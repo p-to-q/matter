@@ -4,6 +4,7 @@ import {
   isAcceptedAudioType,
   MAX_ACCEPTED_RECORDING_MS,
   MAX_AUDIO_BYTES,
+  TRANSCRIPTION_CLIENT_TIMEOUT_MS,
   type TranscriptionErrorCode,
   type TranscriptionErrorEnvelope,
   type TranscriptionPurpose,
@@ -20,8 +21,6 @@ export class TranscriptionClientError extends Error {
     super(message);
   }
 }
-
-export const TRANSCRIPTION_CLIENT_TIMEOUT_MS = 35_000;
 
 export async function requestTranscription(input: {
   interactionId: string;

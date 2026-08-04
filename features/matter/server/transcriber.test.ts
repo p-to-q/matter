@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
-import type { TranscriptionRequest } from "./transcription-contract";
+import {
+  TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+  TRANSCRIPTION_SERVER_TIMEOUT_MS,
+  type TranscriptionRequest,
+} from "./transcription-contract";
 import { TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";
 
@@ -82,5 +86,32 @@ describe("transcribeRecording", () => {
 
     await assertion;
     expect(adapter).toHaveBeenCalledOnce();
+  });
+
+  it("settles with a stable timeout when the adapter ignores its deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const adapter = vi.fn(async () => await new Promise<{ transcript: string }>(() => undefined));
+      const pending = transcribeRecording(REQUEST, new AbortController().signal, adapter);
+      const assertion = expect(pending).rejects.toEqual(
+        new TranscriptionServerError(
+          "TRANSCRIPTION_TIMEOUT",
+          "Speech transcription timed out.",
+          true,
+          504,
+          "voice_01",
+          1,
+        ),
+      );
+      await vi.advanceTimersByTimeAsync(TRANSCRIPTION_SERVER_TIMEOUT_MS + 1);
+      await assertion;
+      expect(adapter).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the client deadline longer than the server deadline", () => {
+    expect(TRANSCRIPTION_CLIENT_TIMEOUT_MS).toBeGreaterThan(TRANSCRIPTION_SERVER_TIMEOUT_MS);
   });
 });

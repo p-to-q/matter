@@ -3,6 +3,7 @@ import type {
   TranscriptionRequest,
   TranscriptionSuccess,
 } from "./transcription-contract";
+import { TRANSCRIPTION_SERVER_TIMEOUT_MS } from "./transcription-contract";
 import { TranscriptionServerError } from "./transcription-errors";
 
 export type TranscriptionAdapter = (
@@ -19,7 +20,7 @@ export async function transcribeRecording(
   adapter = resolveTranscriptionAdapter(),
 ): Promise<TranscriptionSuccess> {
   const timeoutController = new AbortController();
-  const timeout = setTimeout(() => timeoutController.abort(), 30_000);
+  const timeout = setTimeout(() => timeoutController.abort(), TRANSCRIPTION_SERVER_TIMEOUT_MS);
   const combined = combineSignals(requestSignal, timeoutController.signal);
   const abortBoundary = rejectOnAbort(combined.signal);
   try {
