@@ -1,16 +1,26 @@
 # Documentation
 
-Read only the route relevant to the change.
+## Contract
 
-| File | Purpose |
-| --- | --- |
-| [`project-brief.md`](project-brief.md) | Product claim, scope, and completion signal. |
-| [`architecture.md`](architecture.md) | Runtime boundaries and current implementation. |
-| [`engineering-discipline.md`](engineering-discipline.md) | Change, architecture, robustness, and validation rules. |
-| [`surfaces.md`](surfaces.md) | Stable, experimental, stub, and unsupported promises. |
-| [`verification.md`](verification.md) | Checks actually run and known limits. |
-| [`source-ledger.md`](source-ledger.md) | External sources and how they influenced Matter. |
+Read [`product.md`](product.md), [`principles.md`](principles.md), and
+[`material.md`](material.md) first. Together they define what Matter is and the
+structure it is built around.
 
-Durable architecture decisions live in [`../decisions/`](../decisions/). The
-current multi-slice implementation receipt is
-[`../plans/active-elastic-language.md`](../plans/active-elastic-language.md).
+Read only when the change needs it:
+
+- [`architecture.md`](architecture.md) — runtime and module boundaries;
+- [`protocol.md`](protocol.md) — `0.2` wire and document shapes;
+- [`engineering.md`](engineering.md) — implementation discipline and proof;
+- [`workflow.md`](workflow.md) — slice and verifier handoff;
+- [`../plans/active-tree-material.md`](../plans/active-tree-material.md) — current migration;
+- [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — change and validation discipline.
+
+## Context
+
+- [`reference/`](reference/index.md) — optional implementation research;
+- [`surfaces.md`](surfaces.md) — what runs today and what is only specified;
+- [`open.md`](open.md) — unresolved product possibilities;
+- [`changes.md`](changes.md) — short record of form-changing decisions.
+
+[`../archive/`](../archive) preserves the earlier product form. It is trace, not
+current context.

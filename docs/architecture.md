@@ -1,49 +1,182 @@
 # Architecture
 
-## Deployment
+## Runtime paths
 
-Matter is an independent repository and deployment. `ARROW_BASE_PATH=/matter`
-makes the standalone application available beneath `ptoq.io/matter` when routed
-through the production host. It does not import from or build inside `p-to-q/site`.
-
-## Runtime
+Human material enters without a generative model call:
 
 ```text
-pointer + microphone
-        ↓
-BrowserVoiceAdapter
-        ↓
-POST /api/arrow/transcribe
-        ↓
-InteractionEnvelope
-        ↓
-POST /api/arrow/turn
-        ↓
-validated ActionPlan       public, bounded agent vocabulary
-        ↓
-planToSceneCommand
-        ↓
-SceneMutation[]            private, complete reversible vocabulary
-        ↓
-applySceneCommand
-        ↓
-DOM material + local SVG feedback
+node reference + microphone
+  → POST /api/transcribe
+  → transcript
+  → human insert command
+  → tree engine
 ```
 
-The separation between `CanvasAction` and `SceneMutation` is intentional. An
-agent may propose creation, replacement, or branching, but it does not receive
-internal deletion primitives. The reducer can still construct an exact inverse
-command for undo.
+Existing material changes through the four-signal grammar:
 
-## Current scope
+```text
+lasso        → SegmentSelection       reference
+stretch      → StretchGesture         degree
+voice        → transcript             direction
+tree focus   → LineageContext         lineage
+                    ↓
+          TransformEnvelope
+                    ↓
+             POST /api/turn
+                    ↓
+model returns { text } only
+                    ↓
+server constructs validated ActionPlan
+                    ↓
+planToTreeCommand → tree engine → exact inverse
+```
 
-This foundation includes:
+Only the tree engine applies durable mutations. Pointer, audio level, partial
+transcript, selection geometry, focus, and fold remain transient.
 
-- scene protocol, Zod schemas, action validation, and reversible history;
-- mock and OpenAI-compatible server adapters;
-- bounded MediaRecorder capture and local audio-level feedback;
-- full-viewport ptoq-derived neutral visual system;
-- anchor-local listening, planning, failure, creation, and undo states;
-- deterministic fixture mode for testing and demos.
+Matter is local-first. The server never owns the current tree: it validates the
+envelope, derives surrounding text from the supplied lineage, and returns a plan
+for the revision it received. When that plan returns, the client checks the
+tree id, revision, interaction identity, node, range, selected slice, and grapheme
+boundaries again immediately before commit. A stale response changes nothing.
 
-Semantic lasso, stretch degree, and in-place range replacement UI come next.
+## Boundaries
+
+| Boundary | Rule |
+| --- | --- |
+| Component → provider | Never direct; components use the API client. |
+| Model → action | The model returns text; the server chooses the already-declared action and target. |
+| Public action → private mutation | Agent actions are strictly smaller. |
+| Mutation → tree | Only `applyTreeCommand` applies and constructs an inverse. |
+| Tree → storage | Persistence writes committed tree snapshots; storage is not a second model. |
+| DOM → pure code | DOM measures text and yields plain rects; material and layout consume plain data. |
+| Runtime → tools | A pure projection exposes applicable closed intents; the rail owns no domain state. |
+
+## State ownership
+
+| Lifetime | Owned state |
+| --- | --- |
+| Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
+| Runtime material | forward/inverse history; bounded, not exported. |
+| Navigation | focus and fold; derived view state, not history. |
+| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn. |
+| Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
+
+Identifiers and units do not substitute for one another:
+
+| Value | Meaning |
+| --- | --- |
+| `revision` | monotonic durable tree commit number |
+| `writeGeneration` | storage compare-and-swap publication number |
+| `interactionId` + `attempt` | one cancellable async operation, not document history |
+| text offsets | UTF-16 code units, checked against grapheme boundaries |
+| geometry | client CSS pixels tied to one transient `layoutEpoch` |
+| stretch `amount` | unitless normalized expansion value in `[0, 1]` |
+| durable time / duration | canonical ISO string / integer milliseconds |
+
+Ids and durable timestamps enter domain commands as values. Pure modules never
+read a clock, random source, DOM, network, or storage directly.
+
+The interaction controller is an explicit reducer:
+
+```text
+Idle
+Lassoing
+Armed { address, geometry, amount,
+        voice: idle | permission | recording | transcribing,
+        stretch: idle | dragging }
+Pending { interactionId, envelope }
+Applying
+Error { recoverableState }
+```
+
+Voice and stretch are parallel substates because a person may stretch while
+speaking. Pointer cancel, lost capture, unmount, and a newer interaction
+interrupt the relevant substate and clean up audio, ranges, highlights, and
+timers. Hooks adapt browser events to the controller; they do not each invent a
+partial lifecycle.
+
+Selection state separates a semantic `TextAddress` from layout-epoch-bound DOM
+rectangles. Full-tree projection removes folded descendants. Focus projection
+returns the exact root-to-node path and ignores folds on it. Only focus view can
+start a generative transform, so model context cannot be narrower than the
+material visible during that turn.
+
+Async effects are limited to recording, transcription, planning, persistence,
+and archive transport. Every completion returns with
+`{ interactionId, attempt, treeId, baseRevision }`; cancellation aborts work
+where possible, while token and current-tree validation make a late completion
+harmless. React hooks dispatch events and execute effects but do not own a
+second interaction lifecycle.
+
+For portability, browser facilities sit behind narrow capability ports:
+`VoicePort`, `TurnClient`, `DocumentRepository`, and `ArchivePort`. The first
+release implements only browser/HTTP adapters; it does not create a generic SDK
+or speculative native adapter. The tree, material, layout, and runtime reducer
+remain framework-free TypeScript.
+
+## Cache and recovery
+
+Caches hold only reproducible work: derived segments may key on node text;
+measured ranges key on `layoutEpoch`; encoded snapshots key on tree revision.
+They are disposable and never authoritative. Raw audio, transcripts, model
+responses, and lineage are not cached. A bounded diagnostic trace may record
+operation ids, state transitions, error codes, durations, and byte counts, but
+never material or voice content.
+
+Recovery stays with the state owner: command inverses recover in-session
+material; interaction cancel preserves its semantic address for pointer retry;
+persistence retains the latest dirty snapshot until a generation-checked save
+succeeds. No write-ahead log, event sourcing, service worker, or background sync
+belongs in the first release.
+
+## Target modules
+
+The active product lives entirely beneath `features/matter/`. The retired scene
+implementation remains available only in `archive/` for traceability.
+
+```text
+app/
+  page.tsx                         /matter through the Next.js basePath
+  api/transcribe/route.ts
+  api/turn/route.ts
+  api/health/route.ts
+
+features/matter/
+  tree/                            model, invariants, engine, history, lineage
+  material/                        graphemes, segments, pure lasso rules
+  layout/                          visible traversal and focus/fold projection
+  tools/                           pure capability projection and closed intents
+  runtime/                         pure event reducer and effect descriptions
+  interaction/                     DOM geometry and pointer/voice adapters
+  persistence/                     codec, IndexedDB, archive transport
+  server/                          provider adapters, planner, transcription
+  components/
+  store/
+```
+
+- `tree/`, `material/`, `layout/`, and `tools/` do not import React, DOM, store, or server code;
+- components dispatch `ToolIntent`; the controller revalidates it and calls a
+  named runtime action rather than exposing private tree mutations;
+- the interaction state reducer is pure; its DOM and microphone adapters are not;
+- DOM `Range` and `getClientRects()` live at the interaction/rendering edge;
+- `server/` is the only place a provider name appears;
+- route handlers parse, delegate, and translate only.
+
+The complete dependency choice and rejected foundations are in
+[`reference/foundation.md`](reference/foundation.md). The short version: Matter
+owns its tree and interaction semantics; generic IndexedDB and ZIP mechanics may
+use small leaf dependencies when those slices begin.
+
+## Deployment and naming
+
+Matter is independently deployed beneath `ptoq.io/matter`. The base path is
+`MATTER_BASE_PATH=/matter`; therefore `app/page.tsx` is the product page and
+`app/api/turn` resolves under `/matter/api/turn`.
+
+`0.2` has no compatibility aliases because no `0.1` document was persisted.
+Provider routes are absent until their Matter-native envelopes and error
+boundaries are implemented; an old scene route is never renamed into place.
+
+No auth, sync, collaboration, queue, worker, vector store, retrieval, or realtime
+transport belongs in this migration.

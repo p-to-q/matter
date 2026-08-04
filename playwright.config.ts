@@ -12,12 +12,25 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        permissions: ["microphone"],
+        launchOptions: {
+          args: [
+            "--use-fake-device-for-media-stream",
+            "--use-fake-ui-for-media-stream",
+          ],
+        },
+      },
     },
   ],
   webServer: {
     command: "npm run dev -- --hostname 127.0.0.1",
-    url: "http://127.0.0.1:3000/matter?demo=fixture",
+    env: {
+      ...process.env,
+      MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+    },
+    url: "http://127.0.0.1:3000/matter",
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

@@ -2,7 +2,7 @@
 
 Report vulnerabilities through the repository's private GitHub security advisory
 flow once published. Do not include credentials, recordings, transcripts, or
-sensitive scenes in a public issue.
+sensitive material in a public issue.
 
 Security-sensitive surfaces include:
 

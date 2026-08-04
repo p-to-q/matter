@@ -1,10 +1,5 @@
-import { Suspense } from "react";
-import { ArrowApp } from "@/features/arrow/components/ArrowApp";
+import { MatterApp } from "@/features/matter/components/MatterApp";
 
 export default function Page() {
-  return (
-    <Suspense fallback={null}>
-      <ArrowApp />
-    </Suspense>
-  );
+  return <MatterApp />;
 }

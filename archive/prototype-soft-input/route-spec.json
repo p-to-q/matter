@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "0.3",
+  "destination": "Turn AI prompting into an intent playground",
+  "routes": [
+    {
+      "id": "magic-gesture",
+      "label": "One magic gesture",
+      "color": "orange",
+      "recommended": false,
+      "tokens": { "min": 35000, "max": 70000 },
+      "minutes": { "min": 5, "max": 12 },
+      "summary": "Polish the pinch interaction into a viral proof"
+    },
+    {
+      "id": "intent-playground",
+      "label": "Intent playground",
+      "color": "purple",
+      "recommended": true,
+      "tokens": { "min": 80000, "max": 170000 },
+      "minutes": { "min": 12, "max": 28 },
+      "summary": "Three experiments form one coherent interaction thesis"
+    },
+    {
+      "id": "adaptive-canvas",
+      "label": "Adaptive AI canvas",
+      "color": "cyan",
+      "recommended": false,
+      "tokens": { "min": 180000, "max": 380000 },
+      "minutes": { "min": 28, "max": 65 },
+      "summary": "Build a system that generates UI from any gesture"
+    }
+  ],
+  "graph": {
+    "nodes": [
+      { "id": "rough-idea", "label": "rough interaction idea", "column": 0, "lane": 2 },
+      { "id": "research-thesis", "label": "lock research thesis", "column": 1, "lane": 2, "gate": "yellow", "control": "decision" },
+      { "id": "pinch-polish", "label": "polish one pinch", "column": 3, "lane": 0 },
+      { "id": "video-proof", "label": "capture magic moment", "column": 6, "lane": 0, "control": "proof" },
+      { "id": "shared-grammar", "label": "define gesture grammar", "column": 2, "lane": 2, "control": "boundary" },
+      { "id": "three-studies", "label": "build three studies", "column": 4, "lane": 2 },
+      { "id": "demo-choreography", "label": "choreograph demo", "column": 6, "lane": 2, "control": "proof" },
+      { "id": "gesture-engine", "label": "make gesture engine", "column": 3, "lane": 4 },
+      { "id": "generated-ui", "label": "generate output UI", "column": 5, "lane": 4, "control": "proof" },
+      { "id": "taste-agent", "label": "add taste agent", "column": 7, "lane": 4 },
+      { "id": "hackathon-ready", "label": "playable prototype", "column": 9, "lane": 2, "gate": "green", "control": "release" }
+    ],
+    "edges": [
+      { "from": "rough-idea", "to": "research-thesis", "routes": ["magic-gesture", "intent-playground", "adaptive-canvas"] },
+      { "from": "research-thesis", "to": "pinch-polish", "routes": ["magic-gesture"] },
+      { "from": "pinch-polish", "to": "video-proof", "routes": ["magic-gesture"] },
+      { "from": "video-proof", "to": "hackathon-ready", "routes": ["magic-gesture"] },
+      { "from": "research-thesis", "to": "shared-grammar", "routes": ["intent-playground", "adaptive-canvas"] },
+      { "from": "shared-grammar", "to": "three-studies", "routes": ["intent-playground"] },
+      { "from": "three-studies", "to": "demo-choreography", "routes": ["intent-playground"] },
+      { "from": "demo-choreography", "to": "hackathon-ready", "routes": ["intent-playground"] },
+      { "from": "shared-grammar", "to": "gesture-engine", "routes": ["adaptive-canvas"] },
+      { "from": "gesture-engine", "to": "generated-ui", "routes": ["adaptive-canvas"] },
+      { "from": "generated-ui", "to": "taste-agent", "routes": ["adaptive-canvas"] },
+      { "from": "taste-agent", "to": "hackathon-ready", "routes": ["adaptive-canvas"] }
+    ]
+  }
+}

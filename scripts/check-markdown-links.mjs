@@ -1,7 +1,16 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const ignoredDirectories = new Set([".git", ".next", "node_modules", "test-results"]);
+// `archive` is excluded on purpose: archived documents are preserved as they
+// were written, including links to the sibling paths they had at the time.
+// Editing them to satisfy a link checker would falsify the trace they exist for.
+const ignoredDirectories = new Set([
+  ".git",
+  ".next",
+  "node_modules",
+  "test-results",
+  "archive",
+]);
 
 async function markdownFiles(directory) {
   const entries = await readdir(directory, { withFileTypes: true });

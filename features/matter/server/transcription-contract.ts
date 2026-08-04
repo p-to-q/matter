@@ -1,0 +1,73 @@
+import { PROTOCOL_VERSION } from "../tree/model";
+
+export const MAX_RECORDING_MS = 60_000;
+export const MAX_ACCEPTED_RECORDING_MS = 65_000;
+export const MAX_AUDIO_BYTES = 2 * 1024 * 1024;
+export const MAX_AUDIO_REQUEST_BYTES = 2_200_000;
+export const MAX_INTERACTION_ID_LENGTH = 128;
+export const MAX_LOCALE_LENGTH = 35;
+
+export type TranscriptionPurpose = "admission" | "direction";
+
+export type TranscriptionRequest = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  interactionId: string;
+  attempt: number;
+  purpose: TranscriptionPurpose;
+  locale: string;
+  durationMs: number;
+  audio: File;
+};
+
+export type TranscriptionSuccess = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  interactionId: string;
+  attempt: number;
+  transcript: string;
+};
+
+export type TranscriptionErrorCode =
+  | "INVALID_REQUEST"
+  | "UNSUPPORTED_AUDIO"
+  | "AUDIO_EMPTY"
+  | "AUDIO_TOO_LARGE"
+  | "AUDIO_TOO_LONG"
+  | "NO_SPEECH"
+  | "TRANSCRIPTION_TIMEOUT"
+  | "TRANSCRIPTION_UNAVAILABLE"
+  | "TRANSCRIPTION_FAILED"
+  | "INVALID_PROVIDER_RESPONSE";
+
+export type TranscriptionErrorEnvelope = {
+  error: {
+    code: TranscriptionErrorCode;
+    message: string;
+    retryable: boolean;
+    interactionId?: string;
+    attempt?: number;
+  };
+};
+
+const AUDIO_EXTENSIONS = Object.freeze({
+  "audio/webm": "webm",
+  "audio/mp4": "mp4",
+} as const);
+
+export function baseAudioMimeType(mimeType: string): string {
+  return mimeType.split(";", 1)[0]?.trim().toLowerCase() ?? "";
+}
+
+export function audioFileExtension(mimeType: string): string | null {
+  const base = baseAudioMimeType(mimeType);
+  return AUDIO_EXTENSIONS[base as keyof typeof AUDIO_EXTENSIONS] ?? null;
+}
+
+export function isAcceptedAudioType(mimeType: string): boolean {
+  return audioFileExtension(mimeType) !== null;
+}
+
+export function audioUploadName(mimeType: string): string {
+  const extension = audioFileExtension(mimeType);
+  if (extension === null) throw new Error("Unsupported recording MIME type.");
+  return `matter-voice.${extension}`;
+}

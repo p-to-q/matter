@@ -2,19 +2,20 @@
 
 > Make thought matter.
 
-Matter is a standalone browser experiment for `ptoq.io/matter`. It borrows the
-typed boundaries of the original blueprint without living inside the ptoq site
-repository.
+Matter is an environment where thought becomes touchable material. Voice admits
+human thought and gives generative direction. Gesture identifies material and
+degree. A rooted tree keeps lineage. AI appears only as a local, reversible
+change to material.
 
-The current vertical slice is deliberately narrow:
+## State
 
-```text
-sample language → rough lasso → voice direction + stretch degree → ActionPlan
-                → validated in-place replacement → exact undo
-```
+The running `0.2` foundation is one rooted spatial thought tree with exact undo,
+focus, folding, derived geometry, and a contextual editing instrument. Voice,
+segment transformation, and local Markdown durability remain the next release
+slices; the retired hackathon prototype is retained only under `archive/`.
 
-The original voice-placement path remains available for creating another
-thought. Fixture mode exercises both paths without microphone or network access.
+See [`docs/surfaces.md`](docs/surfaces.md) for the exact boundary and
+[`plans/active-tree-material.md`](plans/active-tree-material.md) for the migration.
 
 ## Run
 
@@ -23,45 +24,23 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/matter`. Add `?demo=fixture` for a microphone-free
-deterministic walkthrough.
-
-The application defaults to mock transcription and planning. Copy
-`.env.example` to `.env.local`, add `OPENAI_API_KEY`, and change the adapter
-values to `openai` to exercise the live server routes.
-
-## Checks
+Open `http://localhost:3000/matter`. The current rooted material fixture is
+deterministic and requires neither microphone nor network.
 
 ```bash
-npm test
-npm run typecheck
-npm run build
+npm run check
+npm run test:e2e
 ```
 
-## Boundaries
+## Read
 
-- React components never call providers directly.
-- Server adapters return a versioned, validated `ActionPlan`.
-- Agent actions are separate from internal reversible scene mutations.
-- The scene store is the only durable mutation boundary.
-- Raw audio is forwarded for transcription and is not persisted by Matter.
-- The primary path requires pointer and voice, not a keyboard.
+- [`docs/product.md`](docs/product.md) — the product and interaction grammar;
+- [`docs/material.md`](docs/material.md) — node, segment, tree, lineage, snapshot;
+- [`docs/architecture.md`](docs/architecture.md) — system boundaries;
+- [`docs/index.md`](docs/index.md) — everything else, by need.
 
-## Repository map
+Matter is a standalone Next.js application for `ptoq.io/matter`. Provider code
+is server-only, the model returns text rather than plans, only the tree engine
+mutates durable material, and every generative change has an exact inverse.
 
-- [`docs/index.md`](docs/index.md) — active documentation route;
-- [`docs/engineering-discipline.md`](docs/engineering-discipline.md) — required
-  implementation discipline;
-- [`decisions/`](decisions/) — accepted durable decisions;
-- [`plans/active-elastic-language.md`](plans/active-elastic-language.md) — current
-  slices and acceptance gates;
-- [`WORKFLOW.md`](WORKFLOW.md) — lightweight human/agent handoff contract.
-
-## Current limitations
-
-- Protocol `0.1` and the UI are experimental.
-- The production host still needs `/matter` path routing, rate limiting, privacy
-  copy, and deployed microphone verification.
-- Live provider behavior is optional; fixture mode is the reliable demo path.
-- Touch-specific gesture tuning, persistence, and production hosting remain
-  deferred.
+Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
