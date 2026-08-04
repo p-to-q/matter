@@ -473,6 +473,24 @@ describe("tree command engine", () => {
     expect(tree).toEqual(before);
   });
 
+  it("rejects a text replacement whose timestamp precedes its node creation", () => {
+    const tree = rootedTree();
+    const before = structuredClone(tree);
+    const result = applyTreeCommand(
+      tree,
+      command(tree, {
+        type: "replace-text",
+        nodeId: "root",
+        expectedText: "root",
+        expectedUpdatedAt: T0,
+        text: "next",
+        updatedAt: "2026-08-02T23:59:59.999Z",
+      }),
+    );
+    expectFailure(result, "INVALID_COMMAND");
+    expect(tree).toEqual(before);
+  });
+
   it("returns a stable failure for a malformed runtime memento", () => {
     const tree = branchedTree();
     for (const mutation of [
@@ -486,5 +504,35 @@ describe("tree command engine", () => {
       } as TreeCommand;
       expectFailure(applyTreeCommand(tree, malformed), "INVALID_COMMAND");
     }
+  });
+
+  it("rejects an over-deep detached memento without overflowing the stack", () => {
+    const tree = branchedTree();
+    const nodes: Record<string, ThoughtNode> = {};
+    const chain: string[] = [];
+    for (let i = 0; i < 50_000; i++) chain.push(`deep_${i}`);
+    for (let i = 0; i < chain.length; i++) {
+      nodes[chain[i]] = {
+        id: chain[i],
+        text: chain[i],
+        parentId: i === 0 ? "root" : chain[i - 1],
+        children: i === chain.length - 1 ? [] : [chain[i + 1]],
+        createdAt: T0,
+        updatedAt: T0,
+      };
+    }
+    const detached: DetachedSubtree = {
+      rootId: chain[0],
+      nodes,
+      parentId: "root",
+      index: 0,
+      parentChildrenBeforeDetach: [chain[0], "a", "b"],
+    };
+    const result = applyTreeCommand(
+      tree,
+      command(tree, { type: "restore-subtree", detached }),
+    );
+    expectFailure(result, "INVALID_COMMAND");
+    expect(tree.nodes.root.children).toEqual(["a", "b"]);
   });
 });
