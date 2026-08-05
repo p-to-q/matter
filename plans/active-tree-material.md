@@ -562,6 +562,17 @@ and an explicit validated conflict reload that cannot overwrite a newer local
 commit. Closed file chrome is inert and performs no inventory work.
 The independent second pass found no remaining blocker after those corrections.
 
+Storage-full kernel hardening, 2026-08-05:
+
+```text
+Outcome:    storage exhaustion is distinguishable without losing newer local material
+Boundary:   IndexedDB repository classification → persistence retry queue
+Invariants: only DOMException QuotaExceededError maps to storage-full; generation
+            mismatch remains conflict; all other write exceptions remain generic
+Proof:      repository classification matrix; latest-dirty retention and retry drain
+Non-goals:  UI recovery copy, pagehide, archive/export, automatic deletion
+```
+
 ## Phase 4 — First release
 
 State: Outcome only; no feature design before Phase 3.
