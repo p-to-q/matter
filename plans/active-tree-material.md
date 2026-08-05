@@ -365,6 +365,8 @@ Outcome:    transcription uploads cannot exceed or outlive one server budget
 Boundary:   request stream admission → strict multipart route → transcriber
 Invariants: actual bytes decide; one route-entry deadline; stable public errors
 Proof:      declared/actual size, stalled stream, cancellation, valid multipart
+Capacity:   budget up to ~6.6 MB of body copies per admitted concurrent request;
+            deployment admission/rate guards must bound concurrency before live
 Non-goals:  auth, rate/spend control, decoded media validation, provider changes
 ```
 

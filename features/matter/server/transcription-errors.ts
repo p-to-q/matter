@@ -16,6 +16,10 @@ export class TranscriptionServerError extends Error {
   }
 }
 
+export function isTimeoutSignal(signal: AbortSignal): boolean {
+  return signal.aborted && signal.reason instanceof DOMException && signal.reason.name === "TimeoutError";
+}
+
 export function transcriptionErrorResponse(error: unknown): Response {
   const known =
     error instanceof TranscriptionServerError

@@ -108,6 +108,45 @@ describe("Matter transcription route", () => {
     expect(cancelled).toHaveBeenCalledOnce();
   });
 
+  it("rejects actual request bytes that exceed the limit across chunks", async () => {
+    const cancelled = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_AUDIO_REQUEST_BYTES - 1));
+        controller.enqueue(new Uint8Array(2));
+      },
+      cancel: cancelled,
+    });
+
+    const response = await POST(requestFromStream(body));
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "AUDIO_TOO_LARGE" },
+    });
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it("admits the exact byte limit to multipart validation", async () => {
+    const cancelled = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_AUDIO_REQUEST_BYTES - 1));
+        controller.enqueue(new Uint8Array(1));
+        controller.close();
+      },
+      cancel: cancelled,
+    });
+
+    const response = await POST(requestFromStream(body));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST" },
+    });
+    expect(cancelled).not.toHaveBeenCalled();
+  });
+
   it("settles a stalled request stream at the route-entry deadline", async () => {
     vi.useFakeTimers();
     try {

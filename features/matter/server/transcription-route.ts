@@ -10,7 +10,7 @@ import {
   type TranscriptionPurpose,
   type TranscriptionRequest,
 } from "./transcription-contract";
-import { TranscriptionServerError } from "./transcription-errors";
+import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";
 
 const FIELD_NAMES = new Set([
@@ -237,10 +237,6 @@ function requestInterruptionError(signal: AbortSignal): TranscriptionServerError
         true,
         499,
       );
-}
-
-function isTimeoutSignal(signal: AbortSignal): boolean {
-  return signal.aborted && signal.reason instanceof DOMException && signal.reason.name === "TimeoutError";
 }
 
 function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {

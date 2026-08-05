@@ -4,7 +4,7 @@ import type {
   TranscriptionSuccess,
 } from "./transcription-contract";
 import { TRANSCRIPTION_SERVER_TIMEOUT_MS } from "./transcription-contract";
-import { TranscriptionServerError } from "./transcription-errors";
+import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 
 export type TranscriptionAdapter = (
   request: TranscriptionRequest,
@@ -73,10 +73,6 @@ export async function transcribeRecording(
     abortBoundary.dispose();
     combined.dispose();
   }
-}
-
-function isTimeoutSignal(signal: AbortSignal): boolean {
-  return signal.aborted && signal.reason instanceof DOMException && signal.reason.name === "TimeoutError";
 }
 
 export const fixtureTranscriptionAdapter: TranscriptionAdapter = async (request) => ({
