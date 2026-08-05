@@ -473,6 +473,49 @@ describe("tree command engine", () => {
     expect(tree).toEqual(before);
   });
 
+  it("rejects a text replacement whose timestamp precedes its node creation", () => {
+    const tree = rootedTree();
+    const before = structuredClone(tree);
+    const result = applyTreeCommand(
+      tree,
+      command(tree, {
+        type: "replace-text",
+        nodeId: "root",
+        expectedText: "root",
+        expectedUpdatedAt: T0,
+        text: "next",
+        updatedAt: "2026-08-02T23:59:59.999Z",
+      }),
+    );
+    expectFailure(result, "INVALID_COMMAND");
+    expect(tree).toEqual(before);
+  });
+
+  it("orders canonical extended-year timestamps chronologically", () => {
+    const createdAt = "+010000-01-01T00:00:00.000Z";
+    const updatedAt = "-000001-01-01T00:00:00.000Z";
+    const tree = rootedTree();
+    tree.nodes.root = { ...tree.nodes.root, createdAt, updatedAt: createdAt };
+    const before = structuredClone(tree);
+    const result = applyTreeCommand(
+      tree,
+      command(tree, {
+        type: "replace-text",
+        nodeId: "root",
+        expectedText: "root",
+        expectedUpdatedAt: createdAt,
+        text: "next",
+        updatedAt,
+      }),
+    );
+    expectFailure(result, "INVALID_COMMAND");
+    expect(tree).toEqual(before);
+    expect(validateThoughtTree({
+      ...tree,
+      nodes: { root: { ...tree.nodes.root, updatedAt } },
+    })).toMatchObject({ ok: false });
+  });
+
   it("returns a stable failure for a malformed runtime memento", () => {
     const tree = branchedTree();
     for (const mutation of [
@@ -486,5 +529,71 @@ describe("tree command engine", () => {
       } as TreeCommand;
       expectFailure(applyTreeCommand(tree, malformed), "INVALID_COMMAND");
     }
+  });
+
+  it("rejects an over-deep detached memento without overflowing the stack", () => {
+    const tree = branchedTree();
+    const nodes: Record<string, ThoughtNode> = {};
+    const chain: string[] = [];
+    for (let i = 0; i < 50_000; i++) chain.push(`deep_${i}`);
+    for (let i = 0; i < chain.length; i++) {
+      nodes[chain[i]] = {
+        id: chain[i],
+        text: chain[i],
+        parentId: i === 0 ? "root" : chain[i - 1],
+        children: i === chain.length - 1 ? [] : [chain[i + 1]],
+        createdAt: T0,
+        updatedAt: T0,
+      };
+    }
+    const detached: DetachedSubtree = {
+      rootId: chain[0],
+      nodes,
+      parentId: "root",
+      index: 0,
+      parentChildrenBeforeDetach: [chain[0], "a", "b"],
+    };
+    const result = applyTreeCommand(
+      tree,
+      command(tree, { type: "restore-subtree", detached }),
+    );
+    expectFailure(result, "INVALID_COMMAND");
+    expect(tree.nodes.root.children).toEqual(["a", "b"]);
+  });
+
+  it("rejects the 2,001st node in a shallow detached memento", () => {
+    const tree = branchedTree();
+    const nodes: Record<string, ThoughtNode> = {};
+    const detachedRootId = "wide_root";
+    const branchIds = Array.from({ length: 32 }, (_, index) => `wide_branch_${index}`);
+    nodes[detachedRootId] = node(detachedRootId, "root", branchIds);
+    for (const branchId of branchIds) {
+      nodes[branchId] = node(branchId, detachedRootId);
+    }
+    let nodeCount = 1 + branchIds.length;
+    for (const branchId of branchIds) {
+      const leafIds: string[] = [];
+      while (leafIds.length < 64 && nodeCount < 2_001) {
+        const leafId = `wide_leaf_${nodeCount}`;
+        leafIds.push(leafId);
+        nodes[leafId] = node(leafId, branchId);
+        nodeCount += 1;
+      }
+      nodes[branchId] = node(branchId, detachedRootId, leafIds);
+    }
+    expect(Object.keys(nodes)).toHaveLength(2_001);
+    const detached: DetachedSubtree = {
+      rootId: detachedRootId,
+      nodes,
+      parentId: "root",
+      index: 0,
+      parentChildrenBeforeDetach: [detachedRootId, "a", "b"],
+    };
+    const result = applyTreeCommand(
+      tree,
+      command(tree, { type: "restore-subtree", detached }),
+    );
+    expectFailure(result, "INVALID_COMMAND");
+    expect(tree.nodes.root.children).toEqual(["a", "b"]);
   });
 });

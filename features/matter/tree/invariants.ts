@@ -33,6 +33,10 @@ export function isCanonicalTimestamp(value: unknown): value is string {
   return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
+export function isTimestampBefore(left: string, right: string): boolean {
+  return Date.parse(left) < Date.parse(right);
+}
+
 export function validateThoughtNode(
   node: unknown,
 ): TreeValidationResult {
@@ -70,7 +74,7 @@ export function validateThoughtNode(
   if (!isCanonicalTimestamp(candidate.createdAt) || !isCanonicalTimestamp(candidate.updatedAt)) {
     return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} has a non-canonical timestamp.`);
   }
-  if (candidate.createdAt > candidate.updatedAt) {
+  if (isTimestampBefore(candidate.updatedAt, candidate.createdAt)) {
     return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} was updated before it was created.`);
   }
   return { ok: true };
