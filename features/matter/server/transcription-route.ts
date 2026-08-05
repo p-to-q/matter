@@ -5,11 +5,12 @@ import {
   MAX_AUDIO_REQUEST_BYTES,
   MAX_INTERACTION_ID_LENGTH,
   MAX_LOCALE_LENGTH,
+  TRANSCRIPTION_SERVER_TIMEOUT_MS,
   isAcceptedAudioType,
   type TranscriptionPurpose,
   type TranscriptionRequest,
 } from "./transcription-contract";
-import { TranscriptionServerError } from "./transcription-errors";
+import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";
 
 const FIELD_NAMES = new Set([
@@ -23,25 +24,41 @@ const FIELD_NAMES = new Set([
 ]);
 
 export async function handleTranscriptionRequest(request: Request): Promise<Response> {
+  const boundary = createRequestBoundary(request.signal);
+  try {
+    return await handleBoundedTranscriptionRequest(request, boundary.signal);
+  } finally {
+    boundary.dispose();
+  }
+}
+
+async function handleBoundedTranscriptionRequest(
+  request: Request,
+  signal: AbortSignal,
+): Promise<Response> {
   const declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
   if (declaredLength !== null && declaredLength > MAX_AUDIO_REQUEST_BYTES) {
-    throw new TranscriptionServerError(
-      "AUDIO_TOO_LARGE",
-      "The recording is too large.",
-      false,
-      413,
-    );
+    cancelBody(request.body);
+    throw audioTooLarge();
   }
-  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("multipart/form-data")) {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
+    cancelBody(request.body);
     throw invalidRequest("The recording request format is invalid.", 415);
   }
+  // Content-Length is a fast-fail hint only. Count the bounded stream before
+  // handing any bytes to the buffering multipart parser.
+  const body = await readBoundedBody(request.body, signal);
   let form: FormData;
   try {
-    form = await request.formData();
+    form = await new Response(body, {
+      headers: { "content-type": contentType },
+    }).formData();
   } catch {
+    throwIfRequestInterrupted(signal);
     throw invalidRequest("The recording request could not be read.");
   }
+  throwIfRequestInterrupted(signal);
   validateFieldShape(form);
   const interactionId = requiredString(form, "interactionId", MAX_INTERACTION_ID_LENGTH);
   const attempt = requiredPositiveSafeInteger(form, "attempt");
@@ -109,7 +126,152 @@ export async function handleTranscriptionRequest(request: Request): Promise<Resp
     durationMs,
     audio: audioValue,
   };
-  return Response.json(await transcribeRecording(parsed, request.signal));
+  throwIfRequestInterrupted(signal);
+  return Response.json(await transcribeRecording(parsed, signal));
+}
+
+async function readBoundedBody(
+  body: ReadableStream<Uint8Array> | null,
+  signal: AbortSignal,
+): Promise<ArrayBuffer> {
+  if (body === null) {
+    throwIfRequestInterrupted(signal);
+    return new ArrayBuffer(0);
+  }
+  const reader = body.getReader();
+  if (signal.aborted) {
+    cancelReader(reader);
+    throw requestInterruptionError(signal);
+  }
+  const interruption = rejectOnAbort(signal);
+  const chunks: Uint8Array[] = [];
+  let byteLength = 0;
+  let completed = false;
+  try {
+    while (true) {
+      const next = await Promise.race([reader.read(), interruption.promise]);
+      if (next.done) {
+        completed = true;
+        break;
+      }
+      if (next.value.byteLength > MAX_AUDIO_REQUEST_BYTES - byteLength) {
+        throw audioTooLarge();
+      }
+      chunks.push(next.value);
+      byteLength += next.value.byteLength;
+    }
+  } catch (error) {
+    cancelReader(reader);
+    if (error instanceof TranscriptionServerError) throw error;
+    if (signal.aborted) throw requestInterruptionError(signal);
+    throw invalidRequest("The recording request could not be read.");
+  } finally {
+    interruption.dispose();
+    if (completed) reader.releaseLock();
+  }
+
+  const result = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return result.buffer;
+}
+
+function createRequestBoundary(requestSignal: AbortSignal): {
+  signal: AbortSignal;
+  dispose: () => void;
+} {
+  // This deadline starts at route entry and remains authoritative through both
+  // request admission and provider transcription.
+  const controller = new AbortController();
+  const cancel = () => controller.abort(new DOMException("Cancelled", "AbortError"));
+  if (requestSignal.aborted) cancel();
+  else requestSignal.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(
+    () => controller.abort(new DOMException("Timed out", "TimeoutError")),
+    TRANSCRIPTION_SERVER_TIMEOUT_MS,
+  );
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      requestSignal.removeEventListener("abort", cancel);
+    },
+  };
+}
+
+function rejectOnAbort(signal: AbortSignal): {
+  promise: Promise<never>;
+  dispose: () => void;
+} {
+  let rejectPromise!: (error: TranscriptionServerError) => void;
+  const promise = new Promise<never>((_resolve, reject) => {
+    rejectPromise = reject;
+  });
+  const reject = () => rejectPromise(requestInterruptionError(signal));
+  if (signal.aborted) reject();
+  else signal.addEventListener("abort", reject, { once: true });
+  return {
+    promise,
+    dispose: () => signal.removeEventListener("abort", reject),
+  };
+}
+
+function throwIfRequestInterrupted(signal: AbortSignal): void {
+  if (signal.aborted) throw requestInterruptionError(signal);
+}
+
+function requestInterruptionError(signal: AbortSignal): TranscriptionServerError {
+  return isTimeoutSignal(signal)
+    ? new TranscriptionServerError(
+        "TRANSCRIPTION_TIMEOUT",
+        "Speech transcription timed out.",
+        true,
+        504,
+      )
+    : new TranscriptionServerError(
+        "TRANSCRIPTION_FAILED",
+        "The transcription request was cancelled.",
+        true,
+        499,
+      );
+}
+
+function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  let cancellation: Promise<void> | null = null;
+  try {
+    cancellation = reader.cancel();
+  } catch {
+    // Releasing the reader remains best-effort after a broken stream source.
+  }
+  // Stream cancellation is advisory and its underlying promise may never
+  // settle. Releasing our reader cannot depend on hostile source cleanup.
+  try {
+    reader.releaseLock();
+  } catch {
+    // The route has already settled through its stable cancellation boundary.
+  }
+  if (cancellation !== null) void cancellation.catch(() => undefined);
+}
+
+function cancelBody(body: ReadableStream<Uint8Array> | null): void {
+  if (body === null) return;
+  try {
+    cancelReader(body.getReader());
+  } catch {
+    // A pre-locked invalid body is still rejected before parsing or delegation.
+  }
+}
+
+function audioTooLarge(): TranscriptionServerError {
+  return new TranscriptionServerError(
+    "AUDIO_TOO_LARGE",
+    "The recording is too large.",
+    false,
+    413,
+  );
 }
 
 function validateFieldShape(form: FormData): void {

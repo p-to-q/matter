@@ -2,6 +2,7 @@ import { handleTranscriptionRequest } from "@/features/matter/server/transcripti
 import { transcriptionErrorResponse } from "@/features/matter/server/transcription-errors";
 
 export const runtime = "nodejs";
+export const maxDuration = 35;
 
 export async function POST(request: Request): Promise<Response> {
   try {
