@@ -92,10 +92,10 @@ describe("transcribeRecording", () => {
   it("settles with a stable timeout when the adapter ignores its deadline", async () => {
     vi.useFakeTimers();
     try {
-      let adapterSignal: AbortSignal | null = null;
+      const observation: { signal: AbortSignal | null } = { signal: null };
       let settled = false;
       const adapter = vi.fn(async (_request: TranscriptionRequest, signal: AbortSignal) => {
-        adapterSignal = signal;
+        observation.signal = signal;
         return await new Promise<{ transcript: string }>(() => undefined);
       });
       const pending = transcribeRecording(REQUEST, new AbortController().signal, adapter);
@@ -114,12 +114,12 @@ describe("transcribeRecording", () => {
         ),
       );
       await vi.advanceTimersByTimeAsync(TRANSCRIPTION_SERVER_TIMEOUT_MS - 1);
-      expect(adapterSignal).not.toBeNull();
-      expect(adapterSignal?.aborted).toBe(false);
+      expect(observation.signal).not.toBeNull();
+      expect(observation.signal?.aborted).toBe(false);
       expect(settled).toBe(false);
 
       await vi.advanceTimersByTimeAsync(1);
-      expect(adapterSignal?.aborted).toBe(true);
+      expect(observation.signal?.aborted).toBe(true);
       await assertion;
       expect(settled).toBe(true);
       expect(adapter).toHaveBeenCalledOnce();
