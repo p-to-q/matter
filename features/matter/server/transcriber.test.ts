@@ -3,6 +3,7 @@ import { PROTOCOL_VERSION } from "../tree/model";
 import {
   TRANSCRIPTION_CLIENT_TIMEOUT_MS,
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
+  TRANSCRIPTION_TRANSPORT_GRACE_MS,
   type TranscriptionRequest,
 } from "./transcription-contract";
 import { TranscriptionServerError } from "./transcription-errors";
@@ -91,8 +92,17 @@ describe("transcribeRecording", () => {
   it("settles with a stable timeout when the adapter ignores its deadline", async () => {
     vi.useFakeTimers();
     try {
-      const adapter = vi.fn(async () => await new Promise<{ transcript: string }>(() => undefined));
+      let adapterSignal: AbortSignal | null = null;
+      let settled = false;
+      const adapter = vi.fn(async (_request: TranscriptionRequest, signal: AbortSignal) => {
+        adapterSignal = signal;
+        return await new Promise<{ transcript: string }>(() => undefined);
+      });
       const pending = transcribeRecording(REQUEST, new AbortController().signal, adapter);
+      void pending.then(
+        () => { settled = true; },
+        () => { settled = true; },
+      );
       const assertion = expect(pending).rejects.toEqual(
         new TranscriptionServerError(
           "TRANSCRIPTION_TIMEOUT",
@@ -103,15 +113,26 @@ describe("transcribeRecording", () => {
           1,
         ),
       );
-      await vi.advanceTimersByTimeAsync(TRANSCRIPTION_SERVER_TIMEOUT_MS + 1);
+      await vi.advanceTimersByTimeAsync(TRANSCRIPTION_SERVER_TIMEOUT_MS - 1);
+      expect(adapterSignal).not.toBeNull();
+      expect(adapterSignal?.aborted).toBe(false);
+      expect(settled).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(adapterSignal?.aborted).toBe(true);
       await assertion;
+      expect(settled).toBe(true);
       expect(adapter).toHaveBeenCalledOnce();
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("keeps the client deadline longer than the server deadline", () => {
-    expect(TRANSCRIPTION_CLIENT_TIMEOUT_MS).toBeGreaterThan(TRANSCRIPTION_SERVER_TIMEOUT_MS);
+  it("keeps a fixed transport grace between independent deadlines", () => {
+    expect(TRANSCRIPTION_SERVER_TIMEOUT_MS).toBe(30_000);
+    expect(TRANSCRIPTION_TRANSPORT_GRACE_MS).toBe(5_000);
+    expect(TRANSCRIPTION_CLIENT_TIMEOUT_MS).toBe(35_000);
+    expect(TRANSCRIPTION_CLIENT_TIMEOUT_MS - TRANSCRIPTION_SERVER_TIMEOUT_MS)
+      .toBe(TRANSCRIPTION_TRANSPORT_GRACE_MS);
   });
 });

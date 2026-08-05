@@ -6,11 +6,12 @@ export const MAX_AUDIO_BYTES = 2 * 1024 * 1024;
 export const MAX_AUDIO_REQUEST_BYTES = 2_200_000;
 export const MAX_INTERACTION_ID_LENGTH = 128;
 export const MAX_LOCALE_LENGTH = 35;
-// The server deadline must stay shorter than the client deadline so a
-// platform or provider stall always settles server-side first with a stable
-// TRANSCRIPTION_TIMEOUT envelope instead of a raw client abort.
+// These layers settle independently. The client grace lets ordinary uploads
+// and timeout responses complete, but it is not an end-to-end network guarantee.
 export const TRANSCRIPTION_SERVER_TIMEOUT_MS = 30_000;
-export const TRANSCRIPTION_CLIENT_TIMEOUT_MS = 35_000;
+export const TRANSCRIPTION_TRANSPORT_GRACE_MS = 5_000;
+export const TRANSCRIPTION_CLIENT_TIMEOUT_MS =
+  TRANSCRIPTION_SERVER_TIMEOUT_MS + TRANSCRIPTION_TRANSPORT_GRACE_MS;
 
 export type TranscriptionPurpose = "admission" | "direction";
 
