@@ -270,6 +270,16 @@ the laptop/narrow browser receipt covers root stability, child-right and top
 alignment, sibling-left packing, fold, focus, fixture undo and pan without tree
 revision.
 
+Pointer-capture acquisition hardening, 2026-08-05:
+
+```text
+Outcome:    a failed browser capture cannot strand or move a half-started pan
+Boundary:   RootedMaterial pan adapter only
+Invariants: camera state stays transient; failed capture clears pointer origin
+Proof:      laptop/narrow capture-failure, immobility, and immediate retry receipt
+Non-goals:  gesture redesign, layout changes, or lasso/stretch behavior
+```
+
 ### Confidence gate
 
 The foundation audit on 2026-08-03 rated the `0.2` document, address, layout, and

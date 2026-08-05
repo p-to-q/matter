@@ -428,7 +428,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]")?.dataset
             .thoughtId ?? null;
         updateViewport({ type: "pointer-down", pointerId: event.pointerId, pointerType: normalizePointerType(event.pointerType), isPrimary: event.isPrimary, button: event.button, clientX: event.clientX, clientY: event.clientY });
-        event.currentTarget.setPointerCapture(event.pointerId);
+        try {
+          event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+          // A detached capture target cannot own a trustworthy pan gesture;
+          // drop the half-started drag so moves can never arrive for it.
+          pointerOriginNodeRef.current = null;
+          updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
+        }
       }}
       onPointerMove={(event) => {
         if (interactionPending) return;

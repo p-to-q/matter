@@ -67,10 +67,32 @@ for (const viewport of [
     await expect(tool("Extend related thought")).toBeDisabled();
     await tool("Show all").click();
 
-    const beforePan = await readViewportAndGeometry(page);
-    await page.mouse.move(viewport.width * 0.48, viewport.height * 0.7);
+    const panStart = {
+      x: viewport.width * 0.48,
+      y: viewport.height * 0.7,
+    };
+    const beforeFailedCapture = await readViewportAndGeometry(page);
+    await page.evaluate(() => {
+      const original = Element.prototype.setPointerCapture;
+      Element.prototype.setPointerCapture = function failCaptureOnce(pointerId) {
+        Element.prototype.setPointerCapture = original;
+        void pointerId;
+        throw new DOMException("synthetic detached target", "InvalidStateError");
+      };
+    });
+    await page.mouse.move(panStart.x, panStart.y);
     await page.mouse.down();
-    await page.mouse.move(viewport.width * 0.48 + 42, viewport.height * 0.7 + 31, { steps: 4 });
+    await page.mouse.move(panStart.x + 42, panStart.y + 31, { steps: 4 });
+    await page.mouse.up();
+    await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-dragging", "true");
+    const afterFailedCapture = await readViewportAndGeometry(page);
+    expect(afterFailedCapture.x).toBe(beforeFailedCapture.x);
+    expect(afterFailedCapture.y).toBe(beforeFailedCapture.y);
+
+    const beforePan = await readViewportAndGeometry(page);
+    await page.mouse.move(panStart.x, panStart.y);
+    await page.mouse.down();
+    await page.mouse.move(panStart.x + 42, panStart.y + 31, { steps: 4 });
     await page.mouse.up();
     const afterPan = await readViewportAndGeometry(page);
     expect(afterPan.revision).toBe(beforePan.revision);
