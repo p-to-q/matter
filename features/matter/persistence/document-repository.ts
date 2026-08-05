@@ -52,21 +52,32 @@ const DATABASE_VERSION = 1;
 export function createIndexedDbDocumentRepository(): DocumentRepository {
   let databasePromise: Promise<IDBPDatabase<MatterDatabase>> | null = null;
   const database = () => {
-    databasePromise ??= openDB<MatterDatabase>(DATABASE_NAME, DATABASE_VERSION, {
-      upgrade(db) {
-        if (!db.objectStoreNames.contains("snapshots")) db.createObjectStore("snapshots", { keyPath: "treeId" });
-      },
-      blocked() {
-        databasePromise = null;
-      },
-      terminated() {
-        databasePromise = null;
-      },
-      blocking() {
-        void databasePromise?.then((db) => db.close()).catch(() => undefined);
-        databasePromise = null;
-      },
-    });
+    if (databasePromise === null) {
+      const owner: { opening: Promise<IDBPDatabase<MatterDatabase>> | null } = {
+        opening: null,
+      };
+      const resetIfCurrent = () => {
+        if (databasePromise === owner.opening) databasePromise = null;
+      };
+      const opening = openDB<MatterDatabase>(DATABASE_NAME, DATABASE_VERSION, {
+        upgrade(db) {
+          if (!db.objectStoreNames.contains("snapshots")) db.createObjectStore("snapshots", { keyPath: "treeId" });
+        },
+        blocked: resetIfCurrent,
+        terminated: resetIfCurrent,
+        blocking() {
+          void owner.opening?.then((db) => db.close()).catch(() => undefined);
+          resetIfCurrent();
+        },
+      });
+      owner.opening = opening;
+      databasePromise = opening;
+      void opening.catch(() => {
+        // A failed open is recoverable on the next explicit operation. Do not
+        // let an older rejection clear a newer open installed by a lifecycle event.
+        resetIfCurrent();
+      });
+    }
     return databasePromise;
   };
 
