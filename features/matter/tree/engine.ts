@@ -10,6 +10,7 @@ import {
 } from "./model";
 import {
   isCanonicalTimestamp,
+  isTimestampBefore,
   MAX_NODES_PER_TREE,
   MAX_TREE_DEPTH,
   validateThoughtNode,
@@ -105,7 +106,7 @@ function detachedPreorder(detached: unknown): string[] | null {
   // bound, so a hostile or corrupt memento fails fast here instead of
   // overflowing the call stack during recursion.
   const visit = (id: string, depth: number): boolean => {
-    if (depth > MAX_TREE_DEPTH || visited.size > MAX_NODES_PER_TREE) return false;
+    if (depth > MAX_TREE_DEPTH || visited.size >= MAX_NODES_PER_TREE) return false;
     const node = nodes[id];
     if (!node || active.has(id) || visited.has(id)) return false;
     const validation = validateThoughtNode(node);
@@ -329,7 +330,7 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
     if (!isCanonicalTimestamp(mutation.updatedAt)) {
       return commandFailure("A text replacement requires a canonical timestamp.");
     }
-    if (mutation.updatedAt < node.createdAt) {
+    if (isTimestampBefore(mutation.updatedAt, node.createdAt)) {
       return commandFailure("A text replacement cannot precede its node creation.");
     }
     const nextNode = { ...cloneNode(node), text: mutation.text, updatedAt: mutation.updatedAt };
