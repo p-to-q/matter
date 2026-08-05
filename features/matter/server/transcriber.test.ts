@@ -89,6 +89,23 @@ describe("transcribeRecording", () => {
     expect(adapter).toHaveBeenCalledOnce();
   });
 
+  it("preserves timeout identity when the route-entry deadline aborts the adapter", async () => {
+    const controller = new AbortController();
+    const adapter = vi.fn(async () => await new Promise<{ transcript: string }>(() => undefined));
+    const pending = transcribeRecording(REQUEST, controller.signal, adapter);
+    const assertion = expect(pending).rejects.toMatchObject({
+      code: "TRANSCRIPTION_TIMEOUT",
+      status: 504,
+      interactionId: "voice_01",
+      attempt: 1,
+    });
+
+    controller.abort(new DOMException("Timed out", "TimeoutError"));
+
+    await assertion;
+    expect(adapter).toHaveBeenCalledOnce();
+  });
+
   it("settles with a stable timeout when the adapter ignores its deadline", async () => {
     vi.useFakeTimers();
     try {
