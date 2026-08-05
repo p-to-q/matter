@@ -358,6 +358,18 @@ validation, request admission/rate/spend guards, physical Safari/Chrome proof,
 and true level feedback remain explicit live deployment gates rather than claims
 of the fixture slice.
 
+Request-admission hardening, 2026-08-05:
+
+```text
+Outcome:    transcription uploads cannot exceed or outlive one server budget
+Boundary:   request stream admission → strict multipart route → transcriber
+Invariants: actual bytes decide; one route-entry deadline; stable public errors
+Proof:      declared/actual size, stalled stream, cancellation, valid multipart
+Capacity:   budget up to ~6.6 MB of body copies per admitted concurrent request;
+            deployment admission/rate guards must bound concurrency before live
+Non-goals:  auth, rate/spend control, decoded media validation, provider changes
+```
+
 ### Slice 2B — Language receives a physical address
 
 State: Re-frozen for interaction hardening.

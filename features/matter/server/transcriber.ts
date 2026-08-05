@@ -4,7 +4,7 @@ import type {
   TranscriptionSuccess,
 } from "./transcription-contract";
 import { TRANSCRIPTION_SERVER_TIMEOUT_MS } from "./transcription-contract";
-import { TranscriptionServerError } from "./transcription-errors";
+import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 
 export type TranscriptionAdapter = (
   request: TranscriptionRequest,
@@ -24,6 +24,7 @@ export async function transcribeRecording(
   const combined = combineSignals(requestSignal, timeoutController.signal);
   const abortBoundary = rejectOnAbort(combined.signal);
   try {
+    if (requestSignal.aborted) throw new DOMException("Aborted", "AbortError");
     // Aborting a signal is advisory. The boundary must still settle when an SDK
     // or provider adapter ignores it, otherwise one request can hang forever.
     const result = await Promise.race([
@@ -39,7 +40,7 @@ export async function transcribeRecording(
     };
   } catch (error) {
     if (error instanceof TranscriptionServerError) throw error;
-    if (timeoutController.signal.aborted) {
+    if (timeoutController.signal.aborted || isTimeoutSignal(requestSignal)) {
       throw new TranscriptionServerError(
         "TRANSCRIPTION_TIMEOUT",
         "Speech transcription timed out.",
