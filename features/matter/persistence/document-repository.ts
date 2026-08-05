@@ -17,6 +17,7 @@ export type RepositoryErrorCode =
   | "PERSISTENCE_UNAVAILABLE"
   | "PERSISTENCE_CORRUPT"
   | "PERSISTENCE_CONFLICT"
+  | "PERSISTENCE_STORAGE_FULL"
   | "PERSISTENCE_WRITE_FAILED";
 
 export type RepositoryResult<Value> =
@@ -131,8 +132,8 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
         await transaction.done;
         return success(nextGeneration);
       } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") {
-          return failure("PERSISTENCE_CONFLICT", "Material changed in another tab.");
+        if (error instanceof DOMException && error.name === "QuotaExceededError") {
+          return failure("PERSISTENCE_STORAGE_FULL", "Local material storage is full.");
         }
         return failure("PERSISTENCE_WRITE_FAILED", "The latest material could not be saved locally.");
       }

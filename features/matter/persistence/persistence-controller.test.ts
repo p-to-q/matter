@@ -94,6 +94,46 @@ describe("persistence controller", () => {
       errorCode: "PERSISTENCE_CONFLICT",
     });
   });
+
+  it("retains the latest dirty snapshot after storage fills and drains it on retry", async () => {
+    const tree = createRootedMaterialFixture().tree;
+    const second = { ...tree, revision: tree.revision + 1 };
+    const latest = { ...tree, revision: tree.revision + 2 };
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    await waitFor(() => repository.pending.length === 1);
+
+    controller.publish(second);
+    controller.publish(latest);
+    repository.settleNext({
+      ok: false,
+      error: { code: "PERSISTENCE_STORAGE_FULL", message: "storage full" },
+    });
+    await waitFor(() => controller.getStatus().phase === "error");
+    expect(controller.getStatus()).toMatchObject({
+      persistedRevision: null,
+      dirtyRevision: latest.revision,
+      errorCode: "PERSISTENCE_STORAGE_FULL",
+    });
+    expect(repository.savedRevisions).toEqual([tree.revision]);
+
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]).toMatchObject({
+      treeRevision: latest.revision,
+      expectedGeneration: null,
+    });
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus()).toEqual({
+      phase: "saved",
+      persistedRevision: latest.revision,
+      dirtyRevision: null,
+      errorCode: null,
+    });
+    expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
+  });
 });
 
 function fakeRepository(loaded: LoadedSnapshot | null) {

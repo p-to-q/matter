@@ -90,4 +90,74 @@ describe("IndexedDB document repository", () => {
     expect(currentDatabase.close).not.toHaveBeenCalled();
     expect(openDB).toHaveBeenCalledTimes(2);
   });
+
+  it("classifies a DOMException quota failure as storage full", async () => {
+    const { database } = databaseWithWriteFailure(
+      new DOMException("quota exhausted", "QuotaExceededError"),
+    );
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    await expect(repository.save("tree-1", 2, { files: {} }, null)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_STORAGE_FULL" },
+    });
+  });
+
+  it.each([
+    ["ordinary exception", new Error("write failed")],
+    ["quota-shaped object", { name: "QuotaExceededError", message: "not a DOMException" }],
+    ["aborted transaction", new DOMException("transaction aborted", "AbortError")],
+    ["different DOMException", new DOMException("database failed", "UnknownError")],
+  ])("keeps a %s classified as a generic write failure", async (_label, error) => {
+    const { database } = databaseWithWriteFailure(error);
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    await expect(repository.save("tree-1", 2, { files: {} }, null)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_WRITE_FAILED" },
+    });
+  });
+
+  it("keeps a generation mismatch classified as a conflict", async () => {
+    const put = vi.fn();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({ writeGeneration: 3 }),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    const database = {
+      transaction: vi.fn().mockReturnValue(transaction),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    await expect(repository.save("tree-1", 2, { files: {} }, 2)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_CONFLICT" },
+    });
+    expect(transaction.abort).toHaveBeenCalledTimes(1);
+    expect(put).not.toHaveBeenCalled();
+  });
 });
+
+function databaseWithWriteFailure(error: unknown) {
+  const transaction = {
+    store: {
+      get: vi.fn().mockResolvedValue(undefined),
+      put: vi.fn().mockRejectedValue(error),
+    },
+    abort: vi.fn(),
+    done: Promise.resolve(),
+  };
+  return {
+    database: {
+      transaction: vi.fn().mockReturnValue(transaction),
+    },
+    transaction,
+  };
+}
