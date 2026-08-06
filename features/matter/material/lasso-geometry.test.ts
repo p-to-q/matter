@@ -27,14 +27,14 @@ describe("lasso path preparation", () => {
       minimumPolygonArea: 36,
       sampleDistance: 4,
       maximumPointCount: 256,
-      closureNearDistance: 14,
+      closureNearDistance: 32,
       closureEarlyArcLength: 12,
-      closureMinimumAngleDegrees: 60,
-      closureMaximumPathRatio: 0.5,
-      closureMaximumBoundsRatio: 0.78,
+      closureMinimumAngleDegrees: 45,
+      closureMaximumPathRatio: 0.68,
+      closureMaximumBoundsRatio: 0.92,
       edgeMargin: 6,
       probeInsetRatio: 0.25,
-      minimumInsideProbeCount: 3,
+      minimumInsideProbeCount: 2,
     });
     expect(Object.isFrozen(LASSO_THRESHOLDS)).toBe(true);
     expect(Object.values(LASSO_THRESHOLDS).every(Number.isFinite)).toBe(true);
@@ -113,8 +113,8 @@ describe("lasso path preparation", () => {
       { x: 40, y: 40 },
       { x: gap, y: 0 },
     ];
-    expect(lassoClosureIntent(pathTo(13.999))).toBe(true);
-    expect(lassoClosureIntent(pathTo(14.001))).toBe(false);
+    expect(lassoClosureIntent(pathTo(31.999))).toBe(true);
+    expect(lassoClosureIntent(pathTo(32.001))).toBe(false);
     expect(lassoClosureIntent([
       { x: 0, y: 0 },
       { x: 500, y: 0 },
@@ -122,10 +122,10 @@ describe("lasso path preparation", () => {
     ])).toBe(false);
   });
 
-  it("uses a 60 degree turn from a 12px interpolated early direction", () => {
+  it("uses a 45 degree turn from a 12px interpolated early direction", () => {
     const endpoint = (degrees: number) => {
       const radians = degrees * Math.PI / 180;
-      return { x: 20 * Math.cos(radians), y: 20 * Math.sin(radians) };
+      return { x: 40 * Math.cos(radians), y: 40 * Math.sin(radians) };
     };
     const pathAt = (degrees: number) => [
       { x: 0, y: 0 },
@@ -133,8 +133,8 @@ describe("lasso path preparation", () => {
       { x: 20, y: 40 },
       endpoint(degrees),
     ];
-    expect(lassoClosureIntent(pathAt(59.999))).toBe(false);
-    expect(lassoClosureIntent(pathAt(60))).toBe(true);
+    expect(lassoClosureIntent(pathAt(44.999))).toBe(false);
+    expect(lassoClosureIntent(pathAt(45))).toBe(true);
   });
 
   it("keeps a maximum-density round stroke bounded and selectable", () => {
@@ -222,7 +222,7 @@ describe("text fragment hit predicate", () => {
     expect(lassoHitsRectFragment(lasso, { x: 20 + margin + 0.001, y: 9, width: 0.002, height: 2 })).toBe(false);
   });
 
-  it("accepts substantial enclosure through at least three of five inset probes", () => {
+  it("accepts substantial enclosure through at least two of five inset probes", () => {
     expect(lassoHitsRectFragment(lasso, { x: -15, y: 4, width: 40, height: 12 })).toBe(true);
   });
 

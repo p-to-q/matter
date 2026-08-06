@@ -675,6 +675,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
         if (lasso.pointerDown(event)) {
+          event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
@@ -699,7 +700,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }}
       onPointerMove={(event) => {
         if (interactionPending) return;
-        if (lasso.pointerMove(event)) return;
+        if (lasso.pointerMove(event)) {
+          event.preventDefault();
+          return;
+        }
         if (viewport.gesture?.pointerId !== event.pointerId) return;
         updateViewport({ type: "pointer-move", pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY });
       }}
@@ -714,6 +718,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           return;
         }
         if (lasso.pointerUp(event)) {
+          event.preventDefault();
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           return;

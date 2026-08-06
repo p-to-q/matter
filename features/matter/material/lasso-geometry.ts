@@ -26,14 +26,16 @@ export const LASSO_THRESHOLDS = Object.freeze({
   minimumPolygonArea: 36,
   sampleDistance: 4,
   maximumPointCount: 256,
-  closureNearDistance: 14,
+  // People release a hand-drawn loop near, rather than exactly on, its origin.
+  // The tolerance is deliberately large enough for a small trackpad loop.
+  closureNearDistance: 32,
   closureEarlyArcLength: 12,
-  closureMinimumAngleDegrees: 60,
-  closureMaximumPathRatio: 0.5,
-  closureMaximumBoundsRatio: 0.78,
+  closureMinimumAngleDegrees: 45,
+  closureMaximumPathRatio: 0.68,
+  closureMaximumBoundsRatio: 0.92,
   edgeMargin: 6,
   probeInsetRatio: 0.25,
-  minimumInsideProbeCount: 3,
+  minimumInsideProbeCount: 2,
 });
 
 const PREPARED_LASSO = Symbol("prepared-lasso");
@@ -178,8 +180,19 @@ export function lassoHitsRectFragment(lasso: PreparedLasso, rect: ClientRect): b
   ) {
     return true;
   }
-  return probes.filter((probe) => pointInPolygon(probe, lasso.points)).length >=
-    LASSO_THRESHOLDS.minimumInsideProbeCount;
+  const insideCount = probes.filter((probe) => pointInPolygon(probe, lasso.points)).length;
+  if (insideCount >= LASSO_THRESHOLDS.minimumInsideProbeCount) return true;
+  // A loose loop often crosses a wrapped line without containing its centre.
+  // Accept a fragment when its bounds are substantially enclosed; this keeps
+  // selection forgiving without turning a single edge touch into a hit.
+  const corners = [
+    { x: rect.x, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y },
+    { x: rect.x + rect.width, y: rect.y + rect.height },
+    { x: rect.x, y: rect.y + rect.height },
+  ];
+  const enclosedCorners = corners.filter((corner) => pointInPolygon(corner, lasso.points)).length;
+  return enclosedCorners >= 2 && insideCount > 0;
 }
 
 export function pointInPolygon(point: ClientPoint, polygon: readonly ClientPoint[]): boolean {

@@ -52,16 +52,16 @@ selected node or segment.
 
 ## Current repository boundary
 
-The running 0.2 preview is fixture-seeded. It currently includes the rooted
+The running 0.2 preview is root-seeded. It currently includes the rooted
 tree, spatial layout, focus and folding runtime, material index, punctuation
-lasso, stretch projection, fixture voice admission, local IndexedDB Markdown
+lasso, stretch projection, browser-native voice admission, local IndexedDB Markdown
 durability, ZIP archive transport, and exact pointer undo. The lasso and stretch
 projection are presentational in this preview; they do not claim a live model
 rewrite.
 
-Still gated or not yet released: live transcription, the generative transform
-envelope and /api/turn route, deployed-origin receipts, and a fresh empty-root
-onboarding flow. Do not describe those as currently live.
+Still gated or not yet released: the generative transform envelope and /api/turn
+route, the strict large-tree performance receipt, and account/sync features. Do
+not describe those as currently live.
 
 ## What Matter is not
 

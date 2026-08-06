@@ -830,6 +830,21 @@ and uploading native-recognition audio when no server adapter was selected.
 
 ---
 
+## 2026-08-07 — Lasso selection favors a forgiving hand
+
+Changed: lasso closure now accepts a practical trackpad release distance and
+less rigid turn proportions, while preserving finite-point, area, topology, and
+cross-node safety checks. Text hit testing accepts a substantial wrapped-block
+enclosure when individual line probes straddle the stroke. Pointer handlers
+also suppress browser text selection and claim touch input while drawing.
+
+Why: the previous geometry was mathematically careful but too exact for a real
+hand. A lasso that visibly draws but almost never addresses language breaks the
+primary gesture promise; the simpler path must be the reliable default.
+
+Forecloses: requiring pixel-perfect closure, selecting adjacent thoughts from a
+single loose loop, or weakening topology and stale-layout invalidation.
+
 ## Carried from archived ADRs
 
 **Standalone application at a base path** (ADR-0001, 2026-08-02). Matter is an

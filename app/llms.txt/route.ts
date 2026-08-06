@@ -32,10 +32,10 @@ pointer.
 
 ## Current preview
 
-The current public build is an early, fixture-seeded preview. It demonstrates a
+The current public build is an early, root-seeded preview. It demonstrates a
 rooted spatial tree, focus and folding, punctuation lasso selection, stretch
-degree preview, fixture voice admission, exact undo, and local Markdown
-durability. Live transcription and the generative transform turn remain gated;
+degree preview, browser-native live voice admission, exact undo, and local Markdown
+durability. The generative transform turn remains gated;
 the preview does not expose a chat transcript, assistant panel, or hidden
 retrieval.
 

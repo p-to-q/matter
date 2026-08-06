@@ -55,7 +55,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.finalTranscript = "";
     this.interimTranscript = "";
     this.stopping = false;
-    this.startPromise = new Promise<void>((resolve, reject) => { this.resolveStart = resolve; this.rejectStart = reject; });
+    const startPromise = new Promise<void>((resolve, reject) => { this.resolveStart = resolve; this.rejectStart = reject; });
+    this.startPromise = startPromise;
     const recognition = new Constructor();
     this.recognition = recognition;
     recognition.continuous = true;
@@ -100,17 +101,18 @@ export class BrowserSpeechVoicePort implements VoicePort {
       this.cleanup();
     };
     try { recognition.start(); } catch { this.fail(new VoiceError("RECORDING_FAILED")); }
-    return this.startPromise;
+    return startPromise;
   }
 
   stop(operation: VoiceOperation): Promise<VoiceRecording> {
     if (this.operation === null || this.operation.interactionId !== operation.interactionId || this.operation.attempt !== operation.attempt || this.recognition === null) return Promise.reject(new VoiceError("RECORDING_NOT_ACTIVE"));
     if (this.stopPromise !== null) return this.stopPromise;
     this.stopping = true;
-    this.stopPromise = new Promise<VoiceRecording>((resolve, reject) => { this.resolveStop = resolve; this.rejectStop = reject; });
+    const stopPromise = new Promise<VoiceRecording>((resolve, reject) => { this.resolveStop = resolve; this.rejectStop = reject; });
+    this.stopPromise = stopPromise;
     if (this.timer !== null) window.clearTimeout(this.timer);
     try { this.recognition.stop(); } catch { this.fail(new VoiceError("RECORDING_FAILED")); }
-    return this.stopPromise;
+    return stopPromise;
   }
 
   cancel(operation: VoiceOperation): void {

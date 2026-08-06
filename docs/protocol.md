@@ -1,10 +1,11 @@
 # Protocol 0.2
 
-Status: document, tree engine, navigation, layout, local tool actions, fixture
-voice admission, derived thought labels, lasso segment addressing, stretch
-degree, and Markdown durability are implemented. Generative transformation remains specified for
-Phase 2 in [`plans/active-tree-material.md`](../plans/active-tree-material.md);
-the live transcription adapter and `/api/turn` remain gated. Markdown archive
+Status: document, tree engine, navigation, layout, local tool actions, browser
+native voice admission, fixture HTTP voice tests, derived thought labels, lasso
+segment addressing, stretch degree, and Markdown durability are implemented.
+Generative transformation remains specified for Phase 2 in
+[`plans/active-tree-material.md`](../plans/active-tree-material.md); `/api/turn` remains
+gated. Markdown archive
 export/import is available as a strict local return path.
 
 `0.2` is a clean break because `0.1` has no persisted documents.

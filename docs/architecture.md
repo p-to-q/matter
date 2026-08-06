@@ -6,7 +6,8 @@ Human material enters without a generative model call:
 
 ```text
 node reference + microphone
-  → POST /api/transcribe
+  → browser-native Web Speech API (preferred)
+  → POST /api/transcribe when an explicit server adapter exists
   → transcript
   → human insert command
   → tree engine
@@ -164,7 +165,7 @@ implementation remains available only in `archive/` for traceability.
 app/
   page.tsx                         /matter through the Next.js basePath
   api/health/route.ts              implemented deployment readiness boundary
-  api/transcribe/route.ts          implemented speech boundary; live adapter gated
+  api/transcribe/route.ts          strict speech boundary; browser mode never uses fixture output
   api/label/route.ts               implemented label boundary; live adapter gated
   api/turn/route.ts                gated generative transform boundary
 

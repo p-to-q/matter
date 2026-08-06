@@ -27,7 +27,7 @@ is deliberately absent.
 | Surface | Status |
 | --- | --- |
 | Single-root ThoughtTree and tree engine | implemented |
-| Human material admission without generative rewrite | implemented for fixture; live adapter gated |
+| Human material admission without generative rewrite | implemented with browser-native public speech; fixture HTTP path remains local-only |
 | Punctuation segment addressing | implemented |
 | Root-to-focus lineage context | implemented locally; agent envelope pending |
 | Derived rooted layout with transient focus and fold | implemented |
@@ -98,11 +98,11 @@ an input field or response surface can ship.
 Accounts, sync, collaboration, live streaming transcription, touch parity,
 cross-branch links, split/merge, memory retrieval, assistant UI, and a public SDK.
 
-The public interface is a root-seeded preview. Its browser-native voice path
-is intentionally disabled on `matter.ptoq.io`; it is suitable for localhost
-and deployment readiness checks, but not a public live-AI release. `/api/turn`,
-realtime transcription, and deployed-origin laptop/narrow receipts are still
-gated. ZIP export/import is available; directory export remains absent.
+The public interface is a root-seeded preview. Its browser-native voice path is
+enabled on `matter.ptoq.io` when the browser exposes Web Speech recognition; no
+fixture transcript is used there. `/api/turn`, account/sync, and the strict
+large-tree performance receipt remain gated. ZIP export/import is available;
+directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).

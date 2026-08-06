@@ -12,13 +12,13 @@ than through a prompt box or answer transcript.
 
 The running `0.2` pre-release surface is one rooted spatial thought tree with
 exact undo, focus, folding, derived geometry, a contextual editing instrument,
-fixture voice admission, punctuation lasso selection, shared stretch degree, and
+browser-native live voice admission, punctuation lasso selection, shared stretch degree, and
 local Markdown durability through IndexedDB. The selected-language projection is
 visual only: the original text DOM remains the source for ranges, copying, and
 accessibility.
 
-Still gated: the live transcription adapter, generative transform envelope,
-explicit ZIP/directory export/import, and deployed-origin receipts. The retired
+Still gated: the generative transform envelope, explicit directory export/import,
+and the strict large-tree performance receipt. The retired
 hackathon prototype is retained only under `archive/`.
 
 See [`docs/surfaces.md`](docs/surfaces.md) for the exact boundary and
@@ -32,8 +32,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000/matter`. Tests use a deterministic fixture adapter;
-production leaves transcription unavailable unless a server-side live adapter is
-configured and its deployment gates are proven.
+the dedicated preview uses browser-native recognition, while the MediaRecorder
+fallback remains fixture-gated locally.
 
 ```bash
 npm run check

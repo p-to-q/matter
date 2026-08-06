@@ -31,7 +31,7 @@ configuration through `vercel.json`:
 MATTER_PUBLIC_ORIGIN=https://matter.ptoq.io
 MATTER_BASE_PATH=
 MATTER_INITIAL_DOCUMENT=root
-MATTER_TRANSCRIPTION_ADAPTER=off
+MATTER_TRANSCRIPTION_ADAPTER=browser
 ```
 
 That initial document contains only the canonical root sentence. It is not a
@@ -61,8 +61,8 @@ disallowed in robots and return operational data rather than product copy.
 Public copy can describe the intended interaction grammar: reference a node or
 segment, set degree with gesture, speak direction, and receive one local,
 perceivable, reversible change. It must also say that the current public build
-is fixture-seeded and that live transcription and the generative transform turn
-remain gated. Do not expose material, transcripts, provider configuration,
+is root-seeded, uses browser-native speech when supported, and keeps the
+generative transform turn gated. Do not expose material, transcripts, provider configuration,
 hidden retrieval, or user state in metadata or machine-readable text.
 
 ## Verification

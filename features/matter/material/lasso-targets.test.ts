@@ -31,6 +31,19 @@ describe("lasso target resolution", () => {
     });
   });
 
+  it("falls back to a single wrapped text block when the loop contains its bounds", () => {
+    expect(resolveLassoTargets(lasso, [target({
+      measurement: [
+        { index: 0, rects: [{ x: 2, y: 2, width: 2, height: 2 }] },
+        { index: 1, rects: [{ x: 76, y: 2, width: 2, height: 2 }] },
+        { index: 2, rects: [{ x: 2, y: 46, width: 2, height: 2 }] },
+      ],
+    })])).toMatchObject({
+      kind: "selection",
+      selection: { nodeId: "node_a", selectedText: "第一句，第二句。第三句" },
+    });
+  });
+
   it("keeps empty, pending, and failed measurements distinct from success", () => {
     expect(resolveLassoTargets(lasso, [target({
       bounds: { left: 100, top: 100, right: 150, bottom: 140 },

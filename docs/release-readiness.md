@@ -1,7 +1,7 @@
 # Release readiness
 
-Matter can be deployed today only as an early, fixture-seeded preview. It is not
-yet a public pre-release of the complete product loop.
+Matter can be deployed as an early, root-seeded proprietary preview. It is not
+the complete generative product loop yet.
 
 ## Current deployable slice
 
@@ -13,27 +13,27 @@ The current online-safe claim is narrow:
   local Markdown durability through IndexedDB
   ZIP export/import of the same strict Markdown tree
   file outline, focus/fold, copy, lasso, stretch projection
-  fixture voice admission when explicitly enabled by deployment env
+  browser-native live voice admission (no fixture voice on the public origin)
   derived navigation labels, with a fixture model adapter behind them
   no live model transformation
 ```
 
-The preview may use `MATTER_TRANSCRIPTION_ADAPTER=fixture`. Production without
-that explicit adapter leaves transcription unavailable by design. A live
-transcription adapter remains gated by the deployment requirements in
-[`reference/voice-input.md`](reference/voice-input.md).
+Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
+boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:
+the Web Speech API owns recognition in the browser, while `/api/transcribe`
+refuses to manufacture fixture speech.
 
 `GET /matter/api/health` reports this boundary for the default mount. A
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Candidate verification — 0.2.0-preview.3
+## Candidate verification — 0.2.0-preview.4
 
 The proprietary candidate was rebuilt and verified locally on 2026-08-06:
 
 ```text
-npm run check          doctor, links, 722 passed Vitest tests, typecheck, lint, build
+npm run check          doctor, links, 746 passed Vitest tests, typecheck, lint, build
 npm run test:e2e       35 passed + 1 skipped Chromium cases at laptop, 390 px, and 320 px
 npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
 ```
@@ -44,9 +44,9 @@ structural remount still reaches `105–114 ms`, so the unchanged `<100 ms` raw
 gate correctly fails. The fixture-seeded preview does not claim that large-tree
 release bound; the viewport-DOM renderer decision remains open in the active plan.
 
-These receipts prove the proprietary, fixture-seeded preview boundary only. They do
-not promote the missing transform, live transcription, fresh empty-document
-start, or deployed-origin device gates listed below. The repository and release
+These receipts prove the proprietary, root-seeded preview boundary. They do not
+promote the missing transform, accounts/sync, or strict large-tree gate listed
+below. The repository and release
 artifacts are currently publicly visible for operational reasons, but remain
 proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
 
@@ -61,8 +61,10 @@ proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
 - The complete 2,000-node tree remains authoritative and pointer-ready, but a full
   structural remount still exceeds the strict `<100 ms` raw long-task gate. The
   viewport-DOM renderer fork requires a separate product/architecture freeze.
-- Live transcription has no adapter, rate/spend guard, decoded-duration
-  validation, deployed-origin Chrome/Safari receipt, or final voice-level UX.
+- Browser-native live transcription is enabled, but browser support and vendor
+  service behavior vary; it is not claimed to be offline or universally private.
+- A real server transcription fallback still needs its own provider, rate/spend
+  guard, decoded-duration validation, and deployed-origin device receipt.
 - The deployed origin still needs the Phase 4 receipt in
   [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
 
