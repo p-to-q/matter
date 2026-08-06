@@ -46,6 +46,9 @@ paper never enlarges. The root names the outline, descendant rows step right by
 structural depth, and each branch expands or closes in place without changing
 canvas fold state. Search is a flat result view whose rows carry ancestry paths.
 The tree shadow is the supplied decorative asset inside the paper, never document state.
+`app/icon.svg` is explicitly provisional and is not the product mark: it draws
+the same rooted figure the material index draws, on ink and paper only, sized so
+it survives 16 px. It may be replaced without a product-contract revision.
 The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
 Focus and fold remain navigation capabilities but have no first-release canvas
 presenter; the disclosure control in the left material outline is a separate
