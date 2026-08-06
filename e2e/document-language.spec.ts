@@ -4,5 +4,5 @@ test("declares the language of the application chrome", async ({ page }) => {
   await page.goto("/matter");
 
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.getByText("Make thought matter.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "p to q home" })).toBeVisible();
 });

@@ -56,8 +56,9 @@ for (const viewport of [
       await expect(page.locator(".tool-rail")).toBeHidden();
       const drawer = await sidebar.boundingBox();
       expect(drawer).not.toBeNull();
-      expect(drawer!.width).toBeLessThanOrEqual(304);
-      expect(viewport.width - (drawer!.x + drawer!.width)).toBeGreaterThanOrEqual(55);
+      // CSS layout resolves to fractional device pixels in Chromium.
+      expect(drawer!.width).toBeLessThanOrEqual(304.1);
+      expect(viewport.width - (drawer!.x + drawer!.width)).toBeGreaterThanOrEqual(54.9);
     }
     await expect(sidebar.locator(".material-file")).toHaveCount(1);
 

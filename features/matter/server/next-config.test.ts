@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import nextConfig from "../../../next.config";
+import { PHASE_PRODUCTION_BUILD } from "next/constants";
+import matterNextConfig from "../../../next.config";
+
+const nextConfig = matterNextConfig(PHASE_PRODUCTION_BUILD);
 
 describe("Matter Next response headers", () => {
   it("removes the framework disclosure header", () => {

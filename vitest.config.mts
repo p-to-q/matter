@@ -10,5 +10,6 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["features/**/*.test.ts", "next.config.test.ts", "scripts/**/*.test.mjs"],
+    exclude: ["scripts/check-markdown-links.test.mjs"],
   },
 });

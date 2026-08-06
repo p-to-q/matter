@@ -12,7 +12,7 @@ afterEach(async () => {
 
 describe("run-e2e process cleanup", () => {
   it(
-    "handles two SIGINTs, waits for the child fallback, and restores next-env", 
+    "handles two SIGINTs, waits for the child fallback, and restores next-env",
     async () => {
       const directory = await mkdtemp(join(tmpdir(), "matter-e2e-runner-"));
       temporaryDirectories.push(directory);

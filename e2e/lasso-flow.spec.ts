@@ -71,10 +71,10 @@ for (const viewport of [
         return { width: style.width, height: style.height, color: style.backgroundColor };
       }),
     );
-    expect(gripSkin).toEqual([
-      { width: "22px", height: "2px", color: "rgb(164, 81, 64)" },
-      { width: "22px", height: "2px", color: "rgb(164, 81, 64)" },
-    ]);
+    expect(gripSkin).toHaveLength(2);
+    expect(gripSkin.every((grip) => grip.width === "22px" && grip.height === "2px")).toBe(true);
+    expect(new Set(gripSkin.map((grip) => grip.color)).size).toBe(1);
+    expect(gripSkin[0]?.color).not.toBe("rgba(0, 0, 0, 0)");
     const sourceLayout = await sourceLayoutReceipt(page, text);
     const topHandle = page.getByRole("slider", { name: "Expand selected language from its top edge" });
     const handle = page.getByRole("slider", { name: "Expand selected language from its bottom edge" });

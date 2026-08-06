@@ -12,7 +12,7 @@
     "doctor": "node scripts/doctor.mjs",
     "check:docs": "node --test scripts/check-markdown-links.test.mjs && node scripts/check-markdown-links.mjs",
     "check": "npm run doctor && npm run check:docs && npm test && npm run typecheck && npm run lint && npm run build",
-    "test": "vitest run",
+    "test": "node --test scripts/check-markdown-links.test.mjs && vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:receipt": "env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true npm run build && env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true MATTER_RUN_PERFORMANCE_RECEIPT=true node scripts/run-e2e.mjs e2e/rooted-performance.spec.ts --config=playwright.production.config.ts"
