@@ -34,7 +34,9 @@ for (const viewport of [
     });
     await expect(voice).toBeEnabled();
     await voice.click();
-    const stop = page.getByRole("button", { name: "Stop recording", exact: true });
+    const stop = page
+      .getByRole("navigation", { name: "Editing tools" })
+      .getByRole("button", { name: "Stop recording", exact: true });
     await expect(stop).toBeVisible();
     await expect(page.locator(".matter-guidance__next")).toHaveText("说出你的想法。");
     await expect(page.locator("main.matter-shell")).toHaveAttribute(

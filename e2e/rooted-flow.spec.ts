@@ -103,6 +103,7 @@ for (const viewport of [
     const defaultRootChildId = (await visibleIds(page)).at(-1);
     if (defaultRootChildId === undefined) throw new Error("default root child missing");
     expect(defaultRootChildId).not.toBe(rootId);
+    await expect(tool("Undo")).toBeEnabled();
     await tool("Undo").click();
     await expect.poll(() => visibleIds(page)).toEqual(initialIds);
 
