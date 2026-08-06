@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import type { NavigationState } from "../runtime/navigation";
 import {
+  deriveMaterialFileLabel,
   deriveMaterialTitle,
   extractMaterialKeywords,
+  projectMaterialFileRows,
   projectMaterialFiles,
   serializeMaterialSelection,
 } from "./material-files";
@@ -40,6 +42,68 @@ describe("material file labels", () => {
 });
 
 describe("material file projection", () => {
+  it("keeps the unlabeled projection identical without reading offscreen text", () => {
+    let textReads = 0;
+    const lazyNode = {
+      ...node("lazy", null, [], "unused"),
+      get text() {
+        textReads += 1;
+        return "Only the mounted row needs this label.";
+      },
+    };
+    const lazyTree: ThoughtTree = {
+      protocolVersion: PROTOCOL_VERSION,
+      id: "tree_lazy_files",
+      rootId: lazyNode.id,
+      revision: 0,
+      nodes: { [lazyNode.id]: lazyNode },
+    };
+
+    const rows = projectMaterialFileRows(lazyTree, navigation());
+    expect(rows.map(({ nodeId, authoredIndex, depth }) => ({ nodeId, authoredIndex, depth })))
+      .toEqual([{ nodeId: "lazy", authoredIndex: 0, depth: 0 }]);
+    expect(textReads).toBe(0);
+    expect(deriveMaterialFileLabel(lazyNode).title.length).toBeGreaterThan(0);
+    expect(textReads).toBeGreaterThan(0);
+  });
+
+  it("matches the complete labeled projection for full, folded, and focus views", () => {
+    const focused: NavigationState = {
+      mode: "focus",
+      focusNodeId: "grandchild",
+      selectedNodeId: "grandchild",
+      foldedNodeIds: new Set(["root"]),
+    };
+    for (const state of [navigation(), navigation(new Set(["child-a"])), focused]) {
+      const rows = projectMaterialFileRows(tree, state);
+      const labeled = projectMaterialFiles(tree, state);
+      expect(rows).toEqual(labeled.map((entry) => ({
+        nodeId: entry.nodeId,
+        parentId: entry.parentId,
+        depth: entry.depth,
+        createdAt: entry.createdAt,
+        updatedAt: entry.updatedAt,
+        authoredIndex: entry.authoredIndex,
+        hasChildren: entry.hasChildren,
+        folded: entry.folded,
+        directMatch: entry.directMatch,
+      })));
+    }
+  });
+
+  it("reuses bounded structural projections across selection-only navigation", () => {
+    const initial = projectMaterialFileRows(tree, navigation());
+    const selected = projectMaterialFileRows(tree, {
+      ...navigation(),
+      selectedNodeId: "child-b",
+    });
+    const folded = projectMaterialFileRows(tree, navigation(new Set(["child-a"])));
+
+    expect(selected).toBe(initial);
+    expect(folded).not.toBe(initial);
+    expect(projectMaterialFileRows(tree, navigation(new Set(["child-a"])))).toBe(folded);
+  });
+
   it("uses authored preorder and shared fold state", () => {
     expect(projectMaterialFiles(tree, navigation(new Set(["child-a"]))).map((entry) => entry.nodeId)).toEqual([
       "root",

@@ -17,9 +17,28 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
     const lasso = page.getByRole("button", { name: "Circle-select language", exact: true });
+    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
-    await expect(page.getByRole("button", { name: "Move through canvas", exact: true })).toBeDisabled();
+    const move = page.getByRole("button", { name: "Return to canvas pan", exact: true });
+    await expect(move).toBeEnabled();
+    await move.click();
+    await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
+    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
+    const cameraBeforeMovePan = await page.locator("main.matter-shell").evaluate((main) => ({
+      x: Number(main.getAttribute("data-viewport-x")),
+      y: Number(main.getAttribute("data-viewport-y")),
+    }));
+    await page.mouse.move(viewport.width * 0.72, viewport.height * 0.34);
+    await page.mouse.down();
+    await page.mouse.move(viewport.width * 0.72 + 24, viewport.height * 0.34 + 18, { steps: 3 });
+    await page.mouse.up();
+    await expect.poll(() => page.locator("main.matter-shell").evaluate((main) => ({
+      x: Number(main.getAttribute("data-viewport-x")),
+      y: Number(main.getAttribute("data-viewport-y")),
+    }))).toEqual({ x: cameraBeforeMovePan.x + 24, y: cameraBeforeMovePan.y + 18 });
+    await lasso.click();
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     const cameraBeforeWheel = await page.locator("main.matter-shell").evaluate((main) => ({
       x: main.getAttribute("data-viewport-x"),
       y: main.getAttribute("data-viewport-y"),
@@ -44,6 +63,8 @@ for (const viewport of [
     await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
     await expect(page.getByRole("status")).toContainText("Selected language:");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("拖动把手设定变化程度。");
     const gripSkin = await page.locator(".stretch-handle").evaluateAll((grips) =>
       grips.map((grip) => {
         const style = getComputedStyle(grip, "::after");
@@ -51,8 +72,8 @@ for (const viewport of [
       }),
     );
     expect(gripSkin).toEqual([
-      { width: "22px", height: "2px", color: "rgb(189, 88, 71)" },
-      { width: "22px", height: "2px", color: "rgb(189, 88, 71)" },
+      { width: "22px", height: "2px", color: "rgb(164, 81, 64)" },
+      { width: "22px", height: "2px", color: "rgb(164, 81, 64)" },
     ]);
     const sourceLayout = await sourceLayoutReceipt(page, text);
     const topHandle = page.getByRole("slider", { name: "Expand selected language from its top edge" });
@@ -108,10 +129,16 @@ for (const viewport of [
     await expect(page.locator(".lasso-selection-fragment").first()).toHaveCSS("opacity", "0");
     await expect(page.locator(".lasso-selection-fragment").last()).toHaveCSS("opacity", "0");
     await expect(page.locator(".language-split-projection")).toHaveAttribute("data-preview-mode", "expand");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("在合适的程度松开。");
     await page.mouse.up();
     await expect(topHandle).toHaveAttribute("aria-valuenow", "0.5");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("调整把手细化变化程度。");
     await topHandle.press("Home");
     await expect(topHandle).toHaveAttribute("aria-valuenow", "0");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("拖动把手设定变化程度。");
     const handleBox = await handle.boundingBox();
     if (handleBox === null) throw new Error("stretch handle missing");
     const start = { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 };
@@ -131,6 +158,8 @@ for (const viewport of [
     await page.mouse.down();
     await page.mouse.move(secondStart.x, secondStart.y + 60, { steps: 5 });
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-stretching", "true");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("在合适的程度松开。");
     await expect(page.locator(".elastic-preview")).toHaveAttribute("data-preview-mode", "expand");
     await expect(page.locator(".language-split-slot")).toBeVisible();
     const surface = await page.locator(".language-split-slot").boundingBox();
@@ -144,6 +173,8 @@ for (const viewport of [
     expect(await sourceLayoutReceipt(page, text)).toEqual(sourceLayout);
     await page.mouse.up();
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("调整把手细化变化程度。");
     const settledLayout = await sourceLayoutReceipt(page, text);
     expect(sourceTextReceipt(settledLayout)).toEqual(sourceTextReceipt(sourceLayout));
     expect(settledLayout.node).toEqual(sourceLayout.node);
@@ -230,6 +261,8 @@ for (const viewport of [
     });
     await page.mouse.up();
     await expect(handle).toHaveAttribute("aria-valuenow", committedDegree!);
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("调整把手细化变化程度。");
     const selected = await page.getByRole("status").textContent();
     expect(selected).toContain("Selected language:");
 
@@ -257,6 +290,8 @@ for (const viewport of [
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
     await page.getByRole("button", { name: "Leave language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("拖动把手设定变化程度。");
     expect(browserErrors).toEqual([]);
   });
 
@@ -269,6 +304,8 @@ for (const viewport of [
     const empty = { x: viewport.width - 72, y: viewport.height - 116, width: 44, height: 36 };
     await page.mouse.move(empty.x, empty.y);
     await page.mouse.down();
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("闭合圈选这段文字。");
     await page.mouse.move(empty.x + empty.width, empty.y, { steps: 3 });
     await page.mouse.move(empty.x + empty.width, empty.y + empty.height, { steps: 3 });
     await page.mouse.move(empty.x, empty.y + empty.height, { steps: 3 });
@@ -276,6 +313,8 @@ for (const viewport of [
     await expect(page.locator(".lasso-ink__closure")).toHaveAttribute("d", "");
     await page.mouse.up();
     await expect(page.locator(".lasso-layer[data-selected=true]")).toHaveCount(0);
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("圈选一段文字作为参照。");
 
     const margin = 9;
     await page.mouse.move(fragment.x - margin, fragment.y - margin);
@@ -295,33 +334,32 @@ for (const viewport of [
     await page.mouse.up();
     await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", "");
     await expect(page.locator(".lasso-layer[data-selected=true]")).toHaveCount(0);
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("圈选一段文字作为参照。");
   });
 
-  test(`lasso hint stays at the lower-left at ${viewport.name} width`, async ({ page }) => {
+  test(`lasso does not add a sidebar hint at ${viewport.name} width`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/matter");
     await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
-    const hint = page.getByText("Draw around a phrase", { exact: true });
-    const rect = await hint.boundingBox();
-    if (rect === null) throw new Error("lasso hint missing");
-    expect(rect.x).toBeLessThan(viewport.width * 0.25);
-    expect(rect.y).toBeGreaterThan(viewport.height * 0.72);
-    expect(rect.x).toBeGreaterThanOrEqual(16);
-    expect(rect.y + rect.height).toBeLessThanOrEqual(viewport.height);
+    await expect(page.locator(".lasso-hint")).toHaveCount(0);
   });
 
-  test(`middle language becomes three centered flow blocks at ${viewport.name} width`, async ({ page }) => {
+  test(`selected language opens a centered flow pocket at ${viewport.name} width`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-    await page.getByRole("button", { name: "Apply v3 fixture version", exact: true }).click();
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-tree-revision", "2");
+    await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("圈选一段文字作为参照。");
 
     const text = page.locator(`[data-thought-text-id="${rootId}"]`);
-    const middle = await segmentProbeRect(text, 1);
-    await drawEarlyReleaseLoop(page, middle);
-    await expect(page.getByRole("status")).toContainText("Selected language: 而是它在今天仍然保留的一点余地");
+    const selectedSegment = await segmentProbeRect(text, 0);
+    await drawEarlyReleaseLoop(page, selectedSegment);
+    await expect(page.getByRole("status")).toContainText("我们怀念的也许不是一个真实存在过的过去");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("拖动把手设定变化程度。");
 
     const before = page.locator(".language-split-before-copy");
     const selected = page.locator(".language-split-block--selected");
@@ -331,15 +369,17 @@ for (const viewport of [
     await expect(after).toHaveCount(1);
     const sourceBefore = await sourceLayoutReceipt(page, text);
     const natural = await projectionReceipt(page);
-    const sourceSuffixTop = await sourceRangeTop(text, "让另一种生活");
+    const sourceSuffixTop = await sourceRangeTop(text, "而是那个过去");
     expect(natural.afterGlyphTop).toBeCloseTo(sourceSuffixTop, 1);
-    const sourceGlyphsBefore = await sourceGlyphReceipt(text, 0, "：");
+    const sourceGlyphsBefore = await sourceGlyphReceipt(text, 0, "，");
 
     const bottom = page.getByRole("slider", { name: "Expand selected language from its bottom edge" });
     await bottom.press("End");
     await expect(bottom).toHaveAttribute("aria-valuenow", "1");
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("调整把手细化变化程度。");
     const expanded = await projectionReceipt(page);
-    const sourceGlyphsExpanded = await sourceGlyphReceipt(text, 0, "：");
+    const sourceGlyphsExpanded = await sourceGlyphReceipt(text, 0, "，");
     expect(Math.abs(expanded.before.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
     expect(Math.abs(expanded.selected.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
     expect(Math.abs(expanded.after.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createRootedMaterialFixture } from "../fixtures/rooted-material";
 import type {
   DocumentRepository,
@@ -133,6 +133,70 @@ describe("persistence controller", () => {
       errorCode: null,
     });
     expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
+  });
+
+  it("CAS-saves a foreign imported tree before it becomes the active persistence document", async () => {
+    const current = createRootedMaterialFixture().tree;
+    const imported = { ...createRootedMaterialFixture().tree, id: "imported_tree" };
+    const saves: Array<{ treeId: string; expectedGeneration: number | null }> = [];
+    const repository: DocumentRepository = {
+      load: async () => ({ ok: true, value: null }),
+      save: async (treeId, _revision, _bundle, expectedGeneration) => {
+        saves.push({ treeId, expectedGeneration });
+        return { ok: true, value: 8 };
+      },
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+    await controller.start(current);
+    const prepared = await controller.prepareImportedTree(imported);
+
+    expect(prepared).toEqual({ ok: true, tree: imported, writeGeneration: 8 });
+    expect(saves.some((save) => save.treeId === "imported_tree" && save.expectedGeneration === null)).toBe(true);
+    if (!prepared.ok) throw new Error("import preparation rejected");
+    controller.activateImportedDocument(prepared);
+    expect(controller.getStatus()).toEqual({
+      phase: "saved",
+      persistedRevision: imported.revision,
+      dirtyRevision: null,
+      errorCode: null,
+    });
+  });
+
+  it("rejects a same-id import whose stored bundle differs without saving", async () => {
+    const imported = { ...createRootedMaterialFixture().tree, id: "existing_tree" };
+    const stored = { ...imported, revision: imported.revision + 1 };
+    const save = vi.fn();
+    const repository: DocumentRepository = {
+      load: async () => ({ ok: true, value: { tree: stored, writeGeneration: 3 } }),
+      save,
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+
+    await expect(controller.prepareImportedTree(imported)).resolves.toEqual({
+      ok: false,
+      errorCode: "IMPORT_CONFLICT",
+    });
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  it("reserves a new generation for an identical same-id import", async () => {
+    const imported = { ...createRootedMaterialFixture().tree, id: "existing_tree" };
+    const save = vi.fn(async () => ({ ok: true as const, value: 4 }));
+    const repository: DocumentRepository = {
+      load: async () => ({ ok: true, value: { tree: imported, writeGeneration: 3 } }),
+      save,
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+
+    await expect(controller.prepareImportedTree(imported)).resolves.toEqual({
+      ok: true,
+      tree: imported,
+      writeGeneration: 4,
+    });
+    expect(save).toHaveBeenCalledWith("existing_tree", imported.revision, expect.anything(), 3);
   });
 });
 

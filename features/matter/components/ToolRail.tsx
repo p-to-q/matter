@@ -1,14 +1,15 @@
-import type { PointerEvent as ReactPointerEvent, ReactNode, WheelEvent as ReactWheelEvent } from "react";
-import type { ProjectedTool, ToolIntent } from "../tools/model";
+import type {
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+  WheelEvent as ReactWheelEvent,
+} from "react";
+import type { ToolIntent } from "../tools/model";
+import type { ProjectedToolSurface } from "../tools/project-tool-surface";
 import {
   BranchIcon,
-  FoldIcon,
-  FocusIcon,
   LassoIcon,
   MoveIcon,
-  ShowAllIcon,
   UndoIcon,
-  UnfoldIcon,
   VoiceIcon,
 } from "./icons";
 
@@ -17,20 +18,33 @@ export type ToolRailProps = {
   lassoActive: boolean;
   lassoAvailable: boolean;
   onLasso: () => void;
+  onMove: () => void;
   onIntent: (intent: ToolIntent) => void;
   onVoice: () => void;
-  tools: readonly ProjectedTool[];
+  surface: ProjectedToolSurface;
   voiceActive: boolean;
   voiceAvailable: boolean;
   voiceLabel: string;
 };
 
-export function ToolRail({ interactionPending, lassoActive, lassoAvailable, onIntent, onLasso, onVoice, tools, voiceActive, voiceAvailable, voiceLabel }: ToolRailProps) {
-  const branch = tools.find((tool) => tool.id === "add-child");
-  const undo = tools.find((tool) => tool.id === "undo");
-  const contextual = tools.filter(
-    (tool) => tool.id !== "add-child" && tool.id !== "undo",
-  );
+type ToolRailGroup = "admission" | "material" | "history";
+
+// This fixed, paper-adjacent instrument is the only visible editing vocabulary.
+// Do not mirror its controls into the unfinished left material field.
+export function ToolRail({
+  interactionPending,
+  lassoActive,
+  lassoAvailable,
+  onIntent,
+  onLasso,
+  onMove,
+  onVoice,
+  surface,
+  voiceActive,
+  voiceAvailable,
+  voiceLabel,
+}: ToolRailProps) {
+  const { branch, undo } = surface.main;
 
   return (
     <nav
@@ -43,52 +57,58 @@ export function ToolRail({ interactionPending, lassoActive, lassoAvailable, onIn
       <ToolButton
         active={voiceActive}
         disabled={!voiceAvailable || interactionPending}
+        group="admission"
         icon={<VoiceIcon />}
         label={voiceLabel}
         onClick={voiceAvailable && !interactionPending ? onVoice : undefined}
         shortLabel="Voice"
         toolId="voice"
       />
-      <span aria-hidden="true" className="tool-rail__separator" />
+      <ToolSeparator between="admission-material" />
       <ToolButton
         active={lassoActive}
         disabled={!lassoAvailable || interactionPending}
+        group="material"
         icon={<LassoIcon />}
         label={lassoActive ? "Leave language selection" : "Circle-select language"}
         onClick={!interactionPending && lassoAvailable ? onLasso : undefined}
+        pressed={lassoActive}
         shortLabel="Lasso"
         toolId="lasso"
       />
       <ToolButton
         disabled={interactionPending || branch?.availability !== "available"}
+        group="material"
         icon={<BranchIcon />}
         label="Extend related thought"
-        onClick={branch?.availability === "available" ? () => onIntent(branch.intent) : undefined}
+        onClick={
+          branch?.availability === "available"
+            ? () => onIntent(branch.intent)
+            : undefined
+        }
         shortLabel="Branch"
         toolId="branch"
       />
-      {contextual.map((tool) => (
-        <ToolButton
-          disabled={interactionPending || tool.availability !== "available"}
-          icon={iconForContextualTool(tool.id)}
-          key={tool.id}
-          label={tool.label}
-          onClick={
-            tool.availability === "available"
-              ? () => onIntent(tool.intent)
-              : undefined
-          }
-          shortLabel={tool.label}
-          toolId={tool.id}
-        />
-      ))}
-      <ToolButton active={!interactionPending && !lassoActive} disabled={interactionPending || lassoActive} icon={<MoveIcon />} label="Move through canvas" shortLabel="Move" toolId="move" />
-      <span aria-hidden="true" className="tool-rail__separator" />
+      <ToolButton
+        disabled={interactionPending || !lassoActive}
+        group="material"
+        icon={<MoveIcon />}
+        label={lassoActive ? "Return to canvas pan" : "Canvas pan"}
+        onClick={lassoActive && !interactionPending ? onMove : undefined}
+        shortLabel="Move"
+        toolId="move"
+      />
+      <ToolSeparator between="material-history" />
       <ToolButton
         disabled={interactionPending || undo?.availability !== "available"}
+        group="history"
         icon={<UndoIcon />}
         label="Undo last change"
-        onClick={undo?.availability === "available" ? () => onIntent(undo.intent) : undefined}
+        onClick={
+          undo?.availability === "available"
+            ? () => onIntent(undo.intent)
+            : undefined
+        }
         shortLabel="Undo"
         toolId="undo"
       />
@@ -96,47 +116,39 @@ export function ToolRail({ interactionPending, lassoActive, lassoAvailable, onIn
   );
 }
 
-function iconForContextualTool(toolId: ProjectedTool["id"]): ReactNode {
-  switch (toolId) {
-    case "focus":
-      return <FocusIcon />;
-    case "fold":
-      return <FoldIcon />;
-    case "unfold":
-      return <UnfoldIcon />;
-    case "show-all":
-      return <ShowAllIcon />;
-    case "add-child":
-      return <BranchIcon />;
-    case "undo":
-      return <UndoIcon />;
-    default:
-      return assertNever(toolId);
-  }
-}
-
-function assertNever(value: never): never {
-  throw new Error(`Unhandled contextual tool: ${String(value)}`);
-}
-
 type ToolButtonProps = {
   active?: boolean;
   disabled?: boolean;
+  group: ToolRailGroup;
   icon: ReactNode;
   label: string;
   onClick?: () => void;
+  pressed?: boolean;
   shortLabel: string;
   toolId: string;
 };
 
-function ToolButton({ active, disabled, icon, label, onClick, shortLabel, toolId }: ToolButtonProps) {
+function ToolButton({
+  active,
+  disabled,
+  group,
+  icon,
+  label,
+  onClick,
+  pressed,
+  shortLabel,
+  toolId,
+}: ToolButtonProps) {
   return (
     <button
       aria-label={label}
-      aria-pressed={active || undefined}
+      aria-pressed={pressed}
       className="tool-rail__button"
       data-active={active || undefined}
+      data-tool-emphasis={active ? "primary" : "quiet"}
+      data-tool-group={group}
       data-tool-id={toolId}
+      data-tool-state={disabled ? "disabled" : active ? "active" : "idle"}
       disabled={disabled}
       onClick={onClick}
       title={label}
@@ -145,6 +157,20 @@ function ToolButton({ active, disabled, icon, label, onClick, shortLabel, toolId
       {icon}
       <span className="tool-rail__label">{shortLabel}</span>
     </button>
+  );
+}
+
+function ToolSeparator({
+  between,
+}: {
+  between: "admission-material" | "material-history";
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className="tool-rail__separator"
+      data-tool-separator={between}
+    />
   );
 }
 

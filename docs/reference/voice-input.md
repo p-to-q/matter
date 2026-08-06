@@ -30,10 +30,12 @@ lifecycle and payload cost are not justified by the current claim.
 
 ## Admission boundary
 
-The voice control has a target only at an empty root or a selected node in full
-view. Activation freezes the target, tree id and revision; transcription never
-reads a newer selection and never relocates a result. A successful child
-admission keeps the parent selected, so repeating the action creates siblings.
+The voice control has a target only in the full material view: at an empty tree
+it initializes the root; in a nonempty tree it appends a first-level child under
+the sole root. Activation freezes that target, tree id and revision;
+transcription never reads a newer selection and never relocates a result. A
+successful admission keeps the current selection, so recording never changes
+what a person is handling.
 
 The framework-free controller owns these serializable phases:
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createRootedMaterialFixture } from "../fixtures/rooted-material";
 import { createFixtureInsertChildCommand } from "../fixtures/rooted-material";
 import { commitTreeCommand } from "../tree/history";
-import { allocateSnapshotPaths, materialSlug } from "./snapshot-paths";
+import { allocateSnapshotPath, allocateSnapshotPaths, materialSlug } from "./snapshot-paths";
 
 describe("snapshot paths", () => {
   it("allocates one index.md per node in authored order", () => {
@@ -28,6 +28,9 @@ describe("snapshot paths", () => {
     expect(paths[1].path).toMatch(/^matter\/001-.+\/index\.md$/u);
     expect(paths[2].path).toMatch(/^matter\/002-.+\/index\.md$/u);
     expect(paths.map((entry) => entry.authoredIndex)).toEqual([0, 1, 2]);
+    expect(paths.map((entry) => allocateSnapshotPath(second.tree, entry.nodeId)))
+      .toEqual(paths.map((entry) => entry.path));
+    expect(allocateSnapshotPath(second.tree, "missing")).toBeNull();
   });
 
   it("normalizes and bounds readable slugs without making them identity", () => {

@@ -3,7 +3,8 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev",
+    "dev:webpack": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -13,9 +14,11 @@
     "check": "npm run doctor && npm run check:docs && npm test && npm run typecheck && npm run lint && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:receipt": "env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true npm run build && env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true MATTER_RUN_PERFORMANCE_RECEIPT=true node scripts/run-e2e.mjs e2e/rooted-performance.spec.ts --config=playwright.production.config.ts"
   },
   "dependencies": {
+    "fflate": "^0.8.2",
     "idb": "^8.0.3",
     "next": "16.2.12",
     "react": "19.2.8",

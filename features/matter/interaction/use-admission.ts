@@ -67,8 +67,9 @@ export function useAdmission({
     driver.updateScope({
       treeId: scope.treeId,
       revision: scope.revision,
+      documentEpoch: scope.documentEpoch,
     });
-  }, [driver, scope.treeId, scope.revision]);
+  }, [driver, scope.documentEpoch, scope.treeId, scope.revision]);
 
   useEffect(() => {
     driver.retain();

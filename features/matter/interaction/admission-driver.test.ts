@@ -137,6 +137,16 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
+  it("invalidates capture when only the document session epoch changes", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+
+    h.driver.updateScope({ ...SCOPE, documentEpoch: 1 });
+
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.voice.cancel).toHaveBeenCalledWith({ interactionId: "voice_1", attempt: 1 });
+  });
+
   it("aborts transcription on scope invalidation and ignores its late result", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";

@@ -1,0 +1,96 @@
+.root {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  overflow: hidden;
+  isolation: isolate;
+  background: transparent;
+  pointer-events: none;
+}
+
+.poster,
+.video,
+.wash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.poster,
+.video {
+  z-index: 1;
+}
+
+.wash {
+  z-index: 2;
+}
+
+.poster {
+  background-color: #f5f5f2;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  filter: grayscale(1) contrast(0.84) brightness(1.08);
+  mix-blend-mode: multiply;
+  opacity: 0.18;
+}
+
+.video {
+  display: block;
+  object-fit: cover;
+  filter: grayscale(1) contrast(0.84) brightness(1.08);
+  mix-blend-mode: multiply;
+  opacity: 0.18;
+}
+
+.wash {
+  background: rgba(245, 245, 242, 0.14);
+}
+
+.root[data-fx="off"] .poster,
+.root[data-fx="off"] .video {
+  opacity: 0;
+}
+
+:global(.matter-document[data-canvas-theme="dark"]) .root {
+  color: #f0f2f3;
+}
+
+:global(.matter-document[data-canvas-theme="dark"]) .poster,
+:global(.matter-document[data-canvas-theme="dark"]) .video {
+  filter: grayscale(1) contrast(0.9) brightness(0.9);
+  mix-blend-mode: multiply;
+  opacity: 0.24;
+}
+
+:global(.matter-document[data-canvas-theme="dark"]) .wash {
+  background: rgba(22, 29, 39, 0.06);
+}
+
+:global(.matter-document[data-canvas-theme="dark"]) .root[data-fx="off"] .poster,
+:global(.matter-document[data-canvas-theme="dark"]) .root[data-fx="off"] .video {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .video {
+    display: none;
+  }
+
+  .poster {
+    opacity: 0.16;
+  }
+}
+
+@media (forced-colors: active) {
+  .root {
+    background: Canvas;
+  }
+
+  .poster,
+  .video,
+  .wash {
+    display: none;
+  }
+}

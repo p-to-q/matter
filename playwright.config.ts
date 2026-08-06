@@ -6,7 +6,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:3000/matter",
+    baseURL: "http://127.0.0.1:3100/matter",
     trace: "on-first-retry",
   },
   projects: [
@@ -25,13 +25,17 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1",
+    command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
     env: {
       ...process.env,
+      MATTER_BASE_PATH: "/matter",
+      MATTER_PERFORMANCE_FIXTURE: "true",
       MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+      MATTER_LABEL_ADAPTER: "fixture",
+      MATTER_NEXT_DIST_DIR: ".next-e2e",
     },
-    url: "http://127.0.0.1:3000/matter",
-    reuseExistingServer: !process.env.CI,
+    url: "http://127.0.0.1:3100/matter",
+    reuseExistingServer: false,
     timeout: 60_000,
   },
 });

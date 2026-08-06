@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ThoughtTree } from "../tree/model";
 import { createIndexedDbDocumentRepository } from "./document-repository";
+import { createDocumentImportCoordinator } from "./document-import-coordinator";
+import { resolveHydrationDecision } from "./hydration-decision";
 import { createPersistenceController } from "./persistence-controller";
+import type { DocumentSwitchReceipt } from "../store/matter-store";
 
 export function useMaterialPersistence(
   tree: ThoughtTree,
   hydrateSnapshot: (tree: ThoughtTree) => unknown,
+  switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
 ) {
   const [controller] = useState(() =>
     createPersistenceController(createIndexedDbDocumentRepository()),
@@ -16,6 +20,10 @@ export function useMaterialPersistence(
   const startedRef = useRef(false);
   const startPromiseRef = useRef<ReturnType<typeof controller.start> | null>(null);
   const lifecycleRef = useRef(0);
+  const importCoordinator = useMemo(() => createDocumentImportCoordinator(
+    controller,
+    switchDocument,
+  ), [controller, switchDocument]);
 
   useEffect(() => {
     latestTreeRef.current = tree;
@@ -29,12 +37,9 @@ export function useMaterialPersistence(
     startPromiseRef.current ??= controller.start(initialTree);
     void startPromiseRef.current.then(({ storedTree }) => {
       if (!active) return;
-      const latest = latestTreeRef.current;
-      if (storedTree !== null && latest.id === initialTree.id && latest.revision === initialTree.revision) {
-        hydrateSnapshot(storedTree);
-      } else if (latest.id === initialTree.id && latest.revision !== initialTree.revision) {
-        controller.publish(latest);
-      }
+      const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, storedTree);
+      if (decision.action === "hydrate") hydrateSnapshot(decision.tree);
+      else if (decision.action === "publish") controller.publish(decision.tree);
       startedRef.current = true;
     });
     return () => {
@@ -65,5 +70,10 @@ export function useMaterialPersistence(
   }, [controller, hydrateSnapshot]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
-  return Object.freeze({ status, retry: controller.retry, resolveConflict });
+  return Object.freeze({
+    status,
+    retry: controller.retry,
+    resolveConflict,
+    importMaterial: importCoordinator.importValidatedTree,
+  });
 }

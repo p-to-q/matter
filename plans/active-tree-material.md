@@ -73,7 +73,11 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 | Presentation | Re-frozen | top-anchored columnar tree; measured text, pure derived geometry, no authored coordinate |
 | Editing tools | Frozen | closed context projection; right/bottom rail owns no runtime or tree state |
 | Local return | Frozen | Markdown `SnapshotBundle`, IndexedDB durability, ZIP export/import |
+| Deployment probe | Frozen | `/matter/api/health` reports coarse gated surface states without provider or material data |
 | Visual composition | Local to each phase | quiet Matter form; refine from the running interface, not a second design system |
+| Right paper chrome | Frozen | anonymized private composition study; the rounded paper owns ambient media, right rail, and corner utilities |
+| Left material field | Pending | current file index is intentionally not visually frozen; redesign requires its own research and freeze slice |
+| Lightweight inquiry | Specified | secondary non-executing orientation only; blocked until the no-prompt/no-assistant invariant is explicitly revised |
 
 The foundation freeze was completed on 2026-08-03 after source research and a
 second adversarial review. Its evidence lives in
@@ -270,16 +274,6 @@ the laptop/narrow browser receipt covers root stability, child-right and top
 alignment, sibling-left packing, fold, focus, fixture undo and pan without tree
 revision.
 
-Pointer-capture acquisition hardening, 2026-08-05:
-
-```text
-Outcome:    a failed browser capture cannot strand or move a half-started pan
-Boundary:   RootedMaterial pan adapter only
-Invariants: camera state stays transient; failed capture clears pointer origin
-Proof:      laptop/narrow capture-failure, immobility, and immediate retry receipt
-Non-goals:  gesture redesign, layout changes, or lasso/stretch behavior
-```
-
 ### Confidence gate
 
 The foundation audit on 2026-08-03 rated the `0.2` document, address, layout, and
@@ -308,7 +302,7 @@ preserve material and leave a pointer recovery path.
 
 ### Slice 2A — Voice admits human material
 
-State: Frozen for build.
+State: Proven.
 
 ```text
 Outcome:    pointer-controlled voice admits one verbatim human root or child as
@@ -367,18 +361,6 @@ is only advisory. Recorder fallback, background-page policy, decoded media
 validation, request admission/rate/spend guards, physical Safari/Chrome proof,
 and true level feedback remain explicit live deployment gates rather than claims
 of the fixture slice.
-
-Request-admission hardening, 2026-08-05:
-
-```text
-Outcome:    transcription uploads cannot exceed or outlive one server budget
-Boundary:   request stream admission → strict multipart route → transcriber
-Invariants: actual bytes decide; one route-entry deadline; stable public errors
-Proof:      declared/actual size, stalled stream, cancellation, valid multipart
-Capacity:   budget up to ~6.6 MB of body copies per admitted concurrent request;
-            deployment admission/rate guards must bound concurrency before live
-Non-goals:  auth, rate/spend control, decoded media validation, provider changes
-```
 
 ### Slice 2B — Language receives a physical address
 
@@ -582,6 +564,535 @@ Invariants: only DOMException QuotaExceededError maps to storage-full; generatio
 Proof:      repository classification matrix; latest-dirty retention and retry drain
 Non-goals:  UI recovery copy, pagehide, archive/export, automatic deletion
 ```
+
+### Slice 3B — Material can leave and return as one archive
+
+State: Proven.
+
+```text
+Outcome:    a person can export the current Markdown bundle as a ZIP and, after
+            an explicit replacement confirmation, import a valid ZIP as material
+Boundary:   strict browser archive transport + generation-checked repository save
+            + one successful document-switch coordinator + transient file-panel UI
+Invariants: the archive is only a transport for SnapshotBundle; all entries finish
+            validation before any storage or runtime change; a failed or conflicted
+            import leaves current material, history, navigation, and selection intact;
+            a successful switch clears transient session state and begins persistence
+            for exactly the imported tree; the fixed right editing island stays unchanged
+Proof:      bundle→ZIP→bundle/tree identity; malformed, duplicate/colliding, traversal,
+            CRC, compressed/expanded-size, depth and entry-count rejections; CAS collision
+            tests; pointer-only export/import/cancel/confirmation at laptop and narrow widths
+Non-goals:  directory picker, path-authored edits, multi-document tabs, sync, migration,
+            background archive jobs, archive history, or permanent status chrome
+```
+
+The transport uses a dynamic browser-only `fflate` import rather than a local ZIP
+implementation: the platform has no complete interoperable archive API, while this
+small dependency exposes a streaming `Unzip` boundary. Because `fflate` does not
+verify ZIP CRC during streaming extraction, a bounded central-directory reader and
+incremental CRC check reject corrupt bytes before the strict snapshot codec runs. The Archive
+entry point belongs to a short-lived panel in the left material index; it is not a
+sixth editing tool and does not alter the physical ToolRail order. Archive parsing
+keeps pointer interaction available, and only a fully verified candidate may enter
+the existing generation-checked repository through an explicit document switch.
+
+Receipt, 2026-08-05: deterministic export and streaming import prove exact tree
+identity together with traversal, directory, Unicode/case collision, UTF-8, CRC,
+entry-count, path-depth, compressed-input, declared-expanded and actual-expanded
+bounds. Same-id import reserves a fresh CAS generation before switching; conflict,
+cancel and invalid input leave the current document and session untouched. A
+document epoch invalidates sidebar selection, lasso settlement, stretch preview,
+recording and transcription even when tree id and revision are unchanged. The full
+repository passed 460 unit tests, typecheck, lint and documentation checks; the
+archive browser matrix passed 6/6 at laptop and 390 px. An independent verifier
+reran 69 focused tests and all six browser cases and returned pass with no P0/P1.
+
+### Presentation shell correction — the field becomes a workbench
+
+State: Proven.
+
+```text
+Outcome:    material files remain visible at the left while the rooted canvas
+            reads as one inset, touchable paper field with quiet leaf-shadow motion
+Boundary:   rendering composition, static visual assets, UI type tokens, and the
+            ToolRail presenter; tree layout, tool projection, and persistence stay frozen
+Invariants: the visible tree remains the canvas and context boundary; controls own no
+            durable state; motion is decorative, silent, non-blocking, and reduced-motion safe
+Proof:      focused unit/type/lint checks plus laptop and narrow pointer receipts,
+            screenshots, overflow checks, and an independent verifier pass
+Non-goals:  authored coordinates, a draggable tool mode, theme/settings infrastructure,
+            new tool intents, a chat surface, or copying the supplied reference brand
+```
+
+The desktop shell follows a browser-workbench composition: the material outline
+occupies the outer field and the canvas is inset on the right as one rounded
+surface. The supplied leaf-shadow loop is the single ambient signature inside
+that surface. Departure Mono carries interface text while material passages keep
+their existing reading face. The editing island remains a closed projection in
+its stable right-side position; this slice makes its visual groups portable but
+does not let it compete with the canvas for drag ownership.
+
+Receipt, 2026-08-04: the supplied poster/video and local interface faces load
+through the configured base path; focused tree/layout tests passed 39/39;
+Playwright passed the laptop, 390 px, and focused 320 px workbench matrix 5/5;
+typecheck, lint, production build, and an independent verifier all passed.
+
+### Workbench correction — guidance, index, and responsive loading
+
+State: Proven.
+
+```text
+Outcome:    the canvas explains the next bodily action at its lower edge, the left
+            outline reads as a manuscript index, and first paint does not wait on motion
+Boundary:   MaterialFiles presentation state, canvas guidance copy, ambient asset loading,
+            and the localhost development receipt; fixture domain helpers remain test-only
+Invariants: no assistant/status panel; tree and intent authority stay unchanged; guidance
+            owns no state; video is optional enhancement and reduced-motion safe
+Proof:      request timing, asset byte comparison, type/lint/unit checks, laptop/390/320
+            interaction receipts, repeated localhost health requests, independent review
+Non-goals:  new AI tools, fixture controls in product chrome, persistence/protocol changes,
+            generic animation infrastructure, virtualization, or authored coordinates
+```
+
+The left surface has two transient presentation modes in addition to browsing:
+search reveals one input, while select reveals copy affordances. Revision,
+successful persistence, file-type decoration, and fixture versions are not
+product chrome. The leaf poster paints first; motion joins only after the main
+thread yields and pauses with page visibility.
+
+Receipt, 2026-08-04: Next 16 Turbopack reduced the measured cold development
+page from about `2.704 s` to `0.896 s`; the manual server now owns port 3000
+while Playwright owns isolated port 3100. Twenty consecutive localhost health
+requests returned `200` with no timeout. The poster shrank from `323 KB` PNG to
+`55 KB` JPEG and paints before the idle-mounted video. The full repository
+check passed 372/372 unit tests and production build; the focused UI matrix
+passed 13/13 Playwright tests, and an independent verifier returned pass.
+
+### Guidance correction — one truthful next action
+
+State: Proven.
+
+```text
+Outcome:    the paper's lower-left edge gives one honest next bodily action for
+            every current material, lasso, stretch, and voice-admission state
+Boundary:   pure guidance projection, its RootedMaterial adapter, lower-left type,
+            and focused presentation tests; tool and server authority stay unchanged
+Invariants: guidance owns no state, never promises an unavailable transformation,
+            and does not duplicate the interaction-specific live announcements
+Proof:      exhaustive projection and recovery matrix plus laptop/narrow pointer
+            receipts for selection, lasso, stretch, voice progress, and one-line type
+Non-goals:  generative direction voice, tool reordering, new tool intents, backend
+            changes, copied reference branding, or another status surface
+```
+
+Research found that the existing lower-right sentence sometimes offered several
+actions at once and, after stretch, instructed the person to speak a generative
+direction even though the current voice control admits human material. The
+replacement is a closed pure projection with explicit precedence and error
+recovery copy. Its single visual line moves to the lower-left paper edge and
+uses the already-licensed Departure Mono spacing observed in the supplied
+reference; it does not copy the reference brand or its delayed decorative fade.
+The V1 editing island remains research evidence only: this slice records the
+fixed-slot recommendation but does not change tool order before product review.
+
+Receipt, 2026-08-04: the pure projection matrix covers all admission phases and
+11 recovery codes together with material, lasso and stretch precedence in
+29/29 focused tests. All 401 repository unit tests, typecheck, lint, docs and
+repository doctor passed. The focused browser matrix kept selection, lasso,
+stretch and voice progress green at laptop and narrow widths; a corrected
+Range-based receipt then proved one rendered, non-overflowing guidance line at
+1280, 390 and 320 px in 3/3 checks. Desktop browser inspection confirmed the
+24 px paper inset and Departure Mono treatment. An independent verifier first
+rejected wrapping recovery copy, then passed the bounded-copy and proof revision
+with no remaining gap.
+
+### Tool island correction — stable primary controls, local structure handles
+
+State: Proven.
+
+```text
+Outcome:    the right editing island stays physically and semantically stable while
+            structure navigation appears at the selected material it changes
+Boundary:   ToolRail presentation, a measured transient local-handle overlay,
+            pure tool presentation helpers, responsive CSS, and focused browser proof
+Invariants: Voice → Lasso → Branch → Move → Undo never reorder; local controls own
+            no state; Move must express an actual return to canvas pan; no durable
+            mutation, server, protocol, tree-layout, or history contract changes
+Proof:      fixed-slot and local-tool unit tests plus laptop, 390 px, and 320 px
+            pointer receipts covering selection, fold, focus, show-all, lasso, and undo
+Non-goals:  tool drag/reorder, generated transformations, a settings surface, new
+            ToolIntent variants, persistent camera modes, or revised backend behavior
+```
+
+The rail is a stable instrument, not a context menu: unavailable slots remain
+visible but honest. Focus, Fold, Unfold, and Show all are local structural
+handles positioned from the visible selected material without entering the
+tree's measurement DOM. They yield to lasso and stretch interaction, so they
+cannot silently change the geometry or steal a gesture.
+
+Receipt, 2026-08-04: the independent reviewer first found narrow text overlap,
+drawer collision, and a false Move state; each is now covered by the pure
+positioner and interaction contracts. All 406 unit tests, typecheck, lint,
+repository doctor, and documentation links pass. A fresh localhost restart
+cleared the stale HMR client; Chromium then passed the rooted desktop/390/320
+matrix 3/3 and the lasso/return-to-pan matrix 8/8.
+
+### Workbench restoration — fixed Arc shell and one editing instrument
+
+State: Proven.
+
+```text
+Outcome:    desktop always keeps a left material field beside one inset rounded
+            canvas with the supplied leaf shadow, and only five editing controls show
+Boundary:   desktop shell geometry, the NodeHandles presenter, workbench documentation,
+            and focused browser proof; tree, navigation, and tool intents stay frozen
+Invariants: Voice → Lasso → Branch → Move → Undo is the only visible editing island;
+            hiding the file index cannot enlarge the desktop canvas; ambient media is
+            decorative, silent, non-blocking, base-path safe, and still-backed
+Proof:      source/ZIP hash and HTTP receipts; open/closed desktop geometry; selected-
+            material control inventory; laptop and narrow pointer checks; independent review
+Non-goals:  deleting fold/focus capability, changing the left outline's tree disclosure,
+            tree layout, persistence, protocol, new AI tools, or a draggable tool palette
+```
+
+Implementation evidence reopens the earlier presentation freeze narrowly: a
+selected passage currently creates a second two-button island for Focus/Fold,
+and closing the file index expands the desktop canvas from the specified 262 px
+inset to 64 px. Both states contradict the stable browser-workbench composition
+even though the supplied tree-shadow media itself is present and healthy.
+
+Receipt, 2026-08-05: the desktop canvas remains x=262/y=10/w=1008/r=18 at
+1280 px with the file index both open and closed; the supplied video is playing
+at readyState 4 with a still fallback and byte-identical ZIP sources. Selecting
+material exposes no second action island, while the right instrument remains
+Voice → Lasso → Branch → Move → Undo. The 390 px canvas remains x=8/y=66/r=16
+with 48 px targets. All 463 unit tests, typecheck, lint, docs, build and five
+focused browser cases passed; an independent verifier returned PASS with no
+P0/P1 after repeating asset, localhost, desktop and narrow checks.
+
+### Canvas chrome transplant — Matter utilities at the paper edge
+
+State: Proven.
+
+```text
+Outcome:    the right paper adopts the supplied corner-chrome system: quiet top-right
+            information/settings, lower-left action guidance, and lower-right
+            help/language/leaf-FX/appearance controls with Matter-specific honest copy
+Boundary:   one canvas-chrome presenter, validated transient preferences, the existing
+            guidance presenter, ambient enablement, scoped canvas theme tokens, and UI proof
+Invariants: every new surface stays inside the rounded paper; the left material field and
+            five-slot editing island do not move; no prompt/chat/assistant or data transfer;
+            preferences and overlay/feedback state never enter material or command history
+Proof:      preference validation/storage-event tests; existing guidance-state matrix;
+            menu/dialog keyboard and outside/Escape behavior; FX/reduced-motion/theme proof;
+            desktop/390/320 screenshots, pointer flows, build, health, and independent review
+Non-goals:  billing infrastructure, binding public legal terms, full-app localization, a live
+            support agent, provider work, tree mutations, protocol changes, or sidebar theming
+```
+
+The source package is treated as interaction evidence, not an authority over
+Matter: its 24 px corner grid, Departure Mono typography, popover focus behavior,
+validated preferences, storage synchronization, cleanup, visibility pause and
+media fallbacks are retained. The Herald composer is not: “Ask Matter” opens
+static, task-oriented help because an assistant surface would violate the product.
+Pricing, privacy and terms open honest pre-release information rather than link to
+placeholder pages or imply unavailable billing and legal commitments. The existing
+pure canvas-guidance state machine remains the only owner of lower-left prompts;
+only its presenter takes on the manufacturer-mark typography and keyed state-change
+entrance, so no second toast, timer, or announcement channel is introduced.
+
+Receipt, 2026-08-05: live reference inspection and the supplied package agree on
+the 24 px desktop grid, 14/20 Departure Mono typography, 160×104 settings menu,
+and mobile handoff below 768 px. Matter keeps that form inside the rounded paper
+with localized, honest product copy and no Herald input. The settings and
+information overlays share one state, trap and restore focus without scrolling
+the paper, inert the paper and editing rail, and clean up at the breakpoint.
+Validated v1 preferences survive reload and cross-tab storage events; FX pauses
+the supplied video and appearance tokens remain paper-scoped. All 505 unit tests
+pass; the two dedicated desktop/mobile browser receipts pass, and the complete
+standard suite has 28 product cases passing with the production performance
+receipt explicitly skipped.
+
+The follow-up keeps the fixed lasso hint out of the left field entirely and
+restores the original system mono stack for the top-left workbench mark. Dark
+appearance uses the same ambient source with a scoped dark base and a lower
+brightness/contrast treatment; the independent browser receipt asserts that
+filter path as well as the FX off state.
+
+### Instrument density and human admission correction
+
+State: Frozen.
+
+```text
+Outcome:    the right instrument keeps five stable targets with legible icons;
+            Delete removes a selected non-root thought pointer-undoably; voice
+            admits first-level material below the root after the first admission
+Boundary:   rail presenter/CSS/icons; a private human removal translator and
+            store action; admission-anchor policy and its existing browser path
+Invariants: only the tree engine mutates material; removal is exact-undoable;
+            root deletion remains unavailable; browser text/form editing is not
+            hijacked; first utterance still initializes the sole root; real STT
+            remains deployment-configured rather than silently fixture-backed
+Proof:      pure removal/admission tests; store exact-undo/rejection tests;
+            laptop/narrow pointer and keyboard receipts; toolbar geometry and
+            hover-state proof in light and dark appearance
+Non-goals:  lasso-range deletion, multiple roots, AI tool changes, moving the
+            rail, live-provider credentials, or left-field redesign
+```
+
+The first instrument used a complete return arrow and compact 24-unit icons.
+The current rail grew its targets while retaining 16-unit artwork, then changed
+active target dimensions. This slice restores a 20 px visual icon inside a
+stable 44 px desktop / 48 px narrow target; only the internal black-and-white
+surface expands within that fixed target, so the rail never shifts. Deep selections no longer retarget human
+admission: nonempty full-view voice always appends under the sole root. The
+fixture transcription remains explicit until a verified provider adapter is
+configured; it is not presented as a real transcription result.
+
+### Material index cold-start correction — derive only the visible window
+
+State: Implemented; scoped index cold-start proven, full-page gate open.
+
+```text
+Outcome:    opening the 2,000-node production canvas no longer creates a >100 ms task
+            by deriving labels and paths for every offscreen file before first paint
+Boundary:   MaterialFiles projection/window derivation and its focused performance proof;
+            tree, canvas layout, persistence, search results, and UI form stay frozen
+Invariants: the complete tree remains the index/search authority; mounted rows remain a
+            bounded overscanned window; focus, selection, copy, fold, and paths stay exact
+Proof:      full projection identity tests; window/search/focus browser flows; three-round
+            production receipt with cold max <100 ms and existing fold/focus gates
+Non-goals:  hiding the index by default, prewarming work, weakening timing thresholds,
+            canvas virtualization, protocol changes, or an approximate search inventory
+```
+
+Two repeated production A/B receipts isolate the regression: 2,000 canvas nodes
+with the desktop index closed produce no long task, while the same build with the
+index initially open produces a 308–323 ms first task. Reopening after the first
+derivation is cheap. The current receipt now refuses to assign one causal stage
+when several measurement marks fall inside the same browser task; exact marks and
+raw timing remain intact.
+
+Receipt, 2026-08-05: browse, fold and focus now build a cached unlabeled
+structural projection; only mounted overscan rows derive cached titles and exact
+lineage paths, while non-empty search still derives the complete labeled tree.
+The same production diagnostic reduced the cold task from `310–323 ms` to
+`67 ms`, layout-ready to `216.1 ms`, and measurement-window tasks to at most
+`97 ms`; selection was `8.7 ms`, fold p95 `110.2 ms`, focus p95 `111.3 ms`,
+with 4,289 elements. The unchanged raw `<100 ms` assertion still fails at
+`139 ms` during the first warmup full 2,000-node canvas remount. Open/closed
+index A/B after warmup measured `98/94 ms`, so the index cause is closed but the
+whole-page release gate is not. No threshold was widened and the remaining
+canvas architecture decision stays outside this slice.
+
+### Development server correction — isolate manual work from browser proof
+
+State: Proven.
+
+```text
+Outcome:    a person can keep Matter open on localhost:3000 while Playwright
+            reliably starts and owns a separate localhost:3100 verification server
+Boundary:   Next dev output directory selection, Playwright web-server environment,
+            generated-cache ignore rules, and one concurrent-server receipt
+Invariants: production output remains `.next`; public base path and health route
+            remain unchanged; no product runtime, protocol, or provider behavior moves
+Proof:      manual 3000 stays healthy while standard Playwright launches 3100 and
+            completes a focused pointer flow; both health endpoints return no-store 200
+Non-goals:  a custom dev proxy, HMR rewriting, deployment health semantics, CI hosting,
+            or a new test runner
+```
+
+The failure was a shared Next development lock, not an unavailable health
+surface: the existing manual server and Playwright's fixed server both claimed
+`.next/dev`. An explicitly scoped test output directory isolates their locks and
+Turbopack caches while leaving the production default untouched.
+
+Receipt, 2026-08-04: the E2E server is the only development process allowed to
+select `.next-e2e`; production phases always publish `.next`, and its base path
+is fixed to the tested origin. The runner restores generated type references on
+success, failure, and repeated interrupts. With a manual 3000 server alive,
+`typecheck → standard E2E → typecheck` passed with 15/16 Chromium cases (one
+explicit production receipt skipped); both 3000 and 3100 health paths returned
+no-store 200. The signal cleanup has a real child-process receipt covering two
+SIGINT events and a forced child termination.
+
+### Layout publication correction — local handles do not remeasure the tree
+
+State: Implemented; full production performance receipt pending.
+
+```text
+Outcome:    selecting a thought or lassoing language remains local even in a
+            large document; only structure, text dimensions, or stretch damage
+            republish the rooted layout
+Boundary:   RootedMaterial's pure visible-layout input/key, layout measurement
+            dependencies, the 2,000-node performance harness, and focused proof
+Invariants: selection, lasso, guidance, rail, and local handles remain transient;
+            focus/fold/tree text retain their exact geometry; no server, protocol,
+            tree engine, virtualization, or authored-coordinate changes
+Proof:      pure layout-key tests, existing pointer flows, and a production 2k
+            receipt with cold layout, long-task, fold/focus, and selection samples
+Non-goals:  altering ambient visuals before their measured receipt, performance
+            thresholds without a baseline, or a generic rendering cache
+```
+
+The current renderer has no reason to remeasure every visible node when a person
+only changes selection or a transient language address. Local handles already
+follow screen geometry independently; the layout publisher must now share that
+discipline while retaining stretch's explicit visual damage as a real geometry
+input.
+
+Production evidence reopened the second half of this freeze: selection now has
+a `49.4 ms` p95, but full fold/focus rounds remain above `200 ms` and the page
+contains about `14,940` elements. The authoritative cause is the desktop index
+mounting and reprojection of its 2,000-row non-authoritative file view alongside
+the canvas. The next bounded correction may defer that index projection by one
+render priority after a structural canvas action, but must disable its stale rows
+until its projection catches up; tree, canvas, persistence, selection, and tool
+authority may not defer.
+
+Receipt, 2026-08-04: after the deferred index correction, a complete wide
+surface production round recorded FCP `160 ms`, layout-ready `535.5 ms`, fold
+p95 `152.3 ms`, focus p95 `207.4 ms`, selection p95 `121.2 ms`, and 121 buffered
+long tasks with a `407 ms` maximum across `14,940` elements. This proves the
+selection-layout correction but fails the release gate for focus and long tasks.
+The freeze is therefore reopened solely to research a bounded, index-only
+on-demand rendering policy; the canvas remains fully material and no threshold
+may be widened.
+
+### Index rendering correction — the file view is a window, not a second tree
+
+State: Implemented; full production performance receipt pending.
+
+```text
+Outcome:    a large desktop document keeps its entire authored file index
+            available while only its visible fixed-height rows enter the DOM
+Boundary:   MaterialFiles render edge, pure window geometry, row scroll/focus
+            receipts, and the existing performance harness
+Invariants: full file projection remains the source; tree, canvas, navigation,
+            selection, search, copy, persistence, and tool authority do not
+            become window state; stale index rows stay inert; 42/48 px rows hold
+Proof:      pure range/pinning tests, laptop/narrow scroll/search/select/copy
+            flows, bounded open-index DOM count, and unchanged 2k release gates
+Non-goals:  canvas virtualization, generic virtual-list dependencies, progressive
+            material loading, ARIA treeview semantics, or relaxed performance gates
+```
+
+Only the non-authoritative left index may window after its complete authored
+projection is known. Above a modest size threshold it renders top/bottom spacers
+and an overscanned range; a focused DOM row remains pinned until focus leaves.
+Search, focus, fold and a settled active node reset the index scroll to a
+truthful reachable location. The whole sidebar remains inert while its deferred
+projection is stale.
+
+Implementation receipt: the render edge now keeps the complete projected index
+as its source, but windows only projections above 200 rows using a 12-row
+overscan and fixed CSS-measured 42/48 px geometry. Spacer heights are explicit
+pixels, not CSS typed arithmetic. The standard Chromium 2k proof keeps at most
+64 `.material-file` rows and 4,700 page elements, reaches and selects authored
+row 1,999, and copies it together with the root across the two windows. Pure
+range, focus-pinning, and scroll proofs pass. The original production 2k receipt
+is still required: the isolated production server could not be started because
+its necessary permission escalation was rejected, so no new p95/long-task claim
+has been made and its existing gates remain unchanged.
+
+Production diagnostic, 2026-08-04: the controlled `build → start → Chromium`
+receipt (one diagnostic round and sample; formal receipt retains 20 samples)
+recorded FCP `276 ms`, layout-ready `601.1 ms`, fold p95 `138.5 ms`, focus p95
+`134.4 ms`, selection p95 `8.1 ms`, 4,257 elements, and a `320 ms` maximum
+long task. It correctly failed the unchanged `<100 ms` long-task gate. Cold
+marks attribute only about `1 ms` to height collection and `3.2 ms` to pure
+layout; the approximately `310 ms` gap before the published-canvas commit is
+the next bounded investigation. No result from this diagnostic is treated as
+the final three-round release receipt.
+
+Follow-up diagnostics kept the original gate and progressively isolated that
+gap. Moving geometry publication to the DOM edge preserved 4,257 elements and
+sub-120 ms structural p95s, but a `309 ms` cold long task still crossed the
+geometry and state marks. Empty-lasso and idle-admission work was then removed;
+the controlled result remained `309 ms`. Finally, a cancellable double-rAF
+receipt separated the stages: a `285 ms` long task occurred *before* layout
+state dispatch, in the geometry-frame-yielded to state-dispatch interval. This
+proves the remaining work is the browser applying complete 2,000-node geometry,
+not pure layout, selection, or React's state receipt. The next work must either
+prove a platform containment policy preserves full material/pointer geometry or
+record the incompatibility between a fully published initial 2k canvas and the
+`<100 ms` initial long-task gate; no threshold has been widened.
+
+Experiment withdrawal, 2026-08-05: cancellable double-rAF and 100-node-per-frame
+geometry publication were both removed. The former created a reachable stretch
+handle whose delayed epoch publication cancelled a just-started drag; constraining
+it to cold/no-selection publication still did not remove the browser task. The
+latter delayed geometry completion to about `525 ms` while retaining a `279 ms`
+long task and leaving the receipt without layout-ready evidence. Current code is
+therefore back to one synchronous, all-or-nothing geometry publication followed
+by `setPublished`; its controlled diagnostic is FCP `128 ms`, layout-ready
+`444.1 ms`, fold p95 `117.1 ms`, focus p95 `138.3 ms`, selection p95 `12.8 ms`,
+4,257 elements, and `309 ms` maximum long task. The full normal browser suite
+passes; the production long-task gate does not.
+
+### Cold canvas containment decision — preserve the whole material or record the limit
+
+State: Decision proven; candidate withdrawn.
+
+```text
+Outcome:    determine whether browser containment can keep the complete 2,000-node
+            canvas pointer-ready while bringing every cold long task below 100 ms
+Boundary:   one rendering-edge containment rule on the already-sized matter canvas,
+            production attribution marks, and geometry/pointer comparison receipts
+Invariants: all 2,000 nodes publish synchronously; DOM order, text wrapping, canvas
+            bounds, lasso targets, stretch handles and authored geometry stay exact
+Proof:      baseline versus candidate screenshots and bounding boxes; deep-node select,
+            lasso and stretch receipts; three production rounds of 20 fold/focus/
+            selection samples; FCP/layout-ready/element count and max long task
+Non-goals:  content-visibility, canvas virtualization, delayed/batched geometry,
+            hidden nodes, worker rendering, threshold changes, or new UI
+```
+
+The sole initial hypothesis is containment on the full `.matter-canvas` boundary,
+whose width and height are already synchronously published from complete layout.
+Per-node paint containment is excluded because split-language and stretch projections
+may intentionally cross a thought box. The candidate may proceed only after browser
+proof shows no clipping or geometry change. If the unchanged three-round production
+receipt still exceeds the gate, record that a fully published initial 2k DOM is
+incompatible with the current `<100 ms` cold-task target and return to product/renderer
+architecture; do not revive the withdrawn frame schedulers or enter Phase 4.
+
+Receipt, 2026-08-05: root-level `contain: layout style paint` preserved all 15
+focused desktop/narrow geometry, deep-index, lasso and stretch browser receipts,
+so clipping was not the failure. The controlled production diagnostic recorded
+FCP `184 ms`, layout-ready `549.2 ms`, fold p95 `115.6 ms`, focus p95 `136.9 ms`,
+selection `13.3 ms`, 4,257 elements and a `330 ms` maximum cold long task. The
+candidate therefore worsened the existing approximately `309 ms` result and was
+removed. Browser containment cannot satisfy the current gate while retaining this
+complete initial DOM. The next decision belongs to product/renderer architecture;
+Phase 4 remains closed and the `<100 ms` gate remains unchanged.
+
+### Recommended renderer fork — viewport DOM over the complete layout
+
+State: Recommendation only; requires a product/architecture freeze before build.
+
+```text
+Outcome:    every node remains in the authoritative tree and pure complete layout,
+            while the DOM mounts the viewport plus bounded spatial overscan
+Boundary:   CanvasThoughtList render edge, pure visible-world range projection,
+            viewport/deep-navigation handoff, and screen-geometry publication
+Invariants: structure and authored order stay complete; every visible node is
+            pointer-ready; focus/deep selection first brings its node into the window;
+            offscreen absence never becomes document, history, or retrieval state
+Proof:      pure spatial-window completeness; pan/focus to first, middle and deepest
+            nodes; lasso/stretch at every window edge; screenshot/box equivalence;
+            unchanged 3×20 production gate and full laptop/390/320 pointer suite
+Non-goals:  progressive frame publication, a lower protocol bound, hidden retrieval,
+            canvas/WebGL text, authored coordinates, or relaxed performance thresholds
+```
+
+This is the recommended next route because the file index already proves the same
+authority pattern: complete projection, bounded DOM. Progressive full-DOM publication
+has twice produced pointer races or delayed readiness and stays rejected. A custom
+canvas renderer remains a possible later route, but it would reopen native text
+selection, accessibility and exact lasso geometry before the first release. This
+recommendation deliberately changes the earlier “all 2,000 nodes mounted” renderer
+assumption, so implementation must not begin until that product boundary is accepted.
 
 ## Phase 4 — First release
 

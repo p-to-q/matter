@@ -19,6 +19,7 @@ import {
 } from "../runtime/navigation";
 import {
   commitHumanAdmission,
+  commitHumanRemoval,
   commitSessionCommand,
   undoSession,
   type RuntimeError,
@@ -26,6 +27,7 @@ import {
   type RuntimeState,
 } from "../runtime/session";
 import type { AdmissionAnchor, AdmissionValues } from "../runtime/admission";
+import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
@@ -58,20 +60,33 @@ export type HydrationReceipt =
   | { operation: "hydrate"; status: "hydrated"; revision: number }
   | { operation: "hydrate"; status: "rejected"; revision: number; errorCode: "TREE_INVARIANT_VIOLATION" };
 
-export type MatterStoreReceipt = RuntimeReceipt | NavigationReceipt | HydrationReceipt;
+export type DocumentSwitchReceipt =
+  | { operation: "switch-document"; status: "switched"; treeId: string; revision: number }
+  | {
+      operation: "switch-document";
+      status: "rejected";
+      treeId: string;
+      revision: number;
+      errorCode: "TREE_INVARIANT_VIOLATION";
+    };
+
+export type MatterStoreReceipt = RuntimeReceipt | NavigationReceipt | HydrationReceipt | DocumentSwitchReceipt;
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
+  documentEpoch: number;
   lastError: MatterStoreError | null;
   lastReceipt: MatterStoreReceipt | null;
   insertFixtureChild: (parentId: string) => MatterStoreReceipt;
   applyFixtureText: (nodeId: string, text: string) => MatterStoreReceipt;
   admitHumanTranscript: (anchor: AdmissionAnchor, values: AdmissionValues) => MatterStoreReceipt;
+  removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   focus: (nodeId: string) => MatterStoreReceipt;
   showFull: () => MatterStoreReceipt;
   toggleFold: (nodeId: string) => MatterStoreReceipt;
   hydrateSnapshot: (tree: ThoughtTree) => MatterStoreReceipt;
+  switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt;
   clearError: () => void;
 };
 
@@ -108,6 +123,7 @@ export function createMatterStore(): MatterStore {
 
   const internalStore = createStore<MatterStoreInternalState>()((set) => freezeState({
     tree: initialDomain.tree,
+    documentEpoch: 0,
     history: initialDomain.history,
     navigation: initialDomain.navigation,
     lastError: null,
@@ -169,6 +185,22 @@ export function createMatterStore(): MatterStore {
           values,
           HISTORY_LIMITS,
         );
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({
+          ...current,
+          ...domain,
+          lastError: domain.lastError,
+          lastReceipt: protectValue(receipt),
+        });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    removeSelected: (values) => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const result = commitHumanRemoval(runtimeState(current), values, HISTORY_LIMITS);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
         return freezeState({
@@ -269,6 +301,7 @@ export function createMatterStore(): MatterStore {
         receipt = { operation: "hydrate", status: "hydrated", revision: tree.revision };
         return freezeState({
           ...current,
+          documentEpoch: current.documentEpoch + 1,
           tree: protectValue(tree),
           history: protectValue(createTreeHistory()),
           navigation: protectValue(createNavigationState()),
@@ -277,6 +310,49 @@ export function createMatterStore(): MatterStore {
         });
       });
       return requireSynchronousReceipt(receipt);
+    },
+
+    switchDocument: (tree) => {
+      let receipt: DocumentSwitchReceipt | undefined;
+      set((current) => {
+        const validation = validateThoughtTree(tree);
+        if (!validation.ok) {
+          const error: MatterStoreError = {
+            code: "TREE_INVARIANT_VIOLATION",
+            message: validation.error.message,
+          };
+          receipt = {
+            operation: "switch-document",
+            status: "rejected",
+            treeId: current.tree.id,
+            revision: current.tree.revision,
+            errorCode: "TREE_INVARIANT_VIOLATION",
+          };
+          return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
+        }
+
+        // Import is a document boundary, not hydration of the current tree.
+        // No in-session inverse, focus, or fold can cross that boundary.
+        receipt = {
+          operation: "switch-document",
+          status: "switched",
+          treeId: tree.id,
+          revision: tree.revision,
+        };
+        return freezeState({
+          ...current,
+          documentEpoch: current.documentEpoch + 1,
+          tree: protectValue(tree),
+          history: protectValue(createTreeHistory()),
+          navigation: protectValue(createNavigationState()),
+          lastError: null,
+          lastReceipt: protectValue(receipt),
+        });
+      });
+      if (receipt === undefined) {
+        throw new Error("The Zustand state updater did not execute synchronously.");
+      }
+      return receipt;
     },
 
     clearError: () => {

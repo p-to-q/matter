@@ -17,6 +17,304 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-05 — A node is named once, and a person can overrule the name
+
+Changed: a label is now a phrase rather than a tag — Chinese aims for 11
+graphemes and is bounded at 14, Japanese at 15 and 20, Latin at 26 and 32 — with
+brevity as a smooth weight rather than a veto, so a short label stays reachable
+but rare. Model answers and typed names persist in their own browser store keyed
+by tree and node with the fingerprint of the material they came from, so a node
+is named once instead of once per reload; deterministic labels are recomputed. Double click, or
+long press on touch, names a row; that name outranks every automatic label until
+it is cleared. Index search matches the name on screen. Japanese joins the
+deterministic path with its own fillers, particle boundaries and bound.
+
+Why: two or three characters name a topic, and a list of topics is
+indistinguishable from anyone else's — the author has to recognise their own
+thought, which takes a phrase. Paying a request and a wait for the same sentence
+on every reload is paying for nothing, and a name a person chose is a decision,
+not a derivation.
+
+Forecloses: labels as a pure per-session derivation, a model answer that can
+overwrite a person's name, a name that lives in the document protocol, searching
+only the material under a row, and single-kana particle splitting without a
+morphological analyser.
+
+## 2026-08-05 — The physical instrument stays still while human material stays rooted
+
+Changed: the five-slot right instrument returns to compact 20 px artwork inside
+stable 44 px desktop and 48 px narrow targets. Active state expands only the
+black-and-white surface within its fixed target; the old target-size jump and
+icon scaling are gone. The initial complete
+return-arrow mark is restored. `Delete` and `Backspace` remove only a selected
+non-root thought in full view through one human tree command and exact Undo.
+Voice initializes an empty root, then always appends first-level thoughts under
+that root; fixture transcription remains explicitly fixture-gated.
+
+Why: a physical tool should not move nearby targets when recording or lassoing
+starts. Removal needs the same committed/invertible material boundary as every
+other durable act. A selected deep thought should not silently change where a
+new human utterance enters the rooted document, and a fixed demo transcript is
+not a substitute for configured live STT.
+
+Forecloses: layout-shifting active controls, toolbar-sized icon artwork, root
+deletion, lasso-range deletion by a keyboard shortcut, admission under an
+arbitrary deep selection, and silently presenting fixture text as live speech.
+
+## 2026-08-05 — The label model is a pool, calibrated against a corpus
+
+Changed: `MATTER_LABEL_ADAPTER=live` resolves an ordered pool of
+OpenAI-compatible relays declared per station in git-ignored local
+configuration. The first healthy candidate answers; a recently failed station is
+tried last rather than dropped; an attempt that cannot finish inside the
+remaining deadline is not started. Adjudication thresholds and deadlines were
+reset from measurement rather than intuition: Han grounding is per character
+instead of per bigram, sibling distinctness needs a margin, the Latin bound is
+the panel's existing 32-grapheme title width, and the provider deadline is 3 s.
+
+Why: relays disappear, so fallback is normal operation, not an error path. The
+first thresholds refused most good answers — 35% acceptance, largely on labels
+that recombined phrases the person had actually used. Corpus evidence moved that
+to 88% with no observed hallucination, and showed a flash-class model matching a
+large one at a third of the latency.
+
+Forecloses: a single hard-coded provider, keys in tracked configuration, a paid
+evaluation inside `npm run check`, treating prompt instructions as the boundary
+that stops injected material, and tuning label judgement without a corpus.
+
+## 2026-08-05 — The right canvas composition is a local frozen boundary
+
+Changed: the private visual reference is recorded only as an anonymized study
+of the rounded paper. Its leaf atmosphere, right editing rail, and corner
+utilities are frozen as paper-owned presentation. The left material field is
+explicitly pending redesign and has no visual freeze.
+
+Why: the useful reference is the paper's quiet instrument composition, not an
+external product identity or a prescription for Matter's unfinished left field.
+Keeping the freeze local prevents right-side utilities from spreading while
+leaving the structural index free for its own future research slice.
+
+Forecloses: branded reference leakage, canvas tools in the left field, and
+treating the current file index as a finished visual system.
+
+## 2026-08-05 — A node is named before anything is asked
+
+Changed: the material index shows a short navigation label instead of the
+32-grapheme material title. The label is derived deterministically and appears
+synchronously; a small model may then improve it through `/api/label`, whose
+answer is applied only after validation, adjudication against the deterministic
+label, and a re-check of node, material fingerprint, and latest operation. The
+label is derived presentation: it never enters the document, history,
+persistence, or an archive, so protocol `0.2` is unchanged. Health reports a
+`thoughtLabel` surface; `MATTER_LABEL_ADAPTER` gates it.
+
+Why: a truncated first clause is a preview, not a name, and a tree of nodes is
+only navigable when each row is recognisable at a glance. Deriving first and
+asking second means the interface never waits for a model and never shows a
+failure.
+
+Forecloses: a label field in the document protocol, a label that a model alone
+decides, an index row that waits on the network, a retry or streaming path for
+a handful of tokens, and treating a generated name as material a person wrote.
+
+## 2026-08-05 — Lasso guidance belongs to the paper only
+
+Changed: the canvas keeps the one state-derived lasso sentence at its lower-left
+edge; the fixed full-screen lasso hint is gone. The `[p → q] / matter` mark uses
+the original system mono stack while the paper utilities retain Departure Mono.
+Deep appearance now darkens the same leaf-shadow source with scoped contrast and
+brightness rather than introducing a second background asset. The leaf-shadow
+layer may sit over DOM text with low-opacity multiply blending, while the paper
+keeps a readable blue-black base and stronger text contrast.
+
+Why: the old fixed hint leaked into the left material field and duplicated the
+canvas action. The header is part of the original workbench identity, while dark
+mode should change the atmosphere without changing the FX contract.
+
+Forecloses: sidebar-owned gesture hints, duplicated lasso presenters, a second
+tree-shadow download, and coupling FX on/off to appearance mode.
+
+## 2026-08-05 — Canvas utilities stay at the paper edge
+
+Changed: the rounded paper alone owns a 24 px corner utility system: About and
+settings at the upper-right, the existing state-derived next action at the
+lower-left, and static help, language, leaf-shadow and appearance controls at
+the lower-right. Validated local preferences synchronize across tabs but never
+enter material, commands or history.
+
+Why: the reference composition makes secondary controls discoverable without
+turning the left material field into application chrome or replacing the one
+truthful guidance state with another toast system.
+
+Forecloses: a Herald-style prompt or assistant composer, empty billing/legal
+claims, full-app theme leakage, corner controls in the left field, and a second
+feedback event bus.
+
+## 2026-08-05 — The workbench silhouette and editing instrument stay fixed
+
+Changed: desktop always reserves the 262 px material field beside one 10 px-inset,
+18 px-rounded paper canvas, whether or not the file index is open. The supplied
+silent leaf-shadow media remains inside that paper. The only visible editing
+instrument is Voice, Lasso, Branch, canvas pan, and Undo; the Focus/Fold local
+presenter is withdrawn while its navigation state and intents remain available
+behind the presentation boundary.
+
+Why: resizing the canvas when the index closed broke the browser-workbench form,
+and a second two-button island appeared to be part of the primary tool vocabulary.
+One stable silhouette and one stable instrument are easier to learn and verify.
+
+Forecloses: desktop canvas expansion on index visibility, selection-dependent
+control islands, moving the leaf field into durable material, and deleting
+navigation capability merely because it is not exposed in the first-release UI.
+
+## 2026-08-05 — A verified archive is a document boundary
+
+Changed: the strict Markdown snapshot can leave as a deterministic ZIP and return
+only after bounded streaming extraction, central-directory CRC verification, full
+snapshot validation and a generation-checked save. A successful return advances a
+document epoch that clears history, navigation and transient file, lasso, stretch
+and voice state even when tree identity and revision are unchanged.
+
+Why: a portable copy is the recovery boundary only if corrupt archives, duplicate
+paths, decompression abuse, conflicting writes and late interaction results cannot
+partially replace or leak into the current material.
+
+Forecloses: upload-then-repair imports, object-map unzip that hides duplicates,
+same-generation document replacement, archive actions during live canvas/voice
+ownership, and treating ZIP as a second document model.
+
+## 2026-08-04 — Production performance proof is explicit
+
+Changed: the 2k performance receipt has an explicit production configuration
+and command: it builds with the fixture gate, starts a separate production
+server, then runs Chromium against that output. Development E2E remains a
+separate path. Its structural samples wait with bounded failures rather than
+leaving a missed expected state to the outer test timeout.
+
+Why: a development server receipt cannot prove the deployed renderer, and a
+hang only reports a timeout without identifying the missing material action.
+The receipt must retain its real control availability and report the actual
+long-task gate rather than manufacture a passing run.
+
+Forecloses: using dev-server timings as release proof, silently inheriting
+fixture state, and unbounded mutation-observer waits in performance tests.
+
+## 2026-08-04 — The file index renders as a window
+
+Changed: the complete authored material-file projection remains the source for
+the left index, while only a fixed-height, overscanned visible range is mounted
+once it exceeds 200 rows. Focused DOM rows remain mounted; deferred projections
+remain inert; selection and copy continue to resolve from the tree.
+
+Why: a second fully mounted 2,000-row representation of the material caused
+structure interactions to exceed their release performance bounds. Restricting
+this only at the render edge keeps the document and interaction authorities
+unchanged while bounding browser work.
+
+Forecloses: treating rendered rows as a second tree, progressive partial index
+data, generic virtual-list state in the document, and CSS-only offscreen
+rendering as the performance contract.
+
+## 2026-08-04 — Browser proof owns its development output
+
+Changed: the Playwright development server owns the exact `.next-e2e` output
+only during its development phase, while manual development and every
+production phase retain `.next`. The E2E wrapper restores the tracked Next type
+reference after success, failure, or repeated interruption.
+
+Why: two Next development servers sharing one lock made the local preview look
+unreliable and caused browser proof to depend on whether someone already had
+Matter open. Generated type references must not make that temporary server an
+input to ordinary type checking.
+
+Forecloses: a shared dev lock, arbitrary environment-selected output
+directories, inherited test base paths, and leaving generated E2E type paths in
+the working tree.
+
+## 2026-08-04 — The editing island is stable; structure stays local
+
+Changed: the right editing island has five permanent slots — Voice, Lasso,
+Branch, canvas pan, and Undo. Focus, Fold, Unfold, and Show all are transient
+handles beside the visible material they address. Their screen position is
+derived at the rendering edge and they disappear rather than overlap material,
+the island, guidance, an active lasso/stretch, or the narrow-screen file drawer.
+
+Why: changing the rail's height and order as selection changed made the
+instrument hard to learn and placed structural actions away from their object.
+An unavailable or overlapping control is less honest than a temporarily absent
+local handle.
+
+Forecloses: context-driven rail reordering, fake Move affordances, local
+controls in the measured tree DOM, and treating structural navigation as a new
+durable tool state.
+
+## 2026-08-04 — One truthful action sits at the paper edge
+
+Changed: the canvas footer is one state-derived sentence at the lower-left
+paper edge. A closed pure projection gives voice progress and recovery priority,
+then maps empty, selection, lasso, stretch, focus and fold states to one current
+action. It uses the existing Departure Mono face and does not announce beside
+the interaction-specific live regions.
+
+Why: the prior two-sided footer offered several choices at once and told a
+stretched selection to speak a generative direction even though the current
+voice control admits human material. Guidance must describe the capability that
+actually exists and remain visually attached to the canvas rather than read as
+status chrome.
+
+Forecloses: multi-action coaching, duplicated live announcements, and promising
+directional AI voice before the transformation path is connected.
+
+## 2026-08-04 — Guidance returns to the canvas and controls recede
+
+Changed: the canvas lower edge now keeps one product sentence on the left and
+one state-derived next-action sentence on the right. Fixture text versions stay
+available to tests and store fixtures but no longer appear in product chrome.
+The left outline defaults to a manuscript index; search and copy selection are
+explicit transient modes instead of permanent row controls. The still leaf
+field paints first and video joins only after the browser yields.
+
+Why: people need to know what their hand can do next without reading a tool
+dashboard, while development fixtures, revision counters, checkboxes and media
+startup must not compete with the material or delay first paint.
+
+Forecloses: visible fixture/version controls, permanent file-operation chrome,
+status-led guidance, and making decorative motion a prerequisite for the canvas.
+
+## 2026-08-04 — The canvas sits inside a material workbench
+
+Changed: the full-bleed field becomes a quiet browser-like workbench with the
+Markdown material outline held at the left and one rounded canvas inset on the
+right. A supplied silent leaf-shadow loop is decorative atmosphere within that
+canvas and has a reduced-motion still fallback. Departure Mono carries interface
+chrome; the language material keeps its existing reading face. The right editing
+island now exposes stable visual grouping hooks while the closed `ToolIntent`
+projection remains its only source of actions.
+
+Why: file lineage, spatial material, and the editing instrument need to read as
+three parts of one durable environment rather than unrelated floating panels.
+The ambient motion gives the field a recognizable material quality without
+turning AI or infrastructure into a surface.
+
+Forecloses: a decorative card grid, a prompt or assistant panel, brand imitation,
+durable UI preferences, freely draggable controls that compete with canvas
+gestures, and any visual control that manufactures an unavailable command.
+
+## 2026-08-04 — Deployment health reports gated Matter surfaces
+
+Changed: Matter exposes `app/api/health`, deployed under `/matter/api/health`,
+as a no-store deployment probe. It reports protocol version, app version, base
+path, and coarse surface states for material, local persistence, voice
+admission, transform turns, and archive export/import. The probe deliberately
+does not expose provider names, raw environment values, material, transcripts,
+or lineage.
+
+Why: early deployment needs a machine-readable cross-section without confusing
+fixture/demo readiness with a public live-AI release.
+
+Forecloses: treating deployment health as a debug API, leaking provider
+configuration, or claiming `/api/turn` and archive flows before they exist.
+
 ## 2026-08-04 — The Markdown tree becomes a visible material outline
 
 Changed: every thought is projected as one logical Markdown document in a

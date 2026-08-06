@@ -17,6 +17,7 @@ const requiredFiles = [
   "docs/engineering.md",
   "docs/workflow.md",
   "docs/surfaces.md",
+  "docs/release-readiness.md",
   "docs/open.md",
   "docs/changes.md",
   "docs/reference/index.md",

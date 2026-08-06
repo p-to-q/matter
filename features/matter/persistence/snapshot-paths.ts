@@ -1,4 +1,4 @@
-import type { ThoughtTree } from "../tree/model";
+import type { ThoughtNode, ThoughtTree } from "../tree/model";
 
 export type CanonicalRelativePath = string & { readonly __canonicalRelativePath: unique symbol };
 
@@ -39,6 +39,36 @@ export function allocateSnapshotPaths(tree: ThoughtTree): readonly SnapshotPathE
   };
   visit(tree.rootId, "matter");
   return Object.freeze(entries);
+}
+
+/** Allocates one exact display path without deriving paths for offscreen rows. */
+export function allocateSnapshotPath(
+  tree: ThoughtTree,
+  nodeId: string,
+): CanonicalRelativePath | null {
+  if (tree.rootId === null || !Object.hasOwn(tree.nodes, tree.rootId)) return null;
+  const reverseLineage: ThoughtNode[] = [];
+  const visited = new Set<string>();
+  let currentId: string | null = nodeId;
+  while (currentId !== null) {
+    if (visited.has(currentId) || !Object.hasOwn(tree.nodes, currentId)) return null;
+    visited.add(currentId);
+    const current: ThoughtNode = tree.nodes[currentId];
+    reverseLineage.push(current);
+    currentId = current.parentId;
+  }
+  reverseLineage.reverse();
+  if (reverseLineage[0]?.id !== tree.rootId) return null;
+
+  let directory = "matter";
+  for (let index = 1; index < reverseLineage.length; index += 1) {
+    const parent = reverseLineage[index - 1];
+    const node = reverseLineage[index];
+    const authoredIndex = parent.children.indexOf(node.id);
+    if (authoredIndex < 0) return null;
+    directory += `/${String(authoredIndex + 1).padStart(3, "0")}-${materialSlug(node.text)}`;
+  }
+  return asCanonicalPath(`${directory}/index.md`);
 }
 
 export function materialSlug(text: string): string {

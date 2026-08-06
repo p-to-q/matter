@@ -1,17 +1,10 @@
-import type { DBSchema, IDBPDatabase } from "idb";
-import { openDB } from "idb";
 import { bundleToTree, type SnapshotBundle } from "./snapshot-codec";
+import { createMatterDatabaseHandle, STORAGE_SCHEMA_VERSION } from "./matter-database";
+import type { StoredSnapshot } from "./matter-database";
 import type { ThoughtTree } from "../tree/model";
 
-export const STORAGE_SCHEMA_VERSION = 1 as const;
-
-export type StoredSnapshot = Readonly<{
-  storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
-  treeId: string;
-  treeRevision: number;
-  writeGeneration: number;
-  bundle: SnapshotBundle;
-}>;
+export { STORAGE_SCHEMA_VERSION };
+export type { StoredSnapshot };
 
 export type RepositoryErrorCode =
   | "PERSISTENCE_UNAVAILABLE"
@@ -40,47 +33,9 @@ export type DocumentRepository = Readonly<{
   close(): void;
 }>;
 
-interface MatterDatabase extends DBSchema {
-  snapshots: {
-    key: string;
-    value: StoredSnapshot;
-  };
-}
-
-const DATABASE_NAME = "ptoq-matter";
-const DATABASE_VERSION = 1;
-
 export function createIndexedDbDocumentRepository(): DocumentRepository {
-  let databasePromise: Promise<IDBPDatabase<MatterDatabase>> | null = null;
-  const database = () => {
-    if (databasePromise === null) {
-      const owner: { opening: Promise<IDBPDatabase<MatterDatabase>> | null } = {
-        opening: null,
-      };
-      const resetIfCurrent = () => {
-        if (databasePromise === owner.opening) databasePromise = null;
-      };
-      const opening = openDB<MatterDatabase>(DATABASE_NAME, DATABASE_VERSION, {
-        upgrade(db) {
-          if (!db.objectStoreNames.contains("snapshots")) db.createObjectStore("snapshots", { keyPath: "treeId" });
-        },
-        blocked: resetIfCurrent,
-        terminated: resetIfCurrent,
-        blocking() {
-          void owner.opening?.then((db) => db.close()).catch(() => undefined);
-          resetIfCurrent();
-        },
-      });
-      owner.opening = opening;
-      databasePromise = opening;
-      void opening.catch(() => {
-        // A failed open is recoverable on the next explicit operation. Do not
-        // let an older rejection clear a newer open installed by a lifecycle event.
-        resetIfCurrent();
-      });
-    }
-    return databasePromise;
-  };
+  const handle = createMatterDatabaseHandle();
+  const database = handle.open;
 
   return Object.freeze({
     async load(treeId) {
@@ -140,8 +95,7 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
     },
 
     close() {
-      void databasePromise?.then((db) => db.close()).catch(() => undefined);
-      databasePromise = null;
+      handle.close();
     },
   });
 }

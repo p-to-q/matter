@@ -1,8 +1,11 @@
 # Protocol 0.2
 
-Status: document, tree engine, navigation, layout, and local tool actions are
-implemented. Voice admission and generative transformation remain specified for
-Phase 2 in [`plans/active-tree-material.md`](../plans/active-tree-material.md).
+Status: document, tree engine, navigation, layout, local tool actions, fixture
+voice admission, derived thought labels, lasso segment addressing, stretch
+degree, and Markdown durability are implemented. Generative transformation remains specified for
+Phase 2 in [`plans/active-tree-material.md`](../plans/active-tree-material.md);
+the live transcription adapter and `/api/turn` remain gated. Markdown archive
+export/import is available as a strict local return path.
 
 `0.2` is a clean break because `0.1` has no persisted documents.
 
@@ -40,8 +43,9 @@ escaping.
 Before the first voice admission, the document already has identity, version,
 and revision, but no root. Transcription of the first utterance commits an
 `initialize-root` command; its inverse returns to the same empty document while
-revision continues forward. Later admissions insert a human child under the
-selected node. Admission does not call the generative planner.
+revision continues forward. Later admissions append a human child under the sole
+root, regardless of the currently selected depth. Admission does not call the
+generative planner.
 
 ## Addressing and degree
 
@@ -148,6 +152,76 @@ slice, and the complete composed node bound. It then creates one whole-node
 `replace-text` mutation and dispatches it without an asynchronous gap. The tree
 engine sees the resulting expected text and timestamp, not the public range.
 The server is not an authoritative document replica.
+
+## Label envelope
+
+Labelling names an existing node for navigation. It is a separate, smaller
+boundary than the transform turn: it changes no material, so it has no plan, no
+action, and no command.
+
+```ts
+export type LabelBasis = {
+  treeId: string;
+  nodeId: string;
+  revision: number;
+};
+
+export type LabelRequest = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  promptVersion: string;
+  operationId: string;
+  basis: LabelBasis;
+  locale: string;
+  maxGraphemes: number;    // 2 … 32
+  text: string;            // the node's own material
+  reference: {
+    parentLabel?: string;
+    parentExcerpt?: string;      // ≤ 240 UTF-16 code units
+    siblingLabels?: string[];    // ≤ 8 entries, ≤ 64 code units each
+  };
+};
+
+export type LabelSuccess = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  promptVersion: string;
+  operationId: string;
+  basis: LabelBasis;
+  label: string;
+  source: "provisional" | "model";
+  fallbackReason?: "MODEL_UNAVAILABLE" | "MODEL_TIMEOUT" | "MODEL_REJECTED" | "MODEL_BUSY";
+};
+```
+
+The model's entire output surface is `{ text }`, as in a transform turn. The
+server constructs the response from the request it parsed, so a model cannot
+name a node, a revision, or a document.
+
+Reference material is context, never instruction: it is fenced and named as
+material to be labelled, and text inside it is never followed. Both sides parse
+against this contract and reject unknown fields whole. A response must echo
+`operationId`, `basis`, and `promptVersion` exactly, and the browser then checks
+the node, its material fingerprint, and the latest operation once more before a
+row changes.
+
+A label always settles. When a model is unavailable, slow, saturated, or
+answers badly, the response carries the deterministic label with a
+`fallbackReason`, and the browser applies nothing it did not already have.
+
+`promptVersion` participates in cache identity, so raising it invalidates every
+stored label without a schema change.
+
+Bounds: request 8 KiB, response 4 KiB, label 32 graphemes (Chinese material asks
+for 14, Japanese for 20), browser deadline 3,500 ms, provider deadline 3,000 ms. There is no
+retry. Nothing waits on those deadlines — a label is already on screen — so
+they are set from measured relay latency rather than from a perceived-response
+budget.
+
+Labels are not part of the document. They never appear in `ThoughtTree`, a
+command, an inverse, a snapshot, or an archive. A model answer and a name a
+person typed are kept in a separate browser store keyed by tree and node, each
+carrying the fingerprint of the material it came from, so a node is named once
+rather than once per reload. A deterministic label is never stored: recomputing
+it is cheaper than reading it back.
 
 ## Private commands
 

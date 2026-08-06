@@ -124,7 +124,7 @@ describe("human material admission", () => {
     expect(overBound).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
   });
 
-  it("rejects stale tree identity, revision, selection, and focus", () => {
+  it("rejects stale tree identity, revision, and focus while ignoring a later selection", () => {
     const tree = rootedTree();
     const selected = selectNode(tree, createNavigationState(), "root");
     if (!selected.ok) throw new Error(selected.error.code);
@@ -135,7 +135,7 @@ describe("human material admission", () => {
 
     expect(admissionToTreeCommand({ ...tree, id: "other" }, selected.navigation, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
     expect(admissionToTreeCommand({ ...tree, revision: 2 }, selected.navigation, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
-    expect(admissionToTreeCommand(tree, { ...selected.navigation, selectedNodeId: null }, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
+    expect(admissionToTreeCommand(tree, { ...selected.navigation, selectedNodeId: null }, anchored.anchor, values())).toMatchObject({ ok: true });
     expect(admissionToTreeCommand(tree, focused.navigation, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
   });
 
@@ -168,10 +168,13 @@ describe("human material admission", () => {
     expect(admissionToTreeCommand(tree, folded.navigation, anchored.anchor, values())).toMatchObject({ ok: true });
   });
 
-  it("requires an empty tree for root and a selected node for child admission", () => {
+  it("uses an empty tree for the root and any full rooted tree for a top-level child", () => {
     const empty = createEmptyTree("tree_1");
     expect(createAdmissionAnchor(empty, { ...createNavigationState(), selectedNodeId: "ghost" })).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
-    expect(createAdmissionAnchor(rootedTree(), createNavigationState())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
+    expect(createAdmissionAnchor(rootedTree(), createNavigationState())).toMatchObject({
+      ok: true,
+      anchor: { target: "child", parentNodeId: "root" },
+    });
   });
 
   it("rejects invalid edge-injected identifiers and time before constructing a command", () => {

@@ -37,18 +37,19 @@ export function useStretch(input: {
   selection: SegmentSelection | null;
   treeId: string;
   revision: number;
+  documentEpoch?: number;
   navigationKey: string;
   layoutKey: string;
   onPreview: (signal: StretchPreviewSignal) => void;
 }): StretchController {
-  const { layoutKey, navigationKey, onPreview, revision, selection, treeId } = input;
+  const { documentEpoch = 0, layoutKey, navigationKey, onPreview, revision, selection, treeId } = input;
   const [state, dispatchBase] = useReducer(
     reduceStretchInteraction,
     undefined,
     createStretchInteractionState,
   );
   const stateRef = useRef(state);
-  const previousNavigationRef = useRef(navigationKey);
+  const previousNavigationRef = useRef(`${documentEpoch}:${navigationKey}`);
   const previousLayoutRef = useRef(layoutKey);
 
   const send = useCallback((event: StretchInteractionEvent) => {
@@ -81,11 +82,12 @@ export function useStretch(input: {
   }, [onPreview, revision, selection, treeId, send]);
 
   useEffect(() => {
-    if (previousNavigationRef.current === navigationKey) return;
-    previousNavigationRef.current = navigationKey;
+    const sessionNavigationKey = `${documentEpoch}:${navigationKey}`;
+    if (previousNavigationRef.current === sessionNavigationKey) return;
+    previousNavigationRef.current = sessionNavigationKey;
     send({ type: "navigation-invalidated" });
     onPreview(previewSignal(createStretchInteractionState()));
-  }, [navigationKey, onPreview, send]);
+  }, [documentEpoch, navigationKey, onPreview, send]);
 
   useEffect(() => {
     if (previousLayoutRef.current === layoutKey) return;

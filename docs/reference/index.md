@@ -13,7 +13,9 @@ ordinary component and store work needs no matching document.
 | [`history-and-undo.md`](history-and-undo.md) | atomic tree commands and exact inverse |
 | [`voice-input.md`](voice-input.md) | microphone and transcription lifecycle |
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
+| [`thought-label.md`](thought-label.md) | naming a node in the material index |
 | [`virtual-file-system.md`](virtual-file-system.md) | Markdown snapshot and browser durability |
+| [`ambient-workbench-ui.md`](ambient-workbench-ui.md) | right-side paper, corner controls, rail, and ambient media ownership |
 
 Add or revise a note only when a choice will matter to later implementation, or
 when introducing a dependency. A short statement of the need, useful prior art,

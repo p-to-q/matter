@@ -3,8 +3,11 @@
   "configurations": [
     {
       "name": "matter",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": [
+        "-c",
+        "while true; do npm run dev; echo '--- next dev stopped, restarting in 2s ---'; sleep 2; done"
+      ],
       "port": 3000
     }
   ]

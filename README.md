@@ -9,10 +9,16 @@ change to material.
 
 ## State
 
-The running `0.2` foundation is one rooted spatial thought tree with exact undo,
-focus, folding, derived geometry, and a contextual editing instrument. Voice,
-segment transformation, and local Markdown durability remain the next release
-slices; the retired hackathon prototype is retained only under `archive/`.
+The running `0.2` pre-release surface is one rooted spatial thought tree with
+exact undo, focus, folding, derived geometry, a contextual editing instrument,
+fixture voice admission, punctuation lasso selection, shared stretch degree, and
+local Markdown durability through IndexedDB. The selected-language projection is
+visual only: the original text DOM remains the source for ranges, copying, and
+accessibility.
+
+Still gated: the live transcription adapter, generative transform envelope,
+explicit ZIP/directory export/import, and deployed-origin receipts. The retired
+hackathon prototype is retained only under `archive/`.
 
 See [`docs/surfaces.md`](docs/surfaces.md) for the exact boundary and
 [`plans/active-tree-material.md`](plans/active-tree-material.md) for the migration.
@@ -24,8 +30,9 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/matter`. The current rooted material fixture is
-deterministic and requires neither microphone nor network.
+Open `http://localhost:3000/matter`. Tests use a deterministic fixture adapter;
+production leaves transcription unavailable unless a server-side live adapter is
+configured and its deployment gates are proven.
 
 ```bash
 npm run check

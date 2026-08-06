@@ -9,6 +9,6 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["features/**/*.test.ts"],
+    include: ["features/**/*.test.ts", "next.config.test.ts", "scripts/**/*.test.mjs"],
   },
 });

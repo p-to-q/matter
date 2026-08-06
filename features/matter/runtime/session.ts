@@ -13,6 +13,10 @@ import {
   type AdmissionValues,
 } from "./admission";
 import {
+  selectedNodeToRemovalCommand,
+  type HumanRemovalValues,
+} from "./removal";
+import {
   reconcileNavigation,
   type NavigationState,
 } from "./navigation";
@@ -142,6 +146,17 @@ export function commitHumanAdmission(
       },
     },
   };
+}
+
+export function commitHumanRemoval(
+  state: RuntimeState,
+  values: HumanRemovalValues,
+  limits: TreeHistoryLimits,
+  estimateBytes?: EstimateInverseBytes,
+): RuntimeResult {
+  const translated = selectedNodeToRemovalCommand(state.tree, state.navigation, values);
+  if (!translated.ok) return reject(state, "commit", translated.error);
+  return commitSessionCommand(state, translated.command, limits, estimateBytes);
 }
 
 export function undoSession(state: RuntimeState): RuntimeResult {

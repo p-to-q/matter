@@ -1,0 +1,539 @@
+.root {
+  --chrome-text: #161d27;
+  --chrome-muted: #58616a;
+  --chrome-surface: rgb(22 29 39 / 12%);
+  --chrome-sheet: #f5f5f2;
+  --chrome-primary: #161d27;
+  --chrome-primary-fg: #f5f5f2;
+  --chrome-hover-bg: #161d27;
+  --chrome-hover-text: #f5f5f2;
+  --chrome-line: rgb(22 29 39 / 30%);
+  position: absolute;
+  z-index: 36;
+  inset: 0;
+  color: var(--chrome-text);
+  font: 400 14px/20px var(--mono);
+  pointer-events: none;
+}
+
+.root[data-resolved-appearance="dark"] {
+  --chrome-text: #f0f2f3;
+  --chrome-muted: #9fa4ab;
+  --chrome-surface: rgb(37 47 61 / 72%);
+  --chrome-sheet: #252f3d;
+  --chrome-primary: #f5f5f2;
+  --chrome-primary-fg: #161d27;
+  --chrome-hover-bg: #f5f5f2;
+  --chrome-hover-text: #161d27;
+  --chrome-line: rgb(159 164 171 / 32%);
+}
+
+.root button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.root button:focus-visible {
+  outline: 1px solid currentColor;
+  outline-offset: 2px;
+}
+
+.root svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+}
+
+.desktopSurface,
+.mobileTrigger,
+.mobileSheet,
+.backdrop,
+.infoDialog {
+  pointer-events: auto;
+}
+
+.topRight {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  display: flex;
+  height: 20px;
+  align-items: center;
+  gap: 16px;
+}
+
+.textControl,
+.chromeControl,
+.askButton {
+  isolation: isolate;
+  position: relative;
+  display: inline-flex;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.textControl,
+.chromeControl {
+  color: var(--chrome-muted) !important;
+}
+
+.textControl::before,
+.chromeControl::before,
+.askButton::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: transparent;
+  content: "";
+  transition: background-color 150ms ease;
+}
+
+.textControl:hover,
+.chromeControl:hover,
+.askButton:hover,
+.textControl:focus-visible,
+.chromeControl:focus-visible,
+.askButton:focus-visible {
+  color: var(--chrome-hover-text) !important;
+}
+
+.textControl:hover::before,
+.chromeControl:hover::before,
+.askButton:hover::before,
+.textControl:focus-visible::before,
+.chromeControl:focus-visible::before,
+.askButton:focus-visible::before {
+  background: var(--chrome-hover-bg);
+}
+
+.gearButton {
+  position: relative;
+  display: flex;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  color: var(--chrome-muted) !important;
+  cursor: pointer;
+}
+
+.gearButton::after {
+  position: absolute;
+  inset: -8px;
+  content: "";
+}
+
+.gearButton svg {
+  width: 14px;
+  height: 14px;
+}
+
+.bottomRight {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  display: flex;
+  height: 20px;
+  align-items: center;
+  gap: 16px;
+}
+
+.askButton {
+  min-width: 95.05px;
+  background: var(--chrome-primary) !important;
+  color: var(--chrome-primary-fg) !important;
+  font-weight: 500 !important;
+  letter-spacing: .7px;
+}
+
+.iconLabelControl {
+  gap: 6px;
+}
+
+.iconLabelControl svg {
+  width: 14px;
+  height: 14px;
+}
+
+.fxButton {
+  padding-right: 2px;
+  font-weight: 500 !important;
+  letter-spacing: .7px;
+}
+
+.leafIcon {
+  position: relative;
+  display: flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+}
+
+.leafIcon svg {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+  stroke: none;
+}
+
+.leafIcon .leafShadow {
+  filter: blur(1px);
+  opacity: .3;
+  transform: translate(4px, 2px);
+}
+
+.popoverAnchor {
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  z-index: 3;
+  padding: 4px;
+  overflow: auto;
+  background: var(--chrome-surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 10%);
+  color: var(--chrome-text);
+  backdrop-filter: blur(8px);
+  animation: popoverIn 150ms ease-out;
+}
+
+.settingsMenu {
+  top: 49px;
+  right: 24px;
+  width: 160px;
+}
+
+.settingsMenu button,
+.languageMenu button {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  color: var(--chrome-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.settingsMenu button:hover,
+.languageMenu button:hover,
+.settingsMenu button:focus-visible,
+.languageMenu button:focus-visible {
+  outline: 0;
+  background: var(--chrome-primary);
+  color: var(--chrome-primary-fg);
+}
+
+.settingsMenu svg {
+  width: 16px;
+  height: 16px;
+}
+
+.languageMenu {
+  right: 0;
+  bottom: 28px;
+  width: 184px;
+}
+
+.radioMark {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.radioMark::before,
+.radioMark::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 8px;
+  height: 8px;
+  content: "";
+}
+
+.radioMark::before {
+  border: 1px solid currentColor;
+  opacity: .3;
+}
+
+.languageMenu [aria-checked="true"] .radioMark::after {
+  background: currentColor;
+}
+
+.mobileTrigger {
+  display: none;
+}
+
+.backdrop {
+  position: absolute;
+  z-index: 8;
+  inset: 0;
+  padding: 0;
+  background: rgb(0 0 0 / 22%) !important;
+  cursor: default;
+}
+
+.mobileSheet {
+  position: absolute;
+  z-index: 9;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: min(320px, 85%);
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background: var(--chrome-sheet);
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 10%), 0 8px 10px -6px rgb(0 0 0 / 10%);
+  color: var(--chrome-text);
+  animation: sheetIn 250ms ease-out;
+}
+
+.sheetHeader,
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sheetHeader {
+  padding: max(16px, env(safe-area-inset-top)) 16px 4px;
+}
+
+.sheetHeader h2,
+.dialogHeader h2 {
+  margin: 0;
+  font: 400 14px/1 var(--mono);
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.sheetHeader h2 {
+  color: var(--chrome-muted);
+}
+
+.sheetHeader button,
+.dialogHeader button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-items: center;
+  color: var(--chrome-muted);
+  cursor: pointer;
+}
+
+.mobileNav {
+  flex: 1;
+  padding: 0 16px max(16px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+}
+
+.mobileSection {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--chrome-line);
+}
+
+.mobileSection h3 {
+  margin: 0 0 8px;
+  color: var(--chrome-muted);
+  font: 400 12px/1 var(--mono);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.mobilePrimary {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 4px;
+  color: var(--chrome-text) !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mobileRow,
+.mobilePreference {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px;
+  color: var(--chrome-muted) !important;
+}
+
+.mobileRow {
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mobileRow:hover {
+  color: var(--chrome-text) !important;
+}
+
+.rowLeading,
+.mobilePreferenceLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rowLeading svg,
+.mobilePreferenceLabel svg {
+  width: 16px;
+  height: 16px;
+}
+
+.rowValue {
+  color: var(--chrome-muted);
+  font-size: 12px;
+  opacity: .68;
+}
+
+.mobilePreference {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.segmentedControl {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.segmentedControl button {
+  min-height: 40px;
+  padding: 6px 8px;
+  color: var(--chrome-muted);
+  text-align: left;
+  cursor: pointer;
+}
+
+.segmentedControl button[aria-pressed="true"] {
+  background: var(--chrome-primary);
+  color: var(--chrome-primary-fg);
+}
+
+.infoDialog {
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: 50%;
+  width: min(480px, calc(100% - 48px));
+  border: 1px solid var(--chrome-text);
+  background: color-mix(in srgb, var(--chrome-sheet) 78%, transparent);
+  box-shadow: 0 25px 50px -12px rgb(0 0 0 / 25%);
+  color: var(--chrome-text);
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(8px);
+}
+
+.dialogHeader {
+  min-height: 56px;
+  padding: 6px 8px 6px 16px;
+  border-bottom: 1px solid var(--chrome-text);
+}
+
+.dialogBody {
+  padding: 20px 16px 24px;
+  color: var(--chrome-muted);
+  line-height: 1.65;
+}
+
+.dialogBody p {
+  margin: 0;
+}
+
+.dialogBody p + p {
+  margin-top: 12px;
+}
+
+@keyframes popoverIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sheetIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@media (max-width: 767px) {
+  .desktopSurface {
+    display: none;
+  }
+
+  .mobileTrigger {
+    position: absolute;
+    z-index: 5;
+    top: 0;
+    right: 0;
+    display: flex;
+    width: 52px;
+    height: 56px;
+    align-items: center;
+    padding: 0 16px;
+    color: var(--chrome-muted) !important;
+    cursor: pointer;
+  }
+
+  .mobileTrigger svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .infoDialog {
+    width: calc(100% - 24px);
+  }
+}
+
+@media (min-width: 768px) {
+  .mobileSheet {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .popover,
+  .mobileSheet {
+    animation: none;
+  }
+
+  .textControl::before,
+  .chromeControl::before,
+  .askButton::before {
+    transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .popover,
+  .mobileSheet,
+  .infoDialog {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+    backdrop-filter: none;
+  }
+}

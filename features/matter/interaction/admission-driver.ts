@@ -23,6 +23,7 @@ import {
 export type AdmissionScope = Readonly<{
   treeId: string;
   revision: number;
+  documentEpoch?: number;
 }>;
 
 type Transcribe = typeof requestTranscription;
@@ -313,7 +314,7 @@ function ownScope(scope: AdmissionScope): AdmissionScope {
 }
 
 function sameScope(left: AdmissionScope, right: AdmissionScope): boolean {
-  return left.treeId === right.treeId && left.revision === right.revision;
+  return left.treeId === right.treeId && left.revision === right.revision && (left.documentEpoch ?? 0) === (right.documentEpoch ?? 0);
 }
 
 function operationKey(operation: VoiceOperation): string {

@@ -4,18 +4,26 @@ import type { NavigationState } from "../runtime/navigation";
 export const MATERIAL_TITLE_MAX_GRAPHEMES = 32;
 export const MATERIAL_KEYWORD_LIMIT = 4;
 
-export type MaterialFileEntry = Readonly<{
+export type MaterialFileRow = Readonly<{
   nodeId: string;
   parentId: string | null;
   depth: number;
-  title: string;
-  keywords: readonly string[];
   createdAt: string;
   updatedAt: string;
   authoredIndex: number;
   hasChildren: boolean;
   folded: boolean;
   directMatch: boolean;
+}>;
+
+export type MaterialFileEntry = MaterialFileRow & Readonly<{
+  title: string;
+  keywords: readonly string[];
+}>;
+
+export type MaterialFileLabel = Readonly<{
+  title: string;
+  keywords: readonly string[];
 }>;
 
 export type MaterialSelectionResult =
@@ -48,6 +56,9 @@ const LABEL_CACHE = new WeakMap<ThoughtNode, Readonly<{
   keywords: readonly string[];
   searchText: string;
 }>>();
+const SOURCE_ROW_CACHE = new WeakMap<ThoughtTree, readonly MaterialFileSourceRow[]>();
+const ROW_PROJECTION_CACHE = new WeakMap<ThoughtTree, Map<string, readonly MaterialFileRow[]>>();
+const MAX_ROW_PROJECTIONS_PER_TREE = 64;
 
 /**
  * Produces a stable, non-authoritative label for one Markdown material file.
@@ -55,6 +66,11 @@ const LABEL_CACHE = new WeakMap<ThoughtNode, Readonly<{
  */
 export function deriveMaterialTitle(text: string): string {
   return deriveTitle(text, extractMaterialKeywords(text));
+}
+
+/** Resolves one cached display label without making it document authority. */
+export function deriveMaterialFileLabel(node: ThoughtNode): MaterialFileLabel {
+  return derivedLabel(node);
 }
 
 function deriveTitle(text: string, keywords: readonly string[]): string {
@@ -122,38 +138,62 @@ export function extractMaterialKeywords(
  * Projects the authoritative ThoughtTree into a file-like outline. Filtering
  * temporarily reveals matching ancestry without mutating canvas fold state.
  */
+export function projectMaterialFileRows(
+  tree: ThoughtTree,
+  navigation: NavigationState,
+): readonly MaterialFileRow[] {
+  const cacheKey = rowProjectionCacheKey(navigation);
+  const cached = ROW_PROJECTION_CACHE.get(tree)?.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const rows = projectSourceRows(tree);
+  if (rows.length === 0) return Object.freeze([]);
+  const focusLineage = navigation.mode === "focus"
+    ? matchingNodesAndAncestors(tree, new Set([navigation.focusNodeId]))
+    : null;
+  const projection = materializeRows(
+    navigation,
+    rows,
+    focusLineage,
+    null,
+    false,
+  ) as readonly MaterialFileRow[];
+  let treeCache = ROW_PROJECTION_CACHE.get(tree);
+  if (treeCache === undefined) {
+    treeCache = new Map();
+    ROW_PROJECTION_CACHE.set(tree, treeCache);
+  }
+  if (treeCache.size >= MAX_ROW_PROJECTIONS_PER_TREE) {
+    const oldest = treeCache.keys().next().value;
+    if (oldest !== undefined) treeCache.delete(oldest);
+  }
+  treeCache.set(cacheKey, projection);
+  return projection;
+}
+
+/**
+ * `labels` are the names actually rendered in the index — a semantic label or a
+ * name a person typed. They join the haystack because a person searches for
+ * what they can see, and a manual name may share no characters with the
+ * material underneath it.
+ */
 export function projectMaterialFiles(
   tree: ThoughtTree,
   navigation: NavigationState,
   query = "",
+  labels?: ReadonlyMap<string, string>,
 ): readonly MaterialFileEntry[] {
-  if (tree.rootId === null || !hasOwnNode(tree, tree.rootId)) return Object.freeze([]);
-
-  const rows: Array<{ node: ThoughtNode; depth: number; title: string; keywords: readonly string[]; authoredIndex: number }> = [];
-  const visited = new Set<string>();
-  const visit = (nodeId: string, depth: number): void => {
-    if (visited.has(nodeId)) return;
-    visited.add(nodeId);
-    const node = ownNode(tree, nodeId);
-    if (node === undefined) return;
-    const label = derivedLabel(node);
-    rows.push({
-      node,
-      depth,
-      title: label.title,
-      keywords: label.keywords,
-      authoredIndex: rows.length,
-    });
-    for (const childId of node.children) visit(childId, depth + 1);
-  };
-  visit(tree.rootId, 0);
+  const rows = projectSourceRows(tree);
+  if (rows.length === 0) return Object.freeze([]);
 
   const normalizedQuery = normalizeSearchText(query.trim());
   const directMatches = new Set<string>();
   if (normalizedQuery.length > 0) {
     const terms = normalizedQuery.split(/\s+/u).filter(Boolean);
     for (const row of rows) {
-      const haystack = derivedLabel(row.node).searchText;
+      const rendered = labels?.get(row.node.id);
+      const haystack = rendered === undefined
+        ? derivedLabel(row.node).searchText
+        : `${derivedLabel(row.node).searchText} ${normalizeSearchText(rendered)}`;
       if (terms.every((term) => haystack.includes(term))) directMatches.add(row.node.id);
     }
   }
@@ -168,8 +208,58 @@ export function projectMaterialFiles(
     : (normalizedQuery.length === 0
         ? focusLineage
         : matchingFocusMatches(tree, directMatches, focusLineage));
+  return materializeRows(
+    navigation,
+    rows,
+    included,
+    normalizedQuery.length === 0 ? null : directMatches,
+    true,
+  ) as readonly MaterialFileEntry[];
+}
+
+type MaterialFileSourceRow = Readonly<{
+  node: ThoughtNode;
+  depth: number;
+  authoredIndex: number;
+}>;
+
+function projectSourceRows(tree: ThoughtTree): readonly MaterialFileSourceRow[] {
+  const cached = SOURCE_ROW_CACHE.get(tree);
+  if (cached !== undefined) return cached;
+  if (tree.rootId === null || !hasOwnNode(tree, tree.rootId)) return Object.freeze([]);
+  const rows: MaterialFileSourceRow[] = [];
+  const visited = new Set<string>();
+  const visit = (nodeId: string, depth: number): void => {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    const node = ownNode(tree, nodeId);
+    if (node === undefined) return;
+    rows.push(Object.freeze({ node, depth, authoredIndex: rows.length }));
+    for (const childId of node.children) visit(childId, depth + 1);
+  };
+  visit(tree.rootId, 0);
+  const projection = Object.freeze(rows);
+  SOURCE_ROW_CACHE.set(tree, projection);
+  return projection;
+}
+
+function rowProjectionCacheKey(navigation: NavigationState): string {
+  return JSON.stringify([
+    navigation.mode,
+    navigation.mode === "focus" ? navigation.focusNodeId : null,
+    Array.from(navigation.foldedNodeIds).sort(),
+  ]);
+}
+
+function materializeRows(
+  navigation: NavigationState,
+  rows: readonly MaterialFileSourceRow[],
+  included: ReadonlySet<string> | null,
+  directMatches: ReadonlySet<string> | null,
+  includeLabels: boolean,
+): readonly MaterialFileRow[] | readonly MaterialFileEntry[] {
   const hiddenByFold = new Set<string>();
-  const entries: MaterialFileEntry[] = [];
+  const entries: Array<MaterialFileRow | MaterialFileEntry> = [];
   for (const row of rows) {
     const { node } = row;
     if (included !== null && !included.has(node.id)) continue;
@@ -178,19 +268,23 @@ export function projectMaterialFiles(
       continue;
     }
     const folded = navigation.foldedNodeIds.has(node.id);
-    entries.push(Object.freeze({
+    const materialRow: MaterialFileRow = Object.freeze({
       nodeId: node.id,
       parentId: node.parentId,
       depth: row.depth,
-      title: row.title,
-      keywords: row.keywords,
       createdAt: node.createdAt,
       updatedAt: node.updatedAt,
       authoredIndex: row.authoredIndex,
       hasChildren: node.children.length > 0,
       folded,
-      directMatch: normalizedQuery.length === 0 || directMatches.has(node.id),
-    }));
+      directMatch: directMatches === null || directMatches.has(node.id),
+    });
+    if (includeLabels) {
+      const label = derivedLabel(node);
+      entries.push(Object.freeze({ ...materialRow, title: label.title, keywords: label.keywords }));
+    } else {
+      entries.push(materialRow);
+    }
     if (included === null && folded) {
       for (const childId of node.children) hiddenByFold.add(childId);
     }

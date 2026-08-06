@@ -6,7 +6,7 @@ for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
   { name: "narrow", width: 390, height: 844 },
 ]) {
-  test(`voice admits one undoable child at ${viewport.name} width`, async ({ page }) => {
+  test(`voice admits one undoable top-level thought at ${viewport.name} width`, async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -15,25 +15,34 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await expect(page.locator("#material-files")).toHaveAttribute(
+      "data-persistence-phase",
+      "saved",
+    );
 
     await page
       .locator(`[data-thought-id="${rootId}"]`)
       .locator("[data-thought-text-id]")
       .click();
+    await expect(page.locator(`[data-thought-id="${rootId}"]`)).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
     const voice = page.getByRole("button", {
-      name: "Record a child beneath the selected thought",
+      name: "Record a top-level thought",
       exact: true,
     });
     await expect(voice).toBeEnabled();
     await voice.click();
     const stop = page.getByRole("button", { name: "Stop recording", exact: true });
     await expect(stop).toBeVisible();
+    await expect(page.locator(".matter-guidance__next")).toHaveText("说出你的想法。");
     await expect(page.locator("main.matter-shell")).toHaveAttribute(
       "data-interaction-pending",
       "true",
     );
     await expect(page.getByRole("button", { name: "Extend related thought", exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Move through canvas", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
     // MediaRecorder chunks are asynchronous; this crosses one 250 ms capture
     // interval so Stop can prove the final dataavailable boundary with audio.
     await page.waitForTimeout(350);
@@ -47,9 +56,15 @@ for (const viewport of [
       "data-interaction-pending",
       "true",
     );
+    await expect(page.locator(".matter-guidance__next"))
+      .toHaveText("说话，让想法向下生长。");
     await expect(page.locator(`[data-thought-id="${rootId}"]`)).toHaveAttribute(
       "data-selected",
       "true",
+    );
+    await expect(page.locator("#material-files")).toHaveAttribute(
+      "data-persistence-phase",
+      "saved",
     );
     const geometry = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
       nodes.map((node) => {

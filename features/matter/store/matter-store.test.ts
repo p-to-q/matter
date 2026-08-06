@@ -261,4 +261,34 @@ describe("Matter store", () => {
     });
     expect(store.getState().navigation.foldedNodeIds.size).toBe(0);
   });
+
+  it("switches to a separately validated document only through the explicit boundary", () => {
+    const store = createMatterStore();
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("fixture root missing");
+    store.getState().insertFixtureChild(rootId);
+    store.getState().focus(rootId);
+    const imported = {
+      ...createMatterStore().getState().tree,
+      id: "imported_tree",
+    } as ThoughtTree;
+
+    expect(store.getState().hydrateSnapshot(imported)).toMatchObject({
+      operation: "hydrate",
+      status: "rejected",
+    });
+    expect(store.getState().switchDocument(imported)).toEqual({
+      operation: "switch-document",
+      status: "switched",
+      treeId: "imported_tree",
+      revision: imported.revision,
+    });
+    expect(store.getState().tree).toEqual(imported);
+    expect(store.getState().history.entries).toEqual([]);
+    expect(store.getState().navigation).toMatchObject({
+      mode: "full",
+      focusNodeId: null,
+      selectedNodeId: null,
+    });
+  });
 });

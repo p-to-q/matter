@@ -1,18 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
-import { selectLineage, selectVisiblePreorder } from "../tree/selectors";
 import type { ThoughtTree } from "../tree/model";
 import { projectTools } from "../tools/project-tools";
+import { projectToolSurface } from "../tools/project-tool-surface";
 import { isCurrentToolIntent } from "../tools/validate-intent";
 import type { ToolIntent } from "../tools/model";
 import { ToolRail } from "./ToolRail";
 import { PaperTexture } from "./PaperTexture";
-import { HACKATHON_FIXTURE_VERSIONS } from "../fixtures/rooted-material";
 import {
   INITIAL_CANVAS_VIEWPORT,
   reduceCanvasViewport,
@@ -27,18 +26,39 @@ import { elasticPreviewGeometry } from "../interaction/elastic-preview";
 import { projectLanguageAroundSelection } from "../material/language-projection";
 import type { LanguageProjection } from "../material/language-projection";
 import { clientDepthToWorld, projectLanguageFlow } from "../interaction/language-flow";
-import { MaterialFiles } from "./MaterialFiles";
+import { MaterialFiles, type MaterialArchiveActions } from "./MaterialFiles";
+import { useThoughtLabels } from "../interaction/use-thought-labels";
+import { AmbientWorkbench } from "./AmbientWorkbench";
+import {
+  localizeCanvasGuidance,
+  projectCanvasGuidance,
+  type CanvasLanguageGuidanceState,
+  type CanvasMaterialGuidanceState,
+} from "./canvas-guidance";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
+import {
+  createLayoutProjectionInput,
+  layoutProjectionKey,
+  projectLayoutProjection,
+  type LayoutProjectionItem,
+  type LayoutNavigation,
+} from "./layout-projection";
+import { projectCanvasGeometryPublication } from "./canvas-geometry-publication";
+import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
+import { CanvasChrome } from "./CanvasChrome";
+import { useCanvasPreferences } from "./use-canvas-preferences";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
   admissionAnchor: InteractionAdmissionAnchor | null;
+  archive?: MaterialArchiveActions;
   canUndo: boolean;
-  onApplyFixtureText: (nodeId: string, text: string) => unknown;
+  documentEpoch: number;
   navigation: NavigationState;
   onExitFocus: () => void;
   onFocusNode: (nodeId: string) => void;
   onInsertChild: (parentNodeId: string) => void;
+  onRemoveSelected: () => void;
   onSelectNode: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
   onUndo: () => void;
@@ -48,6 +68,8 @@ export type RootedMaterialProps = {
     retry: () => void;
     resolveConflict: () => void;
   }>;
+  /** Fixture-only timing marks expose the cold canvas path without changing it. */
+  performanceMarking?: boolean;
 };
 
 type PublishedGeometry = {
@@ -71,30 +93,86 @@ type ProjectionHandleReceipt = Readonly<{
 
 export function RootedMaterial(props: RootedMaterialProps) {
   const { canUndo, navigation, tree } = props;
+  const canvasPreferences = useCanvasPreferences();
   const interactionPending = props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
   const shellRef = useRef<HTMLElement>(null);
+  const documentRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const layoutEpochRef = useRef(0);
+  const initialPerformanceMarksRef = useRef({
+    canvasCommitted: false,
+    heightReadStarted: false,
+    heightReadComplete: false,
+    pureLayoutStarted: false,
+    pureLayoutComplete: false,
+    geometryPublished: false,
+    published: false,
+  });
+  const measurementRetryRef = useRef<{
+    key: string | null;
+    attempts: number;
+    frame: number | null;
+  }>({ key: null, attempts: 0, frame: null });
   const [measureRevision, requestMeasurement] = useReducer((value) => value + 1, 0);
   const [published, setPublished] = useState<PublishedGeometry | null>(null);
   const [presentationDamage, setPresentationDamage] = useState<PresentationDamage | null>(null);
+  const presentationDamageRef = useRef<PresentationDamage | null>(null);
   const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
   const suppressClickRef = useRef(false);
   const pointerOriginNodeRef = useRef<string | null>(null);
-  const projection = useMemo(
-    () => projectVisibleNodes(tree, navigation),
-    [navigation, tree],
+  const markPerformance = useCallback((name: string) => {
+    if (!props.performanceMarking || typeof window === "undefined") return;
+    window.performance.mark(name);
+  }, [props.performanceMarking]);
+  const layoutNavigation = useMemo<LayoutNavigation>(
+    () => navigation.mode === "focus"
+      ? {
+          mode: "focus",
+          focusNodeId: navigation.focusNodeId,
+          foldedNodeIds: navigation.foldedNodeIds,
+        }
+      : {
+          mode: "full",
+          focusNodeId: null,
+          foldedNodeIds: navigation.foldedNodeIds,
+        },
+    [navigation.foldedNodeIds, navigation.focusNodeId, navigation.mode],
   );
-  const projectionKey = projection
-    .map(({ node, depth }) => `${node.id}:${depth}:${node.updatedAt}`)
-    .join("|");
+  const layoutInput = useMemo(
+    () => createLayoutProjectionInput(tree, layoutNavigation),
+    [layoutNavigation, tree],
+  );
+  const projection = useMemo(
+    () => projectLayoutProjection(layoutInput),
+    [layoutInput],
+  );
+  const projectionKey = useMemo(
+    () => layoutProjectionKey(layoutInput, projection),
+    [layoutInput, projection],
+  );
   const activeLayout = published?.key === projectionKey ? published.layout : null;
   const stretchInvalidationRef = useRef<() => void>(() => undefined);
   const invalidateStretchGeometry = useCallback(() => {
     stretchInvalidationRef.current();
   }, []);
+  const labels = useThoughtLabels({
+    tree,
+    documentEpoch: props.documentEpoch,
+    enabled: props.performanceMarking !== true,
+  });
+  const labelByNodeId = useMemo(() => {
+    const values = new Map<string, string>();
+    for (const [nodeId, entry] of labels.session.entries) values.set(nodeId, entry.label);
+    return values;
+  }, [labels.session]);
+  const labelOriginByNodeId = useMemo(() => {
+    const values = new Map<string, string>();
+    for (const [nodeId, entry] of labels.session.entries) values.set(nodeId, entry.origin);
+    return values;
+  }, [labels.session]);
   const lasso = useLasso({
     tree,
+    documentEpoch: props.documentEpoch,
     canvasRef,
     epoch: {
       treeRevision: tree.revision,
@@ -106,6 +184,27 @@ export function RootedMaterial(props: RootedMaterialProps) {
     navigationKey: `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`,
     onGeometryInvalidated: invalidateStretchGeometry,
   });
+  useEffect(() => {
+    const removeSelected = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        (event.key !== "Delete" && event.key !== "Backspace") ||
+        interactionPending ||
+        lasso.active ||
+        lasso.drawing ||
+        navigation.mode !== "full" ||
+        navigation.selectedNodeId === null ||
+        navigation.selectedNodeId === tree.rootId ||
+        isEditableEventTarget(event.target) ||
+        hasNativeTextSelection()
+      ) return;
+      event.preventDefault();
+      props.onRemoveSelected();
+    };
+    window.addEventListener("keydown", removeSelected);
+    return () => window.removeEventListener("keydown", removeSelected);
+  }, [interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, props, tree.rootId]);
   const elasticRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
@@ -162,6 +261,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     selection: lasso.selection,
     treeId: tree.id,
     revision: tree.revision,
+    documentEpoch: props.documentEpoch,
     navigationKey,
     layoutKey: `${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}`,
     onPreview: updateElasticPreview,
@@ -201,6 +301,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       });
     }
     const frame = requestAnimationFrame(() => {
+      if (samePresentationDamage(presentationDamageRef.current, nextDamage)) return;
+      presentationDamageRef.current = nextDamage;
       setPresentationDamage(nextDamage);
       requestMeasurement();
     });
@@ -273,6 +375,45 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }),
     [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, selectedNode],
   );
+  const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
+  const materialGuidance: CanvasMaterialGuidanceState = tree.rootId === null
+    ? { kind: "empty" }
+    : navigation.mode === "focus"
+      ? { kind: "focus" }
+      : {
+          kind: "full",
+          selected: selectedNode === null
+            ? null
+            : { folded: navigation.foldedNodeIds.has(selectedNode.id) },
+        };
+  const selectedLanguageIsCurrent = lasso.selection !== null &&
+    lasso.sourceText === tree.nodes[lasso.selection.nodeId]?.text &&
+    projection.some(({ node }) => node.id === lasso.selection?.nodeId);
+  let languageGuidance: CanvasLanguageGuidanceState;
+  if (lasso.drawing) {
+    languageGuidance = { kind: "lasso-drawing" };
+  } else if (selectedLanguageIsCurrent) {
+    languageGuidance = {
+      kind: "selected",
+      stretch: stretch.dragging
+        ? { kind: "dragging", amount: stretch.amount }
+        : stretch.amount > 0
+          ? { kind: "committed", amount: stretch.amount }
+          : { kind: "armed", amount: 0 },
+    };
+  } else if (lasso.active) {
+    languageGuidance = { kind: "lasso-ready" };
+  } else {
+    languageGuidance = { kind: "none" };
+  }
+  const guidance = localizeCanvasGuidance(
+    projectCanvasGuidance({
+      admission: props.admission.state,
+      language: languageGuidance,
+      material: materialGuidance,
+    }),
+    canvasPreferences.preferences.language,
+  );
 
   useEffect(() => {
     const remeasure = () => requestMeasurement();
@@ -287,6 +428,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       setPublished(null);
       return;
     }
+    // A new material projection is not ready until the current geometry has
+    // reached the DOM. This stays imperative because React has already
+    // committed these 2,000 material nodes once for measurement.
+    canvas.removeAttribute("data-layout-ready");
+
+    if (!initialPerformanceMarksRef.current.canvasCommitted) {
+      initialPerformanceMarksRef.current.canvasCommitted = true;
+      markPerformance("matter:performance:initial-canvas-committed");
+    }
 
     const style = getComputedStyle(canvas);
     const columnWidth = readCssPixels(style, "--matter-column-width", 300);
@@ -298,19 +448,44 @@ export function RootedMaterial(props: RootedMaterialProps) {
       ),
     );
     const nodes: LayoutNode[] = [];
+    if (!initialPerformanceMarksRef.current.heightReadStarted) {
+      initialPerformanceMarksRef.current.heightReadStarted = true;
+      markPerformance("matter:performance:height-read-start");
+    }
     for (const item of projection) {
       const element = elements.get(item.node.id);
       // Viewport transforms must never leak camera scale into world geometry.
       // `offsetHeight` is the untransformed CSS box height; bounding rects are
       // screen-space and would apply zoom once here and again on publication.
       const height = element?.offsetHeight ?? 0;
-      if (!Number.isFinite(height) || height <= 0) return;
+      if (!Number.isFinite(height) || height <= 0) {
+        // A cold page can reach layout before type metrics settle. Retry a
+        // bounded pair of frames; an unbounded zero-height loop would compete
+        // with real browser resize/font invalidation forever.
+        const retry = measurementRetryRef.current;
+        if (retry.key !== projectionKey) {
+          if (retry.frame !== null) cancelAnimationFrame(retry.frame);
+          retry.key = projectionKey;
+          retry.attempts = 0;
+          retry.frame = null;
+        }
+        if (retry.attempts < 2 && retry.frame === null) {
+          retry.attempts += 1;
+          retry.frame = requestAnimationFrame(() => {
+            retry.frame = requestAnimationFrame(() => {
+              retry.frame = null;
+              requestMeasurement();
+            });
+          });
+        }
+        return;
+      }
       nodes.push({
         id: item.node.id,
         parentId: item.parentId,
         depth: item.depth,
         size: { width: columnWidth, height },
-        presentation: lasso.selection !== null && presentationDamage?.nodeId === item.node.id
+        presentation: presentationDamage?.nodeId === item.node.id
           ? {
               topExtent: presentationDamage.topExtent,
               bottomExtent: presentationDamage.bottomExtent,
@@ -318,7 +493,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           : undefined,
       });
     }
+    if (!initialPerformanceMarksRef.current.heightReadComplete) {
+      initialPerformanceMarksRef.current.heightReadComplete = true;
+      markPerformance("matter:performance:height-read-complete");
+    }
 
+    if (!initialPerformanceMarksRef.current.pureLayoutStarted) {
+      initialPerformanceMarksRef.current.pureLayoutStarted = true;
+      markPerformance("matter:performance:pure-layout-start");
+    }
     const result = layoutColumnarTree({
       nodes,
       origin: { x: 0, y: 0 },
@@ -327,18 +510,43 @@ export function RootedMaterial(props: RootedMaterialProps) {
       columnGap,
       siblingGap,
     });
+    if (!initialPerformanceMarksRef.current.pureLayoutComplete) {
+      initialPerformanceMarksRef.current.pureLayoutComplete = true;
+      markPerformance("matter:performance:pure-layout-complete");
+    }
     if (!result.ok) return;
+    const retry = measurementRetryRef.current;
+    if (retry.frame !== null) cancelAnimationFrame(retry.frame);
+    retry.key = projectionKey;
+    retry.attempts = 0;
+    retry.frame = null;
+    if (!publishCanvasGeometry(canvas, elements, result.layout)) return;
     layoutEpochRef.current = result.layout.layoutEpoch;
+    if (!initialPerformanceMarksRef.current.geometryPublished) {
+      initialPerformanceMarksRef.current.geometryPublished = true;
+      markPerformance("matter:performance:geometry-dom-published");
+    }
     setPublished({ key: projectionKey, layout: result.layout });
-  }, [lasso.selection, measureRevision, presentationDamage, projection, projectionKey, tree.revision]);
+  }, [markPerformance, measureRevision, presentationDamage, projection, projectionKey]);
 
-  const boxes = new Map(activeLayout?.boxes.map((box) => [box.nodeId, box]) ?? []);
-  const canvasStyle = activeLayout
-    ? ({
-        "--matter-canvas-width": `${activeLayout.bounds.width}px`,
-        "--matter-canvas-height": `${activeLayout.bounds.height}px`,
-      } as CSSProperties)
-    : undefined;
+  useLayoutEffect(() => {
+    if (activeLayout === null) return;
+    canvasRef.current?.setAttribute("data-layout-ready", "true");
+    if (!props.performanceMarking || initialPerformanceMarksRef.current.published) return;
+    initialPerformanceMarksRef.current.published = true;
+    markPerformance("matter:performance:published-canvas-commit");
+  }, [activeLayout, markPerformance, props.performanceMarking]);
+
+  useEffect(() => () => {
+    const retry = measurementRetryRef.current;
+    if (retry.frame !== null) cancelAnimationFrame(retry.frame);
+  }, []);
+
+  const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
+  const admissionParentBox = useMemo(
+    () => findAdmissionFeedbackParentBox(admissionAnchor, activeLayout?.boxes ?? null),
+    [activeLayout?.boxes, admissionAnchor],
+  );
   const worldStyle = {
     transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.zoom})`,
   } as CSSProperties;
@@ -477,12 +685,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span aria-hidden="true" className="matter-brand__divider" />
         <span>matter</span>
       </header>
-      <p className="matter-product-line">Make thought matter.</p>
       <MaterialFiles
-        interactionPending={interactionPending}
+        archive={props.archive}
+        documentEpoch={props.documentEpoch}
+        interactionPending={interactionPending || lasso.active}
+        labels={labelByNodeId}
+        labelOrigins={labelOriginByNodeId}
         navigation={navigation}
         onFocusNode={props.onFocusNode}
+        onRenameNode={labels.rename}
+        onResetNodeName={labels.resetName}
         onSelectNode={props.onSelectNode}
+        onVisibleNodes={labels.observe}
         onToggleFold={props.onToggleFold}
         persistence={props.persistence}
         tree={tree}
@@ -490,26 +704,41 @@ export function RootedMaterial(props: RootedMaterialProps) {
       <ToolRail
         interactionPending={interactionPending}
         lassoActive={lasso.active}
-        lassoAvailable={tree.rootId !== null}
-        onLasso={() => lasso.active ? lasso.deactivate() : lasso.activate()}
+        lassoAvailable={tree.rootId !== null && (lasso.active || activeLayout !== null)}
+        onLasso={() => {
+          if (lasso.active) {
+            lasso.deactivate();
+            return;
+          }
+          if (activeLayout !== null) lasso.activate();
+        }}
+        onMove={() => lasso.deactivate()}
         onIntent={(intent) => dispatchToolIntent(intent, props)}
         onVoice={() => {
           if (props.admissionAnchor !== null) props.admission.start(props.admissionAnchor);
         }}
-        tools={tools}
+        surface={toolSurface}
         voiceActive={props.admission.state.phase === "recording"}
         voiceAvailable={props.admissionAnchor !== null}
         voiceLabel={
           props.admissionAnchor?.kind === "root"
             ? "Record a root thought"
             : props.admissionAnchor?.kind === "child"
-              ? "Record a child beneath the selected thought"
+              ? "Record a top-level thought"
               : navigation.mode === "focus"
                 ? "Voice admission unavailable in focus view"
-                : "Select a thought to add beneath it"
+                : "Voice admission unavailable outside the full material view"
         }
       />
-      <section aria-label="Thought material" className="matter-document">
+      <section
+        aria-label="Thought material"
+        className="matter-document"
+        data-canvas-theme={canvasPreferences.resolvedAppearance}
+        data-canvas-theme-preference={canvasPreferences.preferences.appearance}
+        data-leaf-fx={canvasPreferences.preferences.leafFx ? "on" : "off"}
+        ref={documentRef}
+      >
+        <AmbientWorkbench enabled={canvasPreferences.preferences.leafFx} />
         {projection.length === 0 ? (
           <p className="matter-document__empty">
             {navigation.mode === "focus" ? "This focus is no longer available." : "No material yet."}
@@ -518,85 +747,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
           <div className="matter-world" style={worldStyle}>
           <div
             className="matter-canvas"
-            data-layout-ready={activeLayout !== null || undefined}
             ref={canvasRef}
-            style={canvasStyle}
           >
-            <ol className="spatial-thoughts">
-              {projection.map(({ node }) => {
-                const box = boxes.get(node.id);
-                const isSelected = node.id === navigation.selectedNodeId;
-                const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
-                const isProjected = lasso.selection?.nodeId === node.id &&
-                  lasso.sourceText === node.text;
-                const languageProjection = isProjected && lasso.selection !== null
-                  ? projectLanguageAroundSelection(node.text, lasso.selection)
-                  : null;
-                return (
-                  <li
-                    className="spatial-thought"
-                    data-focused={isFocused || undefined}
-                    data-layout-node-id={node.id}
-                    data-selected={isSelected || undefined}
-                    data-thought-id={node.id}
-                    key={node.id}
-                    style={
-                      box
-                        ? { transform: `translate3d(${box.x}px, ${box.y}px, 0)` }
-                        : undefined
-                    }
-                  >
-                    <button
-                      aria-pressed={isSelected}
-                      className="spatial-thought__text"
-                      data-thought-text-id={node.id}
-                      data-visual-projection={isProjected || undefined}
-                      onClick={() => {
-                        if (!interactionPending) props.onSelectNode(node.id);
-                      }}
-                      type="button"
-                    >
-                      {node.text}
-                    </button>
-                    {languageProjection?.ok ? (
-                      <LanguageSplitProjection
-                        projection={languageProjection.projection}
-                        projectionRef={splitProjectionRef}
-                      />
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ol>
+            <CanvasThoughtList
+              interactionPending={interactionPending}
+              lassoSelection={lasso.selection}
+              lassoSourceText={lasso.sourceText}
+              navigation={navigation}
+              onSelectNode={props.onSelectNode}
+              projection={projection}
+              splitProjectionRef={splitProjectionRef}
+            />
             <AdmissionFeedback
-              anchor={props.admission.state.phase === "idle" ? null : props.admission.state.anchor}
-              boxes={boxes}
+              anchor={admissionAnchor}
+              parentBox={admissionParentBox}
               controller={props.admission}
             />
           </div>
           </div>
         )}
+        <footer
+          aria-label="Matter guidance"
+          className="matter-guidance"
+          data-canvas-interactive
+          data-guidance-kind={guidance.kind}
+          data-guidance-state={guidance.id}
+          key={guidance.id}
+        >
+          <p className="matter-guidance__next">{guidance.text}</p>
+        </footer>
+        <CanvasChrome {...canvasPreferences} />
       </section>
-      {tree.rootId === null ? null : (
-        <aside aria-label="Fixture AI versions" className="fixture-rail" data-canvas-interactive data-disabled={interactionPending || undefined}>
-          <span className="fixture-rail__mark">fixture</span>
-          <span className="fixture-rail__ai">AI adjustable</span>
-          <span className="fixture-rail__versions">
-            {HACKATHON_FIXTURE_VERSIONS.map((version) => (
-              <button
-                aria-label={`Apply ${version.label} fixture version`}
-                data-active={tree.nodes[tree.rootId!]?.text === version.text || undefined}
-                disabled={interactionPending || tree.nodes[tree.rootId!]?.text === version.text}
-                key={version.id}
-                onClick={() => props.onApplyFixtureText(tree.rootId!, version.text)}
-                type="button"
-              >
-                {version.label}
-              </button>
-            ))}
-          </span>
-        </aside>
-      )}
       <LassoOverlay
         active={lasso.active}
         drawing={lasso.drawing}
@@ -610,6 +791,96 @@ export function RootedMaterial(props: RootedMaterialProps) {
       />
     </main>
   );
+}
+
+/**
+ * The material list deliberately has no geometry prop. A layout publication
+ * can update its DOM positions without asking React to reconcile every
+ * measured passage for a second time; material and interaction props still
+ * retain their normal declarative ownership.
+ */
+const CanvasThoughtList = memo(function CanvasThoughtList({
+  interactionPending,
+  lassoSelection,
+  lassoSourceText,
+  navigation,
+  onSelectNode,
+  projection,
+  splitProjectionRef,
+}: {
+  interactionPending: boolean;
+  lassoSelection: ReturnType<typeof useLasso>["selection"];
+  lassoSourceText: string | null;
+  navigation: NavigationState;
+  onSelectNode: (nodeId: string) => void;
+  projection: readonly LayoutProjectionItem[];
+  splitProjectionRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  return (
+    <ol className="spatial-thoughts">
+      {projection.map(({ node }) => {
+        const isSelected = node.id === navigation.selectedNodeId;
+        const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
+        const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
+        const languageProjection = isProjected && lassoSelection !== null
+          ? projectLanguageAroundSelection(node.text, lassoSelection)
+          : null;
+        return (
+          <li
+            className="spatial-thought"
+            data-focused={isFocused || undefined}
+            data-layout-node-id={node.id}
+            data-selected={isSelected || undefined}
+            data-thought-id={node.id}
+            key={node.id}
+          >
+            <button
+              aria-pressed={isSelected}
+              className="spatial-thought__text"
+              data-thought-text-id={node.id}
+              data-visual-projection={isProjected || undefined}
+              onClick={() => {
+                if (!interactionPending) onSelectNode(node.id);
+              }}
+              type="button"
+            >
+              {node.text}
+            </button>
+            {languageProjection?.ok ? (
+              <LanguageSplitProjection
+                projection={languageProjection.projection}
+                projectionRef={splitProjectionRef}
+              />
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
+  );
+});
+
+function publishCanvasGeometry(
+  canvas: HTMLDivElement,
+  elements: ReadonlyMap<string, HTMLElement>,
+  layout: ColumnarLayout,
+): boolean {
+  const publication = projectCanvasGeometryPublication(layout);
+  const targets: Array<{ element: HTMLElement; transform: string }> = [];
+  // Do not mark a partial DOM as geometrically valid. This cannot happen for
+  // one synchronous React commit, but the guard makes a future render-edge
+  // refactor fail closed rather than offer stale pointer geometry.
+  for (const node of publication.nodes) {
+    const element = elements.get(node.nodeId);
+    if (element === undefined) return false;
+    targets.push({ element, transform: node.transform });
+  }
+
+  canvas.style.setProperty("--matter-canvas-width", `${publication.width}px`);
+  canvas.style.setProperty("--matter-canvas-height", `${publication.height}px`);
+  for (const target of targets) {
+    target.element.style.transform = target.transform;
+  }
+  return true;
 }
 
 function LassoOverlay({
@@ -693,9 +964,6 @@ function LassoOverlay({
         <path className="lasso-ink__trace" ref={inkPathRef} />
         <path className="lasso-ink__closure" ref={closurePathRef} />
       </svg>
-      {active && !drawing && selectedText === null ? (
-        <span className="lasso-hint">Draw around a phrase</span>
-      ) : null}
     </div>
   );
 }
@@ -808,6 +1076,16 @@ function keyboardStretchAmount(
   return null;
 }
 
+function isEditableEventTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  return target.closest("input, textarea, select, [contenteditable=true], [role=textbox]") !== null;
+}
+
+function hasNativeTextSelection(): boolean {
+  const selection = window.getSelection();
+  return selection !== null && !selection.isCollapsed && selection.toString().length > 0;
+}
+
 function stretchValueText(amount: number): string {
   if (amount === 0) return "Neutral";
   return `${Math.round(amount * 100)}% expanded`;
@@ -870,15 +1148,14 @@ function normalizePointerType(value: string): CanvasPointerType {
 
 function AdmissionFeedback({
   anchor,
-  boxes,
+  parentBox,
   controller,
 }: {
   anchor: InteractionAdmissionAnchor | null;
-  boxes: Map<string, { x: number; y: number; width: number; height: number }>;
+  parentBox: Readonly<{ x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
 }) {
   if (controller.state.phase === "idle" || anchor === null) return null;
-  const parentBox = anchor.kind === "child" ? boxes.get(anchor.parentNodeId) : null;
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
   } as CSSProperties;
@@ -936,26 +1213,18 @@ function normalizeDeltaMode(value: number): 0 | 1 | 2 {
   return value === 1 || value === 2 ? value : 0;
 }
 
-function projectVisibleNodes(tree: ThoughtTree, navigation: NavigationState) {
-  const nodes =
-    navigation.mode === "focus"
-      ? selectLineage(tree, navigation.focusNodeId) ?? []
-      : selectVisiblePreorder(tree, navigation.foldedNodeIds);
-  const depthById = new Map<string, number>();
-  return nodes.map((node, index) => {
-    const depth = navigation.mode === "focus" ? index : (node.parentId === null ? 0 : (depthById.get(node.parentId) ?? -1) + 1);
-    depthById.set(node.id, depth);
-    return {
-      node,
-      depth,
-      parentId: index === 0 ? null : node.parentId,
-    };
-  });
-}
-
 function readCssPixels(style: CSSStyleDeclaration, property: string, fallback: number) {
   const value = Number.parseFloat(style.getPropertyValue(property));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function samePresentationDamage(
+  left: PresentationDamage | null,
+  right: PresentationDamage | null,
+): boolean {
+  return left?.nodeId === right?.nodeId &&
+    left?.topExtent === right?.topExtent &&
+    left?.bottomExtent === right?.bottomExtent;
 }
 
 function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {

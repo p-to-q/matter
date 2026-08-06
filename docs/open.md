@@ -60,6 +60,22 @@ only because it is not yet needed.
 
 ## Interaction candidates
 
+### Lightweight Matter inquiry
+
+A paper-contained, secondary inquiry may eventually accept a short question and
+return orientation only. It would not alter material, invoke an editing tool,
+retain a transcript, or have an autonomous persona. Weak and strong intelligence
+modes are explicitly not designed yet.
+
+Why it is wanted: a person may need a small amount of orientation without
+leaving the workbench, while keeping Matter's main path embodied and material.
+
+Promotion requires: a revision of the product invariant that currently forbids
+prompt boxes, chat transcripts, and assistant surfaces; a bounded request and
+response contract; proof that a non-material response cannot be mistaken for an
+edit; and a decision about whether it has any durable state. Until then, the
+corner control remains static information rather than a preview chat UI.
+
 ### Context-aware tool prediction
 
 Show the three tools most likely to be needed next rather than the whole set.

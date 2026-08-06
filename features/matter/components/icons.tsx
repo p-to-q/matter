@@ -36,8 +36,8 @@ export function PlusIcon({ className, ...props }: IconProps) {
 
 export function UndoIcon({ className, ...props }: IconProps) {
   return (
-    <svg {...sharedProps} className={className} {...props}>
-      <path d="M5.5 4 2.75 6.75 5.5 9.5M3 6.75h5a4 4 0 0 1 4 4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    <svg aria-hidden="true" className={className} fill="none" height="24" viewBox="0 0 24 24" width="24" {...props}>
+      <path d="M8.5 8H4.75V4.25M5 8c1.65-2.25 4.08-3.5 7-3.5a7.5 7.5 0 1 1-6.82 10.61" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
     </svg>
   );
 }

@@ -12,12 +12,13 @@ Read only when the change needs it:
 - [`protocol.md`](protocol.md) — `0.2` wire and document shapes;
 - [`engineering.md`](engineering.md) — implementation discipline and proof;
 - [`workflow.md`](workflow.md) — slice and verifier handoff;
+- [`release-readiness.md`](release-readiness.md) — preview and public-release gates;
 - [`../plans/active-tree-material.md`](../plans/active-tree-material.md) — current migration;
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — change and validation discipline.
 
 ## Context
 
-- [`reference/`](reference/index.md) — optional implementation research;
+- [`reference/`](reference/index.md) — optional implementation research, including the anonymized right-canvas composition;
 - [`surfaces.md`](surfaces.md) — what runs today and what is only specified;
 - [`open.md`](open.md) — unresolved product possibilities;
 - [`changes.md`](changes.md) — short record of form-changing decisions.

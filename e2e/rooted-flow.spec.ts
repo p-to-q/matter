@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const rootId = "thought_fixture_root";
 const originalText =
@@ -26,14 +26,81 @@ for (const viewport of [
       page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name, exact: true });
 
     await expect(page.getByRole("link", { name: "p to q home" })).toHaveText("[p → q]");
-    await expect(page.getByText("Make thought matter.", { exact: true })).toBeVisible();
+    const guidance = page.locator(".matter-guidance[aria-label='Matter guidance']");
+    await expect(guidance.locator(".matter-guidance__next"))
+      .toHaveText("选择一段想法。");
+    await expect(guidance.locator("p")).toHaveCount(1);
+    await expect(guidance.locator("[aria-live]")).toHaveCount(0);
+    await expectOneLineGuidance(guidance);
     await expect(thought(rootId)).toContainText(originalText);
-    await expect(page.locator(".fixture-rail")).toContainText("fixtureAI adjustablev1v2v3");
+    await expect(page.locator(".fixture-rail")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
     expect(await visibleIds(page)).toEqual([rootId]);
     await expect(page.locator(".spatial-thought")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(page.locator(".matter-document svg")).toHaveCount(0);
+    await expect(page.locator(".spatial-thought svg")).toHaveCount(0);
+    expect(await page.getByRole("navigation", { name: "Editing tools" }).locator("[data-tool-id]").evaluateAll(
+      (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
+    )).toEqual(["voice", "lasso", "branch", "move", "undo"]);
+    await expect(page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name: "Focus" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    const ambientVideo = page.locator("video.matter-ambient__video");
+    await expect(ambientVideo).toHaveCount(1);
+    await expect(ambientVideo).toHaveCSS("object-fit", "cover");
+    await expect.poll(() => ambientVideo.evaluate((video: HTMLVideoElement) => ({
+      loop: video.loop,
+      muted: video.muted,
+      playbackRate: video.playbackRate,
+      preload: video.preload,
+      ready: video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA,
+      source: video.currentSrc,
+      width: video.videoWidth,
+    }))).toEqual({
+      loop: true,
+      muted: true,
+      playbackRate: 0.72,
+      preload: "none",
+      ready: true,
+      source: expect.stringContaining("/matter/matter-ui/shadows-loop."),
+      width: 1280,
+    });
+    expect(await page.locator(".matter-header").evaluate(async (header) => {
+      await document.fonts.ready;
+      const family = getComputedStyle(header).fontFamily.split(",")[0] ?? "";
+      return document.fonts.status === "loaded" && document.fonts.check(`12px ${family}`);
+    })).toBe(true);
+    const initialSurface = await page.locator(".matter-document").boundingBox();
+    const initialRail = await page.getByRole("navigation", { name: "Editing tools" }).boundingBox();
+    const initialRoot = await thought(rootId).boundingBox();
+    if (initialSurface === null || initialRail === null || initialRoot === null) {
+      throw new Error("workbench geometry is not visible");
+    }
+    if (viewport.name !== "laptop") {
+      expect(initialSurface.x).toBeGreaterThan(0);
+      expect(initialSurface.y).toBeGreaterThanOrEqual(60);
+      expect(initialRoot.x + initialRoot.width).toBeLessThanOrEqual(initialRail.x);
+      expect(await page.locator(".tool-rail__button").evaluateAll((buttons) =>
+        buttons.every((button) => {
+          const rect = button.getBoundingClientRect();
+          return rect.width >= 48 && rect.height >= 48;
+        }),
+      )).toBe(true);
+    } else {
+      expect(initialSurface.x).toBeGreaterThan(240);
+      expect(initialSurface.x + initialSurface.width).toBeLessThan(viewport.width);
+      expect(initialRail.width).toBeCloseTo(60, 0);
+      const voiceTool = page.locator('.tool-rail__button[data-tool-id="voice"]');
+      await expect(voiceTool).toHaveCSS("width", "44px");
+      await expect(voiceTool.locator("svg")).toHaveCSS("width", "20px");
+      await voiceTool.hover();
+      await expect.poll(() => voiceTool.evaluate((button) =>
+        getComputedStyle(button, "::before").backgroundColor,
+      )).toBe("rgb(22, 29, 39)");
+    }
 
     await selectThought(rootId);
+    await expect(guidance.locator(".matter-guidance__next"))
+      .toHaveText("说话，让想法向下生长。");
+    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
     const rootBeforeGrowth = await thought(rootId).evaluate((node) => {
       const rect = node.getBoundingClientRect();
       return { x: rect.x, y: rect.y };
@@ -101,12 +168,17 @@ for (const viewport of [
     expect(afterPan.nodes[rootId]!.x - beforePan.nodes[rootId]!.x).toBeCloseTo(42, 0);
     expect(afterPan.nodes[firstChildId]!.x - beforePan.nodes[firstChildId]!.x).toBeCloseTo(42, 0);
 
-    const rootRectBeforeTextPan = await thought(rootId).boundingBox();
-    if (rootRectBeforeTextPan === null) throw new Error("root is not visible");
-    const textPanStart = {
-      x: rootRectBeforeTextPan.x + rootRectBeforeTextPan.width * 0.5,
-      y: rootRectBeforeTextPan.y + rootRectBeforeTextPan.height * 0.5,
-    };
+    const textPanStart = await page.locator("[data-thought-text-id]").evaluateAll((buttons) => {
+      for (const button of buttons) {
+        const rect = button.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const target = document.elementFromPoint(x, y);
+        if (target?.closest("[data-thought-text-id]") === button) return { x, y };
+      }
+      return null;
+    });
+    if (textPanStart === null) throw new Error("no visible thought text is available for canvas drag");
     const beforeTextPan = await readViewportAndGeometry(page);
     await page.mouse.move(textPanStart.x, textPanStart.y);
     await page.mouse.down();
@@ -124,8 +196,8 @@ for (const viewport of [
       deltaMode: 0,
       deltaY: -120,
     });
-    const afterZoom = await readViewportAndGeometry(page);
-    expect(afterZoom.zoom).toBeGreaterThan(afterTextPan.zoom);
+    await expect.poll(async () => (await readViewportAndGeometry(page)).zoom)
+      .toBeGreaterThan(afterTextPan.zoom);
     await selectThought(rootId);
     await tool("Extend related thought").click();
     const idsAfterZoomGrowth = await visibleIds(page);
@@ -135,19 +207,13 @@ for (const viewport of [
     expect(Math.abs(zoomGeometry[firstChildId]!.x - zoomGeometry[thirdChildId]!.x)).toBeLessThanOrEqual(1);
     expect(zoomGeometry[thirdChildId]!.y).toBeGreaterThan(zoomGeometry[secondChildId]!.bottom);
 
-    const v2 = page.getByRole("button", { name: "Apply v2 fixture version" });
-    await v2.click();
-    await expect(thought(rootId)).not.toContainText(originalText);
-    await tool("Undo last change").click();
-    await expect(thought(rootId)).toContainText(originalText);
-
     const railPosition = await page
       .getByRole("navigation", { name: "Editing tools" })
       .evaluate((rail) => {
         const rect = rail.getBoundingClientRect();
         return { bottom: rect.bottom, left: rect.left, right: rect.right };
       });
-    if (viewport.name === "narrow") {
+    if (viewport.name !== "laptop") {
       expect(railPosition.bottom).toBeLessThanOrEqual(viewport.height);
       expect(railPosition.left).toBeGreaterThan(0);
       expect(railPosition.right).toBeLessThan(viewport.width);
@@ -158,6 +224,62 @@ for (const viewport of [
 
     expect(browserErrors).toEqual([]);
   });
+}
+
+test("compact workbench keeps material clear of coarse controls", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") browserErrors.push(message.text());
+  });
+
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const surface = await page.locator(".matter-document").boundingBox();
+  const root = await page.locator(`[data-thought-id="${rootId}"]`).boundingBox();
+  const rail = await page.getByRole("navigation", { name: "Editing tools" }).boundingBox();
+  if (surface === null || root === null || rail === null) {
+    throw new Error("compact workbench geometry is not visible");
+  }
+
+  expect(surface.x).toBeGreaterThan(0);
+  expect(surface.y).toBeGreaterThanOrEqual(60);
+  expect(root.x + root.width).toBeLessThanOrEqual(rail.x);
+  expect(rail.x + rail.width).toBeLessThanOrEqual(320);
+  expect(await page.locator(".tool-rail__button").evaluateAll((buttons) =>
+    buttons.every((button) => {
+      const rect = button.getBoundingClientRect();
+      return rect.width >= 48 && rect.height >= 48;
+    }),
+  )).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await expectOneLineGuidance(page.locator(".matter-guidance"));
+  await page.locator(`[data-thought-id="${rootId}"]`).locator("[data-thought-text-id]").click();
+  await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+  expect(browserErrors).toEqual([]);
+});
+
+async function expectOneLineGuidance(guidance: Locator): Promise<void> {
+  const receipt = await guidance.evaluate((element) => {
+    const text = element.querySelector<HTMLElement>(".matter-guidance__next");
+    if (text === null) throw new Error("guidance text missing");
+    const style = getComputedStyle(text);
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const lineTops = new Set(
+      Array.from(range.getClientRects(), (rect) => Math.round(rect.top * 10) / 10),
+    );
+    return {
+      lineCount: lineTops.size,
+      overflows: text.scrollWidth > element.clientWidth + 1,
+      whiteSpace: style.whiteSpace,
+    };
+  });
+  expect(receipt.whiteSpace).toBe("nowrap");
+  expect(receipt.lineCount).toBe(1);
+  expect(receipt.overflows).toBe(false);
 }
 
 async function visibleIds(page: Page): Promise<string[]> {
