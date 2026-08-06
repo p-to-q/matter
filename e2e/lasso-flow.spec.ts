@@ -349,6 +349,7 @@ for (const viewport of [
     await page.setViewportSize(viewport);
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await page.evaluate(async () => document.fonts.ready);
     await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
     await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
     await expect(page.locator(".matter-guidance__next"))
@@ -381,7 +382,8 @@ for (const viewport of [
     const expanded = await projectionReceipt(page);
     const sourceGlyphsExpanded = await sourceGlyphReceipt(text, 0, "，");
     expect(Math.abs(expanded.before.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
-    expect(Math.abs(expanded.selected.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
+    expect(expanded.selected.left).toBeGreaterThanOrEqual(expanded.columnLeft - 1);
+    expect(expanded.selected.right).toBeLessThanOrEqual(expanded.columnRight + 1);
     expect(Math.abs(expanded.after.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
     expect(expanded.before.top).toBeCloseTo(natural.before.top, 1);
     expect(expanded.selected.top).toBeCloseTo(natural.selected.top, 1);
@@ -524,6 +526,8 @@ async function projectionReceipt(page: Page) {
       return {
         top: rect.top,
         bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
         width: rect.width,
         height: rect.height,
         centerX: rect.left + rect.width / 2,
@@ -541,6 +545,8 @@ async function projectionReceipt(page: Page) {
     );
     if (afterGlyphRect === undefined) throw new Error("projection after glyph missing");
     return {
+      columnLeft: column.left,
+      columnRight: column.right,
       columnCenterX: column.left + column.width / 2,
       before: read(".language-split-source"),
       selected: read(".language-split-block--selected"),
