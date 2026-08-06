@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PHASE_PRODUCTION_BUILD } from "next/constants";
-import matterNextConfig from "../../../next.config";
+import matterNextConfig, { resolveMatterVoiceBuildConfig } from "../../../next.config";
 import { normalizeMatterBasePath } from "../config/base-path";
 
 const nextConfig = matterNextConfig(PHASE_PRODUCTION_BUILD);
@@ -51,5 +51,38 @@ describe("Matter Next response headers", () => {
       basePath: false,
       permanent: false,
     }]);
+  });
+
+  it("fails closed for browser audio upload unless the fixture explicitly enables it", () => {
+    expect(resolveMatterVoiceBuildConfig(undefined)).toEqual({
+      admissionEnabled: false,
+      browserSpeechEnabled: false,
+      audioUploadEnabled: false,
+    });
+    expect(resolveMatterVoiceBuildConfig("browser")).toEqual({
+      admissionEnabled: true,
+      browserSpeechEnabled: true,
+      audioUploadEnabled: false,
+    });
+    expect(resolveMatterVoiceBuildConfig("fixture")).toEqual({
+      admissionEnabled: true,
+      browserSpeechEnabled: false,
+      audioUploadEnabled: true,
+    });
+    expect(resolveMatterVoiceBuildConfig("off")).toEqual({
+      admissionEnabled: false,
+      browserSpeechEnabled: false,
+      audioUploadEnabled: false,
+    });
+    expect(resolveMatterVoiceBuildConfig(undefined, "true", "false")).toEqual({
+      admissionEnabled: true,
+      browserSpeechEnabled: true,
+      audioUploadEnabled: false,
+    });
+    expect(resolveMatterVoiceBuildConfig("browser", "false", "false")).toEqual({
+      admissionEnabled: false,
+      browserSpeechEnabled: false,
+      audioUploadEnabled: false,
+    });
   });
 });

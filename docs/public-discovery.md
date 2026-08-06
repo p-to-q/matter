@@ -32,6 +32,8 @@ MATTER_PUBLIC_ORIGIN=https://matter.ptoq.io
 MATTER_BASE_PATH=
 MATTER_INITIAL_DOCUMENT=root
 MATTER_TRANSCRIPTION_ADAPTER=browser
+NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED=true
+NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED=false
 ```
 
 That initial document contains only the canonical root sentence. It is not a

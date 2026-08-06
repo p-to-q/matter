@@ -499,16 +499,16 @@ function notify(callback: () => void): void {
 }
 
 export function createBrowserVoicePort(): VoicePort {
-  if (
-    typeof window !== "undefined" &&
-    process.env.NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER === "browser"
-  ) {
-    // Native recognition keeps raw audio out of the Matter server when the UA supports it.
-    if (isBrowserSpeechRecognitionAvailable()) return createBrowserSpeechVoicePort();
-    // Browser mode deliberately has no HTTP audio adapter. Fail before asking
-    // for a recording instead of collecting audio for a guaranteed 503.
-    throw new VoiceError("VOICE_UNSUPPORTED");
-  }
+  const transport = resolveBrowserVoiceTransport({
+    browserSpeechEnabled: browserSpeechIsEnabled(),
+    speechRecognitionAvailable: isBrowserSpeechRecognitionAvailable(),
+    audioUploadEnabled: browserAudioUploadIsEnabled(),
+  });
+  // Native recognition keeps raw audio out of the Matter server when the UA supports it.
+  if (transport === "speech") return createBrowserSpeechVoicePort();
+  // Audio upload is an explicit deployment capability. Missing configuration
+  // fails before capture instead of collecting audio for a guaranteed 503.
+  if (transport === "unavailable") throw new VoiceError("VOICE_UNSUPPORTED");
   if (
     typeof navigator === "undefined" ||
     navigator.mediaDevices?.getUserMedia === undefined ||
@@ -531,4 +531,29 @@ export function createBrowserVoicePort(): VoicePort {
     requestFrame: (callback) => requestAnimationFrame(callback),
     cancelFrame: (frame) => cancelAnimationFrame(frame),
   });
+}
+
+export function isBrowserVoiceTransportAvailable(): boolean {
+  return resolveBrowserVoiceTransport({
+    browserSpeechEnabled: browserSpeechIsEnabled(),
+    speechRecognitionAvailable: isBrowserSpeechRecognitionAvailable(),
+    audioUploadEnabled: browserAudioUploadIsEnabled(),
+  }) !== "unavailable";
+}
+
+export function resolveBrowserVoiceTransport(input: Readonly<{
+  browserSpeechEnabled: boolean;
+  speechRecognitionAvailable: boolean;
+  audioUploadEnabled: boolean;
+}>): "speech" | "audio" | "unavailable" {
+  if (input.browserSpeechEnabled && input.speechRecognitionAvailable) return "speech";
+  return input.audioUploadEnabled ? "audio" : "unavailable";
+}
+
+function browserSpeechIsEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED === "true";
+}
+
+function browserAudioUploadIsEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED === "true";
 }

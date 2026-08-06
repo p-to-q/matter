@@ -22,19 +22,23 @@ The current online-safe claim is narrow:
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
 boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:
 the Web Speech API owns recognition in the browser, while `/api/transcribe`
-refuses to manufacture fixture speech.
+refuses to manufacture fixture speech. Its client build also fixes
+`NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED=true` and
+`NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED=false`; an unsupported browser disables
+voice before capture rather than sending audio to that refusing route. Fixture
+proof uses the inverse capability pair and never contacts browser speech.
 
 `GET /matter/api/health` reports this boundary for the default mount. A
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Candidate verification — 0.2.0-preview.6
+## Candidate verification — 0.2.0-preview.7
 
 The proprietary candidate was rebuilt and verified locally on 2026-08-07:
 
 ```text
-npm run check          769 tests passed + 1 skipped; doctor, links, typecheck,
+npm run check          771 tests passed + 1 skipped; doctor, links, typecheck,
                        lint, and browser-mode production build also passed
 npm run test:e2e       37 passed + 1 skipped Chromium cases at laptop, 390 px, 320 px,
                        and a wide structural-drag fixture

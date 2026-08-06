@@ -73,8 +73,10 @@ The public preview prefers the browser-managed Web Speech API: interim and final
 partials remain transient in the admission state, and only the final transcript
 is committed. It needs no Matter API key or extra server, though browser vendors
 may use their own speech service. Browsers without the API keep the MediaRecorder
-path, which only succeeds when a real server adapter is configured; it never uses
-the fixture transcript in production. `POST /api/transcribe` is strict multipart and echoes protocol version,
+path only when the client build explicitly enables audio upload. The dedicated
+public browser-recognition deployment disables that capability, so unsupported
+browsers fail before microphone access; it never uses the fixture transcript in
+production. `POST /api/transcribe` is strict multipart and echoes protocol version,
 interaction id and attempt. It receives purpose, locale, duration and audio,
 but no tree, target, lineage, provider name or fixture flag. The route parses;
 server-only adapters transcribe. Provider selection is deployment configuration.

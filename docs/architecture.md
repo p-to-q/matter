@@ -219,7 +219,11 @@ Browser speech recognition is the narrow platform-capability exception: it uses
 no Matter credential, exposes no provider choice in the client, and commits
 only through the same bounded human-admission command. Any configurable or
 credentialed speech/model provider remains in `server/` (or behind a separately
-frozen same-origin credential boundary).
+frozen same-origin credential boundary). Browser speech and MediaRecorder upload
+are distinct, explicit client build capabilities and both default off; API
+presence and a server adapter name never implicitly select a transport or grant
+the browser permission to collect or upload audio. Voice admission is reported
+available only when at least one of those client transports is enabled.
 
 `app/api/health` is a deployment probe, not a debug console; under the Matter
 base path it is reached as `/matter/api/health`. It reports only stable Matter

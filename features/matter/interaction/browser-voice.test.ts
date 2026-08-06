@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MAX_AUDIO_BYTES, RECORDING_LIMIT_MS } from "./audio-policy";
 import {
   BrowserVoicePort,
+  resolveBrowserVoiceTransport,
   VoiceError,
   type BrowserVoiceDependencies,
   type VoiceOperation,
@@ -131,6 +132,28 @@ async function expectVoiceError(
 }
 
 describe("BrowserVoicePort", () => {
+  it("prefers native speech and requires explicit authority before audio upload", () => {
+    expect(resolveBrowserVoiceTransport({
+      browserSpeechEnabled: true,
+      speechRecognitionAvailable: true,
+      audioUploadEnabled: true,
+    })).toBe("speech");
+    expect(resolveBrowserVoiceTransport({
+      browserSpeechEnabled: false,
+      speechRecognitionAvailable: true,
+      audioUploadEnabled: true,
+    })).toBe("audio");
+    expect(resolveBrowserVoiceTransport({
+      browserSpeechEnabled: true,
+      speechRecognitionAvailable: false,
+      audioUploadEnabled: true,
+    })).toBe("audio");
+    expect(resolveBrowserVoiceTransport({
+      browserSpeechEnabled: true,
+      speechRecognitionAvailable: false,
+      audioUploadEnabled: false,
+    })).toBe("unavailable");
+  });
   it("negotiates MIME, records the final chunk, and releases exactly once", async () => {
     const h = harness({ supported: ["audio/mp4;codecs=mp4a.40.2"] });
     h.recorder.mimeType = "audio/mp4;codecs=mp4a.40.2";

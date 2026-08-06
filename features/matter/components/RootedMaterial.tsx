@@ -51,7 +51,7 @@ import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { LassoSelectionTray } from "./LassoSelectionTray";
 import { canMoveNodeToParent } from "../runtime/move";
-import { isBrowserSpeechRecognitionAvailable } from "../interaction/browser-speech-voice";
+import { isBrowserVoiceTransportAvailable } from "../interaction/browser-voice";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -147,13 +147,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
   const [canvasMode, setCanvasMode] = useState<"material" | "pan">("material");
   const [browserVoiceSupported, setBrowserVoiceSupported] = useState(
-    process.env.NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER !== "browser",
+    process.env.NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED === "true",
   );
   useEffect(() => {
     const frame = requestAnimationFrame(() => setBrowserVoiceSupported(
-        process.env.NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER !== "browser" ||
-        isBrowserSpeechRecognitionAvailable(),
-      ));
+      isBrowserVoiceTransportAvailable(),
+    ));
     return () => cancelAnimationFrame(frame);
   }, []);
   const [wheelMotionActive, setWheelMotionActive] = useState(false);

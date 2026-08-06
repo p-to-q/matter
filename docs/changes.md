@@ -17,6 +17,20 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-07 — Browser voice transport fails closed before capture
+
+Changed: native Web Speech is preferred when explicitly enabled and available,
+while MediaRecorder upload requires a separate explicit client build capability. The dedicated
+browser-recognition deployment disables audio upload and unsupported browsers
+disable voice before requesting microphone access.
+
+Why: a missing client adapter constant allowed an unsupported browser to record
+audio for a server route that browser mode intentionally rejects.
+
+Forecloses: inferring upload authority from a server adapter name, collecting
+audio for a guaranteed 503, and exposing provider/deployment names to client
+interaction code.
+
 ## 2026-08-07 — Canvas rendering follows structure without a fixture identity
 
 Changed: root presentation derives from the absence of a parent, thought clicks

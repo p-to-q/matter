@@ -7,7 +7,11 @@ import { normalizeMatterInitialDocument } from "./features/matter/config/initial
 
 const basePath = normalizeMatterBasePath(process.env.MATTER_BASE_PATH ?? "/matter");
 const initialDocument = normalizeMatterInitialDocument(process.env.MATTER_INITIAL_DOCUMENT);
-const voiceAdmissionEnabled = process.env.MATTER_TRANSCRIPTION_ADAPTER !== "off";
+const voiceBuild = resolveMatterVoiceBuildConfig(
+  process.env.MATTER_TRANSCRIPTION_ADAPTER,
+  process.env.NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED,
+  process.env.NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED,
+);
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
 
@@ -49,9 +53,41 @@ export default function matterNextConfig(phase: string): NextConfig {
     env: {
       NEXT_PUBLIC_MATTER_BASE_PATH: basePath,
       NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT: initialDocument,
-      NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: voiceAdmissionEnabled ? "true" : "false",
-      NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER: process.env.MATTER_TRANSCRIPTION_ADAPTER ?? "",
+      NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: voiceBuild.admissionEnabled ? "true" : "false",
+      NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED: voiceBuild.browserSpeechEnabled ? "true" : "false",
+      NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED: voiceBuild.audioUploadEnabled ? "true" : "false",
     },
     outputFileTracingRoot: process.cwd(),
   };
+}
+
+export function resolveMatterVoiceBuildConfig(
+  adapter: string | undefined,
+  browserSpeechOverride?: string,
+  audioUploadOverride?: string,
+): Readonly<{
+  admissionEnabled: boolean;
+  browserSpeechEnabled: boolean;
+  audioUploadEnabled: boolean;
+}> {
+  const browserSpeechEnabled = resolvePublicBoolean(
+    browserSpeechOverride,
+    adapter === "browser",
+  );
+  const audioUploadEnabled = resolvePublicBoolean(
+    audioUploadOverride,
+    adapter === "fixture",
+  );
+  return Object.freeze({
+    admissionEnabled: adapter !== "off" && (browserSpeechEnabled || audioUploadEnabled),
+    browserSpeechEnabled,
+    // Fixture audio is a local/e2e proof. Public browser mode never uploads.
+    audioUploadEnabled,
+  });
+}
+
+function resolvePublicBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return fallback;
 }
