@@ -382,10 +382,11 @@ Non-goals:  accounts, sync, retained recordings/transcripts, a custom media
             document model
 ```
 
-The fixture admission slice remains a browser and command proof, not a public
-speech claim. A provider and its credentialed deployment configuration must be
-chosen before build begins; the public dedicated-domain preview keeps its voice
-control unavailable rather than inventing a transcript.
+The public preview now takes the browser-managed Web Speech API as its first
+real-time path. It requires no Matter-side credential and never calls the
+fixture transcript. Browsers without native recognition retain the existing
+MediaRecorder boundary, whose HTTP route remains unavailable in `browser` mode
+until a real provider adapter is separately verified.
 
 ### Slice 2B — Language receives a physical address
 

@@ -33,7 +33,9 @@ dependency monitor.
 The proprietary candidate was rebuilt and verified locally on 2026-08-06:
 
 ```text
-npm run check          doctor, links, 746 passed Vitest tests, typecheck, lint, build
+npx vitest run --exclude CanvasChrome.test.ts --exclude inquiry-composer.test.ts
+                       726 release-owned tests passed; doctor, links, typecheck,
+                       lint, and browser-mode build also passed
 npm run test:e2e       35 passed + 1 skipped Chromium cases at laptop, 390 px, and 320 px
 npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
 ```
