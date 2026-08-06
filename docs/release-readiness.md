@@ -34,18 +34,20 @@ dependency monitor.
 The proprietary candidate was rebuilt and verified locally on 2026-08-07:
 
 ```text
-npm run check          770 tests passed + 1 skipped; doctor, links, typecheck,
+npm run check          769 tests passed + 1 skipped; doctor, links, typecheck,
                        lint, and browser-mode production build also passed
 npm run test:e2e       37 passed + 1 skipped Chromium cases at laptop, 390 px, 320 px,
                        and a wide structural-drag fixture
 npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
 ```
 
-The current production diagnostic keeps 4,349 elements and an `85 ms` cold task.
-Its measured fold p95 is `111.2–117 ms`, focus p95 is `113–116.5 ms`, selection
-p95 is `28–36.1 ms`, and the maximum raw long task is `108 ms`, so the unchanged `<100 ms` raw gate
-correctly fails. The root-seeded preview does not claim that large-tree release
-bound; the viewport-DOM renderer decision remains open in the active plan.
+The current production diagnostic keeps 4,349 elements and an `83 ms` cold
+task. Its measured fold p95 is `114–117.8 ms`, focus p95 is `110.3–115.7 ms`,
+selection p95 is `36.3–39.8 ms`, and the maximum raw long task is `115 ms`, so
+the unchanged `<100 ms` raw gate correctly fails. Most full-tree measurement
+tasks now land at `88–96 ms`, but occasional complete-DOM remount spikes remain.
+The root-seeded preview does not claim that large-tree release bound; the
+viewport-DOM renderer decision remains open in the active plan.
 
 These receipts prove the proprietary, root-seeded preview boundary. They do not
 promote the missing transform, accounts/sync, or strict large-tree gate listed

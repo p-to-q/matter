@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import Image from "next/image";
-import type { CSSProperties } from "react";
+import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
@@ -45,7 +45,6 @@ import {
   type LayoutProjectionItem,
   type LayoutNavigation,
 } from "./layout-projection";
-import { projectCanvasGeometryPublication } from "./canvas-geometry-publication";
 import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
@@ -532,11 +531,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const columnWidth = readCssPixels(style, "--matter-column-width", 300);
     const columnGap = readCssPixels(style, "--matter-column-gap", 72);
     const siblingGap = readCssPixels(style, "--matter-sibling-gap", 28);
-    const elements = new Map(
-      Array.from(canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]")).map(
-        (element) => [element.dataset.layoutNodeId ?? "", element],
-      ),
-    );
+    const elements = new Map<string, HTMLElement>();
+    for (const element of canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]")) {
+      elements.set(element.dataset.layoutNodeId ?? "", element);
+    }
     const nodes: LayoutNode[] = [];
     if (!initialPerformanceMarksRef.current.heightReadStarted) {
       initialPerformanceMarksRef.current.heightReadStarted = true;
@@ -1053,13 +1051,26 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   projection: readonly LayoutProjectionItem[];
   splitProjectionRef: React.RefObject<HTMLDivElement | null>;
 }) {
+  const lassoSelectedNodeIds = useMemo(
+    () => new Set(lassoSelections.map(({ nodeId }) => nodeId)),
+    [lassoSelections],
+  );
+  const handleThoughtClick = useCallback((event: ReactMouseEvent<HTMLOListElement>) => {
+    if (interactionPending) return;
+    const target = event.target instanceof Element
+      ? event.target.closest<HTMLElement>("[data-thought-text-id]")
+      : null;
+    const nodeId = target?.dataset.thoughtTextId;
+    if (nodeId !== undefined && event.currentTarget.contains(target)) onSelectNode(nodeId);
+  }, [interactionPending, onSelectNode]);
+
   return (
-    <ol className="spatial-thoughts">
+    <ol className="spatial-thoughts" onClick={handleThoughtClick}>
       {projection.map(({ node }) => {
         const isSelected = node.id === navigation.selectedNodeId;
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
-        const isLassoSelected = lassoSelections.some((selection) => selection.nodeId === node.id);
+        const isLassoSelected = lassoSelectedNodeIds.has(node.id);
         const languageProjection = isProjected && lassoSelection !== null
           ? projectLanguageAroundSelection(node.text, lassoSelection)
           : null;
@@ -1079,9 +1090,6 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               className="spatial-thought__text"
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
-              onClick={() => {
-                if (!interactionPending) onSelectNode(node.id);
-              }}
               type="button"
             >
               {isSelected ? <span className="spatial-thought__label">{node.text}</span> : node.text}
@@ -1104,21 +1112,20 @@ function publishCanvasGeometry(
   elements: ReadonlyMap<string, HTMLElement>,
   layout: ColumnarLayout,
 ): boolean {
-  const publication = projectCanvasGeometryPublication(layout);
-  const targets: Array<{ element: HTMLElement; transform: string }> = [];
   // Do not mark a partial DOM as geometrically valid. This cannot happen for
   // one synchronous React commit, but the guard makes a future render-edge
   // refactor fail closed rather than offer stale pointer geometry.
-  for (const node of publication.nodes) {
-    const element = elements.get(node.nodeId);
-    if (element === undefined) return false;
-    targets.push({ element, transform: node.transform });
+  for (const box of layout.boxes) {
+    if (!elements.has(box.nodeId)) return false;
   }
 
-  canvas.style.setProperty("--matter-canvas-width", `${publication.width}px`);
-  canvas.style.setProperty("--matter-canvas-height", `${publication.height}px`);
-  for (const target of targets) {
-    target.element.style.transform = target.transform;
+  canvas.style.setProperty("--matter-canvas-width", `${layout.bounds.width}px`);
+  canvas.style.setProperty("--matter-canvas-height", `${layout.bounds.height}px`);
+  for (const box of layout.boxes) {
+    const element = elements.get(box.nodeId);
+    if (element !== undefined) {
+      element.style.transform = `translate3d(${box.x}px, ${box.y}px, 0)`;
+    }
   }
   return true;
 }

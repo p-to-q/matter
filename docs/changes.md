@@ -17,6 +17,19 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-07 — Canvas rendering follows structure without a fixture identity
+
+Changed: root presentation derives from the absence of a parent, thought clicks
+are delegated by the ordered material list, and validated layout boxes publish
+directly at the DOM edge without a second frozen geometry projection.
+
+Why: imported roots must look like roots regardless of their id, and a complete
+tree remount should not allocate one handler and two disposable publication
+objects for every visible passage.
+
+Forecloses: fixture ids as styling authority, per-node click closures, and a
+parallel geometry value model between pure layout and the rendering edge.
+
 ## 2026-08-07 — The preview returns to a material-only AI boundary
 
 Changed: the inquiry prompt, assistant transcript, and inquiry API have been

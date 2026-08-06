@@ -1158,6 +1158,16 @@ candidate and its selector changes were removed. The proven two-element geometry
 owner remains; the viewport-DOM recommendation above is still the only open renderer
 route, and it still requires a separate product/architecture freeze.
 
+Preview audit receipt, 2026-08-07: list-level click delegation, structural root
+styling, and direct fail-closed publication from validated layout boxes removed
+per-node handlers and the redundant frozen publication model without changing
+the two-element geometry owner. The full browser suite passed. The three-round
+production receipt kept 4,349 elements, reduced most complete-tree tasks to
+`88–96 ms`, and recorded an `83 ms` cold task, but isolated `113–115 ms` remount
+spikes still failed the unchanged max gate. This is useful local economy, not
+evidence to reopen the withdrawn markup candidate or bypass the viewport-DOM
+freeze.
+
 ## Phase 4 — First release
 
 ### Fixture lineage and selected material affordance
