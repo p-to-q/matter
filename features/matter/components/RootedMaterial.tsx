@@ -833,6 +833,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             <CanvasThoughtList
               interactionPending={interactionPending}
               lassoSelection={lasso.selection}
+              lassoSelections={lasso.selections}
               lassoSourceText={lasso.sourceText}
               navigation={navigation}
               onSelectNode={props.onSelectNode}
