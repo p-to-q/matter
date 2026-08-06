@@ -58,7 +58,10 @@ const LABEL_CACHE = new WeakMap<ThoughtNode, Readonly<{
 }>>();
 const SOURCE_ROW_CACHE = new WeakMap<ThoughtTree, readonly MaterialFileSourceRow[]>();
 const ROW_PROJECTION_CACHE = new WeakMap<ThoughtTree, Map<string, readonly MaterialFileRow[]>>();
+const SUBTREE_SLICE_CACHE = new WeakMap<ThoughtTree, Map<string, readonly MaterialFileSourceRow[]>>();
 const MAX_ROW_PROJECTIONS_PER_TREE = 64;
+const NO_FOLDED_NODES: ReadonlySet<string> = new Set<string>();
+const NO_ROWS: readonly MaterialFileRow[] = Object.freeze([]);
 
 /**
  * Produces a stable, non-authoritative label for one Markdown material file.
@@ -171,6 +174,75 @@ export function projectMaterialFileRows(
 }
 
 /**
+ * Projects the outline the index actually shows: the root's children, and the
+ * descendants of every row that has not been closed. Material arrives expanded,
+ * because a thought that was just spoken must be readable without being hunted
+ * for; closing is the deliberate act, and it is remembered per row.
+ *
+ * Closing is the index's own state. It is deliberately not the canvas fold:
+ * collapsing a branch to read past it must not restructure the canvas.
+ */
+export function projectMaterialFileOutline(
+  tree: ThoughtTree,
+  collapsedNodeIds: ReadonlySet<string>,
+  foldedNodeIds: ReadonlySet<string> = NO_FOLDED_NODES,
+): readonly MaterialFileRow[] {
+  if (tree.rootId === null) return NO_ROWS;
+  const rows = projectSourceRows(tree);
+  if (rows.length === 0) return NO_ROWS;
+  const outline: MaterialFileRow[] = [];
+  const hidden = new Set<string>();
+  for (const row of rows) {
+    const { node } = row;
+    if (node.id === tree.rootId) continue;
+    const parentId = node.parentId;
+    if (parentId !== null && parentId !== tree.rootId) {
+      if (hidden.has(parentId) || collapsedNodeIds.has(parentId)) {
+        hidden.add(node.id);
+        continue;
+      }
+    }
+    outline.push(sourceToRow(row, foldedNodeIds));
+  }
+  return Object.freeze(outline);
+}
+
+/**
+ * Flattens every descendant of `rootId` in authored preorder. Selection spans a
+ * whole branch, so copying must not be limited to the level currently browsed.
+ */
+export function projectMaterialFileSubtree(
+  tree: ThoughtTree,
+  rootId: string | null,
+  foldedNodeIds: ReadonlySet<string> = NO_FOLDED_NODES,
+): readonly MaterialFileRow[] {
+  const anchorId = rootId ?? tree.rootId;
+  if (anchorId === null) return NO_ROWS;
+  const slice = subtreeSlice(tree, anchorId);
+  if (slice.length === 0) return NO_ROWS;
+  return Object.freeze(slice.map((row) => sourceToRow(row, foldedNodeIds)));
+}
+
+/**
+ * Root-first ancestor ids of `nodeId`, excluding the node. Search results are
+ * flat, so position is carried by this path rather than by indentation.
+ */
+export function projectMaterialAncestry(
+  tree: ThoughtTree,
+  nodeId: string,
+): readonly string[] {
+  const ancestry: string[] = [];
+  const seen = new Set<string>([nodeId]);
+  let current = ownNode(tree, nodeId)?.parentId ?? null;
+  while (current !== null && !seen.has(current)) {
+    seen.add(current);
+    ancestry.push(current);
+    current = ownNode(tree, current)?.parentId ?? null;
+  }
+  return Object.freeze(ancestry.reverse());
+}
+
+/**
  * `labels` are the names actually rendered in the index — a semantic label or a
  * name a person typed. They join the haystack because a person searches for
  * what they can see, and a manual name may share no characters with the
@@ -241,6 +313,52 @@ function projectSourceRows(tree: ThoughtTree): readonly MaterialFileSourceRow[] 
   const projection = Object.freeze(rows);
   SOURCE_ROW_CACHE.set(tree, projection);
   return projection;
+}
+
+function subtreeSlice(tree: ThoughtTree, rootId: string): readonly MaterialFileSourceRow[] {
+  let treeCache = SUBTREE_SLICE_CACHE.get(tree);
+  if (treeCache === undefined) {
+    treeCache = new Map();
+    SUBTREE_SLICE_CACHE.set(tree, treeCache);
+  }
+  const cached = treeCache.get(rootId);
+  if (cached !== undefined) return cached;
+  const rows = projectSourceRows(tree);
+  const start = rows.findIndex((row) => row.node.id === rootId);
+  const slice: MaterialFileSourceRow[] = [];
+  if (start >= 0) {
+    const baseDepth = rows[start]!.depth;
+    for (let index = start + 1; index < rows.length; index += 1) {
+      const row = rows[index]!;
+      if (row.depth <= baseDepth) break;
+      slice.push(row);
+    }
+  }
+  const projection = Object.freeze(slice);
+  if (treeCache.size >= MAX_ROW_PROJECTIONS_PER_TREE) {
+    const oldest = treeCache.keys().next().value;
+    if (oldest !== undefined) treeCache.delete(oldest);
+  }
+  treeCache.set(rootId, projection);
+  return projection;
+}
+
+function sourceToRow(
+  row: MaterialFileSourceRow,
+  foldedNodeIds: ReadonlySet<string>,
+): MaterialFileRow {
+  const { node } = row;
+  return Object.freeze({
+    nodeId: node.id,
+    parentId: node.parentId,
+    depth: row.depth,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
+    authoredIndex: row.authoredIndex,
+    hasChildren: node.children.length > 0,
+    folded: foldedNodeIds.has(node.id),
+    directMatch: true,
+  });
 }
 
 function rowProjectionCacheKey(navigation: NavigationState): string {

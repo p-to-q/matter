@@ -72,11 +72,16 @@ for (const viewport of [
         return { id: node.getAttribute("data-thought-id"), x: rect.x, y: rect.y };
       }),
     );
-    expect(geometry).toHaveLength(2);
-    expect(geometry[1]!.x).toBeGreaterThan(geometry[0]!.x);
-    expect(geometry[1]!.y).toBeCloseTo(geometry[0]!.y, 0);
+    const admittedId = await admitted.getAttribute("data-thought-id");
+    const rootGeometry = geometry.find(({ id }) => id === rootId);
+    const admittedGeometry = geometry.find(({ id }) => id === admittedId);
+    expect(geometry).toHaveLength(11);
+    expect(rootGeometry).toBeDefined();
+    expect(admittedGeometry).toBeDefined();
+    expect(admittedGeometry!.x).toBeGreaterThan(rootGeometry!.x);
+    expect(admittedGeometry!.y).toBeGreaterThan(rootGeometry!.y);
 
-    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await page.keyboard.press(viewport.name === "laptop" ? "Meta+z" : "Control+z");
     await expect(admitted).toHaveCount(0);
     expect(browserErrors).toEqual([]);
   });

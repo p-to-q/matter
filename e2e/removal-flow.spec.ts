@@ -13,10 +13,16 @@ for (const viewport of [
 
     const root = page.locator(`[data-thought-id="${rootId}"]`);
     await root.locator("[data-thought-text-id]").click();
+    const before = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-thought-id")),
+    );
     await page.getByRole("button", { name: "Extend related thought", exact: true }).click();
-    const child = page.locator(`[data-thought-id]:not([data-thought-id="${rootId}"])`).first();
-    const childId = await child.getAttribute("data-thought-id");
-    if (childId === null) throw new Error("fixture child was not created");
+    const after = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
+      nodes.map((node) => node.getAttribute("data-thought-id")),
+    );
+    const childId = after.find((nodeId) => nodeId !== null && !before.includes(nodeId));
+    if (childId === undefined || childId === null) throw new Error("fixture child was not created");
+    const child = page.locator(`[data-thought-id="${childId}"]`);
     await child.locator("[data-thought-text-id]").click();
     await expect(child).toHaveAttribute("data-selected", "true");
 

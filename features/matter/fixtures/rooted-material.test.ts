@@ -13,7 +13,7 @@ import {
 import type { ThoughtTree } from "../tree/model";
 import {
   ROOTED_FIXTURE_NODE_IDS,
-  HACKATHON_FIXTURE_VERSIONS,
+  ROOTED_FIXTURE_TEXT_VARIANTS,
   createFixtureInsertChildCommand,
   createFixtureReplaceTextCommand,
   createPerformanceThoughtTree,
@@ -26,7 +26,7 @@ const TEST_HISTORY_LIMITS = {
 };
 
 describe("rooted material fixture", () => {
-  it("is deterministic, valid, and opens with the original single material", () => {
+  it("is deterministic, valid, and opens with a three-level source lineage", () => {
     const first = createRootedMaterialFixture();
     const second = createRootedMaterialFixture();
 
@@ -34,11 +34,26 @@ describe("rooted material fixture", () => {
     expect(validateThoughtTree(first.tree)).toEqual({ ok: true });
     expect(first.tree.rootId).toBe(ROOTED_FIXTURE_NODE_IDS.root);
     expect(first.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root]).toMatchObject({
-      text: HACKATHON_FIXTURE_VERSIONS[0].text,
+      text: ROOTED_FIXTURE_TEXT_VARIANTS[0].text,
+      children: [
+        ROOTED_FIXTURE_NODE_IDS.imaginedLives,
+        ROOTED_FIXTURE_NODE_IDS.presentDistance,
+        ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+      ],
+    });
+    expect(first.tree.nodes[ROOTED_FIXTURE_NODE_IDS.imaginedLives]).toMatchObject({
+      parentId: ROOTED_FIXTURE_NODE_IDS.root,
+      children: [
+        ROOTED_FIXTURE_NODE_IDS.imaginedTime,
+        ROOTED_FIXTURE_NODE_IDS.imaginedRelations,
+      ],
+    });
+    expect(first.tree.nodes[ROOTED_FIXTURE_NODE_IDS.bodilyReturn]).toMatchObject({
+      parentId: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
       children: [],
     });
-    expect(Object.keys(first.tree.nodes)).toEqual([ROOTED_FIXTURE_NODE_IDS.root]);
-    expect(first.tree.revision).toBe(1);
+    expect(Object.keys(first.tree.nodes)).toHaveLength(10);
+    expect(first.tree.revision).toBe(10);
   });
 
   it("starts with empty history after real bootstrap commits", () => {
@@ -88,7 +103,7 @@ describe("rooted material fixture", () => {
     const command = createFixtureReplaceTextCommand(
       fixture.tree,
       root.id,
-      HACKATHON_FIXTURE_VERSIONS[1].text,
+      ROOTED_FIXTURE_TEXT_VARIANTS[1].text,
     );
 
     expect(command.mutation).toMatchObject({
@@ -96,7 +111,7 @@ describe("rooted material fixture", () => {
       nodeId: root.id,
       expectedText: root.text,
       expectedUpdatedAt: root.updatedAt,
-      text: HACKATHON_FIXTURE_VERSIONS[1].text,
+      text: ROOTED_FIXTURE_TEXT_VARIANTS[1].text,
     });
   });
 

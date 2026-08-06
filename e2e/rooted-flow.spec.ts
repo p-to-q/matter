@@ -8,7 +8,7 @@ for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
   { name: "narrow", width: 390, height: 844 },
 ]) {
-  test(`hackathon surface and rooted geometry stay handleable at ${viewport.name} width`, async ({ page }) => {
+  test(`rooted material and geometry stay handleable at ${viewport.name} width`, async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -35,8 +35,10 @@ for (const viewport of [
     await expect(thought(rootId)).toContainText(originalText);
     await expect(page.locator(".fixture-rail")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
-    expect(await visibleIds(page)).toEqual([rootId]);
-    await expect(page.locator(".spatial-thought")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    const initialIds = await visibleIds(page);
+    expect(initialIds).toHaveLength(10);
+    expect(initialIds[0]).toBe(rootId);
+    await expect(thought(rootId)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(page.locator(".spatial-thought svg")).toHaveCount(0);
     expect(await page.getByRole("navigation", { name: "Editing tools" }).locator("[data-tool-id]").evaluateAll(
       (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
@@ -85,7 +87,7 @@ for (const viewport of [
         }),
       )).toBe(true);
     } else {
-      expect(initialSurface.x).toBeGreaterThan(240);
+      expect(initialSurface.x).toBeGreaterThan(300);
       expect(initialSurface.x + initialSurface.width).toBeLessThan(viewport.width);
       expect(initialRail.width).toBeCloseTo(60, 0);
       const voiceTool = page.locator('.tool-rail__button[data-tool-id="voice"]');
@@ -106,19 +108,20 @@ for (const viewport of [
       return { x: rect.x, y: rect.y };
     });
     await tool("Extend related thought").click();
-    const firstChildId = (await visibleIds(page))[1];
+    const firstChildId = (await visibleIds(page)).at(-1);
     if (firstChildId === undefined) throw new Error("first child missing");
     await selectThought(rootId);
     await tool("Extend related thought").click();
     const idsAfterTwoChildren = await visibleIds(page);
-    const secondChildId = idsAfterTwoChildren[2];
+    const secondChildId = idsAfterTwoChildren.at(-1);
     if (secondChildId === undefined) throw new Error("second child missing");
 
     const geometry = await readGeometry(page);
+    const initialTreeBottom = Math.max(...initialIds.map((nodeId) => geometry[nodeId]!.bottom));
     expect(geometry[rootId]!.x).toBeCloseTo(rootBeforeGrowth.x, 0);
     expect(geometry[rootId]!.y).toBeCloseTo(rootBeforeGrowth.y, 0);
     expect(geometry[firstChildId]!.x).toBeGreaterThan(geometry[rootId]!.x);
-    expect(Math.abs(geometry[rootId]!.y - geometry[firstChildId]!.y)).toBeLessThanOrEqual(1);
+    expect(geometry[firstChildId]!.y).toBeGreaterThan(initialTreeBottom);
     expect(Math.abs(geometry[firstChildId]!.x - geometry[secondChildId]!.x)).toBeLessThanOrEqual(1);
     expect(geometry[secondChildId]!.y).toBeGreaterThan(geometry[firstChildId]!.bottom);
 
@@ -189,7 +192,7 @@ for (const viewport of [
     await selectThought(rootId);
     await tool("Extend related thought").click();
     const idsAfterZoomGrowth = await visibleIds(page);
-    const thirdChildId = idsAfterZoomGrowth[3];
+    const thirdChildId = idsAfterZoomGrowth.at(-1);
     if (thirdChildId === undefined) throw new Error("third child missing");
     const zoomGeometry = await readGeometry(page);
     expect(Math.abs(zoomGeometry[firstChildId]!.x - zoomGeometry[thirdChildId]!.x)).toBeLessThanOrEqual(1);

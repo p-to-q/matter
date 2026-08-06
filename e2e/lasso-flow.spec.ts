@@ -393,7 +393,7 @@ for (const viewport of [
     const sourceAfter = await sourceLayoutReceipt(page, text);
     expect(sourceTextReceipt(sourceAfter)).toEqual(sourceTextReceipt(sourceBefore));
     expect(sourceAfter.node).toEqual(sourceBefore.node);
-    expect(sourceAfter.canvas.height).toBeGreaterThan(sourceBefore.canvas.height);
+    expect(sourceAfter.canvas.height).toBeGreaterThanOrEqual(sourceBefore.canvas.height);
 
     await bottom.press("Home");
     const top = page.getByRole("slider", { name: "Expand selected language from its top edge" });

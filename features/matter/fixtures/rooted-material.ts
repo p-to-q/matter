@@ -15,13 +15,18 @@ export const ROOTED_FIXTURE_TREE_ID = "matter_fixture_rooted_01";
 
 export const ROOTED_FIXTURE_NODE_IDS = {
   root: "thought_fixture_root",
-  language: "thought_fixture_language",
-  distance: "thought_fixture_distance",
-  hesitation: "thought_fixture_hesitation",
-  body: "thought_fixture_body",
+  imaginedLives: "thought_fixture_imagined_lives",
+  imaginedTime: "thought_fixture_imagined_time",
+  imaginedRelations: "thought_fixture_imagined_relations",
+  presentDistance: "thought_fixture_present_distance",
+  presentFailure: "thought_fixture_present_failure",
+  presentOpening: "thought_fixture_present_opening",
+  bodilyMemory: "thought_fixture_bodily_memory",
+  bodilyGesture: "thought_fixture_bodily_gesture",
+  bodilyReturn: "thought_fixture_bodily_return",
 } as const;
 
-export const HACKATHON_FIXTURE_VERSIONS = [
+export const ROOTED_FIXTURE_TEXT_VARIANTS = [
   {
     id: "quiet",
     label: "v1",
@@ -55,11 +60,83 @@ const FIXTURE_CHILD_TEXTS = [
 const BOOTSTRAP_NODES: readonly ThoughtNode[] = [
   {
     id: ROOTED_FIXTURE_NODE_IDS.root,
-    text: HACKATHON_FIXTURE_VERSIONS[0].text,
+    text: ROOTED_FIXTURE_TEXT_VARIANTS[0].text,
     parentId: null,
     children: [],
     createdAt: "2026-08-03T08:00:00.000Z",
     updatedAt: "2026-08-03T08:00:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
+    text: "被允许想象的其他生活",
+    parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    children: [],
+    createdAt: "2026-08-03T08:01:00.000Z",
+    updatedAt: "2026-08-03T08:01:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.imaginedTime,
+    text: "也许怀念的是一种不必立刻证明效率的时间，它还没有被切成可以交付的单位。",
+    parentId: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
+    children: [],
+    createdAt: "2026-08-03T08:02:00.000Z",
+    updatedAt: "2026-08-03T08:02:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.imaginedRelations,
+    text: "也许那里的人与人之间还有一些不必被计算的往来，慢一点也不会立刻失去位置。",
+    parentId: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
+    children: [],
+    createdAt: "2026-08-03T08:03:00.000Z",
+    updatedAt: "2026-08-03T08:03:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+    text: "过去为什么在今天显得遥远",
+    parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    children: [],
+    createdAt: "2026-08-03T08:04:00.000Z",
+    updatedAt: "2026-08-03T08:04:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.presentFailure,
+    text: "它未必真的存在过；正因为不完整，才更容易被今天的缺口照亮。",
+    parentId: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+    children: [],
+    createdAt: "2026-08-03T08:05:00.000Z",
+    updatedAt: "2026-08-03T08:05:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.presentOpening,
+    text: "怀念不是回去的路线，更像一个还没有被封死的入口，让别的安排暂时可以被看见。",
+    parentId: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+    children: [],
+    createdAt: "2026-08-03T08:06:00.000Z",
+    updatedAt: "2026-08-03T08:06:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    text: "身体怎样保存这种怀念",
+    parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    children: [],
+    createdAt: "2026-08-03T08:07:00.000Z",
+    updatedAt: "2026-08-03T08:07:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.bodilyGesture,
+    text: "有些记忆先以步速、停顿和说话时的犹豫回来，语言只是在后面追上它们。",
+    parentId: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    children: [],
+    createdAt: "2026-08-03T08:08:00.000Z",
+    updatedAt: "2026-08-03T08:08:00.000Z",
+  },
+  {
+    id: ROOTED_FIXTURE_NODE_IDS.bodilyReturn,
+    text: "所以这段话不急着把过去说清楚，只想留住那一点仍能让身体调整方向的感觉。",
+    parentId: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    children: [],
+    createdAt: "2026-08-03T08:09:00.000Z",
+    updatedAt: "2026-08-03T08:09:00.000Z",
   },
 ] as const;
 

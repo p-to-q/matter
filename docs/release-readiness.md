@@ -26,21 +26,27 @@ transcription adapter remains gated by the deployment requirements in
 `GET /matter/api/health` reports this boundary for deployment checks. It is a
 no-store capability probe, not an uptime or dependency monitor.
 
-## Candidate receipt — 0.2.0-preview.2
+## Candidate verification — 0.2.0-preview.3
 
-The proprietary candidate was rebuilt from the latest `origin/main` and proved
-sequentially on 2026-08-06:
+The proprietary candidate was rebuilt and verified locally on 2026-08-06:
 
 ```text
-npm run check          doctor, links, 706 passed Vitest tests, typecheck, lint, build
+npm run check          doctor, links, 716 passed Vitest tests, typecheck, lint, build
 npm run test:e2e       35 passed + 1 skipped Chromium cases at laptop, 390 px, and 320 px
-npm run test:receipt   production 2,000-node renderer receipt
+npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
 ```
 
-These receipts prove the private, fixture-seeded preview boundary only. They do
+The production diagnostic keeps 4,314 elements, a `64–68 ms` cold task, and
+`93–100 ms` measured structural tasks after warmup. A first full 2,000-node
+structural remount still reaches `105–114 ms`, so the unchanged `<100 ms` raw
+gate correctly fails. The fixture-seeded preview does not claim that large-tree
+release bound; the viewport-DOM renderer decision remains open in the active plan.
+
+These receipts prove the proprietary, fixture-seeded preview boundary only. They do
 not promote the missing transform, live transcription, fresh empty-document
 start, or deployed-origin device gates listed below. The repository and release
-are private; `LICENSE` grants no public-use rights.
+artifacts are currently publicly visible for operational reasons, but remain
+proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
 
 ## Hard gates before a public pre-release
 
@@ -50,6 +56,9 @@ are private; `LICENSE` grants no public-use rights.
   intentionally outside this preview.
 - The product opens with seeded fixture material, not a fresh empty document
   whose first action admits a root thought.
+- The complete 2,000-node tree remains authoritative and pointer-ready, but a full
+  structural remount still exceeds the strict `<100 ms` raw long-task gate. The
+  viewport-DOM renderer fork requires a separate product/architecture freeze.
 - Live transcription has no adapter, rate/spend guard, decoded-duration
   validation, deployed-origin Chrome/Safari receipt, or final voice-level UX.
 - The deployed origin still needs the Phase 4 receipt in

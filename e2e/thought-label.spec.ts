@@ -11,23 +11,27 @@ test("the material index names a thought instead of previewing it", async ({ pag
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
-  const row = page.locator(".material-file").first();
+  // The root is the level the index is inside, so its name is the context line.
+  const heading = page.locator(".material-files__context-title span");
   const material = await page
     .locator(`[data-thought-id="${rootId}"] [data-thought-text-id]`)
     .innerText();
 
-  // The row is a name, not the opening of the passage: short, contained in the
+  // The line is a name, not the opening of the passage: short, contained in the
   // material, and never the whole first clause.
-  const title = (await row.locator(".material-file__title").innerText()).trim();
+  const title = (await heading.innerText()).trim();
   expect(title.length).toBeGreaterThan(1);
   expect(Array.from(title).length).toBeLessThanOrEqual(32);
   expect(material.replaceAll(/\s+/gu, "")).toContain(title.replaceAll(/\s+/gu, ""));
   expect(material.startsWith(title)).toBe(false);
 
-  // One visible node is one question; the index must not storm the boundary.
-  await expect.poll(() => labelRequests.length).toBe(1);
+  // One eligible visible passage is one question; the index arrives expanded, so
+  // it must not repeat requests while its seven generatable fixture passages
+  // stay on screen.
+  await expect(page.locator(".material-file")).toHaveCount(9);
+  await expect.poll(() => labelRequests.length).toBe(7);
   await page.waitForTimeout(300);
-  expect(labelRequests).toHaveLength(1);
+  expect(labelRequests).toHaveLength(7);
 });
 
 test("a name a person types survives a reload and outranks the model", async ({ page }) => {

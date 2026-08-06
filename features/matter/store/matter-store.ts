@@ -9,6 +9,7 @@ import {
 } from "../fixtures/rooted-material";
 import type { TreeHistoryLimits } from "../tree/history";
 import {
+  clearSelection,
   createNavigationState,
   focusNode,
   selectNode,
@@ -37,7 +38,7 @@ const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   maxRetainedInverseBytes: 512_000,
 });
 
-type NavigationOperation = "select" | "focus" | "show-full" | "toggle-fold";
+type NavigationOperation = "select" | "clear-selection" | "focus" | "show-full" | "toggle-fold";
 
 export type MatterStoreError =
   | RuntimeError
@@ -82,6 +83,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
+  clearSelection: () => MatterStoreReceipt;
   focus: (nodeId: string) => MatterStoreReceipt;
   showFull: () => MatterStoreReceipt;
   toggleFold: (nodeId: string) => MatterStoreReceipt;
@@ -236,6 +238,26 @@ export function createMatterStore(): MatterStore {
         const update = navigationUpdate(current, "select", result);
         receipt = update.lastReceipt;
         return freezeState({ ...current, ...protectValue(update) });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    clearSelection: () => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const navigation = clearSelection(current.navigation);
+        receipt = {
+          operation: "clear-selection",
+          status: "navigated",
+          revision: current.tree.revision,
+        };
+        if (navigation === current.navigation && current.lastError === null) return current;
+        return freezeState({
+          ...current,
+          navigation: protectValue(navigation),
+          lastError: null,
+          lastReceipt: protectValue(receipt),
+        });
       });
       return requireSynchronousReceipt(receipt);
     },

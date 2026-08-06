@@ -94,12 +94,18 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
 
   await page.getByRole("button", { name: "Appearance: Auto" }).click();
   await expect(paper).toHaveAttribute("data-canvas-theme-preference", "light");
+  await expect(paper).toHaveAttribute("data-canvas-theme", "light");
+  await rootThought.locator("[data-thought-text-id]").click();
+  await expect(rootThought).toHaveAttribute("data-selected", "true");
+  await expect(rootThought.locator(".spatial-thought__label"))
+    .toHaveCSS("background-color", "rgba(22, 29, 39, 0.08)");
   await page.getByRole("button", { name: "Appearance: Light" }).click();
   await expect(paper).toHaveAttribute("data-canvas-theme-preference", "dark");
   await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
-  await rootThought.locator("[data-thought-text-id]").click();
   await expect(rootThought).toHaveAttribute("data-selected", "true");
   await expect(rootThought.locator("[data-thought-text-id]")).toHaveCSS("color", "rgb(243, 244, 241)");
+  await expect(rootThought.locator(".spatial-thought__label"))
+    .toHaveCSS("background-color", "rgba(245, 245, 242, 0.15)");
   await expect(page.locator("[data-matter-ambient='leaf-shadows'] .matter-ambient__poster"))
     .toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(0.9)");
   await expect(page.locator("[data-matter-ambient='leaf-shadows'] .matter-ambient__video"))

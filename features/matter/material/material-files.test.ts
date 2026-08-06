@@ -5,7 +5,10 @@ import {
   deriveMaterialFileLabel,
   deriveMaterialTitle,
   extractMaterialKeywords,
+  projectMaterialAncestry,
+  projectMaterialFileOutline,
   projectMaterialFileRows,
+  projectMaterialFileSubtree,
   projectMaterialFiles,
   serializeMaterialSelection,
 } from "./material-files";
@@ -162,6 +165,62 @@ describe("material selection copy", () => {
   it("rejects empty and stale selections", () => {
     expect(serializeMaterialSelection(tree, new Set())).toEqual({ ok: false, error: "EMPTY_SELECTION" });
     expect(serializeMaterialSelection(tree, new Set(["missing"]))).toEqual({ ok: false, error: "STALE_SELECTION" });
+  });
+});
+
+describe("the outline the index shows", () => {
+  it("arrives expanded and closes only what was closed", () => {
+    expect(projectMaterialFileOutline(tree, new Set()).map((row) => row.nodeId))
+      .toEqual(["child-a", "grandchild", "child-b"]);
+    expect(projectMaterialFileOutline(tree, new Set(["child-a"])).map((row) => row.nodeId))
+      .toEqual(["child-a", "child-b"]);
+  });
+
+  it("keeps a closed branch closed all the way down", () => {
+    const deep: ThoughtTree = {
+      ...tree,
+      nodes: {
+        ...tree.nodes,
+        grandchild: node("grandchild", "child-a", ["great"], "A resilient clipboard boundary."),
+        great: node("great", "grandchild", [], "Another turn of the same material."),
+      },
+    };
+    expect(projectMaterialFileOutline(deep, new Set()).map((row) => row.nodeId))
+      .toEqual(["child-a", "grandchild", "great", "child-b"]);
+    expect(projectMaterialFileOutline(deep, new Set(["child-a"])).map((row) => row.nodeId))
+      .toEqual(["child-a", "child-b"]);
+  });
+
+  it("carries depth so a row can be stepped right by one level", () => {
+    expect(projectMaterialFileOutline(tree, new Set()).map((row) => row.depth))
+      .toEqual([1, 2, 1]);
+  });
+
+  it("reports which rows can be opened", () => {
+    expect(projectMaterialFileOutline(tree, new Set()).map((row) => row.hasChildren))
+      .toEqual([true, false, false]);
+  });
+
+  // Folding is a canvas state. Closing a branch in the index must not depend on,
+  // or disturb, how the canvas is folded.
+  it("reports fold state without letting it hide a row", () => {
+    const rows = projectMaterialFileOutline(tree, new Set(), new Set(["child-a"]));
+    expect(rows.map((row) => row.nodeId)).toEqual(["child-a", "grandchild", "child-b"]);
+    expect(rows.map((row) => row.folded)).toEqual([true, false, false]);
+  });
+
+  it("flattens a whole branch for selection, excluding the level itself", () => {
+    expect(projectMaterialFileSubtree(tree, "root").map((row) => row.nodeId))
+      .toEqual(["child-a", "grandchild", "child-b"]);
+    expect(projectMaterialFileSubtree(tree, "child-a").map((row) => row.nodeId))
+      .toEqual(["grandchild"]);
+    expect(projectMaterialFileSubtree(tree, "child-b")).toEqual([]);
+  });
+
+  it("carries a search result's position as an ancestor path", () => {
+    expect(projectMaterialAncestry(tree, "grandchild")).toEqual(["root", "child-a"]);
+    expect(projectMaterialAncestry(tree, "root")).toEqual([]);
+    expect(projectMaterialAncestry(tree, "missing")).toEqual([]);
   });
 });
 

@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 const PERFORMANCE_ROW_COUNT = 2_000;
+/**
+ * Selection exposes the complete rooted outline even when browse disclosure is
+ * locally closed. From the root that is every thought except the root itself.
+ */
+const SELECTABLE_ROW_COUNT = PERFORMANCE_ROW_COUNT - 1;
+const FIRST_SELECTABLE_INDEX = 1;
 const WINDOWED_ROW_BUDGET = 64;
 const TOTAL_ELEMENT_BUDGET = 4_700;
 
@@ -16,15 +22,22 @@ test("windows the 2,000-row material index without losing deep selection or copy
   const sidebar = page.locator("aside.material-files");
   const body = sidebar.locator(".material-files__body");
   const rows = sidebar.locator(".material-file");
-  const root = sidebar.locator('.material-file[data-authored-index="0"]');
+  const first = sidebar.locator(`.material-file[data-authored-index="${FIRST_SELECTABLE_INDEX}"]`);
   const last = sidebar.locator(`.material-file[data-authored-index="${PERFORMANCE_ROW_COUNT - 1}"]`);
 
   await expect(page.locator("[data-thought-id]")).toHaveCount(PERFORMANCE_ROW_COUNT);
   await expect(sidebar).toHaveAttribute("data-open", "true");
   await expect(sidebar).not.toHaveAttribute("data-projection-stale", "true");
+
+  // One level is a handful of rows; the shell stays small before selection.
+  expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
+  expect(await page.locator("*").count()).toBeLessThanOrEqual(TOTAL_ELEMENT_BUDGET);
+
+  await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+  await expect(sidebar).toHaveAttribute("data-mode", "select");
   await expect(sidebar.locator(".material-files__tree")).toHaveAttribute(
     "aria-label",
-    `Markdown material tree, ${PERFORMANCE_ROW_COUNT} entries`,
+    `Markdown material tree, ${SELECTABLE_ROW_COUNT} entries`,
   );
   expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
   expect(await page.locator("*").count()).toBeLessThanOrEqual(TOTAL_ELEMENT_BUDGET);
@@ -35,23 +48,14 @@ test("windows the 2,000-row material index without losing deep selection or copy
   });
   await expect(last).toBeVisible();
   expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
-
-  await last.locator(".material-file__open").click();
-  await expect(last).toHaveAttribute(
-    "data-active",
-    "true",
-  );
-
-  await sidebar.getByRole("button", { name: "Select", exact: true }).click();
-  await expect(sidebar).toHaveAttribute("data-mode", "select");
   await last.getByRole("checkbox").check();
 
   await body.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll", { bubbles: true }));
   });
-  await expect(root).toBeVisible();
-  await root.getByRole("checkbox").check();
+  await expect(first).toBeVisible();
+  await first.getByRole("checkbox").check();
   await expect(sidebar).toContainText("2 selected");
 
   await sidebar.getByRole("button", { name: "Copy 2 selected thoughts" }).click();
@@ -126,7 +130,7 @@ for (const viewport of [
     const sidebar = page.locator("aside.material-files");
     const body = sidebar.locator(".material-files__body");
     const rows = sidebar.locator(".material-file");
-    const root = sidebar.locator('.material-file[data-authored-index="0"]');
+    const first = sidebar.locator(`.material-file[data-authored-index="${FIRST_SELECTABLE_INDEX}"]`);
     const last = sidebar.locator(
       `.material-file[data-authored-index="${PERFORMANCE_ROW_COUNT - 1}"]`,
     );
@@ -145,7 +149,6 @@ for (const viewport of [
     expect(rowGeometry.length).toBeGreaterThan(0);
     expect(rowGeometry.every(({ height, minimumHeight }) => height === 48 && minimumHeight === "48px"))
       .toBe(true);
-    expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
 
     await sidebar.getByRole("button", { name: "Select", exact: true }).click();
     await expect(sidebar).toHaveAttribute("data-mode", "select");
@@ -161,8 +164,8 @@ for (const viewport of [
       element.scrollTop = 0;
       element.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
-    await expect(root).toBeVisible();
-    await root.getByRole("checkbox").check();
+    await expect(first).toBeVisible();
+    await first.getByRole("checkbox").check();
     await expect(sidebar).toContainText("2 selected");
     expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
 

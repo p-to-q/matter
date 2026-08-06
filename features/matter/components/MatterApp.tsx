@@ -17,6 +17,7 @@ export function MatterApp() {
   const insertFixtureChild = useMatterStore((state) => state.insertFixtureChild);
   const undo = useMatterStore((state) => state.undo);
   const select = useMatterStore((state) => state.select);
+  const clearSelection = useMatterStore((state) => state.clearSelection);
   const focus = useMatterStore((state) => state.focus);
   const showFull = useMatterStore((state) => state.showFull);
   const toggleFold = useMatterStore((state) => state.toggleFold);
@@ -96,6 +97,7 @@ export function MatterApp() {
       navigation={navigation}
       persistence={persistence}
       onRemoveSelected={removeCurrentThought}
+      onClearSelection={clearSelection}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={insertFixtureChild}

@@ -11,14 +11,14 @@ is deliberately absent.
 | ThoughtTree kernel and exact inverse history | implemented | focused atomicity, ownership, bounds, and undo tests |
 | Full/focus/fold navigation | implemented | pure runtime tests and exact-lineage selectors |
 | Rooted fixture renderer | implemented | pointer receipt at laptop and narrow widths |
-| 2,000-node spatial renderer | measured | production fold/focus receipt; no virtualization needed |
+| 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open |
 | Fixture voice admission | implemented | real MediaRecorder/multipart boundary, tokened reducer, route tests |
 | Punctuation lasso + shared stretch degree | implemented | pure segment/geometry tests and laptop/narrow browser receipts |
 | Split-language projection | implemented | original text remains DOM owner; projection is aria-hidden/inert |
 | Material files + IndexedDB durability | implemented | deterministic snapshot codec, generation conflict, reload/copy e2e |
 | Derived thought labels | implemented | deterministic derivation, adjudication, staleness and cancellation tests; ordered relay pool with corpus evaluation; durable per-node store and manual rename proven by reload e2e |
 | Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and gated surface status |
-| Fixed workbench shell + leaf atmosphere | implemented | 262 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
+| Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
 | Lightweight Matter inquiry | specified | reserved as a non-executing preview contract; not a prompt, chat transcript, or material mutation path |
 
@@ -38,10 +38,14 @@ is deliberately absent.
 renderer. No editor, canvas SDK, layout framework, or CRDT is part of the
 foundation.
 
-The desktop presentation boundary is fixed: the left material field is 262 px,
+The desktop presentation boundary is fixed: the left material field is 304 px,
 and the paper begins at that boundary with a 10 px outer gutter and 18 px radius.
-Closing the file index hides its contents without enlarging the paper. The tree
-shadow is the supplied decorative asset inside the paper, never document state.
+At desk widths the file index is permanently docked in that field and carries no
+open/close control; below 960 px it becomes a drawer with one. Either way the
+paper never enlarges. The root names the outline, descendant rows step right by
+structural depth, and each branch expands or closes in place without changing
+canvas fold state. Search is a flat result view whose rows carry ancestry paths.
+The tree shadow is the supplied decorative asset inside the paper, never document state.
 The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
 Focus and fold remain navigation capabilities but have no first-release canvas
 presenter; the disclosure control in the left material outline is a separate
@@ -58,9 +62,10 @@ bounded focus and focus return. The left material field is outside this system.
 The right-side canvas composition is frozen in
 [`reference/ambient-workbench-ui.md`](reference/ambient-workbench-ui.md): the
 rounded paper owns the atmosphere, the right editing rail, and every corner
-utility. The left material field is explicitly pending redesign and is not
-constrained by that visual reference beyond remaining outside the paper-only
-tool vocabulary.
+utility. The left material field now has its own first-release freeze: a quiet
+304 px manuscript index with local branch disclosure, flat search, copy selection,
+archive access, and a non-account local identity. It remains outside the
+paper-only tool vocabulary.
 
 The requested lightweight inquiry is intentionally specified rather than mounted:
 it may later accept a short question and return a non-executing orientation

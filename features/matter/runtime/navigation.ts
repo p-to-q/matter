@@ -58,6 +58,12 @@ export function selectNode(
   };
 }
 
+/** Selection is presentational navigation, so clearing it never changes material. */
+export function clearSelection(navigation: NavigationState): NavigationState {
+  if (navigation.selectedNodeId === null) return navigation;
+  return { ...navigation, selectedNodeId: null };
+}
+
 export function focusNode(
   tree: ThoughtTree,
   navigation: NavigationState,

@@ -229,6 +229,9 @@ function readCentralCrc(bytes: Uint8Array):
   if (count === 0xffff || size === 0xffffffff || offset === 0xffffffff || offset + size > bytes.length) {
     return failure("ARCHIVE_UNSUPPORTED_ENTRY", "The archive uses unsupported ZIP64 metadata.");
   }
+  if (count > MAX_BUNDLE_FILES) {
+    return failure("ARCHIVE_BOUND_EXCEEDED", "The archive has too many entries.");
+  }
   const result = new Map<string, number>();
   let cursor = offset;
   const decoder = new TextDecoder("utf-8", { fatal: true });

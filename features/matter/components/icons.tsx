@@ -18,6 +18,22 @@ export function ChevronIcon({ className, ...props }: IconProps) {
   );
 }
 
+export function ArrowLeftIcon({ className, ...props }: IconProps) {
+  return (
+    <svg {...sharedProps} className={className} {...props}>
+      <path d="M12.5 8h-9M7 3.5 2.5 8 7 12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function SyncIcon({ className, ...props }: IconProps) {
+  return (
+    <svg {...sharedProps} className={className} {...props}>
+      <path d="M13 8a5 5 0 0 1-8.6 3.5M3 8a5 5 0 0 1 8.6-3.5M11.6 2v2.5H9.1M4.4 14v-2.5h2.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function FocusIcon({ className, ...props }: IconProps) {
   return (
     <svg {...sharedProps} className={className} {...props}>

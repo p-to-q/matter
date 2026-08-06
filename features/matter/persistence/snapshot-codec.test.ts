@@ -44,9 +44,14 @@ describe("Markdown snapshot codec", () => {
     const bundle = treeToBundle(inserted.tree);
     const childPath = Object.keys(bundle.files).find((path) => /^matter\/001-.+\/index\.md$/u.test(path));
     if (childPath === undefined) throw new Error("child path missing");
+    const childDirectory = childPath.slice(0, -"/index.md".length);
+    const renamedDirectory = "matter/001-renamed-by-a-person";
     const files = { ...bundle.files } as Record<string, string>;
-    files["matter/001-renamed-by-a-person/index.md"] = files[childPath];
-    delete files[childPath];
+    for (const path of Object.keys(files)) {
+      if (path !== childPath && !path.startsWith(`${childDirectory}/`)) continue;
+      files[`${renamedDirectory}${path.slice(childDirectory.length)}`] = files[path];
+      delete files[path];
+    }
     expect(bundleToTree({ files })).toEqual({ ok: true, tree: inserted.tree });
   });
 

@@ -89,7 +89,7 @@ describe("material ZIP transport", () => {
     });
   });
 
-  it("rejects an archive with more entries than a complete material bundle may contain", async () => {
+  it("rejects an archive with too many central-directory entries before decoding", async () => {
     const files: Record<string, Uint8Array> = { "matter/matter.json": new Uint8Array() };
     for (let index = 0; index < 2_002; index += 1) {
       files[`matter/${String(index).padStart(4, "0")}/index.md`] = new Uint8Array();

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import {
+  clearSelection,
   createNavigationState,
   focusNode,
   reconcileNavigation,
@@ -60,6 +61,18 @@ describe("runtime navigation", () => {
     expect(selected.navigation.selectedNodeId).toBe("a");
     expect(repeated.ok).toBe(true);
     expect(repeated.navigation).toBe(selected.navigation);
+  });
+
+  it("clears only the selected node while preserving the current view", () => {
+    const material = fixture();
+    const selected = selectNode(material, createNavigationState(), "a");
+    if (!selected.ok) throw new Error(selected.error.code);
+
+    const cleared = clearSelection(selected.navigation);
+
+    expect(cleared).toMatchObject({ mode: "full", selectedNodeId: null });
+    expect(cleared.foldedNodeIds).toBe(selected.navigation.foldedNodeIds);
+    expect(clearSelection(cleared)).toBe(cleared);
   });
 
   it("rejects missing select, focus, and fold targets without changing navigation", () => {

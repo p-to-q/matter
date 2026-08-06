@@ -15,9 +15,15 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
     const sidebar = page.locator("aside.material-files");
+    // The index has no handle at desk widths; below them it is a drawer.
     const toggle = page.getByRole("button", { name: /material files/i }).first();
-    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    if (await toggle.count() > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
+      await toggle.click();
+    }
     await expect(sidebar).toHaveAttribute("data-open", "true");
+    await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+    await sidebar.getByRole("checkbox", { name: /for copying/ }).first().check();
+    await expect(sidebar).toContainText("1 selected");
     await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
     const archive = sidebar.getByRole("region", { name: "Material archive" });
     await expect(archive).toBeVisible();
@@ -35,7 +41,9 @@ for (const viewport of [
     await archive.getByRole("button", { name: "Replace", exact: true }).click();
     await expect(sidebar.getByRole("region", { name: "Material archive" })).toHaveCount(0);
     await expect(sidebar).toHaveAttribute("data-mode", "browse");
-    await expect(page.locator("[data-thought-id]")).toHaveCount(1);
+    await expect(page.locator("[data-thought-id]")).toHaveCount(10);
+    await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+    await expect(sidebar).toContainText("0 selected");
     expect(browserErrors).toEqual([]);
   });
 
@@ -55,8 +63,11 @@ for (const viewport of [
     const before = await readMaterialSession(page);
 
     const sidebar = page.locator("aside.material-files");
+    // The index has no handle at desk widths; below them it is a drawer.
     const toggle = page.getByRole("button", { name: /material files/i }).first();
-    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    if (await toggle.count() > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
+      await toggle.click();
+    }
     await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
     const archive = sidebar.getByRole("region", { name: "Material archive" });
 
@@ -84,10 +95,13 @@ for (const viewport of [
 
     const sidebar = page.locator("aside.material-files");
     const toggle = page.getByRole("button", { name: /material files/i }).first();
-    if ((await toggle.getAttribute("aria-expanded")) === "true" && viewport.name === "narrow") await toggle.click();
+    const hasToggle = await toggle.count() > 0;
+    if (hasToggle && (await toggle.getAttribute("aria-expanded")) === "true" && viewport.name === "narrow") {
+      await toggle.click();
+    }
     await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
-    if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    if (hasToggle && (await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
     await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
 
     const archive = sidebar.getByRole("region", { name: "Material archive" });

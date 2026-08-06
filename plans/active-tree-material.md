@@ -76,7 +76,7 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 | Deployment probe | Frozen | `/matter/api/health` reports coarse gated surface states without provider or material data |
 | Visual composition | Local to each phase | quiet Matter form; refine from the running interface, not a second design system |
 | Right paper chrome | Frozen | anonymized private composition study; the rounded paper owns ambient media, right rail, and corner utilities |
-| Left material field | Pending | current file index is intentionally not visually frozen; redesign requires its own research and freeze slice |
+| Left material field | Re-frozen | 304 px manuscript index; structural depth steps, local disclosure, flat search, copy selection, archive, and local-only identity; drawer below 960 px |
 | Lightweight inquiry | Specified | secondary non-executing orientation only; blocked until the no-prompt/no-assistant invariant is explicitly revised |
 
 The foundation freeze was completed on 2026-08-03 after source research and a
@@ -1094,9 +1094,57 @@ selection, accessibility and exact lasso geometry before the first release. This
 recommendation deliberately changes the earlier “all 2,000 nodes mounted” renderer
 assumption, so implementation must not begin until that product boundary is accepted.
 
+### Canvas node DOM economy — one material control owns one geometry box
+
+State: Candidate withdrawn after browser geometry proof.
+
+```text
+Outcome:    keep the complete 2,000-node canvas pointer-ready while removing the
+            redundant list-item wrapper around every native thought button
+Boundary:   CanvasThoughtList markup, split-projection element semantics, dependent
+            rendering-edge selectors, and the existing browser/performance receipts
+Invariants: every thought remains a native button with its complete accessible name;
+            DOM order, authored order, text wrapping, layout boxes, lasso targets,
+            split projection, selection, and pointer geometry remain exact
+Proof:      full laptop/390/320 pointer suite; lasso/stretch and selected-label proof;
+            2,000-node DOM budget; unchanged three-round <100 ms production gate
+Non-goals:  canvas virtualization, hidden nodes, progressive publication, authored
+            coordinates, custom canvas text, relaxed thresholds, or new product UI
+```
+
+Evidence: two identical three-round receipts after the selected-label DOM correction
+kept the page at 4,314 elements but repeatedly produced `110–114 ms` maximum tasks.
+A disposable text-height cache reduced the measured rounds to `93–99 ms`; the first
+full structural remount still reached `106–107 ms`. The remaining repeated cost is
+therefore the browser mounting two geometry elements for each thought, not pure layout,
+height measurement, the file index, selection, or receipt noise. This evidence
+justified testing whether the ordered-list wrapper was redundant; the browser receipt
+below determines that candidate rather than treating the hypothesis as fact.
+
+Withdrawal receipt, 2026-08-06: the native-button-only candidate passed typecheck
+and lint, but failed the existing laptop/narrow geometry and lasso receipts. The
+button's form-control box did not preserve the former positioning container: narrow
+root material crossed the rail boundary, canvas drag could not find a visible text
+target, and lasso selection lost its measured fragments and stretch handles. The
+candidate and its selector changes were removed. The proven two-element geometry
+owner remains; the viewport-DOM recommendation above is still the only open renderer
+route, and it still requires a separate product/architecture freeze.
+
 ## Phase 4 — First release
 
-State: Outcome only; no feature design before Phase 3.
+### Fixture lineage and selected material affordance
+
+State: Proven.
+
+```text
+Outcome:    the seeded thought opens as a three-level lineage, and selecting it is unmistakable in both the file index and canvas
+Boundary:   deterministic fixture nodes, selected-state presentation, focused fixture and browser receipts
+Invariants: fixture bootstrap still uses tree commands; lineage remains the only model context; selection stays transient and does not alter geometry ownership
+Proof:      fixture shape assertions; wide and narrow sidebar selection receipts; existing full check and browser suite
+Non-goals:  hidden retrieval, generated fixture content, a prompt surface, new node types, or persisted selection styling
+```
+
+State: Integration in progress after Phase 3 proof.
 
 Outcome: the three slices behave as one quiet, dependable product on the deployed
 origin.

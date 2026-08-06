@@ -59,6 +59,7 @@ export type RootedMaterialProps = {
   onFocusNode: (nodeId: string) => void;
   onInsertChild: (parentNodeId: string) => void;
   onRemoveSelected: () => void;
+  onClearSelection: () => void;
   onSelectNode: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
   onUndo: () => void;
@@ -92,13 +93,19 @@ type ProjectionHandleReceipt = Readonly<{
 }>;
 
 export function RootedMaterial(props: RootedMaterialProps) {
-  const { canUndo, navigation, tree } = props;
+  const { canUndo, navigation, onRemoveSelected, onUndo, tree } = props;
   const canvasPreferences = useCanvasPreferences();
   const interactionPending = props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const layoutEpochRef = useRef(0);
+  const measuredHeightCacheRef = useRef(new Map<string, Readonly<{
+    columnWidth: number;
+    height: number;
+    root: boolean;
+    text: string;
+  }>>());
   const initialPerformanceMarksRef = useRef({
     canvasCommitted: false,
     heightReadStarted: false,
@@ -200,11 +207,31 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      props.onRemoveSelected();
+      onRemoveSelected();
     };
     window.addEventListener("keydown", removeSelected);
     return () => window.removeEventListener("keydown", removeSelected);
-  }, [interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, props, tree.rootId]);
+  }, [interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
+  useEffect(() => {
+    const undoFromKeyboard = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.shiftKey ||
+        (!event.metaKey && !event.ctrlKey) ||
+        event.key.toLowerCase() !== "z" ||
+        !canUndo ||
+        interactionPending ||
+        isEditableEventTarget(event.target) ||
+        hasNativeTextSelection()
+      ) return;
+      event.preventDefault();
+      onUndo();
+    };
+    window.addEventListener("keydown", undoFromKeyboard);
+    return () => window.removeEventListener("keydown", undoFromKeyboard);
+  }, [canUndo, interactionPending, onUndo]);
   const elasticRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
@@ -416,10 +443,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
 
   useEffect(() => {
-    const remeasure = () => requestMeasurement();
+    let mounted = true;
+    const remeasure = () => {
+      measuredHeightCacheRef.current.clear();
+      requestMeasurement();
+    };
     window.addEventListener("resize", remeasure);
-    void document.fonts?.ready.then(remeasure);
-    return () => window.removeEventListener("resize", remeasure);
+    void document.fonts?.ready.then(() => {
+      if (mounted) remeasure();
+    });
+    return () => {
+      mounted = false;
+      window.removeEventListener("resize", remeasure);
+    };
   }, []);
 
   useLayoutEffect(() => {
@@ -454,10 +490,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     for (const item of projection) {
       const element = elements.get(item.node.id);
+      const root = item.node.id === tree.rootId;
+      const cachedHeight = measuredHeightCacheRef.current.get(item.node.id);
+      const heightCacheHit = cachedHeight !== undefined &&
+        cachedHeight.columnWidth === columnWidth &&
+        cachedHeight.root === root &&
+        cachedHeight.text === item.node.text;
       // Viewport transforms must never leak camera scale into world geometry.
       // `offsetHeight` is the untransformed CSS box height; bounding rects are
       // screen-space and would apply zoom once here and again on publication.
-      const height = element?.offsetHeight ?? 0;
+      const height = heightCacheHit ? cachedHeight.height : element?.offsetHeight ?? 0;
       if (!Number.isFinite(height) || height <= 0) {
         // A cold page can reach layout before type metrics settle. Retry a
         // bounded pair of frames; an unbounded zero-height loop would compete
@@ -479,6 +521,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           });
         }
         return;
+      }
+      if (!heightCacheHit) {
+        measuredHeightCacheRef.current.set(item.node.id, Object.freeze({
+          columnWidth,
+          height,
+          root,
+          text: item.node.text,
+        }));
       }
       nodes.push({
         id: item.node.id,
@@ -527,7 +577,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       markPerformance("matter:performance:geometry-dom-published");
     }
     setPublished({ key: projectionKey, layout: result.layout });
-  }, [markPerformance, measureRevision, presentationDamage, projection, projectionKey]);
+  }, [markPerformance, measureRevision, presentationDamage, projection, projectionKey, tree.rootId]);
 
   useLayoutEffect(() => {
     if (activeLayout === null) return;
@@ -652,7 +702,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "pointer-move", pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY });
       }}
       onPointerUp={(event) => {
-        if (interactionPending) return;
+        if (interactionPending) {
+          lasso.pointerCancel(event.pointerId);
+          pointerOriginNodeRef.current = null;
+          updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          return;
+        }
         if (lasso.pointerUp(event)) {
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -669,8 +727,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         pointerOriginNodeRef.current = null;
         // Pointer capture keeps dragging reliable over text, but retargets the
         // browser click. Resolve a sub-threshold gesture here as node selection.
-        if (!dragged && originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
-          props.onSelectNode(originNodeId);
+        if (!dragged) {
+          if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
+            props.onSelectNode(originNodeId);
+          } else {
+            props.onClearSelection();
+          }
         }
         suppressClickRef.current = true;
         updateViewport({ type: "pointer-up", pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY });
@@ -697,7 +759,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onResetNodeName={labels.resetName}
         onSelectNode={props.onSelectNode}
         onVisibleNodes={labels.observe}
-        onToggleFold={props.onToggleFold}
         persistence={props.persistence}
         tree={tree}
       />
@@ -844,7 +905,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               }}
               type="button"
             >
-              {node.text}
+              {isSelected ? <span className="spatial-thought__label">{node.text}</span> : node.text}
             </button>
             {languageProjection?.ok ? (
               <LanguageSplitProjection

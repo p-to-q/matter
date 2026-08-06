@@ -23,11 +23,12 @@ describe("snapshot paths", () => {
     if (!second.ok) throw new Error(second.error.message);
 
     const paths = allocateSnapshotPaths(second.tree);
-    expect(paths).toHaveLength(3);
+    expect(paths).toHaveLength(Object.keys(second.tree.nodes).length);
     expect(paths[0].path).toBe("matter/index.md");
     expect(paths[1].path).toMatch(/^matter\/001-.+\/index\.md$/u);
-    expect(paths[2].path).toMatch(/^matter\/002-.+\/index\.md$/u);
-    expect(paths.map((entry) => entry.authoredIndex)).toEqual([0, 1, 2]);
+    expect(new Set(paths.map((entry) => entry.path))).toHaveLength(paths.length);
+    expect(paths.map((entry) => entry.authoredIndex))
+      .toEqual(paths.map((_, index) => index));
     expect(paths.map((entry) => allocateSnapshotPath(second.tree, entry.nodeId)))
       .toEqual(paths.map((entry) => entry.path));
     expect(allocateSnapshotPath(second.tree, "missing")).toBeNull();

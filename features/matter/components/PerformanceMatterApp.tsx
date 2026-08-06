@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { createPerformanceThoughtTree } from "../fixtures/rooted-material";
 import {
   createNavigationState,
+  clearSelection,
   focusNode,
   selectNode,
   showFull,
@@ -83,6 +84,7 @@ export function PerformanceMatterApp() {
       onFocusNode={focus}
       onInsertChild={() => undefined}
       onRemoveSelected={() => undefined}
+      onClearSelection={() => setNavigation((current) => clearSelection(current))}
       onSelectNode={(nodeId) =>
         setNavigation((current) => {
           const result = selectNode(performanceTree, current, nodeId);

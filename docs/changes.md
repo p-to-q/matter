@@ -649,6 +649,21 @@ ambiguous before the first end-to-end transformation exists.
 Forecloses: option stacks, swipe-to-commit, and generated text during stretch in
 the first release. A later proposal must reopen the product grammar explicitly.
 
+## 2026-08-06 — Index width and tool reach follow the material field
+
+Changed: the desk index reserves `304px`, with a `40px` reading row and larger
+material labels. Below `960px` it becomes an overlay drawer, so the root column
+keeps its field. The right rail keeps its original `44px` desktop and `48px`
+narrow targets, and the black active tile fills that stable target.
+
+Why: the former `238px` usable index compressed Chinese labels and the local
+identity area; widening it improves reading without reducing the material to an
+app panel. Hit targets should accept an imprecise hand without making the tools
+look heavier or stealing canvas drag territory.
+
+Forecloses: percentage-based rail widths, a fixed index in tablet space, and
+changing a tool's target size when its active state changes.
+
 ---
 
 ## Carried from archived ADRs

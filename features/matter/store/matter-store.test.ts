@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  HACKATHON_FIXTURE_VERSIONS,
+  ROOTED_FIXTURE_TEXT_VARIANTS,
   ROOTED_FIXTURE_NODE_IDS,
 } from "../fixtures/rooted-material";
 import { createMatterStore } from "./matter-store";
@@ -164,6 +164,36 @@ describe("Matter store", () => {
     expect(repeated.history).toBe(selected.history);
   });
 
+  it("clears a selection without changing the material or history", () => {
+    const store = createMatterStore();
+    store.getState().select(ROOTED_FIXTURE_NODE_IDS.root);
+    const selected = store.getState();
+
+    const receipt = selected.clearSelection();
+    const cleared = store.getState();
+
+    expect(receipt).toMatchObject({ operation: "clear-selection", status: "navigated" });
+    expect(cleared.navigation.selectedNodeId).toBeNull();
+    expect(cleared.tree).toBe(selected.tree);
+    expect(cleared.history).toBe(selected.history);
+  });
+
+  it("does not publish a new state when selection is already clear", () => {
+    const store = createMatterStore();
+    const before = store.getState();
+    let publications = 0;
+    const unsubscribe = store.subscribe(() => {
+      publications += 1;
+    });
+
+    const receipt = before.clearSelection();
+
+    unsubscribe();
+    expect(receipt).toMatchObject({ operation: "clear-selection", status: "navigated" });
+    expect(store.getState()).toBe(before);
+    expect(publications).toBe(0);
+  });
+
   it("undo reconciles focused material removed by the latest insertion", () => {
     const store = createMatterStore();
     const inserted = store
@@ -228,14 +258,14 @@ describe("Matter store", () => {
     if (rootId === null) throw new Error("fixture root missing");
 
     expect(
-      before.applyFixtureText(rootId, HACKATHON_FIXTURE_VERSIONS[1].text),
+      before.applyFixtureText(rootId, ROOTED_FIXTURE_TEXT_VARIANTS[1].text),
     ).toMatchObject({ operation: "commit", status: "committed" });
     expect(store.getState().tree.nodes[rootId].text).toBe(
-      HACKATHON_FIXTURE_VERSIONS[1].text,
+      ROOTED_FIXTURE_TEXT_VARIANTS[1].text,
     );
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(store.getState().tree.nodes[rootId].text).toBe(
-      HACKATHON_FIXTURE_VERSIONS[0].text,
+      ROOTED_FIXTURE_TEXT_VARIANTS[0].text,
     );
   });
 
