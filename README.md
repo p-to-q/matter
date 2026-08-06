@@ -1,11 +1,12 @@
 # Matter
 
-> Make thought matter.
+> Matter — A brain-computer interface for thoughts shaping.
 
 Matter is an environment where thought becomes touchable material. Voice admits
 human thought and gives generative direction. Gesture identifies material and
 degree. A rooted tree keeps lineage. AI appears only as a local, reversible
-change to material.
+change to material. It is also a way of thinking with AI in material rather
+than through a prompt box or answer transcript.
 
 ## State
 
@@ -44,6 +45,7 @@ npm run test:e2e
 - [`docs/product.md`](docs/product.md) — the product and interaction grammar;
 - [`docs/material.md`](docs/material.md) — node, segment, tree, lineage, snapshot;
 - [`docs/architecture.md`](docs/architecture.md) — system boundaries;
+- [`docs/public-discovery.md`](docs/public-discovery.md) — canonical origin and discovery surfaces;
 - [`docs/index.md`](docs/index.md) — everything else, by need.
 
 Matter is a standalone Next.js application for `ptoq.io/matter`. Provider code

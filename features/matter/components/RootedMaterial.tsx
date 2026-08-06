@@ -385,22 +385,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [activeLayout?.layoutEpoch, lasso.selection, stretch.activeHandle, stretch.amount, stretch.dragging, stretch.lastHandle, updateElasticPreview, viewport.x, viewport.y, viewport.zoom]);
   const selectedNode =
     navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
+  const toolTargetNode = resolveToolTargetNode(navigation, tree);
+  const voiceAvailable = props.admissionAnchor !== null && voiceAdmissionIsEnabled();
   const tools = useMemo(
     () =>
       projectTools({
         view: navigation.mode,
-        selected:
-          selectedNode === null
+          selected:
+          toolTargetNode === null
             ? null
             : {
-                nodeId: selectedNode.id,
-                hasChildren: selectedNode.children.length > 0,
-                isFolded: navigation.foldedNodeIds.has(selectedNode.id),
+                nodeId: toolTargetNode.id,
+                hasChildren: toolTargetNode.children.length > 0,
+                isFolded: navigation.foldedNodeIds.has(toolTargetNode.id),
               },
         canUndo,
         interaction: interactionPending ? "pending" : "idle",
       }),
-    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, selectedNode],
+    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
   const materialGuidance: CanvasMaterialGuidanceState = tree.rootId === null
@@ -776,13 +778,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onMove={() => lasso.deactivate()}
         onIntent={(intent) => dispatchToolIntent(intent, props)}
         onVoice={() => {
-          if (props.admissionAnchor !== null) props.admission.start(props.admissionAnchor);
+          if (props.admission.state.phase === "recording") {
+            props.admission.stop();
+          } else if (props.admissionAnchor !== null) {
+            // Recording and lasso are mutually exclusive handles; clear the
+            // visual selection mode before the admission interaction starts.
+            if (lasso.active) lasso.deactivate();
+            props.admission.start(props.admissionAnchor);
+          }
         }}
         surface={toolSurface}
         voiceActive={props.admission.state.phase === "recording"}
-        voiceAvailable={props.admissionAnchor !== null}
+        voiceAvailable={voiceAvailable}
         voiceLabel={
-          props.admissionAnchor?.kind === "root"
+          props.admission.state.phase === "recording"
+            ? "Stop recording"
+            : !voiceAvailable
+              ? "Voice admission is unavailable in this preview"
+            : props.admissionAnchor?.kind === "root"
             ? "Record a root thought"
             : props.admissionAnchor?.kind === "child"
               ? "Record a top-level thought"
@@ -1297,19 +1310,18 @@ function samePresentationDamage(
 
 function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
   const { navigation, tree } = props;
-  const selectedNode =
-    navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
+  const toolTargetNode = resolveToolTargetNode(navigation, tree);
   if (
     !isCurrentToolIntent(
       {
         view: navigation.mode,
         selected:
-          selectedNode === null
+          toolTargetNode === null
             ? null
             : {
-                nodeId: selectedNode.id,
-                hasChildren: selectedNode.children.length > 0,
-                isFolded: navigation.foldedNodeIds.has(selectedNode.id),
+                nodeId: toolTargetNode.id,
+                hasChildren: toolTargetNode.children.length > 0,
+                isFolded: navigation.foldedNodeIds.has(toolTargetNode.id),
               },
         canUndo: props.canUndo,
         interaction: "idle",
@@ -1351,6 +1363,22 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
     default:
       return assertNever(intent);
   }
+}
+
+function resolveToolTargetNode(
+  navigation: NavigationState,
+  tree: ThoughtTree,
+) {
+  const selectedNode = navigation.selectedNodeId === null
+    ? null
+    : tree.nodes[navigation.selectedNodeId] ?? null;
+  if (selectedNode !== null) return selectedNode;
+  if (navigation.mode !== "full" || tree.rootId === null) return null;
+  return tree.nodes[tree.rootId] ?? null;
+}
+
+function voiceAdmissionIsEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED !== "false";
 }
 
 function assertNever(value: never): never {

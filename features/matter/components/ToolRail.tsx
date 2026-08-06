@@ -56,11 +56,11 @@ export function ToolRail({
     >
       <ToolButton
         active={voiceActive}
-        disabled={!voiceAvailable || interactionPending}
+        disabled={!voiceAvailable || (interactionPending && !voiceActive)}
         group="admission"
         icon={<VoiceIcon />}
         label={voiceLabel}
-        onClick={voiceAvailable && !interactionPending ? onVoice : undefined}
+        onClick={voiceAvailable && (!interactionPending || voiceActive) ? onVoice : undefined}
         shortLabel="Voice"
         toolId="voice"
       />
@@ -90,11 +90,11 @@ export function ToolRail({
         toolId="branch"
       />
       <ToolButton
-        disabled={interactionPending || !lassoActive}
+        disabled={interactionPending}
         group="material"
         icon={<MoveIcon />}
         label={lassoActive ? "Return to canvas pan" : "Canvas pan"}
-        onClick={lassoActive && !interactionPending ? onMove : undefined}
+        onClick={!interactionPending ? onMove : undefined}
         shortLabel="Move"
         toolId="move"
       />

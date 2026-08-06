@@ -31,6 +31,18 @@ describe("Matter transcription route", () => {
     });
   });
 
+  it("refuses a fixture request when the public build disables voice", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED = "false";
+
+    const response = await POST(requestFrom(validForm()));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+    });
+  });
+
   it("does not let the browser select fixture mode or a provider", async () => {
     const form = validForm();
     form.append("fixtureMode", "true");

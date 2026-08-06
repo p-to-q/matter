@@ -54,6 +54,17 @@ describe("ToolRail", () => {
     expect(markup).toContain('aria-label="Return to canvas pan"');
     expect(markup).toContain('aria-label="Undo last change"');
   });
+
+  it("keeps the recording control available as stop", () => {
+    const markup = renderToolRail({
+      interactionPending: true,
+      voiceActive: true,
+      voiceLabel: "Stop recording",
+    });
+
+    expect(markup).toContain('aria-label="Stop recording"');
+    expect(markup).not.toMatch(/data-tool-id="voice"[^>]*disabled/);
+  });
 });
 
 function renderToolRail(overrides: Partial<ToolRailProps>): string {

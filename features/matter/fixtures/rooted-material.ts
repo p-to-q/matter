@@ -12,6 +12,9 @@ import {
 import type { ThoughtNode, ThoughtTree, TreeCommand } from "../tree/model";
 
 export const ROOTED_FIXTURE_TREE_ID = "matter_fixture_rooted_01";
+export const ROOT_ONLY_FIXTURE_TREE_ID = "matter_fixture_rooted_02";
+
+export type RootedMaterialFixtureVariant = "root" | "expanded";
 
 export const ROOTED_FIXTURE_NODE_IDS = {
   root: "thought_fixture_root",
@@ -150,11 +153,16 @@ export type RootedMaterialFixture = {
  * Bootstrap commands are then forgotten: opening a fixture must not present
  * setup work as a person's undo history.
  */
-export function createRootedMaterialFixture(): RootedMaterialFixture {
-  let tree = createEmptyTree(ROOTED_FIXTURE_TREE_ID);
+export function createRootedMaterialFixture(
+  variant: RootedMaterialFixtureVariant = "expanded",
+): RootedMaterialFixture {
+  let tree = createEmptyTree(
+    variant === "root" ? ROOT_ONLY_FIXTURE_TREE_ID : ROOTED_FIXTURE_TREE_ID,
+  );
   let history = createTreeHistory();
 
-  for (const [index, node] of BOOTSTRAP_NODES.entries()) {
+  const bootstrapNodes = variant === "root" ? BOOTSTRAP_NODES.slice(0, 1) : BOOTSTRAP_NODES;
+  for (const [index, node] of bootstrapNodes.entries()) {
     const command: TreeCommand =
       index === 0
         ? {

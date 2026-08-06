@@ -6,7 +6,9 @@ import {
   createFixtureInsertChildCommand,
   createFixtureReplaceTextCommand,
   createRootedMaterialFixture,
+  type RootedMaterialFixtureVariant,
 } from "../fixtures/rooted-material";
+import { normalizeMatterInitialDocument } from "../config/initial-document";
 import type { TreeHistoryLimits } from "../tree/history";
 import {
   clearSelection,
@@ -114,9 +116,13 @@ export type MatterStore = {
  * Each factory owns an isolated fixture session. The singleton below is only a
  * React binding; tests and future document tabs must create their own store.
  */
-export function createMatterStore(): MatterStore {
+export function createMatterStore(
+  initialDocument: RootedMaterialFixtureVariant = normalizeMatterInitialDocument(
+    process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
+  ),
+): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
-  const fixture = createRootedMaterialFixture();
+  const fixture = createRootedMaterialFixture(initialDocument);
   const initialDomain = protectDomain({
     tree: fixture.tree,
     history: fixture.history,

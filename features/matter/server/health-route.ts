@@ -75,6 +75,9 @@ function thoughtLabelSurface(): MatterHealthSurface {
 }
 
 function voiceAdmissionSurface(): MatterHealthSurface {
+  if (process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED === "false") {
+    return "unavailable";
+  }
   const configured = process.env.MATTER_TRANSCRIPTION_ADAPTER;
   const usesDefaultFixture =
     configured === undefined && process.env.NODE_ENV !== "production";

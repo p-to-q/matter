@@ -28,9 +28,11 @@ order; exhaustive predicates decide applicability.
 
 For the rooted slice, contextual tools are Add child, Focus, Fold/Unfold, and
 Show all when the current view needs it. Select remains a direct material
-interaction. Undo is the stable utility action and remains visible but disabled
-when history is empty. An inapplicable contextual tool is absent; an applicable
-tool temporarily locked by a pending interaction stays in place and disabled.
+interaction. The visible Branch slot targets the root when no node is selected;
+Canvas pan remains a reachable no-op/return action when lasso is off. Undo is the
+stable utility action and remains visible but disabled when history is empty. An
+applicable tool temporarily locked by a pending interaction stays in place and
+disabled.
 Unimplemented voice, lasso, stretch, draw, move, and AI tools are absent.
 
 The product surface restores the hackathon control island: a fixed paper rail on
@@ -38,8 +40,10 @@ the right at laptop widths and a bottom rail respecting the safe area on narrow
 or coarse-pointer devices. It is not draggable. Voice, Lasso, Branch, Move, and
 Undo retain stable visual positions; unavailable capabilities are honestly
 disabled and never manufacture a command. Move describes the transient canvas
-camera, not a node mutation. Buttons have visible tooltips or labels, native tab order, and at
-least 40 CSS-pixel fine-pointer or 48 CSS-pixel coarse-pointer targets.
+camera, not a node mutation. Buttons have visible tooltips or labels, native tab
+order, and at least 44 CSS-pixel fine-pointer or 48 CSS-pixel coarse-pointer
+targets. The selected desktop rail uses the second preview's `60px` / `22px`
+outer geometry and `44px` / `13px` button geometry.
 `aria-pressed` is reserved for a real persistent mode or toggle.
 
 Dispatch revalidates the projected target, revision-sensitive capability, and

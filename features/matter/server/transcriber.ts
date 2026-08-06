@@ -84,6 +84,14 @@ export const fixtureTranscriptionAdapter: TranscriptionAdapter = async (request)
 });
 
 function resolveTranscriptionAdapter(): TranscriptionAdapter {
+  if (process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED === "false") {
+    throw new TranscriptionServerError(
+      "TRANSCRIPTION_UNAVAILABLE",
+      "Speech transcription is not configured.",
+      true,
+      503,
+    );
+  }
   const configured = process.env.MATTER_TRANSCRIPTION_ADAPTER;
   if (configured === "fixture" || (configured === undefined && process.env.NODE_ENV !== "production")) {
     return fixtureTranscriptionAdapter;

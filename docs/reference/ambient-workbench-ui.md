@@ -32,7 +32,10 @@ canvas appearance, or the right-rail editing tools.
   and never part of document state or persistence.
 - Paper utilities align to a 24 px edge grid. Their hover fill may react to the
   leaf atmosphere, but they never migrate into the material field.
-- The right rail exposes only the current editing vocabulary.
+- The right rail exposes only the current editing vocabulary. Its selected
+  second-preview geometry is `60px` wide with a `22px` outer radius; desktop
+  buttons are `44px` with `13px` corner radii and `20px` artwork. Narrow screens
+  retain `48px` targets.
 
 ## Left field: intentionally pending
 

@@ -362,6 +362,31 @@ validation, request admission/rate/spend guards, physical Safari/Chrome proof,
 and true level feedback remain explicit live deployment gates rather than claims
 of the fixture slice.
 
+### Slice 2A.1 — Managed real-time admission
+
+State: Research reopened by product correction on 2026-08-07.
+
+```text
+Outcome:    a person sees transient, live speech hypotheses while recording and
+            commits one final verbatim admission when they explicitly stop
+Boundary:   short-lived same-origin session credential + direct browser/provider
+            media session + tokened partial-feedback adapter
+Invariants: Matter never receives a provider key or relays raw audio; partials
+            are transient and ordered; only one final transcript reaches the
+            existing atomic human command; cancel and stale events change nothing
+Proof:      session schema/origin/TTL limits; partial ordering and late-event
+            matrix; cancellation/scope/unmount cleanup; final commit and undo;
+            deployed HTTPS Chrome and Safari plus rate and spend receipts
+Non-goals:  accounts, sync, retained recordings/transcripts, a custom media
+            relay, client-side Whisper, continuous material writes, or a new
+            document model
+```
+
+The fixture admission slice remains a browser and command proof, not a public
+speech claim. A provider and its credentialed deployment configuration must be
+chosen before build begins; the public dedicated-domain preview keeps its voice
+control unavailable rather than inventing a transcript.
+
 ### Slice 2B — Language receives a physical address
 
 State: Re-frozen for interaction hardening.
@@ -1166,6 +1191,26 @@ Then complete the no-keyboard path in fixture and live modes at laptop and narro
 widths: admit root, admit child, focus, transform, undo, reload, export, import,
 and confirm no page or console errors. Passing this receipt is the end of this
 roadmap.
+
+### Public discovery boundary — one canonical Matter identity
+
+State: Frozen for build.
+
+```text
+Outcome:    search engines, link unfurlers, and machine readers receive one
+            canonical Matter identity: "A brain-computer interface for thoughts
+            shaping," with complete discovery and structured metadata
+Boundary:   centralized public URL and product metadata, root page metadata and
+            JSON-LD, robots, sitemap, manifest, social image, and LLM text maps
+Invariants: one resolver owns mount-versus-dedicated-domain URLs; internal preview
+            and performance routes are noindex; metadata never exposes material,
+            provider configuration, transcripts, or user state
+Proof:      pure URL/config tests; typecheck and lint; production build; direct
+            inspection of HTML, robots.txt, sitemap.xml, manifest.webmanifest,
+            Open Graph image, llms.txt, and noindex routes under the default mount
+Non-goals:  a marketing page, analytics, cookies, paid SEO tooling, external
+            verification tokens, IndexNow submission, or claiming gated AI turns
+```
 
 ## Current risks
 

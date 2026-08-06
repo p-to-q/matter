@@ -25,8 +25,9 @@ selection and exposes a pointer retry. A transcript is not rendered as a message
 for admission it becomes human material; for transformation it enters the
 envelope and only the resulting material change is shown.
 
-Streaming transcription and client-side Whisper remain possible later, but their
-lifecycle and payload cost are not justified by the current claim.
+Real-time transcription is now a required research slice for the public
+preview. It must use a managed provider session directly from the browser;
+client-side Whisper and an application-owned audio relay remain out of scope.
 
 ## Admission boundary
 
@@ -87,3 +88,23 @@ an equivalent proxy bound, authoritative decoded audio duration/type validation,
 and physical HTTPS Chrome and Safari receipts. Background suspension and
 `pagehide`, recorder-constructor fallback, and real local level feedback must be
 proved before the static recording indicator can be presented as final voice UX.
+
+## Real-time correction
+
+The public preview must not substitute a fixture transcript for a person's
+recording. The next live slice mints a short-lived, origin-bound provider
+credential through one same-origin endpoint, then lets the browser establish
+the media session directly with the managed realtime transcription provider.
+The application never receives an API key or forwards raw audio.
+
+Partial hypotheses are transient interaction feedback, keyed by interaction id,
+attempt, and a monotonic sequence. They are never stored in `ThoughtTree`,
+history, IndexedDB, archives, analytics, or logs. Cancellation, scope change,
+document switch, and unmount close the browser session and make late partials
+inert. Explicit stop yields one final transcript, which alone enters the
+existing atomic admission command and remains pointer-undoable.
+
+Before enabling this route, freeze the provider's WebRTC/session contract,
+allowed origin, token TTL, concurrent-session and byte/duration limits, and
+daily spend cap. The public deployment keeps voice unavailable until those
+controls and Chrome/Safari HTTPS receipts pass.

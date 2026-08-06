@@ -8,6 +8,7 @@ import {
   DEFAULT_CANVAS_PREFERENCES,
   parseCanvasPreferences,
   resolveCanvasAppearance,
+  resolveAutoAppearanceAt,
   serializeCanvasPreferences,
   type CanvasPreferencesPort,
   type ResolvedCanvasAppearance,
@@ -25,12 +26,12 @@ function createPort(initial: string | null = null, system: ResolvedCanvasAppeara
       stored = serialized;
       writes.push(serialized);
     },
-    systemAppearance: () => currentSystem,
+    clockAppearance: () => currentSystem,
     subscribeStorage: (listener) => {
       storageListeners.add(listener);
       return () => storageListeners.delete(listener);
     },
-    subscribeSystemAppearance: (listener) => {
+    subscribeClockAppearance: (listener) => {
       systemListeners.add(listener);
       return () => systemListeners.delete(listener);
     },
@@ -89,6 +90,14 @@ describe("canvas preference codec", () => {
     expect(resolveCanvasAppearance("auto", "light")).toBe("light");
     expect(resolveCanvasAppearance("dark", "light")).toBe("dark");
     expect(resolveCanvasAppearance("light", "dark")).toBe("light");
+  });
+
+  it("resolves Auto from local clock boundaries", () => {
+    expect(resolveAutoAppearanceAt(new Date(2026, 0, 1, 6, 59))).toBe("dark");
+    expect(resolveAutoAppearanceAt(new Date(2026, 0, 1, 7, 0))).toBe("light");
+    expect(resolveAutoAppearanceAt(new Date(2026, 0, 1, 18, 59))).toBe("light");
+    expect(resolveAutoAppearanceAt(new Date(2026, 0, 1, 19, 0))).toBe("dark");
+    expect(resolveAutoAppearanceAt(new Date(Number.NaN), "dark")).toBe("dark");
   });
 });
 
@@ -213,9 +222,9 @@ describe("canvas preference controller", () => {
     const controller = new CanvasPreferencesController({
       read: () => { throw new Error("denied"); },
       write: () => { throw new Error("denied"); },
-      systemAppearance: () => { throw new Error("denied"); },
+      clockAppearance: () => { throw new Error("denied"); },
       subscribeStorage: () => { throw new Error("denied"); },
-      subscribeSystemAppearance: () => { throw new Error("denied"); },
+      subscribeClockAppearance: () => { throw new Error("denied"); },
     });
 
     expect(() => controller.retain()).not.toThrow();
@@ -231,10 +240,10 @@ describe("browser canvas preference port", () => {
   it("is inert and SSR-safe when window is absent", () => {
     const port = createBrowserCanvasPreferencesPort();
     expect(port.read()).toBeNull();
-    expect(port.systemAppearance()).toBe("light");
+    expect(port.clockAppearance()).toBe(resolveAutoAppearanceAt(new Date()));
     expect(() => port.write("ignored")).not.toThrow();
     expect(() => port.subscribeStorage(() => undefined)()).not.toThrow();
-    expect(() => port.subscribeSystemAppearance(() => undefined)()).not.toThrow();
+    expect(() => port.subscribeClockAppearance(() => undefined)()).not.toThrow();
     expect(CANVAS_PREFERENCES_STORAGE_KEY).toContain("v1");
   });
 });

@@ -3,8 +3,11 @@ import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import {
   normalizeMatterBasePath,
 } from "./features/matter/config/base-path";
+import { normalizeMatterInitialDocument } from "./features/matter/config/initial-document";
 
 const basePath = normalizeMatterBasePath(process.env.MATTER_BASE_PATH ?? "/matter");
+const initialDocument = normalizeMatterInitialDocument(process.env.MATTER_INITIAL_DOCUMENT);
+const voiceAdmissionEnabled = process.env.MATTER_TRANSCRIPTION_ADAPTER !== "off";
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
 
@@ -45,6 +48,8 @@ export default function matterNextConfig(phase: string): NextConfig {
     },
     env: {
       NEXT_PUBLIC_MATTER_BASE_PATH: basePath,
+      NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT: initialDocument,
+      NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: voiceAdmissionEnabled ? "true" : "false",
     },
     outputFileTracingRoot: process.cwd(),
   };

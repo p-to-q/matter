@@ -40,6 +40,13 @@ describe("Matter health route", () => {
     expect(healthSnapshot().surfaces.voiceAdmission).toBe("unavailable");
   });
 
+  it("does not advertise a fixture adapter when the public build disables voice", () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED = "false";
+
+    expect(healthSnapshot().surfaces.voiceAdmission).toBe("unavailable");
+  });
+
   it("marks the label model unavailable until a supported adapter is configured", () => {
     process.env.MATTER_LABEL_ADAPTER = "off";
 

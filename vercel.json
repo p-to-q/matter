@@ -1,0 +1,10 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "MATTER_BASE_PATH= MATTER_INITIAL_DOCUMENT=root MATTER_PUBLIC_ORIGIN=https://matter.ptoq.io MATTER_TRANSCRIPTION_ADAPTER=off npm run build",
+  "env": {
+    "MATTER_BASE_PATH": "",
+    "MATTER_INITIAL_DOCUMENT": "root",
+    "MATTER_PUBLIC_ORIGIN": "https://matter.ptoq.io",
+    "MATTER_TRANSCRIPTION_ADAPTER": "off"
+  }
+}

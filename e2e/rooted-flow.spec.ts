@@ -89,15 +89,22 @@ for (const viewport of [
     } else {
       expect(initialSurface.x).toBeGreaterThan(300);
       expect(initialSurface.x + initialSurface.width).toBeLessThan(viewport.width);
-      expect(initialRail.width).toBeCloseTo(56, 0);
+      expect(initialRail.width).toBeCloseTo(60, 0);
       const voiceTool = page.locator('.tool-rail__button[data-tool-id="voice"]');
-      await expect(voiceTool).toHaveCSS("width", "40px");
-      await expect(voiceTool.locator("svg")).toHaveCSS("width", "16px");
+      await expect(voiceTool).toHaveCSS("width", "44px");
+      await expect(voiceTool.locator("svg")).toHaveCSS("width", "20px");
       await voiceTool.hover();
       await expect.poll(() => voiceTool.evaluate((button) =>
         getComputedStyle(button, "::before").backgroundColor,
-      )).toBe("rgb(22, 29, 39)");
+      )).toBe("rgb(245, 245, 242)");
     }
+
+    await tool("Extend related thought").click();
+    const defaultRootChildId = (await visibleIds(page)).at(-1);
+    if (defaultRootChildId === undefined) throw new Error("default root child missing");
+    expect(defaultRootChildId).not.toBe(rootId);
+    await tool("Undo").click();
+    await expect.poll(() => visibleIds(page)).toEqual(initialIds);
 
     await selectThought(rootId);
     await expect(guidance.locator(".matter-guidance__next"))

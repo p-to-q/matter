@@ -14,6 +14,7 @@ import type { ThoughtTree } from "../tree/model";
 import {
   ROOTED_FIXTURE_NODE_IDS,
   ROOTED_FIXTURE_TEXT_VARIANTS,
+  ROOT_ONLY_FIXTURE_TREE_ID,
   createFixtureInsertChildCommand,
   createFixtureReplaceTextCommand,
   createPerformanceThoughtTree,
@@ -26,6 +27,16 @@ const TEST_HISTORY_LIMITS = {
 };
 
 describe("rooted material fixture", () => {
+  it("keeps the public root-only fixture free of prewritten descendants", () => {
+    const fixture = createRootedMaterialFixture("root");
+
+    expect(fixture.tree.id).toBe(ROOT_ONLY_FIXTURE_TREE_ID);
+    expect(fixture.tree.rootId).toBe(ROOTED_FIXTURE_NODE_IDS.root);
+    expect(Object.keys(fixture.tree.nodes)).toEqual([ROOTED_FIXTURE_NODE_IDS.root]);
+    expect(fixture.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root]?.children).toEqual([]);
+    expect(fixture.history.entries).toEqual([]);
+  });
+
   it("is deterministic, valid, and opens with a three-level source lineage", () => {
     const first = createRootedMaterialFixture();
     const second = createRootedMaterialFixture();

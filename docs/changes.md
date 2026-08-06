@@ -17,6 +17,97 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-07 — The public preview does not invent speech
+
+Changed: `matter.ptoq.io` starts from a root-only local document and disables
+the fixture transcription adapter. Its voice control and health probe report
+unavailable until a managed realtime provider has a credential, origin, rate,
+spend, and browser-device receipt.
+
+Why: a fixed transcript is a lifecycle test, not a person's speech. Public
+material must never present it as live or real-time transcription.
+
+Forecloses: exposing fixture output on the dedicated domain, placing a provider
+key in browser code, or persisting partial speech outside the final human tree
+command.
+
+## 2026-08-07 — Auto appearance follows local daylight hours
+
+Changed: Auto appearance resolves to light from 07:00 through 18:59 and dark
+from 19:00 through 06:59 in the browser's local time zone. The next boundary
+is scheduled once; `prefers-color-scheme` is retained as a fallback when the
+clock cannot be read.
+
+Why: automatic appearance should match the person's day without adding theme
+state to the material document or requiring a server request.
+
+Forecloses: treating Auto as a live system-theme mirror or persisting a
+location-specific sunrise/sunset service contract.
+
+## 2026-08-07 — The editing rail keeps its primary handles reachable
+
+Changed: Voice becomes a stop control while recording, Canvas pan remains
+available even when lasso mode is off, and Branch defaults to the root when no
+node is explicitly selected. Only actions that would conflict with an active
+recording remain locked.
+
+Why: the physical instrument should invite the next meaningful action instead
+of presenting several controls that appear permanently unavailable.
+
+Forecloses: requiring a hidden selection prerequisite for the first branch,
+making Canvas pan a dead-looking control, or disabling the only visible Voice
+control while it is recording.
+
+## 2026-08-07 — The dedicated preview starts with one thought
+
+Changed: the `matter.ptoq.io` Vercel build owns `/`, sets its canonical origin
+to that domain, and starts from a root-only fixture with a distinct document ID.
+The root remains the canonical sentence about an imagined past; child material
+is created only when the visitor takes an action and persists in that visitor's
+local browser document.
+
+Why: an online preview should present one clear beginning instead of a
+pre-authored tree while retaining a working, undoable growth path.
+
+Forecloses: serving the dedicated domain at `/matter`, publishing a shared
+pre-filled descendant tree as though it belonged to a visitor, or overwriting
+locally created material on reload.
+
+## 2026-08-07 — The rail returns to the preview's white material
+
+Changed: the selected rail keeps the preview's white surface and light border.
+Its hover tile remains `#f5f5f2`, its selected tile remains black with a white
+icon, and shadows stay removed.
+
+Why: the cool-gray and translucent experiments made the hover tile disappear
+against the dark paper; the original white material gives it a readable step.
+
+Forecloses: tinting the rail body away from the preview white while this
+direction remains selected.
+
+## 2026-08-07 — The quieter rail surface experiment is superseded
+
+Changed: an intermediate lower-luminance cool-paper rail experiment was
+rejected; the following entry records the current white-material direction.
+
+Why: the experiment was evaluated during the visual pass and did not remain the
+selected product surface.
+
+Forecloses: treating this discarded intermediate surface as the current rail
+contract.
+
+## 2026-08-07 — The second rail preview is the selected direction
+
+Changed: the product rail now uses the second preview as the explicit current
+choice: `60px` desktop width, `44px` buttons, `22px` outer radius, `13px`
+button radius, and larger artwork. Narrow screens retain `48px` targets.
+
+Why: the rounder, fuller instrument is the selected visual direction. The
+earlier compact geometry remains in the log only as historical comparison.
+
+Forecloses: treating the compact `56px` rail as the current product choice
+while this direction is selected.
+
 ## 2026-08-06 — Preview deployments support both a mount and a dedicated domain
 
 Changed: `MATTER_BASE_PATH=/matter` remains the default deployment shape, while
@@ -702,6 +793,25 @@ look heavier or stealing canvas drag territory.
 
 Forecloses: percentage-based rail widths, a fixed index in tablet space, and
 changing a tool's target size when its active state changes.
+
+## 2026-08-07 — Public discovery uses one canonical Matter identity
+
+Changed: Matter now has one tested public origin and base-path resolver shared
+by metadata, JSON-LD, social images, robots, sitemap, manifest, and LLM text
+maps. The public definition is the deck's “A brain-computer interface for
+thoughts shaping”; “thinking with AI” remains related category language rather
+than a replacement. Performance paths are excluded from indexing, and the
+machine-readable map states the current fixture-seeded
+preview boundary.
+
+Why: mounted and dedicated-domain deployments must produce the same canonical
+product identity without leaking material, provider configuration, transcripts,
+or user state. Search and machine readers need a factual description of the
+product and its current release boundary, not a generic AI-writing label.
+
+Forecloses: scattered per-route origins, internal fixture discovery, claims
+that the gated generative turn is live, and SEO copy that turns Matter into a
+chat or second-brain product.
 
 ---
 

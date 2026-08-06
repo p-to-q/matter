@@ -2,11 +2,29 @@ import { describe, expect, it } from "vitest";
 import {
   ROOTED_FIXTURE_TEXT_VARIANTS,
   ROOTED_FIXTURE_NODE_IDS,
+  ROOT_ONLY_FIXTURE_TREE_ID,
 } from "../fixtures/rooted-material";
 import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
 
 describe("Matter store", () => {
+  it("starts the public root-only document without descendants and grows locally", () => {
+    const store = createMatterStore("root");
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    expect(store.getState().tree.id).toBe(ROOT_ONLY_FIXTURE_TREE_ID);
+    expect(store.getState().tree.nodes[rootId]?.children).toEqual([]);
+    expect(store.getState().insertFixtureChild(rootId)).toMatchObject({
+      operation: "commit",
+      status: "committed",
+    });
+    const childId = store.getState().tree.nodes[rootId]?.children[0];
+    expect(childId).toBeDefined();
+    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes[rootId]?.children).toEqual([]);
+  });
+
   it("creates isolated deterministic sessions", () => {
     const first = createMatterStore();
     const second = createMatterStore();

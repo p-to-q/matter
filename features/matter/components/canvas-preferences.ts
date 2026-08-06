@@ -1,6 +1,9 @@
 export const CANVAS_PREFERENCES_VERSION = 1 as const;
 export const CANVAS_PREFERENCES_STORAGE_KEY = "matter.canvas-preferences.v1";
 export const CANVAS_PREFERENCES_MAX_STORAGE_LENGTH = 1_024;
+/** Local-time boundaries used by Auto appearance. The interval is half-open. */
+export const CANVAS_AUTO_LIGHT_START_MINUTES = 7 * 60;
+export const CANVAS_AUTO_DARK_START_MINUTES = 19 * 60;
 
 export const CANVAS_LANGUAGE_OPTIONS = Object.freeze([
   Object.freeze({ value: "zh-CN", label: "中文" }),
@@ -43,9 +46,9 @@ export type CanvasPreferencesParseResult =
 export type CanvasPreferencesPort = Readonly<{
   read: () => string | null;
   write: (serialized: string) => void;
-  systemAppearance: () => ResolvedCanvasAppearance;
+  clockAppearance: () => ResolvedCanvasAppearance;
   subscribeStorage: (listener: (serialized: string | null) => void) => () => void;
-  subscribeSystemAppearance: (
+  subscribeClockAppearance: (
     listener: (appearance: ResolvedCanvasAppearance) => void,
   ) => () => void;
 }>;
@@ -70,8 +73,8 @@ export class CanvasPreferencesController {
   private readonly listeners = new Set<() => void>();
   private retainCount = 0;
   private stopStorage: (() => void) | null = null;
-  private stopSystemAppearance: (() => void) | null = null;
-  private systemAppearance: ResolvedCanvasAppearance = "light";
+  private stopClockAppearance: (() => void) | null = null;
+  private clockAppearance: ResolvedCanvasAppearance = "light";
   private snapshot: CanvasPreferencesSnapshot = DEFAULT_SNAPSHOT;
 
   constructor(private readonly port: CanvasPreferencesPort) {}
@@ -90,13 +93,13 @@ export class CanvasPreferencesController {
     this.stopStorage = safelySubscribe(() => this.port.subscribeStorage((serialized) => {
       this.receiveStoredPreferences(serialized);
     }));
-    this.stopSystemAppearance = safelySubscribe(() =>
-      this.port.subscribeSystemAppearance((appearance) => {
-        this.receiveSystemAppearance(appearance);
+    this.stopClockAppearance = safelySubscribe(() =>
+      this.port.subscribeClockAppearance((appearance) => {
+        this.receiveClockAppearance(appearance);
       }),
     );
 
-    this.systemAppearance = safelyReadSystemAppearance(this.port);
+    this.clockAppearance = safelyReadClockAppearance(this.port);
     const stored = safelyReadPreferences(this.port);
     if (stored === null) {
       this.publish(DEFAULT_CANVAS_PREFERENCES);
@@ -113,9 +116,9 @@ export class CanvasPreferencesController {
     if (this.retainCount !== 0) return;
 
     safelyStop(this.stopStorage);
-    safelyStop(this.stopSystemAppearance);
+    safelyStop(this.stopClockAppearance);
     this.stopStorage = null;
-    this.stopSystemAppearance = null;
+    this.stopClockAppearance = null;
   }
 
   setLanguage(language: CanvasLanguage): void {
@@ -150,9 +153,9 @@ export class CanvasPreferencesController {
     if (parsed.ok) this.publish(parsed.preferences);
   }
 
-  private receiveSystemAppearance(appearance: ResolvedCanvasAppearance): void {
-    if (!isResolvedAppearance(appearance) || appearance === this.systemAppearance) return;
-    this.systemAppearance = appearance;
+  private receiveClockAppearance(appearance: ResolvedCanvasAppearance): void {
+    if (!isResolvedAppearance(appearance) || appearance === this.clockAppearance) return;
+    this.clockAppearance = appearance;
     if (this.snapshot.preferences.appearance === "auto") {
       this.publish(this.snapshot.preferences);
     }
@@ -161,7 +164,7 @@ export class CanvasPreferencesController {
   private publish(preferences: CanvasPreferences): void {
     const next = freezeSnapshot(preferences, resolveCanvasAppearance(
       preferences.appearance,
-      this.systemAppearance,
+      this.clockAppearance,
     ));
     if (sameSnapshot(this.snapshot, next)) return;
     this.snapshot = next;
@@ -223,6 +226,17 @@ export function resolveCanvasAppearance(
   return appearance === "auto" ? systemAppearance : appearance;
 }
 
+export function resolveAutoAppearanceAt(
+  date: Date,
+  fallback: ResolvedCanvasAppearance = "light",
+): ResolvedCanvasAppearance {
+  if (!Number.isFinite(date.getTime())) return fallback;
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  return minutes >= CANVAS_AUTO_LIGHT_START_MINUTES && minutes < CANVAS_AUTO_DARK_START_MINUTES
+    ? "light"
+    : "dark";
+}
+
 /** Browser capabilities stay lazy so importing or server-rendering is safe. */
 export function createBrowserCanvasPreferencesPort(): CanvasPreferencesPort {
   return Object.freeze({
@@ -231,7 +245,10 @@ export function createBrowserCanvasPreferencesPort(): CanvasPreferencesPort {
       CANVAS_PREFERENCES_STORAGE_KEY,
       serialized,
     ),
-    systemAppearance: () => systemAppearanceQuery()?.matches ? "dark" : "light",
+    clockAppearance: () => resolveAutoAppearanceAt(
+      new Date(),
+      readSystemAppearanceFallback(),
+    ),
     subscribeStorage: (listener) => {
       if (typeof window === "undefined") return noOp;
       const storage = browserStorage();
@@ -244,15 +261,7 @@ export function createBrowserCanvasPreferencesPort(): CanvasPreferencesPort {
       window.addEventListener("storage", onStorage);
       return () => window.removeEventListener("storage", onStorage);
     },
-    subscribeSystemAppearance: (listener) => {
-      const query = systemAppearanceQuery();
-      if (query === null) return noOp;
-      const onChange = (event: MediaQueryListEvent) => {
-        listener(event.matches ? "dark" : "light");
-      };
-      query.addEventListener("change", onChange);
-      return () => query.removeEventListener("change", onChange);
-    },
+    subscribeClockAppearance: (listener) => subscribeClockBoundary(listener),
   });
 }
 
@@ -330,11 +339,11 @@ function safelyWritePreferences(port: CanvasPreferencesPort, serialized: string)
   }
 }
 
-function safelyReadSystemAppearance(
+function safelyReadClockAppearance(
   port: CanvasPreferencesPort,
 ): ResolvedCanvasAppearance {
   try {
-    const appearance = port.systemAppearance();
+    const appearance = port.clockAppearance();
     return isResolvedAppearance(appearance) ? appearance : "light";
   } catch {
     return "light";
@@ -364,6 +373,38 @@ function browserStorage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function subscribeClockBoundary(listener: (appearance: ResolvedCanvasAppearance) => void): () => void {
+  if (typeof window === "undefined") return noOp;
+  let timer: number | null = null;
+  let stopped = false;
+  const schedule = () => {
+    if (stopped) return;
+    const now = new Date();
+    const next = new Date(now);
+    const minutes = now.getHours() * 60 + now.getMinutes();
+    const boundary = minutes < CANVAS_AUTO_LIGHT_START_MINUTES
+      ? CANVAS_AUTO_LIGHT_START_MINUTES
+      : minutes < CANVAS_AUTO_DARK_START_MINUTES
+        ? CANVAS_AUTO_DARK_START_MINUTES
+        : CANVAS_AUTO_LIGHT_START_MINUTES + 24 * 60;
+    next.setHours(Math.floor(boundary / 60), boundary % 60, 0, 0);
+    timer = window.setTimeout(() => {
+      listener(resolveAutoAppearanceAt(new Date()));
+      schedule();
+    }, Math.max(1_000, next.getTime() - now.getTime()));
+  };
+  schedule();
+  return () => {
+    stopped = true;
+    if (timer !== null) window.clearTimeout(timer);
+  };
+}
+
+function readSystemAppearanceFallback(): ResolvedCanvasAppearance {
+  const query = systemAppearanceQuery();
+  return query?.matches ? "dark" : "light";
 }
 
 function systemAppearanceQuery(): MediaQueryList | null {

@@ -12,7 +12,7 @@ is deliberately absent.
 | Full/focus/fold navigation | implemented | pure runtime tests and exact-lineage selectors |
 | Rooted fixture renderer | implemented | pointer receipt at laptop and narrow widths |
 | 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open |
-| Fixture voice admission | implemented | real MediaRecorder/multipart boundary, tokened reducer, route tests |
+| Fixture voice admission | local-only | real MediaRecorder/multipart boundary, tokened reducer, route tests |
 | Punctuation lasso + shared stretch degree | implemented | pure segment/geometry tests and laptop/narrow browser receipts |
 | Split-language projection | implemented | original text remains DOM owner; projection is aria-hidden/inert |
 | Material files + IndexedDB durability | implemented | deterministic snapshot codec, generation conflict, reload/copy e2e |
@@ -73,14 +73,15 @@ response, but it cannot mutate material, invoke tools, retain a transcript, or
 become the primary path. It needs an explicit product-contract revision before
 an input field or response surface can ship.
 
-## Unsupported in this migration
+## Gated in this migration
 
-Accounts, sync, collaboration, streaming transcription, touch parity,
+Accounts, sync, collaboration, live streaming transcription, touch parity,
 cross-branch links, split/merge, memory retrieval, assistant UI, and a public SDK.
 
-The interface is a `fixture-seeded preview`. It is suitable for localhost and
-deployment readiness checks, but not a public live-AI release: `/api/turn`, live
-transcription guards, and deployed-origin laptop/narrow receipts are still
+The public interface is a root-seeded preview. Its local fixture voice adapter
+is intentionally disabled on `matter.ptoq.io`; it is suitable for localhost
+and deployment readiness checks, but not a public live-AI release. `/api/turn`,
+realtime transcription, and deployed-origin laptop/narrow receipts are still
 gated. ZIP export/import is available; directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is
