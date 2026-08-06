@@ -18,7 +18,7 @@
     "test:receipt": "env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true npm run build && env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true MATTER_RUN_PERFORMANCE_RECEIPT=true node scripts/run-e2e.mjs e2e/rooted-performance.spec.ts --config=playwright.production.config.ts"
   },
   "dependencies": {
-    "fflate": "^0.8.2",
+    "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "next": "16.3.0",
     "react": "19.2.8",
