@@ -3,6 +3,18 @@
 One rooted tree carries the canvas, document structure, and context boundary.
 Matter does not add a separate memory or session system beside it.
 
+Browser speech admission performs punctuation-only normalization at the edge:
+spoken punctuation words become marks and a missing terminal mark is added. It
+does not rewrite wording or introduce generated content. This boundary leaves a
+future context/memory layer open for an explicit text-processing action: a user
+may later ask an AI workflow to inspect selected material under fixed prompts,
+with the server constructing a durable tree command only after that plan is
+accepted.
+
+Moving a node is a durable tree mutation. Exact source and target child-order
+mementos make one undo restore the previous virtual file-system projection and
+every other tree-derived view.
+
 ## Node
 
 A node is one passage of language. Voice admits it, the tree orders it, and

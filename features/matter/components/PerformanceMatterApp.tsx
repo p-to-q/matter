@@ -88,6 +88,7 @@ export function PerformanceMatterApp() {
       onFocusNode={focus}
       onInsertChild={() => undefined}
       onRemoveSelected={() => undefined}
+      onMoveNode={() => undefined}
       onClearSelection={() => setNavigation((current) => clearSelection(current))}
       onSelectNode={(nodeId) =>
         setNavigation((current) => {

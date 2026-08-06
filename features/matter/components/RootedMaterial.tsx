@@ -66,6 +66,7 @@ export type RootedMaterialProps = {
   onFocusNode: (nodeId: string) => void;
   onInsertChild: (parentNodeId: string) => void;
   onRemoveSelected: () => void;
+  onMoveNode: (nodeId: string, targetParentId: string) => void;
   onClearSelection: () => void;
   onSelectNode: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
@@ -872,6 +873,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSourceText={lasso.sourceText}
               navigation={navigation}
               onSelectNode={props.onSelectNode}
+              onMoveNode={props.onMoveNode}
               projection={projection}
               splitProjectionRef={splitProjectionRef}
             />
@@ -933,6 +935,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText,
   navigation,
   onSelectNode,
+  onMoveNode,
   projection,
   splitProjectionRef,
 }: {
@@ -942,6 +945,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText: string | null;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
+  onMoveNode: (nodeId: string, targetParentId: string) => void;
   projection: readonly LayoutProjectionItem[];
   splitProjectionRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -963,7 +967,27 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-selected={isSelected || undefined}
             data-lasso-selected={isLassoSelected || undefined}
             data-thought-id={node.id}
+            data-parent-id={node.parentId ?? undefined}
             key={node.id}
+            draggable={!interactionPending && node.parentId !== null}
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/matter-node", node.id);
+            }}
+            onDragOver={(event) => {
+              const sourceId = event.dataTransfer.types.includes("text/matter-node");
+              if (sourceId && node.parentId !== null) {
+                event.preventDefault();
+                event.currentTarget.dataset.dragOver = "true";
+              }
+            }}
+            onDragLeave={(event) => { delete event.currentTarget.dataset.dragOver; }}
+            onDrop={(event) => {
+              event.preventDefault();
+              delete event.currentTarget.dataset.dragOver;
+              const sourceId = event.dataTransfer.getData("text/matter-node");
+              if (sourceId && sourceId !== node.id) onMoveNode(sourceId, node.id);
+            }}
           >
             <button
               aria-pressed={isSelected}

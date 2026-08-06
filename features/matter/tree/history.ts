@@ -218,6 +218,13 @@ function cloneTreeMutation(mutation: TreeMutation): TreeMutation {
       return { ...mutation, detached: cloneDetachedSubtree(mutation.detached) };
     case "replace-text":
       return { ...mutation };
+    case "move-node":
+      return {
+        ...mutation,
+        expectedNode: cloneThoughtNode(mutation.expectedNode),
+        fromParentChildrenBefore: [...mutation.fromParentChildrenBefore],
+        toParentChildrenBefore: [...mutation.toParentChildrenBefore],
+      };
   }
 }
 

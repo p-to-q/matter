@@ -4,6 +4,7 @@ import {
 } from "../tree/invariants";
 import type { ThoughtTree, TreeCommand } from "../tree/model";
 import type { NavigationState } from "./navigation";
+import { normalizeAdmittedTranscript } from "./transcript-punctuation";
 
 export type AdmissionAnchor =
   | {
@@ -86,6 +87,7 @@ export function admissionToTreeCommand(
 ): AdmissionCommandResult {
   const transcript = validateTranscript(values.transcript);
   if (!transcript.ok) return transcript;
+  const normalizedTranscript = normalizeAdmittedTranscript(values.transcript);
   if (!hasNonEmptyString(values.interactionId) || !hasNonEmptyString(values.commandId)) {
     return invalidInteraction("Admission operation identifiers must be non-empty.");
   }
@@ -122,7 +124,7 @@ export function admissionToTreeCommand(
           type: "initialize-root",
           root: {
             id: values.nodeId,
-            text: values.transcript,
+            text: normalizedTranscript,
             parentId: null,
             children: [],
             createdAt: values.createdAt,
@@ -145,7 +147,7 @@ export function admissionToTreeCommand(
         type: "insert-node",
         node: {
           id: values.nodeId,
-          text: values.transcript,
+          text: normalizedTranscript,
           parentId: parent.id,
           children: [],
           createdAt: values.createdAt,

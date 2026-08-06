@@ -313,6 +313,60 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
     };
   }
 
+  if (mutation.type === "move-node") {
+    const node = tree.nodes[mutation.nodeId];
+    const fromParent = tree.nodes[mutation.fromParentId];
+    const toParent = tree.nodes[mutation.toParentId];
+    if (!node || !fromParent || !toParent || node.parentId !== fromParent.id) {
+      return commandFailure("The moved node and both parents must exist.");
+    }
+    if (tree.rootId === node.id || node.id === mutation.toParentId) {
+      return commandFailure("The root cannot move and a node cannot become its own parent.");
+    }
+    if (!equalNode(node, mutation.expectedNode)) {
+      return commandFailure("The expected moved node does not match the tree.");
+    }
+    if (!equalStrings(fromParent.children, mutation.fromParentChildrenBefore)) {
+      return commandFailure("The source parent child order does not match the tree.");
+    }
+    if (!equalStrings(toParent.children, mutation.toParentChildrenBefore)) {
+      return commandFailure("The target parent child order does not match the tree.");
+    }
+    if (!Number.isInteger(mutation.fromIndex) || mutation.fromIndex < 0 || fromParent.children[mutation.fromIndex] !== node.id) {
+      return commandFailure("The source index is not exact.");
+    }
+    if (!Number.isInteger(mutation.toIndex) || mutation.toIndex < 0 || mutation.toIndex > toParent.children.length) {
+      return commandFailure("The target index is out of range.");
+    }
+    const subtree = new Set(currentSubtreePreorder(tree, node.id));
+    if (subtree.has(toParent.id)) return commandFailure("A node cannot move into its own subtree.");
+    if (fromParent.id === toParent.id) return commandFailure("Reordering within one parent is not supported by this command.");
+    const fromChildren = [...fromParent.children];
+    fromChildren.splice(mutation.fromIndex, 1);
+    const toChildren = [...toParent.children];
+    toChildren.splice(mutation.toIndex, 0, node.id);
+    const movedNode = { ...cloneNode(node), parentId: toParent.id };
+    return {
+      tree: { ...tree, nodes: replaceNodes(tree, {
+        [fromParent.id]: { ...fromParent, children: fromChildren },
+        [toParent.id]: { ...toParent, children: toChildren },
+        [node.id]: movedNode,
+      }) },
+      inverse: {
+        type: "move-node",
+        nodeId: node.id,
+        expectedNode: cloneNode(movedNode),
+        fromParentId: toParent.id,
+        fromIndex: mutation.toIndex,
+        fromParentChildrenBefore: [...toChildren],
+        toParentId: fromParent.id,
+        toIndex: mutation.fromIndex,
+        toParentChildrenBefore: [...fromChildren],
+      },
+      affectedNodeIds: [node.id, fromParent.id, toParent.id],
+    };
+  }
+
   if (mutation.type === "replace-text") {
     const node = tree.nodes[mutation.nodeId];
     if (!node) return commandFailure("The text replacement node does not exist.");

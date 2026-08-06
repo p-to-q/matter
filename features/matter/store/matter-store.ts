@@ -30,6 +30,7 @@ import {
   type RuntimeState,
 } from "../runtime/session";
 import type { AdmissionAnchor, AdmissionValues } from "../runtime/admission";
+import { moveNodeToParentCommand } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
 import { validateThoughtTree } from "../tree/invariants";
@@ -83,6 +84,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   applyFixtureText: (nodeId: string, text: string) => MatterStoreReceipt;
   admitHumanTranscript: (anchor: AdmissionAnchor, values: AdmissionValues) => MatterStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
+  moveNode: (nodeId: string, targetParentId: string) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   clearSelection: () => MatterStoreReceipt;
@@ -217,6 +219,27 @@ export function createMatterStore(
           lastError: domain.lastError,
           lastReceipt: protectValue(receipt),
         });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    moveNode: (nodeId, targetParentId) => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const command = moveNodeToParentCommand(current.tree, {
+          commandId: `move:${current.tree.revision}:${nodeId}`,
+          nodeId,
+          targetParentId,
+          createdAt: new Date().toISOString(),
+        });
+        if (!command) {
+          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
+          return freezeState({ ...current, lastError: { code: "INVALID_COMMAND", message: "The node move is not valid." }, lastReceipt: receipt });
+        }
+        const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(receipt) });
       });
       return requireSynchronousReceipt(receipt);
     },

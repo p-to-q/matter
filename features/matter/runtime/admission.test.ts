@@ -47,7 +47,7 @@ function rootedTree(): ThoughtTree {
 }
 
 describe("human material admission", () => {
-  it("anchors and translates raw root material without trimming or rewriting", () => {
+  it("anchors and normalizes admitted root material punctuation", () => {
     const tree = createEmptyTree("tree_1", 4);
     const navigation = createNavigationState();
     const anchored = createAdmissionAnchor(tree, navigation);
@@ -66,7 +66,7 @@ describe("human material admission", () => {
           type: "initialize-root",
           root: {
             id: "new_node",
-            text: "  unfinished, exactly as spoken.  ",
+            text: "unfinished, exactly as spoken.",
             parentId: null,
             children: [],
             createdAt: T0,
@@ -95,7 +95,7 @@ describe("human material admission", () => {
           parentId: "root",
           index: 0,
           expectedParentChildren: [],
-          node: { id: "new_node", text: "child", parentId: "root" },
+          node: { id: "new_node", text: "child.", parentId: "root" },
         },
       },
     });

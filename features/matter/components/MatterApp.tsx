@@ -24,6 +24,7 @@ export function MatterApp() {
   const toggleFold = useMatterStore((state) => state.toggleFold);
   const admitHumanTranscript = useMatterStore((state) => state.admitHumanTranscript);
   const removeSelected = useMatterStore((state) => state.removeSelected);
+  const moveNode = useMatterStore((state) => state.moveNode);
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
   const persistence = useMaterialPersistence(tree, hydrateSnapshot, switchDocument);
@@ -102,6 +103,7 @@ export function MatterApp() {
       navigation={navigation}
       persistence={persistence}
       onRemoveSelected={removeCurrentThought}
+      onMoveNode={moveNode}
       onClearSelection={clearSelection}
       onExitFocus={showFull}
       onFocusNode={focus}

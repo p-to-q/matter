@@ -28,7 +28,7 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Candidate verification — 0.2.0-preview.5
+## Candidate verification — 0.2.0-preview.6
 
 The proprietary candidate was rebuilt and verified locally on 2026-08-06:
 

@@ -44,6 +44,17 @@ export type TreeMutation =
       expectedUpdatedAt: string;
       text: string;
       updatedAt: string;
+    }
+  | {
+      type: "move-node";
+      nodeId: string;
+      expectedNode: ThoughtNode;
+      fromParentId: string;
+      fromIndex: number;
+      fromParentChildrenBefore: string[];
+      toParentId: string;
+      toIndex: number;
+      toParentChildrenBefore: string[];
     };
 
 export type TreeCommand = {

@@ -925,3 +925,9 @@ crosses the planning boundary.
 
 **Product renamed to Matter** (ADR-0005, 2026-08-02). The `arrow` identifier
 predates the name. `0.2` removes it wholesale with no compatibility aliases.
+# 2026-08-07 — Preview 6 release candidate
+
+- Added durable cross-branch node reparenting with exact source/target order
+  mementos and pointer undo; all tree-derived projections follow the move.
+- Added browser speech punctuation normalization without rewriting admitted
+  wording, and documented the future context/memory workflow boundary.
