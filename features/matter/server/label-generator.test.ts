@@ -143,6 +143,30 @@ describe("generateLabel", () => {
     expect(right.operationId).toBe("b");
   });
 
+  it("does not let one cancelled caller abort a shared provider flight", async () => {
+    let resolveProvider!: (value: { text: string }) => void;
+    const observation: { providerSignal: AbortSignal | null } = { providerSignal: null };
+    const adapter: LabelModelAdapter = async (_input, signal) => {
+      observation.providerSignal = signal;
+      return new Promise<{ text: string }>((resolve) => {
+        resolveProvider = resolve;
+      });
+    };
+    const cancelled = new AbortController();
+    const first = generateLabel(labelRequest({ operationId: "a" }), cancelled.signal, adapter);
+    await Promise.resolve();
+    const second = generateLabel(
+      labelRequest({ operationId: "b" }),
+      new AbortController().signal,
+      adapter,
+    );
+    cancelled.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+    resolveProvider({ text: "想象的生活" });
+    await expect(second).resolves.toMatchObject({ source: "model", label: "想象的生活" });
+    expect(observation.providerSignal?.aborted).toBe(false);
+  });
+
   it("serves a repeated question from cache without calling the provider", async () => {
     let calls = 0;
     const adapter: LabelModelAdapter = async () => {

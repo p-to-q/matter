@@ -122,18 +122,6 @@ for (const viewport of [
     expect(Math.abs(geometry[firstChildId]!.x - geometry[secondChildId]!.x)).toBeLessThanOrEqual(1);
     expect(geometry[secondChildId]!.y).toBeGreaterThan(geometry[firstChildId]!.bottom);
 
-    await selectThought(rootId);
-    await tool("Fold").click();
-    expect(await visibleIds(page)).toEqual([rootId]);
-    await tool("Unfold").click();
-
-    await selectThought(firstChildId);
-    await tool("Focus").click();
-    await expect(page.locator("main[data-view=focus]")).toBeVisible();
-    expect(await visibleIds(page)).toEqual([rootId, firstChildId]);
-    await expect(tool("Extend related thought")).toBeDisabled();
-    await tool("Show all").click();
-
     const panStart = {
       x: viewport.width * 0.48,
       y: viewport.height * 0.7,

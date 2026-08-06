@@ -1,4 +1,5 @@
 import {
+  LABEL_CLIENT_TIMEOUT_MS,
   MAX_LABEL_REQUEST_BYTES,
   parseLabelRequest,
 } from "./label-contract";
@@ -20,20 +21,25 @@ export async function handleLabelRequest(request: Request): Promise<Response> {
     throw new LabelServerError("INVALID_REQUEST", "The label request format is invalid.", false, 415);
   }
 
-  const body = await readBoundedText(request, MAX_LABEL_REQUEST_BYTES);
-  let payload: unknown;
+  const boundary = createRequestBoundary(request.signal);
   try {
-    payload = JSON.parse(body) as unknown;
-  } catch {
-    throw invalidLabelRequest("The label request could not be read.");
+    const body = await readBoundedText(request, MAX_LABEL_REQUEST_BYTES, boundary.signal);
+    let payload: unknown;
+    try {
+      payload = JSON.parse(body) as unknown;
+    } catch {
+      throw invalidLabelRequest("The label request could not be read.");
+    }
+
+    const parsed = parseLabelRequest(payload);
+    if (!parsed.ok) throw invalidLabelRequest(parsed.message);
+
+    return Response.json(await generateLabel(parsed.request, boundary.signal), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } finally {
+    boundary.dispose();
   }
-
-  const parsed = parseLabelRequest(payload);
-  if (!parsed.ok) throw invalidLabelRequest(parsed.message);
-
-  return Response.json(await generateLabel(parsed.request, request.signal), {
-    headers: { "Cache-Control": "no-store" },
-  });
 }
 
 export function labelErrorResponse(error: unknown): Response {
@@ -51,7 +57,7 @@ export function labelErrorResponse(error: unknown): Response {
  * A declared content length may be absent or untrue, so the bound is enforced
  * while streaming rather than after buffering.
  */
-async function readBoundedText(request: Request, maxBytes: number): Promise<string> {
+async function readBoundedText(request: Request, maxBytes: number, signal: AbortSignal): Promise<string> {
   const body = request.body;
   if (body === null) throw invalidLabelRequest("The label request has no body.");
   const reader = body.getReader();
@@ -59,18 +65,22 @@ async function readBoundedText(request: Request, maxBytes: number): Promise<stri
   let total = 0;
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithSignal(reader, signal);
       if (done) break;
       if (value === undefined) continue;
       total += value.byteLength;
       if (total > maxBytes) {
+        cancelReader(reader);
         throw new LabelServerError("INVALID_REQUEST", "The label request is too large.", false, 413);
       }
       chunks.push(value);
     }
   } finally {
-    reader.releaseLock();
-    if (total > maxBytes) await body.cancel().catch(() => undefined);
+    try {
+      reader.releaseLock();
+    } catch {
+      // The abort path may already have released the reader.
+    }
   }
 
   const merged = new Uint8Array(total);
@@ -83,6 +93,69 @@ async function readBoundedText(request: Request, maxBytes: number): Promise<stri
     return new TextDecoder("utf-8", { fatal: true }).decode(merged);
   } catch {
     throw invalidLabelRequest("The label request is not valid UTF-8.");
+  }
+}
+
+async function readWithSignal(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (signal.aborted) throw labelInterruptionError(signal);
+  let rejectInterruption!: (error: LabelServerError) => void;
+  const abort = () => {
+    void reader.cancel().catch(() => undefined);
+    rejectInterruption(labelInterruptionError(signal));
+  };
+  const interrupted = new Promise<never>((_, reject) => {
+    rejectInterruption = reject;
+  });
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    const result = await Promise.race([reader.read(), interrupted]);
+    if (signal.aborted) throw labelInterruptionError(signal);
+    return result;
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+
+function createRequestBoundary(requestSignal: AbortSignal): {
+  signal: AbortSignal;
+  dispose: () => void;
+} {
+  const controller = new AbortController();
+  const cancel = () => controller.abort(new DOMException("Cancelled", "AbortError"));
+  if (requestSignal.aborted) cancel();
+  else requestSignal.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(
+    () => controller.abort(new DOMException("Timed out", "TimeoutError")),
+    LABEL_CLIENT_TIMEOUT_MS,
+  );
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      requestSignal.removeEventListener("abort", cancel);
+    },
+  };
+}
+
+function labelInterruptionError(signal: AbortSignal): LabelServerError {
+  const timedOut = signal.reason instanceof DOMException && signal.reason.name === "TimeoutError";
+  return new LabelServerError(
+    "LABEL_FAILED",
+    timedOut ? "The label request timed out." : "The label request was cancelled.",
+    true,
+    timedOut ? 504 : 499,
+  );
+}
+
+function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
+  void reader.cancel().catch(() => undefined);
+  try {
+    reader.releaseLock();
+  } catch {
+    // Releasing is best effort after a broken stream source.
   }
 }
 

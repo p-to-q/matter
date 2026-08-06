@@ -1,7 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
-import { MAX_LABEL_REQUEST_BYTES, isLabelSuccess, parseLabelRequest } from "./label-contract";
+import {
+  LABEL_CLIENT_TIMEOUT_MS,
+  MAX_LABEL_REQUEST_BYTES,
+  isLabelSuccess,
+  parseLabelRequest,
+} from "./label-contract";
 import { handleLabelRequest, labelErrorResponse } from "./label-route";
 import { resetLabelGeneratorState } from "./label-generator";
 
@@ -61,6 +66,34 @@ describe("label route", () => {
       post({ ...BODY, text: "长".repeat(MAX_LABEL_REQUEST_BYTES) }),
     );
     expect(response.status).toBe(413);
+  });
+
+  it("cancels a body that never finishes within the route deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const cancelled = vi.fn();
+      const request = new Request("https://example.test/matter/api/label", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("{"));
+          },
+          cancel: cancelled,
+        }),
+        duplex: "half",
+      } as RequestInit & { duplex: "half" });
+      const pending = respond(request);
+      await vi.advanceTimersByTimeAsync(LABEL_CLIENT_TIMEOUT_MS);
+      const response = await pending;
+      expect(response.status).toBe(504);
+      await expect(response.json()).resolves.toMatchObject({
+        error: { code: "LABEL_FAILED", retryable: true },
+      });
+      expect(cancelled).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects malformed JSON", async () => {

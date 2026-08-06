@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import packageMetadata from "../../../package.json";
 import { GET } from "../../../app/api/health/route";
 import { healthSnapshot } from "./health-route";
 
@@ -19,7 +20,7 @@ describe("Matter health route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
       protocolVersion: "0.2",
-      appVersion: "0.2.0",
+      appVersion: packageMetadata.version,
       basePath: "/matter",
       status: "ok",
       surfaces: {

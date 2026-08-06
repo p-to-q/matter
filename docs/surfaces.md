@@ -32,7 +32,7 @@ is deliberately absent.
 | Root-to-focus lineage context | implemented locally; agent envelope pending |
 | Derived rooted layout with transient focus and fold | implemented |
 | Markdown snapshot and local durability | implemented |
-| Explicit ZIP/directory export and import | specified |
+| Explicit ZIP export/import; directory export | ZIP implemented; directory export specified |
 
 `0.2` uses a Matter-native pure kernel and a measured top-anchored columnar
 renderer. No editor, canvas SDK, layout framework, or CRDT is part of the
@@ -73,11 +73,12 @@ an input field or response surface can ship.
 Accounts, sync, collaboration, streaming transcription, touch parity,
 cross-branch links, split/merge, memory retrieval, assistant UI, and a public SDK.
 
-The interface is pre-release. It is suitable for localhost and deployment
-readiness checks, but not a public live-AI release: `/api/turn`, ZIP/import,
-live transcription guards, and deployed-origin laptop/narrow receipts are still
-gated. `/matter/api/health` is the machine-readable deployment probe; it must
-not be read as a product capability claim. The exact implementation sequence is
+The interface is a `fixture-seeded preview`. It is suitable for localhost and
+deployment readiness checks, but not a public live-AI release: `/api/turn`, live
+transcription guards, and deployed-origin laptop/narrow receipts are still
+gated. ZIP export/import is available; directory export remains absent.
+`/matter/api/health` is the machine-readable deployment probe; it must not be
+read as a product capability claim. The exact implementation sequence is
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
 Its current phase is the visible/durable Matter slice; its endpoint is the first
 publicly usable release, not a speculative platform roadmap.

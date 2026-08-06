@@ -127,8 +127,9 @@ export async function generateLabel(
     return settle(request, provisional.text, "MODEL_UNAVAILABLE");
   }
 
-  const attempt = await shareModelCall(key, () =>
-    callModel(input, provisional.text, adapter, requestSignal, limits, now),
+  const attempt = await withRequestSignal(
+    shareModelCall(key, () => callModel(input, provisional.text, adapter, limits, now)),
+    requestSignal,
   );
 
   if (attempt.label === null) return settle(request, provisional.text, attempt.reason);
@@ -144,7 +145,6 @@ async function callModel(
   input: NormalizedLabelInput,
   provisional: string,
   adapter: LabelModelAdapter,
-  requestSignal: AbortSignal,
   limits: LabelGeneratorLimits,
   now: () => number,
 ): Promise<ModelAttempt> {
@@ -157,7 +157,7 @@ async function callModel(
 
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), limits.timeoutMs);
-  const combined = combineSignals(requestSignal, deadline.signal);
+  const combined = combineSignals(deadline.signal);
   const abortBoundary = rejectOnAbort(combined.signal);
 
   // The slot is held until the provider promise itself settles, not until this
@@ -296,6 +296,21 @@ function shareModelCall(
   });
   state.inFlight.set(key, flight);
   return flight;
+}
+
+async function withRequestSignal<Value>(work: Promise<Value>, signal: AbortSignal): Promise<Value> {
+  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+  let rejectInterruption!: (error: DOMException) => void;
+  const abort = () => rejectInterruption(new DOMException("Aborted", "AbortError"));
+  const interrupted = new Promise<never>((_, reject) => {
+    rejectInterruption = reject;
+  });
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    return await Promise.race([work, interrupted]);
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
 }
 
 function recordFailure(

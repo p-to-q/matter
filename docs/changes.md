@@ -17,6 +17,22 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-06 — The first preview has one auditable release boundary
+
+Changed: the integrated candidate is versioned as `0.2.0-preview.1`; its
+release receipt runs the repository check, the pointer-only Chromium matrix, and
+the production 2,000-node performance proof. ZIP archive return is available,
+while directory export, live transcription, and generative transform remain
+explicitly gated in release-readiness.
+
+Why: a first preview needs a reproducible claim that matches what a person can
+actually use, and a version must not imply the complete Matter loop before its
+provider and deployed-origin evidence exists.
+
+Forecloses: calling this candidate a complete public pre-release, treating the
+health endpoint as an uptime claim, or silently widening the preview to a live
+AI product.
+
 ## 2026-08-05 — A node is named once, and a person can overrule the name
 
 Changed: a label is now a phrase rather than a tag — Chinese aims for 11
