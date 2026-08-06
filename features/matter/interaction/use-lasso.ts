@@ -134,14 +134,15 @@ export function useLasso(input: {
       return;
     }
     const measured = measureTextRange(root, node.text, selection);
-    setSelectionRects(measured.ok ? measured.rects : clearMeasuredSelectionRects);
+    if (!measured.ok) return;
+    setSelectionRects(measured.rects);
     const column = root.getBoundingClientRect();
-    setSelectionColumn(measured.ok ? {
+    setSelectionColumn({
       left: column.left,
       top: column.top,
       right: column.right,
       bottom: column.bottom,
-    } : null);
+    });
   }, [dispatch, input.canvasRef, input.tree]);
 
   const previousMaterialRef = useRef({ treeId: input.tree.id, revision: input.tree.revision, documentEpoch: input.documentEpoch ?? 0 });
@@ -198,8 +199,12 @@ export function useLasso(input: {
       targetSnapshotRef.current = null;
       targetSnapshotKeyRef.current = null;
       writeInk([]);
-      setSelectionRects(clearMeasuredSelectionRects);
-      setSelectionColumn(null);
+      // Keep the last trustworthy geometry visible while the next frame
+      // remeasures an existing semantic selection after a viewport change.
+      if (stateRef.current.selection === null) {
+        setSelectionRects(clearMeasuredSelectionRects);
+        setSelectionColumn(null);
+      }
       requestAnimationFrame(() => {
         requestAnimationFrame(() => remeasureSelection(stateRef.current.selection));
       });

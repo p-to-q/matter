@@ -23,15 +23,17 @@ that explicit adapter leaves transcription unavailable by design. A live
 transcription adapter remains gated by the deployment requirements in
 [`reference/voice-input.md`](reference/voice-input.md).
 
-`GET /matter/api/health` reports this boundary for deployment checks. It is a
-no-store capability probe, not an uptime or dependency monitor.
+`GET /matter/api/health` reports this boundary for the default mount. A
+dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
+probe at `/api/health`. It is a no-store capability probe, not an uptime or
+dependency monitor.
 
 ## Candidate verification — 0.2.0-preview.3
 
 The proprietary candidate was rebuilt and verified locally on 2026-08-06:
 
 ```text
-npm run check          doctor, links, 716 passed Vitest tests, typecheck, lint, build
+npm run check          doctor, links, 722 passed Vitest tests, typecheck, lint, build
 npm run test:e2e       35 passed + 1 skipped Chromium cases at laptop, 390 px, and 320 px
 npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
 ```

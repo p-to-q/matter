@@ -17,6 +17,45 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-06 — Preview deployments support both a mount and a dedicated domain
+
+Changed: `MATTER_BASE_PATH=/matter` remains the default deployment shape, while
+an empty value mounts the same application at a dedicated domain root. The
+default build redirects `/` to `/matter`, and the health probe reports the
+effective prefix in either mode.
+
+Why: `matter.ptoq.io` is a natural preview origin, but the existing
+`ptoq.io/matter` deployment must remain stable. One normalized boundary keeps
+assets, API fetches, redirects, and deployment checks aligned without a fork.
+
+Forecloses: hostname-specific UI copies, duplicated root routes, and silently
+changing the canonical `ptoq.io/matter` mount.
+
+## 2026-08-06 — The rounder rail was rejected as the release geometry
+
+Changed: the second preview's fuller proportions (`60px` desktop width, `44px`
+buttons, `22px` outer radius, `13px` button radius, and larger artwork) remain
+only as a historical comparison in the rail study.
+
+Why: the enlarged rail competed with the material, so the first compact
+proportions remain the current release direction.
+
+Forecloses: treating the rounded comparison as shipped product chrome.
+
+## 2026-08-06 — The right instrument returns to its first proportions
+
+Changed: the desktop rail is again `56px` wide with `40px` buttons, `16px`
+artwork, a `16px` outer radius, and the original quieter spacing. Its invisible
+hit area reaches `44px`; narrow screens retain `48px` physical targets. The
+selected tool still uses the stable black tile and white icon.
+
+Why: the enlarged rail competed with the material and made the paper-side
+instrument feel like application chrome. The first proportions are more precise
+without making nearby clicks brittle or shrinking touch targets.
+
+Forecloses: using visual bulk as the only way to enlarge a hit area, weakening
+the selected state, or applying desktop density to touch layouts.
+
 ## 2026-08-06 — Matter is proprietary and internal-only
 
 Changed: Matter is licensed as `UNLICENSED`, marked private for package tooling,
@@ -653,8 +692,8 @@ the first release. A later proposal must reopen the product grammar explicitly.
 
 Changed: the desk index reserves `304px`, with a `40px` reading row and larger
 material labels. Below `960px` it becomes an overlay drawer, so the root column
-keeps its field. The right rail keeps its original `44px` desktop and `48px`
-narrow targets, and the black active tile fills that stable target.
+keeps its field. The right rail keeps stable desktop and narrow targets, and the
+black active tile fills that target.
 
 Why: the former `238px` usable index compressed Chinese labels and the local
 identity area; widening it improves reading without reducing the material to an

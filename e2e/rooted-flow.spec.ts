@@ -89,10 +89,10 @@ for (const viewport of [
     } else {
       expect(initialSurface.x).toBeGreaterThan(300);
       expect(initialSurface.x + initialSurface.width).toBeLessThan(viewport.width);
-      expect(initialRail.width).toBeCloseTo(60, 0);
+      expect(initialRail.width).toBeCloseTo(56, 0);
       const voiceTool = page.locator('.tool-rail__button[data-tool-id="voice"]');
-      await expect(voiceTool).toHaveCSS("width", "44px");
-      await expect(voiceTool.locator("svg")).toHaveCSS("width", "20px");
+      await expect(voiceTool).toHaveCSS("width", "40px");
+      await expect(voiceTool.locator("svg")).toHaveCSS("width", "16px");
       await voiceTool.hover();
       await expect.poll(() => voiceTool.evaluate((button) =>
         getComputedStyle(button, "::before").backgroundColor,

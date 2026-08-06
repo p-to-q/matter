@@ -66,6 +66,7 @@ export class LabelDriver {
   private readonly listeners = new Set<(state: LabelSessionState) => void>();
   private readonly active = new Map<string, PendingRequest>();
   private readonly queue: PendingRequest[] = [];
+  private readonly durableMutations = new Map<string, Promise<void>>();
   private consecutiveFailures = 0;
   private cooldownUntilMs = 0;
   private restoredTreeId: string | null = null;
@@ -148,32 +149,62 @@ export class LabelDriver {
   }
 
   /** Replaces the label of one node with a name the person typed. */
-  rename(nodeId: string, label: string): void {
-    if (this.disposed) return;
+  rename(nodeId: string, label: string): Promise<void> {
+    if (this.disposed) return Promise.resolve();
     const trimmed = label.trim();
-    if (trimmed.length === 0) return;
+    if (trimmed.length === 0) return Promise.resolve();
     const next = reduceLabelSession(this.state, { type: "rename", nodeId, label: trimmed });
-    if (next === this.state) return;
+    if (next === this.state) return Promise.resolve();
+    const treeId = this.state.treeId;
+    const documentEpoch = this.state.documentEpoch;
     this.cancelPending(nodeId);
-    this.publish(next);
-    // A name is written before anything else can overwrite it, because losing
-    // it would lose a decision rather than a recomputable derivation.
-    void this.dependencies.repository?.put(this.state.treeId, {
-      nodeId,
-      label: trimmed,
-      origin: "user",
-      basis: null,
-      updatedAt: this.canonicalNow(),
+    return this.enqueueDurableMutation(treeId, nodeId, async () => {
+      try {
+        await this.dependencies.repository?.put(treeId, {
+          nodeId,
+          label: trimmed,
+          origin: "user",
+          basis: null,
+          updatedAt: this.canonicalNow(),
+        });
+      } catch {
+        // Storage is best effort; the in-memory name still belongs to the person.
+      }
+      if (
+        this.disposed ||
+        this.state.treeId !== treeId ||
+        this.state.documentEpoch !== documentEpoch ||
+        this.lastScope?.tree.nodes[nodeId] === undefined
+      ) return;
+      const committed = reduceLabelSession(this.state, { type: "rename", nodeId, label: trimmed });
+      if (committed !== this.state) this.publish(committed);
     });
   }
 
   /** Returns one node to automatic naming. */
-  resetName(nodeId: string): void {
-    if (this.disposed) return;
+  resetName(nodeId: string): Promise<void> {
+    if (this.disposed) return Promise.resolve();
     const next = reduceLabelSession(this.state, { type: "reset-name", nodeId });
-    if (next === this.state) return;
-    this.publish(next);
-    void this.dependencies.repository?.remove(this.state.treeId, [nodeId]);
+    if (next === this.state) return Promise.resolve();
+    const treeId = this.state.treeId;
+    const documentEpoch = this.state.documentEpoch;
+    return this.enqueueDurableMutation(treeId, nodeId, async () => {
+      try {
+        await this.dependencies.repository?.remove(treeId, [nodeId]);
+      } catch {
+        // Storage is best effort; automatic naming still resumes in this session.
+      }
+      if (
+        this.disposed ||
+        this.state.treeId !== treeId ||
+        this.state.documentEpoch !== documentEpoch ||
+        this.lastScope?.tree.nodes[nodeId] === undefined
+      ) return;
+      const committed = reduceLabelSession(this.state, { type: "reset-name", nodeId });
+      if (committed === this.state) return;
+      this.publish(committed);
+      if (this.lastScope !== null) this.observe(this.lastScope, this.lastNodeIds);
+    });
   }
 
   dispose(): void {
@@ -259,6 +290,22 @@ export class LabelDriver {
       pending.controller.abort();
       this.queue.splice(index, 1);
     }
+  }
+
+  private enqueueDurableMutation(
+    treeId: string,
+    nodeId: string,
+    mutation: () => Promise<void>,
+  ): Promise<void> {
+    const key = `${treeId} ${nodeId}`;
+    const previous = this.durableMutations.get(key) ?? Promise.resolve();
+    const current = previous.catch(() => undefined).then(mutation);
+    this.durableMutations.set(key, current);
+    const cleanUp = () => {
+      if (this.durableMutations.get(key) === current) this.durableMutations.delete(key);
+    };
+    void current.then(cleanUp, cleanUp);
+    return current;
   }
 
   private mayRequest(): boolean {

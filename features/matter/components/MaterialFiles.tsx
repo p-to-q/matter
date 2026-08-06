@@ -55,8 +55,8 @@ export type MaterialFilesProps = Readonly<{
    * never overwritten automatically; an empty name returns the row to
    * automatic naming.
    */
-  onRenameNode?: (nodeId: string, label: string) => void;
-  onResetNodeName?: (nodeId: string) => void;
+  onRenameNode?: (nodeId: string, label: string) => void | Promise<void>;
+  onResetNodeName?: (nodeId: string) => void | Promise<void>;
   /** Reports the rows worth labelling. Called from an effect, never in render. */
   onVisibleNodes?: (nodeIds: readonly string[]) => void;
   onSelectNode: (nodeId: string) => void;
@@ -126,6 +126,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const longPressRef = useRef<Readonly<{ timer: number; x: number; y: number }> | null>(null);
   const suppressOpenRef = useRef(false);
   const renameFocusedRef = useRef(false);
+  const renameCommitRef = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -327,7 +328,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     // Naming depends only on this node id, which the row already resolved, so
     // it waits for a live interaction but not for the projection to catch up —
     // otherwise the click that selects a row cancels the double-click on it.
-    if (!renameEnabled || props.interactionPending) return;
+    if (!renameEnabled || props.interactionPending || renameCommitRef.current !== null) return;
     renameFocusedRef.current = false;
     setRenaming({ epoch: props.documentEpoch, nodeId });
   };
@@ -339,10 +340,17 @@ export function MaterialFiles(props: MaterialFilesProps) {
   };
 
   const commitRename = (nodeId: string, value: string) => {
+    const mutationKey = `${props.documentEpoch} ${nodeId}`;
+    if (renameCommitRef.current === mutationKey) return;
+    renameCommitRef.current = mutationKey;
     setRenaming(null);
     const trimmed = value.trim();
-    if (trimmed.length === 0) props.onResetNodeName?.(nodeId);
-    else props.onRenameNode?.(nodeId, trimmed);
+    const mutation = trimmed.length === 0
+      ? props.onResetNodeName?.(nodeId)
+      : props.onRenameNode?.(nodeId, trimmed);
+    void Promise.resolve(mutation).catch(() => undefined).finally(() => {
+      if (renameCommitRef.current === mutationKey) renameCommitRef.current = null;
+    });
   };
 
   useEffect(() => () => {

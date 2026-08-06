@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CANONICAL_NEXT_ROUTE_REFERENCE,
+  CANONICAL_NEXT_ROOT_PARAMS_REFERENCE,
   createSignalTerminator,
   normalizeNextEnvironment,
 } from "./e2e-runner.mjs";
@@ -19,6 +20,15 @@ describe("e2e runner cleanup", () => {
   it("leaves the canonical reference unchanged", () => {
     expect(normalizeNextEnvironment(CANONICAL_NEXT_ROUTE_REFERENCE)).toBe(
       CANONICAL_NEXT_ROUTE_REFERENCE,
+    );
+  });
+
+  it.each([
+    'import "./.next-e2e/dev/types/root-params.d.ts";',
+    'import "./.next/dev/types/root-params.d.ts";',
+  ])("restores the canonical Next root params reference from %s", (reference) => {
+    expect(normalizeNextEnvironment(`${reference}\n`)).toBe(
+      `${CANONICAL_NEXT_ROOT_PARAMS_REFERENCE}\n`,
     );
   });
 

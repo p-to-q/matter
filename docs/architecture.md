@@ -203,8 +203,10 @@ use small leaf dependencies when those slices begin.
 
 ## Deployment and naming
 
-Matter is independently deployed beneath `ptoq.io/matter`. The base path is
-`MATTER_BASE_PATH=/matter`; therefore `app/page.tsx` is the product page and
+Matter is independently deployed beneath `ptoq.io/matter` by default. The base
+path is `MATTER_BASE_PATH=/matter`; a dedicated custom domain may set the value
+to an empty string so `app/page.tsx` owns `/` without forking the application.
+Therefore `app/page.tsx` is the product page and
 the future `app/api/turn` route resolves under `/matter/api/turn` when built.
 
 `0.2` has no compatibility aliases because no `0.1` document was persisted.

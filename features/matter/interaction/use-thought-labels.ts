@@ -12,9 +12,9 @@ export type ThoughtLabels = Readonly<{
   /** Declares the nodes worth labelling now. Safe to call from an effect. */
   observe: (nodeIds: readonly string[]) => void;
   /** Replaces one node's label with a name the person typed. */
-  rename: (nodeId: string, label: string) => void;
+  rename: (nodeId: string, label: string) => Promise<void>;
   /** Returns one node to automatic naming. */
-  resetName: (nodeId: string) => void;
+  resetName: (nodeId: string) => Promise<void>;
 }>;
 
 export function useThoughtLabels(input: Readonly<{

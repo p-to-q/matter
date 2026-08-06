@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
+import {
+  normalizeMatterBasePath,
+} from "./features/matter/config/base-path";
 
-const basePath = process.env.MATTER_BASE_PATH ?? "/matter";
+const basePath = normalizeMatterBasePath(process.env.MATTER_BASE_PATH ?? "/matter");
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
 
@@ -20,6 +23,15 @@ export default function matterNextConfig(phase: string): NextConfig {
     basePath,
     distDir: resolveMatterNextDistDir(phase),
     poweredByHeader: false,
+    async redirects() {
+      if (basePath === "") return [];
+      return [{
+        source: "/",
+        destination: basePath,
+        basePath: false,
+        permanent: false,
+      }];
+    },
     async headers() {
       return [{
         source: "/:path*",

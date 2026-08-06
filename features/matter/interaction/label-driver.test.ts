@@ -89,9 +89,14 @@ type FakeRepository = LabelRepository & {
   readonly stored: Map<string, LabelRecord>;
   readonly removed: string[];
   resolveLoad: () => void;
+  resolvePut: () => void;
 };
 
-function repository(seed: readonly LabelRecord[] = [], defer = false): FakeRepository {
+function repository(
+  seed: readonly LabelRecord[] = [],
+  defer = false,
+  deferPut = false,
+): FakeRepository {
   const stored = new Map(seed.map((record) => [record.nodeId, record]));
   const removed: string[] = [];
   let release: () => void = () => undefined;
@@ -100,15 +105,23 @@ function repository(seed: readonly LabelRecord[] = [], defer = false): FakeRepos
         release = resolve;
       })
     : Promise.resolve();
+  let releasePut: () => void = () => undefined;
+  const putGate = deferPut
+    ? new Promise<void>((resolve) => {
+        releasePut = resolve;
+      })
+    : Promise.resolve();
   return {
     stored,
     removed,
     resolveLoad: () => release(),
+    resolvePut: () => releasePut(),
     async loadAll() {
       await gate;
       return [...stored.values()];
     },
     async put(_treeId, record) {
+      await putGate;
       stored.set(record.nodeId, record);
     },
     async remove(_treeId, nodeIds) {
@@ -347,11 +360,11 @@ describe("LabelDriver", () => {
     await settle();
     const signal = recorded.calls[0]?.signal;
 
-    instance.rename("root", "  过去的另一种生活  ");
-    expect(labelFor(instance.getState(), "root")).toBe("过去的另一种生活");
+    const rename = instance.rename("root", "  过去的另一种生活  ");
     // The outstanding request for that node is abandoned, not raced.
     expect(signal?.aborted).toBe(true);
-    await settle();
+    await rename;
+    expect(labelFor(instance.getState(), "root")).toBe("过去的另一种生活");
     expect(store.stored.get("root")).toMatchObject({
       label: "过去的另一种生活",
       origin: "user",
@@ -363,17 +376,33 @@ describe("LabelDriver", () => {
     expect(recorded.calls).toHaveLength(before);
   });
 
+  it("publishes a person's name only after its durable write settles", async () => {
+    const recorded = recorder();
+    const store = repository([], false, true);
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+    const before = labelFor(instance.getState(), "root");
+
+    const rename = instance.rename("root", "过去的另一种生活");
+    expect(labelFor(instance.getState(), "root")).toBe(before);
+    expect(recorded.calls[0]?.signal.aborted).toBe(true);
+
+    store.resolvePut();
+    await rename;
+    expect(labelFor(instance.getState(), "root")).toBe("过去的另一种生活");
+    expect(instance.getState().entries.get("root")?.origin).toBe("user");
+  });
+
   it("returns a node to automatic naming when its name is reset", async () => {
     const recorded = recorder();
     const store = repository();
     const instance = driver(recorded.request, { repository: store });
     instance.observe(ROOT, ["root"]);
     await settle();
-    instance.rename("root", "过去的另一种生活");
-    await settle();
+    await instance.rename("root", "过去的另一种生活");
 
-    instance.resetName("root");
-    await settle();
+    await instance.resetName("root");
     expect(store.removed).toContain("root");
     instance.observe(ROOT, ["root"]);
     expect(labelFor(instance.getState(), "root")).not.toBe("过去的另一种生活");

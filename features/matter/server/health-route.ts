@@ -1,4 +1,5 @@
 import packageMetadata from "../../../package.json";
+import { DEFAULT_MATTER_BASE_PATH, normalizeMatterBasePath } from "../config/base-path";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { readLabelPool } from "./label-provider";
 
@@ -53,11 +54,11 @@ export function healthSnapshot(): MatterHealth {
 }
 
 function configuredBasePath(): string {
-  const value =
+  return normalizeMatterBasePath(
     process.env.MATTER_BASE_PATH ??
-    process.env.NEXT_PUBLIC_MATTER_BASE_PATH ??
-    "/matter";
-  return value.startsWith("/") && !value.endsWith("/") ? value : "/matter";
+      process.env.NEXT_PUBLIC_MATTER_BASE_PATH ??
+      DEFAULT_MATTER_BASE_PATH,
+  );
 }
 
 function thoughtLabelSurface(): MatterHealthSurface {

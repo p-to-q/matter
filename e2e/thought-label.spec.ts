@@ -47,11 +47,15 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   await editor.press("Enter");
   await expect(row.locator(".material-file__title")).toHaveText("过去的另一种生活");
   await expect(row).toHaveAttribute("data-label-origin", "user");
+  const renamedNodeId = await row.getAttribute("data-node-id");
+  expect(renamedNodeId).not.toBeNull();
 
   // The name is durable, and nothing automatic may take it back.
   const labelRequests: string[] = [];
   page.on("request", (request) => {
-    if (request.url().includes("/api/label")) labelRequests.push(request.url());
+    if (!request.url().includes("/api/label")) return;
+    const payload = request.postDataJSON() as { basis?: { nodeId?: unknown } } | null;
+    if (payload?.basis?.nodeId === renamedNodeId) labelRequests.push(request.url());
   });
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");

@@ -1,10 +1,16 @@
 export const CANONICAL_NEXT_ROUTE_REFERENCE = 'import "./.next/types/routes.d.ts";';
+export const CANONICAL_NEXT_ROOT_PARAMS_REFERENCE = 'import "./.next/types/root-params.d.ts";';
 
 export function normalizeNextEnvironment(source) {
-  return source.replace(
-    /^import "\.\/\.next(?:-e2e)?(?:\/dev)?\/types\/routes\.d\.ts";$/m,
-    CANONICAL_NEXT_ROUTE_REFERENCE,
-  );
+  return source
+    .replace(
+      /^import "\.\/\.next(?:-e2e)?(?:\/dev)?\/types\/routes\.d\.ts";$/m,
+      CANONICAL_NEXT_ROUTE_REFERENCE,
+    )
+    .replace(
+      /^import "\.\/\.next(?:-e2e)?(?:\/dev)?\/types\/root-params\.d\.ts";$/m,
+      CANONICAL_NEXT_ROOT_PARAMS_REFERENCE,
+    );
 }
 
 export function createSignalTerminator(child, schedule = setTimeout, cancel = clearTimeout) {

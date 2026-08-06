@@ -1113,6 +1113,13 @@ function StretchHandleButton({
         if (next === null) return;
         event.preventDefault();
         stretch.setAmount(next, handle);
+        // Geometry feedback can replace this button; keep a keyboard sequence
+        // on the same handle instead of sending the next key to the canvas.
+        window.requestAnimationFrame(() => {
+          document
+            .querySelector<HTMLButtonElement>(`.stretch-handle--${handle}[role="slider"]`)
+            ?.focus();
+        });
       }}
       role="slider"
       type="button"

@@ -51,4 +51,10 @@ describe("Matter health route", () => {
 
     expect(healthSnapshot().basePath).toBe("/matter");
   });
+
+  it("reports an empty prefix for a dedicated root deployment", () => {
+    process.env.MATTER_BASE_PATH = "";
+
+    expect(healthSnapshot().basePath).toBe("");
+  });
 });

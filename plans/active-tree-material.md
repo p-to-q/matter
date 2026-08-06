@@ -840,11 +840,12 @@ Non-goals:  lasso-range deletion, multiple roots, AI tool changes, moving the
             rail, live-provider credentials, or left-field redesign
 ```
 
-The first instrument used a complete return arrow and compact 24-unit icons.
-The current rail grew its targets while retaining 16-unit artwork, then changed
-active target dimensions. This slice restores a 20 px visual icon inside a
-stable 44 px desktop / 48 px narrow target; only the internal black-and-white
-surface expands within that fixed target, so the rail never shifts. Deep selections no longer retarget human
+The first instrument used a complete return arrow and compact artwork. After a
+larger candidate proved visually heavy, the desktop rail returned to its first
+56 px outer width, 40 px visible targets, and 16 px artwork. A 44 px invisible
+hit area preserves reach, while narrow layouts retain 48 px physical targets.
+Only the internal black-and-white surface changes, so the rail never shifts.
+Deep selections no longer retarget human
 admission: nonempty full-view voice always appends under the sole root. The
 fixture transcription remains explicit until a verified provider adapter is
 configured; it is not presented as a real transcription result.
