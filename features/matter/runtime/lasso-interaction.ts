@@ -24,6 +24,7 @@ export type LassoInteractionState =
 export type LassoInteractionEvent =
   | Readonly<{ type: "activate" }>
   | Readonly<{ type: "deactivate" }>
+  | Readonly<{ type: "clear-selection" }>
   | Readonly<{
       type: "pointer-down";
       pointerId: number;
@@ -66,6 +67,8 @@ export function reduceLassoInteraction(
         "inactive",
         state.mode === "drawing" ? state.startSelection : state.selection,
       );
+    case "clear-selection":
+      return idleState(state.mode === "inactive" ? "inactive" : "ready", null);
     case "pointer-down":
       if (
         state.mode !== "ready" ||

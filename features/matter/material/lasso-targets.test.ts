@@ -54,14 +54,26 @@ describe("lasso target resolution", () => {
       .toEqual({ kind: "ambiguous" });
   });
 
-  it("rejects cross-node and non-adjacent hits instead of previewing success", () => {
+  it("keeps cross-node and non-adjacent hits as separate passages", () => {
     const second = target({ nodeId: "node_b", text: "另一句。" });
-    expect(resolveLassoTargets(lasso, [target(), second])).toEqual({ kind: "ambiguous" });
+    expect(resolveLassoTargets(lasso, [target(), second])).toMatchObject({
+      kind: "selection",
+      selections: [
+        { nodeId: "node_a", selectedText: "第一句，第二句" },
+        { nodeId: "node_b", selectedText: "另一句" },
+      ],
+    });
     expect(resolveLassoTargets(lasso, [target({
       measurement: [
         { index: 0, rects: [{ x: 10, y: 10, width: 20, height: 12 }] },
         { index: 2, rects: [{ x: 40, y: 10, width: 20, height: 12 }] },
       ],
-    })])).toEqual({ kind: "ambiguous" });
+    })])).toMatchObject({
+      kind: "selection",
+      selections: [
+        { nodeId: "node_a", selectedText: "第一句" },
+        { nodeId: "node_a", selectedText: "第三句" },
+      ],
+    });
   });
 });

@@ -17,6 +17,7 @@ import {
   resolveLassoTargets,
   type LassoTarget,
 } from "../material/lasso-targets";
+import { normalizeLassoSelectionSet } from "../material/lasso-selection";
 import {
   createLassoInteractionState,
   reduceLassoInteraction,
@@ -33,11 +34,14 @@ export type LassoController = Readonly<{
   inkPathRef: React.RefObject<SVGPathElement | null>;
   closurePathRef: React.RefObject<SVGPathElement | null>;
   selection: SegmentSelection | null;
+  selections: readonly SegmentSelection[];
   sourceText: string | null;
   selectionRects: readonly ClientTextRect[];
+  selectionSetRects: readonly ClientTextRect[];
   selectionColumn: Readonly<{ left: number; top: number; right: number; bottom: number }> | null;
   activate: () => void;
   deactivate: () => void;
+  clearSelection: () => void;
   pointerDown: (event: React.PointerEvent<HTMLElement>) => boolean;
   pointerMove: (event: React.PointerEvent<HTMLElement>) => boolean;
   pointerUp: (event: React.PointerEvent<HTMLElement>) => boolean;
@@ -74,9 +78,11 @@ export function useLasso(input: {
   const targetSnapshotRef = useRef<readonly LassoTarget[] | null>(null);
   const targetSnapshotKeyRef = useRef<string | null>(null);
   const [selectionRects, setSelectionRects] = useState<readonly ClientTextRect[]>([]);
+  const [selectionSetRects, setSelectionSetRects] = useState<readonly ClientTextRect[]>([]);
   const [selectionColumn, setSelectionColumn] = useState<Readonly<{
     left: number; top: number; right: number; bottom: number;
   }> | null>(null);
+  const [selections, setSelections] = useState<readonly SegmentSelection[]>([]);
   const strokeEpochRef = useRef<MeasurementEpoch | null>(null);
   const strokeDocumentEpochRef = useRef(input.documentEpoch ?? 0);
   const latestEpochRef = useRef(input.epoch);
@@ -145,6 +151,25 @@ export function useLasso(input: {
     });
   }, [dispatch, input.canvasRef, input.tree]);
 
+  useEffect(() => {
+    if (selections.length === 0) {
+      const frame = requestAnimationFrame(() => setSelectionSetRects(clearMeasuredSelectionRects));
+      return () => cancelAnimationFrame(frame);
+    }
+    const frame = requestAnimationFrame(() => {
+      const rects: ClientTextRect[] = [];
+      for (const selection of selections) {
+        const node = input.tree.nodes[selection.nodeId];
+        const root = findTextRoot(input.canvasRef.current, selection.nodeId);
+        if (node === undefined || root === null || !validateSelection(node.text, selection, node.id).ok) continue;
+        const measured = measureTextRange(root, node.text, selection);
+        if (measured.ok) rects.push(...measured.rects);
+      }
+      setSelectionSetRects(rects);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [input.canvasRef, input.epoch.layoutEpoch, input.epoch.treeRevision, input.epoch.viewportX, input.epoch.viewportY, input.epoch.viewportZoom, input.tree, selections]);
+
   const previousMaterialRef = useRef({ treeId: input.tree.id, revision: input.tree.revision, documentEpoch: input.documentEpoch ?? 0 });
   useEffect(() => {
     const previous = previousMaterialRef.current;
@@ -157,7 +182,9 @@ export function useLasso(input: {
     targetSnapshotKeyRef.current = null;
     writeInk([]);
     setSelectionRects(clearMeasuredSelectionRects);
+    setSelectionSetRects(clearMeasuredSelectionRects);
     setSelectionColumn(null);
+    setSelections([]);
   }, [dispatch, input.documentEpoch, input.tree.id, input.tree.revision, writeInk]);
 
   const previousNavigationRef = useRef(input.navigationKey);
@@ -171,7 +198,9 @@ export function useLasso(input: {
     targetSnapshotKeyRef.current = null;
     writeInk([]);
     setSelectionRects(clearMeasuredSelectionRects);
+    setSelectionSetRects(clearMeasuredSelectionRects);
     setSelectionColumn(null);
+    setSelections([]);
   }, [dispatch, input.navigationKey, writeInk]);
 
   useEffect(() => {
@@ -203,7 +232,9 @@ export function useLasso(input: {
       // remeasures an existing semantic selection after a viewport change.
       if (stateRef.current.selection === null) {
         setSelectionRects(clearMeasuredSelectionRects);
+        setSelectionSetRects(clearMeasuredSelectionRects);
         setSelectionColumn(null);
+        setSelections([]);
       }
       requestAnimationFrame(() => {
         requestAnimationFrame(() => remeasureSelection(stateRef.current.selection));
@@ -241,6 +272,13 @@ export function useLasso(input: {
     writeInk([]);
     dispatch({ type: "deactivate" });
   }, [dispatch, writeInk]);
+  const clearSelection = useCallback(() => {
+    setSelections([]);
+    setSelectionRects(clearMeasuredSelectionRects);
+    setSelectionSetRects(clearMeasuredSelectionRects);
+    setSelectionColumn(null);
+    dispatch({ type: "clear-selection" });
+  }, [dispatch]);
 
   const pointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
     if (stateRef.current.mode !== "ready") return false;
@@ -265,6 +303,7 @@ export function useLasso(input: {
     sampledPointsRef.current = [{ x: event.clientX, y: event.clientY }];
     setSelectionRects(clearMeasuredSelectionRects);
     setSelectionColumn(null);
+    setSelections([]);
     writeInk(sampledPointsRef.current);
     return true;
   }, [input.canvasRef, input.documentEpoch, input.navigationKey, input.tree, writeInk]);
@@ -311,12 +350,21 @@ export function useLasso(input: {
         )
       : { kind: analysis.kind };
     dispatch({ type: "pointer-up", pointerId: event.pointerId, resolution });
+    if (resolution.kind === "selection") {
+      const resolvedSelections = "selections" in resolution && Array.isArray(resolution.selections)
+        ? resolution.selections
+        : [resolution.selection];
+      setSelections(normalizeLassoSelectionSet(resolvedSelections));
+    } else if (resolution.kind === "empty-closed") {
+      setSelections([]);
+    }
     sampledPointsRef.current = [];
     strokeEpochRef.current = null;
     strokeDocumentEpochRef.current = input.documentEpoch ?? 0;
     targetSnapshotRef.current = null;
     targetSnapshotKeyRef.current = null;
     writeInk([]);
+    setSelections([]);
     remeasureSelection(stateRef.current.selection);
     return true;
   }, [dispatch, input.canvasRef, input.documentEpoch, input.tree, remeasureSelection, writeInk]);
@@ -340,13 +388,16 @@ export function useLasso(input: {
     inkPathRef,
     closurePathRef,
     selection: state.selection,
+    selections,
     sourceText: state.selection === null
       ? null
       : input.tree.nodes[state.selection.nodeId]?.text ?? null,
     selectionRects,
+    selectionSetRects,
     selectionColumn,
     activate,
     deactivate,
+    clearSelection,
     pointerDown,
     pointerMove,
     pointerUp,

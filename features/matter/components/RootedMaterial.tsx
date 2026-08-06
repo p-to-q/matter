@@ -20,6 +20,7 @@ import {
 import type { AdmissionController } from "../interaction/use-admission";
 import type { AdmissionAnchor as InteractionAdmissionAnchor } from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
+import type { SegmentSelection } from "../material/text-segments";
 import { useStretch } from "../interaction/use-stretch";
 import type { StretchPreviewSignal } from "../interaction/use-stretch";
 import { elasticPreviewGeometry } from "../interaction/elastic-preview";
@@ -46,6 +47,7 @@ import {
 import { projectCanvasGeometryPublication } from "./canvas-geometry-publication";
 import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
+import { LassoSelectionTray } from "./LassoSelectionTray";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 
 export type RootedMaterialProps = {
@@ -857,12 +859,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
         </footer>
         <CanvasChrome {...canvasPreferences} />
       </section>
+      <LassoSelectionTray
+        onClear={lasso.clearSelection}
+        onLocate={(selection: SegmentSelection) => {
+          props.onSelectNode(selection.nodeId);
+          document
+            .querySelector<HTMLElement>(`[data-thought-id="${CSS.escape(selection.nodeId)}"]`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }}
+        selections={lasso.selections}
+      />
       <LassoOverlay
         active={lasso.active}
         drawing={lasso.drawing}
         closurePathRef={lasso.closurePathRef}
         inkPathRef={lasso.inkPathRef}
-        rects={lasso.selectionRects}
+        rects={lasso.selectionSetRects.length > 0 ? lasso.selectionSetRects : lasso.selectionRects}
         selectedText={lasso.selection?.selectedText ?? null}
         elasticRef={elasticRef}
         textColumn={lasso.selectionColumn}
@@ -881,6 +893,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
 const CanvasThoughtList = memo(function CanvasThoughtList({
   interactionPending,
   lassoSelection,
+  lassoSelections,
   lassoSourceText,
   navigation,
   onSelectNode,
@@ -889,6 +902,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
 }: {
   interactionPending: boolean;
   lassoSelection: ReturnType<typeof useLasso>["selection"];
+  lassoSelections: ReturnType<typeof useLasso>["selections"];
   lassoSourceText: string | null;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
@@ -901,6 +915,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         const isSelected = node.id === navigation.selectedNodeId;
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
+        const isLassoSelected = lassoSelections.some((selection) => selection.nodeId === node.id);
         const languageProjection = isProjected && lassoSelection !== null
           ? projectLanguageAroundSelection(node.text, lassoSelection)
           : null;
@@ -910,6 +925,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-focused={isFocused || undefined}
             data-layout-node-id={node.id}
             data-selected={isSelected || undefined}
+            data-lasso-selected={isLassoSelected || undefined}
             data-thought-id={node.id}
             key={node.id}
           >

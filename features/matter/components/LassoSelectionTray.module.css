@@ -1,0 +1,132 @@
+.tray {
+  position: fixed;
+  z-index: 35;
+  top: 24px;
+  right: 98px;
+  display: grid;
+  width: min(300px, calc(100vw - 132px));
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--paper-solid) 91%, transparent);
+  box-shadow: 0 14px 36px rgba(22, 29, 39, .13);
+  color: var(--ink);
+  backdrop-filter: blur(16px);
+}
+
+.header,
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.eyebrow {
+  margin: 0 0 3px;
+  color: var(--muted);
+  font: 10px/1 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  margin: 0;
+  font: 600 14px/1.2 var(--sans);
+}
+
+.close,
+.copy,
+.clear,
+.item {
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.close {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.close:hover,
+.close:focus-visible,
+.item:hover,
+.item:focus-visible {
+  background: var(--selection-bg);
+  outline: 0;
+}
+
+.list {
+  display: grid;
+  max-height: min(42vh, 360px);
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  padding: 8px 7px;
+  border-radius: 9px;
+  background: transparent;
+  text-align: left;
+  line-height: 1.45;
+}
+
+.index {
+  color: var(--muted);
+  font: 10px/1.45 var(--mono);
+}
+
+.actions {
+  justify-content: flex-start;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.copy,
+.clear {
+  min-height: 32px;
+  padding: 0 11px;
+  border-radius: 8px;
+}
+
+.copy {
+  background: var(--canvas-chrome);
+  color: var(--paper);
+}
+
+.clear {
+  background: var(--selection-bg);
+  color: var(--ink);
+}
+
+.copy:hover,
+.copy:focus-visible,
+.clear:hover,
+.clear:focus-visible {
+  filter: brightness(.94);
+  outline: 2px solid var(--selection-ring);
+  outline-offset: 1px;
+}
+
+@media (max-width: 700px) {
+  .tray {
+    top: 76px;
+    right: 12px;
+    width: min(300px, calc(100vw - 24px));
+  }
+}
