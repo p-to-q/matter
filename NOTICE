@@ -1,4 +1,20 @@
 Matter
 Copyright 2026 Wooden Computer Co., Ltd.
+All rights reserved. See LICENSE.
+
+Third-party notices
+-------------------
+
+Runtime and development dependencies are distributed under their own licenses.
+See each package under node_modules for its terms.
+
+The paper texture in features/matter/components/PaperTexture.tsx is an original
+SVG filter built from standard feTurbulence primitives. Its visual direction was
+informed by GC Minimal Zine Poster
+(https://github.com/LiamGvchi/gc-minimal-zine-poster), MIT licensed. No source,
+composition, or imagery was copied.
+
+Mirage's Apache-2.0 virtual filesystem was reviewed for reference only, at
+commit a1668482. No code was copied. See docs/reference/virtual-file-system.md.
 
 Repository discipline adapted from p-to-q/repo-template.

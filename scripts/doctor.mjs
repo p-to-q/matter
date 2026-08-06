@@ -38,8 +38,11 @@ const config = await readFile("next.config.ts", "utf8");
 const problems = [];
 
 if (missing.length > 0) problems.push(`Missing files: ${missing.join(", ")}`);
-if (packageJson.license !== "Apache-2.0") {
+if (packageJson.license !== "UNLICENSED") {
   problems.push("package.json license must match LICENSE.");
+}
+if (packageJson.private !== true) {
+  problems.push("package.json must stay private to block accidental publication.");
 }
 if (!config.includes('?? "/matter"')) {
   problems.push("The default /matter base path is missing from next.config.ts.");

@@ -3,6 +3,28 @@
 Matter is a standalone Next.js application for `ptoq.io/matter`. It is an
 environment where thought becomes touchable material.
 
+## Repository posture
+
+Matter is proprietary and wholly owned. It is not open source and is not
+becoming open source.
+
+The GitHub repository is **currently public** for operational reasons, not as an
+open-source commitment. It may be made private later. Two consequences bind
+every change made while it is public:
+
+- treat everything committed as permanently world-readable. Anything pushed can
+  be forked, cached, and mirrored, and going private later does not retract it.
+  Never commit a key, token, recording, transcript, or real user material.
+  Secrets live in `.env.local`, which is gitignored, and never in `.env.example`;
+- never add open-source framing — no badges, no contribution invitations, no
+  "PRs welcome", no permissive license headers in source files. External pull
+  requests are refused by policy, because merging outside code would split
+  copyright in a codebase that must stay wholly owned. See `CONTRIBUTING.md`.
+
+The license is proprietary and `package.json` carries `"license": "UNLICENSED"`
+with `"private": true`. `npm run doctor` enforces both; if either check fails,
+fix the metadata rather than relaxing the check.
+
 ## Read route
 
 Read only what the change needs:

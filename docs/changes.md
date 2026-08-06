@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-06 — Matter is proprietary and internal-only
+
+Changed: Matter is licensed as `UNLICENSED`, marked private for package tooling,
+and documented as proprietary software owned by Wooden Computer Co., Ltd.
+External code contributions and public support requests are not accepted;
+private vulnerability reporting remains the outside security channel. The
+repository may remain publicly readable for operational reasons without
+granting a license.
+
+Why: public source visibility and open-source permission are different choices.
+The project needs one explicit ownership, contribution, support, and package
+publication boundary while internal maintainers continue to collaborate.
+
+Forecloses: treating the current main branch as Apache-2.0, inferring permission
+from repository visibility, publishing the package to npm by mistake, or merging
+outside code without a separate ownership agreement. It does not retroactively
+alter the license attached to already published historical revisions.
+
 ## 2026-08-06 — The first preview has one auditable release boundary
 
 Changed: the integrated candidate is versioned as `0.2.0-preview.1`; its

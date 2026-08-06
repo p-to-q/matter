@@ -50,4 +50,7 @@ Matter is a standalone Next.js application for `ptoq.io/matter`. Provider code
 is server-only, the model returns text rather than plans, only the tree engine
 mutates durable material, and every generative change has an exact inverse.
 
-Apache-2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+Proprietary and confidential. Copyright 2026 Wooden Computer Co., Ltd. All
+rights reserved. No license is granted; see [`LICENSE`](LICENSE) and
+[`NOTICE`](NOTICE). This repository does not accept external contributions —
+see [`CONTRIBUTING.md`](CONTRIBUTING.md).

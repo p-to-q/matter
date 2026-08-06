@@ -1,8 +1,12 @@
 # Security Policy
 
 Report vulnerabilities through the repository's private GitHub security advisory
-flow once published. Do not include credentials, recordings, transcripts, or
-sensitive material in a public issue.
+flow. Do not include credentials, recordings, transcripts, or sensitive material
+in a public issue.
+
+Private vulnerability reporting must stay enabled in repository settings for
+that flow to exist. It is the one channel this repository accepts from outside
+Wooden Computer Co., Ltd.; see `SUPPORT.md` for everything else.
 
 Security-sensitive surfaces include:
 

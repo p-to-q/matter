@@ -1,5 +1,19 @@
 # Contributing
 
+Matter is proprietary software. See [`LICENSE`](LICENSE).
+
+**This repository does not accept external contributions.** Unsolicited pull
+requests will be closed without review and without merge. This is not a
+judgement on the work — accepting outside code would split copyright ownership
+in a codebase that must remain wholly owned, so there is no form in which an
+external patch can be taken.
+
+If you are not working under Wooden Computer Co., Ltd., nothing below applies to
+you. The rest of this file is the internal engineering discipline for people who
+already hold commit rights.
+
+---
+
 Start with [`docs/product.md`](docs/product.md) and
 [`docs/material.md`](docs/material.md), then read only the code, tests, and
 architecture needed for the change. References are available in

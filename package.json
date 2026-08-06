@@ -35,7 +35,7 @@
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   },
-  "license": "Apache-2.0",
+  "license": "UNLICENSED",
   "engines": {
     "node": ">=22"
   }
