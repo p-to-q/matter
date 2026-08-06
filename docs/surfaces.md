@@ -12,7 +12,7 @@ is deliberately absent.
 | Full/focus/fold navigation | implemented | pure runtime tests and exact-lineage selectors |
 | Rooted fixture renderer | implemented | pointer receipt at laptop and narrow widths |
 | 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open |
-| Fixture voice admission | local-only | real MediaRecorder/multipart boundary, tokened reducer, route tests |
+| Voice admission | browser-native in the public preview; fixture is local-only | Web Speech partials stay transient; MediaRecorder/multipart is an explicit non-fixture fallback |
 | Punctuation lasso + shared stretch degree | implemented | pure segment/geometry tests and laptop/narrow browser receipts |
 | Split-language projection | implemented | original text remains DOM owner; projection is aria-hidden/inert |
 | Material files + IndexedDB durability | implemented | deterministic snapshot codec, generation conflict, reload/copy e2e |
@@ -49,10 +49,23 @@ The tree shadow is the supplied decorative asset inside the paper, never documen
 `app/icon.svg` is explicitly provisional and is not the product mark: it draws
 the same rooted figure the material index draws, on ink and paper only, sized so
 it survives 16 px. `app/apple-icon.tsx` renders that same figure full-bleed at
-180 px because iOS masks its own corners, and must be edited alongside it. Both
-may be replaced without a product-contract revision. The manifest keeps
-`theme_color` on the field grey rather than the icon's ink: it colours the mobile
-address bar, which must meet the top of the page, not the tab strip.
+180 px because iOS masks its own corners, and `/icon-192.png` and `/icon-512.png`
+render it again for installation. All of them come from
+[`../features/matter/brand/icon-mark.ts`](../features/matter/brand/icon-mark.ts)
+so they cannot drift; `app/icon.svg` is the one hand-kept copy, because a static
+file cannot import. All may be replaced without a product-contract revision. The
+manifest keeps `theme_color` on the field grey rather than the icon's ink: it
+colours the mobile address bar, which must meet the top of the page, not the tab
+strip.
+
+Browser installation is claimed at the manifest layer only: `standalone` display
+with 192, 512 and maskable icons is what Chrome reads to offer "Install app".
+**No service worker is registered**, so an installed window is this same online
+surface in its own frame — it is not an offline copy, and it must not be
+described as one. Durability is already IndexedDB's job; a cache layer would add
+its own versioning and update story. Whether Matter ends up on mobile, on the
+web, or on both — and whether those need separate builds — is undecided, so
+installation stays this thin until that is settled.
 The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
 Focus and fold remain navigation capabilities but have no first-release canvas
 presenter; the disclosure control in the left material outline is a separate
@@ -85,7 +98,7 @@ an input field or response surface can ship.
 Accounts, sync, collaboration, live streaming transcription, touch parity,
 cross-branch links, split/merge, memory retrieval, assistant UI, and a public SDK.
 
-The public interface is a root-seeded preview. Its local fixture voice adapter
+The public interface is a root-seeded preview. Its browser-native voice path
 is intentionally disabled on `matter.ptoq.io`; it is suitable for localhost
 and deployment readiness checks, but not a public live-AI release. `/api/turn`,
 realtime transcription, and deployed-origin laptop/narrow receipts are still

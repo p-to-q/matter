@@ -15,7 +15,8 @@ Current choice:
 pointer starts at empty root / node / segment
   → bounded recording + local anchored level feedback
   → stop and collect final chunk
-  → POST /api/transcribe
+  → browser-native Web Speech API (preferred)
+  → POST /api/transcribe (explicit server fallback)
   → transcript
   → human material admission, or transform direction
 ```
@@ -67,7 +68,12 @@ timing jitter and at most 2 MiB of audio. Bounds reject rather than truncate.
 Empty or whitespace-only transcript and text beyond the node bound change
 nothing.
 
-`POST /api/transcribe` is strict multipart and echoes protocol version,
+The public preview prefers the browser-managed Web Speech API: interim and final
+partials remain transient in the admission state, and only the final transcript
+is committed. It needs no Matter API key or extra server, though browser vendors
+may use their own speech service. Browsers without the API keep the MediaRecorder
+path, which only succeeds when a real server adapter is configured; it never uses
+the fixture transcript in production. `POST /api/transcribe` is strict multipart and echoes protocol version,
 interaction id and attempt. It receives purpose, locale, duration and audio,
 but no tree, target, lineage, provider name or fixture flag. The route parses;
 server-only adapters transcribe. Provider selection is deployment configuration.

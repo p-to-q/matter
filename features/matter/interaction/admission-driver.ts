@@ -184,6 +184,13 @@ export class AdmissionDriver {
         }
         this.resources.set(key, { operation });
         void voice.start(operation, {
+          locale: this.dependencies.locale,
+          onTranscript: (transcript) => this.send({
+            type: "transcript-updated",
+            token: operation.interactionId,
+            attempt: operation.attempt,
+            transcript,
+          }),
           onDurationLimit: (limited) => this.send({
             type: "duration-limit",
             token: limited.interactionId,
@@ -226,6 +233,15 @@ export class AdmissionDriver {
         const owned = this.resources.get(key);
         if (owned?.recording === undefined) {
           this.send(failureEvent("transcription-failed", effect, "INTERNAL_FAILURE"));
+          return;
+        }
+        if (owned.recording.transcript !== undefined) {
+          const transcript = owned.recording.transcript.trim();
+          if (transcript.length === 0) {
+            this.send(failureEvent("transcription-failed", effect, "NO_AUDIO"));
+            return;
+          }
+          this.send({ type: "transcription-succeeded", token: effect.token, attempt: effect.attempt, transcript });
           return;
         }
         const controller = new AbortController();

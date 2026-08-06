@@ -219,6 +219,7 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--ink); outline-o
 .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; text-decoration-color: transparent; }
 .admission-feedback { position: absolute; z-index: 6; display: flex; width: max-content; max-width: min(420px, calc(100vw - 44px)); min-height: 40px; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); pointer-events: auto; }
 .admission-feedback__signal { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--active); opacity: .72; }
+.admission-feedback__preview { max-width: min(280px, 42vw); overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .admission-feedback[data-phase="recording"] .admission-feedback__signal { box-shadow: 0 0 0 5px rgba(22,29,39,.11); }
 .admission-feedback button { min-height: 34px; padding: 0 9px; border: 1px solid rgba(22,29,39,.12); border-radius: 9px; background: rgba(255,255,255,.72); color: var(--ink); font: inherit; cursor: pointer; }
 .matter-shell[data-interaction-pending="true"] .spatial-thought__text { cursor: default; }

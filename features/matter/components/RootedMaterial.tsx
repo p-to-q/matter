@@ -1253,6 +1253,9 @@ function AdmissionFeedback({
     >
       <span aria-hidden="true" className="admission-feedback__signal" />
       <span>{copy}</span>
+      {phase === "recording" && "transcript" in controller.state && controller.state.transcript ? (
+        <span className="admission-feedback__preview" dir="auto">{controller.state.transcript}</span>
+      ) : null}
       {phase === "recording" ? (
         <button onClick={controller.stop} type="button">Stop recording</button>
       ) : null}

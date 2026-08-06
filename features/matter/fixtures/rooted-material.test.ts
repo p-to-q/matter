@@ -37,6 +37,36 @@ describe("rooted material fixture", () => {
     expect(fixture.history.entries).toEqual([]);
   });
 
+  it("grows semantic fixture branches through the second and third levels", () => {
+    const fixture = createRootedMaterialFixture("root");
+    const rootId = fixture.tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    const first = commitTreeCommand(
+      fixture.tree,
+      fixture.history,
+      createFixtureInsertChildCommand(fixture.tree, rootId),
+      TEST_HISTORY_LIMITS,
+    );
+    if (!first.ok) throw new Error(first.error.code);
+    const secondLevelId = first.tree.nodes[rootId]?.children[0];
+    if (secondLevelId === undefined) throw new Error("second-level fixture child missing");
+
+    const second = commitTreeCommand(
+      first.tree,
+      first.history,
+      createFixtureInsertChildCommand(first.tree, secondLevelId),
+      TEST_HISTORY_LIMITS,
+    );
+    if (!second.ok) throw new Error(second.error.code);
+    const thirdLevelId = second.tree.nodes[secondLevelId]?.children[0];
+    if (thirdLevelId === undefined) throw new Error("third-level fixture child missing");
+
+    expect(first.tree.nodes[secondLevelId]?.text).toContain("生活");
+    expect(second.tree.nodes[thirdLevelId]?.parentId).toBe(secondLevelId);
+    expect(second.tree.nodes[thirdLevelId]?.text).toContain("想法");
+  });
+
   it("is deterministic, valid, and opens with a three-level source lineage", () => {
     const first = createRootedMaterialFixture();
     const second = createRootedMaterialFixture();

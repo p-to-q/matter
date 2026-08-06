@@ -4,6 +4,7 @@ import {
   RECORDING_MIME_CANDIDATES,
   RECORDING_LIMIT_MS,
 } from "./audio-policy";
+import { createBrowserSpeechVoicePort, isBrowserSpeechRecognitionAvailable } from "./browser-speech-voice";
 
 export type VoiceOperation = Readonly<{
   interactionId: string;
@@ -16,6 +17,8 @@ export type VoiceRecording = Readonly<{
   operation: VoiceOperation;
   audio: Blob;
   durationMs: number;
+  /** Browser-native recognition can provide a final transcript without audio upload. */
+  transcript?: string;
 }>;
 
 export type VoiceErrorCode =
@@ -51,6 +54,8 @@ export type VoicePort = Readonly<{
 
 export type VoiceCallbacks = Readonly<{
   onSample?: (sample: VoiceSample) => void;
+  onTranscript?: (transcript: string) => void;
+  locale?: string;
   onDurationLimit?: (operation: VoiceOperation) => void;
   onRecording?: (recording: VoiceRecording) => void;
   onError?: (error: VoiceError) => void;
@@ -493,7 +498,11 @@ function notify(callback: () => void): void {
   }
 }
 
-export function createBrowserVoicePort(): BrowserVoicePort {
+export function createBrowserVoicePort(): VoicePort {
+  if (typeof window !== "undefined") {
+    // Native recognition keeps raw audio out of the Matter server when the UA supports it.
+    if (isBrowserSpeechRecognitionAvailable()) return createBrowserSpeechVoicePort();
+  }
   if (
     typeof navigator === "undefined" ||
     navigator.mediaDevices?.getUserMedia === undefined ||

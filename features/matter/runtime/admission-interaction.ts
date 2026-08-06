@@ -42,6 +42,7 @@ export type AdmissionInteractionState =
   | (AttemptState & {
       readonly phase: "recording";
       readonly startedAtMs: number;
+      readonly transcript?: string;
     })
   | (AttemptState & {
       readonly phase: "stopping";
@@ -64,6 +65,7 @@ export type AdmissionInteractionEvent =
   | ({ readonly type: "permission-failed"; readonly errorCode: AdmissionErrorCode } & AttemptIdentity)
   | { readonly type: "stop" }
   | ({ readonly type: "duration-limit" } & AttemptIdentity)
+  | ({ readonly type: "transcript-updated"; readonly transcript: string } & AttemptIdentity)
   | ({ readonly type: "recorder-stopped" } & AttemptIdentity)
   | ({ readonly type: "recording-failed"; readonly errorCode: AdmissionErrorCode } & AttemptIdentity)
   | ({ readonly type: "transcription-succeeded"; readonly transcript: string } & AttemptIdentity)
@@ -166,6 +168,12 @@ export function reduceAdmissionInteraction(
         );
       }
       if (!matches(state, event)) return unchanged(state);
+      if (event.type === "transcript-updated") {
+        const transcript = event.transcript.trim();
+        return transcript.length > 0 && transcript.length <= 8_000
+          ? changed({ ...state, transcript })
+          : unchanged(state);
+      }
       if (event.type === "recording-failed") return fail(state, event.errorCode);
       return unchanged(state);
     case "stopping":

@@ -93,6 +93,16 @@ function resolveTranscriptionAdapter(): TranscriptionAdapter {
     );
   }
   const configured = process.env.MATTER_TRANSCRIPTION_ADAPTER;
+  // Native browser recognition is a client-owned path; never silently turn a
+  // server request into fixture speech when that deployment mode is selected.
+  if (configured === "browser") {
+    throw new TranscriptionServerError(
+      "TRANSCRIPTION_UNAVAILABLE",
+      "This deployment uses browser-native speech recognition.",
+      true,
+      503,
+    );
+  }
   if (configured === "fixture" || (configured === undefined && process.env.NODE_ENV !== "production")) {
     return fixtureTranscriptionAdapter;
   }

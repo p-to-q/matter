@@ -84,5 +84,6 @@ function voiceAdmissionSurface(): MatterHealthSurface {
   if (configured === "fixture" || usesDefaultFixture) {
     return "fixture";
   }
+  if (configured === "browser") return "available";
   return "unavailable";
 }

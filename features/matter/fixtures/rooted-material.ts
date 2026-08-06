@@ -54,11 +54,51 @@ const FIXTURE_HISTORY_LIMITS = {
 
 const FIXTURE_INSERT_TIME = "2026-08-03T08:10:00.000Z";
 
-const FIXTURE_CHILD_TEXTS = [
-  "也许这里还缺少一个更具体的例子，但我暂时不想替它下结论。",
-  "这条路似乎能继续往下走，只是它和身体之间的关系还没有说清楚。",
-  "我记得当时有一种很短的迟疑，后来它反而成了这段想法的入口。",
-] as const;
+const FIXTURE_CHILD_TEXTS_BY_PARENT: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  [ROOTED_FIXTURE_NODE_IDS.root]: Object.freeze([
+    "也许我们怀念的不是过去本身，而是今天还留给另一种生活的余地。",
+    "过去之所以动人，也许因为它让今天暂时看见另一种安排。",
+    "怀念不是返回原处，而是确认还有没有继续想象的入口。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.imaginedLives]: Object.freeze([
+    "被允许想象的生活，不必立刻证明自己有效。",
+    "另一种生活先以可能的样子存在，再慢慢找到它的形状。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.imaginedTime]: Object.freeze([
+    "那种时间的价值，也许正在于它没有急着把一切变成结果。",
+    "如果时间不只用来交付，迟疑也可以成为一种方向。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.presentDistance]: Object.freeze([
+    "今天的距离也许来自我们已经习惯用现在的尺度解释过去。",
+    "过去显得遥远，并不代表它曾经完整地存在过。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.presentFailure]: Object.freeze([
+    "不完整并不是缺陷，它让今天仍有重新想象的缝隙。",
+    "正因为无法被完全证明，这个入口才没有被封死。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.presentOpening]: Object.freeze([
+    "入口不必把人带回过去，它只需要让别的安排暂时可见。",
+    "只要还可以被看见，怀念就不只是回去的路线。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.bodilyMemory]: Object.freeze([
+    "身体记住的不是年代，而是它曾经可以朝向别处的节奏。",
+    "有些怀念先以步速和停顿回来，语言只是在后面追上它。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.bodilyGesture]: Object.freeze([
+    "停顿留下的方向，比一句解释更早让身体知道该往哪里去。",
+    "当语言追上动作时，记忆已经先替它保留了余地。",
+  ]),
+  [ROOTED_FIXTURE_NODE_IDS.bodilyReturn]: Object.freeze([
+    "所以这段话不急着把过去说清楚，只先留住调整方向的感觉。",
+    "身体保留下来的那一点余地，足够让下一句话继续生长。",
+  ]),
+});
+
+const GENERATED_FIXTURE_CHILD_TEXTS = Object.freeze([
+  "这条想法还可以继续往下走，但先保留它没有说完的部分。",
+  "这里暂时不替它下结论，只让一个更具体的方向留在旁边。",
+  "它和前一句仍然有一点距离，这一点距离也可以成为新的入口。",
+]);
 
 const BOOTSTRAP_NODES: readonly ThoughtNode[] = [
   {
@@ -204,7 +244,7 @@ export function createFixtureInsertChildCommand(
   index = tree.nodes[parentId]?.children.length ?? 0,
 ): TreeCommand {
   const sequence = tree.revision;
-  const text = FIXTURE_CHILD_TEXTS[sequence % FIXTURE_CHILD_TEXTS.length];
+  const text = fixtureChildText(tree, parentId);
   const nodeId = `thought_fixture_added_r${sequence}`;
 
   return {
@@ -228,6 +268,12 @@ export function createFixtureInsertChildCommand(
     },
     createdAt: FIXTURE_INSERT_TIME,
   };
+}
+
+function fixtureChildText(tree: ThoughtTree, parentId: string): string {
+  const parent = tree.nodes[parentId];
+  const options = FIXTURE_CHILD_TEXTS_BY_PARENT[parentId] ?? GENERATED_FIXTURE_CHILD_TEXTS;
+  return options[(parent?.children.length ?? 0) % options.length] ?? GENERATED_FIXTURE_CHILD_TEXTS[0];
 }
 
 export function createFixtureReplaceTextCommand(

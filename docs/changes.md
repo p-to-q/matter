@@ -813,6 +813,21 @@ Forecloses: scattered per-route origins, internal fixture discovery, claims
 that the gated generative turn is live, and SEO copy that turns Matter into a
 chat or second-brain product.
 
+## 2026-08-07 — Browser-native speech is the public admission path
+
+Changed: the public preview selects the browser Web Speech API for live interim
+and final recognition. Transcript previews remain transient and only the final
+human text enters the tree. Browsers without native recognition retain the
+MediaRecorder boundary, but the server refuses fixture speech in this mode.
+
+Why: Matter can provide real-time voice admission without adding a Matter-side
+speech server or API key, while keeping provider ownership and privacy limits
+explicit. Browser recognition may still use a vendor-managed speech service;
+it is not presented as offline recognition.
+
+Forecloses: fixture audio masquerading as live speech, a hidden chat transcript,
+and uploading native-recognition audio when no server adapter was selected.
+
 ---
 
 ## Carried from archived ADRs
