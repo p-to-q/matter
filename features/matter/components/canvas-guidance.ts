@@ -2,6 +2,7 @@ import type {
   AdmissionErrorCode,
   AdmissionInteractionState,
 } from "../runtime/admission-interaction";
+import type { CanvasLanguage } from "./canvas-preferences";
 
 export type CanvasMaterialGuidanceState =
   | Readonly<{ kind: "empty" }>
@@ -158,14 +159,93 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
 /** Localization changes copy only; the interaction state machine remains authoritative. */
 export function localizeCanvasGuidance(
   guidanceState: CanvasGuidance,
-  language: "zh-CN" | "en-US",
+  language: CanvasLanguage,
 ): CanvasGuidance {
   if (language === "en-US") return guidanceState;
+  if (language === "zh-TW") {
+    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_ZH_TW[guidanceState.id] });
+  }
+  if (language === "ja-JP") {
+    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_JA[guidanceState.id] });
+  }
+  if (language === "de-DE") {
+    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_DE[guidanceState.id] });
+  }
   return Object.freeze({
     ...guidanceState,
     text: GUIDANCE_COPY_ZH[guidanceState.id],
   });
 }
+
+const GUIDANCE_COPY_ZH_TW = Object.freeze({
+  ...GUIDANCE_COPY_ZH,
+  "allow-microphone": "允許使用麥克風。",
+  "speak-recording": "說出你的想法。",
+  "wait-recording": "請等待錄音結束。",
+  "wait-transcription": "正在將聲音變成材料。",
+  "wait-commit": "正在放置這段想法。",
+  "enable-microphone": "請開啟麥克風權限。",
+  "connect-microphone": "請連接麥克風。",
+  "use-recording-browser": "請使用支援錄音的瀏覽器。",
+  "record-again": "請重新錄下這段想法。",
+  "dismiss-stale-recording": "關閉這次錄音。",
+  "speak-root": "說出你的第一個想法。",
+  "close-lasso": "閉合圈選這段文字。",
+  "release-stretch": "在合適的程度放開。",
+  "set-degree": "拖動把手設定變化程度。",
+  "refine-degree": "調整把手細化變化程度。",
+  "circle-reference": "圈選一段文字作為參照。",
+  "circle-focus": "圈選需要改變的文字。",
+  "unfold-thought": "展開這段想法。",
+  "speak-child": "說話，讓想法向下生長。",
+  "select-thought": "選擇一段想法。",
+});
+const GUIDANCE_COPY_JA = Object.freeze({
+  ...GUIDANCE_COPY,
+  "allow-microphone": "マイクの使用を許可してください。",
+  "speak-recording": "考えを話してください。",
+  "wait-recording": "録音が終わるまで待ってください。",
+  "wait-transcription": "声を素材にしています。",
+  "wait-commit": "考えを配置しています。",
+  "enable-microphone": "マイクの権限を有効にしてください。",
+  "connect-microphone": "マイクを接続してください。",
+  "use-recording-browser": "録音に対応したブラウザを使ってください。",
+  "record-again": "もう一度考えを録音してください。",
+  "dismiss-stale-recording": "この録音を閉じてください。",
+  "speak-root": "最初の考えを話してください。",
+  "close-lasso": "フレーズを囲んで輪を閉じてください。",
+  "release-stretch": "適切な程度で放してください。",
+  "set-degree": "ハンドルをドラッグして程度を設定してください。",
+  "refine-degree": "ハンドルを調整して程度を細かく決めてください。",
+  "circle-reference": "参照するフレーズを一つ囲んでください。",
+  "circle-focus": "変えるフレーズを囲んでください。",
+  "unfold-thought": "この考えを展開してください。",
+  "speak-child": "話して、考えを下へ育ててください。",
+  "select-thought": "考えを一つ選んでください。",
+});
+const GUIDANCE_COPY_DE = Object.freeze({
+  ...GUIDANCE_COPY,
+  "allow-microphone": "Mikrofonzugriff erlauben.",
+  "speak-recording": "Sprich deinen Gedanken aus.",
+  "wait-recording": "Warte, bis die Aufnahme beendet ist.",
+  "wait-transcription": "Stimme wird zu Material.",
+  "wait-commit": "Gedanke wird platziert.",
+  "enable-microphone": "Mikrofonzugriff aktivieren.",
+  "connect-microphone": "Mikrofon anschließen.",
+  "use-recording-browser": "Einen Browser mit Aufnahmefunktion verwenden.",
+  "record-again": "Gedanken erneut aufnehmen.",
+  "dismiss-stale-recording": "Diese Aufnahme schließen.",
+  "speak-root": "Sprich deinen ersten Gedanken aus.",
+  "close-lasso": "Schließe den Kreis um eine Phrase.",
+  "release-stretch": "Beim passenden Ausmaß loslassen.",
+  "set-degree": "Am Griff ziehen, um das Ausmaß festzulegen.",
+  "refine-degree": "Griff anpassen, um das Ausmaß zu verfeinern.",
+  "circle-reference": "Eine Phrase als Referenz einkreisen.",
+  "circle-focus": "Die zu ändernde Phrase einkreisen.",
+  "unfold-thought": "Diesen Gedanken ausklappen.",
+  "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
+  "select-thought": "Einen Gedanken auswählen.",
+});
 
 function projectAdmissionGuidance(
   admission: Exclude<AdmissionInteractionState, { readonly phase: "idle" }>,

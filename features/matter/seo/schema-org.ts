@@ -50,6 +50,7 @@ export function getMatterSchemaOrgGraph(
         operatingSystem: "Web",
         browserRequirements: "Requires a modern web browser with pointer and microphone support.",
         keywords: MATTER_PRODUCT_KEYWORDS.join(", "),
+        brand: { "@id": organizationId },
         publisher: { "@id": organizationId },
         isPartOf: { "@id": websiteId },
       },

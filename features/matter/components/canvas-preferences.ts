@@ -1,3 +1,5 @@
+import { MATTER_LOCALE } from "../config/locales";
+
 export const CANVAS_PREFERENCES_VERSION = 1 as const;
 export const CANVAS_PREFERENCES_STORAGE_KEY = "matter.canvas-preferences.v1";
 export const CANVAS_PREFERENCES_MAX_STORAGE_LENGTH = 1_024;
@@ -6,8 +8,11 @@ export const CANVAS_AUTO_LIGHT_START_MINUTES = 7 * 60;
 export const CANVAS_AUTO_DARK_START_MINUTES = 19 * 60;
 
 export const CANVAS_LANGUAGE_OPTIONS = Object.freeze([
-  Object.freeze({ value: "zh-CN", label: "中文" }),
-  Object.freeze({ value: "en-US", label: "English" }),
+  Object.freeze({ value: MATTER_LOCALE.simplifiedChinese, label: "简体中文" }),
+  Object.freeze({ value: MATTER_LOCALE.english, label: "English" }),
+  Object.freeze({ value: MATTER_LOCALE.japanese, label: "日本語" }),
+  Object.freeze({ value: MATTER_LOCALE.german, label: "Deutsch" }),
+  Object.freeze({ value: MATTER_LOCALE.traditionalChinese, label: "繁體中文" }),
 ] as const);
 
 export const CANVAS_APPEARANCE_OPTIONS = Object.freeze([

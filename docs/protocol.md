@@ -1,5 +1,19 @@
 # Protocol 0.2
 
+## Locale contract
+
+Locale fields use the supported BCP 47 values `zh-CN`, `en-US`, `ja-JP`,
+`de-DE`, and `zh-TW`. The language picker presents them in product order:
+Simplified Chinese, English, Japanese, German, Traditional Chinese. The
+selected value is local presentation state, but it is also sent as request
+context to transcription, derived labels, and future model turns so server
+output follows the person's chosen language. It is never stored in
+`ThoughtTree`, command history, or exported material snapshots.
+
+Unknown or syntactically valid-but-unsupported locale values are rejected at
+the request boundary. A locale addition is a protocol change: update the
+shared allow-list, client copy, provider handling, and focused tests together.
+
 Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
 segment addressing, stretch degree, and Markdown durability are implemented.
@@ -8,7 +22,10 @@ Generative transformation remains specified for Phase 2 in
 gated. Markdown archive
 export/import is available as a strict local return path.
 
-`0.2` is a clean break because `0.1` has no persisted documents.
+`0.2` is a clean break because `0.1` has no persisted documents. A multi-passage
+lasso selection set is deliberately not a protocol field: it is transient UI
+state for copy and navigation, while a transform still receives one validated
+`SegmentSelection` at a time.
 
 ## ThoughtTree
 

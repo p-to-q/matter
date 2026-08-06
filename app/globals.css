@@ -29,10 +29,12 @@ button:focus-visible, a:focus-visible { outline: 1px solid var(--ink); outline-o
 .matter-shell[data-lasso-mode="true"] .matter-document { touch-action: none; }
 .matter-shell[data-stretching="true"] { cursor: ns-resize; }
 .paper-texture { position: fixed; z-index: 5; inset: 0; width: 100%; height: 100%; color: var(--ink); opacity: .075; mix-blend-mode: multiply; pointer-events: none; }
-.matter-header { position: fixed; z-index: 30; top: 27px; left: 24px; display: flex; align-items: center; gap: 9px; color: var(--muted); font: 400 12px/1 var(--header-face); letter-spacing: .01em; }
-.matter-brand { color: var(--ink); text-decoration: none; }
+.matter-header { position: fixed; z-index: 30; top: 27px; left: 24px; display: flex; align-items: center; gap: 8px; color: var(--muted); font: 400 12px/1 var(--header-face); letter-spacing: .01em; }
+.matter-brand { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
+.matter-brand__logo { display: block; width: auto; height: 15px; }
 .matter-brand:hover { opacity: .6; }
-.matter-brand__divider { width: 1px; height: 11px; background: var(--line); }
+.matter-brand__divider { color: var(--faint); font-size: 12px; }
+.matter-brand__product { color: inherit; font-size: 12px; line-height: 1; letter-spacing: .01em; }
 
 /* The index is a slip of paper on the desk, not a second canvas. It carries a
    compact structural outline; spatial geometry stays on the canvas. */

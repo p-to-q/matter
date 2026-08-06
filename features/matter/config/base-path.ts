@@ -12,3 +12,12 @@ export function normalizeMatterBasePath(value: string | undefined): string {
   }
   return value;
 }
+
+/**
+ * The base path as the browser sees it. Every client that calls a Matter route
+ * needs this, and each one deriving it privately is how a route quietly breaks
+ * under a non-default deployment path.
+ */
+export function clientMatterBasePath(): string {
+  return normalizeMatterBasePath(process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? DEFAULT_MATTER_BASE_PATH);
+}

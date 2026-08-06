@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import Image from "next/image";
 import type { CSSProperties } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { layoutColumnarTree } from "../layout/columnar-layout";
@@ -47,15 +48,19 @@ import {
 import { projectCanvasGeometryPublication } from "./canvas-geometry-publication";
 import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
+import { projectInquiryContext } from "../material/inquiry-context";
+import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
+import type { CanvasLanguage } from "./canvas-preferences";
 import { LassoSelectionTray } from "./LassoSelectionTray";
-import { useCanvasPreferences } from "./use-canvas-preferences";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
   admissionAnchor: InteractionAdmissionAnchor | null;
   archive?: MaterialArchiveActions;
   canUndo: boolean;
+  canvasPreferences: CanvasPreferencesBinding;
   documentEpoch: number;
+  locale: CanvasLanguage;
   navigation: NavigationState;
   onExitFocus: () => void;
   onFocusNode: (nodeId: string) => void;
@@ -96,7 +101,8 @@ type ProjectionHandleReceipt = Readonly<{
 
 export function RootedMaterial(props: RootedMaterialProps) {
   const { canUndo, navigation, onRemoveSelected, onUndo, tree } = props;
-  const canvasPreferences = useCanvasPreferences();
+  const matterBasePath = process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
+  const { canvasPreferences } = props;
   const interactionPending = props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
@@ -127,6 +133,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [presentationDamage, setPresentationDamage] = useState<PresentationDamage | null>(null);
   const presentationDamageRef = useRef<PresentationDamage | null>(null);
   const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
+  const [wheelMotionActive, setWheelMotionActive] = useState(false);
+  const wheelMotionTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const pointerOriginNodeRef = useRef<string | null>(null);
   const markPerformance = useCallback((name: string) => {
@@ -167,6 +175,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const labels = useThoughtLabels({
     tree,
     documentEpoch: props.documentEpoch,
+    locale: props.locale,
     enabled: props.performanceMarking !== true,
   });
   const labelByNodeId = useMemo(() => {
@@ -594,6 +603,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useEffect(() => () => {
     const retry = measurementRetryRef.current;
     if (retry.frame !== null) cancelAnimationFrame(retry.frame);
+    if (wheelMotionTimerRef.current !== null) window.clearTimeout(wheelMotionTimerRef.current);
   }, []);
 
   const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
@@ -622,6 +632,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
         return;
       }
       event.preventDefault();
+      // Wheel navigation has no persistent gesture state, so give atmosphere
+      // one short pulse and let repeated events extend it without polling.
+      setWheelMotionActive(true);
+      if (wheelMotionTimerRef.current !== null) window.clearTimeout(wheelMotionTimerRef.current);
+      wheelMotionTimerRef.current = window.setTimeout(() => {
+        wheelMotionTimerRef.current = null;
+        setWheelMotionActive(false);
+      }, 180);
       setViewport((current) => {
         const result = reduceCanvasViewport(current, {
           type: "wheel",
@@ -640,6 +658,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     shell.addEventListener("wheel", handleWheel, { passive: false });
     return () => shell.removeEventListener("wheel", handleWheel);
   }, [lasso.active]);
+
+  // Read when a question is asked rather than on every render: the context is
+  // whatever is on screen at that moment, and nothing before it matters.
+  const projectInquiryPayload = useCallback(
+    () => projectInquiryContext(tree, navigation),
+    [navigation, tree],
+  );
 
   return (
     <main
@@ -750,11 +775,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
     >
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
-        <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q home">
-          [p → q]
+        <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
+          <Image
+            alt="[p → q]"
+            className="matter-brand__logo"
+            height={235}
+            src={`${matterBasePath}/matter-ui/ptoq-logo.png`}
+            unoptimized
+            width={726}
+          />
         </a>
-        <span aria-hidden="true" className="matter-brand__divider" />
-        <span>matter</span>
+        <span aria-hidden="true" className="matter-brand__divider">/</span>
+        <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFiles
         archive={props.archive}
@@ -819,7 +851,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
         data-leaf-fx={canvasPreferences.preferences.leafFx ? "on" : "off"}
         ref={documentRef}
       >
-        <AmbientWorkbench enabled={canvasPreferences.preferences.leafFx} />
+        <AmbientWorkbench
+          enabled={canvasPreferences.preferences.leafFx}
+          navigationActive={wheelMotionActive || viewport.gesture?.dragging === true}
+        />
         {projection.length === 0 ? (
           <p className="matter-document__empty">
             {navigation.mode === "focus" ? "This focus is no longer available." : "No material yet."}
@@ -858,7 +893,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         >
           <p className="matter-guidance__next">{guidance.text}</p>
         </footer>
-        <CanvasChrome {...canvasPreferences} />
+        <CanvasChrome {...canvasPreferences} inquiryContext={projectInquiryPayload} />
       </section>
       <LassoSelectionTray
         onClear={lasso.clearSelection}

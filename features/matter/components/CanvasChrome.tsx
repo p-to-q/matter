@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useReducer,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -18,11 +19,29 @@ import {
   type CanvasLanguage,
 } from "./canvas-preferences";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
+import {
+  createInquiryState,
+  inquiryText,
+  pendingAnswerId,
+  reduceInquiry,
+  type InquiryTurnOutcome,
+  type InquiryVoiceNotice,
+} from "./inquiry-composer";
+import { useInquiryDictation } from "./use-inquiry-dictation";
+import { askInquiry } from "../interaction/inquiry-client";
+import type { InquiryContextPayload } from "../server/inquiry-contract";
 import styles from "./CanvasChrome.module.css";
 
-export type CanvasChromeProps = CanvasPreferencesBinding;
+export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
+  /**
+   * Projects the material an inquiry is about. Supplied by the canvas because
+   * only it holds the tree; the chrome never reads material directly.
+   */
+  inquiryContext?: () => InquiryContextPayload;
+}>;
 
 export type CanvasChromeOverlay =
+  | "inquiry"
   | "settings"
   | "language"
   | "mobile"
@@ -32,10 +51,22 @@ export type CanvasChromeOverlay =
 type CanvasChromeInfoId = "about" | "help" | "pricing" | "privacy" | "terms";
 type CanvasChromeInfo = Readonly<Record<CanvasChromeInfoId, Readonly<{
   title: string;
-  body: readonly string[];
+  body: readonly ReactNode[];
 }>>>;
 type CanvasChromeCopy = Readonly<{
   about: string;
+  ask: string;
+  askPlaceholder: string;
+  dictate: string;
+  dictateStop: string;
+  listening: string;
+  asking: string;
+  noticeModelUnavailable: string;
+  noticeNoMaterial: string;
+  noticeUnreachable: string;
+  noticeVoiceDenied: string;
+  noticeVoiceFailed: string;
+  noticeVoiceUnsupported: string;
   appearance: Readonly<Record<CanvasAppearance, string>>;
   appearanceLabel: string;
   close: string;
@@ -55,12 +86,26 @@ type CanvasChromeCopy = Readonly<{
   terms: string;
 }>;
 
+function PToQAttribution({ before, after }: Readonly<{ before: string; after: string }>) {
+  return (
+    <>
+      {before}
+      <a href="https://www.ptoq.io/">[p → q]</a>
+      {after}
+    </>
+  );
+}
+
 const ENGLISH_INFO: CanvasChromeInfo = Object.freeze({
   about: Object.freeze({
     title: "About Matter",
     body: Object.freeze([
-      "Matter is an environment where thought becomes touchable material.",
-      "Voice admits language. Gesture sets reference and degree. Structure keeps the lineage between thoughts.",
+      "Matter is an invitation to stay with a thought before it becomes an answer.",
+      "We are building a brain-computer interface for thoughts shaping. Voice brings language in. Gesture touches what matters and sets how much it may change. A rooted structure lets each thought keep its lineage.",
+      "It is a way of thinking with AI in material, not through a chat. Unfinished thoughts deserve room to remain uncertain, to be touched, and to keep growing.",
+      "AI gives language intelligence. Matter gives thought a body.",
+      "This is an early, local preview. The material and gesture layer are here; live transcription and generative transformation are still being built. We are sharing it while it is becoming.",
+      <PToQAttribution after="." before="Matter is a project by " key="attribution" />,
     ]),
   }),
   help: Object.freeze({
@@ -96,8 +141,12 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
   about: Object.freeze({
     title: "关于 Matter",
     body: Object.freeze([
-      "Matter 是一个让思考变成可触摸材料的环境。",
-      "声音承载语言，手势给出引用与程度，结构保留想法之间的脉络。",
+      "Matter 邀请你在一个想法变成答案之前，先和它待在一起。",
+      "我们正在做一个用于塑造思想的脑机接口。声音把语言带进来；手势触碰你在意的地方，决定它可以改变多少；根状结构让每个想法保留自己的脉络。",
+      "这是一种在材料中与 AI 一起思考的方式，而不是在对话框里等待答案。尚未成形的想法需要保留犹豫、被触碰，也继续生长的空间。",
+      "AI 赋予语言智能，Matter 让思想拥有身体。",
+      "当前版本是一个本地运行的早期预览。材料与手势这一层已经在这里；实时转写与生成式改变仍在开发中。我们在它成形的过程中把它打开。",
+      <PToQAttribution after=" 发起的项目。" before="Matter 是由 " key="attribution" />,
     ]),
   }),
   help: Object.freeze({
@@ -129,14 +178,83 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
   }),
 });
 
+const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
+  about: Object.freeze({ title: "關於 Matter", body: Object.freeze([
+    "Matter 邀請你在一個想法變成答案之前，先和它待在一起。",
+    "我們正在做一個用來塑造思想的腦機介面。聲音帶入語言，手勢觸碰在意之處，根狀結構保留每個想法的脈絡。",
+    "這是在材料中與 AI 一起思考，而不是在對話框裡等待答案。未完成的想法需要保留猶豫、被觸碰並繼續生長的空間。",
+    "AI 賦予語言智能，Matter 讓思想擁有身體。",
+    "這是早期的本地預覽。材料與手勢已可使用，實時轉寫與生成式改變仍在開發中。",
+    <PToQAttribution after=" 發起的項目。" before="Matter 是由 " key="attribution" />,
+  ]) }),
+  help: Object.freeze({ title: "詢問 Matter", body: Object.freeze([
+    "先用麥克風說出根想法，再選取一段材料，繼續向下生長。",
+    "用套索圈定語言，拖動邊緣決定改變多少；用分支生成相關想法，用復原退回上一次已提交的改變。",
+  ]) }),
+  pricing: Object.freeze({ title: "定價", body: Object.freeze(["Matter 仍在預覽階段，此版本沒有付費方案或結帳功能。"])}),
+  privacy: Object.freeze({ title: "隱私", body: Object.freeze(["材料保存在目前瀏覽器中，除非你主動匯出或發起模型改變。", "生成時只使用畫面上可見的根節點至焦點路徑作為上下文。"])}),
+  terms: Object.freeze({ title: "服務條款", body: Object.freeze(["Matter 仍是預覽軟體，正式服務條款尚未發布。", "產品仍在驗證階段，請為無法替代的材料保留匯出副本。"])}),
+});
+
+const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
+  about: Object.freeze({ title: "Matter について", body: Object.freeze([
+    "Matter は、考えが答えになる前に、その考えと留まるための環境です。",
+    "思考を形づくるためのブレイン・コンピューター・インターフェースをつくっています。声が言葉を運び、ジェスチャーが触れる場所と変化の量を決め、根のある構造が系譜を保ちます。",
+    "これはチャットで答えを待つのではなく、素材の中で AI と考える方法です。未完成な考えにも、迷いを残し、触れ、育てる余白があります。",
+    "AI は言葉に知性を与え、Matter は思考に身体を与えます。",
+    "初期のローカルプレビューです。素材とジェスチャーは利用できますが、音声入力と生成的な変更は開発中です。",
+    <PToQAttribution after=" の project です。" before="Matter は " key="attribution" />,
+  ]) }),
+  help: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
+    "まず Voice で根の考えを話し、素材を選んで下へ育てます。",
+    "Lasso で言葉を囲み、伸縮で変化の量を決め、Branch で関連する考えを育て、Undo で直前の変更を戻します。",
+  ]) }),
+  pricing: Object.freeze({ title: "料金", body: Object.freeze(["Matter はプレビュー中です。このビルドに有料プランや決済はありません。"])}),
+  privacy: Object.freeze({ title: "プライバシー", body: Object.freeze(["素材は、書き出しまたはモデルによる変更を行わない限り、このブラウザに保存されます。", "生成時は、画面に見えているルートからフォーカスまでの経路だけを文脈として使います。"])}),
+  terms: Object.freeze({ title: "利用規約", body: Object.freeze(["Matter はプレビューソフトウェアで、正式な利用規約はまだありません。", "置き換えられない素材は、検証中のあいだ書き出しを保管してください。"])}),
+});
+
+const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
+  about: Object.freeze({ title: "Über Matter", body: Object.freeze([
+    "Matter lädt dazu ein, bei einem Gedanken zu bleiben, bevor er zu einer Antwort wird.",
+    "Wir entwickeln eine Gehirn-Computer-Schnittstelle zum Formen von Gedanken. Die Stimme bringt Sprache herein, Gesten berühren das Wesentliche und bestimmen das Maß der Veränderung, eine verwurzelte Struktur bewahrt die Herkunft jedes Gedankens.",
+    "Es ist eine Art, mit KI im Material zu denken, nicht in einem Chat auf Antworten zu warten. Unfertige Gedanken dürfen unsicher bleiben, berührt werden und weiterwachsen.",
+    "KI gibt Sprache Intelligenz. Matter gibt Gedanken einen Körper.",
+    "Dies ist eine frühe lokale Vorschau. Material und Gesten sind vorhanden; Live-Diktat und generative Änderungen werden noch entwickelt.",
+    <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
+  ]) }),
+  help: Object.freeze({ title: "Matter fragen", body: Object.freeze([
+    "Beginne mit Voice und sprich einen Wurzelgedanken ein. Wähle dann Material, um darunter weiterzuwachsen.",
+    "Mit Lasso markierst du Sprache, mit Stretch bestimmst du das Ausmaß, Branch erzeugt einen verwandten Gedanken und Undo macht die letzte Änderung rückgängig.",
+  ]) }),
+  pricing: Object.freeze({ title: "Preise", body: Object.freeze(["Matter ist in der Vorschau. Dieser Build hat keinen kostenpflichtigen Plan und keine Kasse."])}),
+  privacy: Object.freeze({ title: "Datenschutz", body: Object.freeze(["Material bleibt in diesem Browser, außer du exportierst es oder startest eine modellgestützte Änderung.", "Bei einer Generierung wird nur der sichtbare Pfad von der Wurzel zum Fokus als Kontext verwendet."])}),
+  terms: Object.freeze({ title: "Nutzungsbedingungen", body: Object.freeze(["Matter ist Vorschau-Software; veröffentlichte Nutzungsbedingungen gibt es noch nicht.", "Bewahre für unersetzliches Material einen Export auf, solange das Produkt erprobt wird."])}),
+});
+
 export const CANVAS_CHROME_INFO: Readonly<Record<CanvasLanguage, CanvasChromeInfo>> = Object.freeze({
   "en-US": ENGLISH_INFO,
   "zh-CN": CHINESE_INFO,
+  "zh-TW": TRADITIONAL_CHINESE_INFO,
+  "ja-JP": JAPANESE_INFO,
+  "de-DE": GERMAN_INFO,
 });
 
 const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = Object.freeze({
   "en-US": Object.freeze({
     about: "About",
+    ask: "Ask",
+    askPlaceholder: "Ask about this material",
+    dictate: "Dictate",
+    dictateStop: "Stop dictating",
+    listening: "Listening",
+    asking: "Asking…",
+    noticeModelUnavailable: "Matter received this, and no model is connected to answer it. Nothing went any further.",
+    noticeNoMaterial: "There is no material to answer about yet. Speak a first thought.",
+    noticeUnreachable: "Matter could not be reached, so this went nowhere.",
+    noticeVoiceDenied: "Microphone access was declined, so nothing was heard.",
+    noticeVoiceFailed: "Dictation stopped early. Anything already heard has been kept.",
+    noticeVoiceUnsupported: "This browser cannot dictate. Typing still works.",
     appearance: Object.freeze({ auto: "Auto", dark: "Dark", light: "Light" }),
     appearanceLabel: "Appearance",
     close: "Close",
@@ -157,6 +275,18 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "zh-CN": Object.freeze({
     about: "关于",
+    ask: "发送",
+    askPlaceholder: "问一句关于这份材料的话",
+    dictate: "口述",
+    dictateStop: "停止口述",
+    listening: "正在听",
+    asking: "正在询问…",
+    noticeModelUnavailable: "Matter 收到了，但还没有接上任何模型来回答它。它没有再往外走一步。",
+    noticeNoMaterial: "还没有材料可以回答。先说出第一个想法。",
+    noticeUnreachable: "没能连上 Matter，这句话哪儿也没去。",
+    noticeVoiceDenied: "麦克风权限被拒绝，没有听到任何内容。",
+    noticeVoiceFailed: "口述提前结束，已经听到的部分保留了下来。",
+    noticeVoiceUnsupported: "此浏览器无法口述，但仍然可以打字。",
     appearance: Object.freeze({ auto: "自动", dark: "深色", light: "浅色" }),
     appearanceLabel: "外观",
     close: "关闭",
@@ -175,6 +305,102 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     settings: "Matter 设置",
     terms: "服务条款",
   }),
+  "zh-TW": Object.freeze({
+    about: "關於",
+    ask: "提問",
+    askPlaceholder: "問一個關於這份材料的問題",
+    dictate: "口述",
+    dictateStop: "停止口述",
+    listening: "正在聆聽",
+    asking: "正在詢問…",
+    noticeModelUnavailable: "Matter 收到了，但還沒有接上任何模型來回答它。它沒有再往外走一步。",
+    noticeNoMaterial: "還沒有材料可以回答。先說出第一個想法。",
+    noticeUnreachable: "沒能連上 Matter，這句話哪裡也沒去。",
+    noticeVoiceDenied: "麥克風權限被拒絕，沒有聽到任何內容。",
+    noticeVoiceFailed: "口述提前結束，已聽到的部分保留了下來。",
+    noticeVoiceUnsupported: "此瀏覽器無法口述，但仍可打字。",
+    appearance: Object.freeze({ auto: "自動", dark: "深色", light: "淺色" }),
+    appearanceLabel: "外觀",
+    close: "關閉",
+    closeMenu: "關閉 Matter 選單",
+    fxLabel: "樹影",
+    help: "詢問 Matter",
+    information: "資訊",
+    language: "語言",
+    menu: "Matter",
+    on: "開",
+    off: "關",
+    openMenu: "開啟 Matter 選單",
+    preferences: "偏好設定",
+    pricing: "定價",
+    privacy: "隱私",
+    settings: "Matter 設定",
+    terms: "服務條款",
+  }),
+  "ja-JP": Object.freeze({
+    about: "概要",
+    ask: "尋ねる",
+    askPlaceholder: "この素材について尋ねる",
+    dictate: "音声入力",
+    dictateStop: "音声入力を停止",
+    listening: "聞いています",
+    asking: "問い合わせ中…",
+    noticeModelUnavailable: "Matter は受け取りましたが、答えるモデルがまだ接続されていません。それ以上どこへも送られていません。",
+    noticeNoMaterial: "まだ答える材料がありません。最初の考えを話してください。",
+    noticeUnreachable: "Matter に接続できず、この問いはどこにも届きませんでした。",
+    noticeVoiceDenied: "マイクへのアクセスが拒否されたため、何も聞き取れませんでした。",
+    noticeVoiceFailed: "音声入力が途中で終了しました。聞き取った内容は保持されています。",
+    noticeVoiceUnsupported: "このブラウザは音声入力に対応していません。入力は利用できます。",
+    appearance: Object.freeze({ auto: "自動", dark: "ダーク", light: "ライト" }),
+    appearanceLabel: "外観",
+    close: "閉じる",
+    closeMenu: "Matter メニューを閉じる",
+    fxLabel: "葉の影",
+    help: "Matter に尋ねる",
+    information: "情報",
+    language: "言語",
+    menu: "Matter",
+    on: "オン",
+    off: "オフ",
+    openMenu: "Matter メニューを開く",
+    preferences: "設定",
+    pricing: "料金",
+    privacy: "プライバシー",
+    settings: "Matter の設定",
+    terms: "利用規約",
+  }),
+  "de-DE": Object.freeze({
+    about: "Über",
+    ask: "Fragen",
+    askPlaceholder: "Zu diesem Material fragen",
+    dictate: "Diktieren",
+    dictateStop: "Diktat stoppen",
+    listening: "Hört zu",
+    asking: "Wird gefragt …",
+    noticeModelUnavailable: "Matter hat das erhalten; es ist kein Modell verbunden, das antworten könnte. Weiter ging nichts.",
+    noticeNoMaterial: "Es gibt noch kein Material, über das geantwortet werden könnte. Sprich einen ersten Gedanken.",
+    noticeUnreachable: "Matter war nicht erreichbar; die Frage ging nirgendwohin.",
+    noticeVoiceDenied: "Der Mikrofonzugriff wurde abgelehnt; es wurde nichts gehört.",
+    noticeVoiceFailed: "Das Diktat endete vorzeitig. Bereits Gehörtes wurde behalten.",
+    noticeVoiceUnsupported: "Dieser Browser kann nicht diktieren. Tippen funktioniert weiterhin.",
+    appearance: Object.freeze({ auto: "Automatisch", dark: "Dunkel", light: "Hell" }),
+    appearanceLabel: "Darstellung",
+    close: "Schließen",
+    closeMenu: "Matter-Menü schließen",
+    fxLabel: "Blattschatten",
+    help: "Matter fragen",
+    information: "Informationen",
+    language: "Sprache",
+    menu: "Matter",
+    on: "An",
+    off: "Aus",
+    openMenu: "Matter-Menü öffnen",
+    preferences: "Einstellungen",
+    pricing: "Preise",
+    privacy: "Datenschutz",
+    settings: "Matter-Einstellungen",
+    terms: "Nutzungsbedingungen",
+  }),
 });
 
 const INFO_OVERLAYS = new Set<CanvasChromeInfoId>([
@@ -190,10 +416,13 @@ const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
   "mobile",
 ]);
 
-const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language"]);
+// The inquiry is dismissed like a menu rather than trapped like a dialog. It is
+// a bubble over the person's own material, and hiding that material behind a
+// modal to ask a question about it would be the wrong way round.
+const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language", "inquiry"]);
 
-// These overlays are paper-local information, not a prompt or assistant surface.
-// A future inquiry requires a separate product-contract change before it adds input.
+// The remaining overlays are paper-local information. The inquiry is the one
+// input surface here, and it is honest about having no model behind it.
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -205,6 +434,7 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 export function CanvasChrome({
+  inquiryContext,
   preferences,
   resolvedAppearance,
   setAppearance,
@@ -218,6 +448,8 @@ export function CanvasChrome({
   const languageButtonRef = useRef<HTMLButtonElement>(null);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const askButtonRef = useRef<HTMLButtonElement>(null);
+  const inquiryAnchorRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const copy = CANVAS_CHROME_COPY[preferences.language];
@@ -246,7 +478,7 @@ export function CanvasChrome({
   }, []);
 
   const toggleMenu = useCallback((
-    next: "settings" | "language",
+    next: "settings" | "language" | "inquiry",
     trigger: HTMLElement | null,
   ) => {
     setOverlay((current) => {
@@ -266,9 +498,12 @@ export function CanvasChrome({
       if (!MENU_OVERLAYS.has(overlay)) return;
       const target = event.target;
       if (!(target instanceof Node)) return;
-      const menu = overlay === "settings" ? settingsMenuRef.current : languageMenuRef.current;
-      const trigger = overlay === "settings" ? settingsButtonRef.current : languageButtonRef.current;
-      if (!menu?.contains(target) && !trigger?.contains(target)) closeOverlay(false);
+      const region = overlay === "settings"
+        ? [settingsMenuRef.current, settingsButtonRef.current]
+        : overlay === "language"
+          ? [languageMenuRef.current, languageButtonRef.current]
+          : [inquiryAnchorRef.current];
+      if (!region.some((element) => element?.contains(target))) closeOverlay(false);
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -438,21 +673,33 @@ export function CanvasChrome({
         </div>
 
         <div className={styles.bottomRight}>
-          <button
-            aria-haspopup="dialog"
-            className={styles.askButton}
-            data-chrome-control="help"
-            onClick={(event) => openInfo("help", event.currentTarget)}
-            type="button"
-          >
-            {copy.help}
-          </button>
+          <div className={styles.popoverAnchor} ref={inquiryAnchorRef}>
+            <button
+              aria-controls="matter-inquiry"
+              aria-expanded={overlay === "inquiry"}
+              aria-haspopup="dialog"
+              className={styles.askButton}
+              data-chrome-control="help"
+              onClick={() => toggleMenu("inquiry", askButtonRef.current)}
+              ref={askButtonRef}
+              type="button"
+            >
+              {copy.help}
+            </button>
+            <InquiryBubble
+              context={inquiryContext}
+              copy={copy}
+              hidden={overlay !== "inquiry"}
+              hint={typeof info.help.body[0] === "string" ? info.help.body[0] : ""}
+              language={preferences.language}
+            />
+          </div>
           <div className={styles.popoverAnchor}>
             <button
               aria-controls="matter-language-menu"
               aria-expanded={overlay === "language"}
               aria-haspopup="menu"
-              aria-label={`Language: ${languageLabel}`}
+              aria-label={`${copy.language}: ${languageLabel}`}
               className={`${styles.chromeControl} ${styles.iconLabelControl}`}
               data-chrome-control="language"
               onClick={() => toggleMenu("language", languageButtonRef.current)}
@@ -464,7 +711,7 @@ export function CanvasChrome({
               <span>{languageLabel}</span>
             </button>
             <div
-              aria-label={`Language: ${languageLabel}`}
+              aria-label={`${copy.language}: ${languageLabel}`}
               className={`${styles.popover} ${styles.languageMenu}`}
               hidden={overlay !== "language"}
               id="matter-language-menu"
@@ -501,7 +748,7 @@ export function CanvasChrome({
             <span>FX</span>
           </button>
           <button
-            aria-label={`Appearance: ${appearanceLabel}`}
+              aria-label={`${copy.appearanceLabel}: ${appearanceLabel}`}
             className={styles.chromeControl}
             data-chrome-control="appearance"
             onClick={cycleAppearance}
@@ -555,7 +802,11 @@ export function CanvasChrome({
             </header>
             <nav aria-label="Matter menu" className={styles.mobileNav}>
               <section className={styles.mobileSection}>
-                <button className={styles.mobilePrimary} onClick={(event) => openInfo("help", event.currentTarget)} type="button">
+                <button
+                  className={styles.mobilePrimary}
+                  onClick={() => openOverlay("inquiry", mobileTriggerRef.current)}
+                  type="button"
+                >
                   {copy.help}
                 </button>
               </section>
@@ -626,13 +877,206 @@ export function CanvasChrome({
               </button>
             </header>
             <div className={styles.dialogBody}>
-              {info[overlay].body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
+              {info[overlay].body.map((paragraph, index) => <p key={index}>{paragraph}</p>)}
             </div>
           </section>
         </>
       ) : null}
     </div>
   );
+}
+
+/**
+ * The inquiry bubble. It accepts a question by keyboard or by voice, and then
+ * tells the truth: no model is connected, so nothing is sent and the question
+ * stays in the field. Every state here is a real state — none of it is a
+ * placeholder for a reply that silently never arrives.
+ */
+function InquiryBubble({
+  context,
+  copy,
+  hidden,
+  hint,
+  language,
+}: {
+  context?: () => InquiryContextPayload;
+  copy: CanvasChromeCopy;
+  hidden: boolean;
+  hint: string;
+  language: CanvasLanguage;
+}) {
+  const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const listening = state.phase === "listening";
+  const text = inquiryText(state);
+  const dictation = useInquiryDictation({
+    onHeard: (transcript) => dispatch({ type: "hear", value: transcript }),
+    onSettled: () => dispatch({ type: "listened" }),
+    onFailed: (notice) => dispatch({ type: "listen-failed", notice }),
+  }, language);
+
+  useEffect(() => {
+    if (hidden) {
+      dispatch({ type: "close" });
+      return;
+    }
+    const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
+    return () => cancelAnimationFrame(frame);
+  }, [hidden]);
+
+  // Every question is carried to Matter's own server and answered there. The
+  // answering turn is already on screen, so this only has to resolve it — and
+  // it always resolves, because the client converts failure into a reason.
+  const ask = useCallback(() => {
+    const question = inquiryText(state).trim();
+    if (question.length === 0) return;
+    const answerId = pendingAnswerId(state);
+    dispatch({ type: "ask" });
+    const payload = context?.();
+    if (payload === undefined) {
+      dispatch({ type: "answer", id: answerId, outcome: NO_MATERIAL });
+      return;
+    }
+    void askInquiry({ question, locale: language, context: payload })
+      .then((outcome) => dispatch({ type: "answer", id: answerId, outcome }))
+      .catch(() => dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE }));
+  }, [context, language, state]);
+
+  // The field opens as a single line and grows with what is in it, so nothing
+  // is reserved before there is anything to put in it.
+  useEffect(() => {
+    const field = fieldRef.current;
+    if (field === null) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, INQUIRY_FIELD_MAX_HEIGHT)}px`;
+  }, [hidden, text]);
+
+  // The newest turn is the one worth seeing.
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread !== null) thread.scrollTop = thread.scrollHeight;
+  }, [state.turns]);
+
+  return (
+    <div
+      aria-label={copy.help}
+      className={styles.inquiry}
+      data-inquiry-phase={state.phase}
+      hidden={hidden}
+      id="matter-inquiry"
+      role="dialog"
+    >
+      {state.turns.length === 0 ? null : (
+        <div
+          aria-live="polite"
+          className={styles.inquiryThread}
+          data-inquiry-thread
+          ref={threadRef}
+        >
+          {state.turns.map((turn) => (
+            <p
+              className={styles.inquiryTurn}
+              data-inquiry-role={turn.role}
+              dir="auto"
+              key={turn.id}
+            >
+              {turn.role === "person" ? turn.text : answerCopy(copy, turn.outcome)}
+            </p>
+          ))}
+        </div>
+      )}
+      <div className={styles.inquiryComposer}>
+        <textarea
+          aria-label={copy.askPlaceholder}
+          className={styles.inquiryField}
+          data-inquiry-field
+          onChange={(event) => dispatch({ type: "type", value: event.currentTarget.value })}
+          onKeyDown={(event) => {
+            // Enter asks; the newline stays available for a question that needs
+            // more than one line.
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            ask();
+          }}
+          placeholder={copy.askPlaceholder}
+          // A live transcript owns the field until it settles, so the two can
+          // never fight over the same text.
+          readOnly={listening}
+          ref={fieldRef}
+          rows={1}
+          value={text}
+        />
+        {dictation.supported === false ? null : (
+          <button
+            aria-label={listening ? copy.dictateStop : copy.dictate}
+            aria-pressed={listening}
+            className={styles.inquiryDictate}
+            data-inquiry-control="dictate"
+            onClick={() => {
+              if (listening) {
+                dictation.stop();
+                return;
+              }
+              dispatch({ type: "listen" });
+              dictation.start();
+            }}
+            type="button"
+          >
+            <MicIcon />
+          </button>
+        )}
+        <button
+          className={styles.inquiryAsk}
+          data-inquiry-control="ask"
+          disabled={text.trim().length === 0}
+          onClick={ask}
+          type="button"
+        >
+          {copy.ask}
+        </button>
+      </div>
+      {/* One quiet line for the composer's own state. The exchange above says
+          everything about the asking itself. */}
+      {listening || state.notice !== null || state.turns.length === 0 ? (
+        <p className={styles.inquiryStatus}>
+          {state.notice !== null
+            ? voiceNoticeCopy(copy, state.notice)
+            : listening ? copy.listening : hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** Roughly five lines: enough for a real question, not a document. */
+const INQUIRY_FIELD_MAX_HEIGHT = 95;
+
+const NO_MATERIAL: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
+const UNREACHABLE: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
+
+function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string {
+  if (outcome.status === "answered") return outcome.text;
+  if (outcome.status === "pending") return copy.asking;
+  switch (outcome.reason) {
+    case "NO_PROVIDER":
+      return copy.noticeModelUnavailable;
+    case "NO_MATERIAL":
+      return copy.noticeNoMaterial;
+    case "UNREACHABLE":
+      return copy.noticeUnreachable;
+  }
+}
+
+function voiceNoticeCopy(copy: CanvasChromeCopy, notice: InquiryVoiceNotice): string {
+  switch (notice) {
+    case "voice-denied":
+      return copy.noticeVoiceDenied;
+    case "voice-unsupported":
+      return copy.noticeVoiceUnsupported;
+    case "voice-failed":
+      return copy.noticeVoiceFailed;
+  }
 }
 
 export function nextMenuFocusIndex(
@@ -782,6 +1226,10 @@ function AppearanceIcon() {
 
 function MenuIcon() {
   return <ChromeSvg><path d="M3 6h18M3 12h18M3 18h18" /></ChromeSvg>;
+}
+
+function MicIcon() {
+  return <ChromeSvg><rect x="9" y="3" width="6" height="10" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></ChromeSvg>;
 }
 
 function CloseIcon() {

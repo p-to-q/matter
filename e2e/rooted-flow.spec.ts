@@ -23,9 +23,11 @@ for (const viewport of [
     const selectThought = (nodeId: string) =>
       thought(nodeId).locator("[data-thought-text-id]").click();
     const tool = (name: string) =>
-      page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name, exact: true });
+      name === "Undo"
+        ? page.getByRole("navigation", { name: "Editing tools" }).locator('[data-tool-id="undo"]')
+        : page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name, exact: true });
 
-    await expect(page.getByRole("link", { name: "p to q home" })).toHaveText("[p → q]");
+    await expect(page.getByRole("link", { name: "p to q — Matter" })).toBeVisible();
     const guidance = page.locator(".matter-guidance[aria-label='Matter guidance']");
     await expect(guidance.locator(".matter-guidance__next"))
       .toHaveText("选择一段想法。");

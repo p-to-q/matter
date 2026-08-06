@@ -7,6 +7,7 @@ import {
 } from "../material/semantic-label";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { PROTOCOL_VERSION } from "../tree/model";
+import { isMatterLocale } from "../config/locales";
 
 /**
  * The wire shape of the thought-label boundary. Both sides parse against this
@@ -144,7 +145,7 @@ export function parseLabelRequest(value: unknown): LabelRequestParse {
   if (basis === null) return invalid("The label basis is invalid.");
 
   const locale = boundedString(value.locale, MAX_LOCALE_LENGTH);
-  if (locale === null || !/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(locale)) {
+  if (locale === null || !isMatterLocale(locale)) {
     return invalid("The label locale is invalid.");
   }
   if (

@@ -76,6 +76,17 @@ boundaries again immediately before commit. A stale response changes nothing.
 
 ## State ownership
 
+### Locale ownership
+
+The selected locale is presentation and request context, not material. The
+browser preference controller owns it and passes the same BCP 47 value to
+browser speech recognition, `/api/transcribe`, label planning, and future
+generative turns. The shared allow-list lives in
+`features/matter/config/locales.ts`; UI labels may be reordered without changing
+the wire contract. Server boundaries reject values outside that allow-list
+rather than accepting an arbitrary locale string. Adding a locale therefore
+requires one config entry, UI copy, and focused server/client tests.
+
 | Lifetime | Owned state |
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
@@ -120,7 +131,9 @@ timers. Hooks adapt browser events to the controller; they do not each invent a
 partial lifecycle.
 
 Selection state separates a semantic `TextAddress` from layout-epoch-bound DOM
-rectangles. Full-tree projection removes folded descendants. Focus projection
+rectangles. A lasso may yield an ordered transient set of addresses; contiguous
+runs remain independently addressable so a gap can never silently become one
+replacement range. Full-tree projection removes folded descendants. Focus projection
 returns the exact root-to-node path and ignores folds on it. Only focus view can
 start a generative transform, so model context cannot be narrower than the
 material visible during that turn.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CANVAS_PREFERENCES_MAX_STORAGE_LENGTH,
+  CANVAS_LANGUAGE_OPTIONS,
   CANVAS_PREFERENCES_STORAGE_KEY,
   CANVAS_PREFERENCES_VERSION,
   CanvasPreferencesController,
@@ -50,6 +51,16 @@ function createPort(initial: string | null = null, system: ResolvedCanvasAppeara
 }
 
 describe("canvas preference codec", () => {
+  it("keeps the language picker order stable", () => {
+    expect(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value)).toEqual([
+      "zh-CN",
+      "en-US",
+      "ja-JP",
+      "de-DE",
+      "zh-TW",
+    ]);
+  });
+
   it("round-trips the strict versioned preference record", () => {
     const serialized = serializeCanvasPreferences({
       version: CANVAS_PREFERENCES_VERSION,

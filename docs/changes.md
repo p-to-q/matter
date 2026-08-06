@@ -17,6 +17,61 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-07 — transient multi-passage lasso selection
+
+Changed:    a lasso can address several visible passages without a prior node selection; an ordered tray offers copy, clear, and locate.
+Why:        selection is a temporary handle and must support comparison without changing the rooted document.
+Forecloses: treating a multi-selection as one hidden transform range or as an implicit node deletion.
+
+## 2026-08-07 — Tree shadows respond to canvas navigation
+
+Changed: the ambient tree-shadow video uses a restrained accelerated playback
+rate while the person is actively panning. Wheel zoom and pan receive only a
+short navigation pulse; releasing the gesture immediately restores the quiet
+baseline rate. Reduced-motion and the existing FX toggle still take priority.
+
+Why: the background should acknowledge physical movement and make the canvas
+feel spatial without competing with the material when the person is still.
+
+Forecloses: continuous high-speed atmosphere, motion that persists after the
+gesture, or a second animation system coupled to document state.
+
+## 2026-08-07 — Canvas preferences have one runtime owner
+
+Changed: MatterApp owns the canvas preference binding and passes it through the
+rooted renderer. Admission, labels, guidance, and chrome now read the same
+snapshot instead of creating competing local controllers.
+
+Why: presentation and server locale must change as one transaction from the
+person's point of view; duplicate subscriptions created avoidable races.
+
+Forecloses: component-local preference controllers for the same canvas.
+
+## 2026-08-07 — Inquiry lineage rejects malformed identity
+
+Changed: the inquiry boundary bounds tree and node identifiers, rejects
+duplicate lineage nodes, requires an increasing depth path rooted at zero, and
+rejects an empty lineage paired with a non-empty thought count.
+
+Why: context is reference material, not an instruction, but it still needs a
+coherent shape before a provider can ever receive it.
+
+Forecloses: treating client-supplied lineage metadata as trusted structure.
+
+## 2026-08-07 — Locale is shared presentation and server request context
+
+Changed: Matter supports Simplified Chinese, English, Japanese, German, and
+Traditional Chinese. The picker shows them in that order, while the shared
+locale allow-list is enforced by transcription and label request boundaries.
+The selected locale now flows from the preference controller into browser
+speech, `/api/transcribe`, derived labels, and future generative turns.
+
+Why: language selection must change the language of work performed by the
+server as well as the language of the surrounding interface.
+
+Forecloses: treating locale as cosmetic-only UI state or accepting arbitrary
+locale strings at provider boundaries.
+
 ## 2026-08-07 — The public preview does not invent speech
 
 Changed: `matter.ptoq.io` starts from a root-only local document and disables

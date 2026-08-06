@@ -6,13 +6,17 @@ import styles from "./AmbientWorkbench.module.css";
 export type AmbientWorkbenchProps = Readonly<{
   className?: string;
   enabled?: boolean;
+  navigationActive?: boolean;
 }>;
+
+const BASE_PLAYBACK_RATE = 0.72;
+const NAVIGATION_PLAYBACK_RATE = 1.55;
 
 /**
  * Decorative atmosphere for the workbench. It owns no document, interaction,
  * or camera state and stays outside the material mutation path.
  */
-export function AmbientWorkbench({ className, enabled = true }: AmbientWorkbenchProps) {
+export function AmbientWorkbench({ className, enabled = true, navigationActive = false }: AmbientWorkbenchProps) {
   const [motionReady, setMotionReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const basePath = process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
@@ -42,7 +46,6 @@ export function AmbientWorkbench({ className, enabled = true }: AmbientWorkbench
     if (!motionReady) return;
     const video = videoRef.current;
     if (video === null) return;
-    video.playbackRate = 0.72;
     const followVisibility = () => {
       if (!enabled || document.hidden) video.pause();
       else void video.play().catch(() => undefined);
@@ -51,6 +54,12 @@ export function AmbientWorkbench({ className, enabled = true }: AmbientWorkbench
     document.addEventListener("visibilitychange", followVisibility);
     return () => document.removeEventListener("visibilitychange", followVisibility);
   }, [enabled, motionReady]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video === null) return;
+    video.playbackRate = navigationActive ? NAVIGATION_PLAYBACK_RATE : BASE_PLAYBACK_RATE;
+  }, [motionReady, navigationActive]);
 
   return (
     <div

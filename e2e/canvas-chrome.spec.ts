@@ -78,12 +78,13 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(settings).toBeFocused();
 
   await help.click();
-  const helpDialog = page.getByRole("dialog", { name: "询问 Matter" });
+  const helpDialog = page.getByRole("dialog", { name: "询问Matter" });
   await expect(helpDialog).toContainText("先用麦克风说出根想法");
-  await expect(helpDialog.locator("input, textarea, form, [contenteditable=true]")).toHaveCount(0);
-  await helpDialog.getByRole("button", { name: "关闭: 询问 Matter" }).click();
-
-  await page.getByRole("button", { name: "Language: 中文" }).click();
+  await expect(helpDialog.getByRole("textbox", { name: "问一句关于这份材料的话" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(helpDialog).toBeHidden();
+  await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
+  await page.locator('[data-chrome-control="language"]').click({ force: true });
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await expect(page.locator(".matter-guidance__next")).toHaveText("Select one thought.");
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
@@ -143,7 +144,7 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
 
   await sheet.getByRole("button", { name: "关于 Matter" }).click();
   const aboutDialog = page.getByRole("dialog", { name: "关于 Matter" });
-  await expect(aboutDialog).toContainText("让思考变成可触摸材料");
+  await expect(aboutDialog).toContainText("Matter 邀请你在一个想法变成答案之前");
   await aboutDialog.getByRole("button", { name: "关闭: 关于 Matter" }).click();
   await expect(aboutDialog).toHaveCount(0);
   await expect(trigger).toBeFocused();

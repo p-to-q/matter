@@ -8,6 +8,7 @@ import { useAdmission } from "../interaction/use-admission";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
 import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/archive-transport";
 import { treeToBundle } from "../persistence/snapshot-codec";
+import { useCanvasPreferences } from "./use-canvas-preferences";
 
 export function MatterApp() {
   const tree = useMatterStore((state) => state.tree);
@@ -26,6 +27,7 @@ export function MatterApp() {
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
   const persistence = useMaterialPersistence(tree, hydrateSnapshot, switchDocument);
+  const canvasPreferences = useCanvasPreferences();
   const exportArchive = useCallback(async () => {
     const archive = await exportSnapshotArchive(treeToBundle(tree));
     if (!archive.ok) return archiveFailure(archive.error.code);
@@ -65,6 +67,7 @@ export function MatterApp() {
   const admission = useAdmission({
     commit: admitHumanTranscript,
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
+    locale: canvasPreferences.preferences.language,
   });
   const admissionAnchor = createAdmissionAnchor(tree, navigation);
   const removeCurrentThought = useCallback(() => removeSelected({
@@ -75,6 +78,8 @@ export function MatterApp() {
   return (
     <RootedMaterial
       canUndo={history.entries.length > 0}
+      canvasPreferences={canvasPreferences}
+      locale={canvasPreferences.preferences.language}
       documentEpoch={documentEpoch}
       archive={archive}
       admission={admission}

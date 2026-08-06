@@ -20,7 +20,7 @@ is deliberately absent.
 | Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and gated surface status |
 | Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
-| Lightweight Matter inquiry | specified | reserved as a non-executing preview contract; not a prompt, chat transcript, or material mutation path |
+| Lightweight Matter inquiry | route implemented; model gated | the one AI entry point: `/api/inquiry` accepts a question plus the root-to-focus lineage, answers with a stated reason and a receipt, and stores nothing; context projection, contract, route and client are all covered |
 
 ## Specified for `0.2`
 
@@ -87,11 +87,48 @@ utility. The left material field now has its own first-release freeze: a quiet
 archive access, and a non-account local identity. It remains outside the
 paper-only tool vocabulary.
 
-The requested lightweight inquiry is intentionally specified rather than mounted:
-it may later accept a short question and return a non-executing orientation
-response, but it cannot mutate material, invoke tools, retain a transcript, or
-become the primary path. It needs an explicit product-contract revision before
-an input field or response surface can ship.
+The lightweight inquiry is now mounted, and this paragraph is the
+product-contract revision that permits it. **It is the only AI entry point in
+the product**, and it is deliberately the smallest one: one question, one
+context, one answer.
+
+It has no panel. It appears only when the "Ask Matter" control is pressed —
+pressing again dismisses it — and then sits directly on the paper, dismissed
+like a menu rather than trapped like a dialog. A question about the material
+must not hide the material. It opens as a single line and grows as an exchange
+accumulates, showing one exchange at a time with the rest a scroll away. A
+question leaves from the right and is answered from the left, and the two sides
+never share a fill.
+
+**The context is the boundary.** A question carries the root-to-focus lineage
+that is already on screen and nothing else — the same promise the privacy copy
+makes, projected once in
+[`../features/matter/material/inquiry-context.ts`](../features/matter/material/inquiry-context.ts)
+so the promise and the payload cannot drift. Each passage is bounded, the whole
+context is bounded, and when the budget bites it is the middle ancestors that go
+— the root states the document and the focus states the subject. A clipped
+context says that it was clipped.
+
+`/api/inquiry` is a real route, built on the same bounded-JSON boundary as the
+label route: a declared size is not trusted, the stream is bounded while read,
+malformed UTF-8 is refused, and a deadline or disconnect is attributable. It
+parses, answers, and drops the question — **nothing writes it to a log, a store,
+or a third party**, and the response never echoes it back. **No provider is
+configured in any deployment**, so every question resolves to `NO_PROVIDER`
+alongside a receipt of what the request actually carried. That receipt is the
+difference between "nothing happened" and "nothing was ever going to happen".
+Wiring a provider replaces one branch in `answerInquiry` and nothing else has to
+move.
+
+The exchange is session memory only: capped at 40 turns, never written to
+material, never persisted, gone on reload. The remaining constraints are
+unchanged and still binding: it cannot mutate material, invoke tools, or become
+the primary path. Its states are covered by `inquiry-composer.test.ts`,
+`inquiry-context.test.ts`, `inquiry-route.test.ts` and `inquiry-client.test.ts`,
+and `CanvasChrome.test.ts` guards that the chrome exposes exactly one closed
+composer.test.ts`](../features/matter/components/inquiry-composer.test.ts),
+and `CanvasChrome.test.ts` guards that the chrome exposes exactly one closed
+composer.
 
 ## Gated in this migration
 

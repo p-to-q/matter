@@ -10,6 +10,7 @@ import {
   type TranscriptionPurpose,
   type TranscriptionRequest,
 } from "./transcription-contract";
+import { isMatterLocale } from "../config/locales";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";
 
@@ -71,7 +72,7 @@ async function handleBoundedTranscriptionRequest(
     throw invalidRequest("The transcription purpose is invalid.");
   }
   const locale = requiredString(form, "locale", MAX_LOCALE_LENGTH);
-  if (!/^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(locale)) {
+  if (!isMatterLocale(locale)) {
     throw invalidRequest("The transcription locale is invalid.");
   }
   const durationMs = requiredPositiveSafeInteger(form, "durationMs");

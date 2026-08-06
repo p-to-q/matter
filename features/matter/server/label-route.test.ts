@@ -41,6 +41,13 @@ beforeEach(() => resetLabelGeneratorState());
 afterEach(() => resetLabelGeneratorState());
 
 describe("label route", () => {
+  it("rejects a well-formed but unsupported locale", () => {
+    expect(parseLabelRequest({ ...BODY, locale: "en-GB" })).toEqual({
+      ok: false,
+      message: "The label locale is invalid.",
+    });
+  });
+
   it("answers a valid request with an echoing success envelope", async () => {
     const response = await respond(post(BODY));
     expect(response.status).toBe(200);

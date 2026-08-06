@@ -1,4 +1,5 @@
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
+import { clientMatterBasePath } from "../config/base-path";
 import {
   LABEL_CLIENT_TIMEOUT_MS,
   MAX_LABEL_RESPONSE_BYTES,
@@ -53,7 +54,7 @@ export async function requestLabel(input: LabelRequestInput): Promise<LabelSucce
   let response: Response;
   try {
     response = await Promise.race([
-      fetch(`${basePath()}/api/label`, {
+      fetch(`${clientMatterBasePath()}/api/label`, {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/json" },
         body,
@@ -198,8 +199,4 @@ function parseErrorEnvelope(payload: unknown): LabelClientError {
 
 function isLabelErrorCodeValue(value: unknown): value is LabelErrorCode {
   return value === "INVALID_REQUEST" || value === "LABEL_UNAVAILABLE" || value === "LABEL_FAILED";
-}
-
-function basePath(): string {
-  return process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
 }

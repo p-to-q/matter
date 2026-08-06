@@ -39,7 +39,9 @@ Other   newline, start of text, end of text
 - merging adjacent segments includes their internal punctuation and preserves
   only the outer terminating seam;
 - adjacent hit segments merge into one range;
-- non-adjacent hits are rejected;
+- a lasso may address several passages at once; each contiguous run becomes a
+  separate transient selection, and non-adjacent hits never merge across a
+  gap;
 - offsets are UTF-16 code-unit offsets and must land on grapheme boundaries;
 - text changes, resize, or zoom invalidate selection geometry.
 
@@ -90,6 +92,12 @@ Fold and focus are navigation state, not material. Folding hides a node's
 descendants in the full tree view. Focusing opens the root-to-node working path.
 Neither is persisted in the material document or placed in the generative undo
 history.
+
+Lasso selection sets are interaction state. They preserve the visible order of
+the addressed passages and support copy, clear, and locate actions at the
+rendering edge. They are never serialized, sent as hidden context, or included
+in tree command history. Deleting a node remains a separate explicit tree
+action; selecting language does not imply deletion.
 
 The full view is depth-first order minus folded descendants. The focus view is
 the exact root-to-focus path and ignores folds along that path. A generative

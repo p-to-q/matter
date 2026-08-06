@@ -58,6 +58,7 @@ describe("Matter transcription route", () => {
     ["duplicate", (form: FormData) => form.append("attempt", "2")],
     ["bad attempt", (form: FormData) => form.set("attempt", "1.5")],
     ["bad locale", (form: FormData) => form.set("locale", "../../secret")],
+    ["unsupported locale", (form: FormData) => form.set("locale", "en-GB")],
     ["bad purpose", (form: FormData) => form.set("purpose", "delete")],
     ["bad protocol", (form: FormData) => form.set("protocolVersion", "0.1")],
   ] as const)("rejects %s fields before transcription", async (_name, mutate) => {

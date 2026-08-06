@@ -13,6 +13,7 @@ import {
 } from "../runtime/navigation";
 import { RootedMaterial } from "./RootedMaterial";
 import { createAdmissionInteractionState } from "../runtime/admission-interaction";
+import { useCanvasPreferences } from "./use-canvas-preferences";
 
 const performanceTree = createPerformanceThoughtTree();
 
@@ -30,6 +31,7 @@ declare global {
 
 /** This harness exercises the real renderer without becoming product state. */
 export function PerformanceMatterApp() {
+  const canvasPreferences = useCanvasPreferences();
   const [navigation, setNavigation] = useState<NavigationState>(() =>
     createNavigationState(),
   );
@@ -64,6 +66,8 @@ export function PerformanceMatterApp() {
   return (
     <RootedMaterial
       documentEpoch={0}
+      canvasPreferences={canvasPreferences}
+      locale="zh-CN"
       canUndo={false}
       admission={{
         state: createAdmissionInteractionState(),
