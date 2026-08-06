@@ -24,7 +24,7 @@ for (const viewport of [
     await expect(move).toBeEnabled();
     await move.click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
-    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeEnabled();
+    await expect(page.locator('[data-tool-id="move"]')).toHaveAttribute("aria-pressed", "true");
     const cameraBeforeMovePan = await page.locator("main.matter-shell").evaluate((main) => ({
       x: Number(main.getAttribute("data-viewport-x")),
       y: Number(main.getAttribute("data-viewport-y")),
@@ -62,6 +62,7 @@ for (const viewport of [
     await drawEarlyReleaseLoop(page, fragment);
     await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
+    await expect(page.locator('[data-selection-count="1"]')).toBeVisible();
     await expect(page.getByRole("status")).toContainText("Selected language:");
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("拖动把手设定变化程度。");
@@ -405,6 +406,45 @@ for (const viewport of [
     expect(upward.selected.top).toBeCloseTo(neutralAgain.selected.top, 1);
     expect(upward.afterGlyphTop - neutralAgain.afterGlyphTop).toBeCloseTo(upward.slot.height, 1);
   });
+}
+
+test("lasso keeps its outside-paper particle echo visual-only", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  if (paper === null) throw new Error("paper is not visible");
+  await page.mouse.move(paper.x + 40, paper.y + 120);
+  await page.mouse.down();
+  await page.mouse.move(paper.x - 36, paper.y + 150, { steps: 12 });
+  await expect.poll(async () => (await particleAlpha(page, paper)).outside).toBeGreaterThan(0);
+  expect((await particleAlpha(page, paper)).inside).toBe(0);
+  await page.mouse.up();
+  await expect.poll(async () => (await particleAlpha(page, paper)).outside).toBe(0);
+});
+
+async function particleAlpha(page: Page, paper: { x: number; y: number; width: number; height: number }) {
+  return page.locator(".lasso-particles").evaluate((canvas, bounds) => {
+    const target = canvas as HTMLCanvasElement;
+    const context = target.getContext("2d");
+    if (context === null) return { outside: 0, inside: 0 };
+    const ratio = target.width / document.documentElement.clientWidth;
+    const pixels = context.getImageData(0, 0, target.width, target.height).data;
+    let outside = 0;
+    let inside = 0;
+    for (let y = 0; y < target.height; y += 2) {
+      for (let x = 0; x < target.width; x += 2) {
+        const alpha = pixels[(y * target.width + x) * 4 + 3] ?? 0;
+        if (alpha === 0) continue;
+        const clientX = x / ratio;
+        const clientY = y / ratio;
+        if (clientX >= bounds.x && clientX <= bounds.x + bounds.width && clientY >= bounds.y && clientY <= bounds.y + bounds.height) inside += alpha;
+        else outside += alpha;
+      }
+    }
+    return { outside, inside };
+  }, paper);
 }
 
 async function firstSegmentRect(page: Page, text: ReturnType<Page["locator"]>) {

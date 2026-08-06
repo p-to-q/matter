@@ -21,6 +21,7 @@ export type ToolRailProps = {
   onMove: () => void;
   onIntent: (intent: ToolIntent) => void;
   onVoice: () => void;
+  panActive: boolean;
   surface: ProjectedToolSurface;
   voiceActive: boolean;
   voiceAvailable: boolean;
@@ -39,6 +40,7 @@ export function ToolRail({
   onLasso,
   onMove,
   onVoice,
+  panActive,
   surface,
   voiceActive,
   voiceAvailable,
@@ -90,13 +92,15 @@ export function ToolRail({
         toolId="branch"
       />
       <ToolButton
+        active={panActive}
         disabled={interactionPending}
         group="material"
         icon={<MoveIcon />}
-        label={lassoActive ? "Return to canvas pan" : "Canvas pan"}
+        label={lassoActive ? "Return to canvas pan" : panActive ? "Canvas pan active" : "Canvas pan"}
         onClick={!interactionPending ? onMove : undefined}
         shortLabel="Move"
         toolId="move"
+        pressed={panActive}
       />
       <ToolSeparator between="material-history" />
       <ToolButton

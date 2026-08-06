@@ -271,6 +271,17 @@ export type TreeMutation =
       expectedUpdatedAt: string;
       text: string;
       updatedAt: string;
+    }
+  | {
+      type: "move-node";
+      nodeId: string;
+      expectedNode: ThoughtNode;
+      fromParentId: string;
+      fromIndex: number;
+      fromParentChildrenBefore: string[];
+      toParentId: string;
+      toIndex: number;
+      toParentChildrenBefore: string[];
     };
 
 export type TreeCommand = {
@@ -311,6 +322,12 @@ one-node tree. `remove-subtree` cannot target the root. `DetachedSubtree` contai
 one complete expected subtree, its parent, its former index, and the parent's
 exact child order before detachment. Remove and restore validate that memento,
 attachment, child order, id absence/presence, and strict index without clamping.
+`move-node` is a private human structural mutation. It captures the complete
+moved node plus exact source and target child orders. The root cannot move, a
+node cannot move into itself or its descendants, and a same-parent drop is a
+no-op rejected before command construction. A successful move changes only the
+moved node's `parentId` and the two parent child lists; its inverse swaps those
+exact mementos.
 
 Every `0.2` command contains exactly one domain mutation. Split or merge may add
 one new atomic mutation later; they do not justify a generic transaction now.
@@ -336,8 +353,9 @@ tree nor history. Hydration, import, and document switch clear history and every
 pending turn.
 
 `affectedNodeIds` is the material touch set: text replacement names its node;
-root operations name the root; insert names node and parent; subtree remove or
-restore names every subtree node and the attachment parent. It is not a layout
+root operations name the root; insert names node and parent; move names the
+moved node and both parents; subtree remove or restore names every subtree node
+and the attachment parent. It is not a layout
 damage calculation.
 
 ## Bounds and errors

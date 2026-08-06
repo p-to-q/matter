@@ -12,6 +12,7 @@ describe("normalizeAdmittedTranscript", () => {
   });
   it("preserves existing terminal punctuation and wording", () => {
     expect(normalizeAdmittedTranscript("已经完成！")).toBe("已经完成！");
-    expect(normalizeAdmittedTranscript("  hello   world?  ")).toBe("hello world?");
+    expect(normalizeAdmittedTranscript("  hello   world?  ")).toBe("hello   world?");
+    expect(normalizeAdmittedTranscript("comma begin period")).toBe(", begin.");
   });
 });

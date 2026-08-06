@@ -117,7 +117,7 @@ describe("human material admission", () => {
     const anchored = createAdmissionAnchor(tree, navigation);
     if (!anchored.ok) throw new Error(anchored.error.code);
 
-    const atBound = admissionToTreeCommand(tree, navigation, anchored.anchor, values("a".repeat(MAX_NODE_TEXT_CODE_UNITS)));
+    const atBound = admissionToTreeCommand(tree, navigation, anchored.anchor, values(`${"a".repeat(MAX_NODE_TEXT_CODE_UNITS - 1)}.`));
     const overBound = admissionToTreeCommand(tree, navigation, anchored.anchor, values("a".repeat(MAX_NODE_TEXT_CODE_UNITS + 1)));
 
     expect(atBound.ok).toBe(true);

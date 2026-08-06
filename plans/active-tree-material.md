@@ -78,6 +78,7 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 | Right paper chrome | Frozen | anonymized private composition study; the rounded paper owns ambient media, right rail, and corner utilities |
 | Left material field | Re-frozen | 304 px manuscript index; structural depth steps, local disclosure, flat search, copy selection, archive, and local-only identity; drawer below 960 px |
 | Lightweight inquiry | Specified | secondary non-executing orientation only; blocked until the no-prompt/no-assistant invariant is explicitly revised |
+| Structural reparenting | Frozen | selected non-root node drops on another visible parent; append-only target order, exact pointer undo, no same-parent reorder or authored coordinates |
 
 The foundation freeze was completed on 2026-08-03 after source research and a
 second adversarial review. Its evidence lives in

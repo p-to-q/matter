@@ -15,6 +15,11 @@ Moving a node is a durable tree mutation. Exact source and target child-order
 mementos make one undo restore the previous virtual file-system projection and
 every other tree-derived view.
 
+The lasso may cross the paper boundary as one continuous pointer stroke. Text
+hit testing remains limited to visible canvas material. Sparse square particles
+outside the paper are a bounded render-only echo: they carry no selection,
+address, history, persistence, or context meaning.
+
 ## Node
 
 A node is one passage of language. Voice admits it, the tree orders it, and

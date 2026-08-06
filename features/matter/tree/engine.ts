@@ -323,13 +323,14 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
     if (tree.rootId === node.id || node.id === mutation.toParentId) {
       return commandFailure("The root cannot move and a node cannot become its own parent.");
     }
-    if (!equalNode(node, mutation.expectedNode)) {
+    const expectedNodeValidation = validateThoughtNode(mutation.expectedNode);
+    if (!expectedNodeValidation.ok || !equalNode(node, mutation.expectedNode)) {
       return commandFailure("The expected moved node does not match the tree.");
     }
-    if (!equalStrings(fromParent.children, mutation.fromParentChildrenBefore)) {
+    if (!Array.isArray(mutation.fromParentChildrenBefore) || !equalStrings(fromParent.children, mutation.fromParentChildrenBefore)) {
       return commandFailure("The source parent child order does not match the tree.");
     }
-    if (!equalStrings(toParent.children, mutation.toParentChildrenBefore)) {
+    if (!Array.isArray(mutation.toParentChildrenBefore) || !equalStrings(toParent.children, mutation.toParentChildrenBefore)) {
       return commandFailure("The target parent child order does not match the tree.");
     }
     if (!Number.isInteger(mutation.fromIndex) || mutation.fromIndex < 0 || fromParent.children[mutation.fromIndex] !== node.id) {

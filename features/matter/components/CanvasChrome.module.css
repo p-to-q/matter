@@ -480,175 +480,6 @@
   margin-top: 12px;
 }
 
-/* The inquiry has no panel. It exists in the void the paper already is: the
-   turns carry their own fills, so the container needs no surface, no border and
-   no tail to be legible. Nothing here is drawn until the control is pressed. */
-/* `display` on the element itself outranks the user agent's `[hidden]` rule, so
-   the closed state has to be stated here or the panel is never actually shut. */
-.inquiry[hidden] {
-  display: none;
-}
-
-.inquiry {
-  position: absolute;
-  z-index: 3;
-  right: 0;
-  bottom: 30px;
-  display: flex;
-  width: 320px;
-  flex-direction: column;
-  gap: 8px;
-  animation: popoverIn 150ms ease-out;
-  pointer-events: auto;
-}
-
-.inquiryThread {
-  display: flex;
-  max-height: 92px;
-  flex-direction: column;
-  gap: 6px;
-  padding-bottom: 9px;
-  border-bottom: 1px solid var(--chrome-line);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-}
-
-.inquiryThread::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-}
-
-/* The question leaves from the right; the answer arrives from the left. The
-   two sides never share a fill, so which is which is never in doubt. */
-.inquiryTurn {
-  max-width: 84%;
-  margin: 0;
-  padding: 6px 9px;
-  font: 400 12px/17px var(--mono);
-  letter-spacing: .2px;
-  overflow-wrap: anywhere;
-  animation: inquiryTurnIn 160ms ease-out;
-}
-
-.inquiryTurn[data-inquiry-role="person"] {
-  align-self: flex-end;
-  background: var(--chrome-primary);
-  color: var(--chrome-primary-fg);
-}
-
-.inquiryTurn[data-inquiry-role="matter"] {
-  align-self: flex-start;
-  background: var(--chrome-answer);
-  color: var(--chrome-answer-fg);
-}
-
-.inquiryComposer {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-}
-
-.inquiryField {
-  width: 100%;
-  height: 20px;
-  min-width: 0;
-  padding: 2px 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--chrome-text);
-  font: 400 13px/19px var(--mono);
-  letter-spacing: .2px;
-  overflow-y: auto;
-  resize: none;
-}
-
-.inquiryField::placeholder {
-  color: var(--chrome-muted);
-}
-
-.inquiryField:read-only {
-  cursor: default;
-}
-
-.inquiryStatus {
-  margin: 0;
-  color: var(--chrome-muted);
-  font: 400 10px/15px var(--mono);
-  letter-spacing: .2px;
-}
-
-/* Listening is the one state worth a moving signal; everything else is text. */
-.inquiry[data-inquiry-phase="listening"] .inquiryStatus::before {
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  margin-right: 6px;
-  background: currentColor;
-  content: "";
-  vertical-align: 1px;
-  animation: inquiryListening 1.2s ease-in-out infinite;
-}
-
-.inquiryDictate {
-  display: inline-flex;
-  width: 22px;
-  height: 22px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  color: var(--chrome-muted);
-  cursor: pointer;
-}
-
-.inquiryDictate svg {
-  width: 14px;
-  height: 14px;
-}
-
-.inquiryAsk {
-  display: inline-flex;
-  height: 22px;
-  flex: 0 0 auto;
-  align-items: center;
-  padding: 0 5px;
-  color: var(--chrome-text);
-  font: 500 11px/1 var(--mono);
-  letter-spacing: .7px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.inquiryDictate:hover,
-.inquiryAsk:hover:not(:disabled),
-.inquiryDictate:focus-visible,
-.inquiryAsk:focus-visible {
-  background: var(--chrome-primary);
-  color: var(--chrome-primary-fg);
-}
-
-.inquiryDictate[aria-pressed="true"] {
-  background: var(--chrome-primary);
-  color: var(--chrome-primary-fg);
-}
-
-.inquiryAsk:disabled {
-  color: var(--chrome-muted);
-  opacity: .5;
-  cursor: default;
-}
-
-@keyframes inquiryListening {
-  0%, 100% { opacity: .3; }
-  50% { opacity: 1; }
-}
-
-@keyframes inquiryTurnIn {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 @keyframes popoverIn {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
@@ -687,13 +518,6 @@
     width: calc(100% - 24px);
   }
 
-  .inquiry {
-    position: fixed;
-    right: 16px;
-    bottom: 16px;
-    left: 16px;
-    width: auto;
-  }
 }
 
 @media (min-width: 768px) {
@@ -705,11 +529,6 @@
 @media (prefers-reduced-motion: reduce) {
   .popover,
   .mobileSheet {
-    animation: none;
-  }
-
-  .inquiry[data-inquiry-phase="listening"] .inquiryStatus::before,
-  .inquiryTurn {
     animation: none;
   }
 

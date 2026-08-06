@@ -76,6 +76,7 @@ function renderToolRail(overrides: Partial<ToolRailProps>): string {
     onLasso: vi.fn(),
     onMove: vi.fn(),
     onVoice: vi.fn(),
+    panActive: false,
     surface: projectToolSurface(projectTools({
       view: "full",
       selected: null,

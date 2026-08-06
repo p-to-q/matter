@@ -4,10 +4,11 @@ Need: bounded microphone capture must survive permission denial, slow prompts,
 final MediaRecorder chunks, retry, and cleanup without falling back to a keyboard
 or retaining audio.
 
-Useful platform pieces are `getUserMedia`, `MediaRecorder`, and local
-`AudioContext` amplitude. Hosted batch transcription is the current path. The Web
-Speech API is avoided because browser behavior, Chinese punctuation, and service
-retention are not controlled.
+Useful platform pieces are the browser-managed Web Speech API and, only when a
+real server adapter is configured, `getUserMedia` plus `MediaRecorder`. Browser
+speech behavior and service retention remain vendor-controlled, so the public
+preview states that limitation and disables voice immediately when native
+recognition is absent rather than recording into an unavailable fallback.
 
 Current choice:
 
@@ -26,9 +27,9 @@ selection and exposes a pointer retry. A transcript is not rendered as a message
 for admission it becomes human material; for transformation it enters the
 envelope and only the resulting material change is shown.
 
-Real-time transcription is now a required research slice for the public
-preview. It must use a managed provider session directly from the browser;
-client-side Whisper and an application-owned audio relay remain out of scope.
+The public preview uses the browser-managed Web Speech capability for transient
+interim text and one final admission. Client-side Whisper and an
+application-owned audio relay remain out of scope.
 
 ## Admission boundary
 
@@ -95,13 +96,14 @@ and physical HTTPS Chrome and Safari receipts. Background suspension and
 `pagehide`, recorder-constructor fallback, and real local level feedback must be
 proved before the static recording indicator can be presented as final voice UX.
 
-## Real-time correction
+## Future managed real-time correction
 
-The public preview must not substitute a fixture transcript for a person's
-recording. The next live slice mints a short-lived, origin-bound provider
-credential through one same-origin endpoint, then lets the browser establish
-the media session directly with the managed realtime transcription provider.
-The application never receives an API key or forwards raw audio.
+The current preview does not mint a credential or open a configurable provider
+session: its real-time partials come only from the browser-managed Web Speech
+capability. A later managed-provider slice may mint a short-lived, origin-bound
+credential through one same-origin endpoint, then let the browser establish the
+media session directly. The application must never receive a permanent API key
+or forward raw audio.
 
 Partial hypotheses are transient interaction feedback, keyed by interaction id,
 attempt, and a monotonic sequence. They are never stored in `ThoughtTree`,

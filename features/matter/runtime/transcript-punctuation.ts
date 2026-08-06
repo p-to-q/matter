@@ -3,10 +3,10 @@ const SPOKEN_PUNCTUATION: ReadonlyArray<readonly [RegExp, string]> = [
   [/\s*(?:句号|句點)\s*/g, "。"],
   [/\s*问号\s*/g, "？"],
   [/\s*感叹号\s*/g, "！"],
-  [/\s+comma\s*/gi, ","],
-  [/\s+(?:period|full stop)\s*/gi, "."],
-  [/\s+question mark\s*/gi, "?"],
-  [/\s+exclamation mark\s*/gi, "!"],
+  [/\bcomma\b\s*/gi, ","],
+  [/\b(?:period|full stop)\b\s*/gi, "."],
+  [/\bquestion mark\b\s*/gi, "?"],
+  [/\bexclamation mark\b\s*/gi, "!"],
 ];
 
 const TERMINAL = /[。！？.!?]$/u;
@@ -16,7 +16,7 @@ const TERMINAL = /[。！？.!?]$/u;
  * not generative rewriting. Existing punctuation and wording are preserved.
  */
 export function normalizeAdmittedTranscript(value: string): string {
-  let text = value.trim().replace(/\s+/g, " ");
+  let text = value.trim();
   for (const [pattern, punctuation] of SPOKEN_PUNCTUATION) text = text.replace(pattern, punctuation);
   text = text.replace(/\s+([，。！？,.!?])/g, "$1").trim();
   text = /[\u3400-\u9fff]/u.test(text)

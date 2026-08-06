@@ -140,6 +140,8 @@ for (const viewport of [
       x: viewport.width * 0.48,
       y: viewport.height * 0.7,
     };
+    await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
     const beforeFailedCapture = await readViewportAndGeometry(page);
     await page.evaluate(() => {
       const original = Element.prototype.setPointerCapture;

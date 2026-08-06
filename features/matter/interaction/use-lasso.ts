@@ -27,12 +27,14 @@ import type { ThoughtTree } from "../tree/model";
 import { measureTextRange, type ClientTextRect } from "./range-measurement";
 import { clearMeasuredSelectionRects } from "./selection-rects-state";
 import { isCurrentLassoStroke, type LassoMeasurementEpoch } from "./lasso-stroke-epoch";
+import { projectOutsideLassoParticles } from "../material/lasso-particles";
 
 export type LassoController = Readonly<{
   active: boolean;
   drawing: boolean;
   inkPathRef: React.RefObject<SVGPathElement | null>;
   closurePathRef: React.RefObject<SVGPathElement | null>;
+  particleCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   selection: SegmentSelection | null;
   selections: readonly SegmentSelection[];
   sourceText: string | null;
@@ -58,6 +60,7 @@ type MeasurementEpoch = LassoMeasurementEpoch;
 export function useLasso(input: {
   tree: ThoughtTree;
   canvasRef: React.RefObject<HTMLDivElement | null>;
+  surfaceRef: React.RefObject<HTMLElement | null>;
   epoch: MeasurementEpoch;
   documentEpoch?: number;
   navigationKey: string;
@@ -73,6 +76,7 @@ export function useLasso(input: {
   const sampledPointsRef = useRef<ClientPoint[]>([]);
   const inkPathRef = useRef<SVGPathElement>(null);
   const closurePathRef = useRef<SVGPathElement>(null);
+  const particleCanvasRef = useRef<HTMLCanvasElement>(null);
   const inkFrameRef = useRef<number | null>(null);
   const pendingInkRef = useRef<readonly ClientPoint[]>([]);
   const targetSnapshotRef = useRef<readonly LassoTarget[] | null>(null);
@@ -102,6 +106,7 @@ export function useLasso(input: {
       inkFrameRef.current = null;
       inkPathRef.current?.setAttribute("d", "");
       closurePathRef.current?.setAttribute("d", "");
+      clearParticleCanvas(particleCanvasRef.current);
       return;
     }
     if (inkFrameRef.current !== null) return;
@@ -118,8 +123,13 @@ export function useLasso(input: {
         "d",
         showClosure ? paths.closure : "",
       );
+      renderOutsideParticles(
+        particleCanvasRef.current,
+        pendingPoints,
+        input.surfaceRef.current?.getBoundingClientRect() ?? null,
+      );
     });
-  }, []);
+  }, [input.surfaceRef]);
 
   useEffect(() => () => {
     if (inkFrameRef.current !== null) cancelAnimationFrame(inkFrameRef.current);
@@ -364,7 +374,6 @@ export function useLasso(input: {
     targetSnapshotRef.current = null;
     targetSnapshotKeyRef.current = null;
     writeInk([]);
-    setSelections([]);
     remeasureSelection(stateRef.current.selection);
     return true;
   }, [dispatch, input.canvasRef, input.documentEpoch, input.tree, remeasureSelection, writeInk]);
@@ -387,6 +396,7 @@ export function useLasso(input: {
     drawing: state.mode === "drawing",
     inkPathRef,
     closurePathRef,
+    particleCanvasRef,
     selection: state.selection,
     selections,
     sourceText: state.selection === null
@@ -403,6 +413,39 @@ export function useLasso(input: {
     pointerUp,
     pointerCancel,
   };
+}
+
+function clearParticleCanvas(canvas: HTMLCanvasElement | null): void {
+  canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+function renderOutsideParticles(
+  canvas: HTMLCanvasElement | null,
+  points: readonly ClientPoint[],
+  paper: DOMRect | null,
+): void {
+  if (canvas === null || paper === null) return;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const width = document.documentElement.clientWidth;
+  const height = document.documentElement.clientHeight;
+  const pixelWidth = Math.round(width * ratio);
+  const pixelHeight = Math.round(height * ratio);
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  const context = canvas.getContext("2d");
+  if (context === null) return;
+  context.setTransform(ratio, 0, 0, ratio, 0, 0);
+  context.clearRect(0, 0, width, height);
+  context.save();
+  context.beginPath();
+  context.rect(0, 0, width, height);
+  context.rect(paper.left, paper.top, paper.width, paper.height);
+  context.clip("evenodd");
+  for (const particle of projectOutsideLassoParticles(points, paper)) {
+    context.fillStyle = particle.tone === "light" ? "rgba(255,255,252,.72)" : "rgba(88,97,106,.36)";
+    context.fillRect(particle.x, particle.y, particle.size, particle.size);
+  }
+  context.restore();
 }
 
 function appendSampledPoint(

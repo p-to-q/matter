@@ -75,6 +75,12 @@ export function MatterApp() {
     commandId: `human_removal_${createOperationId()}`,
     createdAt: new Date().toISOString(),
   }), [removeSelected]);
+  const moveCurrentThought = useCallback((nodeId: string, targetParentId: string) => moveNode({
+    commandId: `human_move_${createOperationId()}`,
+    nodeId,
+    targetParentId,
+    createdAt: new Date().toISOString(),
+  }), [moveNode]);
 
   return (
     <RootedMaterial
@@ -103,7 +109,7 @@ export function MatterApp() {
       navigation={navigation}
       persistence={persistence}
       onRemoveSelected={removeCurrentThought}
-      onMoveNode={moveNode}
+      onMoveNode={moveCurrentThought}
       onClearSelection={clearSelection}
       onExitFocus={showFull}
       onFocusNode={focus}

@@ -88,6 +88,8 @@ export function admissionToTreeCommand(
   const transcript = validateTranscript(values.transcript);
   if (!transcript.ok) return transcript;
   const normalizedTranscript = normalizeAdmittedTranscript(values.transcript);
+  const normalized = validateTranscript(normalizedTranscript);
+  if (!normalized.ok) return normalized;
   if (!hasNonEmptyString(values.interactionId) || !hasNonEmptyString(values.commandId)) {
     return invalidInteraction("Admission operation identifiers must be non-empty.");
   }

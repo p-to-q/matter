@@ -17,6 +17,55 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-07 — The preview returns to a material-only AI boundary
+
+Changed: the inquiry prompt, assistant transcript, and inquiry API have been
+removed from the candidate. Help is static, while a future explicit
+context-and-memory adapter remains documented behind a later product freeze.
+
+Why: Matter currently permits AI output only as one perceivable change to
+material; a parallel chat surface would split attention, history, and context
+ownership before that durable boundary exists.
+
+Forecloses: connecting a provider through truncated lineage, applying stale
+assistant responses across document revisions, and treating chat as a shortcut
+around tree commands.
+
+## 2026-08-07 — Material drag changes structure; canvas pan is an explicit mode
+
+Changed: a selected non-root node can be pointer-dragged to a different visible
+parent through one exact, undoable `move-node` command. Canvas pan/zoom runs only
+while the Move tool is selected; lasso, material handling, and pan are disjoint.
+
+Why: dragging language must not be mistaken for moving the camera, and every
+tree-derived view must follow one structural source of truth.
+
+Forecloses: authored coordinates, same-parent reorder guessing, root movement,
+and HTML drag-and-drop as a desktop-only second interaction system.
+
+## 2026-08-07 — Lasso boundary feedback has no selection authority
+
+Changed: one lasso stroke may cross the paper boundary; its outside portion
+draws a bounded field of off-white and grey square particles while semantic hit
+testing remains limited to visible canvas text.
+
+Why: the gesture should remain continuous at the physical paper edge without
+turning surrounding chrome or the material index into selectable document space.
+
+Forecloses: particles entering history/context, outside-paper text targets, and
+an unbounded per-pointer animation system.
+
+## 2026-08-07 — Speech admission normalizes punctuation only
+
+Changed: explicit spoken punctuation becomes language-appropriate marks and a
+missing terminal mark is added before the existing bounded admission command.
+
+Why: browser speech should enter as readable human material without invoking a
+generative rewrite or changing the person's internal wording and spacing.
+
+Forecloses: AI rewriting at admission, silent text truncation, and accepting a
+normalized result that exceeds the node bound.
+
 ## 2026-08-07 — transient multi-passage lasso selection
 
 Changed:    a lasso can address several visible passages without a prior node selection; an ordered tray offers copy, clear, and locate.
@@ -46,17 +95,6 @@ Why: presentation and server locale must change as one transaction from the
 person's point of view; duplicate subscriptions created avoidable races.
 
 Forecloses: component-local preference controllers for the same canvas.
-
-## 2026-08-07 — Inquiry lineage rejects malformed identity
-
-Changed: the inquiry boundary bounds tree and node identifiers, rejects
-duplicate lineage nodes, requires an increasing depth path rooted at zero, and
-rejects an empty lineage paired with a non-empty thought count.
-
-Why: context is reference material, not an instruction, but it still needs a
-coherent shape before a provider can ever receive it.
-
-Forecloses: treating client-supplied lineage metadata as trusted structure.
 
 ## 2026-08-07 — Locale is shared presentation and server request context
 
@@ -925,9 +963,3 @@ crosses the planning boundary.
 
 **Product renamed to Matter** (ADR-0005, 2026-08-02). The `arrow` identifier
 predates the name. `0.2` removes it wholesale with no compatibility aliases.
-# 2026-08-07 — Preview 6 release candidate
-
-- Added durable cross-branch node reparenting with exact source/target order
-  mementos and pointer undo; all tree-derived projections follow the move.
-- Added browser speech punctuation normalization without rewriting admitted
-  wording, and documented the future context/memory workflow boundary.

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RECORDING_LIMIT_MS } from "./audio-policy";
 import { BrowserSpeechVoicePort } from "./browser-speech-voice";
 import type { VoiceOperation } from "./browser-voice";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 const OPERATION: VoiceOperation = { interactionId: "speech_1", attempt: 1 };
 const originalWindow = globalThis.window;
@@ -85,5 +86,88 @@ describe("BrowserSpeechVoicePort", () => {
     await port.start(OPERATION, { onDurationLimit });
     vi.advanceTimersByTime(RECORDING_LIMIT_MS);
     expect(onDurationLimit).toHaveBeenCalledWith(OPERATION);
+  });
+
+  it("restarts a browser-ended session until the person explicitly stops", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION);
+    const recognition = FakeRecognition.instance!;
+    recognition.onend?.();
+    expect(recognition.start).toHaveBeenCalledTimes(2);
+    port.cancel(OPERATION);
+  });
+
+  it("keeps one cumulative duration limit across a browser restart", async () => {
+    vi.useFakeTimers();
+    const onDurationLimit = vi.fn();
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION, { onDurationLimit });
+    const recognition = FakeRecognition.instance!;
+    vi.advanceTimersByTime(RECORDING_LIMIT_MS - 1);
+    recognition.onend?.();
+    vi.advanceTimersByTime(1);
+    expect(onDurationLimit).toHaveBeenCalledTimes(1);
+    expect(recognition.start).toHaveBeenCalledTimes(2);
+    port.cancel(OPERATION);
+  });
+
+  it("does not revive a cancelled session from a queued browser end event", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION);
+    const recognition = FakeRecognition.instance!;
+    const lateEnd = recognition.onend!;
+    port.cancel(OPERATION);
+    lateEnd();
+    expect(recognition.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("commits the latest interim hypothesis when stop produces no final event", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION);
+    const recognition = FakeRecognition.instance!;
+    recognition.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, length: 1, 0: { transcript: "还没有最终事件" } }],
+    });
+    await expect(port.stop(OPERATION)).resolves.toMatchObject({
+      transcript: "还没有最终事件",
+    });
+  });
+
+  it("rejects a native transcript beyond the material text bound", async () => {
+    const onError = vi.fn();
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION, { onError });
+    const recognition = FakeRecognition.instance!;
+    recognition.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, length: 1, 0: { transcript: "念".repeat(MAX_NODE_TEXT_CODE_UNITS + 1) } }],
+    });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "RECORDING_TOO_LARGE" }));
   });
 });

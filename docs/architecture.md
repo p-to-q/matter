@@ -13,6 +13,15 @@ node reference + microphone
   → tree engine
 ```
 
+Human structure changes through the same durable kernel:
+
+```text
+selected non-root node + pointer drop on another visible node
+  → validated move-node command with source/target order mementos
+  → tree engine → exact inverse
+  → canvas, material index, persistence, and export re-project one tree
+```
+
 Existing material changes through the four-signal grammar:
 
 ```text
@@ -55,6 +64,9 @@ alternatives.
 Only the tree engine applies durable mutations. Pointer, audio level, partial
 transcript, selection geometry, focus, fold, and derived labels remain
 transient.
+Canvas pan, node-drag targeting, and lasso drawing are mutually exclusive
+pointer modes. An outside-paper lasso particle echo is render-only; the semantic
+stroke and text targets remain client-space geometry over visible canvas text.
 
 Matter is local-first. The server never owns the current tree: it validates the
 envelope, derives surrounding text from the supplied lineage, and returns a plan
@@ -200,8 +212,14 @@ features/matter/
   named runtime action rather than exposing private tree mutations;
 - the interaction state reducer is pure; its DOM and microphone adapters are not;
 - DOM `Range` and `getClientRects()` live at the interaction/rendering edge;
-- `server/` is the only place a provider name appears;
+- `server/` is the only place a configurable or credentialed provider name appears;
 - route handlers parse, delegate, and translate only.
+
+Browser speech recognition is the narrow platform-capability exception: it uses
+no Matter credential, exposes no provider choice in the client, and commits
+only through the same bounded human-admission command. Any configurable or
+credentialed speech/model provider remains in `server/` (or behind a separately
+frozen same-origin credential boundary).
 
 `app/api/health` is a deployment probe, not a debug console; under the Matter
 base path it is reached as `/matter/api/health`. It reports only stable Matter

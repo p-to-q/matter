@@ -8,6 +8,8 @@ import { commitTreeCommand } from "../tree/history";
 import { createEmptyTree } from "../tree/invariants";
 import { MAX_TREE_DEPTH } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
+import { moveNodeToParentCommand } from "../runtime/move";
+import { applyTreeCommand } from "../tree/engine";
 import { bundleToTree, treeToBundle, type SnapshotBundle } from "./snapshot-codec";
 
 describe("Markdown snapshot codec", () => {
@@ -30,6 +32,23 @@ describe("Markdown snapshot codec", () => {
       "createdAt: 2026-08-03T08:00:00.000Z",
     );
     expect(bundleToTree(first)).toEqual({ ok: true, tree: inserted.tree });
+  });
+
+  it("round-trips a reparented tree through the same Markdown hierarchy", () => {
+    const tree = createRootedMaterialFixture().tree;
+    const root = tree.nodes[tree.rootId!];
+    const source = tree.nodes[root.children[0]];
+    const target = tree.nodes[root.children[1]];
+    const command = moveNodeToParentCommand(tree, {
+      commandId: "snapshot_move",
+      nodeId: source.children[0],
+      targetParentId: target.id,
+      createdAt: "2026-08-07T00:00:00.000Z",
+    });
+    if (command === null) throw new Error("move fixture is invalid");
+    const moved = applyTreeCommand(tree, command);
+    if (!moved.ok) throw new Error(moved.error.message);
+    expect(bundleToTree(treeToBundle(moved.tree))).toEqual({ ok: true, tree: moved.tree });
   });
 
   it("allows readable slug renames without changing material identity", () => {

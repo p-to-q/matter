@@ -48,10 +48,11 @@ import {
 import { projectCanvasGeometryPublication } from "./canvas-geometry-publication";
 import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
-import { projectInquiryContext } from "../material/inquiry-context";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { LassoSelectionTray } from "./LassoSelectionTray";
+import { canMoveNodeToParent } from "../runtime/move";
+import { isBrowserSpeechRecognitionAvailable } from "../interaction/browser-speech-voice";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -100,6 +101,17 @@ type ProjectionHandleReceipt = Readonly<{
   afterTopWorld: number;
 }>;
 
+type NodeDragGesture = {
+  pointerId: number;
+  sourceId: string | null;
+  originNodeId: string | null;
+  startX: number;
+  startY: number;
+  dragging: boolean;
+  targetId: string | null;
+  targetElement: HTMLElement | null;
+};
+
 export function RootedMaterial(props: RootedMaterialProps) {
   const { canUndo, navigation, onRemoveSelected, onUndo, tree } = props;
   const matterBasePath = process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
@@ -134,10 +146,28 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [presentationDamage, setPresentationDamage] = useState<PresentationDamage | null>(null);
   const presentationDamageRef = useRef<PresentationDamage | null>(null);
   const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
+  const [canvasMode, setCanvasMode] = useState<"material" | "pan">("material");
+  const [browserVoiceSupported, setBrowserVoiceSupported] = useState(
+    process.env.NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER !== "browser",
+  );
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setBrowserVoiceSupported(
+        process.env.NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER !== "browser" ||
+        isBrowserSpeechRecognitionAvailable(),
+      ));
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const [wheelMotionActive, setWheelMotionActive] = useState(false);
   const wheelMotionTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const pointerOriginNodeRef = useRef<string | null>(null);
+  const nodeDragRef = useRef<NodeDragGesture | null>(null);
+  const clearNodeDrag = useCallback(() => {
+    const gesture = nodeDragRef.current;
+    if (gesture?.targetElement) delete gesture.targetElement.dataset.dragOver;
+    if (shellRef.current) delete shellRef.current.dataset.nodeDragging;
+    nodeDragRef.current = null;
+  }, []);
   const markPerformance = useCallback((name: string) => {
     if (!props.performanceMarking || typeof window === "undefined") return;
     window.performance.mark(name);
@@ -193,6 +223,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     tree,
     documentEpoch: props.documentEpoch,
     canvasRef,
+    surfaceRef: documentRef,
     epoch: {
       treeRevision: tree.revision,
       layoutEpoch: activeLayout?.layoutEpoch ?? 0,
@@ -398,7 +429,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectedNode =
     navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
   const toolTargetNode = resolveToolTargetNode(navigation, tree);
-  const voiceAvailable = props.admissionAnchor !== null && voiceAdmissionIsEnabled();
+  const voiceAvailable = props.admissionAnchor !== null && voiceAdmissionIsEnabled() && browserVoiceSupported;
   const tools = useMemo(
     () =>
       projectTools({
@@ -462,13 +493,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
       measuredHeightCacheRef.current.clear();
       requestMeasurement();
     };
+    const remeasureWhenVisible = () => {
+      if (!document.hidden) remeasure();
+    };
     window.addEventListener("resize", remeasure);
+    window.addEventListener("pageshow", remeasureWhenVisible);
+    document.addEventListener("visibilitychange", remeasureWhenVisible);
+    const initialFrame = requestAnimationFrame(remeasure);
     void document.fonts?.ready.then(() => {
       if (mounted) remeasure();
     });
     return () => {
       mounted = false;
+      cancelAnimationFrame(initialFrame);
       window.removeEventListener("resize", remeasure);
+      window.removeEventListener("pageshow", remeasureWhenVisible);
+      document.removeEventListener("visibilitychange", remeasureWhenVisible);
     };
   }, []);
 
@@ -632,6 +672,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         event.preventDefault();
         return;
       }
+      if (canvasMode !== "pan") return;
       event.preventDefault();
       // Wheel navigation has no persistent gesture state, so give atmosphere
       // one short pulse and let repeated events extend it without polling.
@@ -658,19 +699,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // field gesture, so this boundary must be explicitly non-passive.
     shell.addEventListener("wheel", handleWheel, { passive: false });
     return () => shell.removeEventListener("wheel", handleWheel);
-  }, [lasso.active]);
-
-  // Read when a question is asked rather than on every render: the context is
-  // whatever is on screen at that moment, and nothing before it matters.
-  const projectInquiryPayload = useCallback(
-    () => projectInquiryContext(tree, navigation),
-    [navigation, tree],
-  );
+  }, [canvasMode, lasso.active]);
 
   return (
     <main
       className="matter-shell"
       data-dragging={viewport.gesture?.dragging || undefined}
+      data-canvas-mode={lasso.active ? "lasso" : canvasMode}
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
       data-stretching={stretch.dragging || undefined}
@@ -690,12 +725,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
       onLostPointerCapture={(event) => {
         if (stretch.pointerCancel(event.pointerId)) return;
         if (lasso.pointerCancel(event.pointerId)) return;
+        if (nodeDragRef.current?.pointerId === event.pointerId) clearNodeDrag();
         pointerOriginNodeRef.current = null;
         updateViewport({ type: "lost-pointer-capture", pointerId: event.pointerId });
       }}
       onPointerCancel={(event) => {
         if (stretch.pointerCancel(event.pointerId)) return;
         if (lasso.pointerCancel(event.pointerId)) return;
+        if (nodeDragRef.current?.pointerId === event.pointerId) clearNodeDrag();
         pointerOriginNodeRef.current = null;
         updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
       }}
@@ -716,6 +753,30 @@ export function RootedMaterial(props: RootedMaterialProps) {
         pointerOriginNodeRef.current =
           (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]")?.dataset
             .thoughtId ?? null;
+        const originNodeId = pointerOriginNodeRef.current;
+        if (canvasMode === "material") {
+          const sourceId = originNodeId !== null &&
+            originNodeId === navigation.selectedNodeId &&
+            tree.nodes[originNodeId]?.parentId !== null
+              ? originNodeId
+              : null;
+          nodeDragRef.current = {
+            pointerId: event.pointerId,
+            sourceId,
+            originNodeId,
+            startX: event.clientX,
+            startY: event.clientY,
+            dragging: false,
+            targetId: null,
+            targetElement: null,
+          };
+          try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+          } catch {
+            clearNodeDrag();
+          }
+          return;
+        }
         updateViewport({ type: "pointer-down", pointerId: event.pointerId, pointerType: normalizePointerType(event.pointerType), isPrimary: event.isPrimary, button: event.button, clientX: event.clientX, clientY: event.clientY });
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -730,6 +791,27 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (interactionPending) return;
         if (lasso.pointerMove(event)) {
           event.preventDefault();
+          return;
+        }
+        const nodeDrag = nodeDragRef.current;
+        if (nodeDrag?.pointerId === event.pointerId) {
+          if (!nodeDrag.dragging && Math.hypot(event.clientX - nodeDrag.startX, event.clientY - nodeDrag.startY) >= (event.pointerType === "touch" ? 8 : 4)) {
+            nodeDrag.dragging = true;
+            if (nodeDrag.sourceId !== null) event.currentTarget.dataset.nodeDragging = "true";
+          }
+          if (!nodeDrag.dragging || nodeDrag.sourceId === null) return;
+          event.preventDefault();
+          const targetElement = document.elementFromPoint(event.clientX, event.clientY)
+            ?.closest<HTMLElement>("[data-thought-id]") ?? null;
+          const targetId = targetElement?.dataset.thoughtId ?? null;
+          const validTarget = targetId !== null && canMoveNodeToParent(tree, nodeDrag.sourceId, targetId);
+          const nextElement = validTarget ? targetElement : null;
+          if (nodeDrag.targetElement !== nextElement) {
+            if (nodeDrag.targetElement) delete nodeDrag.targetElement.dataset.dragOver;
+            if (nextElement) nextElement.dataset.dragOver = "true";
+          }
+          nodeDrag.targetElement = nextElement;
+          nodeDrag.targetId = validTarget ? targetId : null;
           return;
         }
         if (viewport.gesture?.pointerId !== event.pointerId) return;
@@ -751,6 +833,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           return;
         }
+        const nodeDrag = nodeDragRef.current;
+        if (nodeDrag?.pointerId === event.pointerId) {
+          const targetId = nodeDrag.targetId;
+          const shouldMove = nodeDrag.sourceId !== null && nodeDrag.dragging && targetId !== null && canMoveNodeToParent(tree, nodeDrag.sourceId, targetId);
+          clearNodeDrag();
+          suppressClickRef.current = true;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+          if (shouldMove && nodeDrag.sourceId !== null) props.onMoveNode(nodeDrag.sourceId, targetId);
+          else if (!nodeDrag.dragging) {
+            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) props.onSelectNode(nodeDrag.originNodeId);
+            else props.onClearSelection();
+          }
+          return;
+        }
         if (viewport.gesture?.pointerId !== event.pointerId) return;
         const dragged =
           viewport.gesture.dragging ||
@@ -763,6 +859,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         // Pointer capture keeps dragging reliable over text, but retargets the
         // browser click. Resolve a sub-threshold gesture here as node selection.
         if (!dragged) {
+          setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
             props.onSelectNode(originNodeId);
           } else {
@@ -811,11 +908,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onLasso={() => {
           if (lasso.active) {
             lasso.deactivate();
+            setCanvasMode("material");
             return;
           }
-          if (activeLayout !== null) lasso.activate();
+          if (activeLayout !== null) {
+            setCanvasMode("material");
+            lasso.activate();
+          }
         }}
-        onMove={() => lasso.deactivate()}
+        onMove={() => {
+          lasso.deactivate();
+          setCanvasMode("pan");
+        }}
         onIntent={(intent) => dispatchToolIntent(intent, props)}
         onVoice={() => {
           if (props.admission.state.phase === "recording") {
@@ -828,6 +932,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
         }}
         surface={toolSurface}
+        panActive={!lasso.active && canvasMode === "pan"}
         voiceActive={props.admission.state.phase === "recording"}
         voiceAvailable={voiceAvailable}
         voiceLabel={
@@ -873,7 +978,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSourceText={lasso.sourceText}
               navigation={navigation}
               onSelectNode={props.onSelectNode}
-              onMoveNode={props.onMoveNode}
               projection={projection}
               splitProjectionRef={splitProjectionRef}
             />
@@ -895,9 +999,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
         >
           <p className="matter-guidance__next">{guidance.text}</p>
         </footer>
-        <CanvasChrome {...canvasPreferences} inquiryContext={projectInquiryPayload} />
+        <CanvasChrome {...canvasPreferences} />
       </section>
       <LassoSelectionTray
+        locale={props.locale}
         onClear={lasso.clearSelection}
         onLocate={(selection: SegmentSelection) => {
           props.onSelectNode(selection.nodeId);
@@ -912,6 +1017,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         drawing={lasso.drawing}
         closurePathRef={lasso.closurePathRef}
         inkPathRef={lasso.inkPathRef}
+        particleCanvasRef={lasso.particleCanvasRef}
         rects={lasso.selectionSetRects.length > 0 ? lasso.selectionSetRects : lasso.selectionRects}
         selectedText={lasso.selection?.selectedText ?? null}
         elasticRef={elasticRef}
@@ -935,7 +1041,6 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText,
   navigation,
   onSelectNode,
-  onMoveNode,
   projection,
   splitProjectionRef,
 }: {
@@ -945,7 +1050,6 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText: string | null;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
-  onMoveNode: (nodeId: string, targetParentId: string) => void;
   projection: readonly LayoutProjectionItem[];
   splitProjectionRef: React.RefObject<HTMLDivElement | null>;
 }) {
@@ -969,25 +1073,6 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-thought-id={node.id}
             data-parent-id={node.parentId ?? undefined}
             key={node.id}
-            draggable={!interactionPending && node.parentId !== null}
-            onDragStart={(event) => {
-              event.dataTransfer.effectAllowed = "move";
-              event.dataTransfer.setData("text/matter-node", node.id);
-            }}
-            onDragOver={(event) => {
-              const sourceId = event.dataTransfer.types.includes("text/matter-node");
-              if (sourceId && node.parentId !== null) {
-                event.preventDefault();
-                event.currentTarget.dataset.dragOver = "true";
-              }
-            }}
-            onDragLeave={(event) => { delete event.currentTarget.dataset.dragOver; }}
-            onDrop={(event) => {
-              event.preventDefault();
-              delete event.currentTarget.dataset.dragOver;
-              const sourceId = event.dataTransfer.getData("text/matter-node");
-              if (sourceId && sourceId !== node.id) onMoveNode(sourceId, node.id);
-            }}
           >
             <button
               aria-pressed={isSelected}
@@ -1043,6 +1128,7 @@ function LassoOverlay({
   drawing,
   closurePathRef,
   inkPathRef,
+  particleCanvasRef,
   rects,
   selectedText,
   elasticRef,
@@ -1053,6 +1139,7 @@ function LassoOverlay({
   drawing: boolean;
   closurePathRef: React.RefObject<SVGPathElement | null>;
   inkPathRef: React.RefObject<SVGPathElement | null>;
+  particleCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   rects: readonly { x: number; y: number; width: number; height: number }[];
   selectedText: string | null;
   elasticRef: React.RefObject<HTMLDivElement | null>;
@@ -1115,6 +1202,7 @@ function LassoOverlay({
           </div>
         </>
       )}
+      <canvas aria-hidden="true" className="lasso-particles" ref={particleCanvasRef} />
       <svg aria-hidden="true" className="lasso-ink">
         <path className="lasso-ink__trace" ref={inkPathRef} />
         <path className="lasso-ink__closure" ref={closurePathRef} />

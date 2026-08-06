@@ -287,6 +287,23 @@ describe("Matter store", () => {
     );
   });
 
+  it("publishes a structural move once and restores it through named undo", () => {
+    const store = createMatterStore();
+    const before = store.getState().tree;
+    store.getState().select(ROOTED_FIXTURE_NODE_IDS.imaginedTime);
+    expect(store.getState().moveNode({
+      commandId: "human_move_store",
+      nodeId: ROOTED_FIXTURE_NODE_IDS.imaginedTime,
+      targetParentId: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+      createdAt: "2026-08-07T00:00:00.000Z",
+    })).toMatchObject({ operation: "commit", status: "committed" });
+    expect(store.getState().tree.nodes[ROOTED_FIXTURE_NODE_IDS.imaginedTime].parentId)
+      .toBe(ROOTED_FIXTURE_NODE_IDS.presentDistance);
+    expect(store.getState().navigation.selectedNodeId).toBe(ROOTED_FIXTURE_NODE_IDS.imaginedTime);
+    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes).toEqual(before.nodes);
+  });
+
   it("hydrates one validated snapshot while clearing runtime history and navigation", () => {
     const store = createMatterStore();
     const initial = store.getState();

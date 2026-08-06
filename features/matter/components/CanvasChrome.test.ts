@@ -35,53 +35,14 @@ describe("CanvasChrome", () => {
     expect(markup).toContain("定价");
     expect(markup).toContain("隐私政策");
     expect(markup).toContain("服务条款");
-    expect(markup).toContain("询问Matter");
+    expect(markup).toContain("使用说明");
   });
 
-  // The inquiry is the one input surface in the chrome. It stays bounded: a
-  // single field, closed until asked for, with no transcript and no form that
-  // could post anywhere.
-  it("exposes exactly one closed inquiry composer and no transcript", () => {
+  it("keeps help informational and exposes no assistant input surface", () => {
     const markup = renderChrome();
 
-    expect(markup.match(/<textarea\b/g)).toHaveLength(1);
-    expect(markup).not.toMatch(/<(?:input|form)\b/);
-    expect(markup).toContain('id="matter-inquiry"');
-    expect(markup).toContain('data-inquiry-phase="idle"');
-    expect(markup).toMatch(/id="matter-inquiry"[^>]*hidden|hidden[^>]*id="matter-inquiry"/);
-    expect(markup).toContain('aria-controls="matter-inquiry"');
-    // Nothing of the exchange exists before it is asked for.
-    expect(markup).not.toContain("data-inquiry-thread");
-    expect(markup).not.toMatch(/chat|assistant|history/i);
-  });
-
-  /**
-   * `display` on the element outranks the user agent's `[hidden]` rule, so the
-   * closed state has to be stated in the stylesheet. It once was not, and the
-   * inquiry was permanently on screen while every markup assertion still
-   * passed — the attribute was correct and nothing was hidden.
-   */
-  it("shuts the inquiry in CSS, not only in markup", () => {
-    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
-
-    expect(css).toMatch(/\.inquiry\[hidden\]\s*\{[^}]*display:\s*none/);
-  });
-
-  // A scrollbar appearing with each new answer read as a progress bar.
-  it("keeps the exchange scrollable without a visible scrollbar", () => {
-    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
-    const thread = css.slice(css.indexOf(".inquiryThread {"));
-
-    expect(thread).toMatch(/overflow-y:\s*auto/);
-    expect(thread).toMatch(/scrollbar-width:\s*none/);
-    expect(thread).toMatch(/\.inquiryThread::-webkit-scrollbar\s*\{[^}]*width:\s*0/);
-  });
-
-  it("cannot ask until there is something to ask", () => {
-    const markup = renderChrome();
-    const ask = markup.match(/<button[^>]*data-inquiry-control="ask"[^>]*>/)?.[0] ?? "";
-
-    expect(ask).toContain("disabled");
+    expect(markup).not.toMatch(/<(?:textarea|input|form)\b/);
+    expect(markup).not.toMatch(/data-inquiry|chat|assistant/i);
   });
 
   it("keeps pre-release information honest and task-oriented", () => {

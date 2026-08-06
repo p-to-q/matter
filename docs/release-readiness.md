@@ -9,10 +9,11 @@ The current online-safe claim is narrow:
 
 ```text
 /matter
-  rooted fixture material
+  one seeded root on the dedicated origin; local research may use expanded fixture material
   local Markdown durability through IndexedDB
   ZIP export/import of the same strict Markdown tree
   file outline, focus/fold, copy, lasso, stretch projection
+  explicit canvas-pan mode and undoable cross-branch structural reparenting
   browser-native live voice admission (no fixture voice on the public origin)
   derived navigation labels, with a fixture model adapter behind them
   no live model transformation
@@ -30,21 +31,21 @@ dependency monitor.
 
 ## Candidate verification — 0.2.0-preview.6
 
-The proprietary candidate was rebuilt and verified locally on 2026-08-06:
+The proprietary candidate was rebuilt and verified locally on 2026-08-07:
 
 ```text
-npx vitest run --exclude CanvasChrome.test.ts --exclude inquiry-composer.test.ts
-                       726 release-owned tests passed; doctor, links, typecheck,
-                       lint, and browser-mode build also passed
-npm run test:e2e       35 passed + 1 skipped Chromium cases at laptop, 390 px, and 320 px
+npm run check          770 tests passed + 1 skipped; doctor, links, typecheck,
+                       lint, and browser-mode production build also passed
+npm run test:e2e       37 passed + 1 skipped Chromium cases at laptop, 390 px, 320 px,
+                       and a wide structural-drag fixture
 npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
 ```
 
-The production diagnostic keeps 4,314 elements, a `64–68 ms` cold task, and
-`93–100 ms` measured structural tasks after warmup. A first full 2,000-node
-structural remount still reaches `105–114 ms`, so the unchanged `<100 ms` raw
-gate correctly fails. The fixture-seeded preview does not claim that large-tree
-release bound; the viewport-DOM renderer decision remains open in the active plan.
+The current production diagnostic keeps 4,349 elements and an `85 ms` cold task.
+Its measured fold p95 is `111.2–117 ms`, focus p95 is `113–116.5 ms`, selection
+p95 is `28–36.1 ms`, and the maximum raw long task is `108 ms`, so the unchanged `<100 ms` raw gate
+correctly fails. The root-seeded preview does not claim that large-tree release
+bound; the viewport-DOM renderer decision remains open in the active plan.
 
 These receipts prove the proprietary, root-seeded preview boundary. They do not
 promote the missing transform, accounts/sync, or strict large-tree gate listed

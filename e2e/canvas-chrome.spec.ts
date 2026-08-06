@@ -10,7 +10,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   const rootThought = page.locator('[data-thought-id="thought_fixture_root"]');
   const about = page.getByRole("button", { name: "关于", exact: true });
   const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
-  const help = page.getByRole("button", { name: "询问Matter", exact: true });
+  const help = page.getByRole("button", { name: "使用说明", exact: true });
   const guidance = page.locator(".matter-guidance");
   const paperBox = await paper.boundingBox();
   const aboutBox = await about.boundingBox();
@@ -78,16 +78,16 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(settings).toBeFocused();
 
   await help.click();
-  const helpDialog = page.getByRole("dialog", { name: "询问Matter" });
+  const helpDialog = page.getByRole("dialog", { name: "如何使用 Matter" });
   await expect(helpDialog).toContainText("先用麦克风说出根想法");
-  await expect(helpDialog.getByRole("textbox", { name: "问一句关于这份材料的话" })).toBeVisible();
+  await expect(helpDialog.locator("input, textarea, form, [contenteditable=true]")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(helpDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
   await page.locator('[data-chrome-control="language"]').click({ force: true });
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await expect(page.locator(".matter-guidance__next")).toHaveText("Select one thought.");
-  await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Guide", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Leaf shadows: On" }).click();
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
@@ -117,7 +117,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.reload();
   await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
-  await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Guide", exact: true })).toBeVisible();
 });
 
 test("mobile canvas menu stays inside the paper and restores focus", async ({ page }) => {

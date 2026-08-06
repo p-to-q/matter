@@ -505,6 +505,9 @@ export function createBrowserVoicePort(): VoicePort {
   ) {
     // Native recognition keeps raw audio out of the Matter server when the UA supports it.
     if (isBrowserSpeechRecognitionAvailable()) return createBrowserSpeechVoicePort();
+    // Browser mode deliberately has no HTTP audio adapter. Fail before asking
+    // for a recording instead of collecting audio for a guaranteed 503.
+    throw new VoiceError("VOICE_UNSUPPORTED");
   }
   if (
     typeof navigator === "undefined" ||

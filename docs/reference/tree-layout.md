@@ -81,7 +81,9 @@ Structure produces one constrained two-dimensional arrangement:
   sibling;
 - fold removes a descendant subtree from packing, while focus lays out only the
   exact lineage;
-- a person cannot drag a node or persist a coordinate.
+- dragging a selected non-root node may change its structural parent, but never
+  authors or persists a coordinate; layout still derives every box from the
+  resulting tree.
 
 The restored hackathon surface renders this geometry as frameless text without
 visible lineage connectors. The root column is the viewport anchor: adding

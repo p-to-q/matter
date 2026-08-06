@@ -1,5 +1,6 @@
 import { RECORDING_LIMIT_MS } from "./audio-policy";
 import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./browser-voice";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 type SpeechAlternative = { readonly transcript: string };
 type SpeechResult = ArrayLike<SpeechAlternative> & { readonly isFinal: boolean };
@@ -34,7 +35,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
   private recognition: SpeechRecognitionLike | null = null;
   private operation: VoiceOperation | null = null;
   private callbacks: VoiceCallbacks = {};
-  private startedAt = 0;
+  private startedAt = -1;
   private timer: number | null = null;
   private stopping = false;
   private finalTranscript = "";
@@ -54,6 +55,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.callbacks = callbacks;
     this.finalTranscript = "";
     this.interimTranscript = "";
+    this.startedAt = -1;
     this.stopping = false;
     const startPromise = new Promise<void>((resolve, reject) => { this.resolveStart = resolve; this.rejectStart = reject; });
     this.startPromise = startPromise;
@@ -64,12 +66,20 @@ export class BrowserSpeechVoicePort implements VoicePort {
     recognition.maxAlternatives = 1;
     recognition.lang = callbacks.locale ?? "zh-CN";
     recognition.onstart = () => {
-      this.startedAt = performance.now();
-      this.timer = window.setTimeout(() => this.callbacks.onDurationLimit?.(this.operation!), RECORDING_LIMIT_MS);
+      if (this.recognition !== recognition) return;
+      if (this.startedAt < 0) {
+        this.startedAt = performance.now();
+        this.timer = window.setTimeout(() => {
+          if (this.recognition === recognition && this.operation !== null) {
+            this.callbacks.onDurationLimit?.(this.operation);
+          }
+        }, RECORDING_LIMIT_MS);
+      }
       this.resolveStart?.();
       this.resolveStart = null;
     };
     recognition.onresult = (event) => {
+      if (this.recognition !== recognition) return;
       let finalText = "";
       let interimText = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
@@ -80,9 +90,14 @@ export class BrowserSpeechVoicePort implements VoicePort {
       if (finalText) this.finalTranscript += finalText;
       this.interimTranscript = interimText;
       const preview = `${this.finalTranscript} ${this.interimTranscript}`.trim();
+      if (preview.length > MAX_NODE_TEXT_CODE_UNITS) {
+        this.fail(new VoiceError("RECORDING_TOO_LARGE"));
+        return;
+      }
       if (preview) this.callbacks.onTranscript?.(preview);
     };
     recognition.onerror = (event) => {
+      if (this.recognition !== recognition) return;
       if (this.stopping && event.error === "aborted") return;
       const code = event.error === "not-allowed" || event.error === "service-not-allowed"
         ? "MICROPHONE_DENIED"
@@ -91,9 +106,15 @@ export class BrowserSpeechVoicePort implements VoicePort {
       this.fail(new VoiceError(code));
     };
     recognition.onend = () => {
-      if (!this.stopping) { this.fail(new VoiceError("RECORDING_FAILED")); return; }
+      if (this.recognition !== recognition) return;
+      if (!this.stopping) {
+        // Chromium may end a continuous session after a quiet interval. Keep
+        // one admitted utterance open until the person explicitly stops it.
+        try { recognition.start(); } catch { this.fail(new VoiceError("RECORDING_FAILED")); }
+        return;
+      }
       const operationValue = this.operation!;
-      const transcript = this.finalTranscript.trim();
+      const transcript = `${this.finalTranscript} ${this.interimTranscript}`.trim();
       if (!transcript) { this.fail(new VoiceError("RECORDING_EMPTY")); return; }
       const recording: VoiceRecording = Object.freeze({ operation: operationValue, audio: new Blob([], { type: "audio/webm" }), durationMs: Math.max(1, Math.round(performance.now() - this.startedAt)), transcript });
       this.resolveStop?.(recording);
@@ -148,6 +169,10 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.rejectStop = null;
     this.startPromise = null;
     this.stopPromise = null;
+    this.startedAt = -1;
+    this.stopping = false;
+    this.finalTranscript = "";
+    this.interimTranscript = "";
   }
 }
 

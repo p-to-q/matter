@@ -30,7 +30,7 @@ import {
   type RuntimeState,
 } from "../runtime/session";
 import type { AdmissionAnchor, AdmissionValues } from "../runtime/admission";
-import { moveNodeToParentCommand } from "../runtime/move";
+import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
 import { validateThoughtTree } from "../tree/invariants";
@@ -84,7 +84,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   applyFixtureText: (nodeId: string, text: string) => MatterStoreReceipt;
   admitHumanTranscript: (anchor: AdmissionAnchor, values: AdmissionValues) => MatterStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
-  moveNode: (nodeId: string, targetParentId: string) => MatterStoreReceipt;
+  moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   clearSelection: () => MatterStoreReceipt;
@@ -223,15 +223,10 @@ export function createMatterStore(
       return requireSynchronousReceipt(receipt);
     },
 
-    moveNode: (nodeId, targetParentId) => {
+    moveNode: (values) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const command = moveNodeToParentCommand(current.tree, {
-          commandId: `move:${current.tree.revision}:${nodeId}`,
-          nodeId,
-          targetParentId,
-          createdAt: new Date().toISOString(),
-        });
+        const command = moveNodeToParentCommand(current.tree, values);
         if (!command) {
           receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
           return freezeState({ ...current, lastError: { code: "INVALID_COMMAND", message: "The node move is not valid." }, lastReceipt: receipt });
