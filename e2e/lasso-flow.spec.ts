@@ -17,14 +17,14 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
     const lasso = page.getByRole("button", { name: "Circle-select language", exact: true });
-    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeEnabled();
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     const move = page.getByRole("button", { name: "Return to canvas pan", exact: true });
     await expect(move).toBeEnabled();
     await move.click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
-    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeEnabled();
     const cameraBeforeMovePan = await page.locator("main.matter-shell").evaluate((main) => ({
       x: Number(main.getAttribute("data-viewport-x")),
       y: Number(main.getAttribute("data-viewport-y")),

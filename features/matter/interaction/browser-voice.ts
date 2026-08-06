@@ -499,7 +499,10 @@ function notify(callback: () => void): void {
 }
 
 export function createBrowserVoicePort(): VoicePort {
-  if (typeof window !== "undefined") {
+  if (
+    typeof window !== "undefined" &&
+    process.env.NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER === "browser"
+  ) {
     // Native recognition keeps raw audio out of the Matter server when the UA supports it.
     if (isBrowserSpeechRecognitionAvailable()) return createBrowserSpeechVoicePort();
   }

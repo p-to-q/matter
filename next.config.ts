@@ -50,6 +50,7 @@ export default function matterNextConfig(phase: string): NextConfig {
       NEXT_PUBLIC_MATTER_BASE_PATH: basePath,
       NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT: initialDocument,
       NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: voiceAdmissionEnabled ? "true" : "false",
+      NEXT_PUBLIC_MATTER_TRANSCRIPTION_ADAPTER: process.env.MATTER_TRANSCRIPTION_ADAPTER ?? "",
     },
     outputFileTracingRoot: process.cwd(),
   };

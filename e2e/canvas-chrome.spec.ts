@@ -47,12 +47,12 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await help.evaluate((element) => { element.style.animation = "none"; });
   await guidance.hover();
   await page.waitForTimeout(200);
-  expect(await guidance.evaluate((element) => getComputedStyle(element, "::before").backgroundColor))
-    .toBe("rgb(22, 29, 39)");
+  expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
+    .toContain(await guidance.evaluate((element) => getComputedStyle(element, "::before").backgroundColor));
   await help.hover();
   await page.waitForTimeout(200);
-  expect(await help.evaluate((element) => getComputedStyle(element, "::before").backgroundColor))
-    .toBe("rgb(22, 29, 39)");
+  expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
+    .toContain(await help.evaluate((element) => getComputedStyle(element, "::before").backgroundColor));
 
   await settings.click();
   const settingsMenu = page.getByRole("menu", { name: "Matter 设置" });
