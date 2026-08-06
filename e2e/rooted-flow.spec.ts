@@ -100,6 +100,7 @@ for (const viewport of [
     }
 
     await tool("Extend related thought").click();
+    await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
     const defaultRootChildId = (await visibleIds(page)).at(-1);
     if (defaultRootChildId === undefined) throw new Error("default root child missing");
     expect(defaultRootChildId).not.toBe(rootId);
