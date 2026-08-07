@@ -41,7 +41,7 @@
 }
 
 .root button:focus-visible {
-  outline: 1px solid currentColor;
+  outline: 2px solid var(--chrome-text);
   outline-offset: 2px;
 }
 
@@ -79,9 +79,10 @@
   isolation: isolate;
   position: relative;
   display: inline-flex;
-  height: 20px;
+  height: 28px;
   align-items: center;
   justify-content: center;
+  margin-block: -4px;
   padding: 0 4px;
   white-space: nowrap;
   cursor: pointer;
@@ -97,7 +98,7 @@
 .askButton::before {
   position: absolute;
   z-index: -1;
-  inset: 0;
+  inset: 4px 0;
   background: transparent;
   content: "";
   transition: background-color 150ms ease;
@@ -122,19 +123,37 @@
 }
 
 .gearButton {
+  isolation: isolate;
   position: relative;
   display: flex;
-  width: 14px;
-  height: 14px;
+  width: 30px;
+  height: 30px;
+  margin: -8px;
   padding: 0;
+  align-items: center;
+  justify-content: center;
   color: var(--chrome-muted) !important;
   cursor: pointer;
 }
 
-.gearButton::after {
+.gearButton::before {
   position: absolute;
-  inset: -8px;
+  z-index: -1;
+  inset: 0;
+  border-radius: 9px;
+  background: transparent;
   content: "";
+  transition: background-color 150ms ease;
+}
+
+.gearButton:hover,
+.gearButton:focus-visible {
+  color: var(--chrome-hover-text) !important;
+}
+
+.gearButton:hover::before,
+.gearButton:focus-visible::before {
+  background: var(--chrome-hover-bg);
 }
 
 .gearButton svg {
@@ -154,10 +173,14 @@
 
 .askButton {
   min-width: 95.05px;
-  background: var(--chrome-primary) !important;
+  background: transparent !important;
   color: var(--chrome-primary-fg) !important;
   font-weight: 500 !important;
   letter-spacing: .7px;
+}
+
+.askButton::before {
+  background: var(--chrome-primary);
 }
 
 .iconLabelControl {

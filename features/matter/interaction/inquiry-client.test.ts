@@ -49,6 +49,17 @@ describe("inquiry client", () => {
       lineage: [{ ...start.lineage[0], text: "另一段" }],
     })).toBe(false);
   });
+
+  it("does not start a fetch when the owning interaction is already cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchImpl = vi.fn();
+    await expect(askInquiry({ ...INPUT, signal: controller.signal, fetchImpl })).resolves.toEqual({
+      status: "unavailable",
+      reason: "UNREACHABLE",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
 });
 
 const INPUT = {

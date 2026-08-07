@@ -34,6 +34,7 @@ export default defineConfig({
       MATTER_FIXTURE_ADMISSION_TRANSCRIPT: "也许我还没有想清楚，但这句话可以先留在这里，等它继续长出自己的方向。",
       MATTER_FIXTURE_DIRECTION_TRANSCRIPT: "把这里说得更具体一些，但保留一点不确定。",
       MATTER_INQUIRY_ADAPTER: "off",
+      MATTER_E2E_RUNNER: "playwright",
       NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED: "false",
       NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED: "true",
       MATTER_LABEL_ADAPTER: "fixture",

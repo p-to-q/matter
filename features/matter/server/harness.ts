@@ -171,6 +171,8 @@ export class ScenarioGovernor {
 export type RunScenarioOptions = Readonly<{
   now?: () => number;
   limits?: ScenarioGovernorLimits;
+  /** The request boundary that owns this provider call, when one exists. */
+  signal?: AbortSignal;
   /**
    * A deadline the caller must not exceed, whatever the scenario would prefer.
    * The shorter of the two wins: a scenario knows how long its answer takes,
@@ -188,6 +190,7 @@ export async function runScenario<Input, Value>(
 ): Promise<ScenarioOutcome<Value>> {
   const now = options.now ?? Date.now;
   const limits = options.limits ?? DEFAULT_GOVERNOR_LIMITS;
+  if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
   if (adapter === null) return fallback("MODEL_UNAVAILABLE");
   if (governor.cooling(now())) return fallback("MODEL_UNAVAILABLE");
   if (!governor.admit(limits)) return fallback("MODEL_BUSY");
@@ -202,6 +205,7 @@ export async function runScenario<Input, Value>(
   // permanent fraction of its concurrency for the life of the process, and the
   // symptom is every later request answering MODEL_BUSY for no visible reason.
   const deadline = new AbortController();
+  const cancel = () => deadline.abort(new DOMException("Aborted", "AbortError"));
   let timer: ReturnType<typeof setTimeout> | undefined;
   let boundary: { promise: Promise<never>; dispose: () => void } | undefined;
   let work: Promise<Readonly<{ text: string }>>;
@@ -217,6 +221,8 @@ export async function runScenario<Input, Value>(
     });
     timer = setTimeout(() => deadline.abort(), budget.deadlineMs);
     boundary = rejectOnAbort(deadline.signal);
+    options.signal?.addEventListener("abort", cancel, { once: true });
+    if (options.signal?.aborted) cancel();
     work = adapter(call, deadline.signal);
     const release = () => governor.release();
     work.then(release, release);
@@ -224,7 +230,8 @@ export async function runScenario<Input, Value>(
     governor.release();
     if (timer !== undefined) clearTimeout(timer);
     boundary?.dispose();
-    governor.failed(now(), limits);
+    options.signal?.removeEventListener("abort", cancel);
+    if (!options.signal?.aborted) governor.failed(now(), limits);
     return fallback("MODEL_UNAVAILABLE");
   }
 
@@ -243,11 +250,16 @@ export async function runScenario<Input, Value>(
     // An adjudicator that throws is a defect, not a provider failure, but it
     // reaches the person the same way: the floor. Distinguishing them here
     // would only add a code nothing branches on.
-    governor.failed(now(), limits);
-    return fallback(deadline.signal.aborted ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
+    if (!options.signal?.aborted) governor.failed(now(), limits);
+    return fallback(
+      deadline.signal.aborted && !options.signal?.aborted
+        ? "MODEL_TIMEOUT"
+        : "MODEL_UNAVAILABLE",
+    );
   } finally {
     clearTimeout(timer);
     boundary.dispose();
+    options.signal?.removeEventListener("abort", cancel);
   }
 }
 

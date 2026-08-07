@@ -35,3 +35,28 @@ export function createSignalTerminator(child, schedule = setTimeout, cancel = cl
     },
   };
 }
+
+/**
+ * POSIX detached children lead a process group, so signalling the negative pid
+ * also reaches Playwright and the Next server it owns. Windows lacks that
+ * primitive here and deliberately falls back to the direct child handle.
+ */
+export function createProcessSignalTarget(
+  child,
+  platform = process.platform,
+  signalProcess = process.kill,
+) {
+  if (platform === "win32" || !Number.isSafeInteger(child.pid) || child.pid <= 0) {
+    return child;
+  }
+  return {
+    kill(signal) {
+      try {
+        return signalProcess(-child.pid, signal);
+      } catch (error) {
+        if (error?.code === "ESRCH") return false;
+        throw error;
+      }
+    },
+  };
+}

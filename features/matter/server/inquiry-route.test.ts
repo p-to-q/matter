@@ -40,6 +40,32 @@ describe("inquiry route", () => {
     expect(await response.text()).not.toMatch(/qwen|provider|secret/iu);
   });
 
+  it("propagates request cancellation through the route boundary to the provider", async () => {
+    const controller = new AbortController();
+    let providerAborted = false;
+    let providerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    const pending = handleInquiryRequest(new Request("https://matter.test/api/inquiry", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body()),
+      signal: controller.signal,
+    }), async (_call, signal) => await new Promise<Readonly<{ text: string }>>((_resolve, reject) => {
+      providerStarted();
+      signal.addEventListener("abort", () => {
+        providerAborted = true;
+        reject(new DOMException("Aborted", "AbortError"));
+      }, { once: true });
+    }));
+
+    await started;
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(providerAborted).toBe(true);
+  });
+
   it("distinguishes empty material and never echoes the question", async () => {
     const secret = "这句话不应该出现在回应里";
     const empty = await post(body({

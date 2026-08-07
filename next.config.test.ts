@@ -8,15 +8,29 @@ describe("Matter Next development output", () => {
   });
 
   it("allows the one isolated directory for the development runner", () => {
-    expect(resolveMatterNextDistDir(PHASE_DEVELOPMENT_SERVER, ".next-e2e")).toBe(
+    expect(resolveMatterNextDistDir(
+      PHASE_DEVELOPMENT_SERVER,
       ".next-e2e",
+      "playwright",
+    )).toBe(
+      ".next-e2e",
+    );
+  });
+
+  it("ignores a leaked isolated directory without runner ownership", () => {
+    expect(resolveMatterNextDistDir(PHASE_DEVELOPMENT_SERVER, ".next-e2e")).toBe(
+      ".next",
     );
   });
 
   it.each(["", ".next", ".next-local", "../outside", "/tmp/outside", ".next/e2e"]) (
     "rejects non-reserved output directory %j",
     (value) => {
-      expect(resolveMatterNextDistDir(PHASE_DEVELOPMENT_SERVER, value)).toBe(".next");
+      expect(resolveMatterNextDistDir(
+        PHASE_DEVELOPMENT_SERVER,
+        value,
+        "playwright",
+      )).toBe(".next");
     },
   );
 

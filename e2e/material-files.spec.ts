@@ -191,3 +191,30 @@ for (const viewport of [
     expect(browserErrors).toEqual([]);
   });
 }
+
+test("storage exhaustion stays discoverable with the narrow material drawer closed", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore["put"]>) {
+      if (this.name === "snapshots") throw new DOMException("storage full", "QuotaExceededError");
+      return originalPut.apply(this, args);
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const toggle = page.getByRole("button", { name: "Show material files; saving needs attention" });
+  await expect(toggle).toHaveAttribute("data-persistence-error", "true");
+  await toggle.click();
+
+  const sidebar = page.locator("aside.material-files");
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
+  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("存储已满 · 先导出备份");
+  await sidebar.getByRole("button", { name: "Open archive to export material before freeing storage" }).click();
+
+  const archive = sidebar.getByRole("region", { name: "Material archive" });
+  await expect(archive).toContainText("Local storage is full");
+  await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: "Retry saving" })).toBeEnabled();
+});

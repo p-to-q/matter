@@ -110,6 +110,10 @@ export function CopyIcon({ className, ...props }: IconProps) {
   return <svg {...sharedProps} className={className} {...props}><rect x="5.25" y="5.25" width="7.25" height="7.25" rx="1" stroke="currentColor" /><path d="M10.5 5.25V3.5h-7v7h1.75" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
+export function DownloadIcon({ className, ...props }: IconProps) {
+  return <svg {...sharedProps} className={className} {...props}><path d="M8 2v8M5 7.5 8 10.5l3-3M3 12.5h10" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+
 export function SidebarIcon({ className, ...props }: IconProps) {
   return <svg {...sharedProps} className={className} {...props}><rect x="2" y="2.5" width="12" height="11" rx="1.5" stroke="currentColor" /><path d="M6 2.5v11M8.5 5h3M8.5 8h3M8.5 11h2" stroke="currentColor" strokeLinecap="round" /></svg>;
 }

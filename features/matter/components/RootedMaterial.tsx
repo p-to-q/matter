@@ -134,7 +134,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const { canUndo, navigation, onRemoveSelected, onUndo, tree } = props;
   const matterBasePath = process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
   const { canvasPreferences } = props;
-  const interactionPending = props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
+  // A revision orders one known lineage; it cannot reconcile edits made before
+  // IndexedDB has identified that lineage. Keep durable gestures inert during
+  // bootstrap so hydration can never discard a load-window edit.
+  const persistenceLoading = props.persistence.status.phase === "loading";
+  const interactionPending = persistenceLoading || (
+    props.admission.state.phase !== "idle" && props.admission.state.phase !== "error"
+  );
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);

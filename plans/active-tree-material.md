@@ -1,7 +1,7 @@
 # Plan: Matter first release
 
 Status: Active  
-Current phase: 2 — Thought can be handled  
+Current phase: 2 — complete the generative turn
 Destination: the first usable public release at `ptoq.io/matter`
 
 This is the only roadmap. It ends at the first release; it is not a forecast of
@@ -23,6 +23,36 @@ The release is complete when a person can, without a keyboard:
 The release ends there. Accounts, sync, collaboration, touch parity, streaming,
 split/merge, cross-links, redo, tool prediction, retrieval, and a public SDK are
 not later phases of this plan. They remain outside the first release.
+
+## Next preview execution line
+
+The next preview is not another shell-design pass. Work proceeds in this order,
+and each line closes with its focused proof before the next one starts:
+
+1. **Recovery and bootstrap.** Make storage exhaustion discoverable while the
+   narrow file drawer is closed; keep export and retry reachable; prevent every
+   durable gesture until IndexedDB bootstrap has identified the home lineage.
+   Then freeze and build one strict active-document pointer so a successfully
+   imported foreign-id archive remains the local home document after reload.
+2. **Fixture transform loop.** Build the missing vertical `/api/turn` slice:
+   strict envelope and plan contracts, degree-to-length policy, server planner,
+   fixture provider, bounded route/client, synchronous plan translator, one
+   store commit, and the existing Voice control acting as direction while a
+   focused punctuation selection is stretched. The first proof ends with one
+   local change and exact pointer undo; a route alone is not a product receipt.
+3. **Live transform and deployed receipt.** Enable the same validated scenario
+   behind server-only provider configuration, distributed rate and spend guards,
+   then run the complete no-keyboard path on the deployed origin. Fixture output
+   never silently substitutes for an unavailable live provider.
+4. **Large-tree renderer decision.** Either freeze viewport DOM over the complete
+   pure layout, or publish a smaller supported interactive bound. No local CSS or
+   memoization patch may weaken the existing strict `<100 ms` receipt.
+5. **Release integration.** Re-run fixture and live paths at laptop and narrow
+   widths, close only issues whose shipped proof exists, and publish the next
+   preview from that receipt.
+
+Directory export, multi-document UI, accounts, sync, collaboration, retrieval,
+streaming generation, and new gestures remain outside this execution line.
 
 ## How a phase moves
 
@@ -89,6 +119,21 @@ Invariants: material text never derives or overwrites the title; blank rename re
             title changes are durable and pointer-undoable; no new-document UI is implied
 Proof:      title command forward/inverse, blank-reset, reload, and archive tests
 Non-goals:  document picker, multiple active documents, accounts, sync, or title generation
+```
+
+Post-preview maintenance freeze:
+
+```text
+Outcome:    a clean checkout and an interrupted local proof leave no tracked build output,
+            orphaned POSIX dev server, or provider work owned by a cancelled request
+Boundary:   Next type generation, Playwright process ownership, and one-request model scenarios
+Invariants: generated declarations stay untracked; normal dev cannot inherit the E2E distDir;
+            inquiry/repair cancellation reaches the provider without creating cooldown debt;
+            one label caller still cannot cancel a shared deduplicated provider flight
+Proof:      clean typegen/typecheck, runner missing-file/signal tests, route/client cancellation tests,
+            full check and browser suite
+Non-goals:  Windows process-tree supervision, deployment orchestration, transform implementation,
+            or changing the measured 2,000-node rendering model
 ```
 
 The foundation freeze was completed on 2026-08-03 after source research and a
@@ -386,22 +431,21 @@ of the fixture slice.
 
 ### Slice 2A.1 — Managed real-time admission
 
-State: Research reopened by product correction on 2026-08-07.
+State: Implemented locally; deployed browser/device receipt pending.
 
 ```text
-Outcome:    a person sees transient, live speech hypotheses while recording and
-            commits one final verbatim admission when they explicitly stop
-Boundary:   short-lived same-origin session credential + direct browser/provider
-            media session + tokened partial-feedback adapter
-Invariants: Matter never receives a provider key or relays raw audio; partials
-            are transient and ordered; only one final transcript reaches the
-            existing atomic human command; cancel and stale events change nothing
-Proof:      session schema/origin/TTL limits; partial ordering and late-event
-            matrix; cancellation/scope/unmount cleanup; final commit and undo;
-            deployed HTTPS Chrome and Safari plus rate and spend receipts
+Outcome:    native recognition shows transient live hypotheses when available;
+            every supported path commits one final transcript only on explicit stop
+Boundary:   browser Web Speech session, then lazy on-device Whisper final-transcript
+            fallback over the already bounded MediaRecorder lifecycle
+Invariants: fixture speech never runs on the public origin; raw audio and partials
+            never enter material, persistence, or logs; only one final transcript
+            reaches the existing atomic human command; stale events change nothing
+Proof:      partial ordering, one-session deadline, interim-only settlement,
+            cancellation/scope/unmount cleanup, lazy-worker bounds, final commit
+            and undo; deployed HTTPS Chrome and Safari device receipts remain
 Non-goals:  accounts, sync, retained recordings/transcripts, a custom media
-            relay, client-side Whisper, continuous material writes, or a new
-            document model
+            relay, continuous material writes, or a new document model
 ```
 
 The public preview now takes the browser-managed Web Speech API as its first
@@ -412,7 +456,7 @@ until a real provider adapter is separately verified.
 
 ### Slice 2B — Language receives a physical address
 
-State: Re-frozen for interaction hardening.
+State: Proven.
 
 ```text
 Outcome:    punctuation-bounded language can be addressed by a lasso without
@@ -469,7 +513,7 @@ endpoint cannot be silently completed into a selection.
 
 ### Slice 2C — Selection carries degree
 
-State: Re-frozen for split-language projection.
+State: Proven.
 
 ```text
 Outcome:    top and bottom handles let a person expand selected language from
@@ -540,7 +584,7 @@ fragments.
 
 ## Phase 3 — Material can return
 
-State: Build in progress after product-priority correction.
+State: Core archive and durability proven; active-document bootstrap remains.
 
 Outcome: committed material survives reload and can leave and re-enter the
 browser as the same inspectable Markdown tree.
@@ -612,6 +656,19 @@ Invariants: only DOMException QuotaExceededError maps to storage-full; generatio
 Proof:      repository classification matrix; latest-dirty retention and retry drain
 Non-goals:  UI recovery copy, pagehide, archive/export, automatic deletion
 ```
+
+Storage-full recovery receipt, 2026-08-08: the narrow drawer handle now exposes
+an unsaved state even while closed. Quota exhaustion is named separately from a
+generation conflict, opens the existing archive surface, and keeps export plus
+explicit retry reachable while the controller retains the latest dirty tree.
+Durable canvas and file actions are inert only during initial storage bootstrap,
+closing the load-window loss path without persisting transient UI state.
+
+The remaining persistence slice is one strict active-document pointer. Its
+freeze must cover metadata migration, pointer CAS ownership, pointer-load then
+snapshot-load ordering, archive save/switch/publication rollback, corrupt or
+missing pointer fallback, and multi-tab conflict. It does not introduce a
+document picker, recent-file list, or more than one active runtime document.
 
 ### Slice 3B — Material can leave and return as one archive
 
@@ -1233,7 +1290,7 @@ roadmap.
 
 ### Public discovery boundary — one canonical Matter identity
 
-State: Frozen for build.
+State: Proven.
 
 ```text
 Outcome:    search engines, link unfurlers, and machine readers receive one

@@ -63,6 +63,52 @@ below. The repository and release
 artifacts are currently publicly visible for operational reasons, but remain
 proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
 
+## Candidate verification — 0.2.0-preview.9
+
+Preview.8 remains an immutable receipt. Preview.9 adds the hydration hotfix and
+the maintenance line below without changing the seeded-preview product claim:
+
+```text
+npm run check          928 Vitest tests passed + 1 skipped; 10 Node tests,
+                       explicit typegen, typecheck, lint, docs, and production build passed
+npm run test:e2e       41 passed + 2 capability-gated skips across 43 cases
+runner proof           missing generated file, explicit E2E ownership, and
+                       POSIX process-group interruption passed
+provider proof         pre-abort, disconnect/deadline propagation, and
+                       cancellation-without-cooldown passed
+interaction proof      visible controls meet a 24 CSS px floor; the 44 px rail
+                       visuals keep non-overlapping 72 px horizontal hit areas
+```
+
+No rendering model or performance threshold changed in this maintenance line;
+the 2,000-node boundary above remains the honest open performance constraint.
+These changes form Preview.9; they do not rewrite or move the Preview.8 tag.
+Preview.9 is a GitHub source prerelease only: its exact package version is
+ignored by the connected Vercel build. Production promotion remains tracked in
+GitHub issue #34 and requires a later version after the provider controls exist.
+
+## Product acceptance for the next candidate
+
+The candidate must still look and behave like Matter after engineering work:
+
+- the rooted material, not navigation or a release notice, remains the first
+  visual signal;
+- the manuscript index, full paper, leaf shadow, and one editing island remain
+  the only strong composition; no dashboard cards, gradients, toast stack, or
+  permanent infrastructure status is added;
+- controls use the smallest honest label and expose a visible pointer target,
+  keyboard focus, disabled state, and recovery path without explanatory chrome;
+- fixture, browser-native, on-device, unavailable, and live-provider states are
+  named truthfully; a fixture result never impersonates a live one;
+- public material opens root-only, while expanded fixture branches remain a
+  local/e2e proving surface;
+- laptop, 390 px, reduced-motion, dark/light paper, menu, lasso, archive, and
+  failure-recovery receipts show no overlap, clipped text, or console error.
+
+This is a release acceptance boundary, not permission for another visual
+redesign. The paper composition and its restrained monochrome vocabulary are
+already the product's signature.
+
 ## Hard gates before a public pre-release
 
 - `POST /api/turn` does not exist yet, so the four-signal generative transform
@@ -77,6 +123,10 @@ proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
   share the in-memory limiter.
 - ZIP export/import is implemented; directory export is not implemented and is
   intentionally outside this preview.
+- Storage-full material remains in memory and now has a narrow-screen path to
+  export and retry. A successfully imported foreign-id archive still needs one
+  strict active-document pointer before reload can return to it; this is not a
+  multi-document UI.
 - The product opens with seeded fixture material, not a fresh empty document
   whose first action admits a root thought.
 - The complete 2,000-node tree remains authoritative and pointer-ready, but a full
@@ -93,6 +143,17 @@ proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
   per question.
 - The deployed origin still needs the Phase 4 receipt in
   [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
+
+After the candidate is deployed, run:
+
+```bash
+npm run check:deployment -- https://matter.ptoq.io
+```
+
+The probe fails on version drift, an incomplete capability schema, a non-empty
+dedicated-domain base path, a revived `/matter` duplicate entry, or missing
+edge security headers. It is intentionally post-deployment and does not belong
+in commit CI.
 
 ## Release discipline
 

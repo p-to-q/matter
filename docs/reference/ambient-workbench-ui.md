@@ -34,8 +34,20 @@ canvas appearance, or the right-rail editing tools.
   leaf atmosphere, but they never migrate into the material field.
 - The right rail exposes only the current editing vocabulary. Its selected
   second-preview geometry is `60px` wide with a `22px` outer radius; desktop
-  buttons are `44px` with `13px` corner radii and `20px` artwork. Narrow screens
-  retain `48px` targets.
+  buttons remain visibly `44px` with `13px` corner radii and `20px` artwork.
+  Their non-overlapping pointer boxes may extend horizontally beyond the rail so
+  imprecise approach still lands on the intended tool; narrow screens retain
+  `48px`-high targets. Focus follows the visible button, not the invisible
+  extension.
+
+The editing buttons use a `72 x 44px` desktop pointer box around the unchanged
+`44 x 44px` visible control. This exceeds the WCAG 2.2
+[2.5.8 Target Size (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)
+floor without enlarging the composition. A keyboard-focused tool receives a
+high-contrast `2px` perimeter around the visible control, calibrated against
+[2.4.13 Focus Appearance](https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html).
+These measurements are component evidence, not a claim of product-wide WCAG
+conformance.
 
 ## Left field: intentionally pending
 

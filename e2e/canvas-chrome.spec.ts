@@ -4,6 +4,44 @@ const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
 test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
+  await page.route("**/api/inquiry", async (route) => {
+    const request = route.request().postDataJSON() as {
+      protocolVersion: string;
+      requestId: string;
+      context: {
+        treeId: string;
+        revision: number;
+        scope: "selection" | "tree";
+        lineage: Array<{ text: string }>;
+        thoughtCount: number;
+        clipped: boolean;
+      };
+    };
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        protocolVersion: request.protocolVersion,
+        basis: {
+          requestId: request.requestId,
+          treeId: request.context.treeId,
+          revision: request.context.revision,
+          scope: request.context.scope,
+        },
+        status: "answered",
+        text: "它怀念的是过去仍允许人想象的其他生活。",
+        receipt: {
+          scope: request.context.scope,
+          lineageNodes: request.context.lineage.length,
+          contextCodePoints: request.context.lineage.reduce(
+            (total, node) => total + Array.from(node.text).length,
+            0,
+          ),
+          clipped: request.context.clipped,
+          thoughtCount: request.context.thoughtCount,
+        },
+      }),
+    });
+  });
   await page.goto("/matter");
 
   const paper = page.getByRole("region", { name: "Thought material" });
@@ -21,10 +59,12 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     throw new Error("desktop canvas chrome geometry is not visible");
   }
 
-  expectInset(aboutBox!.y - paperBox!.y, 25);
-  expectInset(paperBox!.x + paperBox!.width - settingsBox!.x - settingsBox!.width, 25);
+  expectInset(aboutBox!.y + aboutBox!.height / 2 - paperBox!.y, 34);
+  const settingsIconBox = await settings.locator("svg").boundingBox();
+  if (settingsIconBox === null) throw new Error("settings icon geometry is not visible");
+  expectInset(paperBox!.x + paperBox!.width - settingsIconBox.x - settingsIconBox.width, 25);
   expect(paperBox!.x + paperBox!.width - askMatterBox!.x - askMatterBox!.width).toBeGreaterThan(180);
-  expectInset(paperBox!.y + paperBox!.height - askMatterBox!.y - askMatterBox!.height, 25);
+  expectInset(paperBox!.y + paperBox!.height - (askMatterBox!.y + askMatterBox!.height / 2), 34);
   expectInset(guidanceBox!.x - paperBox!.x, 21);
   expectInset(paperBox!.y + paperBox!.height - guidanceBox!.y - guidanceBox!.height, 25);
   expect(await guidance.evaluate((element) => {
@@ -41,6 +81,12 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     letterSpacing: "0.7px",
     lineHeight: "20px",
   });
+  expect(await page.locator('[data-chrome-region="desktop"] [data-chrome-control]').evaluateAll((buttons) =>
+    buttons.every((button) => {
+      const rect = button.getBoundingClientRect();
+      return rect.width >= 24 && rect.height >= 24;
+    }),
+  )).toBe(true);
 
   await page.waitForTimeout(1100);
   await guidance.evaluate((element) => { element.style.animation = "none"; });
@@ -88,7 +134,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   }
   expectInset(inquiryBox.x + inquiryBox.width, currentAskMatterBox.x + currentAskMatterBox.width);
   expectInset(
-    currentAskMatterBox.y + currentAskMatterBox.height - (inquiryBox.y + inquiryBox.height),
+    currentAskMatterBox.y + currentAskMatterBox.height / 2 + 10 - (inquiryBox.y + inquiryBox.height),
     30,
   );
   const inquiryField = inquiryDialog.getByRole("textbox", { name: "问一句关于这份材料的话" });

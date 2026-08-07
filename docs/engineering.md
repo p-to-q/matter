@@ -62,6 +62,14 @@ abstraction only when two current call sites need the same stable concept.
 
 ## Proof
 
+Generated Next route declarations are build state, not repository state.
+`next-env.d.ts` stays ignored; `npm run typegen` creates the declarations needed
+by a clean checkout before standalone typecheck. The Playwright development
+server may use `.next-e2e` only when both its reserved directory and explicit
+runner marker are present. Its wrapper owns the spawned process group on POSIX,
+restores generated references after every exit path, and treats a file that was
+never generated as normal cleanup.
+
 Run the narrowest test first. Changes to commands prove forward result, exact
 inverse, invalid atomic rejection, and revision behavior. Protocol changes prove
 valid, malformed, bounded, and stale inputs. Interaction changes prove cancel,

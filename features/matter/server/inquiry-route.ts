@@ -30,10 +30,10 @@ export async function handleInquiryRequest(
   const admission = admitInquiryRequest(request);
   if (!admission.ok) throw inquiryAdmissionError(admission.reason);
   try {
-    return await withBoundedJsonRequest(request, INQUIRY_REQUEST_POLICY, async (payload) => {
+    return await withBoundedJsonRequest(request, INQUIRY_REQUEST_POLICY, async (payload, signal) => {
       const parsed = parseInquiryRequest(payload);
       if (!parsed.ok) throw invalidInquiryRequest(parsed.message);
-      return Response.json(await answerInquiry(parsed.request, adapter, request.signal), {
+      return Response.json(await answerInquiry(parsed.request, adapter, signal), {
         headers: { "Cache-Control": "no-store" },
       });
     });
@@ -60,7 +60,10 @@ export async function answerInquiry(
     return Object.freeze({ protocolVersion: request.protocolVersion, basis, status: "unavailable", reason: "NO_PROVIDER", receipt });
   }
   const outcome = await withRequestSignal(
-    runScenario(INQUIRY_SCENARIO, request, adapter, inquiryGovernor, { limits: INQUIRY_LIMITS }),
+    runScenario(INQUIRY_SCENARIO, request, adapter, inquiryGovernor, {
+      limits: INQUIRY_LIMITS,
+      signal,
+    }),
     signal,
   );
   // Unlike labelling and repair, an unanswered inquiry has no floor to fall back

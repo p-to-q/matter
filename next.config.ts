@@ -23,9 +23,12 @@ const E2E_DIST_DIR = ".next-e2e";
 export function resolveMatterNextDistDir(
   phase: string,
   value = process.env.MATTER_NEXT_DIST_DIR,
+  owner = process.env.MATTER_E2E_RUNNER,
 ): string {
-  // Only the Playwright dev server may use a separate build lock and type output.
-  return phase === PHASE_DEVELOPMENT_SERVER && value === E2E_DIST_DIR
+  // A leaked dist-dir value must never redirect a normal development server.
+  return phase === PHASE_DEVELOPMENT_SERVER &&
+    owner === "playwright" &&
+    value === E2E_DIST_DIR
     ? E2E_DIST_DIR
     : DEFAULT_DIST_DIR;
 }

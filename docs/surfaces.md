@@ -105,5 +105,5 @@ directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
-Its current phase is the visible/durable Matter slice; its endpoint is the first
+Its current phase is the fixture generative-turn slice; its endpoint is the first
 publicly usable release, not a speculative platform roadmap.

@@ -23,6 +23,7 @@ export type AskInquiryInput = Readonly<{
 }>;
 
 export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome> {
+  if (input.signal?.aborted) return UNREACHABLE;
   const fetchImpl = input.fetchImpl ?? globalThis.fetch;
   const boundary = new AbortController();
   const timeout = setTimeout(() => boundary.abort(), INQUIRY_CLIENT_TIMEOUT_MS);

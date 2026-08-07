@@ -182,6 +182,32 @@ describe("runScenario", () => {
     expect(JSON.stringify(outcome)).not.toContain("secret.invalid");
     expect(outcome).toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
   });
+
+  it("propagates request cancellation to a provider without cooling it", async () => {
+    const controller = new AbortController();
+    const governor = new ScenarioGovernor();
+    let providerAborted = false;
+    const pending = runScenario(
+      ECHO,
+      "hello",
+      async (_call, signal) => await new Promise<Readonly<{ text: string }>>((_resolve, reject) => {
+        signal.addEventListener("abort", () => {
+          providerAborted = true;
+          reject(new DOMException("Aborted", "AbortError"));
+        }, { once: true });
+      }),
+      governor,
+      {
+        signal: controller.signal,
+        limits: { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 1 },
+      },
+    );
+    controller.abort();
+
+    await expect(pending).resolves.toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+    expect(providerAborted).toBe(true);
+    expect(governor.cooling(Date.now())).toBe(false);
+  });
 });
 
 describe("withRequestSignal", () => {

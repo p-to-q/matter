@@ -62,7 +62,11 @@ export async function repairTranscript(
   }
 
   const outcome = await withRequestSignal(
-    runScenario(REPAIR_SCENARIO, input, adapter, governor, { now, limits }),
+    runScenario(REPAIR_SCENARIO, input, adapter, governor, {
+      now,
+      limits,
+      signal: requestSignal,
+    }),
     requestSignal,
   );
   return outcome.ok

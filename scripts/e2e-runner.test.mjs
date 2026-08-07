@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CANONICAL_NEXT_ROUTE_REFERENCE,
   CANONICAL_NEXT_ROOT_PARAMS_REFERENCE,
+  createProcessSignalTarget,
   createSignalTerminator,
   normalizeNextEnvironment,
 } from "./e2e-runner.mjs";
@@ -53,5 +54,27 @@ describe("e2e runner cleanup", () => {
 
     terminator.clear();
     expect(cancel).toHaveBeenCalledWith(timer);
+  });
+
+  it("signals the complete detached process group on POSIX", () => {
+    const signalProcess = vi.fn(() => true);
+    const target = createProcessSignalTarget(
+      { pid: 4321, kill: vi.fn() },
+      "darwin",
+      signalProcess,
+    );
+
+    expect(target.kill("SIGTERM")).toBe(true);
+    expect(signalProcess).toHaveBeenCalledWith(-4321, "SIGTERM");
+  });
+
+  it("uses the direct child handle on Windows", () => {
+    const child = { pid: 4321, kill: vi.fn(() => true) };
+    const signalProcess = vi.fn();
+    const target = createProcessSignalTarget(child, "win32", signalProcess);
+
+    expect(target.kill("SIGINT")).toBe(true);
+    expect(child.kill).toHaveBeenCalledWith("SIGINT");
+    expect(signalProcess).not.toHaveBeenCalled();
   });
 });

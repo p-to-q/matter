@@ -93,12 +93,38 @@ for (const viewport of [
       expect(initialSurface.x + initialSurface.width).toBeLessThan(viewport.width);
       expect(initialRail.width).toBeCloseTo(60, 0);
       const voiceTool = page.locator('.tool-rail__button[data-tool-id="voice"]');
-      await expect(voiceTool).toHaveCSS("width", "44px");
+      await expect(voiceTool).toHaveCSS("width", "72px");
+      await expect(voiceTool).toHaveCSS("height", "44px");
       await expect(voiceTool.locator("svg")).toHaveCSS("width", "20px");
       await voiceTool.hover();
       await expect.poll(() => voiceTool.evaluate((button) =>
         getComputedStyle(button, "::before").backgroundColor,
       )).toBe("rgb(245, 245, 242)");
+
+      // The visible rail stays 60px wide, while each real pointer target reaches
+      // slightly beyond it. The outside strip must hover and invoke the same
+      // control without overlapping the tools above or below.
+      const branchTool = page.getByRole("button", { name: "Extend related thought", exact: true });
+      const branchBox = await branchTool.boundingBox();
+      if (branchBox === null) throw new Error("branch target is not visible");
+      expect(branchBox.x).toBeLessThan(initialRail.x);
+      await page.mouse.move(initialRail.x - 4, branchBox.y + branchBox.height / 2);
+      await expect.poll(() => branchTool.evaluate((button) =>
+        getComputedStyle(button, "::before").backgroundColor,
+      )).toBe("rgb(245, 245, 242)");
+      await page.mouse.click(initialRail.x - 4, branchBox.y + branchBox.height / 2);
+      await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
+      await tool("Undo").click();
+      await expect.poll(() => visibleIds(page)).toEqual(initialIds);
+
+      await voiceTool.focus();
+      await page.keyboard.press("Shift+Tab");
+      await page.keyboard.press("Tab");
+      await expect(voiceTool).toBeFocused();
+      expect(await voiceTool.evaluate((button) => ({
+        outlineStyle: getComputedStyle(button, "::after").outlineStyle,
+        outlineWidth: getComputedStyle(button, "::after").outlineWidth,
+      }))).toEqual({ outlineStyle: "solid", outlineWidth: "2px" });
     }
 
     await tool("Extend related thought").click();

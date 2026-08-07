@@ -22,7 +22,7 @@ import {
 import { createNavigationState, type NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
-import { ChevronIcon, CopyIcon, SearchIcon, SidebarIcon, SyncIcon } from "./icons";
+import { ChevronIcon, CopyIcon, DownloadIcon, SearchIcon, SidebarIcon, SyncIcon } from "./icons";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import { allocateSnapshotPath } from "../persistence/snapshot-paths";
 import { projectMaterialFilesSurface } from "./material-files-surface";
@@ -424,6 +424,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   );
   const selectedCount = currentSelectedIds.size;
   const persistenceFailed = props.persistence.status.phase === "error";
+  const storageFull = props.persistence.status.errorCode === "PERSISTENCE_STORAGE_FULL";
   const activeLineageIds = useMemo(() => {
     const lineage = new Set<string>();
     let current = activeNodeId === null ? null : props.tree.nodes[activeNodeId]?.parentId ?? null;
@@ -549,9 +550,14 @@ export function MaterialFiles(props: MaterialFilesProps) {
         <button
           aria-controls="material-files"
           aria-expanded={open}
-          aria-label={open ? "Hide material files" : "Show material files"}
+          aria-label={open
+            ? "Hide material files"
+            : persistenceFailed
+              ? "Show material files; saving needs attention"
+              : "Show material files"}
           className="material-files-toggle"
           data-canvas-interactive
+          data-persistence-error={persistenceFailed || undefined}
           onClick={() => setOpen((value) => !value)}
           type="button"
         >
@@ -695,10 +701,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
+            storageFull={storageFull}
             onClose={closeArchive}
             onExport={() => void exportArchive()}
             onPickImport={() => archiveInputRef.current?.click()}
             onReplace={() => void replaceArchiveImport()}
+            onRetrySave={props.persistence.retry}
             onSelectImport={(file) => void validateArchiveImport(file)}
           />
         ) : (
@@ -916,6 +924,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 {persistenceFailed
                   ? (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"
                       ? "有更新的材料 · 重新载入"
+                      : storageFull
+                        ? "存储已满 · 先导出备份"
                       : "没有保存成功 · 重试")
                   : showSaving ? "正在存到这台设备" : "仅存于这台设备"}
                 {showSaving && !persistenceFailed ? (
@@ -931,18 +941,24 @@ export function MaterialFiles(props: MaterialFilesProps) {
               <button
                 aria-label={props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"
                   ? "Reload newer material"
-                  : "Retry saving material"}
+                  : storageFull
+                    ? "Open archive to export material before freeing storage"
+                    : "Retry saving material"}
                 className="material-files__profile-action"
                 onClick={() => {
                   if (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT") {
                     props.persistence.resolveConflict();
+                  } else if (storageFull && props.archive !== undefined) {
+                    setArchiveError(null);
+                    setPreparedImport(null);
+                    setMode("archive");
                   } else {
                     props.persistence.retry();
                   }
                 }}
                 type="button"
               >
-                <SyncIcon />
+                {storageFull && props.archive !== undefined ? <DownloadIcon /> : <SyncIcon />}
               </button>
             ) : null}
           </div>
@@ -1049,10 +1065,12 @@ function ArchivePanel({
   inputRef,
   phase,
   preparedImport,
+  storageFull,
   onClose,
   onExport,
   onPickImport,
   onReplace,
+  onRetrySave,
   onSelectImport,
 }: Readonly<{
   busy: boolean;
@@ -1060,10 +1078,12 @@ function ArchivePanel({
   inputRef: RefObject<HTMLInputElement | null>;
   phase: ArchivePhase;
   preparedImport: File | null;
+  storageFull: boolean;
   onClose: () => void;
   onExport: () => void;
   onPickImport: () => void;
   onReplace: () => void;
+  onRetrySave: () => void;
   onSelectImport: (file: File) => void;
 }>) {
   const phaseLabel = phase === "exporting"
@@ -1076,7 +1096,9 @@ function ArchivePanel({
   return (
     <section aria-busy={busy || undefined} aria-label="Material archive" className="material-files__archive">
       <p className="material-files__archive-note">
-        Keep a portable copy, or bring one back into this material.
+        {storageFull
+          ? "Local storage is full. Export a copy before freeing browser storage, then retry saving."
+          : "Keep a portable copy, or bring one back into this material."}
       </p>
       <div className="material-files__archive-actions">
         <button disabled={busy} onClick={onExport} type="button">
@@ -1086,6 +1108,16 @@ function ArchivePanel({
           Import a copy
         </button>
       </div>
+      {storageFull ? (
+        <button
+          className="material-files__archive-retry"
+          disabled={busy}
+          onClick={onRetrySave}
+          type="button"
+        >
+          Retry saving
+        </button>
+      ) : null}
       <input
         accept=".zip,application/zip,application/x-zip-compressed"
         aria-label="Choose a material archive"

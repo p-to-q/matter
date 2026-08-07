@@ -182,7 +182,10 @@ Async effects are limited to recording, transcription, labelling, inquiry, plann
 persistence, and archive transport. Every completion returns with
 `{ interactionId, attempt, treeId, baseRevision }`; cancellation aborts work
 where possible, while token and current-tree validation make a late completion
-harmless. React hooks dispatch events and execute effects but do not own a
+harmless. A one-request model scenario receives the route boundary's combined
+disconnect/deadline signal. A deduplicated label flight is the deliberate
+exception: one caller stops waiting but cannot cancel provider work shared by
+another caller. React hooks dispatch events and execute effects but do not own a
 second interaction lifecycle.
 
 For portability, browser facilities sit behind narrow capability ports:
