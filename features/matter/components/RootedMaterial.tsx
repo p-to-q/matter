@@ -7,6 +7,7 @@ import type { NavigationState } from "../runtime/navigation";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
 import type { ThoughtTree } from "../tree/model";
+import { isDocumentRoot } from "../tree/document-root";
 import { projectTools } from "../tools/project-tools";
 import { projectToolSurface } from "../tools/project-tool-surface";
 import { isCurrentToolIntent } from "../tools/validate-intent";
@@ -21,7 +22,6 @@ import {
 import type { AdmissionController } from "../interaction/use-admission";
 import type { AdmissionAnchor as InteractionAdmissionAnchor } from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
-import type { SegmentSelection } from "../material/text-segments";
 import { useStretch } from "../interaction/use-stretch";
 import type { StretchPreviewSignal } from "../interaction/use-stretch";
 import { elasticPreviewGeometry } from "../interaction/elastic-preview";
@@ -49,9 +49,20 @@ import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
-import { LassoSelectionTray } from "./LassoSelectionTray";
-import { canMoveNodeToParent } from "../runtime/move";
+import {
+  canMoveNodeToParent,
+  createNodeMovePolicy,
+  type NodeMovePolicy,
+} from "../runtime/move";
 import { isBrowserVoiceTransportAvailable } from "../interaction/browser-voice";
+import { projectInquiryContext } from "../material/inquiry-context";
+import {
+  projectNodeDropLanes,
+  resolveBlankNodeDropTarget,
+  type NodeDropBounds,
+  type NodeDropLane,
+  type NodeDropMode,
+} from "../interaction/node-drop-target";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -66,7 +77,8 @@ export type RootedMaterialProps = {
   onFocusNode: (nodeId: string) => void;
   onInsertChild: (parentNodeId: string) => void;
   onRemoveSelected: () => void;
-  onMoveNode: (nodeId: string, targetParentId: string) => void;
+  onMoveNode: (nodeId: string, targetParentId: string, targetIndex?: number) => void;
+  onRenameDocument: (title: string) => void;
   onClearSelection: () => void;
   onSelectNode: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
@@ -103,12 +115,19 @@ type ProjectionHandleReceipt = Readonly<{
 type NodeDragGesture = {
   pointerId: number;
   sourceId: string | null;
+  sourceElement: HTMLElement | null;
+  policy: NodeMovePolicy | null;
   originNodeId: string | null;
   startX: number;
   startY: number;
+  zoom: number;
   dragging: boolean;
   targetId: string | null;
+  targetIndex: number | null;
+  targetMode: NodeDropMode | null;
   targetElement: HTMLElement | null;
+  dropLanes: readonly NodeDropLane[];
+  documentBounds: NodeDropBounds | null;
 };
 
 export function RootedMaterial(props: RootedMaterialProps) {
@@ -120,6 +139,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const documentRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const layoutEpochRef = useRef(0);
+  const measuredLayoutCacheRef = useRef(new Map<string, ColumnarLayout>());
   const measuredHeightCacheRef = useRef(new Map<string, Readonly<{
     columnWidth: number;
     height: number;
@@ -163,7 +183,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const clearNodeDrag = useCallback(() => {
     const gesture = nodeDragRef.current;
     if (gesture?.targetElement) delete gesture.targetElement.dataset.dragOver;
-    if (shellRef.current) delete shellRef.current.dataset.nodeDragging;
+    if (gesture?.sourceElement) {
+      delete gesture.sourceElement.dataset.dragSource;
+      gesture.sourceElement.style.removeProperty("--node-drag-x");
+      gesture.sourceElement.style.removeProperty("--node-drag-y");
+    }
+    if (shellRef.current) {
+      delete shellRef.current.dataset.nodeDragging;
+      delete shellRef.current.dataset.nodeDropMode;
+    }
     nodeDragRef.current = null;
   }, []);
   const markPerformance = useCallback((name: string) => {
@@ -188,13 +216,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => createLayoutProjectionInput(tree, layoutNavigation),
     [layoutNavigation, tree],
   );
+  const projectionKey = useMemo(
+    () => layoutProjectionKey(layoutInput),
+    [layoutInput],
+  );
   const projection = useMemo(
     () => projectLayoutProjection(layoutInput),
     [layoutInput],
-  );
-  const projectionKey = useMemo(
-    () => layoutProjectionKey(layoutInput, projection),
-    [layoutInput, projection],
   );
   const activeLayout = published?.key === projectionKey ? published.layout : null;
   const stretchInvalidationRef = useRef<() => void>(() => undefined);
@@ -273,6 +301,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     window.addEventListener("keydown", undoFromKeyboard);
     return () => window.removeEventListener("keydown", undoFromKeyboard);
   }, [canUndo, interactionPending, onUndo]);
+  useEffect(() => {
+    const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
+      const gesture = nodeDragRef.current;
+      const shell = shellRef.current;
+      if (event.key !== "Escape" || gesture === null || shell === null) return;
+      event.preventDefault();
+      suppressClickRef.current = true;
+      clearNodeDrag();
+      if (shell.hasPointerCapture(gesture.pointerId)) shell.releasePointerCapture(gesture.pointerId);
+    };
+    window.addEventListener("keydown", cancelMoveFromKeyboard);
+    return () => window.removeEventListener("keydown", cancelMoveFromKeyboard);
+  }, [clearNodeDrag]);
+  useEffect(() => () => clearNodeDrag(), [clearNodeDrag, props.documentEpoch, navigation.mode, tree.revision]);
   const elasticRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
@@ -325,8 +367,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     element.style.setProperty("--elastic-opacity", String(preview.opacity));
   }, [lasso.selectionColumn, lasso.selectionRects, viewport.zoom]);
   const navigationKey = `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`;
+  const stretchSelection = lasso.selections.length === 1 ? lasso.selection : null;
   const stretch = useStretch({
-    selection: lasso.selection,
+    selection: stretchSelection,
     treeId: tree.id,
     revision: tree.revision,
     documentEpoch: props.documentEpoch,
@@ -446,6 +489,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
+  const projectInquiryPayload = useCallback(
+    () => projectInquiryContext(tree, navigation, lasso.selections),
+    [lasso.selections, navigation, tree],
+  );
   const materialGuidance: CanvasMaterialGuidanceState = tree.rootId === null
     ? { kind: "empty" }
     : navigation.mode === "focus"
@@ -457,6 +504,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             : { folded: navigation.foldedNodeIds.has(selectedNode.id) },
         };
   const selectedLanguageIsCurrent = lasso.selection !== null &&
+    lasso.selections.length === 1 &&
     lasso.sourceText === tree.nodes[lasso.selection.nodeId]?.text &&
     projection.some(({ node }) => node.id === lasso.selection?.nodeId);
   let languageGuidance: CanvasLanguageGuidanceState;
@@ -484,10 +532,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }),
     canvasPreferences.preferences.language,
   );
+  const lassoSelectedNodeIds = useMemo(
+    () => new Set(lasso.selections.map((selection) => selection.nodeId)),
+    [lasso.selections],
+  );
 
   useEffect(() => {
     let mounted = true;
     const remeasure = () => {
+      measuredLayoutCacheRef.current.clear();
       measuredHeightCacheRef.current.clear();
       requestMeasurement();
     };
@@ -530,18 +583,40 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const columnWidth = readCssPixels(style, "--matter-column-width", 300);
     const columnGap = readCssPixels(style, "--matter-column-gap", 72);
     const siblingGap = readCssPixels(style, "--matter-sibling-gap", 28);
-    const elements = new Map<string, HTMLElement>();
-    for (const element of canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]")) {
-      elements.set(element.dataset.layoutNodeId ?? "", element);
+    const elements = canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]");
+    if (elements.length !== projection.length) return;
+    for (let index = 0; index < projection.length; index += 1) {
+      if (elements[index]?.dataset.layoutNodeId !== projection[index]?.node.id) return;
+    }
+    const layoutCacheKey = presentationDamage === null
+      ? `${projectionKey}:${columnWidth}:${columnGap}:${siblingGap}`
+      : null;
+    const cachedLayout = layoutCacheKey === null
+      ? undefined
+      : measuredLayoutCacheRef.current.get(layoutCacheKey);
+    if (cachedLayout !== undefined) {
+      // Reuse only immutable pure geometry; every publication still receives
+      // a fresh epoch, and resize/font invalidation clears this bounded cache.
+      retainBoundedCache(measuredLayoutCacheRef.current, layoutCacheKey!, cachedLayout);
+      const layout = Object.freeze({
+        ...cachedLayout,
+        layoutEpoch: layoutEpochRef.current + 1,
+      });
+      if (!publishCanvasGeometry(canvas, elements, layout)) return;
+      layoutEpochRef.current = layout.layoutEpoch;
+      setPublished({ key: projectionKey, layout });
+      return;
     }
     const nodes: LayoutNode[] = [];
     if (!initialPerformanceMarksRef.current.heightReadStarted) {
       initialPerformanceMarksRef.current.heightReadStarted = true;
       markPerformance("matter:performance:height-read-start");
     }
-    for (const item of projection) {
-      const element = elements.get(item.node.id);
-      const root = item.node.id === tree.rootId;
+    for (let index = 0; index < projection.length; index += 1) {
+      const item = projection[index];
+      if (item === undefined) return;
+      const element = elements[index];
+      const root = item.parentId === null;
       const cachedHeight = measuredHeightCacheRef.current.get(item.node.id);
       const heightCacheHit = cachedHeight !== undefined &&
         cachedHeight.columnWidth === columnWidth &&
@@ -621,6 +696,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     retry.key = projectionKey;
     retry.attempts = 0;
     retry.frame = null;
+    if (layoutCacheKey !== null) {
+      retainBoundedCache(measuredLayoutCacheRef.current, layoutCacheKey, result.layout);
+    }
     if (!publishCanvasGeometry(canvas, elements, result.layout)) return;
     layoutEpochRef.current = result.layout.layoutEpoch;
     if (!initialPerformanceMarksRef.current.geometryPublished) {
@@ -752,20 +830,42 @@ export function RootedMaterial(props: RootedMaterialProps) {
             .thoughtId ?? null;
         const originNodeId = pointerOriginNodeRef.current;
         if (canvasMode === "material") {
-          const sourceId = originNodeId !== null &&
+          const sourceId = navigation.mode === "full" && originNodeId !== null &&
             originNodeId === navigation.selectedNodeId &&
             tree.nodes[originNodeId]?.parentId !== null
               ? originNodeId
               : null;
+          const sourceElement = sourceId === null
+            ? null
+            : (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]");
+          const policy = sourceId === null ? null : createNodeMovePolicy(tree, sourceId);
+          const canvasBounds = canvasRef.current?.getBoundingClientRect() ?? null;
+          const documentBounds = documentRef.current?.getBoundingClientRect() ?? null;
           nodeDragRef.current = {
             pointerId: event.pointerId,
             sourceId,
+            sourceElement,
+            policy,
             originNodeId,
             startX: event.clientX,
             startY: event.clientY,
+            zoom: viewport.zoom,
             dragging: false,
             targetId: null,
+            targetIndex: null,
+            targetMode: null,
             targetElement: null,
+            dropLanes: activeLayout === null || canvasBounds === null
+              ? []
+              : projectNodeDropLanes(tree, activeLayout, canvasBounds, viewport.zoom),
+            documentBounds: documentBounds === null
+              ? null
+              : {
+                  left: documentBounds.left,
+                  top: documentBounds.top,
+                  right: documentBounds.right,
+                  bottom: documentBounds.bottom,
+                },
           };
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -794,21 +894,56 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (nodeDrag?.pointerId === event.pointerId) {
           if (!nodeDrag.dragging && Math.hypot(event.clientX - nodeDrag.startX, event.clientY - nodeDrag.startY) >= (event.pointerType === "touch" ? 8 : 4)) {
             nodeDrag.dragging = true;
-            if (nodeDrag.sourceId !== null) event.currentTarget.dataset.nodeDragging = "true";
+            if (nodeDrag.sourceId !== null && nodeDrag.policy !== null && nodeDrag.sourceElement !== null) {
+              event.currentTarget.dataset.nodeDragging = "true";
+              nodeDrag.sourceElement.dataset.dragSource = "true";
+            }
           }
-          if (!nodeDrag.dragging || nodeDrag.sourceId === null) return;
+          if (
+            !nodeDrag.dragging ||
+            nodeDrag.sourceId === null ||
+            nodeDrag.policy === null ||
+            nodeDrag.sourceElement === null
+          ) return;
           event.preventDefault();
-          const targetElement = document.elementFromPoint(event.clientX, event.clientY)
+          nodeDrag.sourceElement.style.setProperty(
+            "--node-drag-x",
+            `${(event.clientX - nodeDrag.startX) / nodeDrag.zoom}px`,
+          );
+          nodeDrag.sourceElement.style.setProperty(
+            "--node-drag-y",
+            `${(event.clientY - nodeDrag.startY) / nodeDrag.zoom}px`,
+          );
+          const hitElement = document.elementFromPoint(event.clientX, event.clientY)
             ?.closest<HTMLElement>("[data-thought-id]") ?? null;
-          const targetId = targetElement?.dataset.thoughtId ?? null;
-          const validTarget = targetId !== null && canMoveNodeToParent(tree, nodeDrag.sourceId, targetId);
-          const nextElement = validTarget ? targetElement : null;
-          if (nodeDrag.targetElement !== nextElement) {
-            if (nodeDrag.targetElement) delete nodeDrag.targetElement.dataset.dragOver;
-            if (nextElement) nextElement.dataset.dragOver = "true";
-          }
-          nodeDrag.targetElement = nextElement;
-          nodeDrag.targetId = validTarget ? targetId : null;
+          const hitId = hitElement?.dataset.thoughtId ?? null;
+          const directTargetId = hitId !== null && nodeDrag.policy.validTargetIds.has(hitId)
+            ? hitId
+            : null;
+          const blankTarget = directTargetId === null && hitId === null
+            ? resolveBlankNodeDropTarget({
+                clientX: event.clientX,
+                clientY: event.clientY,
+                documentBounds: nodeDrag.documentBounds,
+                lanes: nodeDrag.dropLanes,
+                policy: nodeDrag.policy,
+                rootId: tree.rootId,
+                startX: nodeDrag.startX,
+                startY: nodeDrag.startY,
+              })
+            : null;
+          const targetId = directTargetId ?? blankTarget?.targetId ?? null;
+          const targetMode = directTargetId !== null ? "nest" : blankTarget?.mode ?? null;
+          const targetIndex = directTargetId !== null
+            ? null
+            : blankTarget?.targetIndex === Number.MAX_SAFE_INTEGER && targetId !== null
+              ? tree.nodes[targetId]?.children.length ?? null
+              : blankTarget?.targetIndex ?? null;
+          const indicatorId = directTargetId ?? blankTarget?.indicatorId ?? null;
+          const targetElement = indicatorId === null
+            ? null
+            : event.currentTarget.querySelector<HTMLElement>(`[data-thought-id="${CSS.escape(indicatorId)}"]`);
+          publishNodeDragTarget(nodeDrag, targetElement, targetId, targetIndex, targetMode, event.currentTarget);
           return;
         }
         if (viewport.gesture?.pointerId !== event.pointerId) return;
@@ -817,6 +952,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       onPointerUp={(event) => {
         if (interactionPending) {
           lasso.pointerCancel(event.pointerId);
+          if (nodeDragRef.current?.pointerId === event.pointerId) clearNodeDrag();
           pointerOriginNodeRef.current = null;
           updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
           if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -833,11 +969,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
         const nodeDrag = nodeDragRef.current;
         if (nodeDrag?.pointerId === event.pointerId) {
           const targetId = nodeDrag.targetId;
-          const shouldMove = nodeDrag.sourceId !== null && nodeDrag.dragging && targetId !== null && canMoveNodeToParent(tree, nodeDrag.sourceId, targetId);
+          const targetIndex = nodeDrag.targetIndex;
+          const sourceParentId = nodeDrag.sourceId === null ? null : tree.nodes[nodeDrag.sourceId]?.parentId ?? null;
+          const shouldMove = nodeDrag.sourceId !== null &&
+            nodeDrag.dragging &&
+            targetId !== null &&
+            (targetId !== sourceParentId || targetIndex !== null) &&
+            canMoveNodeToParent(tree, nodeDrag.sourceId, targetId);
           clearNodeDrag();
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-          if (shouldMove && nodeDrag.sourceId !== null) props.onMoveNode(nodeDrag.sourceId, targetId);
+          if (shouldMove && nodeDrag.sourceId !== null) {
+            props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
+          }
           else if (!nodeDrag.dragging) {
             if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) props.onSelectNode(nodeDrag.originNodeId);
             else props.onClearSelection();
@@ -887,11 +1031,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
         archive={props.archive}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
+        lassoSelectedNodeIds={lassoSelectedNodeIds}
         labels={labelByNodeId}
         labelOrigins={labelOriginByNodeId}
         navigation={navigation}
         onFocusNode={props.onFocusNode}
         onRenameNode={labels.rename}
+        onRenameDocument={props.onRenameDocument}
         onResetNodeName={labels.resetName}
         onSelectNode={props.onSelectNode}
         onVisibleNodes={labels.observe}
@@ -958,6 +1104,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
           enabled={canvasPreferences.preferences.leafFx}
           navigationActive={wheelMotionActive || viewport.gesture?.dragging === true}
         />
+        {lasso.selections.length > 1 ? (
+          <div
+            aria-live="polite"
+            className="lasso-selection-count"
+            data-canvas-interactive
+            data-selection-count={lasso.selections.length}
+          >
+            {props.locale === "zh-CN"
+              ? `已选 ${lasso.selections.length} 段文字`
+              : props.locale === "zh-TW"
+                ? `已選 ${lasso.selections.length} 段文字`
+                : props.locale === "ja-JP"
+                  ? `${lasso.selections.length} 件を選択`
+                  : props.locale === "de-DE"
+                    ? `${lasso.selections.length} Passagen ausgewählt`
+                    : `${lasso.selections.length} passages selected`}
+          </div>
+        ) : null}
         {projection.length === 0 ? (
           <p className="matter-document__empty">
             {navigation.mode === "focus" ? "This focus is no longer available." : "No material yet."}
@@ -970,7 +1134,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           >
             <CanvasThoughtList
               interactionPending={interactionPending}
-              lassoSelection={lasso.selection}
+              lassoSelection={stretchSelection}
               lassoSelections={lasso.selections}
               lassoSourceText={lasso.sourceText}
               navigation={navigation}
@@ -996,19 +1160,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
         >
           <p className="matter-guidance__next">{guidance.text}</p>
         </footer>
-        <CanvasChrome {...canvasPreferences} />
+        <CanvasChrome {...canvasPreferences} inquiryContext={projectInquiryPayload} />
       </section>
-      <LassoSelectionTray
-        locale={props.locale}
-        onClear={lasso.clearSelection}
-        onLocate={(selection: SegmentSelection) => {
-          props.onSelectNode(selection.nodeId);
-          document
-            .querySelector<HTMLElement>(`[data-thought-id="${CSS.escape(selection.nodeId)}"]`)
-            ?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }}
-        selections={lasso.selections}
-      />
       <LassoOverlay
         active={lasso.active}
         drawing={lasso.drawing}
@@ -1016,7 +1169,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         inkPathRef={lasso.inkPathRef}
         particleCanvasRef={lasso.particleCanvasRef}
         rects={lasso.selectionSetRects.length > 0 ? lasso.selectionSetRects : lasso.selectionRects}
-        selectedText={lasso.selection?.selectedText ?? null}
+        selectedText={stretchSelection?.selectedText ?? null}
         elasticRef={elasticRef}
         textColumn={lasso.selectionColumn}
         stretch={stretch}
@@ -1065,7 +1218,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
 
   return (
     <ol className="spatial-thoughts" onClick={handleThoughtClick}>
-      {projection.map(({ node }) => {
+      {projection.map(({ node, parentId }) => {
         const isSelected = node.id === navigation.selectedNodeId;
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
@@ -1081,7 +1234,9 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-selected={isSelected || undefined}
             data-lasso-selected={isLassoSelected || undefined}
             data-thought-id={node.id}
-            data-parent-id={node.parentId ?? undefined}
+            data-parent-id={parentId ?? undefined}
+            data-tree-parent-id={node.parentId ?? undefined}
+            data-movable={node.parentId !== null || undefined}
             key={node.id}
           >
             <button
@@ -1106,27 +1261,63 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   );
 });
 
+function publishNodeDragTarget(
+  gesture: NodeDragGesture,
+  targetElement: HTMLElement | null,
+  targetId: string | null,
+  targetIndex: number | null,
+  targetMode: NodeDropMode | null,
+  shell: HTMLElement,
+): void {
+  if (gesture.targetElement !== targetElement || gesture.targetMode !== targetMode) {
+    if (gesture.targetElement !== null) delete gesture.targetElement.dataset.dragOver;
+    if (targetElement !== null && targetMode !== null) targetElement.dataset.dragOver = targetMode;
+  }
+  gesture.targetElement = targetElement;
+  gesture.targetId = targetId;
+  gesture.targetIndex = targetIndex;
+  gesture.targetMode = targetMode;
+  if (targetMode === null) delete shell.dataset.nodeDropMode;
+  else shell.dataset.nodeDropMode = targetMode;
+}
+
 function publishCanvasGeometry(
   canvas: HTMLDivElement,
-  elements: ReadonlyMap<string, HTMLElement>,
+  elements: NodeListOf<HTMLElement>,
   layout: ColumnarLayout,
 ): boolean {
   // Do not mark a partial DOM as geometrically valid. This cannot happen for
   // one synchronous React commit, but the guard makes a future render-edge
   // refactor fail closed rather than offer stale pointer geometry.
-  for (const box of layout.boxes) {
-    if (!elements.has(box.nodeId)) return false;
+  if (elements.length !== layout.boxes.length) return false;
+  for (let index = 0; index < layout.boxes.length; index += 1) {
+    if (elements[index]?.dataset.layoutNodeId !== layout.boxes[index]?.nodeId) return false;
   }
 
   canvas.style.setProperty("--matter-canvas-width", `${layout.bounds.width}px`);
   canvas.style.setProperty("--matter-canvas-height", `${layout.bounds.height}px`);
-  for (const box of layout.boxes) {
-    const element = elements.get(box.nodeId);
-    if (element !== undefined) {
+  for (let index = 0; index < layout.boxes.length; index += 1) {
+    const box = layout.boxes[index];
+    const element = elements[index];
+    if (box !== undefined && element !== undefined) {
       element.style.transform = `translate3d(${box.x}px, ${box.y}px, 0)`;
     }
   }
   return true;
+}
+
+function retainBoundedCache<T>(
+  cache: Map<string, T>,
+  key: string,
+  value: T,
+): void {
+  cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > 3) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey === undefined) return;
+    cache.delete(oldestKey);
+  }
 }
 
 function LassoOverlay({
@@ -1428,7 +1619,14 @@ function AdmissionFeedback({
     >
       <span aria-hidden="true" className="admission-feedback__signal" />
       <span>{copy}</span>
-      {phase === "recording" && "transcript" in controller.state && controller.state.transcript ? (
+      {/*
+        The same preview element spans listening and settling, so the words a
+        person watched appear do not blink out and back while repair runs. The
+        one change they should perceive is the thought itself arriving.
+      */}
+      {(phase === "recording" || phase === "repairing") &&
+      "transcript" in controller.state &&
+      controller.state.transcript ? (
         <span className="admission-feedback__preview" dir="auto">{controller.state.transcript}</span>
       ) : null}
       {phase === "recording" ? (
@@ -1452,6 +1650,7 @@ function admissionCopy(state: AdmissionController["state"]): string {
     case "recording": return "Listening";
     case "stopping": return "Finishing the recording";
     case "transcribing": return "Turning voice into material";
+    case "repairing": return "Settling the words";
     case "committing": return "Placing the thought";
     case "error":
       switch (state.errorCode) {
@@ -1552,7 +1751,10 @@ function resolveToolTargetNode(
     : tree.nodes[navigation.selectedNodeId] ?? null;
   if (selectedNode !== null) return selectedNode;
   if (navigation.mode !== "full" || tree.rootId === null) return null;
-  return tree.nodes[tree.rootId] ?? null;
+  const root = tree.nodes[tree.rootId] ?? null;
+  if (root === null || !isDocumentRoot(tree, root.id)) return root;
+  const firstId = root.children[0];
+  return firstId === undefined ? null : tree.nodes[firstId] ?? null;
 }
 
 function voiceAdmissionIsEnabled(): boolean {

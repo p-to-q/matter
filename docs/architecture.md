@@ -9,14 +9,22 @@ node reference + microphone
   → browser-native Web Speech API (preferred)
   → POST /api/transcribe when an explicit server adapter exists
   → transcript
+  → POST /api/repair, bounded and optional, restores what recognition lost
   → human insert command
   → tree engine
 ```
 
+Repair is part of hearing, not of thinking. It may only restore punctuation,
+sentence boundaries, and a misheard word; a deterministic adjudication rejects
+anything larger, and every rejection admits the transcript as spoken. It
+therefore stays inside the human path and never opens the generative envelope:
+one command, one undo, no agent-sourced mutation.
+
 Human structure changes through the same durable kernel:
 
 ```text
-selected non-root node + pointer drop on another visible node
+selected visible node + pointer drop as before / after / in / first-level
+  → pure hit projection resolves target parent + insertion slot
   → validated move-node command with source/target order mementos
   → tree engine → exact inverse
   → canvas, material index, persistence, and export re-project one tree
@@ -61,12 +69,32 @@ reading was already correct before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
 
+Each of those model paths — repair, labelling, inquiry, and the unbuilt
+transform — is one scenario on a single harness: a frozen prompt built from the
+shared spine, a budget, and an adjudicator that decides whether the answer beats
+a floor that is already correct without a model.
+[`reference/prompt-harness.md`](reference/prompt-harness.md) records why the
+prompt has a shape and where each scenario's judgement differs.
+
+The secondary inquiry is non-mutating and deliberately smaller than a material
+turn:
+
+```text
+short question + lassoed passages, or bounded virtual-tree projection when no lasso exists
+  → bounded InquiryRequest → POST /api/inquiry
+  → answer text or a stated unavailable reason
+  → transient paper-corner exchange; no tree command or persistence
+```
+
 Only the tree engine applies durable mutations. Pointer, audio level, partial
 transcript, selection geometry, focus, fold, and derived labels remain
 transient.
 Canvas pan, node-drag targeting, and lasso drawing are mutually exclusive
 pointer modes. An outside-paper lasso particle echo is render-only; the semantic
 stroke and text targets remain client-space geometry over visible canvas text.
+Node drag uses one O(n) target projection at gesture start, then DOM hit testing
+and lane-local binary search during pointer movement. Preview never enters React
+state or `ThoughtTree`; pointer release commits one parent/index command.
 
 Matter is local-first. The server never owns the current tree: it validates the
 envelope, derives surrounding text from the supplied lineage, and returns a plan
@@ -105,7 +133,7 @@ requires one config entry, UI copy, and focused server/client tests.
 | Runtime material | forward/inverse history; bounded, not exported. |
 | Navigation | focus and fold; derived view state, not history. |
 | Labels | one derived name per node; disposable, never exported, never undoable. |
-| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn. |
+| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, transient inquiry. |
 | Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
 
 Identifiers and units do not substitute for one another:
@@ -150,7 +178,7 @@ returns the exact root-to-node path and ignores folds on it. Only focus view can
 start a generative transform, so model context cannot be narrower than the
 material visible during that turn.
 
-Async effects are limited to recording, transcription, labelling, planning,
+Async effects are limited to recording, transcription, labelling, inquiry, planning,
 persistence, and archive transport. Every completion returns with
 `{ interactionId, attempt, treeId, baseRevision }`; cancellation aborts work
 where possible, while token and current-tree validation make a late completion
@@ -158,7 +186,7 @@ harmless. React hooks dispatch events and execute effects but do not own a
 second interaction lifecycle.
 
 For portability, browser facilities sit behind narrow capability ports:
-`VoicePort`, `TurnClient`, `DocumentRepository`, and `ArchivePort`. The first
+`VoicePort`, `InquiryClient`, `TurnClient`, `DocumentRepository`, and `ArchivePort`. The first
 release implements only browser/HTTP adapters; it does not create a generic SDK
 or speculative native adapter. The tree, material, layout, and runtime reducer
 remain framework-free TypeScript.
@@ -191,12 +219,19 @@ app/
   page.tsx                         /matter through the Next.js basePath
   api/health/route.ts              implemented deployment readiness boundary
   api/transcribe/route.ts          strict speech boundary; browser mode never uses fixture output
+  api/repair/route.ts              bounded transcript-repair boundary; answers are adjudicated before use
   api/label/route.ts               implemented label boundary; live adapter gated
+  api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                gated generative transform boundary
 
 features/matter/
+  server/harness.ts                the only place a model is awaited; one scenario contract
+  server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
+  server/*-harness.ts              one scenario each: repair, label, inquiry, transform
+  server/model-pool.ts             the only place an endpoint, model name, or key appears
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules
+  material/inquiry-context.ts      bounded visible-lineage inquiry projection
   layout/                          visible traversal and focus/fold projection
   tools/                           pure capability projection and closed intents
   runtime/                         pure event reducer and effect descriptions
@@ -214,6 +249,31 @@ features/matter/
 - DOM `Range` and `getClientRects()` live at the interaction/rendering edge;
 - `server/` is the only place a configurable or credentialed provider name appears;
 - route handlers parse, delegate, and translate only.
+
+### Context, harness, and memory ownership
+
+These are separate layers, even when one small route currently crosses all of
+them:
+
+1. `material/*-context.ts` projects the visible document or explicit lasso
+   address into bounded reference material. It knows tree semantics, not models.
+2. `server/*-contract.ts` validates the versioned network envelope and repeats
+   every hard bound. It carries data only; prompts and scenarios do not belong
+   to protocol.
+3. `server/*-harness.ts` owns a named scenario's prompt, context allocation,
+   deadline, output budget, and response validation. It receives already
+   bounded material and returns only the scenario result.
+4. `server/*-provider.ts` owns credentials, model pools, transport quirks, health
+   and fallback. It never chooses document scope.
+
+Past inquiry turns are transient and are not an index. The first release does
+not persist a chat transcript or feed prior answers back into the prompt.
+Durable material history remains tree commands plus snapshots. Derived labels
+live in `persistence/` keyed by tree, node, and material fingerprint. A future
+search or memory index belongs in its own repository beside persistence, stores
+revision-addressed derived records, and may supply context only through an
+explicit context projector. It must not become hidden retrieval for generative
+tree changes.
 
 Browser speech recognition is the narrow platform-capability exception: it uses
 no Matter credential, exposes no provider choice in the client, and commits
@@ -246,8 +306,10 @@ Therefore `app/page.tsx` is the product page and
 the future `app/api/turn` route resolves under `/matter/api/turn` when built.
 
 `0.2` has no compatibility aliases because no `0.1` document was persisted.
-Generative provider routes are absent until their Matter-native envelopes and
-error boundaries are implemented; an old scene route is never renamed into place.
+The generative mutation route remains absent until its Matter-native envelope
+and error boundary are implemented. `/api/inquiry` exists separately because it
+cannot construct a plan or mutate material; an old scene route is never renamed
+into place.
 
 No auth, sync, collaboration, queue, worker, vector store, retrieval, or realtime
 transport belongs in this migration.

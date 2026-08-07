@@ -11,8 +11,13 @@ afterEach(() => {
 
 describe("Matter health route", () => {
   it("reports the deployed protocol without exposing provider configuration", async () => {
+    // Every gate is pinned: this asserts the whole envelope, so a developer's
+    // own `.env.local` must not be able to change what the probe reports.
     process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
     process.env.MATTER_LABEL_ADAPTER = "fixture";
+    process.env.MATTER_REPAIR_ADAPTER = "fixture";
+    process.env.MATTER_INQUIRY_ADAPTER = "off";
+    delete process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED;
     process.env.MATTER_BASE_PATH = "/matter";
     const response = GET();
 
@@ -28,6 +33,8 @@ describe("Matter health route", () => {
         localPersistence: "available",
         voiceAdmission: "fixture",
         thoughtLabel: "fixture",
+        transcriptRepair: "fixture",
+        inquiry: "unavailable",
         transformTurn: "not-implemented",
         archiveExportImport: "available",
       },
@@ -51,6 +58,18 @@ describe("Matter health route", () => {
     process.env.MATTER_LABEL_ADAPTER = "off";
 
     expect(healthSnapshot().surfaces.thoughtLabel).toBe("unavailable");
+  });
+
+  it("marks repair unavailable when the build never asks for it", () => {
+    process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED = "false";
+
+    expect(healthSnapshot().surfaces.transcriptRepair).toBe("unavailable");
+  });
+
+  it("never reports inquiry as a fixture, because it has none", () => {
+    process.env.MATTER_INQUIRY_ADAPTER = "fixture";
+
+    expect(healthSnapshot().surfaces.inquiry).toBe("unavailable");
   });
 
   it("falls back to the canonical Matter base path for unsafe deployment values", () => {

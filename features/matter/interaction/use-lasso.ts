@@ -17,7 +17,10 @@ import {
   resolveLassoTargets,
   type LassoTarget,
 } from "../material/lasso-targets";
-import { normalizeLassoSelectionSet } from "../material/lasso-selection";
+import {
+  settleLassoSelectionSet,
+  type LassoSelectionSet,
+} from "../material/lasso-selection";
 import {
   createLassoInteractionState,
   reduceLassoInteraction,
@@ -87,6 +90,7 @@ export function useLasso(input: {
     left: number; top: number; right: number; bottom: number;
   }> | null>(null);
   const [selections, setSelections] = useState<readonly SegmentSelection[]>([]);
+  const startSelectionsRef = useRef<LassoSelectionSet>(Object.freeze([]));
   const strokeEpochRef = useRef<MeasurementEpoch | null>(null);
   const strokeDocumentEpochRef = useRef(input.documentEpoch ?? 0);
   const latestEpochRef = useRef(input.epoch);
@@ -311,12 +315,13 @@ export function useLasso(input: {
       targetSnapshotKeyRef.current = snapshotKey;
     }
     sampledPointsRef.current = [{ x: event.clientX, y: event.clientY }];
+    startSelectionsRef.current = selections;
     setSelectionRects(clearMeasuredSelectionRects);
     setSelectionColumn(null);
     setSelections([]);
     writeInk(sampledPointsRef.current);
     return true;
-  }, [input.canvasRef, input.documentEpoch, input.navigationKey, input.tree, writeInk]);
+  }, [input.canvasRef, input.documentEpoch, input.navigationKey, input.tree, selections, writeInk]);
 
   const pointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const current = stateRef.current;
@@ -360,14 +365,8 @@ export function useLasso(input: {
         )
       : { kind: analysis.kind };
     dispatch({ type: "pointer-up", pointerId: event.pointerId, resolution });
-    if (resolution.kind === "selection") {
-      const resolvedSelections = "selections" in resolution && Array.isArray(resolution.selections)
-        ? resolution.selections
-        : [resolution.selection];
-      setSelections(normalizeLassoSelectionSet(resolvedSelections));
-    } else if (resolution.kind === "empty-closed") {
-      setSelections([]);
-    }
+    setSelections(settleLassoSelectionSet(startSelectionsRef.current, resolution));
+    startSelectionsRef.current = Object.freeze([]);
     sampledPointsRef.current = [];
     strokeEpochRef.current = null;
     strokeDocumentEpochRef.current = input.documentEpoch ?? 0;
@@ -382,6 +381,8 @@ export function useLasso(input: {
     const current = stateRef.current;
     if (current.mode !== "drawing" || current.pointerId !== pointerId) return false;
     dispatch({ type: "pointer-cancel", pointerId });
+    setSelections(startSelectionsRef.current);
+    startSelectionsRef.current = Object.freeze([]);
     sampledPointsRef.current = [];
     strokeEpochRef.current = null;
     targetSnapshotRef.current = null;

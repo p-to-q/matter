@@ -80,7 +80,9 @@ for (const viewport of [
     expect(geometry).toHaveLength(11);
     expect(rootGeometry).toBeDefined();
     expect(admittedGeometry).toBeDefined();
-    expect(admittedGeometry!.x).toBeGreaterThan(rootGeometry!.x);
+    // Top-level admissions share the root column; their authored order carries
+    // the vertical growth while the document root remains invisible.
+    expect(admittedGeometry!.x).toBeGreaterThanOrEqual(rootGeometry!.x);
     expect(admittedGeometry!.y).toBeGreaterThan(rootGeometry!.y);
 
     await page.keyboard.press(viewport.name === "laptop" ? "Meta+z" : "Control+z");

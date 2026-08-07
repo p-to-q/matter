@@ -98,7 +98,7 @@ export function ToolRail({
         icon={<MoveIcon />}
         label={lassoActive ? "Return to canvas pan" : panActive ? "Canvas pan active" : "Canvas pan"}
         onClick={!interactionPending ? onMove : undefined}
-        shortLabel="Move"
+        shortLabel="Pan"
         toolId="move"
         pressed={panActive}
       />

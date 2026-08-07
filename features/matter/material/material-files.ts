@@ -1,4 +1,5 @@
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
+import { isDocumentRoot } from "../tree/document-root";
 import type { NavigationState } from "../runtime/navigation";
 
 export const MATERIAL_TITLE_MAX_GRAPHEMES = 32;
@@ -218,7 +219,7 @@ export function projectMaterialFileSubtree(
 ): readonly MaterialFileRow[] {
   const anchorId = rootId ?? tree.rootId;
   if (anchorId === null) return NO_ROWS;
-  const slice = subtreeSlice(tree, anchorId);
+  const slice = isDocumentRoot(tree, anchorId) ? projectSourceRows(tree) : subtreeSlice(tree, anchorId);
   if (slice.length === 0) return NO_ROWS;
   return Object.freeze(slice.map((row) => sourceToRow(row, foldedNodeIds)));
 }
@@ -239,7 +240,7 @@ export function projectMaterialAncestry(
     ancestry.push(current);
     current = ownNode(tree, current)?.parentId ?? null;
   }
-  return Object.freeze(ancestry.reverse());
+  return Object.freeze(ancestry.reverse().filter((id) => !isDocumentRoot(tree, id)));
 }
 
 /**
@@ -306,8 +307,9 @@ function projectSourceRows(tree: ThoughtTree): readonly MaterialFileSourceRow[] 
     visited.add(nodeId);
     const node = ownNode(tree, nodeId);
     if (node === undefined) return;
-    rows.push(Object.freeze({ node, depth, authoredIndex: rows.length }));
-    for (const childId of node.children) visit(childId, depth + 1);
+    const structuralRoot = isDocumentRoot(tree, node.id);
+    if (!structuralRoot) rows.push(Object.freeze({ node, depth, authoredIndex: rows.length }));
+    for (const childId of node.children) visit(childId, structuralRoot ? depth : depth + 1);
   };
   visit(tree.rootId, 0);
   const projection = Object.freeze(rows);

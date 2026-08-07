@@ -33,7 +33,8 @@ MATTER_BASE_PATH=
 MATTER_INITIAL_DOCUMENT=root
 MATTER_TRANSCRIPTION_ADAPTER=browser
 NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED=true
-NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED=false
+NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED=true
+NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED=true
 ```
 
 That initial document contains only the canonical root sentence. It is not a
@@ -63,9 +64,11 @@ disallowed in robots and return operational data rather than product copy.
 Public copy can describe the intended interaction grammar: reference a node or
 segment, set degree with gesture, speak direction, and receive one local,
 perceivable, reversible change. It must also say that the current public build
-is root-seeded, uses browser-native speech when supported, and keeps the
-generative transform turn gated. Do not expose material, transcripts, provider configuration,
-hidden retrieval, or user state in metadata or machine-readable text.
+is root-seeded, uses browser-native speech when supported, keeps the generative
+transform turn gated, and exposes Ask Matter only as a bounded non-mutating
+question whose answer adapter may be unavailable. Do not expose material,
+transcripts, provider configuration, hidden retrieval, or user state in metadata
+or machine-readable text.
 
 ## Verification
 

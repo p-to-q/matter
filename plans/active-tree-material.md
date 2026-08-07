@@ -77,13 +77,34 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 | Visual composition | Local to each phase | quiet Matter form; refine from the running interface, not a second design system |
 | Right paper chrome | Frozen | anonymized private composition study; the rounded paper owns ambient media, right rail, and corner utilities |
 | Left material field | Re-frozen | 304 px manuscript index; structural depth steps, local disclosure, flat search, copy selection, archive, and local-only identity; drawer below 960 px |
-| Lightweight inquiry | Specified | secondary non-executing orientation only; blocked until the no-prompt/no-assistant invariant is explicitly revised |
-| Structural reparenting | Frozen | selected non-root node drops on another visible parent; append-only target order, exact pointer undo, no same-parent reorder or authored coordinates |
+| Lightweight inquiry | Re-frozen | one secondary, non-persistent question surface; bounded visible lineage; no mutation; answer adapter may be unavailable |
+| Structural reparenting | Frozen | selected non-root node drops on a visible parent or explicit sibling slot; cross-parent and same-parent authored order use one exact pointer-undoable command; no authored coordinates |
+
+Preview.8 title/document freeze:
+
+```text
+Outcome:    the preview has one seeded demo document with an independently renameable title
+Boundary:   document-root metadata, title command/inverse, local persistence and archive round-trip
+Invariants: material text never derives or overwrites the title; blank rename resets to the demo title;
+            title changes are durable and pointer-undoable; no new-document UI is implied
+Proof:      title command forward/inverse, blank-reset, reload, and archive tests
+Non-goals:  document picker, multiple active documents, accounts, sync, or title generation
+```
 
 The foundation freeze was completed on 2026-08-03 after source research and a
 second adversarial review. Its evidence lives in
 [`docs/reference/foundation.md`](../docs/reference/foundation.md) and the nearby
 references. It does not need another foundation phase.
+
+Structural reparenting keeps this proof boundary:
+
+```text
+Outcome:    a selected non-root node can be reparented or reordered by pointer
+Boundary:   pure drop projection -> move translator -> tree engine -> history
+Invariants: one mutation, exact source/target order, bounded depth/children, exact undo
+Proof:      policy bounds, stale/invalid atomic rejection, reorder/reparent inverse, browser drop/cancel
+Non-goals:  authored coordinates, root movement, cross-document drag, generic drag-and-drop
+```
 
 ## Phase 1 — Rooted Matter
 
@@ -827,6 +848,12 @@ placeholder pages or imply unavailable billing and legal commitments. The existi
 pure canvas-guidance state machine remains the only owner of lower-left prompts;
 only its presenter takes on the manufacturer-mark typography and keyed state-change
 entrance, so no second toast, timer, or announcement channel is introduced.
+
+Corrected intent, 2026-08-07: the static-help substitution above was a historical
+implementation decision, not the final product meaning. Ask Matter is restored as
+one small, closed-by-default inquiry. It can submit only a bounded visible lineage,
+persists no exchange, creates no command, and states when no answer adapter is
+connected. This correction does not reopen permanent chat or assistant chrome.
 
 Receipt, 2026-08-05: live reference inspection and the supplied package agree on
 the 24 px desktop grid, 14/20 Departure Mono typography, 160×104 settings menu,

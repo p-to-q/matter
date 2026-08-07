@@ -258,6 +258,10 @@ function projectAdmissionGuidance(
     case "stopping":
       return guidance("wait-recording", "progress");
     case "transcribing":
+    // Repair is still voice becoming material, and there is nothing different
+    // for a person to do while it runs, so it keeps the same guidance rather
+    // than inventing a second waiting sentence in every language.
+    case "repairing":
       return guidance("wait-transcription", "progress");
     case "committing":
       return guidance("wait-commit", "progress");

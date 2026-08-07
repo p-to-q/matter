@@ -19,7 +19,7 @@ Read only when the change needs it:
 
 ## Context
 
-- [`reference/`](reference/index.md) — optional implementation research, including the anonymized right-canvas composition;
+- [`reference/`](reference/index.md) — optional implementation research, including the prompt harness every model call goes through;
 - [`surfaces.md`](surfaces.md) — what runs today and what is only specified;
 - [`open.md`](open.md) — unresolved product possibilities;
 - [`changes.md`](changes.md) — short record of form-changing decisions.

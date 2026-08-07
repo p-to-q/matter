@@ -35,7 +35,8 @@ Read only what the change needs:
 4. `docs/architecture.md` for boundary work;
 5. `docs/protocol.md` for wire or document-model work;
 6. a relevant file in `docs/reference/` before solving a non-obvious local
-   engineering problem;
+   engineering problem — in particular `docs/reference/prompt-harness.md` before
+   writing or changing anything a model reads or answers;
 7. `docs/engineering.md` for a non-trivial change;
 8. `plans/active-tree-material.md` for durable or multi-slice work;
 9. `docs/workflow.md` when delegating or handing off.
@@ -46,13 +47,16 @@ contract.
 ## Product invariants
 
 - no keyboard is required for the primary path;
-- no prompt box, chat transcript, send button, or assistant panel;
+- no permanent prompt box, chat transcript, or assistant panel; the paper may
+  expose one secondary, non-persistent Matter inquiry bubble under its bounded
+  visible-lineage contract;
 - raw voice may admit human material; generative voice belongs to a node or
   selected segment, never to the application;
 - AI output reaches the screen only as one perceivable change to material;
 - every committed generative change is pointer-undoable;
 - growth runs downward from a single root; structure determines presentation;
-- the model receives the visible root-to-focus lineage, with no hidden retrieval;
+- the model receives the selected lasso passages or bounded virtual-tree context,
+  with no hidden retrieval;
 - keep the interface quiet, precise, and professional.
 - no decorative gradients, card grids, or permanent status chrome.
 

@@ -47,6 +47,7 @@ function validateConfiguration(
 type ValidatedTree = {
   childrenByIndex: number[][];
   parentIndexByIndex: Array<number | null>;
+  rootIndices: number[];
 };
 
 function validateTree(
@@ -54,13 +55,14 @@ function validateTree(
   columnWidth: number,
 ): ValidatedTree | LayoutFailure {
   if (nodes.length === 0) {
-    return { childrenByIndex: [], parentIndexByIndex: [] };
+    return { childrenByIndex: [], parentIndexByIndex: [], rootIndices: [] };
   }
 
   const seen = new Map<string, number>();
   const activePath: number[] = [];
   const childrenByIndex: number[][] = nodes.map(() => []);
   const parentIndexByIndex: Array<number | null> = nodes.map(() => null);
+  const rootIndices: number[] = [];
 
   for (let index = 0; index < nodes.length; index += 1) {
     const node = nodes[index];
@@ -99,14 +101,13 @@ function validateTree(
       return failure("NODE_WIDTH_EXCEEDS_COLUMN", node.id);
     }
 
-    if (index === 0) {
+    if (node.parentId === null || node.depth === 0) {
       if (node.parentId !== null || node.depth !== 0) {
         return failure("INVALID_ROOT", node.id);
       }
+      rootIndices.push(index);
+      activePath.length = 0;
     } else {
-      if (node.parentId === null || node.depth === 0) {
-        return failure("INVALID_ROOT", node.id);
-      }
       const parentIndex = seen.get(node.parentId);
       if (parentIndex === undefined) {
         return failure("MISSING_PARENT", node.id);
@@ -127,7 +128,7 @@ function validateTree(
     seen.set(node.id, index);
   }
 
-  return { childrenByIndex, parentIndexByIndex };
+  return { childrenByIndex, parentIndexByIndex, rootIndices };
 }
 
 function isFailure(
@@ -239,7 +240,7 @@ export function layoutColumnarTree(
   }
 
   const yPositions = new Array<number>(input.nodes.length);
-  yPositions[0] = input.origin.y;
+  let packedRootsMax = Number.NEGATIVE_INFINITY;
   const boxes: LayoutBox[] = [];
   let maxX = input.origin.x;
   let minY = input.origin.y;
@@ -251,11 +252,18 @@ export function layoutColumnarTree(
       return failure("INVALID_PREORDER");
     }
 
-    if (index > 0) {
-      const parentIndex = validated.parentIndexByIndex[index];
-      if (parentIndex === undefined || parentIndex === null) {
-        return failure("MISSING_PARENT", node.id);
-      }
+    const parentIndex = validated.parentIndexByIndex[index];
+    if (parentIndex === null) {
+      const subtreeMin = subtreeMinOffsets[index];
+      const subtreeMax = subtreeMaxOffsets[index];
+      if (subtreeMin === undefined || subtreeMax === undefined) return failure("INVALID_PREORDER", node.id);
+      const rootOffset = packedRootsMax === Number.NEGATIVE_INFINITY
+        ? 0
+        : packedRootsMax + input.siblingGap - subtreeMin;
+      yPositions[index] = input.origin.y + rootOffset;
+      packedRootsMax = rootOffset + subtreeMax;
+    } else {
+      if (parentIndex === undefined) return failure("MISSING_PARENT", node.id);
       const parentY = yPositions[parentIndex];
       if (parentY === undefined) {
         return failure("INVALID_PREORDER", node.id);

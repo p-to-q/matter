@@ -1,7 +1,7 @@
-import type { LabelModelAdapter } from "./label-generator";
+import type { ScenarioAdapter } from "./harness";
 
 /**
- * Resolves the label model from an ordered pool of OpenAI-compatible endpoints.
+ * One ordered pool of OpenAI-compatible endpoints, shared by every scenario.
  *
  * The pool exists because each endpoint is a relay that may disappear without
  * notice. Ordered fallback is therefore normal operation, not an error path.
@@ -9,19 +9,26 @@ import type { LabelModelAdapter } from "./label-generator";
  * This module is the only place an endpoint host, a model name, or a key
  * appears. Keys are read from the environment at call time and never enter a
  * request that reaches the browser, a log line, an error message, or a cache
- * key. A label answer carries no provider identity, so a person cannot tell —
- * and does not need to tell — which relay named their thought.
+ * key. An answer carries no provider identity, so a person cannot tell — and
+ * does not need to tell — which relay named their thought.
+ *
+ * The environment variables are still spelled `MATTER_LABEL_*` because they are
+ * a deployed secret layout, and renaming a secret to match a refactor is how a
+ * deployment loses its credentials on a Tuesday. The pool is scenario-agnostic;
+ * only the variable names remember where it started.
  */
 
-export type LabelCandidate = Readonly<{
+export type PoolCandidate = Readonly<{
   /** Pool entry name. Diagnostic only; it never leaves the server. */
   station: string;
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** Provider-compatible top-level thinking switch, when explicitly set. */
+  enableThinking?: boolean;
 }>;
 
-export type LabelProviderLimits = Readonly<{
+export type PoolLimits = Readonly<{
   /** Below this, a further attempt cannot finish inside the caller's deadline. */
   minimumAttemptMs: number;
   maxOutputTokens: number;
@@ -30,10 +37,15 @@ export type LabelProviderLimits = Readonly<{
   cooldownMs: number;
 }>;
 
-export const DEFAULT_PROVIDER_LIMITS: LabelProviderLimits = Object.freeze({
+export const DEFAULT_POOL_LIMITS: PoolLimits = Object.freeze({
   minimumAttemptMs: 400,
-  maxOutputTokens: 32,
-  maxResponseBytes: 16 * 1_024,
+  /**
+   * The pool's own ceiling, not a scenario's. It sits above the longest answer
+   * any scenario asks for, so a scenario that forgets to state a bound is still
+   * bounded, and a scenario that states one always gets the smaller number.
+   */
+  maxOutputTokens: 1_200,
+  maxResponseBytes: 32 * 1_024,
   failuresBeforeCooldown: 2,
   cooldownMs: 60_000,
 });
@@ -42,7 +54,7 @@ type CandidateHealth = { failures: number; cooldownUntilMs: number };
 
 const health = new Map<string, CandidateHealth>();
 
-export function resetLabelProviderHealth(): void {
+export function resetPoolHealth(): void {
   health.clear();
 }
 
@@ -60,15 +72,15 @@ export function resetLabelProviderHealth(): void {
  * grep, and redact when it is its own variable, and a malformed pool degrades
  * to a shorter pool instead of throwing at request time.
  */
-export function readLabelPool(
+export function readModelPool(
   environment: Readonly<Record<string, string | undefined>> = process.env,
-): readonly LabelCandidate[] {
+): readonly PoolCandidate[] {
   const stations = (environment.MATTER_LABEL_POOL ?? "")
     .split(",")
     .map((entry) => entry.trim())
     .filter((entry) => /^[A-Za-z0-9_-]{1,32}$/.test(entry));
 
-  const candidates: LabelCandidate[] = [];
+  const candidates: PoolCandidate[] = [];
   for (const station of stations) {
     const prefix = `MATTER_LABEL_${station.toUpperCase().replaceAll("-", "_")}`;
     const baseUrl = environment[`${prefix}_BASE_URL`]?.trim();
@@ -77,6 +89,7 @@ export function readLabelPool(
       .split(",")
       .map((model) => model.trim())
       .filter((model) => model.length > 0);
+    const enableThinking = parseOptionalBoolean(environment[`${prefix}_ENABLE_THINKING`]);
     if (baseUrl === undefined || apiKey === undefined) continue;
     if (!isHttpsOrLocal(baseUrl)) continue;
     if (apiKey.length === 0 || models.length === 0) continue;
@@ -86,31 +99,32 @@ export function readLabelPool(
         baseUrl: baseUrl.replace(/\/+$/u, ""),
         apiKey,
         model,
+        ...(enableThinking === null ? {} : { enableThinking }),
       }));
     }
   }
   return Object.freeze(candidates);
 }
 
-export function resolvePoolLabelAdapter(
+export function resolvePoolAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,
-  limits: LabelProviderLimits = DEFAULT_PROVIDER_LIMITS,
+  limits: PoolLimits = DEFAULT_POOL_LIMITS,
   now: () => number = Date.now,
-): LabelModelAdapter | null {
-  const pool = readLabelPool(environment);
+): ScenarioAdapter | null {
+  const pool = readModelPool(environment);
   if (pool.length === 0) return null;
-  return createPoolLabelAdapter(pool, limits, now);
+  return createPoolAdapter(pool, limits, now);
 }
 
-export function createPoolLabelAdapter(
-  pool: readonly LabelCandidate[],
-  limits: LabelProviderLimits = DEFAULT_PROVIDER_LIMITS,
+export function createPoolAdapter(
+  pool: readonly PoolCandidate[],
+  limits: PoolLimits = DEFAULT_POOL_LIMITS,
   now: () => number = Date.now,
   fetchImpl: typeof fetch = fetch,
-): LabelModelAdapter {
+): ScenarioAdapter {
   return async (input, signal) => {
     const deadlineAtMs = now() + input.deadlineMs;
-    let lastError: unknown = new Error("The label pool is empty.");
+    let lastError: unknown = new Error("The model pool is empty.");
 
     for (const candidate of orderedCandidates(pool, now())) {
       const remaining = deadlineAtMs - now();
@@ -138,11 +152,11 @@ export function createPoolLabelAdapter(
  * but is never permanently abandoned.
  */
 function orderedCandidates(
-  pool: readonly LabelCandidate[],
+  pool: readonly PoolCandidate[],
   nowMs: number,
-): readonly LabelCandidate[] {
-  const healthy: LabelCandidate[] = [];
-  const cooling: LabelCandidate[] = [];
+): readonly PoolCandidate[] {
+  const healthy: PoolCandidate[] = [];
+  const cooling: PoolCandidate[] = [];
   for (const candidate of pool) {
     const entry = health.get(candidateKey(candidate));
     if (entry !== undefined && nowMs < entry.cooldownUntilMs) cooling.push(candidate);
@@ -152,10 +166,10 @@ function orderedCandidates(
 }
 
 async function completeOnce(
-  candidate: LabelCandidate,
-  input: Parameters<LabelModelAdapter>[0],
+  candidate: PoolCandidate,
+  input: Parameters<ScenarioAdapter>[0],
   signal: AbortSignal,
-  limits: LabelProviderLimits,
+  limits: PoolLimits,
   remainingMs: number,
   fetchImpl: typeof fetch,
 ): Promise<string> {
@@ -173,11 +187,23 @@ async function completeOnce(
       },
       body: JSON.stringify({
         model: candidate.model,
-        // A label is one short phrase; sampling would make an unchanged node
-        // rename itself on every cache miss.
+        // Every Matter scenario is deterministic by intent: an unchanged node
+        // must not rename itself on a cache miss, and one utterance must not be
+        // repaired differently on a retry. Sampling has nothing to offer here.
         temperature: 0,
-        max_tokens: limits.maxOutputTokens,
+        // The scenario's own ceiling wins when it asked for one. A short thought
+        // must not buy a long generation, and a long one must not be cut off
+        // mid-sentence and then rejected for it.
+        max_tokens: Math.min(
+          limits.maxOutputTokens,
+          Number.isSafeInteger(input.maxOutputTokens) && input.maxOutputTokens > 0
+            ? input.maxOutputTokens
+            : limits.maxOutputTokens,
+        ),
         stream: false,
+        ...(candidate.enableThinking === undefined
+          ? {}
+          : { enable_thinking: candidate.enableThinking }),
         messages: [{ role: "user", content: input.prompt }],
       }),
       redirect: "error",
@@ -187,7 +213,7 @@ async function completeOnce(
     if (!response.ok) {
       // The status is diagnostic; the body may quote the provider and never
       // reaches the browser, which only ever sees a deterministic label.
-      throw new Error(`Label provider returned HTTP ${response.status}.`);
+      throw new Error(`Model provider returned HTTP ${response.status}.`);
     }
     return extractContent(JSON.parse(body) as unknown);
   } finally {
@@ -198,18 +224,18 @@ async function completeOnce(
 
 function extractContent(payload: unknown): string {
   if (typeof payload !== "object" || payload === null) {
-    throw new Error("The label provider response was not an object.");
+    throw new Error("The model provider response was not an object.");
   }
   const choices = (payload as { choices?: unknown }).choices;
   if (!Array.isArray(choices) || choices.length === 0) {
-    throw new Error("The label provider response had no choice.");
+    throw new Error("The model provider response had no choice.");
   }
   const message = (choices[0] as { message?: unknown }).message;
   const content = typeof message === "object" && message !== null
     ? (message as { content?: unknown }).content
     : undefined;
   if (typeof content !== "string") {
-    throw new Error("The label provider response had no text.");
+    throw new Error("The model provider response had no text.");
   }
   return content;
 }
@@ -226,7 +252,7 @@ async function readBounded(response: Response, maxBytes: number): Promise<string
       if (done) break;
       if (value === undefined) continue;
       total += value.byteLength;
-      if (total > maxBytes) throw new Error("The label provider response was too large.");
+      if (total > maxBytes) throw new Error("The model provider response was too large.");
       chunks.push(value);
     }
   } finally {
@@ -243,9 +269,9 @@ async function readBounded(response: Response, maxBytes: number): Promise<string
 }
 
 function recordOutcome(
-  candidate: LabelCandidate,
+  candidate: PoolCandidate,
   ok: boolean,
-  limits: LabelProviderLimits,
+  limits: PoolLimits,
   now: () => number,
 ): void {
   const key = candidateKey(candidate);
@@ -263,7 +289,7 @@ function recordOutcome(
 }
 
 /** Identity excludes the key, so rotating a key does not reset health. */
-function candidateKey(candidate: LabelCandidate): string {
+function candidateKey(candidate: PoolCandidate): string {
   return `${candidate.station} ${candidate.baseUrl} ${candidate.model}`;
 }
 
@@ -277,4 +303,10 @@ function isHttpsOrLocal(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function parseOptionalBoolean(value: string | undefined): boolean | null {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return null;
 }

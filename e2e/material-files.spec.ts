@@ -1,7 +1,8 @@
 import { expect, test, type Locator } from "@playwright/test";
 
-const rootId = "thought_fixture_root";
-const firstBranchText = "被允许想象的其他生活";
+const rootId = "matter_document_root_matter_fixture_rooted_01";
+const firstBranchText = "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
+const searchText = "被允许想象的生活";
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
@@ -71,8 +72,8 @@ for (const viewport of [
     // The root is the heading; the whole branch below it arrives expanded, so a
     // thought that was just spoken never has to be hunted for.
     await expect(contextRow).toHaveAttribute("data-node-id", rootId);
-    await expect(rows).toHaveCount(9);
-    await expect(sidebar.locator('.material-file[data-expanded="true"]')).toHaveCount(3);
+    await expect(rows).toHaveCount(10);
+    await expect(sidebar.locator('.material-file[data-expanded="true"]')).toHaveCount(4);
     const rootTitle = (await contextTitle.innerText()).trim();
     const rowPaths = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-markdown-path")),
@@ -94,20 +95,20 @@ for (const viewport of [
     expect(steps.every(({ depth, x }) => axisByDepth.get(depth) === x)).toBe(true);
     expect(axisByDepth.get(1)!).toBeGreaterThan(axisByDepth.get(0)!);
 
-    // The heading is a row too: it selects the thought the outline is inside.
+    // The document title is metadata, not a selectable thought. Its control
+    // opens the title editor without creating a material selection.
     await contextTitle.click();
-    await expect(page.locator(`[data-thought-id="${rootId}"]`)).toHaveAttribute("data-selected", "true");
-    await expect(contextTitle).toHaveAttribute("data-active", "true");
+    await expect(sidebar.getByRole("textbox", { name: "Canvas title" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
 
     // A branch closes in place rather than replacing the outline, and closing is
     // the index's own state: the canvas does not move with it.
-    const branch = rows.first();
-    const descendantId = await rows.nth(1).getAttribute("data-node-id");
+    const branch = rows.nth(1);
+    const descendantId = await rows.nth(2).getAttribute("data-node-id");
     if (descendantId === null) throw new Error("fixture descendant is missing");
     await branch.locator(".material-file__disclosure").click();
     await expect(branch).not.toHaveAttribute("data-expanded", "true");
-    await expect(rows).toHaveCount(7);
+    await expect(rows).toHaveCount(8);
     await expect(contextTitle).toHaveText(rootTitle);
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
 
@@ -115,7 +116,7 @@ for (const viewport of [
     await page.locator(`[data-thought-id="${descendantId}"] [data-thought-text-id]`).click();
     if (viewport.name === "narrow") await setSidebarOpen(true);
     await expect(branch).toHaveAttribute("data-expanded", "true");
-    await expect(rows).toHaveCount(9);
+    await expect(rows).toHaveCount(10);
 
     await page.reload();
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -123,7 +124,7 @@ for (const viewport of [
     await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
     await expect(sidebar).toHaveAttribute("data-mode", "browse");
     await expect(contextRow).toHaveAttribute("data-node-id", rootId);
-    await expect(rows).toHaveCount(9);
+    await expect(rows).toHaveCount(10);
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
 
     // Search is flat across the whole tree, and a result carries its position
@@ -133,12 +134,12 @@ for (const viewport of [
     await expect(rows).toHaveCount(0);
     await expect(sidebar.locator(".material-files__empty")).toContainText("Type to find a thought.");
     const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
-    await search.fill(firstBranchText.slice(0, 5));
+    await search.fill(searchText.slice(0, 5));
     await expect(rows).toHaveCount(1);
     await expect(rows.first().locator(".material-file__path")).toHaveCount(1);
     await sidebar.getByRole("button", { name: "Close search" }).click();
     await expect(sidebar).toHaveAttribute("data-mode", "browse");
-    await expect(rows).toHaveCount(9);
+    await expect(rows).toHaveCount(10);
 
     // A thought admitted under a closed branch opens that branch, so the index
     // can always answer "where am I".
@@ -148,7 +149,7 @@ for (const viewport of [
     );
     await clickTool(page.getByRole("button", { name: "Extend related thought", exact: true }));
     await expect(rows.first()).toHaveAttribute("data-expanded", "true");
-    await expect(rows).toHaveCount(10);
+    await expect(rows).toHaveCount(11);
     const after = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-node-id")),
     );
@@ -161,7 +162,7 @@ for (const viewport of [
     await sidebar.getByRole("button", { name: "Select", exact: true }).click();
     await expect(sidebar).toHaveAttribute("data-mode", "select");
     const checks = sidebar.getByRole("checkbox", { name: /for copying/ });
-    await expect(checks).toHaveCount(10);
+    await expect(checks).toHaveCount(11);
     if (viewport.name === "narrow") {
       const coarseTargets = await sidebar.locator(
         "button:not(:disabled), label.material-file__check",

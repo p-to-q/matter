@@ -26,7 +26,7 @@ const MAX_BUNDLE_FILES = 2_002;
 const MAX_PATH_BYTES = 2_048;
 const MAX_BUNDLE_BYTES = 18_000_000;
 const CHILD_DIRECTORY = /^(\d{3})-([^/]+)$/u;
-const FRONTMATTER_KEYS = ["id", "createdAt", "updatedAt"] as const;
+const FRONTMATTER_KEYS = ["id", "createdAt", "updatedAt", "role"] as const;
 
 export function treeToBundle(tree: ThoughtTree): SnapshotBundle {
   const validation = validateThoughtTree(tree);
@@ -36,6 +36,7 @@ export function treeToBundle(tree: ThoughtTree): SnapshotBundle {
     protocolVersion: tree.protocolVersion,
     treeId: tree.id,
     revision: tree.revision,
+    ...(tree.title === undefined ? {} : { title: tree.title }),
   })}\n`;
   for (const entry of allocateSnapshotPaths(tree)) {
     files[entry.path] = encodeNode(tree.nodes[entry.nodeId]);
@@ -78,6 +79,7 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
     const emptyTree: ThoughtTree = {
       protocolVersion: PROTOCOL_VERSION,
       id: metadata.value.treeId,
+      ...(metadata.value.title === undefined ? {} : { title: metadata.value.title }),
       rootId: null,
       nodes: {},
       revision: metadata.value.revision,
@@ -156,6 +158,7 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
   return validateDecodedTree({
     protocolVersion: PROTOCOL_VERSION,
     id: metadata.value.treeId,
+    ...(metadata.value.title === undefined ? {} : { title: metadata.value.title }),
     rootId: root.id,
     nodes,
     revision: metadata.value.revision,
@@ -163,7 +166,8 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
 }
 
 function encodeNode(node: ThoughtNode): string {
-  return `---\nid: ${node.id}\ncreatedAt: ${node.createdAt}\nupdatedAt: ${node.updatedAt}\n---\n\n${node.text}`;
+  const role = node.role === undefined ? "" : `\nrole: ${node.role}`;
+  return `---\nid: ${node.id}\ncreatedAt: ${node.createdAt}\nupdatedAt: ${node.updatedAt}${role}\n---\n\n${node.text}`;
 }
 
 function decodeNode(content: string):
@@ -174,7 +178,7 @@ function decodeNode(content: string):
   const end = content.indexOf("\n---\n\n", separator.length);
   if (end < 0) return failure("INVALID_MARKDOWN", "Material frontmatter is not closed.");
   const lines = content.slice(separator.length, end).split("\n");
-  if (lines.length !== FRONTMATTER_KEYS.length) {
+  if (lines.length !== 3 && lines.length !== 4) {
     return failure("INVALID_MARKDOWN", "Material frontmatter has missing, duplicate, or unknown keys.");
   }
   const values = new Map<string, string>();
@@ -185,10 +189,21 @@ function decodeNode(content: string):
     }
     values.set(match[1], match[2]);
   }
+  const expectedKeys = values.has("role")
+    ? ["createdAt", "id", "role", "updatedAt"]
+    : ["createdAt", "id", "updatedAt"];
+  if (Array.from(values.keys()).sort().join("|") !== expectedKeys.join("|")) {
+    return failure("INVALID_MARKDOWN", "Material frontmatter has missing, duplicate, or unknown keys.");
+  }
+  const role = values.get("role");
+  if (role !== undefined && role !== "document-root") {
+    return failure("INVALID_MARKDOWN", "Material frontmatter has an invalid node role.");
+  }
   return Object.freeze({
     ok: true,
     node: {
       id: values.get("id")!,
+      ...(role === undefined ? {} : { role: "document-root" as const }),
       createdAt: values.get("createdAt")!,
       updatedAt: values.get("updatedAt")!,
       text: content.slice(end + "\n---\n\n".length),
@@ -199,7 +214,7 @@ function decodeNode(content: string):
 }
 
 function parseMetadata(text: string):
-  | Readonly<{ ok: true; value: { treeId: string; revision: number } }>
+  | Readonly<{ ok: true; value: { treeId: string; revision: number; title?: string } }>
   | Extract<SnapshotDecodeResult, { ok: false }> {
   let value: unknown;
   try {
@@ -209,7 +224,8 @@ function parseMetadata(text: string):
   }
   if (!isPlainRecord(value)) return failure("INVALID_METADATA", "Snapshot metadata must be an object.");
   const keys = Object.keys(value).sort();
-  if (keys.join("|") !== "protocolVersion|revision|treeId") {
+  const keySignature = keys.join("|");
+  if (keySignature !== "protocolVersion|revision|treeId" && keySignature !== "protocolVersion|revision|title|treeId") {
     return failure("INVALID_METADATA", "Snapshot metadata has missing or unknown fields.");
   }
   if (value.protocolVersion !== PROTOCOL_VERSION) {
@@ -218,10 +234,20 @@ function parseMetadata(text: string):
   if (typeof value.treeId !== "string" || value.treeId.length === 0) {
     return failure("INVALID_METADATA", "Snapshot metadata has an invalid tree id.");
   }
+  if (value.title !== undefined && (typeof value.title !== "string" || value.title.length === 0 || value.title.length > 160)) {
+    return failure("INVALID_METADATA", "Snapshot metadata has an invalid title.");
+  }
   if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0) {
     return failure("INVALID_METADATA", "Snapshot metadata has an invalid revision.");
   }
-  return Object.freeze({ ok: true, value: { treeId: value.treeId, revision: value.revision as number } });
+  return Object.freeze({
+    ok: true,
+    value: {
+      treeId: value.treeId,
+      revision: value.revision as number,
+      ...(value.title === undefined ? {} : { title: value.title }),
+    },
+  });
 }
 
 function parseDirectory(directory: string):

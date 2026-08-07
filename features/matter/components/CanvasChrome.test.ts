@@ -19,7 +19,7 @@ describe("CanvasChrome", () => {
     expect(markup).toContain('data-chrome-region="desktop"');
     expect(markup).toContain('data-chrome-control="about"');
     expect(markup).toContain('data-chrome-control="settings"');
-    expect(markup).toContain('data-chrome-control="help"');
+    expect(markup).toContain('data-chrome-control="inquiry"');
     expect(markup).toContain('data-chrome-control="language"');
     expect(markup).toContain('data-chrome-control="fx"');
     expect(markup).toContain('data-chrome-control="appearance"');
@@ -35,14 +35,25 @@ describe("CanvasChrome", () => {
     expect(markup).toContain("定价");
     expect(markup).toContain("隐私政策");
     expect(markup).toContain("服务条款");
-    expect(markup).toContain("使用说明");
+    expect(markup).toContain("询问 Matter");
   });
 
-  it("keeps help informational and exposes no assistant input surface", () => {
+  it("exposes one closed inquiry field without a persistent chat surface", () => {
     const markup = renderChrome();
 
-    expect(markup).not.toMatch(/<(?:textarea|input|form)\b/);
-    expect(markup).not.toMatch(/data-inquiry|chat|assistant/i);
+    expect(markup.match(/<textarea\b/g)).toHaveLength(1);
+    expect(markup).not.toMatch(/<(?:input|form)\b/);
+    expect(markup).toContain('id="matter-inquiry"');
+    expect(markup).toContain('data-inquiry-phase="idle"');
+    expect(markup).toMatch(/id="matter-inquiry"[^>]*hidden|hidden[^>]*id="matter-inquiry"/);
+    expect(markup).toContain('aria-controls="matter-inquiry"');
+    expect(markup).not.toContain("data-inquiry-thread");
+    expect(markup).not.toMatch(/chat|assistant|history/i);
+  });
+
+  it("hides the inquiry in CSS even though the component owns display", () => {
+    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.inquiry\[hidden\]\s*\{[^}]*display:\s*none/);
   });
 
   it("keeps pre-release information honest and task-oriented", () => {
@@ -53,7 +64,8 @@ describe("CanvasChrome", () => {
     expect(CANVAS_CHROME_INFO["en-US"].pricing.body.join(" ")).toContain("no paid plan");
     expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("visible root-to-focus lineage");
     expect(CANVAS_CHROME_INFO["en-US"].terms.body.join(" ")).toContain("pre-release software");
-    expect(CANVAS_CHROME_INFO["en-US"].help.body.join(" ")).toMatch(/Voice.*Lasso.*Branch.*Undo/s);
+    expect(CANVAS_CHROME_INFO["en-US"].inquiry.body.join(" ")).toContain("Start with Voice");
+    expect(CANVAS_CHROME_INFO["zh-CN"].inquiry.body.join(" ")).toContain("先用麦克风说出根想法");
     expect(CANVAS_CHROME_INFO["zh-CN"].privacy.body.join(" ")).toContain("根节点至焦点路径");
   });
 
@@ -69,16 +81,17 @@ describe("CanvasChrome", () => {
     expect(css).toContain("@media (max-width: 767px)");
     expect(css).toMatch(/\.mobileTrigger\s*{[^}]*width:\s*52px;[^}]*height:\s*56px;/s);
     expect(css).toContain("width: min(320px, 85%);");
+    expect(css).toMatch(/\.inquiryAnchor\s*{[^}]*right:\s*0;[^}]*bottom:\s*30px;/s);
   });
 });
 
 describe("isCanvasChromeInfoOverlay", () => {
-  it.each(["about", "help", "pricing", "privacy", "terms"] as const)(
+  it.each(["about", "pricing", "privacy", "terms"] as const)(
     "accepts the %s information surface across localized copy maps",
     (overlay) => expect(isCanvasChromeInfoOverlay(overlay)).toBe(true),
   );
 
-  it.each([null, "settings", "language", "mobile"] as const)(
+  it.each([null, "settings", "language", "inquiry", "mobile"] as const)(
     "rejects the %s non-information surface",
     (overlay) => expect(isCanvasChromeInfoOverlay(overlay)).toBe(false),
   );

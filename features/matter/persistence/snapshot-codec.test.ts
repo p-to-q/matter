@@ -10,6 +10,7 @@ import { MAX_TREE_DEPTH } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import { moveNodeToParentCommand } from "../runtime/move";
 import { applyTreeCommand } from "../tree/engine";
+import { normalizeDocumentTree } from "../tree/document-root";
 import { bundleToTree, treeToBundle, type SnapshotBundle } from "./snapshot-codec";
 
 describe("Markdown snapshot codec", () => {
@@ -49,6 +50,21 @@ describe("Markdown snapshot codec", () => {
     const moved = applyTreeCommand(tree, command);
     if (!moved.ok) throw new Error(moved.error.message);
     expect(bundleToTree(treeToBundle(moved.tree))).toEqual({ ok: true, tree: moved.tree });
+  });
+
+  it("round-trips the independent canvas title and invisible document root", () => {
+    const tree = {
+      ...normalizeDocumentTree(createRootedMaterialFixture().tree),
+      title: "Allowed other lives",
+    };
+    const bundle = treeToBundle(tree);
+    expect(bundle.files["matter/matter.json" as keyof typeof bundle.files]).toContain(
+      '"title":"Allowed other lives"',
+    );
+    expect(bundle.files["matter/index.md" as keyof typeof bundle.files]).toContain(
+      "role: document-root",
+    );
+    expect(bundleToTree(bundle)).toEqual({ ok: true, tree });
   });
 
   it("allows readable slug renames without changing material identity", () => {

@@ -62,7 +62,7 @@ for (const viewport of [
     await drawEarlyReleaseLoop(page, fragment);
     await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
-    await expect(page.locator('[data-selection-count="1"]')).toBeVisible();
+    await expect(page.locator(".lasso-selection-count")).toHaveCount(0);
     await expect(page.getByRole("status")).toContainText("Selected language:");
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("拖动把手设定变化程度。");
@@ -292,7 +292,7 @@ for (const viewport of [
     await page.getByRole("button", { name: "Leave language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("拖动把手设定变化程度。");
+      .toHaveText("选择一段想法。");
     expect(browserErrors).toEqual([]);
   });
 
@@ -422,6 +422,60 @@ test("lasso keeps its outside-paper particle echo visual-only", async ({ page })
   expect((await particleAlpha(page, paper)).inside).toBe(0);
   await page.mouse.up();
   await expect.poll(async () => (await particleAlpha(page, paper)).outside).toBe(0);
+});
+
+test("multi-passage selection count belongs to the paper guidance layer", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+
+  const passages = page.locator(".spatial-thought__text");
+  const first = await passages.nth(0).boundingBox();
+  const second = await passages.nth(1).boundingBox();
+  if (first === null || second === null) throw new Error("two visible passages are required");
+  const left = Math.min(first.x, second.x);
+  const top = Math.min(first.y, second.y);
+  const right = Math.max(first.x + first.width, second.x + second.width);
+  const bottom = Math.max(first.y + first.height, second.y + second.height);
+  await drawEarlyReleaseLoop(page, {
+    x: left,
+    y: top,
+    width: right - left,
+    height: bottom - top,
+  });
+
+  const count = page.locator(".lasso-selection-count");
+  await expect(count).toBeVisible();
+  const receipt = await count.evaluate((element) => {
+    const paper = element.parentElement;
+    if (!(paper instanceof HTMLElement)) {
+      throw new Error("paper guidance layer is missing");
+    }
+    const guidance = paper.querySelector<HTMLElement>(".matter-guidance");
+    if (guidance === null) throw new Error("paper guidance is missing");
+    const countRect = element.getBoundingClientRect();
+    const paperRect = paper.getBoundingClientRect();
+    const countStyle = getComputedStyle(element);
+    return {
+      parentClass: paper.className,
+      offsetLeft: countRect.left - paperRect.left,
+      offsetTop: countRect.top - paperRect.top,
+      positionedLeft: countStyle.left,
+      positionedTop: countStyle.top,
+      countFontSize: countStyle.fontSize,
+      countLineHeight: countStyle.lineHeight,
+      guidanceFontSize: getComputedStyle(guidance).fontSize,
+      guidanceLineHeight: getComputedStyle(guidance).lineHeight,
+    };
+  });
+  expect(receipt.parentClass).toContain("matter-document");
+  expect(receipt.positionedLeft).toBe("24px");
+  expect(receipt.positionedTop).toBe("24px");
+  expect(receipt.offsetLeft).toBeCloseTo(25, 0);
+  expect(receipt.offsetTop).toBeCloseTo(25, 0);
+  expect(receipt.countFontSize).toBe(receipt.guidanceFontSize);
+  expect(receipt.countLineHeight).toBe(receipt.guidanceLineHeight);
 });
 
 async function particleAlpha(page: Page, paper: { x: number; y: number; width: number; height: number }) {

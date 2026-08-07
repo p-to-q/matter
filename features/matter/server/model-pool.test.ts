@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  DEFAULT_PROVIDER_LIMITS,
-  createPoolLabelAdapter,
-  readLabelPool,
-  resetLabelProviderHealth,
-  resolvePoolLabelAdapter,
-  type LabelCandidate,
-} from "./label-provider";
+  DEFAULT_POOL_LIMITS,
+  createPoolAdapter,
+  readModelPool,
+  resetPoolHealth,
+  resolvePoolAdapter,
+  type PoolCandidate,
+} from "./model-pool";
 
 const ENVIRONMENT = Object.freeze({
   MATTER_LABEL_POOL: "abc,backup",
@@ -18,12 +18,19 @@ const ENVIRONMENT = Object.freeze({
   MATTER_LABEL_BACKUP_MODELS: "Qwen-flash",
 });
 
-function candidate(model: string, station = "abc"): LabelCandidate {
+function candidate(model: string, station = "abc"): PoolCandidate {
   return { station, baseUrl: "https://relay.example/v1", apiKey: "key", model };
 }
 
 function adapterInput(deadlineMs = 3_000) {
-  return { prompt: "name it", locale: "zh-CN", maxGraphemes: 9, material: "材料", deadlineMs };
+  return {
+    scenario: "matter-thought-label" as const,
+    prompt: "name it",
+    locale: "zh-CN",
+    input: null,
+    deadlineMs,
+    maxOutputTokens: 32,
+  };
 }
 
 function chatResponse(text: string, status = 200): Response {
@@ -33,12 +40,12 @@ function chatResponse(text: string, status = 200): Response {
   });
 }
 
-beforeEach(() => resetLabelProviderHealth());
-afterEach(() => resetLabelProviderHealth());
+beforeEach(() => resetPoolHealth());
+afterEach(() => resetPoolHealth());
 
-describe("readLabelPool", () => {
+describe("readModelPool", () => {
   it("flattens stations into ordered candidates and trims the base URL", () => {
-    expect(readLabelPool(ENVIRONMENT)).toEqual([
+    expect(readModelPool(ENVIRONMENT)).toEqual([
       { station: "abc", baseUrl: "https://relay.example/v1", apiKey: "key-one", model: "Qwen-flash" },
       { station: "abc", baseUrl: "https://relay.example/v1", apiKey: "key-one", model: "DeepSeek-V3" },
       { station: "backup", baseUrl: "https://other.example/v1", apiKey: "key-two", model: "Qwen-flash" },
@@ -46,8 +53,8 @@ describe("readLabelPool", () => {
   });
 
   it("is empty when nothing is configured", () => {
-    expect(readLabelPool({})).toEqual([]);
-    expect(resolvePoolLabelAdapter({})).toBeNull();
+    expect(readModelPool({})).toEqual([]);
+    expect(resolvePoolAdapter({})).toBeNull();
   });
 
   it.each([
@@ -57,13 +64,13 @@ describe("readLabelPool", () => {
     ["plain HTTP off the loopback", { ...ENVIRONMENT, MATTER_LABEL_ABC_BASE_URL: "http://relay.example/v1" }],
     ["a malformed base URL", { ...ENVIRONMENT, MATTER_LABEL_ABC_BASE_URL: "relay.example" }],
   ])("drops a station with %s without losing the rest", (_name, environment) => {
-    const pool = readLabelPool(environment as Record<string, string | undefined>);
+    const pool = readModelPool(environment as Record<string, string | undefined>);
     expect(pool.every((entry) => entry.station === "backup")).toBe(true);
     expect(pool).toHaveLength(1);
   });
 
   it("allows plain HTTP on the loopback interface", () => {
-    const pool = readLabelPool({
+    const pool = readModelPool({
       MATTER_LABEL_POOL: "local",
       MATTER_LABEL_LOCAL_BASE_URL: "http://127.0.0.1:11434/v1",
       MATTER_LABEL_LOCAL_API_KEY: "unused",
@@ -72,17 +79,28 @@ describe("readLabelPool", () => {
     expect(pool).toHaveLength(1);
   });
 
+  it("reads an explicit station-level thinking mode", () => {
+    const [entry] = readModelPool({
+      MATTER_LABEL_POOL: "aiping",
+      MATTER_LABEL_AIPING_BASE_URL: "https://aiping.cn/api/v1",
+      MATTER_LABEL_AIPING_API_KEY: "key",
+      MATTER_LABEL_AIPING_MODELS: "Qwen3.5-Flash",
+      MATTER_LABEL_AIPING_ENABLE_THINKING: "false",
+    });
+    expect(entry).toMatchObject({ model: "Qwen3.5-Flash", enableThinking: false });
+  });
+
   it("ignores a station name that could not be an environment suffix", () => {
-    expect(readLabelPool({ MATTER_LABEL_POOL: "a b,../etc" })).toEqual([]);
+    expect(readModelPool({ MATTER_LABEL_POOL: "a b,../etc" })).toEqual([]);
   });
 });
 
 describe("pool adapter", () => {
   it("sends an OpenAI-compatible deterministic request and returns the text", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [candidate("Qwen-flash")],
-      DEFAULT_PROVIDER_LIMITS,
+      DEFAULT_POOL_LIMITS,
       Date.now,
       async (url, init) => {
         calls.push({ url: String(url), init: init as RequestInit });
@@ -99,11 +117,26 @@ describe("pool adapter", () => {
     expect((call?.init.headers as Record<string, string>).authorization).toBe("Bearer key");
   });
 
+  it("sends a configured non-thinking mode at the provider boundary", async () => {
+    let body: Record<string, unknown> = {};
+    const adapter = createPoolAdapter(
+      [{ ...candidate("Qwen3.5-Flash"), enableThinking: false }],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return chatResponse("想象的余地");
+      },
+    );
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(body.enable_thinking).toBe(false);
+  });
+
   it("falls through to the next candidate on failure", async () => {
     const tried: string[] = [];
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [candidate("first"), candidate("second")],
-      DEFAULT_PROVIDER_LIMITS,
+      DEFAULT_POOL_LIMITS,
       Date.now,
       async (_url, init) => {
         const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
@@ -119,9 +152,9 @@ describe("pool adapter", () => {
   it("does not start an attempt that cannot finish inside the deadline", async () => {
     let clock = 1_000;
     let calls = 0;
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [candidate("first"), candidate("second")],
-      DEFAULT_PROVIDER_LIMITS,
+      DEFAULT_POOL_LIMITS,
       () => clock,
       async () => {
         calls += 1;
@@ -142,8 +175,8 @@ describe("pool adapter", () => {
       return model === "flaky" ? chatResponse("", 500) : chatResponse("成本问题");
     };
     const pool = [candidate("flaky"), candidate("steady")];
-    const limits = { ...DEFAULT_PROVIDER_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 60_000 };
-    const adapter = createPoolLabelAdapter(pool, limits, () => clock, respond);
+    const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 60_000 };
+    const adapter = createPoolAdapter(pool, limits, () => clock, respond);
 
     await adapter(adapterInput(), new AbortController().signal);
     expect(tried).toEqual(["flaky", "steady"]);
@@ -162,9 +195,9 @@ describe("pool adapter", () => {
   it("propagates caller cancellation instead of trying the next candidate", async () => {
     const controller = new AbortController();
     let calls = 0;
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [candidate("first"), candidate("second")],
-      DEFAULT_PROVIDER_LIMITS,
+      DEFAULT_POOL_LIMITS,
       Date.now,
       async () => {
         calls += 1;
@@ -181,9 +214,9 @@ describe("pool adapter", () => {
     ["no message text", JSON.stringify({ choices: [{ message: {} }] })],
     ["a non-object body", JSON.stringify("nope")],
   ])("rejects a response with %s", async (_name, body) => {
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [candidate("only")],
-      DEFAULT_PROVIDER_LIMITS,
+      DEFAULT_POOL_LIMITS,
       Date.now,
       async () => new Response(body, { headers: { "content-type": "application/json" } }),
     );
@@ -191,9 +224,9 @@ describe("pool adapter", () => {
   });
 
   it("refuses a response beyond the byte bound", async () => {
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [candidate("only")],
-      { ...DEFAULT_PROVIDER_LIMITS, maxResponseBytes: 64 },
+      { ...DEFAULT_POOL_LIMITS, maxResponseBytes: 64 },
       Date.now,
       async () => chatResponse("x".repeat(4_096)),
     );
@@ -201,9 +234,9 @@ describe("pool adapter", () => {
   });
 
   it("never puts the key in a thrown message", async () => {
-    const adapter = createPoolLabelAdapter(
+    const adapter = createPoolAdapter(
       [{ station: "abc", baseUrl: "https://relay.example/v1", apiKey: "sk-secret-value", model: "only" }],
-      DEFAULT_PROVIDER_LIMITS,
+      DEFAULT_POOL_LIMITS,
       Date.now,
       async () => chatResponse("nope", 401),
     );

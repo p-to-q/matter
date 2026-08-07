@@ -336,12 +336,40 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
     if (!Number.isInteger(mutation.fromIndex) || mutation.fromIndex < 0 || fromParent.children[mutation.fromIndex] !== node.id) {
       return commandFailure("The source index is not exact.");
     }
-    if (!Number.isInteger(mutation.toIndex) || mutation.toIndex < 0 || mutation.toIndex > toParent.children.length) {
+    const sameParent = fromParent.id === toParent.id;
+    const targetLengthAfterRemoval = toParent.children.length - (sameParent ? 1 : 0);
+    if (!Number.isInteger(mutation.toIndex) || mutation.toIndex < 0 || mutation.toIndex > targetLengthAfterRemoval) {
       return commandFailure("The target index is out of range.");
     }
     const subtree = new Set(currentSubtreePreorder(tree, node.id));
     if (subtree.has(toParent.id)) return commandFailure("A node cannot move into its own subtree.");
-    if (fromParent.id === toParent.id) return commandFailure("Reordering within one parent is not supported by this command.");
+    if (sameParent) {
+      const children = [...fromParent.children];
+      children.splice(mutation.fromIndex, 1);
+      children.splice(mutation.toIndex, 0, node.id);
+      if (equalStrings(children, fromParent.children)) {
+        return commandFailure("A same-parent move must change the child order.");
+      }
+      const movedNode = cloneNode(node);
+      return {
+        tree: { ...tree, nodes: replaceNodes(tree, {
+          [fromParent.id]: { ...fromParent, children },
+          [node.id]: movedNode,
+        }) },
+        inverse: {
+          type: "move-node",
+          nodeId: node.id,
+          expectedNode: cloneNode(movedNode),
+          fromParentId: fromParent.id,
+          fromIndex: mutation.toIndex,
+          fromParentChildrenBefore: [...children],
+          toParentId: fromParent.id,
+          toIndex: mutation.fromIndex,
+          toParentChildrenBefore: [...children],
+        },
+        affectedNodeIds: [node.id, fromParent.id],
+      };
+    }
     const fromChildren = [...fromParent.children];
     fromChildren.splice(mutation.fromIndex, 1);
     const toChildren = [...toParent.children];
@@ -400,6 +428,28 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
         updatedAt: node.updatedAt,
       },
       affectedNodeIds: [node.id],
+    };
+  }
+
+  if (mutation.type === "replace-title") {
+    if (
+      typeof mutation.expectedTitle !== "string" ||
+      typeof mutation.title !== "string" ||
+      tree.title !== mutation.expectedTitle ||
+      mutation.title === mutation.expectedTitle ||
+      mutation.title.length === 0 ||
+      mutation.title.length > 160
+    ) {
+      return commandFailure("The title replacement does not match the document.");
+    }
+    return {
+      tree: { ...tree, title: mutation.title },
+      inverse: {
+        type: "replace-title",
+        expectedTitle: mutation.title,
+        title: mutation.expectedTitle,
+      },
+      affectedNodeIds: [],
     };
   }
 

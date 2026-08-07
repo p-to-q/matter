@@ -502,7 +502,7 @@ export function createBrowserVoicePort(): VoicePort {
   const transport = resolveBrowserVoiceTransport({
     browserSpeechEnabled: browserSpeechIsEnabled(),
     speechRecognitionAvailable: isBrowserSpeechRecognitionAvailable(),
-    audioUploadEnabled: browserAudioUploadIsEnabled(),
+    audioUploadEnabled: recordedAudioFallbackIsEnabled(),
   });
   // Native recognition keeps raw audio out of the Matter server when the UA supports it.
   if (transport === "speech") return createBrowserSpeechVoicePort();
@@ -537,7 +537,7 @@ export function isBrowserVoiceTransportAvailable(): boolean {
   return resolveBrowserVoiceTransport({
     browserSpeechEnabled: browserSpeechIsEnabled(),
     speechRecognitionAvailable: isBrowserSpeechRecognitionAvailable(),
-    audioUploadEnabled: browserAudioUploadIsEnabled(),
+    audioUploadEnabled: recordedAudioFallbackIsEnabled(),
   }) !== "unavailable";
 }
 
@@ -556,4 +556,9 @@ function browserSpeechIsEnabled(): boolean {
 
 function browserAudioUploadIsEnabled(): boolean {
   return process.env.NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED === "true";
+}
+
+function recordedAudioFallbackIsEnabled(): boolean {
+  return browserAudioUploadIsEnabled() ||
+    process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED === "true";
 }

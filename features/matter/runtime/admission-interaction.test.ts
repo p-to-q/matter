@@ -33,6 +33,15 @@ function recording(anchor: AdmissionAnchor = CHILD): AdmissionInteractionState {
   }).state;
 }
 
+function repairing(transcript: string): AdmissionInteractionState {
+  return reduceAdmissionInteraction(transcribing(), {
+    type: "transcription-succeeded",
+    token: "voice_1",
+    attempt: 1,
+    transcript,
+  }).state;
+}
+
 function transcribing(): AdmissionInteractionState {
   const stopped = reduceAdmissionInteraction(recording(), { type: "stop" }).state;
   return reduceAdmissionInteraction(stopped, {
@@ -115,7 +124,7 @@ describe("admission interaction reducer", () => {
     });
   });
 
-  it("passes transcript directly to a commit effect without retaining it in state", () => {
+  it("holds the trimmed transcript for repair rather than committing it directly", () => {
     const result = reduceAdmissionInteraction(transcribing(), {
       type: "transcription-succeeded",
       token: "voice_1",
@@ -124,26 +133,77 @@ describe("admission interaction reducer", () => {
     });
 
     expect(result.state).toEqual({
-      phase: "committing",
+      phase: "repairing",
       token: "voice_1",
       attempt: 1,
       anchor: CHILD,
+      transcript: "an unfinished thought",
     });
+    expect(result.effects).toEqual([
+      {
+        type: "repair-transcript",
+        token: "voice_1",
+        attempt: 1,
+        transcript: "an unfinished thought",
+      },
+    ]);
+  });
+
+  it("commits the settled transcript once repair answers", () => {
+    const result = reduceAdmissionInteraction(repairing("an unfinished thought"), {
+      type: "repair-settled",
+      token: "voice_1",
+      attempt: 1,
+      transcript: "An unfinished thought.",
+    });
+
+    expect(result.state).toEqual({ phase: "committing", token: "voice_1", attempt: 1, anchor: CHILD });
     expect(result.effects).toEqual([
       {
         type: "commit-admission",
         token: "voice_1",
         attempt: 1,
         anchor: CHILD,
-        transcript: "  an unfinished thought  ",
+        transcript: "An unfinished thought.",
       },
     ]);
-    expect(JSON.stringify(result.state)).not.toContain("unfinished");
+  });
+
+  it("commits what was heard when repair settles with nothing usable", () => {
+    for (const settled of ["", "   ", "x".repeat(8_001)]) {
+      const result = reduceAdmissionInteraction(repairing("an unfinished thought"), {
+        type: "repair-settled",
+        token: "voice_1",
+        attempt: 1,
+        transcript: settled,
+      });
+      expect(result.effects).toEqual([
+        {
+          type: "commit-admission",
+          token: "voice_1",
+          attempt: 1,
+          anchor: CHILD,
+          transcript: "an unfinished thought",
+        },
+      ]);
+    }
+  });
+
+  it("ignores a repair answer from another attempt", () => {
+    const state = repairing("an unfinished thought");
+    const result = reduceAdmissionInteraction(state, {
+      type: "repair-settled",
+      token: "voice_1",
+      attempt: 2,
+      transcript: "a different thought.",
+    });
+    expect(result.state).toBe(state);
+    expect(result.effects).toEqual([]);
   });
 
   it("finishes only the matching commit and requests deterministic cleanup", () => {
-    const committing = reduceAdmissionInteraction(transcribing(), {
-      type: "transcription-succeeded",
+    const committing = reduceAdmissionInteraction(repairing("thought"), {
+      type: "repair-settled",
       token: "voice_1",
       attempt: 1,
       transcript: "thought",
@@ -165,7 +225,8 @@ describe("admission interaction reducer", () => {
     ["recording", recording()],
     ["stopping", reduceAdmissionInteraction(recording(), { type: "stop" }).state],
     ["transcribing", transcribing()],
-    ["committing", reduceAdmissionInteraction(transcribing(), { type: "transcription-succeeded", token: "voice_1", attempt: 1, transcript: "thought" }).state],
+    ["repairing", repairing("thought")],
+    ["committing", reduceAdmissionInteraction(repairing("thought"), { type: "repair-settled", token: "voice_1", attempt: 1, transcript: "thought" }).state],
   ])("cancels %s with one complete cleanup instruction", (_phase, state) => {
     const result = reduceAdmissionInteraction(state, { type: "cancel" });
     expect(result).toEqual({
@@ -215,7 +276,7 @@ describe("admission interaction reducer", () => {
     ["recording", recording(), { type: "recording-failed", token: "voice_1", attempt: 1, errorCode: "NO_AUDIO" }],
     ["stopping", reduceAdmissionInteraction(recording(), { type: "stop" }).state, { type: "recording-failed", token: "voice_1", attempt: 1, errorCode: "RECORDING_FAILED" }],
     ["transcription", transcribing(), { type: "transcription-failed", token: "voice_1", attempt: 1, errorCode: "TRANSCRIPTION_TIMEOUT" }],
-    ["commit", reduceAdmissionInteraction(transcribing(), { type: "transcription-succeeded", token: "voice_1", attempt: 1, transcript: "thought" }).state, { type: "commit-failed", token: "voice_1", attempt: 1, errorCode: "STALE_TARGET" }],
+    ["commit", reduceAdmissionInteraction(repairing("thought"), { type: "repair-settled", token: "voice_1", attempt: 1, transcript: "thought" }).state, { type: "commit-failed", token: "voice_1", attempt: 1, errorCode: "STALE_TARGET" }],
   ] as const)("makes %s failure recoverable after cleanup", (_name, state, event) => {
     const result = reduceAdmissionInteraction(state, event);
     expect(result.state).toMatchObject({ phase: "error", token: "voice_1", attempt: 1, anchor: CHILD, errorCode: event.errorCode });
@@ -318,13 +379,18 @@ describe("admission interaction reducer", () => {
       createAdmissionInteractionState(),
       start().state,
       recording(),
+      reduceAdmissionInteraction(recording(), { type: "transcript-updated", token: "voice_1", attempt: 1, transcript: "a partial" }).state,
       reduceAdmissionInteraction(recording(), { type: "stop" }).state,
       transcribing(),
-      reduceAdmissionInteraction(transcribing(), { type: "transcription-succeeded", token: "voice_1", attempt: 1, transcript: "thought" }).state,
+      repairing("thought"),
+      reduceAdmissionInteraction(repairing("thought"), { type: "repair-settled", token: "voice_1", attempt: 1, transcript: "thought" }).state,
     ];
     for (const state of states) {
       expect(JSON.parse(JSON.stringify(state))).toEqual(state);
-      expect(JSON.stringify(state)).not.toMatch(/blob|stream|recorder|transcript/i);
+      // Words a person said are transient interaction feedback and may live
+      // here. A browser resource may not: it cannot survive a cancel, and it
+      // cannot be reconstructed from what this state serializes to.
+      expect(JSON.stringify(state)).not.toMatch(/blob|stream|recorder/i);
     }
   });
 });

@@ -1,5 +1,6 @@
 import { selectLineage, selectVisiblePreorder } from "../tree/selectors";
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
+import { isDocumentRoot } from "../tree/document-root";
 
 export type LayoutProjectionItem = Readonly<{
   node: ThoughtNode;
@@ -66,16 +67,17 @@ export function projectLayoutProjection(
       : selectVisiblePreorder(input.tree, input.foldedNodeIds);
   const depthById = new Map<string, number>();
   const projection = nodes.map((node, index) => {
+    const parentIsDocumentRoot = isDocumentRoot(input.tree, node.parentId);
     const depth = input.mode === "focus"
       ? index
-      : node.parentId === null
+      : node.parentId === null || parentIsDocumentRoot
         ? 0
         : (depthById.get(node.parentId) ?? -1) + 1;
     depthById.set(node.id, depth);
     return Object.freeze({
       node,
       depth,
-      parentId: index === 0 ? null : node.parentId,
+      parentId: index === 0 || parentIsDocumentRoot ? null : node.parentId,
     });
   });
   return Object.freeze(projection);
@@ -83,15 +85,12 @@ export function projectLayoutProjection(
 
 /**
  * This key is the publication boundary for measured coordinates. The tree
- * revision covers text-only changes while the visible projection covers view
- * shape; transient selection and language geometry are intentionally absent.
+ * revision covers material changes while focus and fold state cover view shape;
+ * transient selection and language geometry are intentionally absent.
  */
 export function layoutProjectionKey(
   input: LayoutProjectionInput,
-  projection: readonly LayoutProjectionItem[],
 ): string {
   const folds = Array.from(input.foldedNodeIds).sort().join(",");
-  return `${input.tree.id}:${input.tree.revision}:${input.mode}:${input.focusNodeId ?? ""}:${folds}:${projection
-    .map(({ node, depth }) => `${node.id}:${depth}:${node.updatedAt}`)
-    .join("|")}`;
+  return `${input.tree.id}:${input.tree.revision}:${input.mode}:${input.focusNodeId ?? ""}:${folds}`;
 }

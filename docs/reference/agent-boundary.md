@@ -60,6 +60,12 @@ must preserve this specified `0.2` boundary when the provider route is built.
 converts the stretch into a character range, which enters the instruction as a
 hard bound. The model is told how much to write; it does not decide.
 
+**The prompt itself is shared.** The turn's prompt, budget, and answer
+judgement are one scenario on the common spine in
+[`prompt-harness.md`](prompt-harness.md), already compiled and tested as
+`transform-harness.ts`. The route and planner remain gated; freezing the prompt
+early is deliberate, because it decides what a person's material becomes.
+
 **Document context is labeled.** Lineage text is passed as reference material
 with an explicit statement that it is never instruction, and it is bounded by
 the limits in [`../protocol.md`](../protocol.md).

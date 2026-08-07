@@ -15,6 +15,7 @@ import {
   type VoicePort,
   type VoiceRecording,
 } from "./browser-voice";
+import type { requestTranscriptRepair } from "./repair-client";
 import {
   TranscriptionClientError,
   type requestTranscription,
@@ -41,6 +42,12 @@ export type AdmissionDriverDependencies = Readonly<{
   ) => MatterStoreReceipt;
   createVoice: () => VoicePort;
   transcribe: Transcribe;
+  /**
+   * Optional by design. A deployment, a test, or a browser without the route
+   * simply admits what was heard; repair is an improvement to an utterance that
+   * already exists, never a step admission depends on.
+   */
+  repair?: typeof requestTranscriptRepair;
   createInteractionId: () => string;
   createMaterialId: () => string;
   canonicalNow: () => string;
@@ -52,6 +59,7 @@ type OwnedResources = {
   readonly operation: VoiceOperation;
   recording?: VoiceRecording;
   transcription?: AbortController;
+  repair?: AbortController;
 };
 
 /**
@@ -67,6 +75,12 @@ export class AdmissionDriver {
   private readonly resources = new Map<string, OwnedResources>();
   private readonly events: AdmissionInteractionEvent[] = [];
   private voice: VoicePort | null = null;
+  /**
+   * Terms from the person's material, pushed in like the scope rather than read
+   * at construction: the tree they come from has usually grown since this
+   * driver was made. Empty is always a valid answer.
+   */
+  private vocabulary: readonly string[] = Object.freeze([]);
   private processing = false;
   private disposed = false;
   private leases = 0;
@@ -128,6 +142,11 @@ export class AdmissionDriver {
 
   dismiss(): void {
     this.send({ type: "dismiss" });
+  }
+
+  updateVocabulary(terms: readonly string[]): void {
+    if (this.disposed) return;
+    this.vocabulary = terms;
   }
 
   updateScope(scope: AdmissionScope): void {
@@ -272,6 +291,33 @@ export class AdmissionDriver {
         );
         return;
       }
+      case "repair-transcript": {
+        const repair = this.dependencies.repair;
+        const owned = this.resources.get(key);
+        if (repair === undefined || owned === undefined) {
+          this.send(settledEvent(effect, effect.transcript));
+          return;
+        }
+        const controller = new AbortController();
+        owned.repair = controller;
+        // Every outcome is the same event with different words in it, so this
+        // boundary has no failure branch and cannot strand the utterance.
+        void repair({
+          operationId: effect.token,
+          attempt: effect.attempt,
+          locale: this.dependencies.locale,
+          text: effect.transcript,
+          vocabulary: this.vocabulary,
+          signal: controller.signal,
+        }).then(
+          (result) => this.send(settledEvent(effect, result.text)),
+          () => {
+            if (controller.signal.aborted) return;
+            this.send(settledEvent(effect, effect.transcript));
+          },
+        );
+        return;
+      }
       case "commit-admission": {
         let receipt: MatterStoreReceipt;
         try {
@@ -310,6 +356,7 @@ export class AdmissionDriver {
     const key = operationKey(operation);
     const resources = this.resources.get(key);
     resources?.transcription?.abort();
+    resources?.repair?.abort();
     this.voice?.cancel(operation);
     this.resources.delete(key);
   }
@@ -339,6 +386,13 @@ function operationKey(operation: VoiceOperation): string {
 
 function operationFrom(effect: AdmissionInteractionEffect): VoiceOperation {
   return { interactionId: effect.token, attempt: effect.attempt };
+}
+
+function settledEvent(
+  effect: { readonly token: string; readonly attempt: number },
+  transcript: string,
+): AdmissionInteractionEvent {
+  return { type: "repair-settled", token: effect.token, attempt: effect.attempt, transcript };
 }
 
 function failureEvent(

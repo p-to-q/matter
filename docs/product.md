@@ -32,14 +32,17 @@ an open product question before it is a tool.
 
 ## The handle stays with the person
 
-Intent is anchored to a node or segment. AI has no panel, transcript, persona,
-or autonomous chain of operations. Its output appears only as a change to the
-material a person is handling. One turn makes one perceivable change, and every
-generative change has an exact pointer undo.
+Intent is anchored to a node or segment. AI has no permanent panel, persona, or
+autonomous chain of operations. Its primary output appears only as a change to
+the material a person is handling. One secondary exception exists: a person may
+open a small Matter inquiry, ask one short question about either the lassoed
+passages or, when no passages are selected, the bounded virtual material tree,
+and receive orientation that neither edits material nor survives a reload.
+Every generative material change still has an exact pointer undo.
 
-The person and the model share the same working lineage: the visible path from
-the root to the focused thought. Siblings, cousins, collapsed descendants, and
-hidden retrieval are not part of that turn.
+For a lassoed inquiry, selected passages are the working context. Without a
+lasso selection, the virtual material tree is projected within the protocol
+budget; hidden external retrieval is never implied.
 
 ## Form
 
@@ -55,7 +58,7 @@ edit, address the user, or mention itself.
 
 - a keyboard-free AI writing app;
 - an infinite canvas with voice attached;
-- a memory layer, knowledge base, or second brain;
+- a separate memory layer, knowledge base, or second brain outside the material;
 - an automation product acting on a person's behalf.
 
 Matter is not shaped around a demographic persona. The first proving task is

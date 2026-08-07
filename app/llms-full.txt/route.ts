@@ -34,8 +34,10 @@ the direction of a possible transformation.
 Matter is rooted rather than infinite. The single tree is structure,
 presentation, and context. The visible root-to-focus lineage is the context
 boundary; there is no hidden retrieval layer. AI appears inside material as one
-local change, never as an assistant panel, chat transcript, autonomous chain, or
-voice that takes the handle from the person.
+local change. A separate, closed-by-default Ask Matter control may return one
+read-only orientation answer from the visible lineage; it is not a permanent
+assistant panel, durable chat transcript, autonomous chain, or voice that takes
+the handle from the person.
 
 ## Interaction contract
 
@@ -57,7 +59,8 @@ tree, spatial layout, focus and folding runtime, material index, punctuation
 lasso, stretch projection, browser-native voice admission, local IndexedDB Markdown
 durability, ZIP archive transport, and exact pointer undo. The lasso and stretch
 projection are presentational in this preview; they do not claim a live model
-rewrite.
+rewrite. Ask Matter has a bounded request boundary but no answer or memory
+adapter is connected in this build.
 
 Still gated or not yet released: the generative transform envelope and /api/turn
 route, the strict large-tree performance receipt, and account/sync features. Do
@@ -69,7 +72,7 @@ not describe those as currently live.
 - not an infinite canvas with voice attached;
 - not a second brain, memory layer, or knowledge base;
 - not an automation product acting on a person's behalf;
-- not a prompt box or answer transcript.
+- not a permanent prompt box or durable answer transcript.
 
 ## Search vocabulary
 

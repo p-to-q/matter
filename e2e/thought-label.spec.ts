@@ -17,18 +17,18 @@ test("the material index names a thought instead of previewing it", async ({ pag
     .locator(`[data-thought-id="${rootId}"] [data-thought-text-id]`)
     .innerText();
 
-  // The line is a name, not the opening of the passage: short, contained in the
-  // material, and never the whole first clause.
+  // The document title is independent from the opening passage. It stays short
+  // and stable while the visible root keeps the person's complete sentence.
   const title = (await heading.innerText()).trim();
   expect(title.length).toBeGreaterThan(1);
   expect(Array.from(title).length).toBeLessThanOrEqual(32);
-  expect(material.replaceAll(/\s+/gu, "")).toContain(title.replaceAll(/\s+/gu, ""));
+  expect(title).toBe("被允许想象的其他生活");
   expect(material.startsWith(title)).toBe(false);
 
   // One eligible visible passage is one question; the index arrives expanded, so
   // it must not repeat requests while its seven generatable fixture passages
   // stay on screen.
-  await expect(page.locator(".material-file")).toHaveCount(9);
+  await expect(page.locator(".material-file")).toHaveCount(10);
   await expect.poll(() => labelRequests.length).toBe(7);
   await page.waitForTimeout(300);
   expect(labelRequests).toHaveLength(7);

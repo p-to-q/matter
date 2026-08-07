@@ -33,6 +33,7 @@ export async function requestTranscription(input: {
   timeoutMs?: number;
 }): Promise<TranscriptionSuccess> {
   validateClientRecording(input.audio, input.durationMs);
+  if (localTranscriptionIsEnabled()) return requestLocalTranscription(input);
   const form = new FormData();
   form.append("protocolVersion", PROTOCOL_VERSION);
   form.append("interactionId", input.interactionId);
@@ -82,6 +83,61 @@ export async function requestTranscription(input: {
     );
   }
   return payload;
+}
+
+async function requestLocalTranscription(input: {
+  interactionId: string;
+  attempt: number;
+  locale: string;
+  audio: Blob;
+  signal: AbortSignal;
+}): Promise<TranscriptionSuccess> {
+  let local: typeof import("./local-transcription-client") | undefined;
+  try {
+    local = await import("./local-transcription-client");
+    const transcript = await local.transcribeLocally(input);
+    const result: TranscriptionSuccess = {
+      protocolVersion: PROTOCOL_VERSION,
+      interactionId: input.interactionId,
+      attempt: input.attempt,
+      transcript,
+    };
+    if (!isSuccess(result, input.interactionId, input.attempt)) {
+      throw new TranscriptionClientError(
+        "INVALID_PROVIDER_RESPONSE",
+        "Speech transcription returned an invalid response.",
+        true,
+      );
+    }
+    return result;
+  } catch (error) {
+    if (input.signal.aborted || (error instanceof Error && error.name === "AbortError")) {
+      throw error;
+    }
+    if (error instanceof TranscriptionClientError) throw error;
+    if (local !== undefined && error instanceof local.LocalTranscriptionError) {
+      if (error.reason === "no-speech") {
+        throw new TranscriptionClientError("NO_SPEECH", "No words were heard.", true);
+      }
+      if (error.reason === "timeout") {
+        throw new TranscriptionClientError(
+          "TRANSCRIPTION_TIMEOUT",
+          "On-device speech transcription timed out.",
+          true,
+        );
+      }
+      throw new TranscriptionClientError(
+        error.reason === "unavailable" ? "TRANSCRIPTION_UNAVAILABLE" : "TRANSCRIPTION_FAILED",
+        "On-device speech transcription is unavailable.",
+        true,
+      );
+    }
+    throw new TranscriptionClientError(
+      "TRANSCRIPTION_UNAVAILABLE",
+      "On-device speech transcription is unavailable.",
+      true,
+    );
+  }
 }
 
 function withDeadline(parent: AbortSignal, timeoutMs: number): {
@@ -168,6 +224,10 @@ function isSuccess(value: unknown, interactionId: string, attempt: number): valu
 
 function basePath(): string {
   return process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
+}
+
+function localTranscriptionIsEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED === "true";
 }
 
 const TRANSCRIPTION_ERROR_CODES = new Set<TranscriptionErrorCode>([

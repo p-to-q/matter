@@ -3,6 +3,8 @@ export const PROTOCOL_VERSION = "0.2" as const;
 export type ThoughtNode = {
   id: string;
   text: string;
+  /** Only the synthetic document container may use this role. */
+  role?: "document-root";
   parentId: string | null;
   children: string[];
   createdAt: string;
@@ -13,6 +15,8 @@ export type ThoughtTree = {
   protocolVersion: typeof PROTOCOL_VERSION;
   id: string;
   rootId: string | null;
+  /** Presentation title of the canvas, independent from material text. */
+  title?: string;
   nodes: Record<string, ThoughtNode>;
   revision: number;
 };
@@ -44,6 +48,11 @@ export type TreeMutation =
       expectedUpdatedAt: string;
       text: string;
       updatedAt: string;
+    }
+  | {
+      type: "replace-title";
+      expectedTitle: string;
+      title: string;
     }
   | {
       type: "move-node";

@@ -49,6 +49,13 @@ export type AdmissionInteractionState =
       readonly reason: "person" | "duration-limit";
     })
   | (AttemptState & { readonly phase: "transcribing" })
+  /**
+   * The transcript exists and is shown, and a bounded repair pass may still
+   * replace it. This phase is the only place a person waits on a model, so it
+   * carries the words it is holding: they are what the interface shows while
+   * the answer is outstanding, and what is admitted if none arrives.
+   */
+  | (AttemptState & { readonly phase: "repairing"; readonly transcript: string })
   | (AttemptState & { readonly phase: "committing" })
   | (AttemptState & {
       readonly phase: "error";
@@ -70,6 +77,12 @@ export type AdmissionInteractionEvent =
   | ({ readonly type: "recording-failed"; readonly errorCode: AdmissionErrorCode } & AttemptIdentity)
   | ({ readonly type: "transcription-succeeded"; readonly transcript: string } & AttemptIdentity)
   | ({ readonly type: "transcription-failed"; readonly errorCode: AdmissionErrorCode } & AttemptIdentity)
+  /**
+   * Repair settled, whatever happened. There is no failure counterpart: an
+   * unavailable, slow, or rejected answer settles with the transcript the
+   * driver was given, because a person's own words are never an error.
+   */
+  | ({ readonly type: "repair-settled"; readonly transcript: string } & AttemptIdentity)
   | ({ readonly type: "commit-succeeded" } & AttemptIdentity)
   | ({ readonly type: "commit-failed"; readonly errorCode: AdmissionErrorCode } & AttemptIdentity)
   | { readonly type: "cancel" }
@@ -87,6 +100,10 @@ export type AdmissionInteractionEffect =
   | (AttemptState & { readonly type: "request-microphone" })
   | (AttemptIdentity & { readonly type: "stop-recording" })
   | (AttemptIdentity & { readonly type: "transcribe-recording" })
+  | (AttemptIdentity & {
+      readonly type: "repair-transcript";
+      readonly transcript: string;
+    })
   | (AttemptState & {
       readonly type: "commit-admission";
       readonly transcript: string;
@@ -190,13 +207,27 @@ export function reduceAdmissionInteraction(
       if (!matches(state, event)) return unchanged(state);
       if (event.type === "transcription-failed") return fail(state, event.errorCode);
       if (event.type === "transcription-succeeded") {
-        if (event.transcript.trim().length === 0) return fail(state, "EMPTY_TRANSCRIPT");
+        const transcript = event.transcript.trim();
+        if (transcript.length === 0) return fail(state, "EMPTY_TRANSCRIPT");
         return changed(
-          { ...identityAndAnchor(state), phase: "committing" },
-          [{ type: "commit-admission", ...identityAndAnchor(state), transcript: event.transcript }],
+          { ...identityAndAnchor(state), phase: "repairing", transcript },
+          [{ type: "repair-transcript", ...identity(state), transcript }],
         );
       }
       return unchanged(state);
+    case "repairing": {
+      if (!matches(state, event)) return unchanged(state);
+      if (event.type !== "repair-settled") return unchanged(state);
+      // A settled answer may be the same words, better punctuated words, or —
+      // when nothing usable came back — the same words again. An empty or
+      // over-long one is not a reason to lose the utterance.
+      const settled = event.transcript.trim();
+      const transcript = settled.length > 0 && settled.length <= 8_000 ? settled : state.transcript;
+      return changed(
+        { ...identityAndAnchor(state), phase: "committing" },
+        [{ type: "commit-admission", ...identityAndAnchor(state), transcript }],
+      );
+    }
     case "committing":
       if (!matches(state, event)) return unchanged(state);
       if (event.type === "commit-failed") return fail(state, event.errorCode);

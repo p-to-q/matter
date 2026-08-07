@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PHASE_PRODUCTION_BUILD } from "next/constants";
-import matterNextConfig, { resolveMatterVoiceBuildConfig } from "../../../next.config";
+import matterNextConfig, {
+  resolveMatterRepairEnabled,
+  resolveMatterVoiceBuildConfig,
+} from "../../../next.config";
 import { normalizeMatterBasePath } from "../config/base-path";
 
 const nextConfig = matterNextConfig(PHASE_PRODUCTION_BUILD);
@@ -58,31 +61,52 @@ describe("Matter Next response headers", () => {
       admissionEnabled: false,
       browserSpeechEnabled: false,
       audioUploadEnabled: false,
+      localTranscriptionEnabled: false,
     });
     expect(resolveMatterVoiceBuildConfig("browser")).toEqual({
       admissionEnabled: true,
       browserSpeechEnabled: true,
       audioUploadEnabled: false,
+      localTranscriptionEnabled: false,
     });
     expect(resolveMatterVoiceBuildConfig("fixture")).toEqual({
       admissionEnabled: true,
       browserSpeechEnabled: false,
       audioUploadEnabled: true,
+      localTranscriptionEnabled: false,
     });
     expect(resolveMatterVoiceBuildConfig("off")).toEqual({
       admissionEnabled: false,
       browserSpeechEnabled: false,
       audioUploadEnabled: false,
+      localTranscriptionEnabled: false,
     });
     expect(resolveMatterVoiceBuildConfig(undefined, "true", "false")).toEqual({
       admissionEnabled: true,
       browserSpeechEnabled: true,
       audioUploadEnabled: false,
+      localTranscriptionEnabled: false,
     });
     expect(resolveMatterVoiceBuildConfig("browser", "false", "false")).toEqual({
       admissionEnabled: false,
       browserSpeechEnabled: false,
       audioUploadEnabled: false,
+      localTranscriptionEnabled: false,
     });
+    expect(resolveMatterVoiceBuildConfig("browser", "true", "true", "true")).toEqual({
+      admissionEnabled: true,
+      browserSpeechEnabled: true,
+      audioUploadEnabled: true,
+      localTranscriptionEnabled: true,
+    });
+  });
+
+  it("follows the server's repair adapter unless a build overrides it", () => {
+    expect(resolveMatterRepairEnabled(undefined)).toBe(true);
+    expect(resolveMatterRepairEnabled("fixture")).toBe(true);
+    expect(resolveMatterRepairEnabled("live")).toBe(true);
+    expect(resolveMatterRepairEnabled("off")).toBe(false);
+    expect(resolveMatterRepairEnabled("live", "false")).toBe(false);
+    expect(resolveMatterRepairEnabled("off", "true")).toBe(true);
   });
 });

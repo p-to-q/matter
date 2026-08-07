@@ -12,7 +12,8 @@ than through a prompt box or answer transcript.
 
 The running `0.2` pre-release surface is one rooted spatial thought tree with
 exact undo, focus, folding, derived geometry, a contextual editing instrument,
-browser-native live voice admission, punctuation lasso selection, shared stretch degree, and
+browser-native live voice admission with a bounded transcript-repair pass,
+punctuation lasso selection, shared stretch degree, and
 local Markdown durability through IndexedDB. The selected-language projection is
 visual only: the original text DOM remains the source for ranges, copying, and
 accessibility.
@@ -51,6 +52,9 @@ npm run test:e2e
 Matter is a standalone Next.js application for `ptoq.io/matter`. Provider code
 is server-only, the model returns text rather than plans, only the tree engine
 mutates durable material, and every generative change has an exact inverse.
+Every model call goes through one harness with a frozen prompt, a bounded
+budget, and an answer the server judges before using — see
+[`docs/reference/prompt-harness.md`](docs/reference/prompt-harness.md).
 
 Proprietary and confidential. Copyright 2026 Wooden Computer Co., Ltd. All
 rights reserved. No license is granted; see [`LICENSE`](LICENSE) and

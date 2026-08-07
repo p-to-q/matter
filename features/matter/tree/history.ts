@@ -217,6 +217,7 @@ function cloneTreeMutation(mutation: TreeMutation): TreeMutation {
     case "restore-subtree":
       return { ...mutation, detached: cloneDetachedSubtree(mutation.detached) };
     case "replace-text":
+    case "replace-title":
       return { ...mutation };
     case "move-node":
       return {

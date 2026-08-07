@@ -56,11 +56,14 @@ export type MaterialFilesProps = Readonly<{
    * automatic naming.
    */
   onRenameNode?: (nodeId: string, label: string) => void | Promise<void>;
+  onRenameDocument?: (title: string) => void;
   onResetNodeName?: (nodeId: string) => void | Promise<void>;
   /** Reports the rows worth labelling. Called from an effect, never in render. */
   onVisibleNodes?: (nodeIds: readonly string[]) => void;
   onSelectNode: (nodeId: string) => void;
   tree: ThoughtTree;
+  /** Transient passages addressed by the canvas lasso; never persisted. */
+  lassoSelectedNodeIds?: ReadonlySet<string>;
   persistence: Readonly<{
     status: PersistenceStatus;
     retry: () => void;
@@ -123,6 +126,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   );
   const [focusedRowState, setFocusedRowState] = useState(() => ({ epoch: props.documentEpoch, nodeId: null as string | null }));
   const [renaming, setRenaming] = useState<Readonly<{ epoch: number; nodeId: string }> | null>(null);
+  const [renamingDocument, setRenamingDocument] = useState(false);
+  const [documentTitleDraft, setDocumentTitleDraft] = useState("");
   const longPressRef = useRef<Readonly<{ timer: number; x: number; y: number }> | null>(null);
   const suppressOpenRef = useRef(false);
   const renameFocusedRef = useRef(false);
@@ -164,6 +169,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     return closed;
   }, [activeNodeId, collapsedState, props.documentEpoch, props.tree]);
   const rootId = props.tree.rootId;
+  const documentTitle = props.tree.title ?? "Untitled matter";
   const titleForNode = useMemo(() => (nodeId: string): string => {
     const derived = props.labels?.get(nodeId);
     if (derived !== undefined) return derived;
@@ -249,8 +255,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     () => {
       const ids: string[] = [];
       if (!open) return ids;
-      // The context line is a row too — it needs a name as much as the rest.
-      if (rootId !== null) ids.push(rootId);
+      if (rootId !== null && props.tree.nodes[rootId]?.role !== "document-root") ids.push(rootId);
       for (const range of renderRanges) {
         for (let index = range.start; index < range.end; index += 1) {
           const row = files[index];
@@ -259,7 +264,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
       }
       return ids;
     },
-    [files, open, renderRanges, rootId],
+    [files, open, props.tree.nodes, renderRanges, rootId],
   );
   const reportVisibleNodes = props.onVisibleNodes;
 
@@ -311,6 +316,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setCollapsedState({ epoch: props.documentEpoch, ids: new Set<string>() });
     setFocusedRowState({ epoch: props.documentEpoch, nodeId: null });
     setRenaming(null);
+    setRenamingDocument(false);
+    setDocumentTitleDraft("");
     setCopyState("idle");
     setArchivePhase("idle");
     setArchiveError(null);
@@ -566,19 +573,40 @@ export function MaterialFiles(props: MaterialFilesProps) {
         onWheel={stopWheelPropagation}
       >
         <header className="material-files__context" data-node-id={rootId ?? undefined}>
-          <button
-            aria-current={rootId !== null && activeNodeId === rootId ? "page" : undefined}
-            className="material-files__context-title"
-            data-active={rootId !== null && activeNodeId === rootId || undefined}
-            disabled={rootId === null || surface.rowInteractionDisabled}
-            onClick={() => {
-              if (rootId !== null) openNode(rootId);
-            }}
-            title={rootId === null ? undefined : titleForNode(rootId)}
-            type="button"
-          >
-            <span dir="auto">{rootId === null ? "No material yet" : titleForNode(rootId)}</span>
-          </button>
+          {renamingDocument ? (
+            <input
+              aria-label="Canvas title"
+              autoFocus
+              className="material-files__context-title-input"
+              maxLength={160}
+              onBlur={() => {
+                setRenamingDocument(false);
+                if (documentTitleDraft.trim() !== documentTitle) props.onRenameDocument?.(documentTitleDraft);
+              }}
+              onChange={(event) => setDocumentTitleDraft(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setDocumentTitleDraft(documentTitle);
+                  setRenamingDocument(false);
+                } else if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              value={documentTitleDraft}
+            />
+          ) : (
+            <button
+              aria-label={`Rename canvas: ${documentTitle}`}
+              className="material-files__context-title"
+              disabled={surface.rowInteractionDisabled}
+              onClick={() => {
+                setDocumentTitleDraft(documentTitle);
+                setRenamingDocument(true);
+              }}
+              title="Rename canvas"
+              type="button"
+            >
+              <span dir="auto">{documentTitle}</span>
+            </button>
+          )}
         </header>
         <div className="material-files__controls">
           {mode === "archive" ? (
@@ -696,6 +724,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
               {renderFileRanges(files, renderRanges, rowHeight, ({ file, index }) => {
                 const checked = currentSelectedIds.has(file.nodeId);
                 const active = activeNodeId === file.nodeId;
+                const lassoSelected = props.lassoSelectedNodeIds?.has(file.nodeId) === true;
                 const expanded = file.hasChildren && !collapsedNodeIds.has(file.nodeId);
                 const materialNode = props.tree.nodes[file.nodeId];
                 const derivedLabel = props.labels?.get(file.nodeId);
@@ -708,6 +737,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     aria-setsize={files.length}
                     className="material-file"
                     data-active={active || undefined}
+                    data-lasso-selected={lassoSelected || undefined}
                     data-label-origin={props.labelOrigins?.get(file.nodeId)}
                     data-direct-match={file.directMatch || undefined}
                     data-in-lineage={activeLineageIds.has(file.nodeId) || undefined}

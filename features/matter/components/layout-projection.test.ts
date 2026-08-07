@@ -9,7 +9,6 @@ import {
 import {
   createLayoutProjectionInput,
   layoutProjectionKey,
-  projectLayoutProjection,
 } from "./layout-projection";
 
 const tree: ThoughtTree = {
@@ -39,7 +38,7 @@ const tree: ThoughtTree = {
 
 function keyFor(tree: ThoughtTree, navigation: ReturnType<typeof createNavigationState>) {
   const input = createLayoutProjectionInput(tree, navigation);
-  return layoutProjectionKey(input, projectLayoutProjection(input));
+  return layoutProjectionKey(input);
 }
 
 describe("layout projection boundary", () => {

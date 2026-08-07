@@ -51,6 +51,12 @@ export function validateThoughtNode(
   if (typeof candidate.text !== "string") {
     return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} has invalid text.`);
   }
+  if (candidate.role !== undefined && candidate.role !== "document-root") {
+    return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} has an invalid role.`);
+  }
+  if (candidate.role === "document-root" && candidate.text !== "") {
+    return failure("TREE_INVARIANT_VIOLATION", `Document root ${candidate.id} must have empty text.`);
+  }
   if (candidate.text.length > MAX_NODE_TEXT_CODE_UNITS) {
     return failure("BOUND_EXCEEDED", `Node ${candidate.id} exceeds the text bound.`);
   }
@@ -124,6 +130,12 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
   if (nodeIds.length === 0 || !Object.hasOwn(nodes, candidate.rootId)) {
     return failure("TREE_INVARIANT_VIOLATION", "The tree root does not exist.");
   }
+  if (
+    typeof candidate.title !== "undefined" &&
+    (typeof candidate.title !== "string" || candidate.title.trim().length === 0 || candidate.title.length > 160)
+  ) {
+    return failure("TREE_INVARIANT_VIOLATION", "The document title is invalid.");
+  }
 
   const incoming = new Map<string, number>();
   for (const key of nodeIds) {
@@ -143,6 +155,9 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
       }
     } else if (node.parentId === null) {
       return failure("TREE_INVARIANT_VIOLATION", `Node ${node.id} is an additional root.`);
+    }
+    if (node.role === "document-root" && node.id !== candidate.rootId) {
+      return failure("TREE_INVARIANT_VIOLATION", `Node ${node.id} cannot be a nested document root.`);
     }
 
     for (const childId of node.children) {
@@ -185,7 +200,7 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
     return { ok: true };
   };
 
-  const traversal = visit(candidate.rootId, 1);
+  const traversal = visit(candidate.rootId, nodes[candidate.rootId].role === "document-root" ? 0 : 1);
   if (!traversal.ok) return traversal;
   if (visited.size !== nodeIds.length) {
     return failure("TREE_INVARIANT_VIOLATION", "The tree contains an unreachable node.");

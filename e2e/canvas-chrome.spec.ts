@@ -10,21 +10,21 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   const rootThought = page.locator('[data-thought-id="thought_fixture_root"]');
   const about = page.getByRole("button", { name: "关于", exact: true });
   const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
-  const help = page.getByRole("button", { name: "使用说明", exact: true });
+  const askMatter = page.getByRole("button", { name: "询问 Matter", exact: true });
   const guidance = page.locator(".matter-guidance");
   const paperBox = await paper.boundingBox();
   const aboutBox = await about.boundingBox();
   const settingsBox = await settings.boundingBox();
-  const helpBox = await help.boundingBox();
+  const askMatterBox = await askMatter.boundingBox();
   const guidanceBox = await guidance.boundingBox();
-  if ([paperBox, aboutBox, settingsBox, helpBox, guidanceBox].some((box) => box === null)) {
+  if ([paperBox, aboutBox, settingsBox, askMatterBox, guidanceBox].some((box) => box === null)) {
     throw new Error("desktop canvas chrome geometry is not visible");
   }
 
   expectInset(aboutBox!.y - paperBox!.y, 25);
   expectInset(paperBox!.x + paperBox!.width - settingsBox!.x - settingsBox!.width, 25);
-  expect(paperBox!.x + paperBox!.width - helpBox!.x - helpBox!.width).toBeGreaterThan(180);
-  expectInset(paperBox!.y + paperBox!.height - helpBox!.y - helpBox!.height, 25);
+  expect(paperBox!.x + paperBox!.width - askMatterBox!.x - askMatterBox!.width).toBeGreaterThan(180);
+  expectInset(paperBox!.y + paperBox!.height - askMatterBox!.y - askMatterBox!.height, 25);
   expectInset(guidanceBox!.x - paperBox!.x, 21);
   expectInset(paperBox!.y + paperBox!.height - guidanceBox!.y - guidanceBox!.height, 25);
   expect(await guidance.evaluate((element) => {
@@ -44,15 +44,15 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
 
   await page.waitForTimeout(1100);
   await guidance.evaluate((element) => { element.style.animation = "none"; });
-  await help.evaluate((element) => { element.style.animation = "none"; });
+  await askMatter.evaluate((element) => { element.style.animation = "none"; });
   await guidance.hover();
   await page.waitForTimeout(200);
   expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
     .toContain(await guidance.evaluate((element) => getComputedStyle(element, "::before").backgroundColor));
-  await help.hover();
+  await askMatter.hover();
   await page.waitForTimeout(200);
   expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
-    .toContain(await help.evaluate((element) => getComputedStyle(element, "::before").backgroundColor));
+    .toContain(await askMatter.evaluate((element) => getComputedStyle(element, "::before").backgroundColor));
 
   await settings.click();
   const settingsMenu = page.getByRole("menu", { name: "Matter 设置" });
@@ -77,17 +77,43 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(page.locator(".tool-rail")).not.toHaveAttribute("aria-hidden", "true");
   await expect(settings).toBeFocused();
 
-  await help.click();
-  const helpDialog = page.getByRole("dialog", { name: "如何使用 Matter" });
-  await expect(helpDialog).toContainText("先用麦克风说出根想法");
-  await expect(helpDialog.locator("input, textarea, form, [contenteditable=true]")).toHaveCount(0);
+  await askMatter.click();
+  const inquiryDialog = page.getByRole("dialog", { name: "询问 Matter" });
+  await expect(inquiryDialog).toBeVisible();
+  await page.waitForTimeout(180);
+  const inquiryBox = await inquiryDialog.boundingBox();
+  const currentAskMatterBox = await askMatter.boundingBox();
+  if (inquiryBox === null || currentAskMatterBox === null) {
+    throw new Error("desktop inquiry geometry is not visible");
+  }
+  expectInset(inquiryBox.x + inquiryBox.width, currentAskMatterBox.x + currentAskMatterBox.width);
+  expectInset(
+    currentAskMatterBox.y + currentAskMatterBox.height - (inquiryBox.y + inquiryBox.height),
+    30,
+  );
+  const inquiryField = inquiryDialog.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  const dictate = inquiryDialog.getByRole("button", { name: "口述", exact: true });
+  await expect(inquiryDialog).toContainText("先用麦克风说出根想法，再选中一段材料，继续向下生长。");
+  await expect(inquiryField).toBeFocused();
+  await expect(dictate).toBeVisible();
+  await dictate.click();
+  const stopDictating = inquiryDialog.getByRole("button", { name: "停止口述", exact: true });
+  await expect(stopDictating).toBeVisible();
+  await page.waitForTimeout(400);
+  await stopDictating.click();
+  await expect(dictate).toBeVisible({ timeout: 10_000 });
+  await inquiryField.fill("这份材料在怀念什么？");
+  await inquiryDialog.getByRole("button", { name: "询问", exact: true }).click();
+  const matterTurn = inquiryDialog.locator('[data-inquiry-role="matter"]');
+  await expect(matterTurn).not.toContainText("正在询问…", { timeout: 20_000 });
+  await expect(matterTurn).toHaveText(/\S/u);
   await page.keyboard.press("Escape");
-  await expect(helpDialog).toBeHidden();
+  await expect(inquiryDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
   await page.locator('[data-chrome-control="language"]').click({ force: true });
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await expect(page.locator(".matter-guidance__next")).toHaveText("Select one thought.");
-  await expect(page.getByRole("button", { name: "Guide", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Leaf shadows: On" }).click();
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
@@ -117,7 +143,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.reload();
   await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
-  await expect(page.getByRole("button", { name: "Guide", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });
 
 test("mobile canvas menu stays inside the paper and restores focus", async ({ page }) => {
@@ -142,6 +168,15 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   expectInset(sheetBox.y - paperBox.y, 1);
   expectInset(paperBox.height - sheetBox.height, 2);
 
+  await sheet.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  await expect(inquiry).toBeVisible();
+  await expect(inquiry).toBeInViewport();
+  await page.keyboard.press("Escape");
+  await expect(inquiry).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
   await sheet.getByRole("button", { name: "关于 Matter" }).click();
   const aboutDialog = page.getByRole("dialog", { name: "关于 Matter" });
   await expect(aboutDialog).toContainText("Matter 邀请你在一个想法变成答案之前");

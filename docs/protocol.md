@@ -16,7 +16,8 @@ shared allow-list, client copy, provider handling, and focused tests together.
 
 Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
-segment addressing, stretch degree, and Markdown durability are implemented.
+segment addressing, stretch degree, Markdown durability, and the non-mutating
+inquiry envelope and gated server-side answer adapter are implemented.
 Generative transformation remains specified for Phase 2 in
 [`plans/active-tree-material.md`](../plans/active-tree-material.md); `/api/turn` remains
 gated. Markdown archive
@@ -35,6 +36,7 @@ export const PROTOCOL_VERSION = "0.2" as const;
 export type ThoughtNode = {
   id: string;
   text: string;
+  role?: "document-root";
   parentId: string | null;
   children: string[];
   createdAt: string;
@@ -45,6 +47,7 @@ export type ThoughtTree = {
   protocolVersion: typeof PROTOCOL_VERSION;
   id: string;
   rootId: string | null;
+  title?: string;
   nodes: Record<string, ThoughtNode>;
   revision: number;
 };
@@ -57,6 +60,13 @@ Tree and node ids use 1–128 ASCII characters from `[A-Za-z0-9_-]`, beginning
 with an alphanumeric character. This grammar is safe in Markdown frontmatter,
 network envelopes, IndexedDB keys, and logical paths without transport-specific
 escaping.
+
+The running document normalizes that root into one invisible `document-root`.
+Its ordered children are the visible first level, so a canvas can have several
+peer headings without becoming a forest. The container has empty text and is
+never a drag source, focus target, model passage, or material-index row. `title`
+names the canvas independently from every passage; legacy `0.2` trees seed it
+from their former visible root and are wrapped at the document boundary.
 
 Before the first voice admission, the document already has identity, version,
 and revision, but no root. Transcription of the first utterance commits an
@@ -241,6 +251,135 @@ carrying the fingerprint of the material it came from, so a node is named once
 rather than once per reload. A deterministic label is never stored: recomputing
 it is cheaper than reading it back.
 
+## Repair envelope
+
+Transcript repair sits between a final transcript and its admission. It is the
+smallest boundary in the protocol: it carries one utterance and gets one back,
+and it names no tree, node, revision, lineage, or target, because it changes
+nothing. What it returns becomes the text of one ordinary human admission
+command, so repair adds no mutation, no plan, and no history entry of its own.
+
+```ts
+export type RepairRequest = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  promptVersion: typeof TRANSCRIPT_REPAIR_PROMPT_VERSION;
+  operationId: string;
+  attempt: number;
+  locale: string;
+  text: string;
+  vocabulary?: string[];   // bounded terms from the person's own material
+};
+
+export type RepairSuccess = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  promptVersion: typeof TRANSCRIPT_REPAIR_PROMPT_VERSION;
+  operationId: string;
+  attempt: number;
+  text: string;
+  source: "verbatim" | "model";
+  fallbackReason?:
+    | "MODEL_UNAVAILABLE"
+    | "MODEL_TIMEOUT"
+    | "MODEL_REJECTED"
+    | "MODEL_BUSY"
+    | "NOT_WORTH_ASKING";
+};
+```
+
+`operationId` and `attempt` echo the admission interaction, so a late answer for
+a superseded attempt is discarded by identity rather than by timing.
+`source: "verbatim"` with a `fallbackReason` is a success, not an error: it means
+the words as heard are the answer. The only error codes are `INVALID_REQUEST`
+and `REPAIR_FAILED`, and neither reaches the person, because the browser admits
+the transcript it already holds.
+
+`vocabulary` is a hint, not context: bounded terms the person already repeated
+in their own visible material, most-used first, carrying no node id, depth, or
+ordering. It can only help a model recognise a word that was said —
+`adjudicateRepair` still rejects any answer that moves the spoken skeleton past
+its edit budget, so a hinted term cannot be inserted into a sentence that did
+not contain it. Absent, malformed, or over-long vocabulary is refused or
+ignored, and repair proceeds without it.
+
+Bounds: transcript 2,000 code units, vocabulary 24 terms of 32 code units,
+request and response 12 KiB, provider deadline scaled to the utterance with a
+4-second ceiling, and a browser deadline 800 ms above it.
+
+## Inquiry envelope
+
+Ask Matter is a read-only orientation boundary, separate from transformation.
+It cannot name an action or create a tree command. Its context scope is
+`selection` when lasso passages exist, otherwise `tree` for the bounded virtual
+file-system projection.
+
+```ts
+export type InquiryContextNodePayload = {
+  nodeId: string;
+  depth: number;
+  text: string;
+  truncated: boolean;
+};
+
+export type InquiryRequest = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  requestId: string;
+  question: string;
+  locale: string;
+  context: {
+    treeId: string;
+    revision: number;
+    scope: "selection" | "tree";
+    lineage: InquiryContextNodePayload[];
+    thoughtCount: number;
+    clipped: boolean;
+  };
+};
+
+export type InquiryReceipt = {
+  scope: "selection" | "tree";
+  lineageNodes: number;
+  contextCodePoints: number;
+  clipped: boolean;
+  thoughtCount: number;
+};
+
+export type InquiryAnswer =
+  | {
+      protocolVersion: typeof PROTOCOL_VERSION;
+      basis: { requestId: string; treeId: string; revision: number; scope: "selection" | "tree" };
+      status: "answered";
+      text: string;
+      receipt: InquiryReceipt;
+    }
+  | {
+      protocolVersion: typeof PROTOCOL_VERSION;
+      basis: { requestId: string; treeId: string; revision: number; scope: "selection" | "tree" };
+      status: "unavailable";
+      reason: "NO_PROVIDER" | "NO_MATERIAL";
+      receipt: InquiryReceipt;
+    };
+```
+
+Both request and response reject unknown fields whole. The response echoes the
+request id and exact tree/revision/scope basis; the browser accepts it only while
+that operation and complete projected context are still current. Closing the
+surface, changing documents, committing material, or changing the selection
+aborts the request and makes a late completion inert.
+
+The browser projects lasso passages in authored order, including multiple
+passages from one node. With no lasso selection it projects the virtual tree in
+authored preorder. Both scopes are bounded; the server parses the request whole,
+reports a receipt,
+and returns `Cache-Control: no-store`. No question, context, answer, or turn list
+enters `ThoughtTree`, command history, persistence, archive, or routine logs.
+
+Bounds: question 500 code points, request 24 KiB, lineage 64 nodes, each projected
+node 480 code points, total projected context 4,000 code points, and browser
+deadline 20 seconds. Answer text is bounded to 1,201 code points. The response is either one text answer or an explicit
+unavailable reason; no fallback prose is invented. The current build has no
+answer or memory adapter connected. A future adapter remains server-owned and
+must preserve this same visible-context and non-mutation contract.
+
 ## Private commands
 
 ```ts
@@ -271,6 +410,11 @@ export type TreeMutation =
       expectedUpdatedAt: string;
       text: string;
       updatedAt: string;
+    }
+  | {
+      type: "replace-title";
+      expectedTitle: string;
+      title: string;
     }
   | {
       type: "move-node";
@@ -324,10 +468,11 @@ exact child order before detachment. Remove and restore validate that memento,
 attachment, child order, id absence/presence, and strict index without clamping.
 `move-node` is a private human structural mutation. It captures the complete
 moved node plus exact source and target child orders. The root cannot move, a
-node cannot move into itself or its descendants, and a same-parent drop is a
-no-op rejected before command construction. A successful move changes only the
-moved node's `parentId` and the two parent child lists; its inverse swaps those
-exact mementos.
+node cannot move into itself or its descendants, and an unchanged insertion slot
+is rejected before command construction. `toIndex` is the post-removal slot;
+therefore the same command supports both reparenting and same-parent ordering.
+A successful move changes only the moved node's `parentId` when necessary and
+the affected child lists; its inverse restores those exact mementos.
 
 Every `0.2` command contains exactly one domain mutation. Split or merge may add
 one new atomic mutation later; they do not justify a generic transaction now.

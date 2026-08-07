@@ -87,6 +87,15 @@ describe("planLabelWork", () => {
     expect(item?.reference.parentLabel).toBe(labelFor(state, "root"));
     expect(item?.text).not.toContain("<");
   });
+
+  it("omits an empty document-root excerpt from the wire reference", () => {
+    const document = tree([
+      node("document", "", null, ["child"]),
+      node("child", "一段需要命名的材料", "document"),
+    ]);
+    const [item] = planLabelWork(document, ["child"], createLabelSessionState("tree-1", 0), "zh-CN");
+    expect(item?.reference).toEqual({});
+  });
 });
 
 describe("reduceLabelSession", () => {

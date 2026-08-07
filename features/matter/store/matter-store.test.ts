@@ -8,6 +8,23 @@ import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
 
 describe("Matter store", () => {
+  it("uses the deployed initial title without replacing restored document titles", () => {
+    const store = createMatterStore("expanded", {
+      documentRoot: true,
+      initialTitle: "被允许想象的其他生活",
+    });
+    expect(store.getState().tree.title).toBe("被允许想象的其他生活");
+
+    const restored = structuredClone(store.getState().tree) as ThoughtTree;
+    restored.title = "我已经改过的画布名";
+    restored.revision += 1;
+    expect(store.getState().hydrateSnapshot(restored)).toMatchObject({
+      operation: "hydrate",
+      status: "hydrated",
+    });
+    expect(store.getState().tree.title).toBe("我已经改过的画布名");
+  });
+
   it("starts the public root-only document without descendants and grows locally", () => {
     const store = createMatterStore("root");
     const rootId = store.getState().tree.rootId;

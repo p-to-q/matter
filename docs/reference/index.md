@@ -13,6 +13,7 @@ ordinary component and store work needs no matching document.
 | [`history-and-undo.md`](history-and-undo.md) | atomic tree commands and exact inverse |
 | [`voice-input.md`](voice-input.md) | microphone and transcription lifecycle |
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
+| [`prompt-harness.md`](prompt-harness.md) | how any Matter prompt is built, budgeted, and judged |
 | [`thought-label.md`](thought-label.md) | naming a node in the material index |
 | [`virtual-file-system.md`](virtual-file-system.md) | Markdown snapshot and browser durability |
 | [`ambient-workbench-ui.md`](ambient-workbench-ui.md) | right-side paper, corner controls, rail, and ambient media ownership |

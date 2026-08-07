@@ -3,6 +3,14 @@
 One rooted tree carries the canvas, document structure, and context boundary.
 Matter does not add a separate memory or session system beside it.
 
+A lightweight inquiry may read either the transient lasso selection or a bounded
+projection of the complete virtual material tree when no lasso selection exists.
+Its question, answer, pending state, and voice partials
+are transient chrome: they never enter the tree, persistence, export, or command
+history. A future memory adapter may replace the server's unavailable branch,
+but it must remain behind this same bounded contract rather than becoming a
+second browser-owned document model.
+
 Browser speech admission performs punctuation-only normalization at the edge:
 spoken punctuation words become marks and a missing terminal mark is added. It
 does not rewrite wording or introduce generated content. This boundary leaves a
@@ -58,7 +66,9 @@ Other   newline, start of text, end of text
 - adjacent hit segments merge into one range;
 - a lasso may address several passages at once; each contiguous run becomes a
   separate transient selection, and non-adjacent hits never merge across a
-  gap;
+  gap; one passage may expose the stretch handle, while two or more passages
+  form a selection set only, mark their source nodes in the material index,
+  and report only a compact count on the canvas;
 - offsets are UTF-16 code-unit offsets and must land on grapheme boundaries;
 - text changes, resize, or zoom invalidate selection geometry.
 
@@ -94,10 +104,17 @@ a clause inside it.
 
 ## Lineage
 
+One document has one structural root, but that root is not material. Its ordered
+children are the visible first-level passages. Dropping a passage onto another
+passage makes it a child; dropping into a sibling gap changes its exact order;
+dropping on unrelated paper attaches it to the structural root as a first-level
+passage. The canvas title is separate document metadata and may be renamed
+without changing the first passage or its lineage.
+
 For a turn focused on node `X`, both the person and the model work with:
 
 ```text
-root → … → parent → X
+first visible passage → … → parent → X
 ```
 
 This path is the session. Siblings, cousins, descendants, and unrelated branches
@@ -128,8 +145,8 @@ The canonical serialized snapshot is a nested Markdown directory tree:
 
 ```text
 matter/
-  matter.json                    tree id, protocol version, snapshot revision
-  index.md                       root
+  matter.json                    tree id, title, protocol version, revision
+  index.md                       invisible document root
   001-women-huainian/
     index.md
     001-name/
@@ -150,7 +167,9 @@ updatedAt: 2026-08-03T09:31:02.884Z
 
 Identity lives in frontmatter. Parent and children derive from nesting; sibling
 order derives from the numeric prefix; the readable slug carries no identity.
-`matter.json` carries only tree-level metadata that cannot live in a node.
+`matter.json` carries only tree-level metadata that cannot live in a node. The
+document root records `role: document-root` in frontmatter so export/import does
+not turn it back into visible material.
 
 The snapshot preserves the complete `ThoughtTree`: current material, structure,
 ids, order, times, tree revision, and protocol version. Command and undo history

@@ -8,7 +8,10 @@ import {
   createRootedMaterialFixture,
   type RootedMaterialFixtureVariant,
 } from "../fixtures/rooted-material";
-import { normalizeMatterInitialDocument } from "../config/initial-document";
+import {
+  DEFAULT_MATTER_DOCUMENT_TITLE,
+  normalizeMatterInitialDocument,
+} from "../config/initial-document";
 import type { TreeHistoryLimits } from "../tree/history";
 import {
   clearSelection,
@@ -35,6 +38,9 @@ import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
+import { normalizeDocumentTree } from "../tree/document-root";
+import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
+import { deriveMaterialTitle } from "../material/material-files";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   maxEntries: 64,
@@ -85,6 +91,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   admitHumanTranscript: (anchor: AdmissionAnchor, values: AdmissionValues) => MatterStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
   moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
+  renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   clearSelection: () => MatterStoreReceipt;
@@ -122,12 +129,16 @@ export function createMatterStore(
   initialDocument: RootedMaterialFixtureVariant = normalizeMatterInitialDocument(
     process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
   ),
+  options: Readonly<{ documentRoot?: boolean; initialTitle?: string }> = {},
 ): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
   const fixture = createRootedMaterialFixture(initialDocument);
+  const initialTree = options.documentRoot === true
+    ? normalizeForDocumentModel(fixture.tree, options.initialTitle)
+    : fixture.tree;
   const initialDomain = protectDomain({
-    tree: fixture.tree,
-    history: fixture.history,
+    tree: initialTree,
+    history: options.documentRoot === true ? createTreeHistory() : fixture.history,
     navigation: createNavigationState(),
   });
 
@@ -239,6 +250,22 @@ export function createMatterStore(
       return requireSynchronousReceipt(receipt);
     },
 
+    renameDocument: (values) => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const command = renameDocumentCommand(current.tree, values);
+        if (!command) {
+          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
+          return freezeState({ ...current, lastError: { code: "INVALID_COMMAND", message: "The document title is unchanged." }, lastReceipt: receipt });
+        }
+        const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(receipt) });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
     undo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
@@ -330,8 +357,9 @@ export function createMatterStore(
     hydrateSnapshot: (tree) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const validation = validateThoughtTree(tree);
-        if (!validation.ok || tree.id !== current.tree.id) {
+        const normalizedTree = options.documentRoot === true ? normalizeForDocumentModel(tree) : tree;
+        const validation = validateThoughtTree(normalizedTree);
+        if (!validation.ok || normalizedTree.id !== current.tree.id) {
           const error: MatterStoreError = {
             code: "TREE_INVARIANT_VIOLATION",
             message: validation.ok ? "The stored material belongs to another tree." : validation.error.message,
@@ -344,11 +372,11 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        receipt = { operation: "hydrate", status: "hydrated", revision: tree.revision };
+        receipt = { operation: "hydrate", status: "hydrated", revision: normalizedTree.revision };
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(tree),
+          tree: protectValue(normalizedTree),
           history: protectValue(createTreeHistory()),
           navigation: protectValue(createNavigationState()),
           lastError: null,
@@ -361,7 +389,8 @@ export function createMatterStore(
     switchDocument: (tree) => {
       let receipt: DocumentSwitchReceipt | undefined;
       set((current) => {
-        const validation = validateThoughtTree(tree);
+        const normalizedTree = options.documentRoot === true ? normalizeForDocumentModel(tree) : tree;
+        const validation = validateThoughtTree(normalizedTree);
         if (!validation.ok) {
           const error: MatterStoreError = {
             code: "TREE_INVARIANT_VIOLATION",
@@ -382,13 +411,13 @@ export function createMatterStore(
         receipt = {
           operation: "switch-document",
           status: "switched",
-          treeId: tree.id,
-          revision: tree.revision,
+          treeId: normalizedTree.id,
+          revision: normalizedTree.revision,
         };
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(tree),
+          tree: protectValue(normalizedTree),
           history: protectValue(createTreeHistory()),
           navigation: protectValue(createNavigationState()),
           lastError: null,
@@ -428,6 +457,13 @@ function runtimeState(state: MatterStoreInternalState): RuntimeState {
     // is not part of the pure session boundary.
     lastError: null,
   };
+}
+
+function normalizeForDocumentModel(tree: ThoughtTree, initialTitle?: string): ThoughtTree {
+  const root = tree.rootId === null ? undefined : tree.nodes[tree.rootId];
+  const firstChild = root?.children[0] === undefined ? undefined : tree.nodes[root.children[0]];
+  const source = root?.text.trim() ? root.text : firstChild?.text ?? "";
+  return normalizeDocumentTree(tree, initialTitle ?? deriveMaterialTitle(source));
 }
 
 function navigationUpdate(
@@ -601,7 +637,10 @@ function freezeState(state: MatterStoreInternalState): MatterStoreInternalState 
   return Object.freeze(state);
 }
 
-const matterStore = createMatterStore();
+const matterStore = createMatterStore(undefined, {
+  documentRoot: true,
+  initialTitle: DEFAULT_MATTER_DOCUMENT_TITLE,
+});
 
 export function useMatterStore<T>(
   selector: (state: MatterStoreInternalState) => T,

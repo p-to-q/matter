@@ -7,8 +7,8 @@ import {
   normalizeLabelInput,
   validateSemanticLabel,
 } from "../features/matter/material/semantic-label";
-import { buildLabelPrompt } from "../features/matter/server/label-generator";
-import { readLabelPool } from "../features/matter/server/label-provider";
+import { buildLabelPrompt } from "../features/matter/server/label-harness";
+import { readModelPool } from "../features/matter/server/model-pool";
 import { corpus } from "./label-corpus.mjs";
 
 /**
@@ -35,7 +35,7 @@ describe.runIf(enabled)("label model evaluation", () => {
       .filter((value) => value.length > 0);
     const repeat = Math.max(1, Number(process.env.MATTER_LABEL_EVAL_REPEAT ?? 1));
 
-    const pool = readLabelPool(process.env).filter(
+    const pool = readModelPool(process.env).filter(
       (candidate) => requested.length === 0 ||
         requested.some((model) => model.toLowerCase() === candidate.model.toLowerCase()),
     );

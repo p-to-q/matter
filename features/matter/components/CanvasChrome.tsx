@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useReducer,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -18,33 +19,67 @@ import {
   type CanvasLanguage,
 } from "./canvas-preferences";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
+import {
+  createInquiryState,
+  inquiryText,
+  pendingAnswerId,
+  reduceInquiry,
+  type InquiryTurnOutcome,
+  type InquiryVoiceNotice,
+} from "./inquiry-composer";
+import { useInquiryDictation } from "./use-inquiry-dictation";
+import { askInquiry } from "../interaction/inquiry-client";
+import {
+  sameInquiryContext,
+  type InquiryContextPayload,
+} from "../server/inquiry-contract";
 import styles from "./CanvasChrome.module.css";
 
-export type CanvasChromeProps = CanvasPreferencesBinding;
+export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
+  inquiryContext?: () => InquiryContextPayload;
+}>;
 
 export type CanvasChromeOverlay =
+  | "inquiry"
   | "settings"
   | "language"
   | "mobile"
   | CanvasChromeInfoId
   | null;
 
-type CanvasChromeInfoId = "about" | "help" | "pricing" | "privacy" | "terms";
+type CanvasChromeInfoId = "about" | "pricing" | "privacy" | "terms";
+type CanvasChromeInquiryInfo = Readonly<{
+  title: string;
+  body: readonly ReactNode[];
+}>;
 type CanvasChromeInfo = Readonly<Record<CanvasChromeInfoId, Readonly<{
   title: string;
   body: readonly ReactNode[];
-}>>>;
+}>> & { inquiry: CanvasChromeInquiryInfo }>;
 type CanvasChromeCopy = Readonly<{
   about: string;
+  ask: string;
+  askPlaceholder: string;
+  asking: string;
   appearance: Readonly<Record<CanvasAppearance, string>>;
   appearanceLabel: string;
   close: string;
   closeMenu: string;
+  dictate: string;
+  dictateStop: string;
   fxLabel: string;
-  help: string;
+  inquiry: string;
   information: string;
   language: string;
+  listening: string;
+  transcribing: string;
   menu: string;
+  noticeModelUnavailable: string;
+  noticeNoMaterial: string;
+  noticeUnreachable: string;
+  noticeVoiceDenied: string;
+  noticeVoiceFailed: string;
+  noticeVoiceUnsupported: string;
   on: string;
   off: string;
   openMenu: string;
@@ -77,8 +112,8 @@ const ENGLISH_INFO: CanvasChromeInfo = Object.freeze({
       <PToQAttribution after="." before="Matter is a project by " key="attribution" />,
     ]),
   }),
-  help: Object.freeze({
-    title: "Using Matter",
+  inquiry: Object.freeze({
+    title: "Ask Matter",
     body: Object.freeze([
       "Start with Voice to admit a root thought, then select material to keep growing beneath it.",
       "Use Lasso to circle exact language, stretch to set how much should change, Branch to grow a related thought, and Undo to reverse the last committed change.",
@@ -118,8 +153,8 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
       <PToQAttribution after=" 发起的项目。" before="Matter 是由 " key="attribution" />,
     ]),
   }),
-  help: Object.freeze({
-    title: "如何使用 Matter",
+  inquiry: Object.freeze({
+    title: "询问 Matter",
     body: Object.freeze([
       "先用麦克风说出根想法，再选中一段材料，继续向下生长。",
       "用套索圈定确切语言，拖动边缘决定改变多少；用分支生成相关想法，用撤销退回上一次已提交的改变。",
@@ -156,7 +191,7 @@ const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     "這是早期的本地預覽。材料與手勢已可使用，實時轉寫與生成式改變仍在開發中。",
     <PToQAttribution after=" 發起的項目。" before="Matter 是由 " key="attribution" />,
   ]) }),
-  help: Object.freeze({ title: "如何使用 Matter", body: Object.freeze([
+  inquiry: Object.freeze({ title: "詢問 Matter", body: Object.freeze([
     "先用麥克風說出根想法，再選取一段材料，繼續向下生長。",
     "用套索圈定語言，拖動邊緣決定改變多少；用分支生成相關想法，用復原退回上一次已提交的改變。",
   ]) }),
@@ -174,7 +209,7 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
     "初期のローカルプレビューです。素材とジェスチャーは利用できますが、音声入力と生成的な変更は開発中です。",
     <PToQAttribution after=" の project です。" before="Matter は " key="attribution" />,
   ]) }),
-  help: Object.freeze({ title: "Matter の使い方", body: Object.freeze([
+  inquiry: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
     "まず Voice で根の考えを話し、素材を選んで下へ育てます。",
     "Lasso で言葉を囲み、伸縮で変化の量を決め、Branch で関連する考えを育て、Undo で直前の変更を戻します。",
   ]) }),
@@ -192,7 +227,7 @@ const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
     "Dies ist eine frühe lokale Vorschau. Material und Gesten sind vorhanden; Live-Diktat und generative Änderungen werden noch entwickelt.",
     <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
   ]) }),
-  help: Object.freeze({ title: "Matter verwenden", body: Object.freeze([
+  inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
     "Beginne mit Voice und sprich einen Wurzelgedanken ein. Wähle dann Material, um darunter weiterzuwachsen.",
     "Mit Lasso markierst du Sprache, mit Stretch bestimmst du das Ausmaß, Branch erzeugt einen verwandten Gedanken und Undo macht die letzte Änderung rückgängig.",
   ]) }),
@@ -212,15 +247,28 @@ export const CANVAS_CHROME_INFO: Readonly<Record<CanvasLanguage, CanvasChromeInf
 const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = Object.freeze({
   "en-US": Object.freeze({
     about: "About",
+    ask: "Ask",
+    askPlaceholder: "Ask about this material",
+    asking: "Asking…",
     appearance: Object.freeze({ auto: "Auto", dark: "Dark", light: "Light" }),
     appearanceLabel: "Appearance",
     close: "Close",
     closeMenu: "Close Matter menu",
+    dictate: "Dictate",
+    dictateStop: "Stop dictating",
     fxLabel: "Leaf shadows",
-    help: "Guide",
+    inquiry: "Ask Matter",
     information: "Information",
     language: "Language",
+    listening: "Listening",
+    transcribing: "Transcribing on this device…",
     menu: "Matter",
+    noticeModelUnavailable: "Matter received this, but no answer model is connected yet.",
+    noticeNoMaterial: "There is no material to answer about yet.",
+    noticeUnreachable: "Matter could not be reached. The question was not sent further.",
+    noticeVoiceDenied: "Microphone access was declined, so nothing was heard.",
+    noticeVoiceFailed: "Dictation stopped early. Anything already heard was kept.",
+    noticeVoiceUnsupported: "This browser cannot dictate. Typing still works.",
     on: "On",
     off: "Off",
     openMenu: "Open Matter menu",
@@ -232,15 +280,28 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "zh-CN": Object.freeze({
     about: "关于",
+    ask: "询问",
+    askPlaceholder: "问一句关于这份材料的话",
+    asking: "正在询问…",
     appearance: Object.freeze({ auto: "自动", dark: "深色", light: "浅色" }),
     appearanceLabel: "外观",
     close: "关闭",
     closeMenu: "关闭 Matter 菜单",
+    dictate: "口述",
+    dictateStop: "停止口述",
     fxLabel: "树影",
-    help: "使用说明",
+    inquiry: "询问 Matter",
     information: "关于",
     language: "语言",
+    listening: "正在听",
+    transcribing: "正在此设备上转写…",
     menu: "Matter",
+    noticeModelUnavailable: "Matter 收到了，但还没有连接可以回答的模型。",
+    noticeNoMaterial: "还没有材料可以回答。",
+    noticeUnreachable: "没能连上 Matter，这句话没有继续发送。",
+    noticeVoiceDenied: "麦克风权限被拒绝，没有听到任何内容。",
+    noticeVoiceFailed: "口述提前结束，已经听到的部分保留了下来。",
+    noticeVoiceUnsupported: "此浏览器无法口述，但仍然可以打字。",
     on: "开",
     off: "关",
     openMenu: "打开 Matter 菜单",
@@ -252,15 +313,28 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "zh-TW": Object.freeze({
     about: "關於",
+    ask: "詢問",
+    askPlaceholder: "問一句關於這份材料的話",
+    asking: "正在詢問…",
     appearance: Object.freeze({ auto: "自動", dark: "深色", light: "淺色" }),
     appearanceLabel: "外觀",
     close: "關閉",
     closeMenu: "關閉 Matter 選單",
+    dictate: "口述",
+    dictateStop: "停止口述",
     fxLabel: "樹影",
-    help: "使用說明",
+    inquiry: "詢問 Matter",
     information: "資訊",
     language: "語言",
+    listening: "正在聽",
+    transcribing: "正在此裝置上轉寫…",
     menu: "Matter",
+    noticeModelUnavailable: "Matter 收到了，但還沒有連接可以回答的模型。",
+    noticeNoMaterial: "還沒有材料可以回答。",
+    noticeUnreachable: "沒能連上 Matter，這句話沒有繼續傳送。",
+    noticeVoiceDenied: "麥克風權限被拒絕，沒有聽到任何內容。",
+    noticeVoiceFailed: "口述提前結束，已聽到的部分保留了下來。",
+    noticeVoiceUnsupported: "此瀏覽器無法口述，但仍然可以打字。",
     on: "開",
     off: "關",
     openMenu: "開啟 Matter 選單",
@@ -272,15 +346,28 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "ja-JP": Object.freeze({
     about: "概要",
+    ask: "尋ねる",
+    askPlaceholder: "この素材について尋ねる",
+    asking: "問い合わせ中…",
     appearance: Object.freeze({ auto: "自動", dark: "ダーク", light: "ライト" }),
     appearanceLabel: "外観",
     close: "閉じる",
     closeMenu: "Matter メニューを閉じる",
+    dictate: "音声入力",
+    dictateStop: "音声入力を停止",
     fxLabel: "葉の影",
-    help: "使い方",
+    inquiry: "Matter に尋ねる",
     information: "情報",
     language: "言語",
+    listening: "聞いています",
+    transcribing: "この端末で文字起こし中…",
     menu: "Matter",
+    noticeModelUnavailable: "Matter は受け取りましたが、答えるモデルがまだ接続されていません。",
+    noticeNoMaterial: "まだ答える材料がありません。",
+    noticeUnreachable: "Matter に接続できず、この問いは送信されませんでした。",
+    noticeVoiceDenied: "マイクへのアクセスが拒否されたため、何も聞き取れませんでした。",
+    noticeVoiceFailed: "音声入力が途中で終了しました。聞き取った内容は保持されています。",
+    noticeVoiceUnsupported: "このブラウザは音声入力に対応していません。入力は利用できます。",
     on: "オン",
     off: "オフ",
     openMenu: "Matter メニューを開く",
@@ -292,15 +379,28 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "de-DE": Object.freeze({
     about: "Über",
+    ask: "Fragen",
+    askPlaceholder: "Zu diesem Material fragen",
+    asking: "Wird gefragt …",
     appearance: Object.freeze({ auto: "Automatisch", dark: "Dunkel", light: "Hell" }),
     appearanceLabel: "Darstellung",
     close: "Schließen",
     closeMenu: "Matter-Menü schließen",
+    dictate: "Diktieren",
+    dictateStop: "Diktat stoppen",
     fxLabel: "Blattschatten",
-    help: "Hilfe",
+    inquiry: "Matter fragen",
     information: "Informationen",
     language: "Sprache",
+    listening: "Hört zu",
+    transcribing: "Wird auf diesem Gerät transkribiert …",
     menu: "Matter",
+    noticeModelUnavailable: "Matter hat die Frage erhalten, aber noch ist kein Antwortmodell verbunden.",
+    noticeNoMaterial: "Es gibt noch kein Material für eine Antwort.",
+    noticeUnreachable: "Matter war nicht erreichbar; die Frage wurde nicht weitergesendet.",
+    noticeVoiceDenied: "Der Mikrofonzugriff wurde abgelehnt; es wurde nichts gehört.",
+    noticeVoiceFailed: "Das Diktat endete vorzeitig. Bereits Gehörtes wurde behalten.",
+    noticeVoiceUnsupported: "Dieser Browser kann nicht diktieren. Tippen funktioniert weiterhin.",
     on: "An",
     off: "Aus",
     openMenu: "Matter-Menü öffnen",
@@ -314,7 +414,6 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
 
 const INFO_OVERLAYS = new Set<CanvasChromeInfoId>([
   "about",
-  "help",
   "pricing",
   "privacy",
   "terms",
@@ -325,8 +424,8 @@ const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
   "mobile",
 ]);
 
-// Menus close on outside pointer or Escape; information overlays remain modal.
-const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language"]);
+// Inquiry stays over the material rather than making the material inert.
+const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language", "inquiry"]);
 
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -338,6 +437,7 @@ const FOCUSABLE_SELECTOR = [
 ].join(",");
 
 export function CanvasChrome({
+  inquiryContext,
   preferences,
   resolvedAppearance,
   setAppearance,
@@ -351,6 +451,8 @@ export function CanvasChrome({
   const languageButtonRef = useRef<HTMLButtonElement>(null);
   const languageMenuRef = useRef<HTMLDivElement>(null);
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const askButtonRef = useRef<HTMLButtonElement>(null);
+  const inquiryAnchorRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const copy = CANVAS_CHROME_COPY[preferences.language];
@@ -379,7 +481,7 @@ export function CanvasChrome({
   }, []);
 
   const toggleMenu = useCallback((
-    next: "settings" | "language",
+    next: "settings" | "language" | "inquiry",
     trigger: HTMLElement | null,
   ) => {
     setOverlay((current) => {
@@ -401,7 +503,9 @@ export function CanvasChrome({
       if (!(target instanceof Node)) return;
       const region = overlay === "settings"
         ? [settingsMenuRef.current, settingsButtonRef.current]
-        : [languageMenuRef.current, languageButtonRef.current];
+        : overlay === "language"
+          ? [languageMenuRef.current, languageButtonRef.current]
+          : [inquiryAnchorRef.current, askButtonRef.current];
       if (!region.some((element) => element?.contains(target))) closeOverlay(false);
     };
 
@@ -574,13 +678,26 @@ export function CanvasChrome({
         <div className={styles.bottomRight}>
           <div className={styles.popoverAnchor}>
             <button
+              aria-controls="matter-inquiry"
+              aria-expanded={overlay === "inquiry"}
+              aria-haspopup="dialog"
               className={styles.askButton}
-              data-chrome-control="help"
-              onClick={(event) => openInfo("help", event.currentTarget)}
+              data-chrome-control="inquiry"
+              onClick={() => toggleMenu("inquiry", askButtonRef.current)}
+              ref={askButtonRef}
               type="button"
             >
-              {copy.help}
+              {copy.inquiry}
             </button>
+            <div className={styles.inquiryAnchor} ref={inquiryAnchorRef}>
+              <InquiryBubble
+                context={inquiryContext}
+                copy={copy}
+                hidden={overlay !== "inquiry"}
+                hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
+                language={preferences.language}
+              />
+            </div>
           </div>
           <div className={styles.popoverAnchor}>
             <button
@@ -692,10 +809,10 @@ export function CanvasChrome({
               <section className={styles.mobileSection}>
                 <button
                   className={styles.mobilePrimary}
-                  onClick={() => openOverlay("help", mobileTriggerRef.current)}
+                  onClick={() => openOverlay("inquiry", mobileTriggerRef.current)}
                   type="button"
                 >
-                  {copy.help}
+                  {copy.inquiry}
                 </button>
               </section>
               <section className={styles.mobileSection}>
@@ -772,6 +889,209 @@ export function CanvasChrome({
       ) : null}
     </div>
   );
+}
+
+function InquiryBubble({
+  context,
+  copy,
+  hidden,
+  hint,
+  language,
+}: {
+  context?: () => InquiryContextPayload;
+  copy: CanvasChromeCopy;
+  hidden: boolean;
+  hint: string;
+  language: CanvasLanguage;
+}) {
+  const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  const threadRef = useRef<HTMLDivElement>(null);
+  const requestRef = useRef<AbortController | null>(null);
+  const contextRef = useRef(context);
+  const listening = state.phase === "listening";
+  const transcribing = state.phase === "transcribing";
+  const voiceBusy = listening || transcribing;
+  const text = inquiryText(state);
+  const dictation = useInquiryDictation({
+    onHeard: (transcript) => dispatch({ type: "hear", value: transcript }),
+    onProcessing: () => dispatch({ type: "transcribe" }),
+    onSettled: () => dispatch({ type: "listened" }),
+    onFailed: (notice) => dispatch({ type: "listen-failed", notice }),
+  }, language);
+  const cancelDictation = dictation.cancel;
+
+  useEffect(() => () => requestRef.current?.abort(), []);
+
+  useEffect(() => {
+    contextRef.current = context;
+  }, [context]);
+
+  useEffect(() => {
+    requestRef.current?.abort();
+    requestRef.current = null;
+    dispatch({ type: "scope-changed" });
+  }, [context]);
+
+  useEffect(() => {
+    if (hidden) {
+      cancelDictation();
+      requestRef.current?.abort();
+      requestRef.current = null;
+      dispatch({ type: "close" });
+      return;
+    }
+    const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
+    return () => cancelAnimationFrame(frame);
+  }, [cancelDictation, hidden]);
+
+  const ask = useCallback(() => {
+    const question = inquiryText(state).trim();
+    if (question.length === 0) return;
+    const answerId = pendingAnswerId(state);
+    dispatch({ type: "ask" });
+    const payload = context?.();
+    if (payload === undefined) {
+      dispatch({ type: "answer", id: answerId, outcome: NO_MATERIAL });
+      return;
+    }
+    requestRef.current?.abort();
+    const request = new AbortController();
+    requestRef.current = request;
+    void askInquiry({ question, locale: language, context: payload, signal: request.signal })
+      .then((outcome) => {
+        const currentContext = contextRef.current?.();
+        if (
+          requestRef.current !== request ||
+          currentContext === undefined ||
+          !sameInquiryContext(payload, currentContext)
+        ) return;
+        dispatch({ type: "answer", id: answerId, outcome });
+      })
+      .catch(() => {
+        if (requestRef.current === request) {
+          dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE });
+        }
+      })
+      .finally(() => {
+        if (requestRef.current === request) requestRef.current = null;
+      });
+  }, [context, language, state]);
+
+  useEffect(() => {
+    const field = fieldRef.current;
+    if (field === null) return;
+    field.style.height = "auto";
+    field.style.height = `${Math.min(field.scrollHeight, INQUIRY_FIELD_MAX_HEIGHT)}px`;
+  }, [hidden, text]);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread !== null) thread.scrollTop = thread.scrollHeight;
+  }, [state.turns]);
+
+  return (
+    <div
+      aria-label={copy.inquiry}
+      className={styles.inquiry}
+      data-inquiry-phase={state.phase}
+      hidden={hidden}
+      id="matter-inquiry"
+      role="dialog"
+    >
+      {state.turns.length === 0 ? null : (
+        <div aria-live="polite" className={styles.inquiryThread} data-inquiry-thread ref={threadRef}>
+          {state.turns.map((turn) => (
+            <p
+              className={styles.inquiryTurn}
+              data-inquiry-role={turn.role}
+              dir="auto"
+              key={turn.id}
+            >
+              {turn.role === "person" ? turn.text : answerCopy(copy, turn.outcome)}
+            </p>
+          ))}
+        </div>
+      )}
+      <div className={styles.inquiryComposer}>
+        <textarea
+          aria-label={copy.askPlaceholder}
+          className={styles.inquiryField}
+          data-inquiry-field
+          onChange={(event) => dispatch({ type: "type", value: event.currentTarget.value })}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.shiftKey) return;
+            event.preventDefault();
+            ask();
+          }}
+          placeholder={copy.askPlaceholder}
+          readOnly={voiceBusy}
+          ref={fieldRef}
+          rows={1}
+          value={text}
+        />
+        <button
+          aria-label={listening ? copy.dictateStop : copy.dictate}
+          aria-pressed={listening}
+          className={styles.inquiryDictate}
+          data-inquiry-control="dictate"
+          data-voice-available={dictation.supported === true}
+          disabled={transcribing}
+          onClick={() => {
+            if (listening) {
+              dictation.stop();
+              return;
+            }
+            dispatch({ type: "listen" });
+            dictation.start();
+          }}
+          type="button"
+        >
+          <MicIcon />
+        </button>
+        <button
+          className={styles.inquiryAsk}
+          data-inquiry-control="ask"
+          disabled={text.trim().length === 0}
+          onClick={ask}
+          type="button"
+        >
+          {copy.ask}
+        </button>
+      </div>
+      {voiceBusy || state.notice !== null || state.turns.length === 0 ? (
+        <p className={styles.inquiryStatus}>
+          {state.notice !== null
+            ? voiceNoticeCopy(copy, state.notice)
+            : listening ? copy.listening
+              : transcribing ? copy.transcribing
+                : hint}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+const INQUIRY_FIELD_MAX_HEIGHT = 95;
+const NO_MATERIAL: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
+const UNREACHABLE: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
+
+function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string {
+  if (outcome.status === "answered") return outcome.text;
+  if (outcome.status === "pending") return copy.asking;
+  switch (outcome.reason) {
+    case "NO_PROVIDER": return copy.noticeModelUnavailable;
+    case "NO_MATERIAL": return copy.noticeNoMaterial;
+    case "UNREACHABLE": return copy.noticeUnreachable;
+  }
+}
+
+function voiceNoticeCopy(copy: CanvasChromeCopy, notice: InquiryVoiceNotice): string {
+  switch (notice) {
+    case "voice-denied": return copy.noticeVoiceDenied;
+    case "voice-unsupported": return copy.noticeVoiceUnsupported;
+    case "voice-failed": return copy.noticeVoiceFailed;
+  }
 }
 
 export function nextMenuFocusIndex(
@@ -888,6 +1208,10 @@ function GearIcon() {
 
 function GlobeIcon() {
   return <ChromeSvg><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9" /></ChromeSvg>;
+}
+
+function MicIcon() {
+  return <ChromeSvg><rect x="8" y="3" width="8" height="12" rx="4" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" /></ChromeSvg>;
 }
 
 function LeafIcon() {

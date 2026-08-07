@@ -16,8 +16,10 @@ is deliberately absent.
 | Punctuation lasso + shared stretch degree | implemented | pure segment/geometry tests and laptop/narrow browser receipts |
 | Split-language projection | implemented | original text remains DOM owner; projection is aria-hidden/inert |
 | Material files + IndexedDB durability | implemented | deterministic snapshot codec, generation conflict, reload/copy e2e |
+| Transcript repair before admission | implemented; live adapter independently gated | restores punctuation, sentence boundaries, and a misheard word; every answer adjudicated against the spoken skeleton, every failure admits the words as heard |
 | Derived thought labels | implemented | deterministic derivation, adjudication, staleness and cancellation tests; ordered relay pool with corpus evaluation; durable per-node store and manual rename proven by reload e2e |
-| Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and gated surface status |
+| Lightweight Matter inquiry | boundary and independently gated live adapter implemented | one paper-contained question field, lasso selection or bounded virtual-tree context, bounded answer or explicit unavailable result, no persistence or material mutation |
+| Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and per-surface gate status for voice, label, repair, inquiry, and the unbuilt transform |
 | Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
 
@@ -71,12 +73,14 @@ presenter; the disclosure control in the left material outline is a separate
 file-tree affordance.
 
 The paper corner system is presentation state only. About, pre-release pricing,
-privacy and terms are static information rather than a support agent; the help
-control contains no prompt, form or transcript. Language changes canvas guidance
-and corner copy, leaf FX pauses and hides only decorative media, and appearance
-scopes theme tokens to the paper. Desktop controls follow a 24 px edge grid;
-below 768 px they collapse into one paper-contained menu with inert background,
-bounded focus and focus return. The left material field is outside this system.
+privacy and terms are static information rather than a support agent. Ask Matter
+is the one secondary-input exception: it stays closed until requested, submits
+one bounded question with lassoed passages or the bounded virtual-tree context,
+persists no exchange, and cannot mutate material. Language changes canvas guidance and corner
+copy, leaf FX pauses and hides only decorative media, and appearance scopes theme
+tokens to the paper. Desktop controls follow a 24 px edge grid; below 768 px they
+collapse into one paper-contained menu with inert background, bounded focus and
+focus return. The left material field is outside this system.
 
 The right-side canvas composition is frozen in
 [`reference/ambient-workbench-ui.md`](reference/ambient-workbench-ui.md): the
@@ -88,13 +92,15 @@ paper-only tool vocabulary.
 
 ## Gated in this migration
 
-Accounts, sync, collaboration, live streaming transcription, touch parity,
-cross-branch links, split/merge, memory retrieval, assistant UI, and a public SDK.
+Accounts, sync, collaboration, touch parity, cross-branch links, split/merge, a
+durable memory service, permanent assistant UI, and a public SDK.
 
 The public interface is a root-seeded preview. Its browser-native voice path is
 enabled on `matter.ptoq.io` when the browser exposes Web Speech recognition; no
 fixture transcript is used there. `/api/turn`, account/sync, and the strict
-large-tree performance receipt remain gated. ZIP export/import is available;
+large-tree performance receipt remain gated. The transform's prompt, degree
+bound, and answer judgement are frozen and tested ahead of that route; nothing
+calls them. ZIP export/import is available;
 directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is

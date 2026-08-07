@@ -79,6 +79,23 @@ describe("layoutColumnarTree", () => {
     expect(layout.boxes.find(({ nodeId }) => nodeId === "next")?.y).toBe(160);
   });
 
+  it("packs multiple visible roots while keeping their descendants in authored preorder", () => {
+    const layout = expectLayout(layoutColumnarTree(input([
+      node("first", null, 0, 40),
+      node("first-child", "first", 1, 60),
+      node("second", null, 0, 30),
+      node("second-child", "second", 1, 20),
+    ])));
+
+    expect(layout.boxes.map(({ nodeId, y }) => ({ nodeId, y }))).toEqual([
+      { nodeId: "first", y: 20 },
+      { nodeId: "first-child", y: 20 },
+      { nodeId: "second", y: 100 },
+      { nodeId: "second-child", y: 100 },
+    ]);
+    expect(layout.edges).toHaveLength(2);
+  });
+
   it("packs transient top and bottom presentation extents without moving the source root", () => {
     const a = { ...node("a", "root", 1, 40), presentation: { topExtent: 0, bottomExtent: 30 } };
     const b = { ...node("b", "root", 1, 40), presentation: { topExtent: 25, bottomExtent: 0 } };
@@ -212,7 +229,7 @@ describe("layoutColumnarTree", () => {
     [input([node("", null, 0, 20)]), "INVALID_NODE_ID"],
     [input([node("root", null, 0, 20), node("root", "root", 1, 20)]), "DUPLICATE_NODE_ID"],
     [input([node("root", "parent", 0, 20)]), "INVALID_ROOT"],
-    [input([node("root", null, 0, 20), node("second", null, 0, 20)]), "INVALID_ROOT"],
+    [input([node("root", null, 0, 20), node("second", "root", 0, 20)]), "INVALID_ROOT"],
     [input([node("root", null, 0, 20), node("child", "missing", 1, 20)]), "MISSING_PARENT"],
     [input([node("root", null, 0, 20), node("child", "root", 2, 20)]), "INVALID_DEPTH"],
     [

@@ -334,8 +334,12 @@ function toReferenceMaterial(
   }>,
 ): LabelReferenceMaterial {
   return Object.freeze({
-    ...(reference.parentLabel === null ? {} : { parentLabel: reference.parentLabel }),
-    ...(reference.parentExcerpt === null ? {} : { parentExcerpt: reference.parentExcerpt }),
+    ...(reference.parentLabel === null || reference.parentLabel.length === 0
+      ? {}
+      : { parentLabel: reference.parentLabel }),
+    ...(reference.parentExcerpt === null || reference.parentExcerpt.length === 0
+      ? {}
+      : { parentExcerpt: reference.parentExcerpt }),
     ...(reference.siblingLabels.length === 0 ? {} : { siblingLabels: reference.siblingLabels }),
   });
 }

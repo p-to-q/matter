@@ -1,4 +1,5 @@
 import type { ThoughtNode, ThoughtTree } from "./model";
+import { isDocumentRoot } from "./document-root";
 
 /**
  * Projects the full tree into authored depth-first order. A folded node remains
@@ -26,7 +27,7 @@ export function selectVisiblePreorder(
       return;
     }
 
-    visible.push(node);
+    if (!isDocumentRoot(tree, node.id)) visible.push(node);
     if (foldedNodeIds.has(nodeId)) {
       return;
     }
@@ -75,5 +76,6 @@ export function selectLineage(
   }
 
   reversePath.reverse();
-  return reversePath[0]?.id === tree.rootId ? reversePath : null;
+  if (reversePath[0]?.id !== tree.rootId) return null;
+  return isDocumentRoot(tree, tree.rootId) ? reversePath.slice(1) : reversePath;
 }

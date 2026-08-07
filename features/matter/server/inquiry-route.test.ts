@@ -1,0 +1,111 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { PROTOCOL_VERSION } from "../tree/model";
+import { MAX_INQUIRY_REQUEST_BYTES } from "./inquiry-contract";
+import { handleInquiryRequest, inquiryErrorResponse } from "./inquiry-route";
+import { resetInquiryAdmissionForTests } from "./inquiry-admission";
+
+beforeEach(resetInquiryAdmissionForTests);
+
+describe("inquiry route", () => {
+  it("returns an honest unavailable result with a context receipt", async () => {
+    const response = await post(body(), {}, null);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      protocolVersion: PROTOCOL_VERSION,
+      basis: { requestId: "inquiry_route_test", treeId: "tree_inquiry", revision: 3, scope: "tree" },
+      status: "unavailable",
+      reason: "NO_PROVIDER",
+      receipt: { scope: "tree", lineageNodes: 2, contextCodePoints: 8, clipped: false, thoughtCount: 7 },
+    });
+  });
+
+  it("returns only validated model text and keeps the receipt server-owned", async () => {
+    const response = await post(body(), {}, async () => ({ text: "  它怀念的是仍然能够想象其他生活的余地。  " }));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      protocolVersion: PROTOCOL_VERSION,
+      basis: { requestId: "inquiry_route_test", treeId: "tree_inquiry", revision: 3, scope: "tree" },
+      status: "answered",
+      text: "它怀念的是仍然能够想象其他生活的余地。",
+      receipt: { scope: "tree", lineageNodes: 2, contextCodePoints: 8, clipped: false, thoughtCount: 7 },
+    });
+  });
+
+  it("maps provider failure without exposing provider details", async () => {
+    const response = await post(body(), {}, async () => {
+      throw new Error("qwen-secret-provider-detail");
+    });
+    expect(response.status).toBe(503);
+    expect(await response.text()).not.toMatch(/qwen|provider|secret/iu);
+  });
+
+  it("distinguishes empty material and never echoes the question", async () => {
+    const secret = "这句话不应该出现在回应里";
+    const empty = await post(body({
+      question: secret,
+      context: { ...body().context, lineage: [], thoughtCount: 0 },
+    }));
+    const payload = await empty.json();
+    expect(payload).toMatchObject({ reason: "NO_MATERIAL" });
+    expect(JSON.stringify(payload)).not.toContain(secret);
+  });
+
+  it("rejects invalid shape, media type, and declared oversize", async () => {
+    await expect(post(body({ question: " " })).then((response) => response.status)).resolves.toBe(400);
+    await expect(post(body({ locale: "en-GB" })).then((response) => response.status)).resolves.toBe(400);
+    await expect(post(body({ extra: true })).then((response) => response.status)).resolves.toBe(400);
+    await expect(post(body(), { "content-type": "text/plain" }).then((response) => response.status))
+      .resolves.toBe(415);
+    await expect(post(body(), { "content-length": String(MAX_INQUIRY_REQUEST_BYTES + 1) })
+      .then((response) => response.status)).resolves.toBe(413);
+    await expect(post(body({
+      context: {
+        ...body().context,
+        lineage: Array.from({ length: 9 }, (_, index) => ({
+          nodeId: `node_${index}`,
+          depth: index,
+          text: "文".repeat(480),
+          truncated: false,
+        })),
+      },
+    })).then((response) => response.status)).resolves.toBe(400);
+  });
+});
+
+function body(overrides: Record<string, unknown> = {}) {
+  return {
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: "inquiry_route_test",
+    question: "这份材料在讲什么？",
+    locale: "zh-CN",
+    context: {
+      treeId: "tree_inquiry",
+      revision: 3,
+      scope: "tree",
+      thoughtCount: 7,
+      clipped: false,
+      lineage: [
+        { nodeId: "root", depth: 0, text: "根材料", truncated: false },
+        { nodeId: "child", depth: 1, text: "子材料内容", truncated: false },
+      ],
+    },
+    ...overrides,
+  };
+}
+
+async function post(
+  payload: unknown,
+  headers: Record<string, string> = {},
+  adapter?: Parameters<typeof handleInquiryRequest>[1],
+): Promise<Response> {
+  try {
+    return await handleInquiryRequest(new Request("https://matter.test/api/inquiry", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(payload),
+    }), adapter);
+  } catch (error) {
+    return inquiryErrorResponse(error);
+  }
+}

@@ -12,6 +12,7 @@ import {
   type AdmissionScope,
 } from "./admission-driver";
 import { createBrowserVoicePort } from "./browser-voice";
+import { requestTranscriptRepair, transcriptRepairEnabled } from "./repair-client";
 import { requestTranscription } from "./transcription-client";
 
 export type UseAdmissionInput = {
@@ -27,6 +28,12 @@ export type UseAdmissionInput = {
   ) => MatterStoreReceipt;
   scope: AdmissionScope;
   locale?: string;
+  /**
+   * Terms from the person's own visible material, for transcript repair. A
+   * plain value rather than a callback: the caller already recomputes it when
+   * the tree changes, and a ref keeps the driver itself stable.
+   */
+  vocabulary?: readonly string[];
 };
 
 export type AdmissionController = {
@@ -38,16 +45,20 @@ export type AdmissionController = {
   dismiss: () => void;
 };
 
+const NO_VOCABULARY: readonly string[] = Object.freeze([]);
+
 export function useAdmission({
   commit,
   scope,
   locale = "zh-CN",
+  vocabulary = NO_VOCABULARY,
 }: UseAdmissionInput): AdmissionController {
   const driver = useMemo(
     () => new AdmissionDriver({
       commit,
       createVoice: createBrowserVoicePort,
       transcribe: requestTranscription,
+      ...(transcriptRepairEnabled() ? { repair: requestTranscriptRepair } : {}),
       createInteractionId,
       createMaterialId,
       canonicalNow,
@@ -62,6 +73,10 @@ export function useAdmission({
   );
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+
+  useEffect(() => {
+    driver.updateVocabulary(vocabulary);
+  }, [driver, vocabulary]);
 
   useEffect(() => {
     driver.updateScope({

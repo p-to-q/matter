@@ -17,12 +17,152 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-07 — Preview.8 closes transient and provider-boundary races
+
+Changed: lasso cancellation preserves the prior transient selection, multi-block
+selection settles without entering document history, inquiry responses echo and
+validate their request identity and context receipt, stale requests abort when
+scope changes, empty document-root excerpts are omitted from label reference
+material, and voice restart/cancel events remain bound to one recording session.
+Dependency updates from the two open Dependabot proposals are absorbed with
+audited transitive overrides rather than left as release branches.
+
+Why: pointer cancellation, late browser callbacks, empty metadata, and stale
+network answers are normal boundary conditions. They must fail closed without
+changing material, leaking provider detail, or manufacturing a second history.
+
+Forecloses: clearing a useful selection on an ambiguous gesture, applying an
+answer to changed context, sending empty reference fields, letting a late voice
+event finish a newer session, and shipping known vulnerable transitive packages.
+
+## 2026-08-07 — Preview.8 keeps one independent demo-document title
+
+Changed: the current preview remains a single seeded demo document. Its title is
+independent metadata, starts as `被允许想象的其他生活`, survives material edits,
+deletions, generation, reload, and export/import, and returns to that same title
+when the person clears the title. There is no new-document UI in this preview;
+the multi-document activation path remains planned rather than implied.
+
+Why: the opening sentence is material and must remain untouched, while the small
+upper-left title gives the document a stable identity. Treating an empty rename
+as a deterministic reset keeps the demo legible without letting a model or a
+first paragraph silently rename it.
+
+Forecloses: deriving the title from the first passage, allowing model output to
+rename the document, presenting a premature document picker, or persisting an
+empty title as an accidental `Untitled matter` state in the demo flow.
+
+## 2026-08-07 — Every model call is one scenario on one harness
+
+Changed: repair, labelling, inquiry, and the gated transform are now four
+`MatterScenario` values on a shared spine. `runScenario` is the only function
+that awaits a provider, and it owns the deadline, the shedding, the backoff, and
+the refusal to leak provider identity. Prompts are assembled from named sections
+in a fixed order rather than written as prose; every one opens with the same
+five-line statement of what Matter is, and material reaches a prompt only
+through a fence that escapes it and carries the never-instruction sentence with
+it. Every scenario declares an adjudicator and a floor; the pool is one module
+with four independent environment gates. Ask Matter's dictation shares the
+repair pass. The transform prompt, degree bound, and answer judgement are frozen
+and tested; its route stays gated.
+
+Why: four independent integrations meant four deadlines, four retry policies,
+and four chances to forget the sentence that keeps a person's own writing from
+acting as an instruction. A prompt is odds, not a guarantee — the guarantee has
+to be a deterministic check that the person's fixed scope survived. And a model
+told only its immediate task assumes the product it was trained in, where
+greeting the reader and choosing how much to change are both correct.
+
+Forecloses: a surface that talks to a provider on its own terms, a prompt whose
+material is not fenced, an answer accepted without a floor to compare it to,
+per-scenario provider pools, and inventing prose where the inquiry should state
+that it has none.
+
+## 2026-08-07 — Public voice has an on-device transcription fallback
+
+Changed: browser-native Web Speech remains the live, zero-download preference.
+When it is unavailable, the public client may record within the existing bounds,
+decode to 16 kHz mono, and lazily run multilingual Whisper Tiny in a single
+browser worker. Audio does not cross the Matter server boundary; both admission
+and inquiry dictation reuse the same transcription contract.
+
+Why: the public preview needs a usable voice path without operating an STT
+service or exposing a third-party credential, while keeping model cost off the
+initial page and off browsers that already provide live recognition.
+
+Forecloses: fixture speech in production, mandatory raw-audio upload, eager model
+loading on first paint, concurrent inference against one model instance, and
+running fallback inference on the UI thread.
+
+## 2026-08-07 — A bounded repair pass sits between transcript and admission
+
+Changed: a final voice transcript passes through `POST /api/repair` before it is
+admitted. The scenario may only restore punctuation, sentence boundaries, a
+misheard word, and one spelling for a repeated term; every answer is adjudicated
+against the spoken skeleton of the original and discarded unless it stays inside
+a proportional edit budget. Failure of any kind admits the words as heard. The
+admission machine gains a `repairing` phase that holds the transcript while the
+answer is outstanding, and `MATTER_REPAIR_ADAPTER` gates the server side.
+
+Why: recognition loses punctuation and the occasional homophone, and the only
+fix a person otherwise has is the keyboard the primary path exists to avoid.
+Repair belongs to hearing rather than to thinking, so it must be unable to
+change what was said — which is a deterministic property, not a prompt.
+
+Forecloses: treating a model answer as authoritative over a transcript, giving
+repair its own error state or retry, and letting punctuation restoration become
+a second durable command or an agent-sourced mutation.
+
+## 2026-08-07 — Provider stations may explicitly disable thinking
+
+Changed: an OpenAI-compatible model-pool station may set
+`MATTER_LABEL_<STATION>_ENABLE_THINKING=false`; the server sends the provider
+switch only when configured. The environment example records AIPing as a
+separate optional station with Qwen3.5-Flash, DeepSeek-V4-Flash, and
+Step-3.5-Flash in measured Matter order.
+
+Why: low-latency inquiry and naming should not pay for hidden reasoning, and a
+model offered by one gateway cannot be assumed to exist at another gateway.
+
+Forecloses: mixing credentials between relays, treating model names as globally
+portable, and relying on a provider's changing default thinking mode.
+
+## 2026-08-07 — Matter inquiry uses the existing server model pool
+
+Changed: the non-mutating inquiry route may use the existing OpenAI-compatible
+server model pool behind an independent `MATTER_INQUIRY_ADAPTER=live` gate.
+Questions and bounded selection-or-tree material are serialized as separate
+JSON values in a fixed prompt; answers are trimmed and bounded before they
+cross the route.
+
+Why: the lightweight inquiry can now be tried without exposing a credential,
+adding a browser-to-provider path, or creating a second pool configuration.
+
+Forecloses: provider selection in the client, silent fixture answers, following
+instructions embedded in material, and leaking provider errors or identity.
+
+## 2026-08-07 — Lightweight Matter inquiry returns as a bounded exception
+
+Changed: the lower-right Guide control is again Ask Matter. It opens one small,
+non-persistent question surface and sends either bounded lasso passages or a
+bounded virtual-tree projection through
+`/api/inquiry`; without an answer adapter it reports that fact instead of
+inventing prose.
+
+Why: product intent explicitly restored a quiet orientation and future memory
+entry point without restoring a permanent assistant panel.
+
+Forecloses: treating static help as the final corner action, browser-to-provider
+calls, persistent chat history, hidden whole-tree retrieval, and answers that
+silently imply a connected model.
+
 ## 2026-08-07 — Browser voice transport fails closed before capture
 
 Changed: native Web Speech is preferred when explicitly enabled and available,
-while MediaRecorder upload requires a separate explicit client build capability. The dedicated
-browser-recognition deployment disables audio upload and unsupported browsers
-disable voice before requesting microphone access.
+while MediaRecorder upload requires a separate explicit client build capability.
+The inquiry composer shares that transport for voice questions. The dedicated
+browser-recognition deployment disables audio upload; unsupported browsers keep
+the microphone affordance visible but fail before requesting access.
 
 Why: a missing client adapter constant allowed an unsupported browser to record
 audio for a server route that browser mode intentionally rejects.
@@ -95,9 +235,9 @@ normalized result that exceeds the node bound.
 
 ## 2026-08-07 — transient multi-passage lasso selection
 
-Changed:    a lasso can address several visible passages without a prior node selection; an ordered tray offers copy, clear, and locate.
+Changed:    a lasso can address several visible passages without a prior node selection. One passage remains a stretchable semantic range; two or more become a non-transforming selection set, mark their source nodes in the material index, and expose only a compact canvas count.
 Why:        selection is a temporary handle and must support comparison without changing the rooted document.
-Forecloses: treating a multi-selection as one hidden transform range or as an implicit node deletion.
+Forecloses: treating a multi-selection as one hidden transform range, adding a competing right-side tray, or implying node deletion.
 
 ## 2026-08-07 — Tree shadows respond to canvas navigation
 
@@ -964,6 +1104,25 @@ primary gesture promise; the simpler path must be the reliable default.
 
 Forecloses: requiring pixel-perfect closure, selecting adjacent thoughts from a
 single loose loop, or weakening topology and stale-layout invalidation.
+
+## 2026-08-07 — The document root is structural, not a visible heading
+
+Changed: each running canvas has an invisible document root, an independent
+editable title, and one or more visible first-level passages. Direct node drag
+uses four explicit intents: before, after, in, and first-level blank paper. The
+tree engine now applies parent plus insertion-slot moves atomically, including
+same-parent reorder, with an exact inverse.
+
+Why: React Flow and tldraw make spatial scene data authoritative, while
+Excalidraw uses a flat ordered scene; none fits Matter's structure-authoritative,
+pure-layout boundary. MindElixir's before/after/in feedback and React Arborist's
+`parentId + index` move contract fit the existing engine without adding a
+dependency. A separate document container also preserves the single-root
+invariant while allowing several visible peers.
+
+Forecloses: multiple durable roots, authored node coordinates, same-parent moves
+outside command history, using a visible passage as the canvas name, and
+replacing the tree engine with a generic scene graph.
 
 ## Carried from archived ADRs
 

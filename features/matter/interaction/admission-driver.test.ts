@@ -56,6 +56,7 @@ class ControlledVoice implements VoicePort {
 function harness(options: {
   commit?: AdmissionDriverDependencies["commit"];
   transcribe?: AdmissionDriverDependencies["transcribe"];
+  repair?: AdmissionDriverDependencies["repair"];
 } = {}) {
   const voice = new ControlledVoice();
   const commit = options.commit ?? vi.fn((): MatterStoreReceipt => ({
@@ -74,6 +75,7 @@ function harness(options: {
     commit,
     createVoice: () => voice,
     transcribe,
+    ...(options.repair === undefined ? {} : { repair: options.repair }),
     createInteractionId: () => "voice_1",
     createMaterialId: () => "thought_1",
     canonicalNow: () => "2026-08-03T10:00:00.000Z",
@@ -82,6 +84,11 @@ function harness(options: {
   });
   driver.updateScope(SCOPE);
   return { commit, driver, transcribe, voice };
+}
+
+/** Runs the microtasks between a finished recording and a settled commit. */
+async function settle(times = 6): Promise<void> {
+  for (let index = 0; index < times; index += 1) await Promise.resolve();
 }
 
 async function reachRecording(driver: AdmissionDriver, voice: ControlledVoice): Promise<void> {
@@ -117,6 +124,83 @@ describe("AdmissionDriver", () => {
     );
     expect(h.driver.getState()).toEqual({ phase: "idle" });
     expect(h.voice.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("admits the repaired transcript when repair answers in time", async () => {
+    const repair = vi.fn(async (input) => ({
+      protocolVersion: "0.2" as const,
+      promptVersion: "transcript-repair/1" as const,
+      operationId: input.operationId,
+      attempt: input.attempt,
+      text: "保留这句话，先别删。",
+      source: "model" as const,
+    }));
+    const h = harness({ repair });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(repair).toHaveBeenCalledWith(expect.objectContaining({
+      operationId: "voice_1",
+      attempt: 1,
+      locale: "zh-CN",
+      text: "保留这句话。",
+    }));
+    expect(h.commit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ transcript: "保留这句话，先别删。" }),
+    );
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+  });
+
+  it("admits what was heard when repair fails", async () => {
+    const repair = vi.fn(async () => {
+      throw new Error("unavailable");
+    });
+    const h = harness({ repair });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.commit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ transcript: "保留这句话。" }),
+    );
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+  });
+
+  it("aborts repair on cancellation and ignores its late answer", async () => {
+    let releaseRepair!: () => void;
+    const h = harness({
+      repair: vi.fn(async (input) => {
+        await new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        return {
+          protocolVersion: "0.2" as const,
+          promptVersion: "transcript-repair/1" as const,
+          operationId: input.operationId,
+          attempt: input.attempt,
+          text: "太晚了。",
+          source: "model" as const,
+        };
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle(4);
+    expect(h.driver.getState().phase).toBe("repairing");
+
+    h.driver.cancel();
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+
+    releaseRepair();
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
   it("invalidates capture immediately when the document scope changes", async () => {

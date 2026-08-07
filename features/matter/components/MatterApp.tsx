@@ -5,6 +5,7 @@ import { RootedMaterial } from "./RootedMaterial";
 import { useMatterStore } from "../store/matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { useAdmission } from "../interaction/use-admission";
+import { collectVocabulary } from "../material/material-vocabulary";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
 import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/archive-transport";
 import { treeToBundle } from "../persistence/snapshot-codec";
@@ -25,6 +26,7 @@ export function MatterApp() {
   const admitHumanTranscript = useMatterStore((state) => state.admitHumanTranscript);
   const removeSelected = useMatterStore((state) => state.removeSelected);
   const moveNode = useMatterStore((state) => state.moveNode);
+  const renameDocument = useMatterStore((state) => state.renameDocument);
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
   const persistence = useMaterialPersistence(tree, hydrateSnapshot, switchDocument);
@@ -65,22 +67,38 @@ export function MatterApp() {
     validateImport: validateArchive,
     replaceImport: replaceArchive,
   }), [exportArchive, replaceArchive, validateArchive]);
+  // Recomputed only when the material or the language actually moves. Every
+  // term here is already on the person's own canvas; nothing is retrieved.
+  const materialVocabulary = useMemo(
+    () => collectVocabulary(
+      Object.values(tree.nodes).map((node) => node.text),
+      canvasPreferences.preferences.language,
+    ),
+    [tree.nodes, canvasPreferences.preferences.language],
+  );
   const admission = useAdmission({
     commit: admitHumanTranscript,
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
     locale: canvasPreferences.preferences.language,
+    vocabulary: materialVocabulary,
   });
   const admissionAnchor = createAdmissionAnchor(tree, navigation);
   const removeCurrentThought = useCallback(() => removeSelected({
     commandId: `human_removal_${createOperationId()}`,
     createdAt: new Date().toISOString(),
   }), [removeSelected]);
-  const moveCurrentThought = useCallback((nodeId: string, targetParentId: string) => moveNode({
+  const moveCurrentThought = useCallback((nodeId: string, targetParentId: string, targetIndex?: number) => moveNode({
     commandId: `human_move_${createOperationId()}`,
     nodeId,
     targetParentId,
+    ...(targetIndex === undefined ? {} : { targetIndex }),
     createdAt: new Date().toISOString(),
   }), [moveNode]);
+  const renameCurrentDocument = useCallback((title: string) => renameDocument({
+    commandId: `human_title_${createOperationId()}`,
+    title,
+    createdAt: new Date().toISOString(),
+  }), [renameDocument]);
 
   return (
     <RootedMaterial
@@ -110,6 +128,7 @@ export function MatterApp() {
       persistence={persistence}
       onRemoveSelected={removeCurrentThought}
       onMoveNode={moveCurrentThought}
+      onRenameDocument={renameCurrentDocument}
       onClearSelection={clearSelection}
       onExitFocus={showFull}
       onFocusNode={focus}

@@ -89,6 +89,7 @@ export function PerformanceMatterApp() {
       onInsertChild={() => undefined}
       onRemoveSelected={() => undefined}
       onMoveNode={() => undefined}
+      onRenameDocument={() => undefined}
       onClearSelection={() => setNavigation((current) => clearSelection(current))}
       onSelectNode={(nodeId) =>
         setNavigation((current) => {

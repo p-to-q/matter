@@ -11,6 +11,11 @@ const voiceBuild = resolveMatterVoiceBuildConfig(
   process.env.MATTER_TRANSCRIPTION_ADAPTER,
   process.env.NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED,
   process.env.NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED,
+  process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED,
+);
+const repairEnabled = resolveMatterRepairEnabled(
+  process.env.MATTER_REPAIR_ADAPTER,
+  process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED,
 );
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
@@ -56,6 +61,8 @@ export default function matterNextConfig(phase: string): NextConfig {
       NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: voiceBuild.admissionEnabled ? "true" : "false",
       NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED: voiceBuild.browserSpeechEnabled ? "true" : "false",
       NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED: voiceBuild.audioUploadEnabled ? "true" : "false",
+      NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED: voiceBuild.localTranscriptionEnabled ? "true" : "false",
+      NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED: repairEnabled ? "true" : "false",
     },
     outputFileTracingRoot: process.cwd(),
   };
@@ -65,10 +72,12 @@ export function resolveMatterVoiceBuildConfig(
   adapter: string | undefined,
   browserSpeechOverride?: string,
   audioUploadOverride?: string,
+  localTranscriptionOverride?: string,
 ): Readonly<{
   admissionEnabled: boolean;
   browserSpeechEnabled: boolean;
   audioUploadEnabled: boolean;
+  localTranscriptionEnabled: boolean;
 }> {
   const browserSpeechEnabled = resolvePublicBoolean(
     browserSpeechOverride,
@@ -78,12 +87,31 @@ export function resolveMatterVoiceBuildConfig(
     audioUploadOverride,
     adapter === "fixture",
   );
+  const localTranscriptionEnabled = resolvePublicBoolean(
+    localTranscriptionOverride,
+    false,
+  );
   return Object.freeze({
-    admissionEnabled: adapter !== "off" && (browserSpeechEnabled || audioUploadEnabled),
+    admissionEnabled: adapter !== "off" && (
+      browserSpeechEnabled || audioUploadEnabled || localTranscriptionEnabled
+    ),
     browserSpeechEnabled,
-    // Fixture audio is a local/e2e proof. Public browser mode never uploads.
     audioUploadEnabled,
+    localTranscriptionEnabled,
   });
+}
+
+/**
+ * Whether the browser may ask for a transcript repair at all. The server switch
+ * is the default so one deployment cannot ship a control that always fails, and
+ * the public override exists so a deterministic run can turn the round trip off
+ * without changing the server's own adapter.
+ */
+export function resolveMatterRepairEnabled(
+  adapter: string | undefined,
+  override?: string,
+): boolean {
+  return resolvePublicBoolean(override, adapter !== "off");
 }
 
 function resolvePublicBoolean(value: string | undefined, fallback: boolean): boolean {
