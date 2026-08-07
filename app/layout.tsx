@@ -86,7 +86,11 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   const schema = getMatterSchemaOrgGraph();
 
   return (
-    <html className={`${departureMono.variable} ${plantinNow.variable}`} lang="en">
+    <html
+      className={`${departureMono.variable} ${plantinNow.variable}`}
+      lang="en"
+      suppressHydrationWarning
+    >
       <head>
         <script
           type="application/ld+json"
