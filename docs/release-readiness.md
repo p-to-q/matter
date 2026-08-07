@@ -106,6 +106,29 @@ durability proof       tree and inverse journal write atomically; reload
 This exact package version is ignored by the connected Vercel build. The
 GitHub prerelease is therefore a source candidate only, not a deployment of
 `matter.ptoq.io`; production remains gated by issue #34 and a later version.
+GitHub CI subsequently rejected Preview.10 because one old lasso E2E still
+looked for the removed "Leave language selection" control. The immutable tag
+remains an audit record; Preview.11 corrects that verifier rather than moving it.
+
+## Candidate verification — 0.2.0-preview.11
+
+Preview.11 changes the stale lasso exit assertion to the explicit re-click exit
+contract for both lasso and Canvas pan. It also declares
+`MATTER_LABEL_ADAPTER=live` in Vercel's non-secret
+configuration, so the existing server pool can serve labels as soon as its
+encrypted environment variables are configured. The exact version remains
+ignored by Vercel until the handoff in
+[`deployment-handoff.md`](deployment-handoff.md) is completed.
+
+```text
+npm run check          938 tests passed + 1 skipped; doctor, docs, typegen,
+                       typecheck, lint, and production build passed
+npm run test:e2e       43 Chromium browser flows passed; the persisted report
+                       records no failed test, including lasso toggle, pan
+                       toggle, voice, archive, tree move, and 2,000-node view
+localhost inspection   root seed, default title, and post-hydration tool
+                       availability checked against the live client surface
+```
 
 ## Product acceptance for the next candidate
 

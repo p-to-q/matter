@@ -1080,12 +1080,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoActive={lasso.active}
         lassoAvailable={tree.rootId !== null && (lasso.active || activeLayout !== null)}
         onLasso={() => {
+          if (lasso.active) {
+            lasso.deactivate();
+            setCanvasMode("material");
+            return;
+          }
           if (activeLayout !== null) {
             setCanvasMode("material");
             lasso.activate();
           }
         }}
         onMove={() => {
+          if (canvasMode === "pan" && !lasso.active) {
+            setCanvasMode("material");
+            return;
+          }
           lasso.deactivate();
           setCanvasMode("pan");
         }}

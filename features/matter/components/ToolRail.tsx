@@ -72,7 +72,7 @@ export function ToolRail({
         disabled={!lassoAvailable || interactionPending}
         group="material"
         icon={<LassoIcon />}
-        label={lassoActive ? "Language selection active" : "Circle-select language"}
+        label={lassoActive ? "Exit language selection" : "Circle-select language"}
         onClick={!interactionPending && lassoAvailable ? onLasso : undefined}
         pressed={lassoActive}
         shortLabel="Lasso"
@@ -96,7 +96,7 @@ export function ToolRail({
         disabled={interactionPending}
         group="material"
         icon={<MoveIcon />}
-        label={lassoActive ? "Return to canvas pan" : panActive ? "Canvas pan active" : "Canvas pan"}
+        label={lassoActive ? "Return to canvas pan" : panActive ? "Exit canvas pan" : "Canvas pan"}
         onClick={!interactionPending ? onMove : undefined}
         shortLabel="Pan"
         toolId="move"

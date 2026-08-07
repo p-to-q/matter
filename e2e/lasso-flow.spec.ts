@@ -37,6 +37,8 @@ for (const viewport of [
       x: Number(main.getAttribute("data-viewport-x")),
       y: Number(main.getAttribute("data-viewport-y")),
     }))).toEqual({ x: cameraBeforeMovePan.x + 24, y: cameraBeforeMovePan.y + 18 });
+    await page.getByRole("button", { name: "Exit canvas pan", exact: true }).click();
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     const cameraBeforeWheel = await page.locator("main.matter-shell").evaluate((main) => ({
@@ -289,7 +291,9 @@ for (const viewport of [
     await page.mouse.up();
 
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
-    await page.getByRole("button", { name: "Leave language selection", exact: true }).click();
+    // Tools are toggles: a second lasso click leaves the semantic selection
+    // available for stretch, but releases lasso pointer ownership.
+    await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("选择一段想法。");
@@ -362,8 +366,8 @@ for (const viewport of [
     await expect(page.getByRole("status")).toContainText("我们怀念的也许不是一个真实存在过的过去");
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("拖动把手设定变化程度。");
-    await page.getByRole("button", { name: "Language selection active", exact: true }).click();
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+    await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
+    await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.getByRole("slider", { name: "Expand selected language from its bottom edge" }))
       .toBeVisible();
 

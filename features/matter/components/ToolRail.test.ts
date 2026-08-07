@@ -49,7 +49,7 @@ describe("ToolRail", () => {
     });
 
     expect(markup).toContain('aria-label="Record a top-level thought"');
-    expect(markup).toContain('aria-label="Language selection active"');
+    expect(markup).toContain('aria-label="Exit language selection"');
     expect(markup).toContain('aria-label="Extend related thought"');
     expect(markup).toContain('aria-label="Return to canvas pan"');
     expect(markup).toContain('aria-label="Undo last change"');

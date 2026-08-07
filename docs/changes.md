@@ -17,6 +17,22 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-08 — Preview.11 corrects the source-release verifier
+
+Changed: the lasso browser verifier and the editing rail now give active lasso
+and Canvas pan modes the same re-click-to-exit contract. The Vercel
+configuration also enables the live label gate once a server-only pool is
+configured, while the exact Preview.11 version remains an ignored build until a
+permissions holder completes deployment controls.
+
+Why: a source prerelease must not retain a test that asserts the behaviour it
+just intentionally removed, and deployment configuration should expose every
+already-bounded server scenario without publishing credentials or promoting an
+unreviewed build.
+
+Forecloses: hiding a mode change behind a stale test name, enabling a browser
+model credential, or accidentally making this source candidate production.
+
 ## 2026-08-08 — Preview.10 remains a source prerelease
 
 Changed: the exact `0.2.0-preview.10` package version remains Vercel's
@@ -35,16 +51,17 @@ immutable preview tag later.
 
 Changed: recording under a selected visible passage now commits the transcript
 as that passage's child; without a selection it remains a first-level thought.
-Lasso is an armed mode until Canvas pan explicitly replaces it, so a completed
-single-passage selection keeps its stretch handles. Every local material commit
+Lasso and Canvas pan are explicit, re-click-to-exit modes, so a completed
+single-passage selection keeps its stretch handles after either mode exits.
+Every local material commit
 now writes its exact inverse journal atomically beside the IndexedDB snapshot;
 reload restores only a chain that can be validated all the way back to the
 stored document baseline. The material index carries every actual tree depth,
 so a title's subtitle is visibly one step below its parent.
 
-Why: the visual hierarchy must agree with the authored tree, repeated lasso work
-must not require re-arming, and undo must remain trustworthy after the browser
-has been closed or refreshed.
+Why: the visual hierarchy must agree with the authored tree, every active tool
+must have one discoverable exit gesture, and undo must remain trustworthy after
+the browser has been closed or refreshed.
 
 Forecloses: treating a selected passage as a sibling insertion target, silently
 dropping old undo entries in normal operation, or claiming that an archive or a
