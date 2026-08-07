@@ -750,7 +750,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     data-direct-match={file.directMatch || undefined}
                     data-in-lineage={activeLineageIds.has(file.nodeId) || undefined}
                     key={file.nodeId}
-                    style={{ "--material-file-depth": Math.max(0, file.depth - 1) } as CSSProperties}
+                    style={{ "--material-file-depth": file.depth } as CSSProperties}
                     data-node-id={file.nodeId}
                     data-authored-index={file.authoredIndex}
                     data-created-at={file.createdAt}

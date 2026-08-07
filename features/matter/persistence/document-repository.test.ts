@@ -143,6 +143,35 @@ describe("IndexedDB document repository", () => {
     expect(transaction.abort).toHaveBeenCalledTimes(1);
     expect(put).not.toHaveBeenCalled();
   });
+
+  it("stores the local inverse journal in the same snapshot write", async () => {
+    const put = vi.fn().mockResolvedValue(undefined);
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue(undefined),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    const database = {
+      transaction: vi.fn().mockReturnValue(transaction),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const repository = createIndexedDbDocumentRepository();
+    const history = { entries: [], retainedInverseBytes: 0 };
+
+    await expect(repository.save("tree-1", 2, { files: {} }, null, history)).resolves.toEqual({
+      ok: true,
+      value: 1,
+    });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      treeId: "tree-1",
+      treeRevision: 2,
+      bundle: { files: {} },
+      history,
+    }));
+  });
 });
 
 function databaseWithWriteFailure(error: unknown) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
+import { normalizeDocumentTree } from "../tree/document-root";
 import type { NavigationState } from "../runtime/navigation";
 import {
   deriveMaterialFileLabel,
@@ -174,6 +175,14 @@ describe("the outline the index shows", () => {
       .toEqual(["child-a", "grandchild", "child-b"]);
     expect(projectMaterialFileOutline(tree, new Set(["child-a"])).map((row) => row.nodeId))
       .toEqual(["child-a", "child-b"]);
+  });
+
+  it("keeps the opening passage as first-level material under a document root", () => {
+    const documentTree = normalizeDocumentTree({ ...tree, title: "Allowed other lives" });
+    const rows = projectMaterialFileOutline(documentTree, new Set());
+
+    expect(rows.map((row) => row.nodeId)).toEqual(["root", "child-a", "grandchild", "child-b"]);
+    expect(rows.map((row) => row.depth)).toEqual([0, 1, 2, 1]);
   });
 
   it("keeps a closed branch closed all the way down", () => {

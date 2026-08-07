@@ -29,7 +29,7 @@ export function MatterApp() {
   const renameDocument = useMatterStore((state) => state.renameDocument);
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
-  const persistence = useMaterialPersistence(tree, hydrateSnapshot, switchDocument);
+  const persistence = useMaterialPersistence(tree, history, hydrateSnapshot, switchDocument);
   const canvasPreferences = useCanvasPreferences();
   const exportArchive = useCallback(async () => {
     const archive = await exportSnapshotArchive(treeToBundle(tree));

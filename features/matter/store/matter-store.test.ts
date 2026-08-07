@@ -25,6 +25,23 @@ describe("Matter store", () => {
     expect(store.getState().tree.title).toBe("我已经改过的画布名");
   });
 
+  it("migrates only the seeded demo's superseded document title", () => {
+    const store = createMatterStore("expanded", {
+      documentRoot: true,
+      initialTitle: "被允许想象的其他生活",
+    });
+    const restored = structuredClone(store.getState().tree) as ThoughtTree;
+    restored.title = "而是那个过去在今天仍然允许我们想象的其他生活";
+
+    expect(store.getState().hydrateSnapshot(restored)).toMatchObject({
+      operation: "hydrate",
+      status: "hydrated",
+    });
+    expect(store.getState().tree.title).toBe("被允许想象的其他生活");
+    expect(store.getState().tree.nodes[ROOTED_FIXTURE_NODE_IDS.imaginedLives]?.text)
+      .toBe("被允许想象的其他生活");
+  });
+
   it("starts the public root-only document without descendants and grows locally", () => {
     const store = createMatterStore("root");
     const rootId = store.getState().tree.rootId;
@@ -40,6 +57,25 @@ describe("Matter store", () => {
     expect(childId).toBeDefined();
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(store.getState().tree.nodes[rootId]?.children).toEqual([]);
+  });
+
+  it("keeps a valid persisted undo chain after hydration", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const childrenBeforeCommit = [...(source.getState().tree.nodes[rootId]?.children ?? [])];
+    source.getState().insertFixtureChild(rootId);
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+    const persistedHistory = structuredClone(source.getState().history);
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(persistedTree, persistedHistory)).toMatchObject({
+      operation: "hydrate",
+      status: "hydrated",
+    });
+    expect(restored.getState().history.entries).toHaveLength(1);
+    expect(restored.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(restored.getState().tree.nodes[rootId]?.children).toEqual(childrenBeforeCommit);
   });
 
   it("creates isolated deterministic sessions", () => {

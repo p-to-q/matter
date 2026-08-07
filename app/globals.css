@@ -107,8 +107,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__disclosure:focus-visible { opacity: 1; }
 .material-file[data-expanded="true"] .material-file__disclosure svg { transform: rotate(90deg); }
 
-/* An opened row is the heading of the group it opened. That is how depth is
-   carried here: by role, never by a horizontal shift. */
+/* A branch title identifies a group, while its children retain their own
+   horizontal structural step. Weight may clarify role; it never replaces depth. */
 .material-file[data-has-children="true"] .material-file__title { color: var(--index-ink); }
 .material-file__check { position: relative; display: flex; min-width: 0; height: var(--index-row); align-items: center; gap: 9px; padding: 0 9px 0 10px; grid-column: 1 / -1; cursor: pointer; }
 .material-file__check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -215,6 +215,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-canvas { --matter-column-width: 520px; --matter-column-gap: 116px; --matter-sibling-gap: 42px; position: absolute; top: 43%; left: 50%; width: max(var(--matter-canvas-width, 520px), 520px); height: max(var(--matter-canvas-height, 160px), 160px); transform: translate(calc(var(--matter-column-width) / -2), -80px); }
 .spatial-thoughts { margin: 0; padding: 0; list-style: none; }
 .spatial-thought { position: absolute; top: 0; left: 0; width: var(--matter-column-width); contain: layout style; }
+.matter-canvas:not([data-layout-revealed="true"]) .spatial-thought { visibility: hidden; pointer-events: none; }
+.matter-canvas:not([data-layout-revealed="true"]) .spatial-thought:first-child { visibility: visible; opacity: .62; }
 .spatial-thought__text { position: relative; z-index: 1; display: block; width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: var(--ink); font: 400 clamp(22px, 2.2vw, 34px)/1.62 var(--matter-face); letter-spacing: 0; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; cursor: inherit; user-select: text; }
 .spatial-thought__label { -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .spatial-thought[data-selected="true"] .spatial-thought__label { padding: .08em .32em; border-radius: .44em; background: var(--selection-bg); box-shadow: inset 0 0 0 1px var(--selection-ring); color: var(--ink); text-shadow: var(--selection-shadow); }

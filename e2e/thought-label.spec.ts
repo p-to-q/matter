@@ -25,9 +25,8 @@ test("the material index names a thought instead of previewing it", async ({ pag
   expect(title).toBe("被允许想象的其他生活");
   expect(material.startsWith(title)).toBe(false);
 
-  // One eligible visible passage is one question; the index arrives expanded, so
-  // it must not repeat requests while its seven generatable fixture passages
-  // stay on screen.
+  // One eligible visible passage is one question; the index arrives expanded,
+  // so it must not repeat requests while seven fixture passages stay on screen.
   await expect(page.locator(".material-file")).toHaveCount(10);
   await expect.poll(() => labelRequests.length).toBe(7);
   await page.waitForTimeout(300);
@@ -38,6 +37,7 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await expect(page.locator(".material-files")).toHaveAttribute("data-persistence-phase", "saved");
 
   const row = page.locator(".material-file").first();
   await openNameEditor(row.locator(".material-file__open"));

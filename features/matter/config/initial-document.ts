@@ -1,6 +1,7 @@
 export type MatterInitialDocument = "root" | "expanded";
 
 export const DEFAULT_MATTER_DOCUMENT_TITLE = "被允许想象的其他生活";
+export const LEGACY_MATTER_DOCUMENT_TITLE = "而是那个过去在今天仍然允许我们想象的其他生活";
 
 /**
  * The deployed preview may start with one root while local research keeps the

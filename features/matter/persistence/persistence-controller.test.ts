@@ -7,6 +7,7 @@ import type {
 } from "./document-repository";
 import { createPersistenceController } from "./persistence-controller";
 import type { SnapshotBundle } from "./snapshot-codec";
+import type { TreeHistory } from "../tree/history";
 
 describe("persistence controller", () => {
   it("loads a stored tree and reports the persisted revision", async () => {
@@ -14,7 +15,7 @@ describe("persistence controller", () => {
     const repository = fakeRepository({ tree, writeGeneration: 3 });
     const controller = createPersistenceController(repository.port);
 
-    await expect(controller.start(tree)).resolves.toEqual({ storedTree: tree });
+    await expect(controller.start(tree)).resolves.toEqual({ storedTree: tree, storedHistory: null });
     expect(controller.getStatus()).toEqual({
       phase: "saved",
       persistedRevision: tree.revision,
@@ -42,6 +43,19 @@ describe("persistence controller", () => {
     expect(repository.savedRevisions).toEqual([tree.revision, third.revision]);
   });
 
+  it("writes the inverse journal with the same snapshot transaction", async () => {
+    const tree = createRootedMaterialFixture().tree;
+    const history: TreeHistory = { entries: [], retainedInverseBytes: 0 };
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.history).toEqual(history);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+  });
+
   it("retains the latest dirty tree on conflict until explicit reload resolves it", async () => {
     const tree = createRootedMaterialFixture().tree;
     const newer = { ...tree, revision: tree.revision + 8 };
@@ -63,7 +77,7 @@ describe("persistence controller", () => {
     expect(repository.pending).toHaveLength(0);
 
     repository.setLoaded({ tree: newer, writeGeneration: 7 });
-    await expect(controller.resolveConflict()).resolves.toEqual({ storedTree: newer });
+    await expect(controller.resolveConflict()).resolves.toEqual({ storedTree: newer, storedHistory: null });
     expect(repository.loads).toBe(2);
     await waitFor(() => controller.getStatus().phase === "saved");
     expect(controller.getStatus()).toMatchObject({
@@ -87,7 +101,7 @@ describe("persistence controller", () => {
     const newerLocal = { ...tree, revision: tree.revision + 2 };
     controller.publish(newerLocal);
     repository.settleLoad();
-    await expect(resolving).resolves.toEqual({ storedTree: null });
+    await expect(resolving).resolves.toEqual({ storedTree: null, storedHistory: null });
     expect(controller.getStatus()).toMatchObject({
       phase: "error",
       dirtyRevision: newerLocal.revision,
@@ -196,7 +210,13 @@ describe("persistence controller", () => {
       tree: imported,
       writeGeneration: 4,
     });
-    expect(save).toHaveBeenCalledWith("existing_tree", imported.revision, expect.anything(), 3);
+    expect(save).toHaveBeenCalledWith(
+      "existing_tree",
+      imported.revision,
+      expect.anything(),
+      3,
+      expect.anything(),
+    );
   });
 });
 
@@ -216,6 +236,7 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
   type Pending = {
     treeRevision: number;
     expectedGeneration: number | null;
+    history: TreeHistory | undefined;
     settle: (result: RepositoryResult<number>) => void;
   };
   const pending: Pending[] = [];
@@ -230,10 +251,10 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
         pendingLoad = settle;
       });
     },
-    save: async (_treeId: string, treeRevision: number, bundle: SnapshotBundle, expectedGeneration) => {
+    save: async (_treeId: string, treeRevision: number, bundle: SnapshotBundle, expectedGeneration, history) => {
       void bundle;
       savedRevisions.push(treeRevision);
-      return new Promise<RepositoryResult<number>>((settle) => pending.push({ treeRevision, expectedGeneration, settle }));
+      return new Promise<RepositoryResult<number>>((settle) => pending.push({ treeRevision, expectedGeneration, history, settle }));
     },
     close: () => undefined,
   };

@@ -62,7 +62,11 @@ export function createAdmissionAnchor(
   }
 
   if (navigation.mode !== "full" || tree.rootId === null || !Object.hasOwn(tree.nodes, tree.rootId)) {
-    return invalidInteraction("Top-level admission is only available in the full material view.");
+    return invalidInteraction("Admission is only available in the full material view.");
+  }
+  const parentNodeId = navigation.selectedNodeId ?? tree.rootId;
+  if (!Object.hasOwn(tree.nodes, parentNodeId)) {
+    return invalidInteraction("The selected admission parent is no longer available.");
   }
   return {
     ok: true,
@@ -70,7 +74,7 @@ export function createAdmissionAnchor(
       target: "child",
       treeId: tree.id,
       baseRevision: tree.revision,
-      parentNodeId: tree.rootId,
+      parentNodeId,
     },
   };
 }
@@ -137,8 +141,12 @@ export function admissionToTreeCommand(
     };
   }
 
-  if (navigation.mode !== "full" || tree.rootId !== anchor.parentNodeId || !Object.hasOwn(tree.nodes, anchor.parentNodeId)) {
-    return invalidInteraction("The top-level admission handle is no longer current.");
+  if (
+    navigation.mode !== "full" ||
+    !Object.hasOwn(tree.nodes, anchor.parentNodeId) ||
+    (navigation.selectedNodeId !== null && navigation.selectedNodeId !== anchor.parentNodeId)
+  ) {
+    return invalidInteraction("The admission parent is no longer current.");
   }
   const parent = tree.nodes[anchor.parentNodeId];
   return {

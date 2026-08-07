@@ -45,7 +45,10 @@ import {
   type LayoutProjectionItem,
   type LayoutNavigation,
 } from "./layout-projection";
-import { findAdmissionFeedbackParentBox } from "./admission-feedback-geometry";
+import {
+  findAdmissionFeedbackParentBox,
+  projectAdmissionFeedbackPresentation,
+} from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
@@ -145,6 +148,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const documentRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const layoutEpochRef = useRef(0);
+  const revealedDocumentEpochRef = useRef<number | null>(null);
   const measuredLayoutCacheRef = useRef(new Map<string, ColumnarLayout>());
   const measuredHeightCacheRef = useRef(new Map<string, Readonly<{
     columnWidth: number;
@@ -168,8 +172,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }>({ key: null, attempts: 0, frame: null });
   const [measureRevision, requestMeasurement] = useReducer((value) => value + 1, 0);
   const [published, setPublished] = useState<PublishedGeometry | null>(null);
-  const [presentationDamage, setPresentationDamage] = useState<PresentationDamage | null>(null);
-  const presentationDamageRef = useRef<PresentationDamage | null>(null);
+  const [stretchPresentationDamage, setStretchPresentationDamage] = useState<PresentationDamage | null>(null);
+  const stretchPresentationDamageRef = useRef<PresentationDamage | null>(null);
+  const [admissionFeedbackHeight, setAdmissionFeedbackHeight] = useState(0);
+  const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
   const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
   const [canvasMode, setCanvasMode] = useState<"material" | "pan">("material");
   const [browserVoiceSupported, setBrowserVoiceSupported] = useState(
@@ -231,6 +237,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
     [layoutInput],
   );
   const activeLayout = published?.key === projectionKey ? published.layout : null;
+  const admissionParentBox = useMemo(
+    () => findAdmissionFeedbackParentBox(
+      admissionAnchor,
+      activeLayout?.boxes ?? null,
+      navigation.selectedNodeId,
+    ),
+    [activeLayout?.boxes, admissionAnchor, navigation.selectedNodeId],
+  );
+  const admissionPresentationDamage = useMemo<PresentationDamage | null>(
+    () => projectAdmissionFeedbackPresentation(
+      admissionParentBox?.nodeId ?? null,
+      admissionFeedbackHeight,
+    ),
+    [admissionFeedbackHeight, admissionParentBox?.nodeId],
+  );
+  // Voice admission and stretch are mutually exclusive interactions. Giving
+  // admission precedence still makes the rendering boundary deterministic if
+  // a stale stretch receipt survives until the next layout publication.
+  const presentationDamage = admissionPresentationDamage ?? stretchPresentationDamage;
   const stretchInvalidationRef = useRef<() => void>(() => undefined);
   const invalidateStretchGeometry = useCallback(() => {
     stretchInvalidationRef.current();
@@ -418,9 +443,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       });
     }
     const frame = requestAnimationFrame(() => {
-      if (samePresentationDamage(presentationDamageRef.current, nextDamage)) return;
-      presentationDamageRef.current = nextDamage;
-      setPresentationDamage(nextDamage);
+      if (samePresentationDamage(stretchPresentationDamageRef.current, nextDamage)) return;
+      stretchPresentationDamageRef.current = nextDamage;
+      setStretchPresentationDamage(nextDamage);
       requestMeasurement();
     });
     return () => cancelAnimationFrame(frame);
@@ -575,6 +600,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       setPublished(null);
       return;
     }
+    if (revealedDocumentEpochRef.current !== props.documentEpoch) {
+      canvas.removeAttribute("data-layout-revealed");
+    }
     // A new material projection is not ready until the current geometry has
     // reached the DOM. This stays imperative because React has already
     // committed these 2,000 material nodes once for measurement.
@@ -712,15 +740,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
       markPerformance("matter:performance:geometry-dom-published");
     }
     setPublished({ key: projectionKey, layout: result.layout });
-  }, [markPerformance, measureRevision, presentationDamage, projection, projectionKey, tree.rootId]);
+  }, [markPerformance, measureRevision, presentationDamage, projection, projectionKey, props.documentEpoch, tree.rootId]);
 
   useLayoutEffect(() => {
     if (activeLayout === null) return;
     canvasRef.current?.setAttribute("data-layout-ready", "true");
+    canvasRef.current?.setAttribute("data-layout-revealed", "true");
+    revealedDocumentEpochRef.current = props.documentEpoch;
     if (!props.performanceMarking || initialPerformanceMarksRef.current.published) return;
     initialPerformanceMarksRef.current.published = true;
     markPerformance("matter:performance:published-canvas-commit");
-  }, [activeLayout, markPerformance, props.performanceMarking]);
+  }, [activeLayout, markPerformance, props.documentEpoch, props.performanceMarking]);
 
   useEffect(() => () => {
     const retry = measurementRetryRef.current;
@@ -728,11 +758,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (wheelMotionTimerRef.current !== null) window.clearTimeout(wheelMotionTimerRef.current);
   }, []);
 
-  const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
-  const admissionParentBox = useMemo(
-    () => findAdmissionFeedbackParentBox(admissionAnchor, activeLayout?.boxes ?? null),
-    [activeLayout?.boxes, admissionAnchor],
-  );
   const worldStyle = {
     transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.zoom})`,
   } as CSSProperties;
@@ -1055,11 +1080,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoActive={lasso.active}
         lassoAvailable={tree.rootId !== null && (lasso.active || activeLayout !== null)}
         onLasso={() => {
-          if (lasso.active) {
-            lasso.deactivate();
-            setCanvasMode("material");
-            return;
-          }
           if (activeLayout !== null) {
             setCanvasMode("material");
             lasso.activate();
@@ -1091,8 +1111,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
               ? "Voice admission is unavailable in this preview"
             : props.admissionAnchor?.kind === "root"
             ? "Record a root thought"
-            : props.admissionAnchor?.kind === "child"
+            : props.admissionAnchor?.kind === "child" && props.admissionAnchor.parentNodeId === tree.rootId
               ? "Record a top-level thought"
+              : props.admissionAnchor?.kind === "child"
+                ? "Record a thought below the selected material"
               : navigation.mode === "focus"
                 ? "Voice admission unavailable in focus view"
                 : "Voice admission unavailable outside the full material view"
@@ -1135,6 +1157,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         ) : (
           <div className="matter-world" style={worldStyle}>
           <div
+            aria-busy={activeLayout === null || persistenceLoading || undefined}
             className="matter-canvas"
             ref={canvasRef}
           >
@@ -1152,6 +1175,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               anchor={admissionAnchor}
               parentBox={admissionParentBox}
               controller={props.admission}
+              onHeightChange={setAdmissionFeedbackHeight}
             />
           </div>
           </div>
@@ -1603,16 +1627,35 @@ function AdmissionFeedback({
   anchor,
   parentBox,
   controller,
+  onHeightChange,
 }: {
   anchor: InteractionAdmissionAnchor | null;
   parentBox: Readonly<{ x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
+  onHeightChange: (height: number) => void;
 }) {
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const phase = controller.state.phase;
+  useLayoutEffect(() => {
+    const element = feedbackRef.current;
+    if (element === null) {
+      onHeightChange(0);
+      return;
+    }
+    const publishHeight = () => onHeightChange(Math.ceil(element.getBoundingClientRect().height));
+    publishHeight();
+    if (typeof ResizeObserver === "undefined") return () => onHeightChange(0);
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      onHeightChange(0);
+    };
+  }, [anchor, onHeightChange, phase]);
   if (controller.state.phase === "idle" || anchor === null) return null;
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
   } as CSSProperties;
-  const phase = controller.state.phase;
   const copy = admissionCopy(controller.state);
   return (
     <div
@@ -1620,6 +1663,7 @@ function AdmissionFeedback({
       className="admission-feedback"
       data-canvas-interactive
       data-phase={phase}
+      ref={feedbackRef}
       role={phase === "error" ? "alert" : "status"}
       style={style}
     >

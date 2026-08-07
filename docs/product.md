@@ -8,8 +8,9 @@ agent standing outside it.
 
 ## Two kinds of turn
 
-**Material admission.** A person speaks at the empty root or adds a first-level
-thought beneath the root in the full material view. Transcription enters the tree as human material, without a generative
+**Material admission.** A person speaks at the empty root, beneath the selected
+visible passage, or — when nothing is selected — as a first-level thought in
+the full material view. Transcription enters the tree as human material, without a generative
 rewrite. This preserves the person's first expression rather than silently
 replacing it with an AI version. Once committed, admission is pointer-undoable
 like every other material change.

@@ -5,7 +5,7 @@
 Human material enters without a generative model call:
 
 ```text
-node reference + microphone
+selected visible node (or document root) + microphone
   → browser-native Web Speech API (preferred)
   → POST /api/transcribe when an explicit server adapter exists
   → transcript
@@ -130,7 +130,7 @@ requires one config entry, UI copy, and focused server/client tests.
 | Lifetime | Owned state |
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
-| Runtime material | forward/inverse history; bounded, not exported. |
+| Durable local history | complete forward/inverse journal paired atomically with the local snapshot; not exported. |
 | Navigation | focus and fold; derived view state, not history. |
 | Labels | one derived name per node; disposable, never exported, never undoable. |
 | Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, transient inquiry. |
@@ -206,11 +206,13 @@ responses, and lineage are not cached. A bounded diagnostic trace may record
 operation ids, state transitions, error codes, durations, and byte counts, but
 never material or voice content.
 
-Recovery stays with the state owner: command inverses recover in-session
-material; interaction cancel preserves its semantic address for pointer retry;
-persistence retains the latest dirty snapshot until a generation-checked save
-succeeds. No write-ahead log, event sourcing, service worker, or background sync
-belongs in the first release.
+Recovery stays with the state owner: a validated inverse journal recovers local
+undo after reload; interaction cancel preserves its semantic address for pointer
+retry; persistence retains the latest dirty snapshot until a generation-checked
+save succeeds. An archive import starts a new journal, and a legacy snapshot
+that predates journal storage remains usable but begins with an empty history.
+No write-ahead log, event sourcing, service worker, or background sync belongs
+in the first release.
 
 ## Target modules
 

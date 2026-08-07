@@ -29,6 +29,8 @@ export const ROOTED_FIXTURE_NODE_IDS = {
   bodilyReturn: "thought_fixture_bodily_return",
 } as const;
 
+export const ROOTED_FIXTURE_IMAGINED_LIVES_TEXT = "被允许想象的其他生活";
+
 export const ROOTED_FIXTURE_TEXT_VARIANTS = [
   {
     id: "quiet",
@@ -111,7 +113,7 @@ const BOOTSTRAP_NODES: readonly ThoughtNode[] = [
   },
   {
     id: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
-    text: "被允许想象的其他生活",
+    text: ROOTED_FIXTURE_IMAGINED_LIVES_TEXT,
     parentId: ROOTED_FIXTURE_NODE_IDS.root,
     children: [],
     createdAt: "2026-08-03T08:01:00.000Z",

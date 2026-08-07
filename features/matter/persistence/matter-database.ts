@@ -1,6 +1,7 @@
 import type { DBSchema, IDBPDatabase } from "idb";
 import { openDB } from "idb";
 import type { SnapshotBundle } from "./snapshot-codec";
+import type { TreeHistory } from "../tree/history";
 
 /**
  * Opens the one browser database Matter owns.
@@ -22,6 +23,8 @@ export type StoredSnapshot = Readonly<{
   treeRevision: number;
   writeGeneration: number;
   bundle: SnapshotBundle;
+  /** Absent only for snapshots written before durable undo history existed. */
+  history?: TreeHistory;
 }>;
 
 /** Origin of a stored label. A provisional label is never stored: it is a pure

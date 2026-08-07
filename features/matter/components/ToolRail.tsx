@@ -72,7 +72,7 @@ export function ToolRail({
         disabled={!lassoAvailable || interactionPending}
         group="material"
         icon={<LassoIcon />}
-        label={lassoActive ? "Leave language selection" : "Circle-select language"}
+        label={lassoActive ? "Language selection active" : "Circle-select language"}
         onClick={!interactionPending && lassoAvailable ? onLasso : undefined}
         pressed={lassoActive}
         shortLabel="Lasso"

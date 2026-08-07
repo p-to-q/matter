@@ -2,6 +2,7 @@ import type { DocumentRepository, RepositoryErrorCode } from "./document-reposit
 import { treeToBundle } from "./snapshot-codec";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
+import { createTreeHistory, type TreeHistory } from "../tree/history";
 
 export type PersistenceStatus = Readonly<{
   phase: "loading" | "saved" | "saving" | "error";
@@ -22,12 +23,15 @@ export type ImportedDocumentRejection = Readonly<{
 }>;
 
 export type PersistenceController = Readonly<{
-  start(tree: ThoughtTree): Promise<Readonly<{ storedTree: ThoughtTree | null }>>;
-  publish(tree: ThoughtTree): void;
+  start(tree: ThoughtTree, history?: TreeHistory): Promise<Readonly<{
+    storedTree: ThoughtTree | null;
+    storedHistory: unknown | null;
+  }>>;
+  publish(tree: ThoughtTree, history?: TreeHistory): void;
   prepareImportedTree(tree: ThoughtTree): Promise<ImportedDocumentPreparation | ImportedDocumentRejection>;
   activateImportedDocument(prepared: ImportedDocumentPreparation): void;
   retry(): void;
-  resolveConflict(): Promise<Readonly<{ storedTree: ThoughtTree | null }>>;
+  resolveConflict(): Promise<Readonly<{ storedTree: ThoughtTree | null; storedHistory: unknown | null }>>;
   flush(): void;
   dispose(): void;
   getStatus(): PersistenceStatus;
@@ -41,7 +45,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
   let activeTreeId: string | null = null;
   let documentEpoch = 0;
   let baseGeneration: number | null = null;
-  let pending: ThoughtTree | null = null;
+  let pending: Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null = null;
   let status: PersistenceStatus = Object.freeze({
     phase: "loading",
     persistedRevision: null,
@@ -51,7 +55,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
   const listeners = new Set<() => void>();
   // Async repository writes may overlap a publish() call; reading through this
   // seam prevents compile-time narrowing from erasing that runtime transition.
-  const currentPending = (): ThoughtTree | null => pending;
+  const currentPending = (): Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null => pending;
 
   const update = (next: PersistenceStatus) => {
     status = Object.freeze(next);
@@ -63,8 +67,9 @@ export function createPersistenceController(repository: DocumentRepository): Per
     writing = true;
     const drainEpoch = documentEpoch;
     while (active && pending !== null) {
-      const tree = pending;
+      const pendingDocument = pending;
       pending = null;
+      const { tree, history } = pendingDocument;
       update({
         phase: "saving",
         persistedRevision: status.persistedRevision,
@@ -75,15 +80,15 @@ export function createPersistenceController(repository: DocumentRepository): Per
       try {
         bundle = treeToBundle(tree);
       } catch {
-        pending = tree;
+        pending = pendingDocument;
         update({ ...status, phase: "error", dirtyRevision: tree.revision, errorCode: "PERSISTENCE_WRITE_FAILED" });
         break;
       }
-      const saved = await repository.save(tree.id, tree.revision, bundle, baseGeneration);
+      const saved = await repository.save(tree.id, tree.revision, bundle, baseGeneration, history);
       if (!active || drainEpoch !== documentEpoch || tree.id !== activeTreeId) break;
       if (!saved.ok) {
-        pending ??= tree;
-        update({ ...status, phase: "error", dirtyRevision: pending.revision, errorCode: saved.error.code });
+        pending ??= pendingDocument;
+        update({ ...status, phase: "error", dirtyRevision: pending.tree.revision, errorCode: saved.error.code });
         break;
       }
       baseGeneration = saved.value;
@@ -91,7 +96,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
       update({
         phase: queuedAfterWrite === null ? "saved" : "saving",
         persistedRevision: tree.revision,
-        dirtyRevision: queuedAfterWrite?.revision ?? null,
+        dirtyRevision: queuedAfterWrite?.tree.revision ?? null,
         errorCode: null,
       });
     }
@@ -100,33 +105,33 @@ export function createPersistenceController(repository: DocumentRepository): Per
   };
 
   return Object.freeze({
-    async start(tree) {
+    async start(tree, history = createTreeHistory()) {
       activeTreeId = tree.id;
       documentEpoch += 1;
       const startEpoch = documentEpoch;
       const loaded = await repository.load(tree.id);
-      if (!active || startEpoch !== documentEpoch) return Object.freeze({ storedTree: null });
+      if (!active || startEpoch !== documentEpoch) return Object.freeze({ storedTree: null, storedHistory: null });
       if (!loaded.ok) {
         ready = true;
-        pending = tree;
+        pending = Object.freeze({ tree, history });
         update({ phase: "error", persistedRevision: null, dirtyRevision: tree.revision, errorCode: loaded.error.code });
-        return Object.freeze({ storedTree: null });
+        return Object.freeze({ storedTree: null, storedHistory: null });
       }
       ready = true;
       baseGeneration = loaded.value?.writeGeneration ?? null;
       if (loaded.value === null) {
-        pending = tree;
+        pending = Object.freeze({ tree, history });
         void drain();
-        return Object.freeze({ storedTree: null });
+        return Object.freeze({ storedTree: null, storedHistory: null });
       }
       update({ phase: "saved", persistedRevision: loaded.value.tree.revision, dirtyRevision: null, errorCode: null });
-      return Object.freeze({ storedTree: loaded.value.tree });
+      return Object.freeze({ storedTree: loaded.value.tree, storedHistory: loaded.value.history ?? null });
     },
 
-    publish(tree) {
+    publish(tree, history = createTreeHistory()) {
       if (tree.id !== activeTreeId) return;
       if (pending === null && status.phase === "saved" && status.persistedRevision === tree.revision) return;
-      pending = tree;
+      pending = Object.freeze({ tree, history });
       if (ready && status.phase !== "error") void drain();
       else if (ready) update({ ...status, dirtyRevision: tree.revision });
     },
@@ -166,13 +171,13 @@ export function createPersistenceController(repository: DocumentRepository): Per
         // Reserve a fresh generation even for byte-identical material. This
         // linearizes the later runtime switch against a save that starts after
         // the load, instead of trusting a generation observed in the past.
-        const reserved = await repository.save(tree.id, tree.revision, bundle, loaded.value.writeGeneration);
+        const reserved = await repository.save(tree.id, tree.revision, bundle, loaded.value.writeGeneration, loaded.value.history ?? createTreeHistory());
         if (!active) return Object.freeze({ ok: false, errorCode: "PERSISTENCE_UNAVAILABLE" });
         if (!reserved.ok) return Object.freeze({ ok: false, errorCode: importRepositoryError(reserved.error.code) });
         return Object.freeze({ ok: true, tree, writeGeneration: reserved.value });
       }
 
-      const saved = await repository.save(tree.id, tree.revision, bundle, null);
+      const saved = await repository.save(tree.id, tree.revision, bundle, null, createTreeHistory());
       if (!active) return Object.freeze({ ok: false, errorCode: "PERSISTENCE_UNAVAILABLE" });
       if (!saved.ok) {
         return Object.freeze({
@@ -208,23 +213,23 @@ export function createPersistenceController(repository: DocumentRepository): Per
 
     async resolveConflict() {
       if (!active || !ready || pending === null || status.errorCode !== "PERSISTENCE_CONFLICT") {
-        return Object.freeze({ storedTree: null });
+        return Object.freeze({ storedTree: null, storedHistory: null });
       }
-      const dirtyTree = pending;
-      const loaded = await repository.load(dirtyTree.id);
-      if (!active) return Object.freeze({ storedTree: null });
+      const dirtyDocument = pending;
+      const loaded = await repository.load(dirtyDocument.tree.id);
+      if (!active) return Object.freeze({ storedTree: null, storedHistory: null });
       if (!loaded.ok || loaded.value === null) {
         update({
           ...status,
           phase: "error",
-          dirtyRevision: pending?.revision ?? dirtyTree.revision,
+          dirtyRevision: pending?.tree.revision ?? dirtyDocument.tree.revision,
           errorCode: loaded.ok ? "PERSISTENCE_CONFLICT" : loaded.error.code,
         });
-        return Object.freeze({ storedTree: null });
+        return Object.freeze({ storedTree: null, storedHistory: null });
       }
       // A commit after the explicit reload gesture wins locally. It keeps the
       // conflict unresolved rather than being silently discarded by hydration.
-      if (pending !== dirtyTree) return Object.freeze({ storedTree: null });
+      if (pending !== dirtyDocument) return Object.freeze({ storedTree: null, storedHistory: null });
       pending = null;
       baseGeneration = loaded.value.writeGeneration;
       update({
@@ -233,7 +238,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
         dirtyRevision: null,
         errorCode: null,
       });
-      return Object.freeze({ storedTree: loaded.value.tree });
+      return Object.freeze({ storedTree: loaded.value.tree, storedHistory: loaded.value.history ?? null });
     },
 
     flush() {

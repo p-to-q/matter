@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ThoughtTree } from "../tree/model";
+import type { TreeHistory } from "../tree/history";
 import { createIndexedDbDocumentRepository } from "./document-repository";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
 import { resolveHydrationDecision } from "./hydration-decision";
@@ -10,13 +11,16 @@ import type { DocumentSwitchReceipt } from "../store/matter-store";
 
 export function useMaterialPersistence(
   tree: ThoughtTree,
-  hydrateSnapshot: (tree: ThoughtTree) => unknown,
+  history: TreeHistory,
+  hydrateSnapshot: (tree: ThoughtTree, history?: unknown) => unknown,
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
 ) {
   const [controller] = useState(() =>
     createPersistenceController(createIndexedDbDocumentRepository()),
   );
   const latestTreeRef = useRef(tree);
+  const latestHistoryRef = useRef(history);
+  const initialHistoryRef = useRef(history);
   const startedRef = useRef(false);
   const startPromiseRef = useRef<ReturnType<typeof controller.start> | null>(null);
   const lifecycleRef = useRef(0);
@@ -27,19 +31,20 @@ export function useMaterialPersistence(
 
   useEffect(() => {
     latestTreeRef.current = tree;
-  }, [tree]);
+    latestHistoryRef.current = history;
+  }, [history, tree]);
 
   useEffect(() => {
     let active = true;
     lifecycleRef.current += 1;
     const lifecycle = lifecycleRef.current;
     const initialTree = latestTreeRef.current;
-    startPromiseRef.current ??= controller.start(initialTree);
-    void startPromiseRef.current.then(({ storedTree }) => {
+    startPromiseRef.current ??= controller.start(initialTree, initialHistoryRef.current);
+    void startPromiseRef.current.then(({ storedTree, storedHistory }) => {
       if (!active) return;
       const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, storedTree);
-      if (decision.action === "hydrate") hydrateSnapshot(decision.tree);
-      else if (decision.action === "publish") controller.publish(decision.tree);
+      if (decision.action === "hydrate") hydrateSnapshot(decision.tree, storedHistory);
+      else if (decision.action === "publish") controller.publish(decision.tree, latestHistoryRef.current);
       startedRef.current = true;
     });
     return () => {
@@ -53,8 +58,8 @@ export function useMaterialPersistence(
   }, [controller, hydrateSnapshot]);
 
   useEffect(() => {
-    if (startedRef.current) controller.publish(tree);
-  }, [controller, tree]);
+    if (startedRef.current) controller.publish(tree, history);
+  }, [controller, history, tree]);
 
   useEffect(() => {
     const flushWhenHidden = () => {
@@ -66,7 +71,7 @@ export function useMaterialPersistence(
 
   const resolveConflict = useCallback(async () => {
     const result = await controller.resolveConflict();
-    if (result.storedTree !== null) hydrateSnapshot(result.storedTree);
+    if (result.storedTree !== null) hydrateSnapshot(result.storedTree, result.storedHistory);
   }, [controller, hydrateSnapshot]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);

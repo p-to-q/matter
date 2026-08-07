@@ -484,9 +484,10 @@ commands without treating provenance as authorization.
 not only while translating a plan. Undo restores material, structure, sibling
 order, and node timestamps exactly. It is itself a new commit, so tree revision
 always increments and is never rolled back. Committed human and agent commands
-may enter pointer undo history; their source remains distinguishable. Runtime
-history has both an entry limit and a retained-inverse byte budget, and is not
-serialized.
+may enter pointer undo history; their source remains distinguishable. The browser
+retains the complete local inverse journal alongside its material snapshot,
+within the physical IndexedDB quota, and saves both in one compare-and-swap
+record. It is deliberately excluded from archives.
 
 The engine sets an inverse's expected revision to the newly committed revision.
 When sequential undo reaches it after newer commands have themselves been
@@ -494,8 +495,10 @@ undone, history clones the inverse and rebases only that revision to the current
 one. Every structural or text mutation still verifies its complete memento, so
 rebasing cannot become an unconditional overwrite. Successful undo removes the
 entry and does not push the inverse produced by undo; failure changes neither
-tree nor history. Hydration, import, and document switch clear history and every
-pending turn.
+tree nor history. Hydration validates the whole saved inverse chain against the
+restored tree before exposing it; a malformed or legacy journal is discarded
+without affecting material. Archive import and a foreign document switch start
+a new history, and every document transition clears pending turns.
 
 `affectedNodeIds` is the material touch set: text replacement names its node;
 root operations name the root; insert names node and parent; move names the

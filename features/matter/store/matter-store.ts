@@ -6,10 +6,13 @@ import {
   createFixtureInsertChildCommand,
   createFixtureReplaceTextCommand,
   createRootedMaterialFixture,
+  ROOTED_FIXTURE_TREE_ID,
+  ROOT_ONLY_FIXTURE_TREE_ID,
   type RootedMaterialFixtureVariant,
 } from "../fixtures/rooted-material";
 import {
   DEFAULT_MATTER_DOCUMENT_TITLE,
+  LEGACY_MATTER_DOCUMENT_TITLE,
   normalizeMatterInitialDocument,
 } from "../config/initial-document";
 import type { TreeHistoryLimits } from "../tree/history";
@@ -41,10 +44,13 @@ import type { ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
+import { recoverPersistedHistory } from "../persistence/history-recovery";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
-  maxEntries: 64,
-  maxRetainedInverseBytes: 512_000,
+  // Durable history must not silently discard an old inverse. Browser storage
+  // remains the physical limit and surfaces a recoverable save error instead.
+  maxEntries: Number.MAX_SAFE_INTEGER,
+  maxRetainedInverseBytes: Number.MAX_SAFE_INTEGER,
 });
 
 type NavigationOperation = "select" | "clear-selection" | "focus" | "show-full" | "toggle-fold";
@@ -98,7 +104,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   focus: (nodeId: string) => MatterStoreReceipt;
   showFull: () => MatterStoreReceipt;
   toggleFold: (nodeId: string) => MatterStoreReceipt;
-  hydrateSnapshot: (tree: ThoughtTree) => MatterStoreReceipt;
+  hydrateSnapshot: (tree: ThoughtTree, history?: unknown) => MatterStoreReceipt;
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt;
   clearError: () => void;
 };
@@ -354,10 +360,12 @@ export function createMatterStore(
       return requireSynchronousReceipt(receipt);
     },
 
-    hydrateSnapshot: (tree) => {
+    hydrateSnapshot: (tree, persistedHistory) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const normalizedTree = options.documentRoot === true ? normalizeForDocumentModel(tree) : tree;
+        const normalizedTree = options.documentRoot === true
+          ? normalizeForDocumentModel(tree, options.initialTitle)
+          : tree;
         const validation = validateThoughtTree(normalizedTree);
         if (!validation.ok || normalizedTree.id !== current.tree.id) {
           const error: MatterStoreError = {
@@ -372,12 +380,17 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
+        const recoveredHistory = recoverPersistedHistory(
+          normalizedTree,
+          persistedHistory,
+          HISTORY_LIMITS,
+        );
         receipt = { operation: "hydrate", status: "hydrated", revision: normalizedTree.revision };
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
           tree: protectValue(normalizedTree),
-          history: protectValue(createTreeHistory()),
+          history: protectValue(recoveredHistory),
           navigation: protectValue(createNavigationState()),
           lastError: null,
           lastReceipt: protectValue(receipt),
@@ -389,7 +402,9 @@ export function createMatterStore(
     switchDocument: (tree) => {
       let receipt: DocumentSwitchReceipt | undefined;
       set((current) => {
-        const normalizedTree = options.documentRoot === true ? normalizeForDocumentModel(tree) : tree;
+        const normalizedTree = options.documentRoot === true
+          ? normalizeForDocumentModel(tree, options.initialTitle)
+          : tree;
         const validation = validateThoughtTree(normalizedTree);
         if (!validation.ok) {
           const error: MatterStoreError = {
@@ -463,7 +478,26 @@ function normalizeForDocumentModel(tree: ThoughtTree, initialTitle?: string): Th
   const root = tree.rootId === null ? undefined : tree.nodes[tree.rootId];
   const firstChild = root?.children[0] === undefined ? undefined : tree.nodes[root.children[0]];
   const source = root?.text.trim() ? root.text : firstChild?.text ?? "";
-  return normalizeDocumentTree(tree, initialTitle ?? deriveMaterialTitle(source));
+  return migrateFixtureDefaults(
+    normalizeDocumentTree(tree, initialTitle ?? deriveMaterialTitle(source)),
+    initialTitle,
+  );
+}
+
+/**
+ * Compatibility belongs to the seeded demo ids, never to arbitrary material.
+ * These exact old defaults shipped before the document title was shortened.
+ */
+function migrateFixtureDefaults(tree: ThoughtTree, initialTitle?: string): ThoughtTree {
+  if (tree.id !== ROOTED_FIXTURE_TREE_ID && tree.id !== ROOT_ONLY_FIXTURE_TREE_ID) return tree;
+  const nextTitle = initialTitle === DEFAULT_MATTER_DOCUMENT_TITLE && tree.title === LEGACY_MATTER_DOCUMENT_TITLE
+    ? DEFAULT_MATTER_DOCUMENT_TITLE
+    : tree.title;
+  if (nextTitle === tree.title) return tree;
+  return {
+    ...tree,
+    title: nextTitle,
+  };
 }
 
 function navigationUpdate(

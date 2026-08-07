@@ -101,6 +101,28 @@ describe("human material admission", () => {
     });
   });
 
+  it("anchors a new admission beneath the selected visible passage", () => {
+    const root = node("root", null, ["first", "second"]);
+    const first = node("first", "root");
+    const second = node("second", "root");
+    const tree: ThoughtTree = {
+      ...createEmptyTree("tree_1", 1),
+      rootId: "root",
+      nodes: { root, first, second },
+    };
+    const selected = selectNode(tree, createNavigationState(), "second");
+    if (!selected.ok) throw new Error(selected.error.code);
+    const anchored = createAdmissionAnchor(tree, selected.navigation);
+    if (!anchored.ok) throw new Error(anchored.error.code);
+
+    expect(anchored.anchor).toMatchObject({ target: "child", parentNodeId: "second" });
+    expect(admissionToTreeCommand(tree, selected.navigation, anchored.anchor, values("nested")))
+      .toMatchObject({
+        ok: true,
+        command: { mutation: { parentId: "second", node: { parentId: "second" } } },
+      });
+  });
+
   it.each(["", "   ", "\n\t"])("rejects an empty transcript %j", (transcript) => {
     const tree = createEmptyTree("tree_1");
     const anchored = createAdmissionAnchor(tree, createNavigationState());

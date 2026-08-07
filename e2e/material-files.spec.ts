@@ -69,19 +69,24 @@ for (const viewport of [
       expect(viewport.width - (drawer!.x + drawer!.width)).toBeGreaterThanOrEqual(54.9);
     }
 
-    // The root is the heading; the whole branch below it arrives expanded, so a
-    // thought that was just spoken never has to be hunted for.
+    // The title is document metadata; the opening passage is still selectable
+    // first-level material and may share its wording with that metadata.
     await expect(contextRow).toHaveAttribute("data-node-id", rootId);
     await expect(rows).toHaveCount(10);
     await expect(sidebar.locator('.material-file[data-expanded="true"]')).toHaveCount(4);
     const rootTitle = (await contextTitle.innerText()).trim();
+    expect(rootTitle).toBe("被允许想象的其他生活");
+    await expect(rows.locator(".material-file__title").filter({ hasText: /^被允许想象的其他生活$/u }))
+      .toHaveCount(1);
     const rowPaths = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-markdown-path")),
     );
     expect(rowPaths.every((path) => /^matter\/(?:00\d-[^/]+\/){1,}index\.md$/u.test(path ?? "")))
       .toBe(true);
 
-    // Depth is a step to the right: one per level, and only per level.
+    // Every material depth remains visible in the index. In particular, the
+    // default title's subtitles must step right rather than visually sharing
+    // their parent's level.
     const steps = await rows.evaluateAll((elements) =>
       elements.map((element) => ({
         depth: Number(getComputedStyle(element).getPropertyValue("--material-file-depth")),
@@ -91,9 +96,10 @@ for (const viewport of [
       })),
     );
     const axisByDepth = new Map(steps.map(({ depth, x }) => [depth, x]));
-    expect([...axisByDepth.keys()].sort()).toEqual([0, 1]);
+    expect([...axisByDepth.keys()].sort()).toEqual([0, 1, 2]);
     expect(steps.every(({ depth, x }) => axisByDepth.get(depth) === x)).toBe(true);
     expect(axisByDepth.get(1)!).toBeGreaterThan(axisByDepth.get(0)!);
+    expect(axisByDepth.get(2)!).toBeGreaterThan(axisByDepth.get(1)!);
 
     // The document title is metadata, not a selectable thought. Its control
     // opens the title editor without creating a material selection.

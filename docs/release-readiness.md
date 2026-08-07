@@ -87,6 +87,26 @@ Preview.9 is a GitHub source prerelease only: its exact package version is
 ignored by the connected Vercel build. Production promotion remains tracked in
 GitHub issue #34 and requires a later version after the provider controls exist.
 
+## Candidate verification — 0.2.0-preview.10
+
+Preview.10 retains the same source-prerelease-only deployment boundary. It
+adds durable local undo, exact hierarchy presentation, and recording/lasso
+interaction corrections without changing the public root-seeded claim:
+
+```text
+npm run check          938 tests passed + 1 skipped; doctor, links, explicit
+                       typegen, typecheck, lint, and production build passed
+npm run test:e2e       43 Chromium browser flows passed, including archive,
+                       2,000-node windowing/performance, voice, lasso, move,
+                       hierarchy, and reload-then-undo receipts
+durability proof       tree and inverse journal write atomically; reload
+                       validates every saved inverse before it is exposed
+```
+
+This exact package version is ignored by the connected Vercel build. The
+GitHub prerelease is therefore a source candidate only, not a deployment of
+`matter.ptoq.io`; production remains gated by issue #34 and a later version.
+
 ## Product acceptance for the next candidate
 
 The candidate must still look and behave like Matter after engineering work:

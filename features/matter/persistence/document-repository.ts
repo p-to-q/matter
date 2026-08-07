@@ -2,6 +2,7 @@ import { bundleToTree, type SnapshotBundle } from "./snapshot-codec";
 import { createMatterDatabaseHandle, STORAGE_SCHEMA_VERSION } from "./matter-database";
 import type { StoredSnapshot } from "./matter-database";
 import type { ThoughtTree } from "../tree/model";
+import type { TreeHistory } from "../tree/history";
 
 export { STORAGE_SCHEMA_VERSION };
 export type { StoredSnapshot };
@@ -19,6 +20,7 @@ export type RepositoryResult<Value> =
 
 export type LoadedSnapshot = Readonly<{
   tree: ThoughtTree;
+  history?: TreeHistory | null;
   writeGeneration: number;
 }>;
 
@@ -29,6 +31,7 @@ export type DocumentRepository = Readonly<{
     treeRevision: number,
     bundle: SnapshotBundle,
     expectedGeneration: number | null,
+    history?: TreeHistory,
   ): Promise<RepositoryResult<number>>;
   close(): void;
 }>;
@@ -55,13 +58,17 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
         if (!decoded.ok || decoded.tree.id !== treeId || decoded.tree.revision !== stored.treeRevision) {
           return failure("PERSISTENCE_CORRUPT", "The stored Markdown bundle is invalid.");
         }
-        return success(Object.freeze({ tree: decoded.tree, writeGeneration: stored.writeGeneration }));
+        return success(Object.freeze({
+          tree: decoded.tree,
+          history: stored.history ?? null,
+          writeGeneration: stored.writeGeneration,
+        }));
       } catch {
         return failure("PERSISTENCE_UNAVAILABLE", "Local material storage is unavailable.");
       }
     },
 
-    async save(treeId, treeRevision, bundle, expectedGeneration) {
+    async save(treeId, treeRevision, bundle, expectedGeneration, history) {
       try {
         const db = await database();
         const transaction = db.transaction("snapshots", "readwrite");
@@ -83,6 +90,7 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           treeRevision,
           writeGeneration: nextGeneration,
           bundle,
+          ...(history === undefined ? {} : { history }),
         }));
         await transaction.done;
         return success(nextGeneration);

@@ -362,6 +362,10 @@ for (const viewport of [
     await expect(page.getByRole("status")).toContainText("我们怀念的也许不是一个真实存在过的过去");
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("拖动把手设定变化程度。");
+    await page.getByRole("button", { name: "Language selection active", exact: true }).click();
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+    await expect(page.getByRole("slider", { name: "Expand selected language from its bottom edge" }))
+      .toBeVisible();
 
     const before = page.locator(".language-split-before-copy");
     const selected = page.locator(".language-split-block--selected");

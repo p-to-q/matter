@@ -17,6 +17,67 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-08 — Preview.10 remains a source prerelease
+
+Changed: the exact `0.2.0-preview.10` package version remains Vercel's
+ignored-build version. Its `main` commit and immutable GitHub prerelease can be
+published for review without replacing the dedicated-domain production
+deployment.
+
+Why: the interaction and durability candidate has a complete local verifier,
+but production promotion still requires its own owned deployment receipt.
+
+Forecloses: silently turning a GitHub prerelease into production deployment,
+claiming a local/browser receipt verifies live provider controls, or moving the
+immutable preview tag later.
+
+## 2026-08-08 — Selected admission becomes structural descent and undo survives reload
+
+Changed: recording under a selected visible passage now commits the transcript
+as that passage's child; without a selection it remains a first-level thought.
+Lasso is an armed mode until Canvas pan explicitly replaces it, so a completed
+single-passage selection keeps its stretch handles. Every local material commit
+now writes its exact inverse journal atomically beside the IndexedDB snapshot;
+reload restores only a chain that can be validated all the way back to the
+stored document baseline. The material index carries every actual tree depth,
+so a title's subtitle is visibly one step below its parent.
+
+Why: the visual hierarchy must agree with the authored tree, repeated lasso work
+must not require re-arming, and undo must remain trustworthy after the browser
+has been closed or refreshed.
+
+Forecloses: treating a selected passage as a sibling insertion target, silently
+dropping old undo entries in normal operation, or claiming that an archive or a
+pre-journal legacy snapshot can recreate commands it never stored.
+
+## 2026-08-08 — Cold material reveals only after geometry is valid
+
+Changed: a newly opened or restored document keeps only its root passage visible
+while the rendering edge measures language. Descendants remain measurable but
+invisible and inert until the first valid geometry publication; later changes
+within the same document do not reopen that reveal gate.
+
+Why: unpositioned absolute nodes otherwise share the root origin for a frame,
+turning loading into an illegible pile of language.
+
+Forecloses: a spinner or loading card over the paper, delaying the initial
+bundle to disguise layout work, flashing the whole tree on every edit, and
+migrating titles or language in non-fixture documents.
+
+## 2026-08-08 — Admission feedback occupies temporary layout space
+
+Changed: the rendering edge measures the live recording feedback and reserves
+that height beneath its target passage. The document title remains metadata,
+while the same phrase may also exist as first-level material alongside future
+first-level passages.
+
+Why: an absolutely positioned recording status could overlap the next branch,
+and removing a first-level passage merely because it repeats the document title
+would erase a real structural role.
+
+Forecloses: persisting recording chrome in the tree, using a guessed fixed
+feedback height, and treating the document title as the tree's only first level.
+
 ## 2026-08-08 — Preview.9 publication does not promote Vercel production
 
 Changed: the exact `0.2.0-preview.9` package version exits Vercel's ignored-build

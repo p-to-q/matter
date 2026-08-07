@@ -129,7 +129,7 @@ describe("runtime session", () => {
     expect(undone.state.tree.nodes.child).toBeUndefined();
   });
 
-  it("adds top-level material while preserving unrelated folds and current selection", () => {
+  it("adds child material, reveals its parent, and preserves unrelated folds", () => {
     const tree: ThoughtTree = {
       ...createEmptyTree("tree_1"),
       rootId: "root",
@@ -169,12 +169,13 @@ describe("runtime session", () => {
         navigation: {
           mode: "full",
           selectedNodeId: "parent",
-          foldedNodeIds: new Set(["parent", "other"]),
+          foldedNodeIds: new Set(["other"]),
         },
       },
     });
     if (!admitted.ok) throw new Error(admitted.receipt.errorCode);
-    expect(admitted.state.tree.nodes.root.children).toEqual(["parent", "other", "new_child"]);
+    expect(admitted.state.tree.nodes.root.children).toEqual(["parent", "other"]);
+    expect(admitted.state.tree.nodes.parent.children).toEqual(["prior", "new_child"]);
   });
 
   it("atomically rejects a colliding admission id at the tree boundary", () => {

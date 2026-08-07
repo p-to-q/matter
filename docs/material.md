@@ -105,7 +105,9 @@ a clause inside it.
 ## Lineage
 
 One document has one structural root, but that root is not material. Its ordered
-children are the visible first-level passages. Dropping a passage onto another
+children are the visible first-level passages. Speaking with a visible passage
+selected adds a child beneath that passage; speaking with no selection adds a
+first-level passage. Dropping a passage onto another
 passage makes it a child; dropping into a sibling gap changes its exact order;
 dropping on unrelated paper attaches it to the structural root as a first-level
 passage. The canvas title is separate document metadata and may be renamed
@@ -172,13 +174,15 @@ document root records `role: document-root` in frontmatter so export/import does
 not turn it back into visible material.
 
 The snapshot preserves the complete `ThoughtTree`: current material, structure,
-ids, order, times, tree revision, and protocol version. Command and undo history
-are runtime state and do not survive export.
+ids, order, times, tree revision, and protocol version. The browser pairs that
+snapshot with its local inverse journal in one IndexedDB record, so an accepted
+command remains undoable after reload. Archive export deliberately contains only
+the material snapshot: importing an archive establishes a new undo boundary.
 
 In a browser, local durability and a user-visible folder are different physical
-stores. IndexedDB keeps one versioned logical Markdown bundle automatically. A
-ZIP or directory export is an explicit copy of the same bundle. They share one
-codec, not one filesystem object.
+stores. IndexedDB keeps one versioned logical Markdown bundle and its paired
+inverse journal automatically. A ZIP or directory export is an explicit copy of
+the bundle only. They share one codec, not one filesystem object.
 
 ## Deliberately absent
 

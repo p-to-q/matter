@@ -17,7 +17,22 @@ for (const viewport of [
 
     await page.setViewportSize(viewport);
     await page.goto("/matter");
-    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const canvas = page.locator(".matter-canvas");
+    await expect(canvas).toHaveAttribute("data-layout-ready", "true");
+    await expect(canvas).toHaveAttribute("data-layout-revealed", "true");
+    await expect(canvas).not.toHaveAttribute("aria-busy", "true");
+
+    if (viewport.name === "laptop") {
+      const coldVisibility = await canvas.evaluate((element) => {
+        element.removeAttribute("data-layout-revealed");
+        const thoughts = [...element.querySelectorAll<HTMLElement>(".spatial-thought")];
+        const result = thoughts.map((thought) => getComputedStyle(thought).visibility);
+        element.setAttribute("data-layout-revealed", "true");
+        return result;
+      });
+      expect(coldVisibility[0]).toBe("visible");
+      expect(coldVisibility.slice(1).every((visibility) => visibility === "hidden")).toBe(true);
+    }
 
     const thought = (nodeId: string) => page.locator(`[data-thought-id="${nodeId}"]`);
     const selectThought = (nodeId: string) =>

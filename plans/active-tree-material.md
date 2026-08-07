@@ -26,6 +26,20 @@ not later phases of this plan. They remain outside the first release.
 
 ## Next preview execution line
 
+## Preview.10 interaction durability freeze
+
+```text
+Outcome:    recording beneath a selected passage creates its child; lasso remains armed until Pan is chosen;
+            undo returns after reload for every locally persisted command in the active document.
+Boundary:   admission anchor, lasso rail intent, runtime history, and one atomic IndexedDB document record.
+Invariants: document title is metadata; selected parent is revalidated at commit; lasso/stretches stay transient;
+            history and material save together or the newer pair is not advertised as durable.
+Proof:      parented-admission, repeated-lasso-and-stretch, reload-then-undo, corrupt-history recovery,
+            two viewport browser flows, full check, and full browser suite.
+Non-goals:  server sync, collaboration, redo, rewriting past history, or promising recovery for records from before
+            durable history was first stored.
+```
+
 The next preview is not another shell-design pass. Work proceeds in this order,
 and each line closes with its focused proof before the next one starts:
 

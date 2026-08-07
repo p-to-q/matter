@@ -1,12 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-const rootId = "thought_fixture_root";
+const parentId = "thought_fixture_imagined_lives";
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
   { name: "narrow", width: 390, height: 844 },
 ]) {
-  test(`voice admits one undoable top-level thought at ${viewport.name} width`, async ({ page }) => {
+  test(`voice admits one undoable child thought at ${viewport.name} width`, async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -21,15 +21,15 @@ for (const viewport of [
     );
 
     await page
-      .locator(`[data-thought-id="${rootId}"]`)
+      .locator(`[data-thought-id="${parentId}"]`)
       .locator("[data-thought-text-id]")
       .click();
-    await expect(page.locator(`[data-thought-id="${rootId}"]`)).toHaveAttribute(
+    await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveAttribute(
       "data-selected",
       "true",
     );
     const voice = page.getByRole("button", {
-      name: "Record a top-level thought",
+      name: "Record a thought below the selected material",
       exact: true,
     });
     await expect(voice).toBeEnabled();
@@ -43,6 +43,25 @@ for (const viewport of [
       "data-interaction-pending",
       "true",
     );
+    const feedback = page.locator(".admission-feedback");
+    await expect(feedback).toBeVisible();
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const feedbackBox = await feedback.boundingBox();
+    const selectedBox = await page.locator(`[data-thought-id="${parentId}"]`).boundingBox();
+    expect(feedbackBox).not.toBeNull();
+    expect(selectedBox).not.toBeNull();
+    // The structural commit anchor is invisible; feedback instead follows the
+    // selected visible passage and must clear every rendered language block.
+    expect(feedbackBox!.y).toBeGreaterThanOrEqual(selectedBox!.y + selectedBox!.height + 17);
+    const overlaps = await page.locator("[data-thought-id]").evaluateAll((nodes, box) =>
+      nodes.filter((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.left < box.x + box.width &&
+          rect.right > box.x &&
+          rect.top < box.y + box.height &&
+          rect.bottom > box.y;
+      }).map((node) => node.getAttribute("data-thought-id")), feedbackBox!);
+    expect(overlaps).toEqual([]);
     await expect(page.getByRole("button", { name: "Extend related thought", exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
     // MediaRecorder chunks are asynchronous; this crosses one 250 ms capture
@@ -60,7 +79,7 @@ for (const viewport of [
     );
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("说话，让想法向下生长。");
-    await expect(page.locator(`[data-thought-id="${rootId}"]`)).toHaveAttribute(
+    await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveAttribute(
       "data-selected",
       "true",
     );
@@ -75,17 +94,20 @@ for (const viewport of [
       }),
     );
     const admittedId = await admitted.getAttribute("data-thought-id");
-    const rootGeometry = geometry.find(({ id }) => id === rootId);
+    const parentGeometry = geometry.find(({ id }) => id === parentId);
     const admittedGeometry = geometry.find(({ id }) => id === admittedId);
     expect(geometry).toHaveLength(11);
-    expect(rootGeometry).toBeDefined();
+    expect(parentGeometry).toBeDefined();
     expect(admittedGeometry).toBeDefined();
-    // Top-level admissions share the root column; their authored order carries
-    // the vertical growth while the document root remains invisible.
-    expect(admittedGeometry!.x).toBeGreaterThanOrEqual(rootGeometry!.x);
-    expect(admittedGeometry!.y).toBeGreaterThan(rootGeometry!.y);
+    // A selected visible passage is the durable parent, so admission moves one
+    // structural level to the right instead of becoming its sibling.
+    expect(admittedGeometry!.x).toBeGreaterThan(parentGeometry!.x);
 
-    await page.keyboard.press(viewport.name === "laptop" ? "Meta+z" : "Control+z");
+    await page.reload();
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
+    await expect(admitted).toHaveCount(1);
+    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
     await expect(admitted).toHaveCount(0);
     expect(browserErrors).toEqual([]);
   });
