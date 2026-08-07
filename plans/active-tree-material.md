@@ -26,11 +26,32 @@ not later phases of this plan. They remain outside the first release.
 
 ## Next preview execution line
 
-## Preview.10 interaction durability freeze
+## Preview.12 inquiry submit-key freeze
 
 ```text
-Outcome:    recording beneath a selected passage creates its child; lasso remains armed until Pan is chosen;
-            undo returns after reload for every locally persisted command in the active document.
+Outcome:    expanding Ask Matter exposes the existing small inquiry composer;
+            Enter submits the non-blank draft through the same action as its
+            visible Ask button.
+Boundary:   inquiry composer key handler, existing submit guard, and one
+            browser receipt; no inquiry wire, context, provider, or persistence
+            contract changes.
+Invariants: an empty or whitespace-only draft never sends; Enter during an IME
+            composition never sends; a pending request cannot be duplicated;
+            Shift+Enter preserves a deliberate line break; closing or resolving
+            the inquiry does not create a transcript or alter material.
+Proof:      reducer/interaction tests for empty, Enter, composition, pending,
+            and Shift+Enter; browser receipt shows Enter and the visible button
+            create the same one bounded request.
+Non-goals:  multi-turn chat, keyboard-required primary flow, new prompt UI,
+            server changes, context expansion, or durable inquiry history.
+```
+
+## Preview.10 interaction durability freeze (proven)
+
+```text
+Outcome:    recording beneath a selected passage creates its child; active lasso
+            and Canvas pan both exit on a second click; undo returns after reload
+            for every locally persisted command in the active document.
 Boundary:   admission anchor, lasso rail intent, runtime history, and one atomic IndexedDB document record.
 Invariants: document title is metadata; selected parent is revalidated at commit; lasso/stretches stay transient;
             history and material save together or the newer pair is not advertised as durable.
