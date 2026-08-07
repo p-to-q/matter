@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-08 — Preview.12 keeps voice feedback below material
+
+Changed: recording feedback now claims one measured material lane beneath its
+selected passage. With no selection it anchors beneath the seeded first passage;
+if that passage is unavailable it falls back to the first visible first-level
+passage. A conservative pre-measure reservation and a one-column width prevent
+the feedback controls from crossing into text or a right-hand branch. Ask Matter
+keeps its visible pointer button, while plain Enter is an IME-safe shortcut for
+the same bounded request; Shift+Enter remains a line break. Closing the inquiry
+clears its transient exchange.
+
+Why: live transcription should read as a small continuation of the material,
+never as an overlay that hides it. Keyboard support should accelerate an
+available pointer action without becoming the primary path or corrupting CJK
+composition.
+
+Forecloses: canvas-origin feedback, post-paint overlap repair, a keyboard-only
+Ask action, duplicate pending inquiries, and a closed inquiry retaining a
+visible conversation history.
+
 ## 2026-08-08 — Preview.11 corrects the source-release verifier
 
 Changed: the lasso browser verifier and the editing rail now give active lasso

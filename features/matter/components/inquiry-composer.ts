@@ -52,6 +52,13 @@ export function inquiryText(state: InquiryState): string {
   return joinDictatedText(state.draft, state.interim);
 }
 
+/** The visible submit button and Enter share this one transient eligibility rule. */
+export function canSubmitInquiry(state: InquiryState): boolean {
+  return state.phase === "idle" &&
+    inquiryText(state).trim().length > 0 &&
+    !state.turns.some((turn) => turn.role === "matter" && turn.outcome.status === "pending");
+}
+
 export function reduceInquiry(state: InquiryState, event: InquiryEvent): InquiryState {
   switch (event.type) {
     case "type":
@@ -110,7 +117,7 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
       // answered turns into another document, revision, or selection scope.
       return createInquiryState();
     case "close":
-      return freeze({ ...settle(state, null), notice: null });
+      return createInquiryState();
   }
 }
 

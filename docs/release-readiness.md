@@ -130,6 +130,26 @@ localhost inspection   root seed, default title, and post-hydration tool
                        availability checked against the live client surface
 ```
 
+## Candidate verification — 0.2.0-preview.12
+
+Preview.12 deploys the root-seeded browser experience from `main` again. The
+server model adapters remain capability-gated: without encrypted provider
+variables, labels keep their deterministic floor, transcript repair admits the
+heard text, and Ask Matter truthfully reports that no answer model is connected.
+That safe no-model mode is deployable; enabling a live model still requires the
+separate controls in [`deployment-handoff.md`](deployment-handoff.md).
+
+```text
+focused proof          selected and default voice feedback clears every visible
+                       text block at laptop and narrow widths; Enter, Shift+Enter,
+                       visible Ask, pending, and composition boundaries are covered
+release proof          npm run check: 943 passed, 1 skipped; npm run test:e2e:
+                       45 passed; typecheck, lint, production build, and docs
+                       link verification all pass
+deployment proof       after Git integration deploys, check the dedicated origin
+                       with npm run check:deployment -- https://matter.ptoq.io
+```
+
 ## Product acceptance for the next candidate
 
 The candidate must still look and behave like Matter after engineering work:

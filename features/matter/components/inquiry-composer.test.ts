@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createInquiryState,
   inquiryText,
+  canSubmitInquiry,
   pendingAnswerId,
   reduceInquiry,
 } from "./inquiry-composer";
@@ -43,10 +44,25 @@ describe("inquiry composer", () => {
     expect(state.turns.at(-1)).toMatchObject({ role: "matter", outcome: { reason: "NO_PROVIDER" } });
   });
 
+  it("only enables a settled non-blank question with no pending answer", () => {
+    const typed = reduceInquiry(createInquiryState(), { type: "type", value: "这是什么？" });
+    expect(canSubmitInquiry(typed)).toBe(true);
+    const pending = reduceInquiry(typed, { type: "ask" });
+    expect(canSubmitInquiry(pending)).toBe(false);
+    expect(canSubmitInquiry(reduceInquiry(typed, { type: "listen" }))).toBe(false);
+    expect(canSubmitInquiry(reduceInquiry(createInquiryState(), { type: "type", value: "   " }))).toBe(false);
+  });
+
   it("drops an exchange when its material context changes", () => {
     let state = reduceInquiry(createInquiryState(), { type: "type", value: "旧材料" });
     state = reduceInquiry(state, { type: "ask" });
     expect(state.turns).not.toHaveLength(0);
     expect(reduceInquiry(state, { type: "scope-changed" })).toEqual(createInquiryState());
+  });
+
+  it("clears a closed inquiry rather than retaining a transient exchange", () => {
+    let state = reduceInquiry(createInquiryState(), { type: "type", value: "旧问题" });
+    state = reduceInquiry(state, { type: "ask" });
+    expect(reduceInquiry(state, { type: "close" })).toEqual(createInquiryState());
   });
 });

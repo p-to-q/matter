@@ -4,10 +4,12 @@ const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
 test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
+  const inquiryQuestions: string[] = [];
   await page.route("**/api/inquiry", async (route) => {
     const request = route.request().postDataJSON() as {
       protocolVersion: string;
       requestId: string;
+      question: string;
       context: {
         treeId: string;
         revision: number;
@@ -17,6 +19,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
         clipped: boolean;
       };
     };
+    inquiryQuestions.push(request.question);
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -149,10 +152,15 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await stopDictating.click();
   await expect(dictate).toBeVisible({ timeout: 10_000 });
   await inquiryField.fill("这份材料在怀念什么？");
-  await inquiryDialog.getByRole("button", { name: "询问", exact: true }).click();
+  await inquiryField.press("Shift+Enter");
+  await inquiryField.type("保留这里的停顿。");
+  await expect(inquiryField).toHaveValue("这份材料在怀念什么？\n保留这里的停顿。");
+  await expect(inquiryDialog.getByRole("button", { name: "询问", exact: true })).toBeEnabled();
+  await inquiryField.press("Enter");
   const matterTurn = inquiryDialog.locator('[data-inquiry-role="matter"]');
   await expect(matterTurn).not.toContainText("正在询问…", { timeout: 20_000 });
   await expect(matterTurn).toHaveText(/\S/u);
+  expect(inquiryQuestions).toEqual(["这份材料在怀念什么？\n保留这里的停顿。"]);
   await page.keyboard.press("Escape");
   await expect(inquiryDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");

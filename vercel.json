@@ -1,6 +1,5 @@
 {
   "framework": "nextjs",
-  "ignoreCommand": "node -e \"process.exit(require('./package.json').version === '0.2.0-preview.11' ? 0 : 1)\"",
   "buildCommand": "MATTER_BASE_PATH= MATTER_INITIAL_DOCUMENT=root MATTER_PUBLIC_ORIGIN=https://matter.ptoq.io MATTER_TRANSCRIPTION_ADAPTER=browser MATTER_REPAIR_ADAPTER=live MATTER_INQUIRY_ADAPTER=live NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED=true NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED=true NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED=true npm run build",
   "env": {
     "MATTER_BASE_PATH": "",

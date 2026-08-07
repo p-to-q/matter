@@ -247,8 +247,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .language-split-projection[data-preview-mode="expand"] ~ *,
 .spatial-thought__text[data-visual-projection="true"] { transition: color 90ms ease, text-decoration-color 90ms ease; }
 .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; text-decoration-color: transparent; }
-.admission-feedback { position: absolute; z-index: 6; display: flex; width: max-content; max-width: min(420px, calc(100vw - 44px)); min-height: 40px; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); pointer-events: auto; }
+.admission-feedback { position: absolute; z-index: 6; display: flex; width: min(var(--matter-column-width), calc(100vw - 44px)); max-width: calc(100vw - 44px); min-height: 40px; box-sizing: border-box; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); flex-wrap: wrap; pointer-events: auto; }
 .admission-feedback__signal { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--active); opacity: .72; }
+.admission-feedback > span:not(.admission-feedback__signal) { min-width: 0; }
 .admission-feedback__preview { max-width: min(280px, 42vw); overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
 .admission-feedback[data-phase="recording"] .admission-feedback__signal { box-shadow: 0 0 0 5px rgba(22,29,39,.11); }
 .admission-feedback[data-phase="repairing"] .admission-feedback__preview { animation: admission-settle 1.1s ease-in-out infinite; }

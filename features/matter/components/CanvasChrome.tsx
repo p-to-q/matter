@@ -21,6 +21,7 @@ import {
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import {
   createInquiryState,
+  canSubmitInquiry,
   inquiryText,
   pendingAnswerId,
   reduceInquiry,
@@ -28,6 +29,7 @@ import {
   type InquiryVoiceNotice,
 } from "./inquiry-composer";
 import { useInquiryDictation } from "./use-inquiry-dictation";
+import { shouldSubmitInquiryOnEnter } from "./inquiry-submit-key";
 import { askInquiry } from "../interaction/inquiry-client";
 import {
   sameInquiryContext,
@@ -908,11 +910,16 @@ function InquiryBubble({
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const submittingRef = useRef(false);
   const contextRef = useRef(context);
   const listening = state.phase === "listening";
   const transcribing = state.phase === "transcribing";
   const voiceBusy = listening || transcribing;
   const text = inquiryText(state);
+  const canAsk = canSubmitInquiry(state);
+  const hasPendingAnswer = state.turns.some(
+    (turn) => turn.role === "matter" && turn.outcome.status === "pending",
+  );
   const dictation = useInquiryDictation({
     onHeard: (transcript) => dispatch({ type: "hear", value: transcript }),
     onProcessing: () => dispatch({ type: "transcribe" }),
@@ -922,6 +929,10 @@ function InquiryBubble({
   const cancelDictation = dictation.cancel;
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (!hasPendingAnswer) submittingRef.current = false;
+  }, [hasPendingAnswer]);
 
   useEffect(() => {
     contextRef.current = context;
@@ -938,6 +949,7 @@ function InquiryBubble({
       cancelDictation();
       requestRef.current?.abort();
       requestRef.current = null;
+      submittingRef.current = false;
       dispatch({ type: "close" });
       return;
     }
@@ -946,8 +958,13 @@ function InquiryBubble({
   }, [cancelDictation, hidden]);
 
   const ask = useCallback(() => {
+    if (!canAsk || submittingRef.current) return;
     const question = inquiryText(state).trim();
     if (question.length === 0) return;
+    // React state updates are asynchronous. This ref closes the small window
+    // where a double-click or repeated Enter could otherwise submit the same
+    // transient question twice before the disabled button is rendered.
+    submittingRef.current = true;
     const answerId = pendingAnswerId(state);
     dispatch({ type: "ask" });
     const payload = context?.();
@@ -974,9 +991,12 @@ function InquiryBubble({
         }
       })
       .finally(() => {
-        if (requestRef.current === request) requestRef.current = null;
+        if (requestRef.current === request) {
+          requestRef.current = null;
+          submittingRef.current = false;
+        }
       });
-  }, [context, language, state]);
+  }, [canAsk, context, language, state]);
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -1020,7 +1040,12 @@ function InquiryBubble({
           data-inquiry-field
           onChange={(event) => dispatch({ type: "type", value: event.currentTarget.value })}
           onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.shiftKey) return;
+            if (!shouldSubmitInquiryOnEnter({
+              key: event.key,
+              shiftKey: event.shiftKey,
+              isComposing: event.nativeEvent.isComposing,
+              canSubmit: canAsk,
+            })) return;
             event.preventDefault();
             ask();
           }}
@@ -1052,7 +1077,7 @@ function InquiryBubble({
         <button
           className={styles.inquiryAsk}
           data-inquiry-control="ask"
-          disabled={text.trim().length === 0}
+          disabled={!canAsk}
           onClick={ask}
           type="button"
         >

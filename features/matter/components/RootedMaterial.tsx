@@ -1639,7 +1639,7 @@ function AdmissionFeedback({
   onHeightChange,
 }: {
   anchor: InteractionAdmissionAnchor | null;
-  parentBox: Readonly<{ x: number; y: number; width: number; height: number }> | null;
+  parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
   onHeightChange: (height: number) => void;
 }) {
@@ -1670,6 +1670,7 @@ function AdmissionFeedback({
     <div
       aria-live={phase === "error" ? undefined : "polite"}
       className="admission-feedback"
+      data-admission-anchor-node-id={parentBox?.nodeId}
       data-canvas-interactive
       data-phase={phase}
       ref={feedbackRef}

@@ -1,6 +1,7 @@
 # Matter deployment handoff
 
-Status: **partial — source preview is ready; production promotion is deliberately blocked.**
+Status: **partial — the root-seeded browser preview may deploy; live model
+promotion remains deliberately blocked.**
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -80,14 +81,20 @@ Before any production promotion, complete GitHub issue #34:
    dedicated-domain routing intact. No provider name, raw audio, material text,
    or key belongs in routine logs.
 
-## Promotion procedure
+## Browser-preview deployment
 
-Preview.11 is intentionally Vercel-ignored. Do not remove that guard merely to
-test a secret. First configure the controls above, then create a fresh reviewed
-version and let its Vercel build run (or replace the exact-version
-`ignoreCommand` only as part of that reviewed promotion commit).
+The current `main` build may deploy the root-seeded browser experience without a
+model credential. This is an intentional safe mode, not a fixture: browser
+speech and local material work, labels retain their deterministic floor,
+transcript repair falls back to heard text, and Ask Matter reports an unavailable
+answer model. The public UI must not imply that an answer model is live.
 
-After the first real deployment:
+## Live-model promotion procedure
+
+Do not add a provider secret merely to test the UI. First configure the controls
+above, then create a fresh reviewed version and let its Vercel build run.
+
+After each browser-preview deployment, verify the dedicated origin:
 
 ```bash
 npm run check:deployment -- https://matter.ptoq.io
@@ -101,11 +108,15 @@ Manually verify, with a normal browser and no repository secrets:
   capability states;
 - browser speech works where the browser provides it; unsupported speech stays
   on-device or reports a truthful limitation;
-- labels can improve, transcript repair falls back verbatim, and Ask Matter
-  answers only from the submitted lasso passages or bounded tree context;
+- labels retain their deterministic floor, transcript repair falls back
+  verbatim, and Ask Matter truthfully reports an unavailable model until the
+  live-model procedure has been completed;
 - no provider identity or response error leaks into the page; and
-- rate limits, spend alarms, and an unavailable-provider fallback are observed
-  once on the real origin.
+- the unavailable-provider fallback is observed once on the real origin.
+
+After live-model promotion, repeat the origin check with a bounded selected
+passage and a bounded virtual-tree inquiry. Verify rate limits and spend alarms
+there, rather than treating the credential-free browser preview as model proof.
 
 Rollback is a Vercel deployment rollback plus disabling the affected scenario
 gate; rotate a credential if there is any possibility it reached logs or a

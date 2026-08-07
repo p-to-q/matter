@@ -29,19 +29,20 @@ not later phases of this plan. They remain outside the first release.
 ## Preview.12 inquiry submit-key freeze
 
 ```text
-Outcome:    expanding Ask Matter exposes the existing small inquiry composer;
-            Enter submits the non-blank draft through the same action as its
-            visible Ask button.
-Boundary:   inquiry composer key handler, existing submit guard, and one
-            browser receipt; no inquiry wire, context, provider, or persistence
-            contract changes.
-Invariants: an empty or whitespace-only draft never sends; Enter during an IME
-            composition never sends; a pending request cannot be duplicated;
-            Shift+Enter preserves a deliberate line break; closing or resolving
-            the inquiry does not create a transcript or alter material.
-Proof:      reducer/interaction tests for empty, Enter, composition, pending,
-            and Shift+Enter; browser receipt shows Enter and the visible button
-            create the same one bounded request.
+Outcome:    live voice feedback remains visibly beneath its selected material
+            or first first-level passage; expanding Ask Matter exposes the
+            existing small composer, where Enter submits a non-blank draft
+            through the same action as its visible Ask button.
+Boundary:   feedback-lane geometry, inquiry composer key handler, existing
+            submit guard, and browser receipts; no tree, inquiry wire, context,
+            provider, or persistence contract changes.
+Invariants: feedback never overlaps material and is constrained to its anchor
+            lane; an empty draft never sends; Enter during an IME composition
+            never sends; a pending request cannot duplicate; Shift+Enter keeps
+            a deliberate line break; closing or resolving inquiry changes no material.
+Proof:      geometry fallback and conservative-reservation tests; reducer tests
+            for empty, pending and close; browser receipts at laptop/narrow
+            widths for zero overlap and at desktop for Enter/Shift+Enter.
 Non-goals:  multi-turn chat, keyboard-required primary flow, new prompt UI,
             server changes, context expansion, or durable inquiry history.
 ```

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { LayoutBox } from "../layout/model";
 import {
+  ADMISSION_FEEDBACK_MIN_HEIGHT,
   findAdmissionFeedbackParentBox,
   projectAdmissionFeedbackPresentation,
 } from "./admission-feedback-geometry";
@@ -49,7 +50,18 @@ describe("admission feedback geometry", () => {
     }, [parent], "parent")).toBe(parent);
   });
 
-  it("reserves the measured feedback below only a child admission parent", () => {
+  it("falls back to the first first-level passage when the original anchor is absent", () => {
+    const descendant: LayoutBox = { ...parent, nodeId: "descendant", parentId: "missing", depth: 1 };
+    const firstLevel: LayoutBox = { ...parent, nodeId: "first-level", parentId: null, depth: 0 };
+    expect(findAdmissionFeedbackParentBox({
+      kind: "child",
+      treeId: "tree",
+      baseRevision: 1,
+      parentNodeId: "missing",
+    }, [descendant, firstLevel])).toBe(firstLevel);
+  });
+
+  it("reserves a measured or conservative feedback lane below only a child admission parent", () => {
     const childAnchor = {
       kind: "child" as const,
       treeId: "tree",
@@ -59,9 +71,18 @@ describe("admission feedback geometry", () => {
     expect(projectAdmissionFeedbackPresentation(childAnchor.parentNodeId, 40.2)).toEqual({
       nodeId: "parent",
       topExtent: 0,
-      bottomExtent: 59,
+      bottomExtent: ADMISSION_FEEDBACK_MIN_HEIGHT + 18,
     });
-    expect(projectAdmissionFeedbackPresentation(childAnchor.parentNodeId, 0)).toBeNull();
+    expect(projectAdmissionFeedbackPresentation(childAnchor.parentNodeId, 0)).toEqual({
+      nodeId: "parent",
+      topExtent: 0,
+      bottomExtent: ADMISSION_FEEDBACK_MIN_HEIGHT + 18,
+    });
+    expect(projectAdmissionFeedbackPresentation(childAnchor.parentNodeId, 86)).toEqual({
+      nodeId: "parent",
+      topExtent: 0,
+      bottomExtent: 104,
+    });
     expect(projectAdmissionFeedbackPresentation(null, 40)).toBeNull();
   });
 });

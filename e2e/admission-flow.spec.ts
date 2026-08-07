@@ -111,4 +111,37 @@ for (const viewport of [
     await expect(admitted).toHaveCount(0);
     expect(browserErrors).toEqual([]);
   });
+
+  test(`unselected voice reserves the first material lane at ${viewport.name} width`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+    const root = page.locator('[data-thought-id="thought_fixture_root"]');
+    const voice = page.getByRole("button", { name: "Record a top-level thought", exact: true });
+    await voice.click();
+    const feedback = page.locator(".admission-feedback");
+    await expect(feedback).toBeVisible();
+    await expect(feedback).toHaveAttribute("data-admission-anchor-node-id", "thought_fixture_root");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+    const feedbackBox = await feedback.boundingBox();
+    const rootBox = await root.boundingBox();
+    if (feedbackBox === null || rootBox === null) throw new Error("voice feedback geometry is unavailable");
+    // Voice feedback stays in its anchor's material lane: it begins below the
+    // first passage and cannot trespass into its right-hand child branch.
+    expect(feedbackBox.y).toBeGreaterThanOrEqual(rootBox.y + rootBox.height + 17);
+    expect(feedbackBox.width).toBeLessThanOrEqual(rootBox.width + 1);
+    const overlaps = await page.locator("[data-thought-id]").evaluateAll((nodes, box) =>
+      nodes.filter((node) => {
+        const rect = node.getBoundingClientRect();
+        return rect.left < box.x + box.width &&
+          rect.right > box.x &&
+          rect.top < box.y + box.height &&
+          rect.bottom > box.y;
+      }).map((node) => node.getAttribute("data-thought-id")), feedbackBox);
+    expect(overlaps).toEqual([]);
+    await feedback.getByRole("button", { name: "Cancel recording", exact: true }).click();
+    await expect(feedback).toHaveCount(0);
+  });
 }
