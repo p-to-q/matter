@@ -47,6 +47,46 @@ Non-goals:  multi-turn chat, keyboard-required primary flow, new prompt UI,
             server changes, context expansion, or durable inquiry history.
 ```
 
+## Preview.13 deployable-configuration freeze
+
+```text
+Outcome:    matter.ptoq.io serves the current source version again. The Vercel
+            production build is accepted by Vercel's own deployment schema, and
+            a configuration that would be rejected — or that would silently
+            drop a build-time value — fails locally and in CI instead of
+            failing eight times in a row on the deployment dashboard.
+Boundary:   vercel.json, one new configuration check with its focused tests,
+            the npm test entry that runs it, and the deployment/release wording
+            that describes the build shape. No product route, tree, provider,
+            credential, security header, or runtime capability changes.
+Invariants: `/` stays the product entry and `/matter` stays 404; each visitor's
+            material stays in their own browser IndexedDB; browser speech and
+            local material never depend on a provider; with no provider pool,
+            labels keep their deterministic floor, repair admits the heard
+            words, and inquiry reports itself unavailable; provider code stays
+            in server/ with no browser-visible secret; no key of any kind
+            appears in vercel.json; tree, undo, lasso, and recording feedback
+            behavior is untouched.
+Proof:      focused tests for the build-command length bound, the build-time
+            and runtime variable sets, the dedicated-domain product shape, and
+            secret-shaped keys; npm run check; npm run test:e2e; an accepted
+            Vercel preview build; then npm run check:deployment against
+            https://matter.ptoq.io.
+Non-goals:  live model promotion, edge rate rules, spend caps, dashboard
+            automation, deployment-log tooling, monitoring vendor, automatic
+            rollback, and any visual or interaction change.
+```
+
+Root cause of the Preview.8–Preview.12 deployment gap: `vercel.json` carried the
+whole product build shape as an environment prefix inside `buildCommand`. That
+string reached 340 characters, and Vercel's deployment schema rejects a
+`buildCommand` longer than 256. Every production deployment from `fb59a69`
+onward failed during schema validation, before any build step ran, so no build
+log existed to read and `matter.ptoq.io` stayed on Preview.7. Git integration,
+root directory, Node version, domain binding, and the repository build were all
+correct. The build shape now lives in `build.env` and `env`, which is where
+Vercel expresses it, and the length bound is a test rather than folklore.
+
 ## Post-Preview.12 deployment receipt freeze
 
 ```text

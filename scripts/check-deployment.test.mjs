@@ -127,3 +127,26 @@ test("retries one transient probe failure without exposing its transport detail"
   assert.equal(result.attempts, 2);
   assert.deepEqual(result.failures, []);
 });
+
+test("runs on its own clock, the way the release gate invokes it", async () => {
+  // Regression: the default clock was `performance.now` detached from
+  // `performance`, so every real invocation threw before probing anything.
+  const result = await waitForDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    check: async () => ({ origin: "https://matter.ptoq.io", failures: [] }),
+  });
+  assert.equal(result.attempts, 1);
+  assert.deepEqual(result.failures, []);
+});
+
+test("reports a failing origin on its own clock instead of throwing", async () => {
+  const result = await waitForDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    waitMs: 1,
+    intervalMs: 1,
+    check: async () => ({ origin: "https://matter.ptoq.io", failures: ["forced"] }),
+  });
+  assert.deepEqual(result.failures, ["forced"]);
+});

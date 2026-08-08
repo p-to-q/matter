@@ -60,10 +60,21 @@ NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED=true
 NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED=true
 ```
 
+Those values live in `build.env`, because `next.config.ts` and the prerendered
+metadata read them while the bundle is produced. The subset the server re-reads
+per request — the base path, the public origin, and the transcription adapter —
+is repeated in `env`, so the deployed health probe reports what the build
+actually shipped. Do not move them back into `buildCommand`: Vercel rejects a
+`buildCommand` over 256 characters during schema validation, before any build
+runs, and that failure produces no build log. `npm test` now enforces the bound,
+both shapes, and the absence of any credential-shaped entry.
+
 The three model gates are independent. To reduce exposure during rollout, enable
-only labels first, then repair, then inquiry. A missing or failing pool remains
-safe: labels stay deterministic, repair admits the words as heard, and inquiry
-states that it is unavailable.
+only labels first, then repair, then inquiry. `vercel.json` declares only the
+label gate; repair and inquiry stay unset there so their promotion remains an
+encrypted, owner-controlled step rather than a repository default. A missing or
+failing pool remains safe: labels stay deterministic, repair admits the words as
+heard, and inquiry states that it is unavailable.
 
 ## Edge, spend, and access controls
 

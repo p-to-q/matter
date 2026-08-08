@@ -17,6 +17,32 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-08 — The deployment build shape is configuration, not a command prefix
+
+Changed: `vercel.json` declares the dedicated-domain build shape in `build.env`
+and its server-read subset in `env`, and `buildCommand` is now `npm run build`.
+`npm test` checks that file: the build command stays inside Vercel's 256-character
+schema bound, both shapes carry every value their side actually reads, and no
+credential-shaped key or value appears in a world-readable file. The repair and
+inquiry gates return to owner-controlled encrypted environment variables so the
+handoff's labels-then-repair-then-inquiry order stays possible; the label gate
+stays declared as before. `npm run check:deployment` also runs for the first
+time: its retry clock defaulted to an unbound `performance.now`, so the real
+release gate threw before probing anything while its tests, which all injected a
+clock, passed.
+
+Why: carrying seven assignments as an environment prefix inside `buildCommand`
+grew that string to 340 characters. Vercel rejected the deployment during schema
+validation, before any build step, so eight consecutive production deployments
+failed with no build log and `matter.ptoq.io` silently stayed on Preview.7 while
+source, tags, CI, and local receipts all stayed green. A deployment constraint
+that only exists in a maintainer's memory is not a constraint.
+
+Forecloses: expressing build configuration as command-line syntax, a release
+whose deployable shape is only proven after a deployment attempt, committing a
+provider key to `vercel.json`, and enabling all three model gates at once from
+repository configuration.
+
 ## 2026-08-08 — Preview.12 keeps voice feedback below material
 
 Changed: recording feedback now claims one measured material lane beneath its

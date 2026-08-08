@@ -106,7 +106,10 @@ export async function waitForDeployment({
   intervalMs = 5_000,
   check = checkDeployment,
   sleep = delay,
-  now = performance.now,
+  // Bound, because `performance.now` detached from `performance` throws when
+  // called. Every test injects a clock, so only the real release gate ran the
+  // default — and it failed the same way for a healthy origin and a broken one.
+  now = () => performance.now(),
 }) {
   if (!Number.isSafeInteger(waitMs) || waitMs < 0) {
     throw new Error("Deployment wait must be a non-negative integer number of milliseconds.");

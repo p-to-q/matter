@@ -150,6 +150,48 @@ deployment proof       after Git integration deploys, check the dedicated origin
                        with npm run check:deployment -- https://matter.ptoq.io
 ```
 
+## Candidate verification — 0.2.0-preview.13
+
+Preview.13 changes no product code. It makes the repository deployable again and
+makes the constraint that broke it executable.
+
+Preview.8 moved the dedicated-domain build shape into an environment prefix
+inside `vercel.json`'s `buildCommand`, which grew that string to 340 characters.
+Vercel rejects a `buildCommand` over 256 during deployment schema validation,
+before any build step, so the eight production deployments from Preview.8 to
+Preview.12 all failed with no build log and `matter.ptoq.io` stayed on
+Preview.7. Source, tags, and GitHub CI stayed green throughout, because nothing
+verified that the committed configuration was one Vercel would accept.
+
+The build shape now lives in `build.env`, its server-read subset in `env`, and
+`buildCommand` is `npm run build`. `npm test` checks the length bound, both
+shapes, agreement between them, and the absence of any credential-shaped entry.
+
+`npm run check:deployment` also runs for the first time. Its retry clock
+defaulted to an unbound `performance.now`, which throws when called, so the real
+gate exited with `deployment: check failed` for every origin — healthy or not —
+while its tests passed because each one injected a clock. Preview.13 is the
+first candidate whose deployed-origin receipt means anything.
+
+```text
+release proof          npm run check: 943 Vitest passed + 1 skipped, and 29 Node
+                       tests passed, including 12 new deployment-configuration
+                       cases; doctor, docs, typegen, typecheck, lint, and the
+                       production build all passed
+browser proof          npm run test:e2e: 43 passed + 2 capability-gated skips
+                       across 45 Chromium cases
+deployment proof       the same commit is accepted by Vercel's deployment schema
+                       and verified with
+                       npm run check:deployment -- https://matter.ptoq.io
+```
+
+Local runs at `retries: 0` showed `lasso-flow.spec.ts` "lasso addresses wrapped
+language at laptop width" failing intermittently — roughly two runs in five —
+when its stretch re-grab measures a handle the layout has not settled. It passes
+alone and on a clean checkout, and no Preview.13 change touches runtime code. CI
+sets two retries, which is why the suite has read as uniformly green. This is an
+open interaction-proof defect, recorded rather than retried away.
+
 ## Product acceptance for the next candidate
 
 The candidate must still look and behave like Matter after engineering work:
