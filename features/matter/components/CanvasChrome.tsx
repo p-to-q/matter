@@ -3,6 +3,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useReducer,
   useRef,
   useState,
@@ -10,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
+  type UIEvent as ReactUIEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
@@ -931,6 +933,9 @@ function InquiryBubble({
   const requestRef = useRef<AbortController | null>(null);
   const submittingRef = useRef(false);
   const contextRef = useRef(context);
+  const contextSnapshotRef = useRef<InquiryContextPayload | undefined>(undefined);
+  const hasContextSnapshotRef = useRef(false);
+  const followThreadRef = useRef(true);
   const listening = state.phase === "listening";
   const transcribing = state.phase === "transcribing";
   const voiceBusy = listening || transcribing;
@@ -955,11 +960,23 @@ function InquiryBubble({
 
   useEffect(() => {
     contextRef.current = context;
-  }, [context]);
-
-  useEffect(() => {
+    const nextContext = context?.();
+    if (!hasContextSnapshotRef.current) {
+      hasContextSnapshotRef.current = true;
+      contextSnapshotRef.current = nextContext;
+      return;
+    }
+    const previousContext = contextSnapshotRef.current;
+    contextSnapshotRef.current = nextContext;
+    const unchanged = previousContext !== undefined && nextContext !== undefined
+      ? sameInquiryContext(previousContext, nextContext)
+      : previousContext === nextContext;
+    if (unchanged) return;
+    // A parent render may replace this callback without changing the bounded
+    // material it projects. Only an actual scope change may discard a reply.
     requestRef.current?.abort();
     requestRef.current = null;
+    submittingRef.current = false;
     dispatch({ type: "scope-changed" });
   }, [context]);
 
@@ -984,6 +1001,7 @@ function InquiryBubble({
     // where a double-click or repeated Enter could otherwise submit the same
     // transient question twice before the disabled button is rendered.
     submittingRef.current = true;
+    followThreadRef.current = true;
     const answerId = pendingAnswerId(state);
     dispatch({ type: "ask" });
     const payload = context?.();
@@ -1024,10 +1042,15 @@ function InquiryBubble({
     field.style.height = `${Math.min(field.scrollHeight, INQUIRY_FIELD_MAX_HEIGHT)}px`;
   }, [hidden, text]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const thread = threadRef.current;
-    if (thread !== null) thread.scrollTop = thread.scrollHeight;
+    if (thread !== null && followThreadRef.current) thread.scrollTop = thread.scrollHeight;
   }, [state.turns]);
+
+  const trackThreadScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
+    const thread = event.currentTarget;
+    followThreadRef.current = thread.scrollHeight - thread.clientHeight - thread.scrollTop <= 2;
+  }, []);
 
   return (
     <div
@@ -1039,7 +1062,13 @@ function InquiryBubble({
       role="dialog"
     >
       {state.turns.length === 0 ? null : (
-        <div aria-live="polite" className={styles.inquiryThread} data-inquiry-thread ref={threadRef}>
+        <div
+          aria-live="polite"
+          className={styles.inquiryThread}
+          data-inquiry-thread
+          onScroll={trackThreadScroll}
+          ref={threadRef}
+        >
           {state.turns.map((turn) => (
             <p
               className={styles.inquiryTurn}
