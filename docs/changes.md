@@ -17,6 +17,32 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — Inquiry answers keep their material scope, not a render identity
+
+Changed: the transient Ask Matter bubble compares its projected, bounded
+selection-or-tree context before it clears a pending request or visible answer.
+A parent render may replace the projection callback while the underlying
+material remains identical; that implementation detail no longer throws away a
+reply. New questions still follow the existing no-memory contract, and a real
+material scope change still clears the temporary thread.
+
+The public and archived dependency graphs now pin `nanoid` to `3.3.17`, which
+removes the reported high-severity transitive advisory without widening any
+runtime dependency range.
+
+Why: inquiry is a bounded, non-persistent reference surface, but a React
+callback identity is not a change in the material someone asked about. Dropping
+an answer on that boundary made the interface appear to retract language the
+person had not had time to read. The dependency repair protects the public
+repository and deployed runtime from a known transitive defect while preserving
+the existing Next/PostCSS compatibility contract.
+
+Forecloses: treating render churn as a material change, retaining a hidden chat
+history after its actual scope changes, and knowingly shipping the affected
+`nanoid` version from either public lockfile.
+
+---
+
 ## 2026-08-08 — The model gates open, and the surfaces behind them tell the truth
 
 Changed: labels, transcript repair, and Ask Matter run against the live pool on

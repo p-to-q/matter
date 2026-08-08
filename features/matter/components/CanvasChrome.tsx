@@ -37,6 +37,7 @@ import {
   sameInquiryContext,
   type InquiryContextPayload,
 } from "../server/inquiry-contract";
+import { inquiryContextScopeChanged } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
 
@@ -982,10 +983,7 @@ function InquiryBubble({
     }
     const previousContext = contextSnapshotRef.current;
     contextSnapshotRef.current = nextContext;
-    const unchanged = previousContext !== undefined && nextContext !== undefined
-      ? sameInquiryContext(previousContext, nextContext)
-      : previousContext === nextContext;
-    if (unchanged) return;
+    if (!inquiryContextScopeChanged(previousContext, nextContext)) return;
     // A parent render may replace this callback without changing the bounded
     // material it projects. Only an actual scope change may discard a reply.
     requestRef.current?.abort();

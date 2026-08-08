@@ -150,6 +150,41 @@ deployment proof       after Git integration deploys, check the dedicated origin
                        with npm run check:deployment -- https://matter.ptoq.io
 ```
 
+## Candidate verification — 0.2.0-preview.15
+
+Preview.15 is the reviewed fixture-seeded preview following the live-gate
+integration. It keeps the root-seeded, local-first material claim and does not
+turn Ask Matter into durable chat: a visible answer survives callback churn for
+the same bounded material scope, but a real scope change or closing the bubble
+still discards the transient thread.
+
+```text
+release proof          npm run check: 952 Vitest passed + 1 skipped; 28 Node
+                       tests passed; doctor, docs, typegen, typecheck, lint,
+                       and the production build all passed
+browser proof          npm run test:e2e: 43 Chromium cases passed + 2
+                       capability-gated skips, including the real on-device
+                       Whisper worker, inquiry Enter and Shift+Enter, voice,
+                       lasso, archive, tree move, and the 2,000-node material
+                       index at laptop, 390 px, and 320 px
+dependency proof       root and archived public lockfiles resolve nanoid 3.3.17;
+                       npm ci reported 0 vulnerabilities
+origin baseline        before promotion, matter.ptoq.io reported preview.14 at
+                       the dedicated root with the three model gates available
+```
+
+The earlier browser receipt briefly failed because the new inquiry regression
+assertion began a lasso stroke outside the bubble. That pointer-down is the
+existing, intentional close boundary for a lightweight non-persistent inquiry,
+so the assertion was removed rather than changing Matter into a permanent chat
+surface. The final focused canvas receipt and the full suite pass.
+
+Preview.15 does not resolve the external deployment-control gap: distributed
+rate rules and a provider spend ceiling remain required for the live label,
+repair, and inquiry gates. The release remains a proprietary fixture-seeded
+preview; no transform API, accounts, server material storage, hidden retrieval,
+or persistent assistant history is claimed.
+
 ## Candidate verification — 0.2.0-preview.14
 
 Preview.14 opens the three model gates on the deployed origin and corrects the
