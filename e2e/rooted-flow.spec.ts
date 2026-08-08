@@ -306,6 +306,27 @@ test("compact workbench keeps material clear of coarse controls", async ({ page 
   expect(browserErrors).toEqual([]);
 });
 
+// The band between the two narrow layouts was never measured, and material ran
+// under the fixed rail across it: 18px at 341, 8px at 360 (Galaxy S8), 1px at
+// 375 (iPhone SE), flush at 376. These are widths people actually hold.
+test("material clears the rail across every narrow width", async ({ page }) => {
+  for (const width of [320, 341, 360, 375, 376, 389, 390, 414]) {
+    await page.setViewportSize({ width, height: 780 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const root = await page.locator(`[data-thought-id="${rootId}"]`).boundingBox();
+    const rail = await page.getByRole("navigation", { name: "Editing tools" }).boundingBox();
+    if (root === null || rail === null) {
+      throw new Error(`narrow geometry is not visible at ${width}px`);
+    }
+    expect(
+      { width, clear: root.x + root.width <= rail.x },
+      `material overlaps the rail by ${Math.round(root.x + root.width - rail.x)}px at ${width}px`,
+    ).toEqual({ width, clear: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  }
+});
+
 async function expectOneLineGuidance(guidance: Locator): Promise<void> {
   const receipt = await guidance.evaluate((element) => {
     const text = element.querySelector<HTMLElement>(".matter-guidance__next");

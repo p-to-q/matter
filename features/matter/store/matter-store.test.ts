@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  ROOTED_FIXTURE_TEXT_VARIANTS,
   ROOTED_FIXTURE_NODE_IDS,
   ROOT_ONLY_FIXTURE_TREE_ID,
 } from "../fixtures/rooted-material";
@@ -49,7 +48,7 @@ describe("Matter store", () => {
 
     expect(store.getState().tree.id).toBe(ROOT_ONLY_FIXTURE_TREE_ID);
     expect(store.getState().tree.nodes[rootId]?.children).toEqual([]);
-    expect(store.getState().insertFixtureChild(rootId)).toMatchObject({
+    expect(store.getState().extendMaterial(rootId, branchValues())).toMatchObject({
       operation: "commit",
       status: "committed",
     });
@@ -64,7 +63,7 @@ describe("Matter store", () => {
     const rootId = source.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const childrenBeforeCommit = [...(source.getState().tree.nodes[rootId]?.children ?? [])];
-    source.getState().insertFixtureChild(rootId);
+    source.getState().extendMaterial(rootId, branchValues());
     const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
     const persistedHistory = structuredClone(source.getState().history);
 
@@ -132,7 +131,7 @@ describe("Matter store", () => {
     expect(root.text).toBe(text);
     expect(root.children).toEqual(children);
     expect(state.history.entries).toHaveLength(0);
-    expect(state.insertFixtureChild(rootId).status).toBe("committed");
+    expect(state.extendMaterial(rootId, branchValues()).status).toBe("committed");
     expect(store.getState().tree.revision).toBe(state.tree.revision + 1);
   });
 
@@ -140,7 +139,7 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("fixture root missing");
-    store.getState().insertFixtureChild(rootId);
+    store.getState().extendMaterial(rootId, branchValues());
     const committed = store.getState();
     const entry = committed.history.entries.at(-1);
     if (entry === undefined) throw new Error("history entry missing");
@@ -156,9 +155,9 @@ describe("Matter store", () => {
   it("uses current state preconditions for sequential named insertions", () => {
     const store = createMatterStore();
     const before = store.getState();
-    const firstReceipt = before.insertFixtureChild(ROOTED_FIXTURE_NODE_IDS.root);
+    const firstReceipt = before.extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
     const afterFirst = store.getState();
-    const secondReceipt = afterFirst.insertFixtureChild(ROOTED_FIXTURE_NODE_IDS.root);
+    const secondReceipt = afterFirst.extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
     const afterSecond = store.getState();
 
     expect(firstReceipt).toMatchObject({
@@ -183,7 +182,7 @@ describe("Matter store", () => {
       const store = createMatterStore();
       const before = store.getState();
 
-      expect(() => before.insertFixtureChild(parentId)).not.toThrow();
+      expect(() => before.extendMaterial(parentId, branchValues())).not.toThrow();
       const receipt = store.getState().lastReceipt;
       const after = store.getState();
 
@@ -269,7 +268,7 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const inserted = store
       .getState()
-      .insertFixtureChild(ROOTED_FIXTURE_NODE_IDS.root);
+      .extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
     expect(inserted.status).toBe("committed");
     const afterInsert = store.getState();
     const insertedNodeId = afterInsert.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root].children.at(-1);
@@ -299,7 +298,7 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const initial = store.getState();
 
-    expect(initial.insertFixtureChild(ROOTED_FIXTURE_NODE_IDS.root).status).toBe(
+    expect(initial.extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues()).status).toBe(
       "committed",
     );
     const childId = store.getState().tree.nodes[ROOTED_FIXTURE_NODE_IDS.root].children[0];
@@ -320,24 +319,6 @@ describe("Matter store", () => {
     expect(store.getState().navigation.foldedNodeIds.has(ROOTED_FIXTURE_NODE_IDS.root)).toBe(false);
 
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
-  });
-
-  it("applies a fixture version through history and exactly undoes it", () => {
-    const store = createMatterStore();
-    const before = store.getState();
-    const rootId = before.tree.rootId;
-    if (rootId === null) throw new Error("fixture root missing");
-
-    expect(
-      before.applyFixtureText(rootId, ROOTED_FIXTURE_TEXT_VARIANTS[1].text),
-    ).toMatchObject({ operation: "commit", status: "committed" });
-    expect(store.getState().tree.nodes[rootId].text).toBe(
-      ROOTED_FIXTURE_TEXT_VARIANTS[1].text,
-    );
-    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
-    expect(store.getState().tree.nodes[rootId].text).toBe(
-      ROOTED_FIXTURE_TEXT_VARIANTS[0].text,
-    );
   });
 
   it("publishes a structural move once and restores it through named undo", () => {
@@ -361,9 +342,9 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const initial = store.getState();
     initial.select(ROOTED_FIXTURE_NODE_IDS.root);
-    store.getState().insertFixtureChild(ROOTED_FIXTURE_NODE_IDS.root);
+    store.getState().extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
     const storedTree = store.getState().tree;
-    store.getState().insertFixtureChild(ROOTED_FIXTURE_NODE_IDS.root);
+    store.getState().extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
 
     expect(store.getState().hydrateSnapshot(storedTree as ThoughtTree)).toEqual({
       operation: "hydrate",
@@ -384,7 +365,7 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("fixture root missing");
-    store.getState().insertFixtureChild(rootId);
+    store.getState().extendMaterial(rootId, branchValues());
     store.getState().focus(rootId);
     const imported = {
       ...createMatterStore().getState().tree,
@@ -410,3 +391,12 @@ describe("Matter store", () => {
     });
   });
 });
+
+let branchSequence = 0;
+function branchValues() {
+  branchSequence += 1;
+  return {
+    nodeId: `thought_branch_${branchSequence}`,
+    createdAt: `2026-08-09T00:00:${String(branchSequence).padStart(2, "0")}.000Z`,
+  };
+}

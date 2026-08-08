@@ -189,6 +189,35 @@ deployment requirement after promotion, npm run check:deployment must report
                        surfaces actually answer
 ```
 
+## Candidate verification — 0.2.0-preview.17
+
+Preview.17 is an issue-closing line. It changes no interface: the rail, the
+paper, the bubble, and every control keep their shape and copy. What changes is
+what happens underneath them.
+
+- a branched thought carries its own id and timestamp rather than a build
+  constant that reached exported Markdown frontmatter;
+- material clears the editing rail at every tested phone width; the 341–389px band was
+  never measured and overlapped by up to 18px;
+- an unanswered inquiry names its scenario outcome, so a released model surface
+  can be diagnosed rather than guessed at;
+- the two interaction flakes CI was retrying away were unstable pointer
+  coordinates in the tests, not product races. Both now hover the element they
+  mean, so the assertion tests the product rule instead of the canvas position.
+
+```text
+release proof          npm run check: 961 Vitest passed, 1 opt-in live-pool
+                       skip; 29 Node tests passed; doctor, docs, typegen,
+                       typecheck, lint, Vercel configuration, and production
+                       build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2 skipped
+flake proof            five consecutive full-suite runs at retries: 0, no
+                       failures. The same suite failed roughly two runs in five
+                       before, on the unmodified tree
+narrow-width proof     material clears the rail at the eight measured widths
+                       320, 341, 360, 375, 376, 389, 390, and 414px
+```
+
 ## Promotion receipt — 0.2.0-preview.16
 
 Promoted to `main` and served from `matter.ptoq.io` on 2026-08-09.

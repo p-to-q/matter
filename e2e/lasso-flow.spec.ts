@@ -151,13 +151,17 @@ for (const viewport of [
     await page.mouse.up();
     await expect(handle).toHaveAttribute("aria-valuenow", "0");
 
+    // Hover before pressing. Measuring the settled handle and pressing that
+    // point races the layout that follows `Home`: under load the press landed
+    // beside the re-grabbed handle and no drag began, which read as a product
+    // flake for as long as CI retried it away.
+    await handle.hover();
     const secondHandleBox = await handle.boundingBox();
     if (secondHandleBox === null) throw new Error("settled stretch handle missing");
     const secondStart = {
       x: secondHandleBox.x + secondHandleBox.width / 2,
       y: secondHandleBox.y + secondHandleBox.height / 2,
     };
-    await page.mouse.move(secondStart.x, secondStart.y);
     await page.mouse.down();
     await page.mouse.move(secondStart.x, secondStart.y + 60, { steps: 5 });
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-stretching", "true");

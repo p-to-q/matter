@@ -113,6 +113,8 @@ boundaries again immediately before commit. A stale response changes nothing.
 | Tree → storage | Persistence writes committed tree snapshots; storage is not a second model. |
 | DOM → pure code | DOM measures text and yields plain rects; material and layout consume plain data. |
 | Runtime → tools | A pure projection exposes applicable closed intents; the rail owns no domain state. |
+| Composition → adapters | An explicit composition boundary chooses concrete implementations; product-wide modes belong at the product root, while lifecycle-local resources may be constructed by their owning factory. Neither owns domain, persistence, or provider policy. |
+| Store → application | The store binds observable state, public actions, and receipts; reachability does not make it the owner of every fact or lifecycle. |
 
 ## State ownership
 
@@ -130,9 +132,10 @@ requires one config entry, UI copy, and focused server/client tests.
 | Lifetime | Owned state |
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
+| Durable local choice | any active-document identity or manual name promised across reload; explicit failure, never cache eviction. |
 | Durable local history | complete forward/inverse journal paired atomically with the local snapshot; not exported. |
 | Navigation | focus and fold; derived view state, not history. |
-| Labels | one derived name per node; disposable, never exported, never undoable. |
+| Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
 | Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, transient inquiry. |
 | Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
 
@@ -151,24 +154,24 @@ Identifiers and units do not substitute for one another:
 Ids and durable timestamps enter domain commands as values. Pure modules never
 read a clock, random source, DOM, network, or storage directly.
 
-The interaction controller is an explicit reducer:
+Interaction authority is split into focused lifecycles, not one application-wide
+reducer. Admission has an explicit reducer and effect driver; lasso and stretch
+have their own focused reducers; rendering-edge code coordinates visible
+precedence and pointer availability. Each lifecycle owns its start, event,
+commit or cancel, and cleanup transitions. An async lifecycle also carries its
+operation identity, attempt, document, and revision basis.
 
-```text
-Idle
-Lassoing
-Armed { address, geometry, amount,
-        voice: idle | permission | recording | transcribing,
-        stretch: idle | dragging }
-Pending { interactionId, envelope }
-Applying
-Error { recoverableState }
-```
+Pointer cancel, lost capture, unmount, and a newer interaction interrupt the
+relevant owner and clean up audio, ranges, highlights, workers, and timers.
+Hooks adapt browser events to those owners; they do not each invent a partial
+copy of another lifecycle.
 
-Voice and stretch are parallel substates because a person may stretch while
-speaking. Pointer cancel, lost capture, unmount, and a newer interaction
-interrupt the relevant substate and clean up audio, ranges, highlights, and
-timers. Hooks adapt browser events to the controller; they do not each invent a
-partial lifecycle.
+A shared coordinator is justified only when current behavior proves that two
+lifecycles share one invariant that the rendering edge cannot safely enforce.
+If introduced, it owns only their active mode, operation identity, and document
+epoch. It does not absorb microphone internals, worker queues, request retries,
+layout caches, provider policy, or persistence, and it never becomes a generic
+`MatterController`.
 
 Selection state separates a semantic `TextAddress` from layout-epoch-bound DOM
 rectangles. A lasso may yield an ordered transient set of addresses; contiguous
@@ -191,8 +194,15 @@ second interaction lifecycle.
 For portability, browser facilities sit behind narrow capability ports:
 `VoicePort`, `InquiryClient`, `TurnClient`, `DocumentRepository`, and `ArchivePort`. The first
 release implements only browser/HTTP adapters; it does not create a generic SDK
-or speculative native adapter. The tree, material, layout, and runtime reducer
+or speculative native adapter. The tree, material, layout, and runtime reducers
 remain framework-free TypeScript.
+
+Concrete ports are chosen at an explicit composition boundary and each consumer
+receives only the capability it needs. Product-wide fixture or live modes are
+selected at the product root; a lifecycle-local repository, worker, or request
+may be constructed by the focused factory that owns its cleanup. A store,
+component, or use case never discovers a global service bag or silently chooses
+between fixture and live behavior for itself.
 
 ## Cache and recovery
 

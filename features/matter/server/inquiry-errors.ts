@@ -1,4 +1,8 @@
-import type { InquiryErrorCode, InquiryErrorEnvelope } from "./inquiry-contract";
+import type {
+  InquiryErrorCode,
+  InquiryErrorEnvelope,
+  InquiryFallbackReason,
+} from "./inquiry-contract";
 
 export class InquiryServerError extends Error {
   constructor(
@@ -6,6 +10,7 @@ export class InquiryServerError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly status: number,
+    readonly fallbackReason?: InquiryFallbackReason,
   ) {
     super(message);
     this.name = "InquiryServerError";
@@ -17,6 +22,7 @@ export class InquiryServerError extends Error {
         code: this.code,
         message: this.message,
         retryable: this.retryable,
+        ...(this.fallbackReason === undefined ? {} : { fallbackReason: this.fallbackReason }),
       }),
     });
   }

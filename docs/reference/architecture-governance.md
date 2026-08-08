@@ -136,15 +136,13 @@ The following are implementation findings, not architectural guesses.
 | Production imports fixture behavior | `matter-store.ts` and the Branch path call `fixtures/rooted-material.ts` | A disabled or unfinished capability can silently create fixture material. | Inject initial/demo data at composition; remove fixture mutations from production actions. |
 | Browser imports `server/*-contract` | transcription, label, repair, inquiry clients and inquiry UI import those files | The documented provider boundary is not a physical client/server boundary, and future server imports can leak into the client graph. | Move shared DTO/parser code to a neutral protocol surface and add server/client sentinels. |
 | A human decision shares cache failure semantics | `label-repository.ts` stores model and user labels and swallows every storage failure | The UI can show a manual name that disappears after reload without reporting an unsaved state. | Split authoritative manual metadata from disposable model-label cache or explicitly change the product promise. |
-| Three view modules own many lifecycles | `RootedMaterial.tsx` is 1,832 lines, `CanvasChrome.tsx` 1,343, and `MaterialFiles.tsx` 1,178 | Cancellation, exclusivity, focus, geometry, and network ownership are hard to reason about together. | Freeze behavior, then extract one lifecycle owner at a time; keep hot DOM measurement at the rendering edge. |
-| Local inference cancellation is incomplete | the client rejects pending work, while the worker keeps a serialized inference queue with no active-job cancellation | A cancelled long job can consume CPU and delay later work. | Give the worker job lifecycle an owner; terminate/recreate if the library cannot cancel safely. |
+| Three view modules contain several lifecycles | `RootedMaterial`, `CanvasChrome`, and `MaterialFiles` coordinate several kinds of state or browser behavior | Cancellation, exclusivity, focus, geometry, and network ownership deserve review when a current slice touches them. | Treat size as a concentration signal only; extract one owner only when behavior or change evidence identifies an independent lifecycle. |
+| Local inference cancellation has an explicit worker lease | active cancellation retires the worker lease, rejects its pending work, and makes late messages inert | A cancelled long job no longer occupies the next turn. | Preserve queued/active cancel, timeout, late-result, and retry proofs; do not generalize it into a worker framework. |
 | Undo capacity has two stories | implementation retains to physical limits while reference material also describes count/byte bounds | Recovery cost and the supported session length are undefined. | Measure save/hydrate/quota behavior, then freeze one policy before changing the structure. |
 
 The codebase is not a hollow scaffold: it contains substantial product code,
-91 focused test files and 14 browser specifications. The audit also found that
-the three largest view modules total 4,353 lines. These numbers are evidence of
-real implementation and concentrated ownership, not quality scores by
-themselves.
+91 focused test files and 14 browser specifications. The three largest view
+modules are a concentration signal, not a quality score or a refactoring plan.
 
 ## Recommended route
 
@@ -156,10 +154,11 @@ Use a guardrails-first, slice-by-slice route:
    provider-to-client edges, and forbidden inner-to-outer imports in CI. Keep an
    explicit short allowlist for known debt, with an issue beside each entry.
 3. **Repair semantic seams.** Separate manual names from label cache semantics;
-   give local inference a real cancellation lifecycle; remove fixture Branch
-   behavior; move shared wire contracts to neutral ownership.
-4. **Extract by lifecycle.** Begin with one independently testable controller
-   from `RootedMaterial`; do not rewrite all three large components together.
+   remove fixture Branch behavior; move shared wire contracts to neutral
+   ownership; preserve the now-explicit local-inference cancellation proof.
+4. **Review by lifecycle.** When a current slice exposes an independent owner,
+   freeze its behavior and extract only that owner. Do not schedule a component
+   split from size alone.
 5. **Continue vertical slices.** Active-document boot, fixture transform,
    live-model controls, and viewport DOM each cross these same boundaries and
    should delete an allowlisted exception when they land.
@@ -180,18 +179,26 @@ frozen and creates narrow issues only for newly verified gaps:
 
 | Priority | Work |
 | --- | --- |
-| P0 | [#34](https://github.com/p-to-q/matter/issues/34) closes distributed live-model abuse and spend controls; [#8](https://github.com/p-to-q/matter/issues/8) establishes the durable active-document pointer. |
-| P1 | [#44](https://github.com/p-to-q/matter/issues/44) removes fixture mutations from production actions; [#46](https://github.com/p-to-q/matter/issues/46) separates manual-name durability from label caching; [#45](https://github.com/p-to-q/matter/issues/45) owns local transcription cancellation; [#49](https://github.com/p-to-q/matter/issues/49) restores the single-inquiry boundary; [#50](https://github.com/p-to-q/matter/issues/50) creates the neutral protocol and executable dependency DAG. |
-| P2 | [#47](https://github.com/p-to-q/matter/issues/47) measures and freezes undo-journal capacity; [#48](https://github.com/p-to-q/matter/issues/48) extracts one interaction coordinator under behavior proofs. |
+| P0 | [#52](https://github.com/p-to-q/matter/issues/52) makes the released inquiry surface answer from the deployed origin; [#34](https://github.com/p-to-q/matter/issues/34) closes distributed live-model abuse and spend controls. |
+| P1 | [#49](https://github.com/p-to-q/matter/issues/49) restores the single-inquiry boundary, the one place the shipped interface disagrees with a stated product invariant; [#46](https://github.com/p-to-q/matter/issues/46) separates manual-name durability from label caching; [#44](https://github.com/p-to-q/matter/issues/44) moves the seeded preview's composition out of `fixtures/`. |
+| P2 | [#8](https://github.com/p-to-q/matter/issues/8) establishes the durable active-document pointer; [#12](https://github.com/p-to-q/matter/issues/12) bounds the generated replacement when the transform route lands. |
 
-The dependency check in #50 should land after or with #44 so the production
-fixture edge is removed rather than normalized as a permanent exception. The
-component extraction in #48 follows behavior and lifecycle fixes; it is not the
-opening move.
+Preview.17 closed the durable half of #44: a branched thought now carries its
+own id and timestamp instead of a build constant that reached exported Markdown.
+What remains there is the module move, and the executable dependency check
+([#50](https://github.com/p-to-q/matter/issues/50), closed as not-now) should
+land in the same change so it starts green rather than with an allowlist. The
+local-inference cancellation proof ([#45](https://github.com/p-to-q/matter/issues/45))
+and the interaction receipts ([#42](https://github.com/p-to-q/matter/issues/42))
+are closed and covered by tests. Undo-journal capacity
+([#47](https://github.com/p-to-q/matter/issues/47)) is closed until it can be
+measured on the same rig as the large-tree gate. Component extraction remains an
+evidence-triggered future option rather than a current plan;
+[#48](https://github.com/p-to-q/matter/issues/48) is closed as not planned.
 
 ## Rule-to-proof matrix
 
-| Rule | Owner | Mechanical proof |
+| Rule | Owner | Enforcement or proof |
 | --- | --- | --- |
 | Only the tree engine applies durable material mutations | `tree/` | atomic forward/inverse/stale command tests and forbidden-import check |
 | Imports point inward and are acyclic | repository architecture check | production import graph fixture in `npm run check` |
@@ -200,7 +207,7 @@ opening move.
 | Every external operation has one cleanup owner | adapter that starts it | cancel, timeout, late result, unmount, retry, and idempotent cleanup tests |
 | Caches never own human truth | persistence owner | quota/blocked/corrupt tests and visible failure receipt for authoritative writes |
 | Persisted and network values are strict and versioned | codec/contract owner | corpus round-trip, malformed, bounded, migration, and replay-equivalence tests |
-| Large UI modules are split by lifecycle, not cosmetics | component/application owner | characterization tests before extraction and unchanged pointer/browser receipts |
+| Module growth follows ownership evidence, not size | current module owner | the change boundary names any new fact or lifecycle; characterization tests precede extraction; concentration metrics do not block by themselves |
 
 ## Issue policy
 

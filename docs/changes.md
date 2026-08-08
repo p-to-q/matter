@@ -17,6 +17,53 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — A branched thought carries its own identity and time
+
+Changed: the Branch action takes a node id and an ISO timestamp from the
+composition edge instead of deriving them from the tree revision and a build
+constant. The dead fixture text-replacement action left the production store.
+
+Why: every node anyone branched was written with `2026-08-03T08:10:00.000Z` as
+both `createdAt` and `updatedAt`, and that reaches exported Markdown
+frontmatter. A person's material recorded a moment that was not theirs, and
+ordering material by time was wrong wherever they had used the tool.
+
+Forecloses: a pure command inventing identity or reading a clock, and a
+production store surfacing a fixture mutation nothing calls.
+
+---
+
+## 2026-08-09 — Material clears the rail at every phone width
+
+Changed: the narrow material column now starts below 390px rather than at
+340px.
+
+Why: between those widths the 280px column ran under the fixed editing rail —
+18px at 341px, 8px at 360px, 1px at 375px, flush at 376px. Galaxy S8 and
+iPhone SE sit inside that band, so material was drawn beneath the controls on
+two of the most common widths a person holds. The band had never been measured;
+it now has a browser receipt across eight widths.
+
+Forecloses: a responsive boundary whose only evidence is the stylesheet.
+
+---
+
+## 2026-08-09 — An unanswered inquiry says why it could not answer
+
+Changed: the inquiry error envelope carries `fallbackReason` — the same
+field, and the same stable vocabulary, that label and repair already publish.
+
+Why: inquiry is the one surface with no floor, so its failure is the visible
+one — and it was a single opaque 503. Nothing outside the function could tell a
+relay that stalled from one that refused, was busy, or answered something the
+adjudicator would not use, which is why a live production failure stayed
+unmeasurable.
+
+Forecloses: diagnosing a released model surface by guessing, and a provider
+message, status, or identity reaching the browser in the name of diagnosis.
+
+---
+
 ## 2026-08-09 — A short utterance buys one real repair attempt, not two halves
 
 Changed: transcript repair keeps almost its whole budget for one relay instead
