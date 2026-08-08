@@ -189,6 +189,26 @@ deployment requirement after promotion, npm run check:deployment must report
                        surfaces actually answer
 ```
 
+## Candidate verification — 0.2.0-preview.18
+
+Preview.18 is one measured tuning change, taken from the preview.17 promotion
+receipt rather than from reasoning.
+
+```text
+deployed origin        inquiry answers in 1.3-2.2 s with a 16 s budget
+                       (8 s per attempt); label spends its whole 6 s budget
+                       (3 s per attempt) and falls back; repair likewise
+reading                the first call from a cold function pays the connection
+                       before the model, and only the wider budget survives it
+change                 label 6 s -> 12 s, browser bound 7 s -> 13 s. Repair
+                       keeps its short budget: a person is holding still for it
+                       and the words as heard are the better answer. Nothing on
+                       screen waits for a label
+release proof          npm run check: 961 Vitest passed, 1 opt-in live-pool
+                       skip; 29 Node tests; npm run test:e2e: 45 passed,
+                       2 skipped
+```
+
 ## Candidate verification — 0.2.0-preview.17
 
 Preview.17 is an issue-closing line. It changes no interface: the rail, the

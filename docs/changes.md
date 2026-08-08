@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — A label's budget is sized for a cold connection
+
+Changed: the thought-label budget rises from 6 s to 12 s, with the browser's
+bound at 13 s.
+
+Why: measured against the deployed origin, an inquiry with an 8 s attempt
+answers in 1.3-2.2 s while a label with a 3 s attempt spends its whole budget
+and falls back — the same pool, the same relays, the same function. The first
+call from a cold function pays the connection before it pays the model, and
+only the wider budget survives that. Repair keeps its short budget on purpose:
+a person is holding still for repair, and admitting the words as heard is the
+better answer there. Nobody waits for a label.
+
+Forecloses: reading a fallback as a model that could not answer, when it was a
+connection that had not finished opening.
+
+---
+
 ## 2026-08-09 — A branched thought carries its own identity and time
 
 Changed: the Branch action takes a node id and an ISO timestamp from the
