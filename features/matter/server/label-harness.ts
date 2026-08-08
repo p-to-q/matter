@@ -49,10 +49,12 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
  * Nothing waits on a label. Measured relay latency on the corpus is p50 ≈ 0.65 s
  * and p95 ≈ 1.7 s from a workstation beside the relays, so a 1.5 s budget threw
  * away answers that were merely slow. The deployed region pays a slower path to
- * the same relays, and the pool spends at most half of this on one of them, so
- * the budget has to hold two attempts rather than one.
+ * the same relays and a connection cost on the first call from a cold
+ * function, and the pool spends at most half of this on one of them. Sized so
+ * two attempts each survive that cold connection — which nothing on screen is
+ * waiting for. See `label-contract.ts` for the measurement.
  */
-export const LABEL_SCENARIO_DEADLINE_MS = 6_000;
+export const LABEL_SCENARIO_DEADLINE_MS = 12_000;
 
 /**
  * The length range matters more than the ceiling. Asked only for a maximum, a
