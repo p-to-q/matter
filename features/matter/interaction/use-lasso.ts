@@ -113,7 +113,7 @@ export function useLasso(input: {
       inkPathRef.current?.setAttribute("d", "");
       closurePathRef.current?.setAttribute("d", "");
       clearParticleCanvas(particleCanvasRef.current);
-      clipInkToPaper(inkRef.current, null);
+      clipInkToPaper(inkRef.current, null, 0);
       return;
     }
     if (inkFrameRef.current !== null) return;
@@ -130,9 +130,13 @@ export function useLasso(input: {
         "d",
         showClosure ? paths.closure : "",
       );
-      const paper = input.surfaceRef.current?.getBoundingClientRect() ?? null;
-      clipInkToPaper(inkRef.current, paper);
-      renderOutsideParticles(particleCanvasRef.current, pendingPoints, paper);
+      const paperElement = input.surfaceRef.current;
+      const paper = paperElement?.getBoundingClientRect() ?? null;
+      // One boundary for both layers: the paper's own corner, read from the
+      // element rather than restated, so ink and echo can never disagree.
+      const radius = paperCornerRadius(paperElement);
+      clipInkToPaper(inkRef.current, paper, radius);
+      renderOutsideParticles(particleCanvasRef.current, pendingPoints, paper, radius);
     });
   }, [input.surfaceRef]);
 
@@ -438,26 +442,32 @@ export function useLasso(input: {
  * material field. Clipping is presentation, so it is applied here at the
  * rendering edge and never reaches selection.
  */
-function clipInkToPaper(ink: SVGSVGElement | null, paper: DOMRect | null): void {
+function clipInkToPaper(ink: SVGSVGElement | null, paper: DOMRect | null, radius: number): void {
   if (ink === null) return;
   if (paper === null || paper.width <= 0 || paper.height <= 0) {
-    // With no inset the stylesheet's clip-path has no value to compute, so the
-    // ink is simply unclipped rather than clipped to nothing.
-    for (const edge of INK_CLIP_EDGES) ink.style.removeProperty(`--ink-clip-${edge}`);
+    ink.style.removeProperty("clip-path");
     return;
   }
-  const inset = {
-    top: Math.max(0, paper.top),
-    right: Math.max(0, window.innerWidth - paper.right),
-    bottom: Math.max(0, window.innerHeight - paper.bottom),
-    left: Math.max(0, paper.left),
-  };
-  for (const edge of INK_CLIP_EDGES) {
-    ink.style.setProperty(`--ink-clip-${edge}`, `${Math.round(inset[edge])}px`);
-  }
+  const top = Math.max(0, paper.top);
+  const right = Math.max(0, window.innerWidth - paper.right);
+  const bottom = Math.max(0, window.innerHeight - paper.bottom);
+  const left = Math.max(0, paper.left);
+  ink.style.setProperty(
+    "clip-path",
+    `inset(${round(top)}px ${round(right)}px ${round(bottom)}px ${round(left)}px round ${round(radius)}px)`,
+  );
 }
 
-const INK_CLIP_EDGES = ["top", "right", "bottom", "left"] as const;
+/** The paper's own corner. Reading it keeps one boundary rather than two. */
+function paperCornerRadius(paper: HTMLElement | null): number {
+  if (paper === null) return 0;
+  const value = Number.parseFloat(window.getComputedStyle(paper).borderTopLeftRadius);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function round(value: number): number {
+  return Math.round(value);
+}
 
 function clearParticleCanvas(canvas: HTMLCanvasElement | null): void {
   canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
@@ -467,6 +477,7 @@ function renderOutsideParticles(
   canvas: HTMLCanvasElement | null,
   points: readonly ClientPoint[],
   paper: DOMRect | null,
+  radius: number,
 ): void {
   if (canvas === null || paper === null) return;
   const ratio = Math.min(window.devicePixelRatio || 1, 2);
@@ -483,9 +494,15 @@ function renderOutsideParticles(
   context.save();
   context.beginPath();
   context.rect(0, 0, width, height);
-  context.rect(paper.left, paper.top, paper.width, paper.height);
+  // The same rounded outline the ink is clipped to, so a stroke crossing a
+  // corner keeps its echo instead of falling into a gap between two shapes.
+  if (radius > 0 && typeof context.roundRect === "function") {
+    context.roundRect(paper.left, paper.top, paper.width, paper.height, radius);
+  } else {
+    context.rect(paper.left, paper.top, paper.width, paper.height);
+  }
   context.clip("evenodd");
-  for (const particle of projectOutsideLassoParticles(points, paper)) {
+  for (const particle of projectOutsideLassoParticles(points, paper, radius)) {
     context.globalAlpha = particle.opacity;
     // The echo lands on the material field, never on the paper, so both weights
     // are field ink rather than the paper's own palette.

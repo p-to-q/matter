@@ -92,11 +92,23 @@ is reachable from the deployed region — the probe must not open a provider
 connection to answer a machine. The two are not the same fact, and they have
 already disagreed in production: a fully `available` receipt sat above a pool
 whose every call timed out. So a promotion is only finished when one live call
-per surface has been made against the deployed origin: `/api/label` returning
-`source` `model` rather than `provisional`, and `/api/inquiry` returning
-`answered` rather than a 503. A pool that has just started falling back also
-cools down for a minute at a time, so re-probe after a pause before concluding
-that a relay is gone.
+per surface has been made against the deployed origin, each with the origin
+header the route requires:
+
+- `/api/label` returns `source` `model` rather than `provisional`;
+- `/api/repair` returns `source` `model` rather than `verbatim`, sending an
+  utterance that plainly needs punctuation so a correct verbatim answer cannot
+  be mistaken for a dead relay;
+- `/api/inquiry` returns `answered` rather than a 503.
+
+A pool that has just started falling back also cools down for a minute at a
+time, so re-probe after a pause before concluding that a relay is gone.
+
+Because all three gates are part of this launch configuration, a credential-free
+deployment of the dedicated origin is no longer a supported shape:
+`check:deployment` fails on it by design. To stage the interface without a pool,
+turn the gates off on that deployment and expect the check to report exactly
+which surface is unavailable.
 
 ## Edge, spend, and access controls
 

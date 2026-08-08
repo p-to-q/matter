@@ -22,8 +22,7 @@ body, button { font-family: var(--mono); -webkit-font-smoothing: antialiased; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-/* The paper's own corner, shared with the lasso ink clip so the two agree. */
-.matter-shell { --paper-radius: 18px; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: none; }
+.matter-shell { position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: none; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
 .matter-shell[data-node-dragging="true"] { cursor: grabbing; }
@@ -285,10 +284,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell:has(.matter-document[data-canvas-theme="dark"]) .tool-rail__separator { background: rgba(22,29,39,.24); }
 .lasso-layer { position: fixed; z-index: 28; inset: 0; overflow: hidden; pointer-events: none; }
 .lasso-particles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-/* Ink is drawn on the paper only. The four inset variables are written per
-   frame by the lasso renderer; while none are set the declaration has no
-   value and the stroke is unclipped. */
-.lasso-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; clip-path: inset(var(--ink-clip-top) var(--ink-clip-right) var(--ink-clip-bottom) var(--ink-clip-left) round var(--paper-radius, 18px)); }
+/* Ink is drawn on the paper only; the lasso renderer writes the clip inline
+   each frame from the paper's own rect and corner. */
+.lasso-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .lasso-ink path { fill: none; stroke: var(--active); stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .lasso-ink__trace { stroke-width: 2; opacity: .78; }
 .lasso-ink__closure { stroke-width: 1; stroke-dasharray: 2 5; opacity: .24; }
@@ -338,7 +336,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .matter-shell:has(.material-files[data-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
   .matter-document,
   .matter-shell:has(.material-files:not([data-open="true"])) .matter-document { top: 66px; right: 8px; bottom: 8px; left: 8px; border-radius: 16px; }
-  .matter-shell:has(.material-files:not([data-open="true"])) { --paper-radius: 16px; }
 }
 
 @media (max-width: 720px) {
@@ -368,7 +365,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .matter-shell:has(.material-files[data-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
   .matter-document,
   .matter-shell:has(.material-files:not([data-open="true"])) .matter-document { top: 66px; right: 8px; bottom: 8px; left: 8px; border-radius: 16px; }
-  .matter-shell:has(.material-files:not([data-open="true"])) { --paper-radius: 16px; }
   .matter-guidance,
   .lasso-selection-count { font-size: 11px; line-height: 16px; letter-spacing: .45px; }
   .matter-guidance { bottom: 16px; left: 16px; max-width: calc(100% - 102px); }

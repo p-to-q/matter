@@ -165,24 +165,28 @@ where the capability exists it retains the original grandchild-port cleanup
 proof.
 
 ```text
-release proof          npm run check: 956 Vitest passed, 1 opt-in live-pool
+release proof          npm run check: 960 Vitest passed, 1 opt-in live-pool
                        skip; 29 Node tests passed; doctor, docs, typegen,
                        typecheck, lint, Vercel configuration, and production
                        build passed
-browser proof          npm run test:e2e: 43 Chromium cases passed, 2 skipped,
+browser proof          npm run test:e2e: 44 Chromium cases passed, 2 skipped,
                        including inquiry Enter/Shift+Enter, scoped reply
-                       lifecycle, browser voice, local Whisper, lasso, archive,
-                       and tree interactions at laptop, 390 px, and 320 px
+                       lifecycle, browser voice, local Whisper, lasso ink
+                       clipped to the paper and its echo through a rounded
+                       corner, archive, and tree interactions at laptop,
+                       390 px, and 320 px
 live-path proof        a local production build against the same relay pool
                        answered /api/label with source=model and /api/inquiry
                        with status=answered
 deployment requirement after promotion, npm run check:deployment must report
                        the preview.16 version and all three model surfaces as
-                       available; separately, /api/label must report
-                       source=model and /api/inquiry status=answered from the
-                       deployed origin. `available` is a configuration fact,
-                       not a reachability one, so the second probe is the only
-                       evidence that the released AI surfaces actually answer
+                       available; separately, all three must answer from the
+                       deployed origin — /api/label source=model, /api/repair
+                       source=model on an utterance that needs punctuation,
+                       and /api/inquiry status=answered. `available` is a
+                       configuration fact, not a reachability one, so the
+                       second probe is the only evidence that the released AI
+                       surfaces actually answer
 ```
 
 The credentials, pool endpoint, and model ordering remain Vercel-encrypted

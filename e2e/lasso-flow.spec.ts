@@ -456,6 +456,30 @@ test("lasso keeps its outside-paper particle echo visual-only", async ({ page })
   })).toBe("none");
 });
 
+test("lasso keeps its echo through the paper's rounded corner", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  if (paper === null) throw new Error("paper is not visible");
+
+  // A stroke through the corner cutout sits outside the rounded paper while
+  // still inside its bounding rectangle. Ink stops there and the echo starts,
+  // so the two layers must share one boundary or the corner shows neither.
+  await page.mouse.move(paper.x + 90, paper.y + 90);
+  await page.mouse.down();
+  for (let step = 1; step <= 14; step += 1) {
+    const t = step / 14;
+    await page.mouse.move(paper.x + 90 - t * 88, paper.y + 90 - t * 88);
+  }
+  // The cutout is inside the paper's bounding box, so the rectangle-based
+  // helper cannot see it; sample the corner itself.
+  await expect.poll(() => cornerParticleAlpha(page, paper), { timeout: 5_000 })
+    .toBeGreaterThan(0);
+  await page.mouse.up();
+});
+
 test("multi-passage selection count belongs to the paper guidance layer", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
@@ -509,6 +533,22 @@ test("multi-passage selection count belongs to the paper guidance layer", async 
   expect(receipt.countFontSize).toBe(receipt.guidanceFontSize);
   expect(receipt.countLineHeight).toBe(receipt.guidanceLineHeight);
 });
+
+async function cornerParticleAlpha(page: Page, paper: { x: number; y: number }) {
+  return page.locator(".lasso-particles").evaluate((canvas, bounds) => {
+    const target = canvas as HTMLCanvasElement;
+    const context = target.getContext("2d");
+    if (context === null) return 0;
+    const ratio = target.width / document.documentElement.clientWidth;
+    const left = Math.max(0, Math.round((bounds.x - 4) * ratio));
+    const top = Math.max(0, Math.round((bounds.y - 4) * ratio));
+    const size = Math.round(30 * ratio);
+    const pixels = context.getImageData(left, top, size, size).data;
+    let total = 0;
+    for (let index = 3; index < pixels.length; index += 4) total += pixels[index] ?? 0;
+    return total;
+  }, paper);
+}
 
 async function particleAlpha(page: Page, paper: { x: number; y: number; width: number; height: number }) {
   return page.locator(".lasso-particles").evaluate((canvas, bounds) => {
