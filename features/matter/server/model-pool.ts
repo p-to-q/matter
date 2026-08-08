@@ -31,6 +31,18 @@ export type PoolCandidate = Readonly<{
 export type PoolLimits = Readonly<{
   /** Below this, a further attempt cannot finish inside the caller's deadline. */
   minimumAttemptMs: number;
+  /**
+   * The largest share of one caller's deadline a single relay may hold.
+   *
+   * A relay that answers slowly, or hangs until the deadline, is the ordinary
+   * failure here — far more common than one that refuses quickly. Letting that
+   * relay wait out the whole deadline turns ordered fallback into no fallback
+   * at all: the second candidate is never reached, and the caller pays a full
+   * deadline to learn nothing. Bounding one attempt guarantees that at least
+   * one other relay is tried before the floor is used. The last candidate is
+   * exempt, because there is no one left for it to starve.
+   */
+  maxAttemptShare: number;
   maxOutputTokens: number;
   maxResponseBytes: number;
   failuresBeforeCooldown: number;
@@ -39,6 +51,7 @@ export type PoolLimits = Readonly<{
 
 export const DEFAULT_POOL_LIMITS: PoolLimits = Object.freeze({
   minimumAttemptMs: 400,
+  maxAttemptShare: 0.5,
   /**
    * The pool's own ceiling, not a scenario's. It sits above the longest answer
    * any scenario asks for, so a scenario that forgets to state a bound is still
@@ -126,14 +139,22 @@ export function createPoolAdapter(
     const deadlineAtMs = now() + input.deadlineMs;
     let lastError: unknown = new Error("The model pool is empty.");
 
-    for (const candidate of orderedCandidates(pool, now())) {
+    const ordered = orderedCandidates(pool, now());
+    const attemptCeilingMs = Math.max(
+      limits.minimumAttemptMs,
+      Math.round(input.deadlineMs * limits.maxAttemptShare),
+    );
+    for (let index = 0; index < ordered.length; index += 1) {
+      const candidate = ordered[index]!;
       const remaining = deadlineAtMs - now();
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       // Starting an attempt that cannot finish spends the caller's deadline on
       // a request nobody will read.
       if (remaining < limits.minimumAttemptMs) break;
+      const isLast = index === ordered.length - 1;
+      const attemptMs = isLast ? remaining : Math.min(remaining, attemptCeilingMs);
       try {
-        const text = await completeOnce(candidate, input, signal, limits, remaining, fetchImpl);
+        const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
         recordOutcome(candidate, true, limits, now);
         return { text };
       } catch (error) {
@@ -170,11 +191,11 @@ async function completeOnce(
   input: Parameters<ScenarioAdapter>[0],
   signal: AbortSignal,
   limits: PoolLimits,
-  remainingMs: number,
+  attemptMs: number,
   fetchImpl: typeof fetch,
 ): Promise<string> {
   const attempt = new AbortController();
-  const timer = setTimeout(() => attempt.abort(), remainingMs);
+  const timer = setTimeout(() => attempt.abort(), attemptMs);
   const forward = () => attempt.abort();
   signal.addEventListener("abort", forward, { once: true });
   try {

@@ -17,6 +17,75 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — Lasso ink belongs to the paper; the field keeps only its echo
+
+Changed: the drawn stroke is clipped to the paper's own rounded rectangle, so
+past that edge a person sees only the square particle echo, now drawn in the
+field's ink and fading back from the pointer along the stroke.
+
+Why: the line was drawn across the material index and the surrounding chrome,
+which reads as though the index were selectable document space. It is not, and
+it never was: hit testing was already limited to visible canvas text.
+
+Forecloses: a stroke that looks like it addresses anything outside the paper,
+and a clip that could quietly narrow selection — the geometry below the clip is
+untouched, so the same stroke selects the same passages.
+
+---
+
+## 2026-08-09 — One relay can no longer spend the whole pool's deadline
+
+Changed: a pool attempt is bounded to half of the caller's deadline, except for
+the last candidate, which keeps the remainder. The label, transcript-repair,
+and inquiry budgets were raised to hold two attempts instead of one, and the
+three model routes now declare a platform duration above their own deadline.
+
+Why: the relays answer in about a second from a workstation beside them and far
+more slowly from the deployed region. An attempt was allowed the entire
+deadline, so the first relay to hang consumed the budget alone and the ordered
+fallback the pool exists for never happened: every deployed call fell back to
+the floor, and inquiry — the surface with no floor — returned unavailable.
+
+Forecloses: reading a green health receipt as evidence that a released AI
+surface answers, and a single slow relay deciding the outcome for the pool.
+
+---
+
+## 2026-08-09 — Cancelled on-device speech cannot occupy the next turn
+
+Changed: the lazy Whisper worker now distinguishes a queued cancellation from
+active inference. Queued work is skipped; active inference retires its worker,
+rejects that lease's pending requests, and makes late worker messages inert.
+The next transcription creates a fresh worker only when needed.
+
+Why: cancelling the Promise without cancelling or retiring its worker left a
+dismissed recording consuming CPU and serial-queue time before the next voice
+attempt could begin.
+
+Forecloses: a cancelled utterance delaying later speech, treating a late result
+as current material, and keeping raw audio or a transcript beyond its attempt.
+
+---
+
+## 2026-08-09 — Production configuration makes all released model gates explicit
+
+Changed: the dedicated-domain runtime configuration now declares the existing
+live label, transcript-repair, and inquiry gates together. The repository's
+configuration and deployment receipts require all three to report `available`;
+the model pool endpoint and credentials remain exclusively encrypted Vercel
+environment variables.
+
+Why: a release that can silently omit the inquiry gate presents the product as
+having an answer capability while its browser can only receive an unavailable
+result. The gate is not a secret and should be reviewed with the rest of the
+runtime deployment shape.
+
+Forecloses: shipping a root-domain preview that has a live model pool but leaves
+one released AI surface disconnected without a failing configuration or
+deployment check.
+
+---
+
 ## 2026-08-09 — Inquiry answers keep their material scope, not a render identity
 
 Changed: the transient Ask Matter bubble compares its projected, bounded

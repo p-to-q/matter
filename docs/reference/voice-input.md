@@ -197,6 +197,13 @@ live partials without the model download. The local model provides final text,
 not real-time partial hypotheses, and lower-powered devices may take noticeably
 longer to settle.
 
+A cancelled queued local request is explicitly skipped by that worker. If
+Whisper has already started inference, the browser has no safe interrupt for
+that model call, so cancellation retires the worker and invalidates every late
+message from its lease; the next request lazily creates a fresh worker. This
+prevents a dismissed utterance from consuming the next person's turn while
+keeping all audio on-device and transient.
+
 ## Future managed real-time correction
 
 The current preview does not mint a credential or open a configurable provider

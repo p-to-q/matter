@@ -24,9 +24,12 @@ mementos make one undo restore the previous virtual file-system projection and
 every other tree-derived view.
 
 The lasso may cross the paper boundary as one continuous pointer stroke. Text
-hit testing remains limited to visible canvas material. Sparse square particles
-outside the paper are a bounded render-only echo: they carry no selection,
-address, history, persistence, or context meaning.
+hit testing remains limited to visible canvas material. Ink is drawn on the
+paper only; past its edge the stroke appears as sparse square particles in the
+field's own ink, brightest under the pointer and fading back along the stroke.
+That echo is a bounded render-only trace: it carries no selection, address,
+history, persistence, or context meaning, and clipping the line changes nothing
+about which passages the same stroke selects.
 
 ## Node
 

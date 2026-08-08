@@ -107,11 +107,14 @@ export function repairBudget(skeletonLength: number): number {
  * A deadline proportional to the utterance. Repair emits roughly as much text
  * as it reads, so one fixed budget either abandons long thoughts before they
  * can be answered or makes short ones wait for nothing. The person is reading
- * their own words while this runs, which is what buys the upper end.
+ * their own words while this runs, which is what buys the upper end. Both ends
+ * carry a second relay's attempt as well as a first: the pool gives one relay
+ * at most half of this, so a budget sized for a single call falls back to the
+ * words as heard the moment the nearest relay is the slow one.
  */
 export function repairDeadlineMs(input: NormalizedRepairInput): number {
   const codePoints = Array.from(input.text).length;
-  return Math.min(4_000, Math.max(1_200, 1_200 + codePoints * 8));
+  return Math.min(6_000, Math.max(2_000, 2_000 + codePoints * 8));
 }
 
 /** Output ceiling for the provider, in the same proportion as the deadline. */

@@ -42,6 +42,11 @@ export function inspectDeploymentHealth(value, expectedVersion) {
   for (const name of ["material", "localPersistence", "archiveExportImport"]) {
     if (value.surfaces[name] !== "available") failures.push(`Required surface ${name} is not available.`);
   }
+  for (const name of ["thoughtLabel", "transcriptRepair", "inquiry"]) {
+    if (value.surfaces[name] !== "available") {
+      failures.push(`Live model surface ${name} is not available.`);
+    }
+  }
   if (value.surfaces.voiceAdmission !== "available") {
     failures.push("Public voice admission is not available.");
   }

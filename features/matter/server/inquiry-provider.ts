@@ -18,6 +18,7 @@ export function resolveInquiryAdapter(
   if (environment.MATTER_INQUIRY_ADAPTER !== "live") return null;
   return resolvePoolAdapter(environment, {
     minimumAttemptMs: 600,
+    maxAttemptShare: 0.5,
     maxOutputTokens: 720,
     maxResponseBytes: 32 * 1_024,
     failuresBeforeCooldown: 2,

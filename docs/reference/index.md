@@ -17,6 +17,7 @@ ordinary component and store work needs no matching document.
 | [`thought-label.md`](thought-label.md) | naming a node in the material index |
 | [`virtual-file-system.md`](virtual-file-system.md) | Markdown snapshot and browser durability |
 | [`ambient-workbench-ui.md`](ambient-workbench-ui.md) | right-side paper, corner controls, rail, and ambient media ownership |
+| [`architecture-governance.md`](architecture-governance.md) | auditing module boundaries, state ownership, caches, and architecture fitness |
 
 Add or revise a note only when a choice will matter to later implementation, or
 when introducing a dependency. A short statement of the need, useful prior art,

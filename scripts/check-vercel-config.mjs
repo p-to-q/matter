@@ -40,6 +40,9 @@ export const DEDICATED_DOMAIN_RUNTIME_SHAPE = Object.freeze({
   MATTER_BASE_PATH: "",
   MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
   MATTER_TRANSCRIPTION_ADAPTER: "browser",
+  MATTER_LABEL_ADAPTER: "live",
+  MATTER_REPAIR_ADAPTER: "live",
+  MATTER_INQUIRY_ADAPTER: "live",
 });
 
 // This file is committed to a world-readable repository. A provider credential

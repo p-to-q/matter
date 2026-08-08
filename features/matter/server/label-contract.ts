@@ -28,12 +28,15 @@ export const MAX_LOCALE_LENGTH = 35;
  * Nothing waits on these: a label is already on screen, so the deadline only
  * decides how late an improvement may still arrive. Measured relay latency on
  * the corpus is p50 ≈ 0.65 s and p95 ≈ 1.7 s, so a 1.5 s provider budget threw
- * away answers that were merely slow. Three seconds is still well inside the
- * time a person spends reading the thought they just admitted.
+ * away answers that were merely slow. Those numbers were measured from a
+ * workstation beside the relays; the deployed region reaches them across a
+ * slower path, and a budget that only fits one attempt cannot fall through to
+ * a second relay. Six seconds is still well inside the time a person spends
+ * reading the thought they just admitted, and nothing on screen waits for it.
  */
-export const LABEL_CLIENT_TIMEOUT_MS = 3_500;
+export const LABEL_CLIENT_TIMEOUT_MS = 7_000;
 /** Server deadline, kept under the browser's so a timeout is attributable. */
-export const LABEL_PROVIDER_TIMEOUT_MS = 3_000;
+export const LABEL_PROVIDER_TIMEOUT_MS = 6_000;
 
 export type LabelBasis = Readonly<{
   treeId: string;

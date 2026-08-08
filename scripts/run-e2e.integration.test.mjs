@@ -1,19 +1,23 @@
 import { chmod, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
-import { createConnection } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories = [];
 const FIXTURE_START_TIMEOUT_MS = 12_000;
+// Some restricted runners prohibit every loopback bind. The socket below is
+// the proof that process-group cleanup releases a grandchild resource, so
+// skip only when this host cannot create that proof at all.
+const loopbackBindingAvailable = await canBindLoopback();
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { force: true, recursive: true })));
 });
 
 describe("run-e2e process cleanup", () => {
-  it.skipIf(process.platform === "win32")(
+  it.skipIf(process.platform === "win32" || !loopbackBindingAvailable)(
     "terminates the POSIX process group, releases its grandchild port, and restores next-env",
     async () => {
       const directory = await mkdtemp(join(tmpdir(), "matter-e2e-runner-"));
@@ -169,6 +173,16 @@ function portIsOpen(port) {
     socket.once("error", (error) => {
       if (error?.code === "ECONNREFUSED") resolve(false);
       else reject(error);
+    });
+  });
+}
+
+function canBindLoopback() {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.listen(0, "127.0.0.1", () => {
+      server.close((error) => resolve(error === undefined));
     });
   });
 }

@@ -1211,6 +1211,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         active={lasso.active}
         drawing={lasso.drawing}
         closurePathRef={lasso.closurePathRef}
+        inkRef={lasso.inkRef}
         inkPathRef={lasso.inkPathRef}
         particleCanvasRef={lasso.particleCanvasRef}
         rects={lasso.selectionSetRects.length > 0 ? lasso.selectionSetRects : lasso.selectionRects}
@@ -1369,6 +1370,7 @@ function LassoOverlay({
   active,
   drawing,
   closurePathRef,
+  inkRef,
   inkPathRef,
   particleCanvasRef,
   rects,
@@ -1380,6 +1382,7 @@ function LassoOverlay({
   active: boolean;
   drawing: boolean;
   closurePathRef: React.RefObject<SVGPathElement | null>;
+  inkRef: React.RefObject<SVGSVGElement | null>;
   inkPathRef: React.RefObject<SVGPathElement | null>;
   particleCanvasRef: React.RefObject<HTMLCanvasElement | null>;
   rects: readonly { x: number; y: number; width: number; height: number }[];
@@ -1445,7 +1448,7 @@ function LassoOverlay({
         </>
       )}
       <canvas aria-hidden="true" className="lasso-particles" ref={particleCanvasRef} />
-      <svg aria-hidden="true" className="lasso-ink">
+      <svg aria-hidden="true" className="lasso-ink" ref={inkRef}>
         <path className="lasso-ink__trace" ref={inkPathRef} />
         <path className="lasso-ink__closure" ref={closurePathRef} />
       </svg>

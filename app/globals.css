@@ -284,6 +284,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell:has(.matter-document[data-canvas-theme="dark"]) .tool-rail__separator { background: rgba(22,29,39,.24); }
 .lasso-layer { position: fixed; z-index: 28; inset: 0; overflow: hidden; pointer-events: none; }
 .lasso-particles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+/* Ink is drawn on the paper only; the lasso renderer writes the clip inline
+   each frame from the paper's own rect and corner. */
 .lasso-ink { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .lasso-ink path { fill: none; stroke: var(--active); stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .lasso-ink__trace { stroke-width: 2; opacity: .78; }
