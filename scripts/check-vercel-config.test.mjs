@@ -13,6 +13,7 @@ function validConfig() {
   return {
     framework: "nextjs",
     buildCommand: "npm run build",
+    regions: ["hkg1"],
     build: { env: { ...DEDICATED_DOMAIN_BUILD_SHAPE } },
     env: { ...DEDICATED_DOMAIN_RUNTIME_SHAPE, MATTER_LABEL_ADAPTER: "live" },
   };
@@ -25,6 +26,12 @@ test("accepts the committed deployment configuration", async () => {
 
 test("accepts a minimal configuration carrying both shapes", () => {
   assert.deepEqual(inspectVercelConfig(validConfig()), []);
+});
+
+test("rejects a configuration with no region pinned near the model pool", () => {
+  const config = validConfig();
+  delete config.regions;
+  assert.match(inspectVercelConfig(config).join("\n"), /region close to the model pool/);
 });
 
 test("rejects a build command longer than Vercel's schema allows", () => {

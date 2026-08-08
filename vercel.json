@@ -1,6 +1,7 @@
 {
   "framework": "nextjs",
   "buildCommand": "npm run build",
+  "regions": ["hkg1"],
   "build": {
     "env": {
       "MATTER_BASE_PATH": "",

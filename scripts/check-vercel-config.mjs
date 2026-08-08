@@ -66,6 +66,15 @@ export function inspectVercelConfig(config) {
     );
   }
 
+  // The model pool is reached from the function, not from the visitor, so the
+  // region is a latency budget: repair's deadline is ~1.5s for a short
+  // utterance, and a cross-Pacific hop spent most of it before the provider
+  // had answered. Losing this pins the pool-backed scenarios back to a
+  // silent verbatim floor.
+  if (!Array.isArray(config.regions) || config.regions.length === 0) {
+    failures.push("vercel.json must pin a function region close to the model pool.");
+  }
+
   failures.push(...inspectShape("build.env", buildEnv, DEDICATED_DOMAIN_BUILD_SHAPE));
   failures.push(...inspectShape("env", runtimeEnv, DEDICATED_DOMAIN_RUNTIME_SHAPE));
   failures.push(...inspectAgreement(buildEnv, runtimeEnv));
