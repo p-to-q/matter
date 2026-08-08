@@ -89,7 +89,9 @@ test("rejects a credential by key name and by value shape", () => {
   assert.match(inspectVercelConfig(named).join("\n"), /encrypted Vercel store/);
 
   const shaped = validConfig();
-  shaped.build.env.MATTER_LABEL_AIPING_RELAY = "QC-141acd687b3a4b59629133a18142025a";
+  // Shaped like a provider key, but not one: never place real key material,
+  // whole or partial, in a file this repository can publish.
+  shaped.build.env.MATTER_LABEL_EXAMPLE_RELAY = "XX-000000000000000000000000000000";
   assert.match(inspectVercelConfig(shaped).join("\n"), /credential-shaped value/);
 });
 
