@@ -17,6 +17,22 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — A short utterance buys one real repair attempt, not two halves
+
+Changed: transcript repair keeps almost its whole budget for one relay instead
+of reserving half for a second, and its floor rose from 2.0 s to 2.6 s.
+
+Why: repair's budget is deliberately short because a person is holding still
+while it runs. Halving two seconds did not buy a fallback; it bought two
+attempts neither of which could finish from the deployed region, so every short
+utterance was admitted exactly as heard. Where the floor is already correct,
+one real attempt is worth more than two doomed ones.
+
+Forecloses: reading the pool's fairness rule as scenario-independent when the
+scenario's budget is smaller than one relay's answer.
+
+---
+
 ## 2026-08-09 — Lasso ink belongs to the paper; the field keeps only its echo
 
 Changed: the drawn stroke is clipped to the paper's own rounded rectangle, so

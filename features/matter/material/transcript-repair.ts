@@ -114,7 +114,7 @@ export function repairBudget(skeletonLength: number): number {
  */
 export function repairDeadlineMs(input: NormalizedRepairInput): number {
   const codePoints = Array.from(input.text).length;
-  return Math.min(6_000, Math.max(2_000, 2_000 + codePoints * 8));
+  return Math.min(6_000, Math.max(2_600, 2_600 + codePoints * 8));
 }
 
 /** Output ceiling for the provider, in the same proportion as the deadline. */

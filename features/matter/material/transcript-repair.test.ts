@@ -61,7 +61,7 @@ describe("decideRepairRequest", () => {
 
 describe("repairDeadlineMs", () => {
   it("scales with the utterance and stays inside the ceiling", () => {
-    expect(repairDeadlineMs(zh("短句子而已"))).toBe(2_040);
+    expect(repairDeadlineMs(zh("短句子而已"))).toBe(2_640);
     expect(repairDeadlineMs(zh("字".repeat(600)))).toBe(6_000);
   });
 });
