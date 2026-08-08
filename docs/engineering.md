@@ -41,15 +41,22 @@ product intent.
 
 ## Architecture fitness
 
-The runtime import graph is acyclic. Dependencies point from composition and
-adapters toward application and domain code; a lower layer never imports the
-store, a component, a browser adapter, a route, or a provider. Test and demo
-fixtures are leaves and never supply behavior to a production path.
+These are the rules a change is held to, not a description of what the tree
+already satisfies everywhere. The current exceptions — an import cycle, browser
+code reaching into `server/*-contract`, and a fixture on a production path —
+are recorded in
+[`reference/architecture-governance.md`](reference/architecture-governance.md).
+Where the two disagree, that note is the state and this section is the target.
 
-Code shared by browser and server is a neutral, strict, serializable contract.
-It does not live in a provider module. Provider modules are server-only, browser
-adapters are client-only, and the composition root is the only place allowed to
-choose concrete adapters.
+The runtime import graph must be acyclic. Dependencies point from composition
+and adapters toward application and domain code; a lower layer must not import
+the store, a component, a browser adapter, a route, or a provider. Test and demo
+fixtures are leaves and must not supply behavior to a production path.
+
+Code shared by browser and server must be a neutral, strict, serializable
+contract. It does not belong in a provider module. Provider modules are
+server-only, browser adapters are client-only, and the composition root is the
+only place allowed to choose concrete adapters.
 
 Every external resource has one lifecycle owner. A microphone, worker, request,
 timer, animation frame, database handle, or subscription has an explicit start,

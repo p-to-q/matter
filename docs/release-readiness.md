@@ -197,10 +197,19 @@ One pre-existing intermittent browser failure is carried into this release
 rather than hidden: `canvas-chrome.spec.ts` occasionally loses the inquiry
 reply when a lasso begins, roughly one full-suite run in three, and CI's two
 retries absorb it. It reproduces on the unmodified preview.15 tree, so it is
-not introduced here, and it is not understood yet — the discard runs through
-the material-scope comparison, which means either a tree revision is moving
-under the open exchange or the comparison is reading a scope change that a
-person did not make. It is the first thing to take after this release.
+not introduced here — preview.15 is live with it now — and it is not understood
+yet. Two mechanisms can produce it and neither has been proven: the
+material-scope comparison discarding the exchange, or the paper's outside-
+pointer dismissal closing the bubble on the same gesture the assertion races.
+A dedicated repro loop of that sequence did not reproduce it in 40 attempts, so
+the trigger involves more of the session than the gesture itself.
+
+Carrying it was a deliberate trade, not an oversight, and retries are not
+offered as proof. Holding preview.16 would keep a live outage in place — all
+three released model surfaces currently answer nothing in production — to avoid
+an intermittent reply loss that is already shipped. It is the first thing to
+take after this release, and the reply-loss race should be reproduced under
+instrumentation rather than re-derived by reading.
 
 ## Candidate verification — 0.2.0-preview.15
 
