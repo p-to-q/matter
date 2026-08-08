@@ -131,7 +131,9 @@ describe("local transcription audio projection", () => {
 
     const second = transcribeLocally(request(new AbortController().signal, "after"));
     await vi.waitFor(() => expect(workers).toHaveLength(2));
-    // A late result from the abandoned inference cannot become this transcript.
+    // The abandoned inference finishing late cannot become this transcript, and
+    // neither can the retired lease answering for the request it never carried.
+    worker.emit({ id: "slow:1", status: "complete", text: "迟到的转写。" });
     worker.emit({ id: "after:1", status: "complete", text: "被放弃的转写。" });
     workers[1]!.emit({ id: "after:1", status: "complete", text: "干净的转写。" });
     await expect(second).resolves.toBe("干净的转写。");

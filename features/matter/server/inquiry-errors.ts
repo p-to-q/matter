@@ -1,7 +1,7 @@
 import type {
   InquiryErrorCode,
   InquiryErrorEnvelope,
-  InquiryFailureReason,
+  InquiryFallbackReason,
 } from "./inquiry-contract";
 
 export class InquiryServerError extends Error {
@@ -10,7 +10,7 @@ export class InquiryServerError extends Error {
     message: string,
     readonly retryable: boolean,
     readonly status: number,
-    readonly reason?: InquiryFailureReason,
+    readonly fallbackReason?: InquiryFallbackReason,
   ) {
     super(message);
     this.name = "InquiryServerError";
@@ -22,7 +22,7 @@ export class InquiryServerError extends Error {
         code: this.code,
         message: this.message,
         retryable: this.retryable,
-        ...(this.reason === undefined ? {} : { reason: this.reason }),
+        ...(this.fallbackReason === undefined ? {} : { fallbackReason: this.fallbackReason }),
       }),
     });
   }

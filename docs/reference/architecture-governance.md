@@ -179,15 +179,22 @@ frozen and creates narrow issues only for newly verified gaps:
 
 | Priority | Work |
 | --- | --- |
-| P0 | [#34](https://github.com/p-to-q/matter/issues/34) closes distributed live-model abuse and spend controls; [#8](https://github.com/p-to-q/matter/issues/8) establishes the durable active-document pointer. |
-| P1 | [#44](https://github.com/p-to-q/matter/issues/44) removes fixture mutations from production actions; [#46](https://github.com/p-to-q/matter/issues/46) separates manual-name durability from label caching; [#45](https://github.com/p-to-q/matter/issues/45) carries the shipped local-transcription cancellation proof; [#49](https://github.com/p-to-q/matter/issues/49) restores the single-inquiry boundary; [#50](https://github.com/p-to-q/matter/issues/50) creates the neutral protocol and executable dependency DAG. |
-| P2 | [#47](https://github.com/p-to-q/matter/issues/47) measures and freezes undo-journal capacity. |
+| P0 | [#52](https://github.com/p-to-q/matter/issues/52) makes the released inquiry surface answer from the deployed origin; [#34](https://github.com/p-to-q/matter/issues/34) closes distributed live-model abuse and spend controls. |
+| P1 | [#49](https://github.com/p-to-q/matter/issues/49) restores the single-inquiry boundary, the one place the shipped interface disagrees with a stated product invariant; [#46](https://github.com/p-to-q/matter/issues/46) separates manual-name durability from label caching; [#44](https://github.com/p-to-q/matter/issues/44) moves the seeded preview's composition out of `fixtures/`. |
+| P2 | [#8](https://github.com/p-to-q/matter/issues/8) establishes the durable active-document pointer; [#12](https://github.com/p-to-q/matter/issues/12) bounds the generated replacement when the transform route lands. |
 
-The dependency check in #50 should land after or with #44 so the production
-fixture edge is removed rather than normalized as a permanent exception.
-Component extraction remains an evidence-triggered future option rather than a
-current plan; [#48](https://github.com/p-to-q/matter/issues/48) is closed as not
-planned.
+Preview.17 closed the durable half of #44: a branched thought now carries its
+own id and timestamp instead of a build constant that reached exported Markdown.
+What remains there is the module move, and the executable dependency check
+([#50](https://github.com/p-to-q/matter/issues/50), closed as not-now) should
+land in the same change so it starts green rather than with an allowlist. The
+local-inference cancellation proof ([#45](https://github.com/p-to-q/matter/issues/45))
+and the interaction receipts ([#42](https://github.com/p-to-q/matter/issues/42))
+are closed and covered by tests. Undo-journal capacity
+([#47](https://github.com/p-to-q/matter/issues/47)) is closed until it can be
+measured on the same rig as the large-tree gate. Component extraction remains an
+evidence-triggered future option rather than a current plan;
+[#48](https://github.com/p-to-q/matter/issues/48) is closed as not planned.
 
 ## Rule-to-proof matrix
 

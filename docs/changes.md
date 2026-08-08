@@ -50,8 +50,8 @@ Forecloses: a responsive boundary whose only evidence is the stylesheet.
 
 ## 2026-08-09 — An unanswered inquiry says why it could not answer
 
-Changed: the inquiry error envelope carries the same stable scenario reason
-label and repair already publish as `fallbackReason`.
+Changed: the inquiry error envelope carries `fallbackReason` — the same
+field, and the same stable vocabulary, that label and repair already publish.
 
 Why: inquiry is the one surface with no floor, so its failure is the visible
 one — and it was a single opaque 503. Nothing outside the function could tell a

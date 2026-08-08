@@ -42,7 +42,7 @@ describe("inquiry route", () => {
     // The scenario outcome is named so a deployment can tell a stalled relay
     // from a refused answer. It is the same vocabulary label and repair
     // already publish, and it carries no provider message, status, or identity.
-    expect((JSON.parse(raw) as { error: { reason?: string } }).error.reason)
+    expect((JSON.parse(raw) as { error: { fallbackReason?: string } }).error.fallbackReason)
       .toBe("MODEL_UNAVAILABLE");
   });
 

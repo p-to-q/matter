@@ -197,7 +197,7 @@ what happens underneath them.
 
 - a branched thought carries its own id and timestamp rather than a build
   constant that reached exported Markdown frontmatter;
-- material clears the editing rail at every phone width; the 341–389px band was
+- material clears the editing rail at every tested phone width; the 341–389px band was
   never measured and overlapped by up to 18px;
 - an unanswered inquiry names its scenario outcome, so a released model surface
   can be diagnosed rather than guessed at;
@@ -214,8 +214,8 @@ browser proof          npm run test:e2e: 45 Chromium cases passed, 2 skipped
 flake proof            five consecutive full-suite runs at retries: 0, no
                        failures. The same suite failed roughly two runs in five
                        before, on the unmodified tree
-narrow-width proof     material clears the rail at 320, 341, 360, 375, 376,
-                       389, 390, and 414px, measured in the browser
+narrow-width proof     material clears the rail at the eight measured widths
+                       320, 341, 360, 375, 376, 389, 390, and 414px
 ```
 
 ## Promotion receipt — 0.2.0-preview.16
