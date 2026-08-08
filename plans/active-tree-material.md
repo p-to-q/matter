@@ -47,6 +47,23 @@ Non-goals:  multi-turn chat, keyboard-required primary flow, new prompt UI,
             server changes, context expansion, or durable inquiry history.
 ```
 
+## Post-Preview.12 deployment receipt freeze
+
+```text
+Outcome:    a release maintainer can wait through bounded edge propagation and
+            prove that the dedicated domain serves the intended version.
+Boundary:   local deployment receipt script, its focused tests, and deployment
+            handoff wording; no product route, provider, Vercel credential, or
+            runtime capability changes.
+Invariants: every retry performs the same HTTPS, version, capability, legacy
+            route, and security-header checks; it never reads material, sends
+            credentials, or turns a stale receipt into success.
+Proof:      stale-then-current and deadline receipts; existing full check and
+            browser suite before a source push.
+Non-goals:  dashboard automation, deployment-log access, model promotion,
+            monitoring vendor, or automatic rollback.
+```
+
 ## Preview.10 interaction durability freeze (proven)
 
 ```text

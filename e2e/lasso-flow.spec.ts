@@ -61,7 +61,7 @@ for (const viewport of [
 
     const text = page.locator(`[data-thought-text-id="${rootId}"]`);
     const fragment = await firstSegmentRect(page, text);
-    await drawEarlyReleaseLoop(page, fragment);
+    await drawClosedLoop(page, fragment);
     await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
     await expect(page.locator(".lasso-selection-count")).toHaveCount(0);
@@ -712,5 +712,23 @@ async function drawEarlyReleaseLoop(
   await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });
   // Release before returning to the start; the visible seam is the exact final edge.
   await page.mouse.move(rect.x - margin, rect.y + Math.min(18, rect.height * .45), { steps: 2 });
+  await page.mouse.up();
+}
+
+async function drawClosedLoop(
+  page: Page,
+  rect: { x: number; y: number; width: number; height: number },
+) {
+  const margin = 9;
+  const start = { x: rect.x - margin, y: rect.y - margin };
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width + margin, start.y, { steps: 5 });
+  await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
+  await page.mouse.move(start.x, rect.y + rect.height + margin, { steps: 5 });
+  // The baseline material-selection path closes explicitly. Early release is
+  // covered by its own resilience receipt, so normal selection does not depend
+  // on scheduler-sensitive sampling of that exceptional gesture.
+  await page.mouse.move(start.x, start.y, { steps: 5 });
   await page.mouse.up();
 }

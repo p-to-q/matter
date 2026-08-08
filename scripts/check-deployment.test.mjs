@@ -5,6 +5,7 @@ import {
   inspectDeploymentHeaders,
   inspectDeploymentHealth,
   normalizeDeploymentOrigin,
+  waitForDeployment,
 } from "./check-deployment.mjs";
 
 const HEALTH = {
@@ -67,4 +68,62 @@ test("requires the security headers owned by the public edge", () => {
   assert.deepEqual(inspectDeploymentHeaders(complete), []);
   complete.delete("strict-transport-security");
   assert.deepEqual(inspectDeploymentHeaders(complete), ["Missing HSTS header."]);
+});
+
+test("waits through one stale edge receipt without widening the probe", async () => {
+  let elapsed = 0;
+  let calls = 0;
+  const result = await waitForDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    waitMs: 10_000,
+    intervalMs: 5_000,
+    now: () => elapsed,
+    sleep: async (milliseconds) => { elapsed += milliseconds; },
+    check: async () => {
+      calls += 1;
+      return calls === 1
+        ? { origin: "https://matter.ptoq.io", failures: ["Deployed appVersion 0.2.0-preview.7 does not match 0.2.0-preview.9."] }
+        : { origin: "https://matter.ptoq.io", failures: [] };
+    },
+  });
+  assert.equal(result.attempts, 2);
+  assert.equal(elapsed, 5_000);
+  assert.deepEqual(result.failures, []);
+});
+
+test("stops at the bounded wait deadline when the receipt never becomes current", async () => {
+  let elapsed = 0;
+  const result = await waitForDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    waitMs: 10_000,
+    intervalMs: 5_000,
+    now: () => elapsed,
+    sleep: async (milliseconds) => { elapsed += milliseconds; },
+    check: async () => ({ origin: "https://matter.ptoq.io", failures: ["Deployment has not propagated."] }),
+  });
+  assert.equal(result.attempts, 3);
+  assert.equal(elapsed, 10_000);
+  assert.deepEqual(result.failures, ["Deployment has not propagated."]);
+});
+
+test("retries one transient probe failure without exposing its transport detail", async () => {
+  let elapsed = 0;
+  let calls = 0;
+  const result = await waitForDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    waitMs: 5_000,
+    intervalMs: 5_000,
+    now: () => elapsed,
+    sleep: async (milliseconds) => { elapsed += milliseconds; },
+    check: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error("network path should not become release output");
+      return { origin: "https://matter.ptoq.io", failures: [] };
+    },
+  });
+  assert.equal(result.attempts, 2);
+  assert.deepEqual(result.failures, []);
 });

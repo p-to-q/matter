@@ -210,13 +210,13 @@ already the product's signature.
 After the candidate is deployed, run:
 
 ```bash
-npm run check:deployment -- https://matter.ptoq.io
+npm run check:deployment -- https://matter.ptoq.io --wait=120
 ```
 
 The probe fails on version drift, an incomplete capability schema, a non-empty
 dedicated-domain base path, a revived `/matter` duplicate entry, or missing
-edge security headers. It is intentionally post-deployment and does not belong
-in commit CI.
+edge security headers. The bounded wait only absorbs normal edge propagation;
+it is intentionally post-deployment and does not belong in commit CI.
 
 ## Release discipline
 

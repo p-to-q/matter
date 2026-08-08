@@ -94,10 +94,12 @@ answer model. The public UI must not imply that an answer model is live.
 Do not add a provider secret merely to test the UI. First configure the controls
 above, then create a fresh reviewed version and let its Vercel build run.
 
-After each browser-preview deployment, verify the dedicated origin:
+After each browser-preview deployment, verify the dedicated origin. `--wait=120`
+retries the same bounded receipt during the normal edge propagation window; it
+does not relax a failing version or surface check.
 
 ```bash
-npm run check:deployment -- https://matter.ptoq.io
+npm run check:deployment -- https://matter.ptoq.io --wait=120
 ```
 
 Manually verify, with a normal browser and no repository secrets:

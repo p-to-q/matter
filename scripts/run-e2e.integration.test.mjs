@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories = [];
+const FIXTURE_START_TIMEOUT_MS = 12_000;
 
 afterEach(async () => {
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { force: true, recursive: true })));
@@ -82,7 +83,7 @@ setInterval(() => {}, 1_000);
       );
       await expect(waitForPortClosed(port)).resolves.toBeUndefined();
     },
-    12_000,
+    20_000,
   );
 
   it("does not fail cleanup when typegen never created next-env", async () => {
@@ -122,7 +123,9 @@ function waitForText(readOutput, expected) {
     const timeout = setTimeout(() => {
       clearInterval(interval);
       reject(new Error(`Timed out waiting for ${expected}: ${readOutput()}`));
-    }, 5_000);
+    // Full Vitest runs start many module graphs at once. This fixture verifies
+    // process-group cleanup, not a five-second startup-performance budget.
+    }, FIXTURE_START_TIMEOUT_MS);
   });
 }
 
