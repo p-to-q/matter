@@ -184,6 +184,22 @@ Corrections shipped with it, each one a state a live provider produces:
 - The inquiry dictation and Ask controls meet the 24 CSS px floor, and the
   browser receipt that claims that floor now actually measures them.
 
+One parity gap was found by measurement rather than by reading. Transcript
+repair answered from the model on localhost but timed out on roughly half of
+production requests and fell back to the verbatim floor. Its deadline scales
+with the utterance — about 1.5s for a short one, because repair fires once per
+utterance and must not delay admission — and a cross-Pacific hop from `iad1` to
+the pool spent most of it. Pinning the functions to `hkg1` in `vercel.json`
+closed it: six consecutive production repairs answered from the model with text
+identical to localhost. The deadline was not relaxed, and the deployment check
+now requires a region to be pinned.
+
+```text
+parity receipt         localhost and matter.ptoq.io, same version, all three
+                       gates available, label and repair both source=model,
+                       inquiry answered on both
+```
+
 Outstanding and deliberately not claimed: the distributed rate rules and
 provider spend ceiling in issue #34 are still absent, so the gates are open
 without an abuse or cost control. The `lasso-flow` stretch flake recorded under
