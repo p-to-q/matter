@@ -78,13 +78,25 @@ actually shipped. Do not move them back into `buildCommand`: Vercel rejects a
 runs, and that failure produces no build log. `npm test` now enforces the bound,
 both shapes, and the absence of any credential-shaped entry.
 
-The three model gates are independent. `vercel.json` declares only the label
-gate; repair and inquiry live in the encrypted project environment, so each stays
-an owner-controlled step rather than a repository default. All three are
-currently set to `live` in production. A missing or failing pool remains safe at
-any time: labels stay deterministic, repair admits the words as heard, and
-inquiry states that it is unavailable, so turning one gate off is a complete
-rollback for that surface.
+The three model gates are independent, but the current launch configuration
+declares all three non-secret `live` switches in `vercel.json`. The encrypted
+project environment remains the only place for the pool's endpoint and key.
+`npm run check:vercel` and `npm run check:deployment` now fail if a deployment
+leaves labels, repair, or inquiry unavailable. A missing or failing pool remains
+safe at any time: labels stay deterministic, repair admits the words as heard,
+and inquiry states that it is unavailable, so turning one gate off remains a
+complete rollback for that surface.
+
+`available` on the health probe means a pool is configured, never that a relay
+is reachable from the deployed region — the probe must not open a provider
+connection to answer a machine. The two are not the same fact, and they have
+already disagreed in production: a fully `available` receipt sat above a pool
+whose every call timed out. So a promotion is only finished when one live call
+per surface has been made against the deployed origin: `/api/label` returning
+`source` `model` rather than `provisional`, and `/api/inquiry` returning
+`answered` rather than a 503. A pool that has just started falling back also
+cools down for a minute at a time, so re-probe after a pause before concluding
+that a relay is gone.
 
 ## Edge, spend, and access controls
 

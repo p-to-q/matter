@@ -15,6 +15,17 @@ describe("projectOutsideLassoParticles", () => {
     ], paper);
     expect(particles).toHaveLength(2);
     expect(particles.map((particle) => particle.size)).toEqual([2, 4]);
+    expect(particles.every((particle) => Number.isInteger(particle.x) && Number.isInteger(particle.y))).toBe(true);
+  });
+
+  it("fades the trail back from the pointer", () => {
+    const points = Array.from({ length: 24 }, (_, index) => ({ x: 10 + index, y: 20 }));
+    const particles = projectOutsideLassoParticles(points, paper);
+    const opacities = particles.map((particle) => particle.opacity);
+    expect(opacities.at(0)).toBeLessThan(opacities.at(-1)!);
+    expect(Math.min(...opacities)).toBeGreaterThan(0);
+    expect(Math.max(...opacities)).toBeLessThanOrEqual(1);
+    expect([...opacities].sort((a, b) => a - b)).toEqual(opacities);
   });
 
   it("bounds the render-only particle count", () => {

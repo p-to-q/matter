@@ -149,6 +149,31 @@ describe("pool adapter", () => {
     expect(tried).toEqual(["first", "second"]);
   });
 
+  it("bounds one relay's attempt so a hang cannot spend the whole deadline", async () => {
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("hanging"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const request = init as RequestInit;
+        const model = (JSON.parse(String(request.body)) as { model: string }).model;
+        tried.push(model);
+        if (model !== "hanging") return chatResponse("成本问题");
+        return new Promise<Response>((_resolve, reject) => {
+          request.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        });
+      },
+    );
+    await expect(adapter(adapterInput(1_000), new AbortController().signal))
+      .resolves.toEqual({ text: "成本问题" });
+    expect(tried).toEqual(["hanging", "steady"]);
+  });
+
   it("does not start an attempt that cannot finish inside the deadline", async () => {
     let clock = 1_000;
     let calls = 0;

@@ -15,7 +15,7 @@ function validConfig() {
     buildCommand: "npm run build",
     regions: ["hkg1"],
     build: { env: { ...DEDICATED_DOMAIN_BUILD_SHAPE } },
-    env: { ...DEDICATED_DOMAIN_RUNTIME_SHAPE, MATTER_LABEL_ADAPTER: "live" },
+    env: { ...DEDICATED_DOMAIN_RUNTIME_SHAPE },
   };
 }
 
@@ -72,6 +72,12 @@ test("rejects a runtime shape that would make the health probe untruthful", () =
   const config = validConfig();
   delete config.env.MATTER_TRANSCRIPTION_ADAPTER;
   assert.match(inspectVercelConfig(config).join("\n"), /env is missing MATTER_TRANSCRIPTION_ADAPTER/);
+});
+
+test("rejects a runtime shape that leaves a live model surface behind", () => {
+  const config = validConfig();
+  delete config.env.MATTER_INQUIRY_ADAPTER;
+  assert.match(inspectVercelConfig(config).join("\n"), /env is missing MATTER_INQUIRY_ADAPTER/);
 });
 
 test("does not require the build-inlined public flags at runtime", () => {

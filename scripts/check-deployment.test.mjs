@@ -17,7 +17,7 @@ const HEALTH = {
     material: "available",
     localPersistence: "available",
     voiceAdmission: "available",
-    thoughtLabel: "unavailable",
+    thoughtLabel: "available",
     transcriptRepair: "available",
     inquiry: "available",
     transformTurn: "not-implemented",
@@ -44,6 +44,8 @@ test("reports version drift and an older health schema", () => {
     "Deployed appVersion 0.2.0-preview.7 does not match 0.2.0-preview.9.",
     "Health surface transcriptRepair is missing or invalid.",
     "Health surface inquiry is missing or invalid.",
+    "Live model surface transcriptRepair is not available.",
+    "Live model surface inquiry is not available.",
   ]);
 });
 

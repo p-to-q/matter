@@ -39,6 +39,36 @@ product intent.
 - Use stable error codes at boundaries. Provider messages, raw audio, transcript,
   and lineage never enter routine logs.
 
+## Architecture fitness
+
+The runtime import graph is acyclic. Dependencies point from composition and
+adapters toward application and domain code; a lower layer never imports the
+store, a component, a browser adapter, a route, or a provider. Test and demo
+fixtures are leaves and never supply behavior to a production path.
+
+Code shared by browser and server is a neutral, strict, serializable contract.
+It does not live in a provider module. Provider modules are server-only, browser
+adapters are client-only, and the composition root is the only place allowed to
+choose concrete adapters.
+
+Every external resource has one lifecycle owner. A microphone, worker, request,
+timer, animation frame, database handle, or subscription has an explicit start,
+cancel or stop, and idempotent cleanup. A late completion is a no-op unless its
+operation, document, revision, and addressed material still match.
+
+Every cache states its owner, authority class, key, size or time bound,
+invalidation trigger, read-time revalidation, and failure fallback. A snapshot,
+active-document pointer, manual name, or other human decision is durable state,
+not a cache, and cannot be hidden behind best-effort cache failure semantics.
+Do not introduce a generic cache service merely to make these policies look
+uniform.
+
+Split a module when it owns several independent lifecycles or facts, not when it
+crosses an arbitrary line count. Preserve behavior first with focused tests,
+then extract one owner at a time. Once a dependency or ownership rule is stable
+and syntactic, encode it in `npm run check`; prose and review are not its final
+enforcement mechanism.
+
 ## Comments
 
 Comments in source code are written in English. Add them where they preserve

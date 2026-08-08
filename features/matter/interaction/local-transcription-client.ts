@@ -10,14 +10,22 @@ export class LocalTranscriptionError extends Error {
   }
 }
 
-type Pending = Readonly<{
+type Pending = {
   resolve: (text: string) => void;
   reject: (error: LocalTranscriptionError) => void;
   dispose: () => void;
-}>;
+  worker: Worker;
+  started: boolean;
+};
 
 let worker: Worker | null = null;
 const pending = new Map<string, Pending>();
+const cancelled = new WeakMap<Worker, Set<string>>();
+
+/** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
+export function resetLocalTranscriptionForTests(): void {
+  if (worker !== null) retireWorker(worker, new LocalTranscriptionError("failed"));
+}
 
 export async function transcribeLocally(input: Readonly<{
   interactionId: string;
@@ -34,26 +42,31 @@ export async function transcribeLocally(input: Readonly<{
   const id = `${input.interactionId}:${input.attempt}`;
   const target = localTranscriptionWorker();
   return new Promise<string>((resolve, reject) => {
-    const abort = () => settle(id, new LocalTranscriptionError("failed"));
+    const abort = () => cancelRequest(id, target, new LocalTranscriptionError("failed"));
     const timeout = window.setTimeout(
-      () => settle(id, new LocalTranscriptionError("timeout")),
+      () => cancelRequest(id, target, new LocalTranscriptionError("timeout")),
       LOCAL_TRANSCRIPTION_TIMEOUT_MS,
     );
     const dispose = () => {
       window.clearTimeout(timeout);
       input.signal.removeEventListener("abort", abort);
     };
-    pending.set(id, { resolve, reject, dispose });
+    pending.set(id, { resolve, reject, dispose, worker: target, started: false });
     input.signal.addEventListener("abort", abort, { once: true });
     if (input.signal.aborted) {
       abort();
       return;
     }
-    target.postMessage({
-      id,
-      audio,
-      language: whisperLanguage(input.locale),
-    }, [audio.buffer]);
+    try {
+      target.postMessage({
+        type: "transcribe",
+        id,
+        audio,
+        language: whisperLanguage(input.locale),
+      }, [audio.buffer]);
+    } catch {
+      retireWorker(target, new LocalTranscriptionError("failed"));
+    }
   });
 }
 
@@ -63,10 +76,26 @@ function localTranscriptionWorker(): Worker {
     name: "matter-local-transcription",
     type: "module",
   });
+  const target = worker;
   worker.addEventListener("message", (event: MessageEvent<unknown>) => {
     if (!isWorkerResponse(event.data)) return;
+    if (event.data.status === "cancelled") {
+      cancelled.get(target)?.delete(event.data.id);
+      return;
+    }
     const request = pending.get(event.data.id);
-    if (request === undefined) return;
+    if (event.data.status === "started") {
+      // A retired lease may still deliver a queued message. It never speaks for
+      // a request the current worker owns, even when the two ids agree.
+      if (request !== undefined && request.worker === target) {
+        request.started = true;
+      } else if (cancelled.get(target)?.has(event.data.id) === true) {
+        retireWorker(target, new LocalTranscriptionError("failed"));
+      }
+      return;
+    }
+    cancelled.get(target)?.delete(event.data.id);
+    if (request === undefined || request.worker !== target) return;
     pending.delete(event.data.id);
     request.dispose();
     if (event.data.status === "failed") {
@@ -78,9 +107,7 @@ function localTranscriptionWorker(): Worker {
     else request.resolve(text);
   });
   worker.addEventListener("error", () => {
-    for (const [id] of pending) settle(id, new LocalTranscriptionError("failed"));
-    worker?.terminate();
-    worker = null;
+    retireWorker(target, new LocalTranscriptionError("failed"));
   });
   return worker;
 }
@@ -151,6 +178,41 @@ function settle(id: string, error: LocalTranscriptionError): void {
   request.reject(error);
 }
 
+/**
+ * A queued job can be skipped by the worker. A job that has begun Whisper
+ * inference cannot be safely interrupted by the library, so its worker lease
+ * is retired instead; the next request creates a fresh lazy worker.
+ */
+function cancelRequest(id: string, target: Worker, error: LocalTranscriptionError): void {
+  const request = pending.get(id);
+  if (request === undefined || request.worker !== target) return;
+  let ids = cancelled.get(target);
+  if (ids === undefined) {
+    ids = new Set<string>();
+    cancelled.set(target, ids);
+  }
+  ids.add(id);
+  if (request.started) {
+    retireWorker(target, error);
+    return;
+  }
+  settle(id, error);
+  try {
+    target.postMessage({ type: "cancel", id });
+  } catch {
+    retireWorker(target, error);
+  }
+}
+
+function retireWorker(target: Worker, error: LocalTranscriptionError): void {
+  if (worker === target) worker = null;
+  cancelled.delete(target);
+  target.terminate();
+  for (const [id, request] of [...pending]) {
+    if (request.worker === target) settle(id, error);
+  }
+}
+
 function whisperLanguage(locale: string): string {
   switch (locale) {
     case "zh-CN":
@@ -170,11 +232,15 @@ function throwIfAborted(signal: AbortSignal): void {
 }
 
 function isWorkerResponse(value: unknown): value is
+  | Readonly<{ id: string; status: "started" }>
+  | Readonly<{ id: string; status: "cancelled" }>
   | Readonly<{ id: string; status: "failed" }>
   | Readonly<{ id: string; status: "complete"; text: string }> {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
   return typeof candidate.id === "string" && (
+    candidate.status === "started" ||
+    candidate.status === "cancelled" ||
     candidate.status === "failed" ||
     (candidate.status === "complete" && typeof candidate.text === "string")
   );

@@ -428,8 +428,32 @@ test("lasso keeps its outside-paper particle echo visual-only", async ({ page })
   await page.mouse.move(paper.x - 36, paper.y + 150, { steps: 12 });
   await expect.poll(async () => (await particleAlpha(page, paper)).outside).toBeGreaterThan(0);
   expect((await particleAlpha(page, paper)).inside).toBe(0);
+
+  // The stroke still carries every sampled point, including the ones off the
+  // paper; only the drawn line stops at the paper's edge.
+  const ink = await page.evaluate(() => {
+    const element = document.querySelector<SVGSVGElement>(".lasso-ink");
+    const trace = document.querySelector<SVGPathElement>(".lasso-ink__trace");
+    if (element === null || trace === null) return null;
+    const style = getComputedStyle(element);
+    return {
+      clip: style.clipPath,
+      length: trace.getTotalLength(),
+      strokeWidth: (trace.getAttribute("d") ?? "").length,
+    };
+  });
+  if (ink === null) throw new Error("the lasso ink layer is not rendered");
+  expect(ink.clip).toMatch(/inset\(/);
+  expect(ink.clip).not.toBe("none");
+  expect(ink.length).toBeGreaterThan(0);
+  expect(ink.strokeWidth).toBeGreaterThan(0);
+
   await page.mouse.up();
   await expect.poll(async () => (await particleAlpha(page, paper)).outside).toBe(0);
+  await expect.poll(async () => page.evaluate(() => {
+    const element = document.querySelector<SVGSVGElement>(".lasso-ink");
+    return element === null ? "none" : getComputedStyle(element).clipPath;
+  })).toBe("none");
 });
 
 test("multi-passage selection count belongs to the paper guidance layer", async ({ page }) => {

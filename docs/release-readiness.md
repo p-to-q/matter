@@ -150,6 +150,54 @@ deployment proof       after Git integration deploys, check the dedicated origin
                        with npm run check:deployment -- https://matter.ptoq.io
 ```
 
+## Candidate verification — 0.2.0-preview.16
+
+Preview.16 makes the launch configuration enforce the live-model product claim
+and makes the pool behind it able to keep that claim from the deployed region.
+The public runtime declares label, transcript-repair, and inquiry gates as
+`live`, and the deployment receipt requires all three health surfaces to be
+`available`. The pool now bounds one relay's share of a caller's deadline, so a
+hanging relay can no longer spend the whole budget alone, and the three
+scenario deadlines carry two attempts rather than one. It does not add a
+transform route or relax the model-provider boundary. The release runner's
+POSIX socket fixture now skips only on hosts that forbid loopback binding;
+where the capability exists it retains the original grandchild-port cleanup
+proof.
+
+```text
+release proof          npm run check: 956 Vitest passed, 1 opt-in live-pool
+                       skip; 29 Node tests passed; doctor, docs, typegen,
+                       typecheck, lint, Vercel configuration, and production
+                       build passed
+browser proof          npm run test:e2e: 43 Chromium cases passed, 2 skipped,
+                       including inquiry Enter/Shift+Enter, scoped reply
+                       lifecycle, browser voice, local Whisper, lasso, archive,
+                       and tree interactions at laptop, 390 px, and 320 px
+live-path proof        a local production build against the same relay pool
+                       answered /api/label with source=model and /api/inquiry
+                       with status=answered
+deployment requirement after promotion, npm run check:deployment must report
+                       the preview.16 version and all three model surfaces as
+                       available; separately, /api/label must report
+                       source=model and /api/inquiry status=answered from the
+                       deployed origin. `available` is a configuration fact,
+                       not a reachability one, so the second probe is the only
+                       evidence that the released AI surfaces actually answer
+```
+
+The credentials, pool endpoint, and model ordering remain Vercel-encrypted
+server environment values. Distributed rate limits and a provider spend ceiling
+remain the outstanding production control in issue #34.
+
+One pre-existing intermittent browser failure is carried into this release
+rather than hidden: `canvas-chrome.spec.ts` occasionally loses the inquiry
+reply when a lasso begins, roughly one full-suite run in three, and CI's two
+retries absorb it. It reproduces on the unmodified preview.15 tree, so it is
+not introduced here, and it is not understood yet — the discard runs through
+the material-scope comparison, which means either a tree revision is moving
+under the open exchange or the comparison is reading a scope change that a
+person did not make. It is the first thing to take after this release.
+
 ## Candidate verification — 0.2.0-preview.15
 
 Preview.15 is the reviewed fixture-seeded preview following the live-gate

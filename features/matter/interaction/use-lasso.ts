@@ -35,6 +35,7 @@ import { projectOutsideLassoParticles } from "../material/lasso-particles";
 export type LassoController = Readonly<{
   active: boolean;
   drawing: boolean;
+  inkRef: React.RefObject<SVGSVGElement | null>;
   inkPathRef: React.RefObject<SVGPathElement | null>;
   closurePathRef: React.RefObject<SVGPathElement | null>;
   particleCanvasRef: React.RefObject<HTMLCanvasElement | null>;
@@ -77,6 +78,7 @@ export function useLasso(input: {
   );
   const stateRef = useRef(state);
   const sampledPointsRef = useRef<ClientPoint[]>([]);
+  const inkRef = useRef<SVGSVGElement>(null);
   const inkPathRef = useRef<SVGPathElement>(null);
   const closurePathRef = useRef<SVGPathElement>(null);
   const particleCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -111,6 +113,7 @@ export function useLasso(input: {
       inkPathRef.current?.setAttribute("d", "");
       closurePathRef.current?.setAttribute("d", "");
       clearParticleCanvas(particleCanvasRef.current);
+      clipInkToPaper(inkRef.current, null);
       return;
     }
     if (inkFrameRef.current !== null) return;
@@ -127,11 +130,9 @@ export function useLasso(input: {
         "d",
         showClosure ? paths.closure : "",
       );
-      renderOutsideParticles(
-        particleCanvasRef.current,
-        pendingPoints,
-        input.surfaceRef.current?.getBoundingClientRect() ?? null,
-      );
+      const paper = input.surfaceRef.current?.getBoundingClientRect() ?? null;
+      clipInkToPaper(inkRef.current, paper);
+      renderOutsideParticles(particleCanvasRef.current, pendingPoints, paper);
     });
   }, [input.surfaceRef]);
 
@@ -408,6 +409,7 @@ export function useLasso(input: {
   return {
     active: state.mode !== "inactive",
     drawing: state.mode === "drawing",
+    inkRef,
     inkPathRef,
     closurePathRef,
     particleCanvasRef,
@@ -428,6 +430,34 @@ export function useLasso(input: {
     pointerCancel,
   };
 }
+
+/**
+ * Ink belongs to the paper. A stroke may travel anywhere on screen and still
+ * mean what it meant — the semantic geometry below is untouched — but off the
+ * paper a person sees only the particle echo, never a line drawn across the
+ * material field. Clipping is presentation, so it is applied here at the
+ * rendering edge and never reaches selection.
+ */
+function clipInkToPaper(ink: SVGSVGElement | null, paper: DOMRect | null): void {
+  if (ink === null) return;
+  if (paper === null || paper.width <= 0 || paper.height <= 0) {
+    // With no inset the stylesheet's clip-path has no value to compute, so the
+    // ink is simply unclipped rather than clipped to nothing.
+    for (const edge of INK_CLIP_EDGES) ink.style.removeProperty(`--ink-clip-${edge}`);
+    return;
+  }
+  const inset = {
+    top: Math.max(0, paper.top),
+    right: Math.max(0, window.innerWidth - paper.right),
+    bottom: Math.max(0, window.innerHeight - paper.bottom),
+    left: Math.max(0, paper.left),
+  };
+  for (const edge of INK_CLIP_EDGES) {
+    ink.style.setProperty(`--ink-clip-${edge}`, `${Math.round(inset[edge])}px`);
+  }
+}
+
+const INK_CLIP_EDGES = ["top", "right", "bottom", "left"] as const;
 
 function clearParticleCanvas(canvas: HTMLCanvasElement | null): void {
   canvas?.getContext("2d")?.clearRect(0, 0, canvas.width, canvas.height);
@@ -456,9 +486,13 @@ function renderOutsideParticles(
   context.rect(paper.left, paper.top, paper.width, paper.height);
   context.clip("evenodd");
   for (const particle of projectOutsideLassoParticles(points, paper)) {
-    context.fillStyle = particle.tone === "light" ? "rgba(255,255,252,.72)" : "rgba(88,97,106,.36)";
+    context.globalAlpha = particle.opacity;
+    // The echo lands on the material field, never on the paper, so both weights
+    // are field ink rather than the paper's own palette.
+    context.fillStyle = particle.tone === "ink" ? "rgba(22,29,39,.62)" : "rgba(88,97,106,.34)";
     context.fillRect(particle.x, particle.y, particle.size, particle.size);
   }
+  context.globalAlpha = 1;
   context.restore();
 }
 

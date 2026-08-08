@@ -4,7 +4,14 @@ import { composePrompt, fenceJson } from "./prompt-spine";
 
 export const INQUIRY_SCENARIO_ID = "matter-inquiry";
 export const INQUIRY_PROMPT_VERSION = "2";
-const INQUIRY_PROVIDER_DEADLINE_MS = 8_000;
+/**
+ * The one scenario a person is deliberately waiting on, and the one with no
+ * floor to fall back to. The pool holds at most half of this for one relay, so
+ * this budget buys two attempts; the browser's own 20 s bound still arrives
+ * after it, so a server timeout reaches the paper as a stated unavailability
+ * rather than as a dead socket.
+ */
+const INQUIRY_PROVIDER_DEADLINE_MS = 16_000;
 const MAX_INQUIRY_ANSWER_CODE_POINTS = 1_200;
 
 /**

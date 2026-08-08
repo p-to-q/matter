@@ -2,11 +2,15 @@ import { pipeline } from "@huggingface/transformers";
 
 const MODEL_ID = "onnx-community/whisper-tiny";
 
-type WorkerRequest = Readonly<{
+type TranscriptionRequest = Readonly<{
+  type: "transcribe";
   id: string;
   audio: Float32Array;
   language: string;
 }>;
+
+type CancelRequest = Readonly<{ type: "cancel"; id: string }>;
+type WorkerRequest = TranscriptionRequest | CancelRequest;
 
 type WorkerScope = Readonly<{
   addEventListener: (
@@ -19,13 +23,25 @@ type WorkerScope = Readonly<{
 const scope = globalThis as unknown as WorkerScope;
 let transcriber: ReturnType<typeof createTranscriber> | null = null;
 let queue = Promise.resolve();
+const cancelled = new Set<string>();
 
 scope.addEventListener("message", (event) => {
-  queue = queue.then(() => transcribe(event.data), () => transcribe(event.data));
+  const request = event.data;
+  if (request.type === "cancel") {
+    cancelled.add(request.id);
+    scope.postMessage({ id: request.id, status: "cancelled" });
+    return;
+  }
+  queue = queue.then(() => transcribe(request), () => transcribe(request));
 });
 
-async function transcribe(request: WorkerRequest): Promise<void> {
+async function transcribe(request: TranscriptionRequest): Promise<void> {
+  if (cancelled.delete(request.id)) {
+    scope.postMessage({ id: request.id, status: "cancelled" });
+    return;
+  }
   try {
+    scope.postMessage({ id: request.id, status: "started" });
     transcriber ??= createTranscriber();
     const recognize = await transcriber;
     const result = await recognize(request.audio, {
@@ -34,6 +50,10 @@ async function transcribe(request: WorkerRequest): Promise<void> {
       chunk_length_s: 30,
       stride_length_s: 5,
     });
+    if (cancelled.delete(request.id)) {
+      scope.postMessage({ id: request.id, status: "cancelled" });
+      return;
+    }
     scope.postMessage({ id: request.id, status: "complete", text: result.text });
   } catch {
     // Model, network, and runtime details stay inside the worker boundary.
