@@ -199,7 +199,10 @@ version on the first probe, with all three model surfaces `available`.
 transcript repair      answered live from the deployed origin in 0.909 s,
                        source=model, on an utterance that needed punctuation.
                        Repair has no cache, so this is a real relay call and
-                       the first proof that the pool is reachable from hkg1
+                       the first proof that the pool is reachable from hkg1.
+                       It is intermittent: later calls at a wider 3.4 s single
+                       attempt still timed out, so the relay is sometimes under
+                       a second and usually several seconds away from hkg1
 thought label          answered source=model in 1.489 s. Labelling caches and
                        coalesces, so this is a live call or a late answer read
                        back from that cache; either way a person sees a name
@@ -221,6 +224,14 @@ ruled out (every relay answers a 720-token request in about a second). The next
 step is to make the failure legible before guessing again — the inquiry error
 carries no reason, while label and repair both report `fallbackReason`, so
 nothing outside the function can tell a timeout from a rejection.
+
+Widening deadlines further is not that step. Repair was given a single 3.4 s
+attempt and still timed out on three consecutive calls after answering one in
+0.909 s, which is the shape of a connection cost paid per cold relay rather
+than of a model that needs more time. Every further second is spent by a person
+holding still, so the next move is measurement — and, if the reading holds, a
+warm connection or a nearer relay rather than a longer wait. Tracked in
+issue #52.
 
 The credentials, pool endpoint, and model ordering remain Vercel-encrypted
 server environment values. Distributed rate limits and a provider spend ceiling
