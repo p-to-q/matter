@@ -16,6 +16,11 @@ Proof:      focused tests and browser evidence
 Non-goals:  nearby work deliberately excluded
 ```
 
+`Boundary` names the owning module, fact or lifecycle, and any public surface
+added or widened; it is not only a list of files. If one slice crosses several
+owners, state why they form one atomic change rather than convenient nearby
+work.
+
 Read before writing. Extend one active path, keep the diff coherent, and avoid
 dependency upgrades, file moves, formatting churn, and speculative abstractions.
 Repository evidence overrides generic practice. A frozen choice reopens only for
@@ -39,12 +44,61 @@ product intent.
 - Use stable error codes at boundaries. Provider messages, raw audio, transcript,
   and lineage never enter routine logs.
 
+## Module ownership
+
+Place code with the owner of its invariant, not in the widest module that can
+reach it. Before adding behavior to a store, component, controller, repository,
+or route, name the authoritative fact, policy, or lifecycle it owns; the public
+operation its caller needs; its allowed dependencies; and the proof for its
+failure boundary. If no current owner fits, add the smallest named module at the
+correct layer rather than making a convenient caller the new owner.
+
+Construction happens at an explicit composition boundary; behavior stays with
+its named owner. Product-wide modes and singleton choices belong at the product
+root. A resource used by one focused lifecycle may instead be constructed by
+that lifecycle's factory, which then owns its cleanup. Neither boundary
+validates domain values, derives layout or context, constructs private
+mutations, defines persistence semantics, or interprets provider results. Do
+not hide dependencies in a service locator or an unbounded `services`, context,
+or options bag; pass the narrow port or capability the owner actually uses.
+
+Reach does not decide state ownership. A value belongs in the application store
+only when its transition is application-level, not merely because several
+components need to read it. Render-local state stays at the rendering edge;
+resource-internal state stays with its session or adapter; a derived value is
+recomputed or kept in an explicitly disposable cache. The store exposes
+observable application state, public actions, and receipts. It does not create
+providers, workers, repositories, or fixtures, and it does not reimplement
+tree, codec, lineage, layout, or protocol rules.
+
+Modules are private by default. A new cross-module export needs a current
+consumer and exposes a narrow operation, port, or strict value rather than
+mutable internal state or a concrete adapter. Do not add a barrel that merely
+re-exports an implementation. A helper stays beside the policy that owns it;
+undifferentiated `common`, `shared`, `utils`, `services`, and `managers` are not
+owners. Extract a shared concept only when at least two current owners need the
+same stable behavior, then name it for that concept and preserve dependency
+direction.
+
+Recheck ownership before a module gains any of the following:
+
+- another durable fact with a different commit, invalidation, or failure policy;
+- another external resource with an independent cancel, retry, or cleanup path;
+- platform, storage, or provider adaptation beside pure policy;
+- test setup or reset machinery unrelated to its existing invariant;
+- a public export added only so another layer can reach an internal helper.
+
+These are review triggers, not automatic split rules. State that shares one
+invariant and lifecycle may stay together. When the owners differ, freeze the
+behavior and extract one owner at a time. Line count, hook count, import count,
+and fan-in are concentration signals only; none is a refactoring requirement.
+
 ## Architecture fitness
 
 These are the rules a change is held to, not a description of what the tree
-already satisfies everywhere. The current exceptions — an import cycle, browser
-code reaching into `server/*-contract`, and a fixture on a production path —
-are recorded in
+already satisfies everywhere. Current named exceptions include an import cycle,
+browser code reaching into `server/*-contract`, and a fixture on a production
+path; they are recorded in
 [`reference/architecture-governance.md`](reference/architecture-governance.md).
 Where the two disagree, that note is the state and this section is the target.
 
@@ -55,8 +109,11 @@ fixtures are leaves and must not supply behavior to a production path.
 
 Code shared by browser and server must be a neutral, strict, serializable
 contract. It does not belong in a provider module. Provider modules are
-server-only, browser adapters are client-only, and the composition root is the
-only place allowed to choose concrete adapters.
+server-only and browser adapters are client-only. A concrete adapter is chosen
+at an explicit composition boundary: the product root for product-wide modes,
+or the owning lifecycle factory for a lifecycle-local resource. Domain and
+application policy never discovers or silently selects fixture versus live
+behavior.
 
 Every external resource has one lifecycle owner. A microphone, worker, request,
 timer, animation frame, database handle, or subscription has an explicit start,
@@ -70,11 +127,13 @@ not a cache, and cannot be hidden behind best-effort cache failure semantics.
 Do not introduce a generic cache service merely to make these policies look
 uniform.
 
-Split a module when it owns several independent lifecycles or facts, not when it
-crosses an arbitrary line count. Preserve behavior first with focused tests,
-then extract one owner at a time. Once a dependency or ownership rule is stable
-and syntactic, encode it in `npm run check`; prose and review are not its final
-enforcement mechanism.
+Objective boundaries such as cycles, forbidden layer edges, and fixture or
+provider leaks belong in `npm run check`. Concentration metrics remain review
+signals because they cannot identify an invariant or lifecycle owner. Every
+architecture rule names an owner and has either a mechanical check or a focused
+proof; prose alone is guidance, not enforcement. Placement and extraction still
+require engineering judgment: record the present evidence and the signal that
+would reverse the choice instead of pretending an AST can decide ownership.
 
 ## Comments
 
@@ -98,6 +157,18 @@ worker, or platform SDK to solve a single first-release slice. Extract a shared
 abstraction only when two current call sites need the same stable concept.
 
 ## Proof
+
+Proof is proportional to the risk and protects the observable contract, not the
+current implementation shape. Tests hold outputs, durable authority, failure,
+cancellation, recovery, bounds, and compatibility where those matter. They do
+not freeze file counts, hook counts, helper names, private state shape, internal
+call order, or a particular adapter unless one of those is itself the boundary.
+
+A choice may be the best fit for the current browser, provider, roadmap, or
+measured workload without being universal. When that choice cannot be checked
+mechanically, record its evidence, the plausible alternative, and the condition
+that would reopen it; use a focused test, receipt, or review check rather than an
+artificial exhaustive gate. More tests are not automatically stronger proof.
 
 Generated Next route declarations are build state, not repository state.
 `next-env.d.ts` stays ignored; `npm run typegen` creates the declarations needed
