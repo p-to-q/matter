@@ -189,6 +189,39 @@ deployment requirement after promotion, npm run check:deployment must report
                        surfaces actually answer
 ```
 
+## Promotion receipt — 0.2.0-preview.16
+
+Promoted to `main` and served from `matter.ptoq.io` on 2026-08-09.
+`npm run check:deployment -- https://matter.ptoq.io --wait=120` matched the
+version on the first probe, with all three model surfaces `available`.
+
+```text
+transcript repair      answered live from the deployed origin in 0.909 s,
+                       source=model, on an utterance that needed punctuation.
+                       Repair has no cache, so this is a real relay call and
+                       the first proof that the pool is reachable from hkg1
+thought label          answered source=model in 1.489 s. Labelling caches and
+                       coalesces, so this is a live call or a late answer read
+                       back from that cache; either way a person sees a name
+inquiry                still unanswered. Every call spends the whole 16 s
+                       budget and returns 503, then the governor cools down.
+                       Not a relay-speed problem: the same pool answers repair
+                       in under a second from the same deployment, and a local
+                       production build against the same relays answers the
+                       identical inquiry request in ~1.1 s, repeatedly
+```
+
+So preview.16 fixes two of the three surfaces the previous release only
+claimed. Inquiry — the one with no floor — is still down, and its browser
+message is a truthful, retryable "could not answer just now" rather than an
+invented answer. The remaining difference between it and the two that work is
+inside the scenario, not in the relays: prompt size, output ceiling, and the
+per-scenario governor are the untested candidates, and the token cap is already
+ruled out (every relay answers a 720-token request in about a second). The next
+step is to make the failure legible before guessing again — the inquiry error
+carries no reason, while label and repair both report `fallbackReason`, so
+nothing outside the function can tell a timeout from a rejection.
+
 The credentials, pool endpoint, and model ordering remain Vercel-encrypted
 server environment values. Distributed rate limits and a provider spend ceiling
 remain the outstanding production control in issue #34.
