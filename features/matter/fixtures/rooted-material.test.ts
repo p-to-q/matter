@@ -45,7 +45,7 @@ describe("rooted material fixture", () => {
     const first = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, rootId),
+      createFixtureInsertChildCommand(fixture.tree, rootId, branchValues()),
       TEST_HISTORY_LIMITS,
     );
     if (!first.ok) throw new Error(first.error.code);
@@ -55,7 +55,7 @@ describe("rooted material fixture", () => {
     const second = commitTreeCommand(
       first.tree,
       first.history,
-      createFixtureInsertChildCommand(first.tree, secondLevelId),
+      createFixtureInsertChildCommand(first.tree, secondLevelId, branchValues()),
       TEST_HISTORY_LIMITS,
     );
     if (!second.ok) throw new Error(second.error.code);
@@ -103,11 +103,12 @@ describe("rooted material fixture", () => {
     expect(fixture.history).toEqual(createTreeHistory());
   });
 
-  it("uses monotonic revisions to avoid an id collision after undo", () => {
+  it("carries the caller's identity and time into durable material", () => {
     const fixture = createRootedMaterialFixture();
     const firstCommand = createFixtureInsertChildCommand(
       fixture.tree,
       ROOTED_FIXTURE_NODE_IDS.root,
+      branchValues(),
     );
     const firstCommit = commitTreeCommand(
       fixture.tree,
@@ -122,6 +123,7 @@ describe("rooted material fixture", () => {
     const secondCommand = createFixtureInsertChildCommand(
       undone.tree,
       ROOTED_FIXTURE_NODE_IDS.root,
+      branchValues(),
     );
     const secondCommit = commitTreeCommand(
       undone.tree,
@@ -136,6 +138,12 @@ describe("rooted material fixture", () => {
     }
     expect(secondCommand.mutation.node.id).not.toBe(firstCommand.mutation.node.id);
     expect(secondCommit.ok).toBe(true);
+    // A node a person made carries the moment they made it. This used to be a
+    // build constant, which reached exported Markdown frontmatter.
+    expect(firstCommand.mutation.node.createdAt).toBe(firstCommand.createdAt);
+    expect(firstCommand.mutation.node.updatedAt).toBe(firstCommand.createdAt);
+    expect(firstCommand.createdAt).not.toBe(secondCommand.createdAt);
+    expect(new Date(firstCommand.createdAt).toISOString()).toBe(firstCommand.createdAt);
   });
 
   it("builds a closed fixture text replacement with exact stale guards", () => {
@@ -161,7 +169,7 @@ describe("rooted material fixture", () => {
     const missingParent = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, "missing_parent"),
+      createFixtureInsertChildCommand(fixture.tree, "missing_parent", branchValues()),
       TEST_HISTORY_LIMITS,
     );
     const badIndex = commitTreeCommand(
@@ -170,6 +178,7 @@ describe("rooted material fixture", () => {
       createFixtureInsertChildCommand(
         fixture.tree,
         ROOTED_FIXTURE_NODE_IDS.root,
+        branchValues(),
         999,
       ),
       TEST_HISTORY_LIMITS,
@@ -225,4 +234,13 @@ function inspectShape(tree: ThoughtTree): {
   }
 
   return { maxDepth, maxChildren, textLengths };
+}
+
+let branchSequence = 0;
+function branchValues() {
+  branchSequence += 1;
+  return {
+    nodeId: `thought_branch_${branchSequence}`,
+    createdAt: `2026-08-09T00:00:${String(branchSequence).padStart(2, "0")}.000Z`,
+  };
 }

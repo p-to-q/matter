@@ -37,7 +37,13 @@ describe("inquiry route", () => {
       throw new Error("qwen-secret-provider-detail");
     });
     expect(response.status).toBe(503);
-    expect(await response.text()).not.toMatch(/qwen|provider|secret/iu);
+    const raw = await response.text();
+    expect(raw).not.toMatch(/qwen|provider|secret/iu);
+    // The scenario outcome is named so a deployment can tell a stalled relay
+    // from a refused answer. It is the same vocabulary label and repair
+    // already publish, and it carries no provider message, status, or identity.
+    expect((JSON.parse(raw) as { error: { reason?: string } }).error.reason)
+      .toBe("MODEL_UNAVAILABLE");
   });
 
   it("propagates request cancellation through the route boundary to the provider", async () => {

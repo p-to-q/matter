@@ -380,7 +380,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .admission-feedback button { min-height: 48px; }
 }
 
-@media (max-width: 340px) {
+/* The narrow column starts below 390px, not at 340px. Between those the 280px
+   column ran under the fixed rail — 18px at 341px, 8px at 360px (Galaxy S8),
+   1px at 375px (iPhone SE), and flush at 376px — so material sat beneath the
+   controls on two of the most common phone widths. 390px is the width the
+   browser receipt measures, and it keeps the wider column. */
+@media (max-width: 389px) {
   .matter-canvas { --matter-column-width: 236px; --matter-column-gap: 56px; left: calc(50% - 34px); }
   .spatial-thought__text { font-size: 22px; }
   .spatial-thought > .language-split-projection { font-size: 22px; }

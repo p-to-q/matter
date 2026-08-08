@@ -22,7 +22,7 @@ describe("Markdown snapshot codec", () => {
     const inserted = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!),
+      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 4, maxRetainedInverseBytes: 100_000 },
     );
     if (!inserted.ok) throw new Error(inserted.error.message);
@@ -72,7 +72,7 @@ describe("Markdown snapshot codec", () => {
     const inserted = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!),
+      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 4, maxRetainedInverseBytes: 100_000 },
     );
     if (!inserted.ok) throw new Error(inserted.error.message);
@@ -95,7 +95,7 @@ describe("Markdown snapshot codec", () => {
     const inserted = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!),
+      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 4, maxRetainedInverseBytes: 100_000 },
     );
     if (!inserted.ok) throw new Error(inserted.error.message);
@@ -165,4 +165,13 @@ function mutate(
   const files = { ...bundle.files } as Record<string, string>;
   change(files);
   return bundleToTree({ files });
+}
+
+let branchSequence = 0;
+function branchValues() {
+  branchSequence += 1;
+  return {
+    nodeId: `thought_branch_${branchSequence}`,
+    createdAt: `2026-08-09T00:00:${String(branchSequence).padStart(2, "0")}.000Z`,
+  };
 }

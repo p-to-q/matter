@@ -236,39 +236,45 @@ export function createRootedMaterialFixture(
 }
 
 /**
- * Creates the next deterministic fixture action. Its text is closed fixture
- * input, not a product prompt surface. The engine remains the sole owner of
- * parent existence, child limits, insertion bounds, and id-collision checks.
+ * Composes the next Branch child.
+ *
+ * The text is closed preview composition, not a product prompt surface: until
+ * the generative turn exists, Branch offers a continuation rather than writing
+ * one. Identity and time are supplied by the caller and are ordinary durable
+ * material — a person's own node, created when they created it. They were once
+ * derived from the tree revision and a frozen constant, which put a fixed past
+ * timestamp and a synthetic id into exported Markdown for every branch anyone
+ * made. The engine remains the sole owner of parent existence, child limits,
+ * insertion bounds, and id-collision checks.
  */
 export function createFixtureInsertChildCommand(
   tree: ThoughtTree,
   parentId: string,
+  values: Readonly<{ nodeId: string; createdAt: string }>,
   index = tree.nodes[parentId]?.children.length ?? 0,
 ): TreeCommand {
-  const sequence = tree.revision;
   const text = fixtureChildText(tree, parentId);
-  const nodeId = `thought_fixture_added_r${sequence}`;
 
   return {
-    id: `fixture_insert_r${sequence}`,
+    id: `branch_${values.nodeId}`,
     source: "fixture",
     expectedTreeId: tree.id,
     expectedRevision: tree.revision,
     mutation: {
       type: "insert-node",
       node: {
-        id: nodeId,
+        id: values.nodeId,
         text,
         parentId,
         children: [],
-        createdAt: FIXTURE_INSERT_TIME,
-        updatedAt: FIXTURE_INSERT_TIME,
+        createdAt: values.createdAt,
+        updatedAt: values.createdAt,
       },
       parentId,
       index,
       expectedParentChildren: [...(tree.nodes[parentId]?.children ?? [])],
     },
-    createdAt: FIXTURE_INSERT_TIME,
+    createdAt: values.createdAt,
   };
 }
 

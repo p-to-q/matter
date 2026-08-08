@@ -163,9 +163,12 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   // Beginning another lasso swaps the context callback while its projected
   // tree context is still the same. That render must not discard this reply.
   await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
-  const rootTextBox = await rootThought.locator("[data-thought-text-id]").boundingBox();
-  if (rootTextBox === null) throw new Error("fixture root text is not visible");
-  await page.mouse.move(rootTextBox.x + 8, rootTextBox.y + 8);
+  // Hover rather than a measured offset. A node's box may begin left of the
+  // paper it is clipped by, and a raw `x + 8` then lands in the material index
+  // — an outside pointer-down, which legitimately dismisses the bubble. Hover
+  // picks a point the element actually receives, so this asserts the product
+  // rule instead of racing the canvas position.
+  await rootThought.locator("[data-thought-text-id]").hover();
   await page.mouse.down();
   await expect(matterTurn).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
   await page.mouse.up();

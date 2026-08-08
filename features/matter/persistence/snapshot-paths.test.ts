@@ -10,14 +10,14 @@ describe("snapshot paths", () => {
     const first = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!),
+      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 10, maxRetainedInverseBytes: 100_000 },
     );
     if (!first.ok) throw new Error(first.error.message);
     const second = commitTreeCommand(
       first.tree,
       first.history,
-      createFixtureInsertChildCommand(first.tree, first.tree.rootId!),
+      createFixtureInsertChildCommand(first.tree, first.tree.rootId!, branchValues()),
       { maxEntries: 10, maxRetainedInverseBytes: 100_000 },
     );
     if (!second.ok) throw new Error(second.error.message);
@@ -41,3 +41,12 @@ describe("snapshot paths", () => {
     expect(materialSlug("!!!")).toBe("thought");
   });
 });
+
+let branchSequence = 0;
+function branchValues() {
+  branchSequence += 1;
+  return {
+    nodeId: `thought_branch_${branchSequence}`,
+    createdAt: `2026-08-09T00:00:${String(branchSequence).padStart(2, "0")}.000Z`,
+  };
+}

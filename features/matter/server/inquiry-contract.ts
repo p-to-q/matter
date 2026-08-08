@@ -73,8 +73,27 @@ export type InquiryAnswer =
 
 export type InquiryErrorCode = "INVALID_REQUEST" | "INQUIRY_FAILED";
 
+/**
+ * `reason` is the same vocabulary label and repair already publish as
+ * `fallbackReason`. It is a stable scenario outcome, never a provider message,
+ * status, or identity — and it is the only thing outside the function that can
+ * tell a relay that timed out from one that refused, was busy, or answered
+ * something the adjudicator would not use. Without it an inquiry failure is
+ * one opaque 503, which is how #52 stayed unmeasurable.
+ */
+export type InquiryFailureReason =
+  | "MODEL_TIMEOUT"
+  | "MODEL_UNAVAILABLE"
+  | "MODEL_BUSY"
+  | "MODEL_REJECTED";
+
 export type InquiryErrorEnvelope = Readonly<{
-  error: Readonly<{ code: InquiryErrorCode; message: string; retryable: boolean }>;
+  error: Readonly<{
+    code: InquiryErrorCode;
+    message: string;
+    retryable: boolean;
+    reason?: InquiryFailureReason;
+  }>;
 }>;
 
 export type InquiryParseResult =

@@ -4,7 +4,6 @@ import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import {
   createFixtureInsertChildCommand,
-  createFixtureReplaceTextCommand,
   createRootedMaterialFixture,
   ROOTED_FIXTURE_TREE_ID,
   ROOT_ONLY_FIXTURE_TREE_ID,
@@ -92,8 +91,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
   lastError: MatterStoreError | null;
   lastReceipt: MatterStoreReceipt | null;
-  insertFixtureChild: (parentId: string) => MatterStoreReceipt;
-  applyFixtureText: (nodeId: string, text: string) => MatterStoreReceipt;
+  extendMaterial: (parentId: string, values: BranchValues) => MatterStoreReceipt;
   admitHumanTranscript: (anchor: AdmissionAnchor, values: AdmissionValues) => MatterStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
   moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
@@ -108,6 +106,13 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt;
   clearError: () => void;
 };
+
+/**
+ * Identity and time for one extension. They arrive as values because a pure
+ * domain command may not read a clock or a random source, and because a node a
+ * person made must carry the moment they made it rather than a build constant.
+ */
+export type BranchValues = Readonly<{ nodeId: string; createdAt: string }>;
 
 export type DeepReadonly<T> = T extends (...args: never[]) => unknown
   ? T
@@ -156,13 +161,13 @@ export function createMatterStore(
     lastError: null,
     lastReceipt: null,
 
-    insertFixtureChild: (parentId) => {
+    extendMaterial: (parentId, values) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
         if (!Object.hasOwn(current.tree.nodes, parentId)) {
           const error: MatterStoreError = {
             code: "INVALID_COMMAND",
-            message: "The fixture parent node does not exist.",
+            message: "The parent thought does not exist.",
           };
           receipt = {
             operation: "commit",
@@ -172,24 +177,7 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        const command = createFixtureInsertChildCommand(current.tree, parentId);
-        const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
-        receipt = result.receipt;
-        const domain = protectDomain(result.state);
-        return freezeState({
-          ...current,
-          ...domain,
-          lastError: domain.lastError,
-          lastReceipt: protectValue(receipt),
-        });
-      });
-      return requireSynchronousReceipt(receipt);
-    },
-
-    applyFixtureText: (nodeId, text) => {
-      let receipt: MatterStoreReceipt | undefined;
-      set((current) => {
-        const command = createFixtureReplaceTextCommand(current.tree, nodeId, text);
+        const command = createFixtureInsertChildCommand(current.tree, parentId, values);
         const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
         receipt = result.receipt;
         const domain = protectDomain(result.state);

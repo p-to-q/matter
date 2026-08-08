@@ -70,7 +70,13 @@ export async function answerInquiry(
   // to: the person asked a question and is owed either an answer or the fact
   // that there is none. It is the one scenario whose failure is visible.
   if (!outcome.ok) {
-    throw new InquiryServerError("INQUIRY_FAILED", "Matter could not answer just now.", true, 503);
+    throw new InquiryServerError(
+      "INQUIRY_FAILED",
+      "Matter could not answer just now.",
+      true,
+      503,
+      outcome.fallback,
+    );
   }
   return Object.freeze({ protocolVersion: request.protocolVersion, basis, status: "answered", text: outcome.value, receipt });
 }

@@ -16,7 +16,7 @@ export function MatterApp() {
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
   const navigation = useMatterStore((state) => state.navigation);
-  const insertFixtureChild = useMatterStore((state) => state.insertFixtureChild);
+  const extendMaterial = useMatterStore((state) => state.extendMaterial);
   const undo = useMatterStore((state) => state.undo);
   const select = useMatterStore((state) => state.select);
   const clearSelection = useMatterStore((state) => state.clearSelection);
@@ -94,6 +94,12 @@ export function MatterApp() {
     ...(targetIndex === undefined ? {} : { targetIndex }),
     createdAt: new Date().toISOString(),
   }), [moveNode]);
+  // Branch is the one durable mutation whose material the product composes
+  // rather than the person speaking it. Its identity and time are still theirs.
+  const extendChild = useCallback((parentNodeId: string) => extendMaterial(parentNodeId, {
+    nodeId: `thought_${createOperationId()}`,
+    createdAt: new Date().toISOString(),
+  }), [extendMaterial]);
   const renameCurrentDocument = useCallback((title: string) => renameDocument({
     commandId: `human_title_${createOperationId()}`,
     title,
@@ -132,7 +138,7 @@ export function MatterApp() {
       onClearSelection={clearSelection}
       onExitFocus={showFull}
       onFocusNode={focus}
-      onInsertChild={insertFixtureChild}
+      onInsertChild={extendChild}
       onSelectNode={select}
       onToggleFold={toggleFold}
       onUndo={undo}
