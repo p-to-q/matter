@@ -444,6 +444,19 @@ const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
 // Inquiry stays over the material rather than making the material inert.
 const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language", "inquiry"]);
 
+/**
+ * A pointer-down on the paper or the editing rail is how a person addresses
+ * material — starting a lasso is the gesture that gives an inquiry its
+ * selection scope. Treating it as a dismissal made a selection-scoped question
+ * impossible to ask: reaching for the passage discarded the exchange first.
+ * An actual scope change still resets the composer through `scope-changed`.
+ */
+function addressesMaterial(target: Node): boolean {
+  const element = target instanceof Element ? target : target.parentElement;
+  return element?.closest(".matter-document, .tool-rail") != null;
+}
+
+
 const FOCUSABLE_SELECTOR = [
   "a[href]",
   "button:not([disabled])",
@@ -518,6 +531,7 @@ export function CanvasChrome({
       if (!MENU_OVERLAYS.has(overlay)) return;
       const target = event.target;
       if (!(target instanceof Node)) return;
+      if (overlay === "inquiry" && addressesMaterial(target)) return;
       const region = overlay === "settings"
         ? [settingsMenuRef.current, settingsButtonRef.current]
         : overlay === "language"

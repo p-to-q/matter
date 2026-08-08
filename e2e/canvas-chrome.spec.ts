@@ -162,13 +162,16 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expect(inquiryQuestions).toEqual(["这份材料在怀念什么？\n保留这里的停顿。"]);
   // Beginning another lasso swaps the context callback while its projected
   // tree context is still the same. That render must not discard this reply.
-  await page.getByRole("button", { name: "圈选文字", exact: true }).click();
+  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
   const rootTextBox = await rootThought.locator("[data-thought-text-id]").boundingBox();
   if (rootTextBox === null) throw new Error("fixture root text is not visible");
   await page.mouse.move(rootTextBox.x + 8, rootTextBox.y + 8);
   await page.mouse.down();
   await expect(matterTurn).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
   await page.mouse.up();
+  // Lasso is a re-click-to-exit mode. Leave it as this test found it, so the
+  // guidance assertions below still describe the unselected canvas.
+  await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
   await page.keyboard.press("Escape");
   await expect(inquiryDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
