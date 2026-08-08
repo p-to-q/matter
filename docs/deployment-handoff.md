@@ -1,7 +1,16 @@
 # Matter deployment handoff
 
-Status: **partial — the root-seeded browser preview may deploy; live model
-promotion remains deliberately blocked.**
+Status: **live — the root-seeded browser preview is deployed and all three model
+gates are open on `matter.ptoq.io`. The abuse and spend controls in issue #34
+are still outstanding, and that is now a live exposure rather than a plan.**
+
+The deployment owner enabled labels, transcript repair, and inquiry together on
+2026-08-08, ahead of the staged order below, so that the deployed origin matches
+a local `.env.local`. What that decision leaves open is recorded honestly here
+rather than removed: the in-process governors are per-instance only, no
+distributed rate rule exists, and no provider spend ceiling is configured. Until
+issue #34 closes, the practical ceiling on a runaway cost is the provider
+account itself.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -69,12 +78,13 @@ actually shipped. Do not move them back into `buildCommand`: Vercel rejects a
 runs, and that failure produces no build log. `npm test` now enforces the bound,
 both shapes, and the absence of any credential-shaped entry.
 
-The three model gates are independent. To reduce exposure during rollout, enable
-only labels first, then repair, then inquiry. `vercel.json` declares only the
-label gate; repair and inquiry stay unset there so their promotion remains an
-encrypted, owner-controlled step rather than a repository default. A missing or
-failing pool remains safe: labels stay deterministic, repair admits the words as
-heard, and inquiry states that it is unavailable.
+The three model gates are independent. `vercel.json` declares only the label
+gate; repair and inquiry live in the encrypted project environment, so each stays
+an owner-controlled step rather than a repository default. All three are
+currently set to `live` in production. A missing or failing pool remains safe at
+any time: labels stay deterministic, repair admits the words as heard, and
+inquiry states that it is unavailable, so turning one gate off is a complete
+rollback for that surface.
 
 ## Edge, spend, and access controls
 
@@ -146,7 +156,9 @@ or to bypass the scenario adjudicator.
 
 Validation: local `npm run check` and full Chromium E2E must pass before every
 source preview; after a Vercel promotion, add `npm run check:deployment` and the
-manual real-origin receipt above.
+manual real-origin receipt above. With the gates open, `/api/health` reports
+`thoughtLabel`, `transcriptRepair`, and `inquiry` as `available`; that word means
+a pool is configured, never that a relay answered.
 
 Risks: browser speech availability varies by browser/vendor; serverless
 in-memory governors do not replace edge rate limits; archive imports intentionally

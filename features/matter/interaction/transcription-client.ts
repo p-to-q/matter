@@ -11,6 +11,7 @@ import {
   type TranscriptionSuccess,
 } from "../server/transcription-contract";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+import { clientMatterBasePath } from "../config/base-path";
 
 export class TranscriptionClientError extends Error {
   constructor(
@@ -223,7 +224,7 @@ function isSuccess(value: unknown, interactionId: string, attempt: number): valu
 }
 
 function basePath(): string {
-  return process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
+  return clientMatterBasePath();
 }
 
 function localTranscriptionIsEnabled(): boolean {

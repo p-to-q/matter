@@ -615,7 +615,10 @@
 .inquiryDictate,
 .inquiryAsk {
   display: inline-flex;
-  height: 22px;
+  /* The pointer-target floor the release receipt claims. These are the
+     dictation microphone and the visible Ask action: both belong to the
+     pointer-and-voice primary path, so neither may sit below it. */
+  height: 24px;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
@@ -624,7 +627,7 @@
 }
 
 .inquiryDictate {
-  width: 22px;
+  width: 24px;
 }
 
 .inquiryDictate svg {

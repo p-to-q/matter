@@ -3,7 +3,10 @@ import { expect, test } from "@playwright/test";
 test("declares the language of the application chrome", async ({ page }) => {
   await page.goto("/matter");
 
-  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  // The shell is served as `lang="en"` because a person's stored language is
+  // not known until hydration; after it, the attribute must follow the canvas
+  // language so assistive technology reads material in its own voice.
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.getByRole("link", { name: "p to q — Matter" })).toBeVisible();
 });
 

@@ -1,3 +1,5 @@
+import type { InquiryClientReason } from "../interaction/inquiry-client";
+
 export const INQUIRY_MAX_CODE_POINTS = 500;
 export const INQUIRY_MAX_TURNS = 40;
 
@@ -7,7 +9,12 @@ export type InquiryTurnOutcome =
   | Readonly<{ status: "pending" }>
   | Readonly<{ status: "answered"; text: string }>
   | Readonly<{ status: "unavailable"; reason: InquiryUnavailableReason }>;
-export type InquiryUnavailableReason = "NO_PROVIDER" | "NO_MATERIAL" | "UNREACHABLE";
+/**
+ * The client owns this vocabulary, because it is the boundary that decides
+ * which refusal a response means. Re-declaring it here would let the reducer
+ * and the transport disagree about what a person can be told.
+ */
+export type InquiryUnavailableReason = InquiryClientReason;
 export type InquiryTurn =
   | Readonly<{ id: number; role: "person"; text: string }>
   | Readonly<{ id: number; role: "matter"; outcome: InquiryTurnOutcome }>;

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
@@ -84,12 +84,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     letterSpacing: "0.7px",
     lineHeight: "20px",
   });
-  expect(await page.locator('[data-chrome-region="desktop"] [data-chrome-control]').evaluateAll((buttons) =>
-    buttons.every((button) => {
-      const rect = button.getBoundingClientRect();
-      return rect.width >= 24 && rect.height >= 24;
-    }),
-  )).toBe(true);
+  expect(await measureControlFloor(page, '[data-chrome-region="desktop"] [data-chrome-control]')).toEqual([]);
 
   await page.waitForTimeout(1100);
   await guidance.evaluate((element) => { element.style.animation = "none"; });
@@ -145,6 +140,10 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(inquiryDialog).toContainText("先用麦克风说出根想法，再选中一段材料，继续向下生长。");
   await expect(inquiryField).toBeFocused();
   await expect(dictate).toBeVisible();
+  // The composer's controls carry data-inquiry-control rather than
+  // data-chrome-control, so the earlier floor never saw them. They only exist
+  // while the composer is open, which is why the check belongs here.
+  expect(await measureControlFloor(page, "[data-inquiry-control]")).toEqual([]);
   await dictate.click();
   const stopDictating = inquiryDialog.getByRole("button", { name: "停止口述", exact: true });
   await expect(stopDictating).toBeVisible();
@@ -243,4 +242,18 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
 
 function expectInset(actual: number, expected: number): void {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1.1);
+}
+
+/** Reports every matched control that falls below the 24 CSS px pointer floor. */
+async function measureControlFloor(page: Page, selector: string) {
+  const boxes = await page.locator(selector).evaluateAll((elements) => elements.map((element) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      name: element.getAttribute("aria-label") ?? element.textContent?.trim() ?? "",
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  }));
+  if (boxes.length === 0) throw new Error(`no controls matched ${selector}`);
+  return boxes.filter((box) => box.width < 24 || box.height < 24);
 }

@@ -216,8 +216,10 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
 
   const sidebar = page.locator("aside.material-files");
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
+  // Visible text and accessible name must be in the canvas language, not one
+  // Chinese label beside an English one.
   await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("存储已满 · 先导出备份");
-  await sidebar.getByRole("button", { name: "Open archive to export material before freeing storage" }).click();
+  await sidebar.getByRole("button", { name: "打开归档，先导出材料再清理存储" }).click();
 
   const archive = sidebar.getByRole("region", { name: "Material archive" });
   await expect(archive).toContainText("Local storage is full");

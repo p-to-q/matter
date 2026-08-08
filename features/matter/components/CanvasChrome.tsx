@@ -36,6 +36,7 @@ import {
   type InquiryContextPayload,
 } from "../server/inquiry-contract";
 import styles from "./CanvasChrome.module.css";
+import { isCancelEscape } from "./composition-safe-keys";
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
@@ -78,6 +79,8 @@ type CanvasChromeCopy = Readonly<{
   menu: string;
   noticeModelUnavailable: string;
   noticeNoMaterial: string;
+  noticeRateLimited: string;
+  noticeBusy: string;
   noticeUnreachable: string;
   noticeVoiceDenied: string;
   noticeVoiceFailed: string;
@@ -267,6 +270,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     menu: "Matter",
     noticeModelUnavailable: "Matter received this, but no answer model is connected yet.",
     noticeNoMaterial: "There is no material to answer about yet.",
+    noticeRateLimited: "Matter has this question. Give it a moment before asking again.",
+    noticeBusy: "Matter has this question but is busy right now. Try again shortly.",
     noticeUnreachable: "Matter could not be reached. The question was not sent further.",
     noticeVoiceDenied: "Microphone access was declined, so nothing was heard.",
     noticeVoiceFailed: "Dictation stopped early. Anything already heard was kept.",
@@ -300,6 +305,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     menu: "Matter",
     noticeModelUnavailable: "Matter 收到了，但还没有连接可以回答的模型。",
     noticeNoMaterial: "还没有材料可以回答。",
+    noticeRateLimited: "Matter 收到了这句话，先等一下再问。",
+    noticeBusy: "Matter 收到了这句话，但现在有点忙，稍后再试。",
     noticeUnreachable: "没能连上 Matter，这句话没有继续发送。",
     noticeVoiceDenied: "麦克风权限被拒绝，没有听到任何内容。",
     noticeVoiceFailed: "口述提前结束，已经听到的部分保留了下来。",
@@ -333,6 +340,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     menu: "Matter",
     noticeModelUnavailable: "Matter 收到了，但還沒有連接可以回答的模型。",
     noticeNoMaterial: "還沒有材料可以回答。",
+    noticeRateLimited: "Matter 收到了這句話，先等一下再問。",
+    noticeBusy: "Matter 收到了這句話，但現在有點忙，稍後再試。",
     noticeUnreachable: "沒能連上 Matter，這句話沒有繼續傳送。",
     noticeVoiceDenied: "麥克風權限被拒絕，沒有聽到任何內容。",
     noticeVoiceFailed: "口述提前結束，已聽到的部分保留了下來。",
@@ -366,6 +375,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     menu: "Matter",
     noticeModelUnavailable: "Matter は受け取りましたが、答えるモデルがまだ接続されていません。",
     noticeNoMaterial: "まだ答える材料がありません。",
+    noticeRateLimited: "Matter はこの問いを受け取りました。少し待ってからもう一度どうぞ。",
+    noticeBusy: "Matter はこの問いを受け取りましたが、今は混み合っています。少し後でどうぞ。",
     noticeUnreachable: "Matter に接続できず、この問いは送信されませんでした。",
     noticeVoiceDenied: "マイクへのアクセスが拒否されたため、何も聞き取れませんでした。",
     noticeVoiceFailed: "音声入力が途中で終了しました。聞き取った内容は保持されています。",
@@ -399,6 +410,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     menu: "Matter",
     noticeModelUnavailable: "Matter hat die Frage erhalten, aber noch ist kein Antwortmodell verbunden.",
     noticeNoMaterial: "Es gibt noch kein Material für eine Antwort.",
+    noticeRateLimited: "Matter hat die Frage. Warte einen Moment, bevor du erneut fragst.",
+    noticeBusy: "Matter hat die Frage, ist aber gerade ausgelastet. Versuche es gleich noch einmal.",
     noticeUnreachable: "Matter war nicht erreichbar; die Frage wurde nicht weitergesendet.",
     noticeVoiceDenied: "Der Mikrofonzugriff wurde abgelehnt; es wurde nichts gehört.",
     noticeVoiceFailed: "Das Diktat endete vorzeitig. Bereits Gehörtes wurde behalten.",
@@ -512,7 +525,9 @@ export function CanvasChrome({
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      // Closing the inquiry discards its draft and answers, so an Escape that
+      // is only dismissing an IME candidate window must not reach it.
+      if (isCancelEscape({ key: event.key, isComposing: event.isComposing })) {
         event.preventDefault();
         closeOverlay();
         return;
@@ -554,41 +569,45 @@ export function CanvasChrome({
     const canvas = root?.closest<HTMLElement>(".matter-document");
     if (root == null || canvas == null) return;
 
-    const rail = canvas.closest<HTMLElement>(".matter-shell")
-      ?.querySelector<HTMLElement>(".tool-rail") ?? null;
-    const railRecord = rail === null ? null : {
-      element: rail,
-      ariaHidden: rail.getAttribute("aria-hidden"),
-      inert: rail.inert,
+    const shell = canvas.closest<HTMLElement>(".matter-shell");
+    // The docked material index is a sibling of the paper, not a child of it,
+    // so inerting the canvas alone left it clickable behind an aria-modal
+    // dialog at desk widths, where it is always visible.
+    const siblings = [
+      shell?.querySelector<HTMLElement>(".tool-rail") ?? null,
+      shell?.querySelector<HTMLElement>(".material-files") ?? null,
+    ].filter((element): element is HTMLElement => element !== null);
+
+    const records = new Map<HTMLElement, Readonly<{ ariaHidden: string | null; inert: boolean }>>();
+    const hide = (element: HTMLElement) => {
+      if (element === root || records.has(element)) return;
+      records.set(element, { ariaHidden: element.getAttribute("aria-hidden"), inert: element.inert });
+      element.inert = true;
+      element.setAttribute("aria-hidden", "true");
+    };
+    const hideCanvasChildren = () => {
+      for (const child of Array.from(canvas.children)) {
+        if (child instanceof HTMLElement) hide(child);
+      }
     };
 
-    const records = Array.from(canvas.children)
-      .filter((child): child is HTMLElement => child instanceof HTMLElement && child !== root)
-      .map((element) => ({
-        element,
-        ariaHidden: element.getAttribute("aria-hidden"),
-        inert: element.inert,
-      }));
-    for (const record of records) {
-      record.element.inert = true;
-      record.element.setAttribute("aria-hidden", "true");
-    }
+    hideCanvasChildren();
+    for (const sibling of siblings) hide(sibling);
     canvas.setAttribute("data-canvas-modal-open", "true");
-    if (railRecord !== null) {
-      railRecord.element.inert = true;
-      railRecord.element.setAttribute("aria-hidden", "true");
-    }
+
+    // A snapshot taken once leaves anything React mounts later — the empty-state
+    // swap, a lasso count — tabbable behind the dialog.
+    const observer = new MutationObserver(hideCanvasChildren);
+    observer.observe(canvas, { childList: true });
+
     return () => {
+      observer.disconnect();
       canvas.removeAttribute("data-canvas-modal-open");
-      for (const record of records) {
-        record.element.inert = record.inert;
-        if (record.ariaHidden === null) record.element.removeAttribute("aria-hidden");
-        else record.element.setAttribute("aria-hidden", record.ariaHidden);
-      }
-      if (railRecord !== null) {
-        railRecord.element.inert = railRecord.inert;
-        if (railRecord.ariaHidden === null) railRecord.element.removeAttribute("aria-hidden");
-        else railRecord.element.setAttribute("aria-hidden", railRecord.ariaHidden);
+      for (const [element, record] of records) {
+        if (!element.isConnected) continue;
+        element.inert = record.inert;
+        if (record.ariaHidden === null) element.removeAttribute("aria-hidden");
+        else element.setAttribute("aria-hidden", record.ariaHidden);
       }
     };
   }, [modalOpen]);
@@ -1107,6 +1126,8 @@ function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string
   switch (outcome.reason) {
     case "NO_PROVIDER": return copy.noticeModelUnavailable;
     case "NO_MATERIAL": return copy.noticeNoMaterial;
+    case "RATE_LIMITED": return copy.noticeRateLimited;
+    case "BUSY": return copy.noticeBusy;
     case "UNREACHABLE": return copy.noticeUnreachable;
   }
 }

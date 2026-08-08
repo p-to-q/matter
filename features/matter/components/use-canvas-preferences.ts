@@ -31,6 +31,14 @@ export function useCanvasPreferences(): CanvasPreferencesBinding {
     return () => controller.release();
   }, [controller]);
 
+  // The document element ships as `lang="en"` because the shell is rendered
+  // before a person's stored language is known. Assistive technology picks a
+  // voice from this attribute, so leaving it English makes a screen reader
+  // pronounce Chinese, Japanese, and German material with an English voice.
+  useEffect(() => {
+    document.documentElement.lang = snapshot.preferences.language;
+  }, [snapshot.preferences.language]);
+
   const setLanguage = useCallback(
     (language: CanvasLanguage) => controller.setLanguage(language),
     [controller],

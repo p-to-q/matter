@@ -31,6 +31,9 @@ import {
   projectMaterialFileWindow,
   scrollTopForMaterialFileIndex,
 } from "./material-file-window";
+import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
+import { materialFilesCopy } from "./material-files-copy";
+import type { MatterLocale } from "../config/locales";
 
 export type MaterialFilesProps = Readonly<{
   /**
@@ -48,6 +51,8 @@ export type MaterialFilesProps = Readonly<{
   labels?: ReadonlyMap<string, string>;
   /** Provenance per row. Presentation only; never material. */
   labelOrigins?: ReadonlyMap<string, string>;
+  /** Canvas language. The index localizes its own identity and save states. */
+  locale: MatterLocale;
   navigation: NavigationState;
   onFocusNode: (nodeId: string) => void;
   /**
@@ -97,6 +102,7 @@ export type MaterialArchiveActions = Readonly<{
 }>;
 
 export function MaterialFiles(props: MaterialFilesProps) {
+  const copy = materialFilesCopy(props.locale);
   const [open, setOpen] = useState(false);
   /**
    * At desk widths the index is simply part of the shell: the gutter is already
@@ -591,10 +597,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
               }}
               onChange={(event) => setDocumentTitleDraft(event.currentTarget.value)}
               onKeyDown={(event) => {
-                if (event.key === "Escape") {
+                // The canvas title is durable material: blurring here commits
+                // it, so an IME composition must never reach either branch.
+                const composing = event.nativeEvent.isComposing;
+                if (isCancelEscape({ key: event.key, isComposing: composing })) {
                   setDocumentTitleDraft(documentTitle);
                   setRenamingDocument(false);
-                } else if (event.key === "Enter") event.currentTarget.blur();
+                } else if (isCommitEnter({ key: event.key, isComposing: composing })) {
+                  event.currentTarget.blur();
+                }
               }}
               value={documentTitleDraft}
             />
@@ -823,10 +834,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
                           renameFocusedRef.current = true;
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter") {
+                          const composing = event.nativeEvent.isComposing;
+                          if (isCommitEnter({ key: event.key, isComposing: composing })) {
                             event.preventDefault();
                             commitRename(file.nodeId, event.currentTarget.value);
-                          } else if (event.key === "Escape") {
+                          } else if (isCancelEscape({ key: event.key, isComposing: composing })) {
                             event.preventDefault();
                             setRenaming(null);
                           }
@@ -919,15 +931,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
           >
             <PixelIdenticon />
             <span className="material-files__profile-copy">
-              <span className="material-files__profile-name">采石者</span>
+              <span className="material-files__profile-name">{copy.identityName}</span>
               <span aria-live="polite" className="material-files__profile-meta">
                 {persistenceFailed
                   ? (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"
-                      ? "有更新的材料 · 重新载入"
+                      ? copy.conflict
                       : storageFull
-                        ? "存储已满 · 先导出备份"
-                      : "没有保存成功 · 重试")
-                  : showSaving ? "正在存到这台设备" : "仅存于这台设备"}
+                        ? copy.storageFull
+                      : copy.saveFailed)
+                  : showSaving ? copy.saving : copy.localOnly}
                 {showSaving && !persistenceFailed ? (
                   <span
                     aria-hidden="true"
@@ -940,10 +952,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
             {persistenceFailed ? (
               <button
                 aria-label={props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"
-                  ? "Reload newer material"
+                  ? copy.conflictAction
                   : storageFull
-                    ? "Open archive to export material before freeing storage"
-                    : "Retry saving material"}
+                    ? copy.storageFullAction
+                    : copy.saveFailedAction}
                 className="material-files__profile-action"
                 onClick={() => {
                   if (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT") {

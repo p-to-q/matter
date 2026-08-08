@@ -155,6 +155,11 @@ export class BrowserSpeechVoicePort implements VoicePort {
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
     if (this.recognition !== null) {
+      // Detaching handlers only makes a live session invisible. Release it here
+      // so no path can drop the reference while the microphone stays open —
+      // a failing `stop()` reaches cleanup after the driver has already
+      // forgotten the operation, so no later `cancel()` can do it instead.
+      try { this.recognition.abort(); } catch { /* releasing is best effort */ }
       this.recognition.onstart = null;
       this.recognition.onresult = null;
       this.recognition.onerror = null;

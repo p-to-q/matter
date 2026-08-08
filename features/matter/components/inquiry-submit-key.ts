@@ -1,3 +1,5 @@
+import { isCommitEnter } from "./composition-safe-keys";
+
 export type InquirySubmitKeyInput = Readonly<{
   key: string;
   shiftKey: boolean;
@@ -11,8 +13,5 @@ export type InquirySubmitKeyInput = Readonly<{
  * input or replaces the pointer-first inquiry path.
  */
 export function shouldSubmitInquiryOnEnter(input: InquirySubmitKeyInput): boolean {
-  return input.key === "Enter" &&
-    !input.shiftKey &&
-    !input.isComposing &&
-    input.canSubmit;
+  return isCommitEnter(input) && input.canSubmit;
 }

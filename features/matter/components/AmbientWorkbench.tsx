@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import styles from "./AmbientWorkbench.module.css";
+import { clientMatterBasePath } from "../config/base-path";
 
 export type AmbientWorkbenchProps = Readonly<{
   className?: string;
@@ -19,7 +20,7 @@ const NAVIGATION_PLAYBACK_RATE = 1.55;
 export function AmbientWorkbench({ className, enabled = true, navigationActive = false }: AmbientWorkbenchProps) {
   const [motionReady, setMotionReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const basePath = process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
+  const basePath = clientMatterBasePath();
   const assetPath = (name: string) => `${basePath}/matter-ui/${name}`;
   const rootClassName = ["matter-ambient", styles.root, className]
     .filter(Boolean)

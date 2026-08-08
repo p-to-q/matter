@@ -38,6 +38,25 @@ describe("inquiry client", () => {
     }
   });
 
+  it("separates a refused question from an unsent one", async () => {
+    // A rate-limited or shed question was received. Reporting it as never sent
+    // is untrue and invites an immediate retry into the same limiter.
+    const limited = vi.fn(() => Promise.resolve(new Response("", { status: 429 }))) as unknown as typeof fetch;
+    expect(await askInquiry({ ...INPUT, fetchImpl: limited }))
+      .toEqual({ status: "unavailable", reason: "RATE_LIMITED" });
+
+    const busy = vi.fn(() => Promise.resolve(new Response("", { status: 503 }))) as unknown as typeof fetch;
+    expect(await askInquiry({ ...INPUT, fetchImpl: busy }))
+      .toEqual({ status: "unavailable", reason: "BUSY" });
+
+    // Anything else may not have arrived, so unreachable stays the honest answer.
+    for (const status of [400, 403, 404, 500, 504]) {
+      const other = vi.fn(() => Promise.resolve(new Response("", { status }))) as unknown as typeof fetch;
+      expect(await askInquiry({ ...INPUT, fetchImpl: other }))
+        .toEqual({ status: "unavailable", reason: "UNREACHABLE" });
+    }
+  });
+
   it("makes document, revision, and selected-context changes stale", () => {
     const start = INPUT.context;
     expect(sameInquiryContext(start, { ...start })).toBe(true);

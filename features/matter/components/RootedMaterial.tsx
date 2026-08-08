@@ -66,6 +66,7 @@ import {
   type NodeDropLane,
   type NodeDropMode,
 } from "../interaction/node-drop-target";
+import { clientMatterBasePath } from "../config/base-path";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -135,7 +136,7 @@ type NodeDragGesture = {
 
 export function RootedMaterial(props: RootedMaterialProps) {
   const { canUndo, navigation, onRemoveSelected, onUndo, tree } = props;
-  const matterBasePath = process.env.NEXT_PUBLIC_MATTER_BASE_PATH ?? "/matter";
+  const matterBasePath = clientMatterBasePath();
   const { canvasPreferences } = props;
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
@@ -1065,6 +1066,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoSelectedNodeIds={lassoSelectedNodeIds}
         labels={labelByNodeId}
         labelOrigins={labelOriginByNodeId}
+        locale={props.canvasPreferences.preferences.language}
         navigation={navigation}
         onFocusNode={props.onFocusNode}
         onRenameNode={labels.rename}
@@ -1113,11 +1115,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
         panActive={!lasso.active && canvasMode === "pan"}
         voiceActive={props.admission.state.phase === "recording"}
         voiceAvailable={voiceAvailable}
+        // A navigation restriction must be named as one. The generic build
+        // limitation is the last branch, because reaching for it first told a
+        // person in focus view that the preview cannot record at all — and left
+        // both navigation explanations unreachable.
         voiceLabel={
           props.admission.state.phase === "recording"
             ? "Stop recording"
-            : !voiceAvailable
-              ? "Voice admission is unavailable in this preview"
             : props.admissionAnchor?.kind === "root"
             ? "Record a root thought"
             : props.admissionAnchor?.kind === "child" && props.admissionAnchor.parentNodeId === tree.rootId
@@ -1126,7 +1130,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 ? "Record a thought below the selected material"
               : navigation.mode === "focus"
                 ? "Voice admission unavailable in focus view"
-                : "Voice admission unavailable outside the full material view"
+                : !voiceAdmissionIsEnabled() || !browserVoiceSupported
+                  ? "Voice admission is unavailable in this preview"
+                  : "Voice admission unavailable outside the full material view"
         }
       />
       <section

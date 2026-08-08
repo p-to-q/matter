@@ -10,7 +10,12 @@ export type InquiryOutcome =
   | Readonly<{ status: "answered"; text: string }>
   | Readonly<{ status: "unavailable"; reason: InquiryClientReason }>;
 
-export type InquiryClientReason = "NO_PROVIDER" | "NO_MATERIAL" | "UNREACHABLE";
+export type InquiryClientReason =
+  | "NO_PROVIDER"
+  | "NO_MATERIAL"
+  | "RATE_LIMITED"
+  | "BUSY"
+  | "UNREACHABLE";
 
 export type AskInquiryInput = Readonly<{
   requestId?: string;
@@ -44,7 +49,11 @@ export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome
       }),
       signal: boundary.signal,
     });
-    if (!response.ok) return UNREACHABLE;
+    // A refused question was still sent, so it must not be reported as unsent.
+    // The status is the only thing read from a failed response: the route's own
+    // prose is English and would bypass this surface's localized copy, and a
+    // provider's message must never reach the page.
+    if (!response.ok) return refusalOutcome(response.status);
     const answer = parseInquiryAnswer(await response.json() as unknown, requestId, input.context);
     if (answer === null) return UNREACHABLE;
     return answer.status === "answered"
@@ -69,3 +78,24 @@ const UNREACHABLE: InquiryOutcome = Object.freeze({
   status: "unavailable",
   reason: "UNREACHABLE",
 });
+
+const RATE_LIMITED: InquiryOutcome = Object.freeze({
+  status: "unavailable",
+  reason: "RATE_LIMITED",
+});
+
+const BUSY: InquiryOutcome = Object.freeze({
+  status: "unavailable",
+  reason: "BUSY",
+});
+
+/**
+ * The two refusals the route authors for a question it did receive. Everything
+ * else stays UNREACHABLE, which is the only honest answer when the request may
+ * not have arrived at all.
+ */
+function refusalOutcome(status: number): InquiryOutcome {
+  if (status === 429) return RATE_LIMITED;
+  if (status === 503) return BUSY;
+  return UNREACHABLE;
+}

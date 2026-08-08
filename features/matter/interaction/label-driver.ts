@@ -258,8 +258,11 @@ export class LabelDriver {
   }
 
   private applyRestored(treeId: string, records: readonly LabelRecord[]): void {
-    this.restoring = false;
+    // A load that resolves for a previous document must not clear the flag the
+    // current document's load is still holding, or stored labels are re-asked
+    // of the model while their own restore is in flight.
     if (this.disposed || this.state.treeId !== treeId) return;
+    this.restoring = false;
     if (records.length > 0) {
       const next = reduceLabelSession(this.state, {
         type: "restore",
@@ -386,8 +389,21 @@ export class LabelDriver {
       // than spending a deadline per visible row.
       this.cooldownUntilMs = this.now() + this.limits.cooldownMs;
       this.consecutiveFailures = 0;
-      for (const queued of this.queue) queued.controller.abort();
-      this.queue.length = 0;
+      // Dropping a queued request must also release its session entry. An entry
+      // left holding a pending operation id is skipped by every later plan, so
+      // one bad endpoint window would otherwise cost those rows their model
+      // label permanently, long after the cooldown expires.
+      const abandoned = this.queue.splice(0, this.queue.length);
+      for (const queued of abandoned) {
+        queued.controller.abort();
+        const released = reduceLabelSession(this.state, {
+          type: "failed",
+          nodeId: queued.item.nodeId,
+          basis: queued.item.basis,
+          operationId: queued.operationId,
+        });
+        if (released !== this.state) this.publish(released);
+      }
     }
     const next = reduceLabelSession(this.state, {
       type: "failed",

@@ -17,6 +17,36 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-08 — The model gates open, and the surfaces behind them tell the truth
+
+Changed: labels, transcript repair, and Ask Matter run against the live pool on
+`matter.ptoq.io`, configured as encrypted Vercel production variables, so the
+deployed origin and a local `.env.local` now carry the same three gates.
+
+Six surfaces behind those gates were corrected first, because opening a gate is
+what makes them reachable. Admission no longer substitutes English spoken
+punctuation: "period" and "comma" are ordinary nouns, and no lexical rule can
+tell a dictated command from the word itself, so "during that period we
+shipped" was being admitted as "during that.we shipped". CJK substitution stays
+and now skips a punctuation word that follows a determiner. A refused inquiry
+reports being rate-limited or shed rather than never sent. A label queue dropped
+on cooldown releases its session entries instead of stranding those rows
+permanently. Enter and Escape yield to an IME composition wherever they commit
+or discard, which includes the durable canvas title. The material index is
+localized, so the only signal that saving stopped is readable. `<html lang>`
+follows the canvas language. A modal's inert set is live rather than a snapshot
+and now covers the docked material index. Voice reports a navigation
+restriction as one instead of as a missing capability.
+
+Why: a truthful floor is what makes a failing provider harmless, and every one
+of these surfaces was either untruthful or unreachable in exactly the states a
+live provider produces. Enabling a model first would have shipped them.
+
+Forecloses: rewriting a person's wording on the human admission path, telling
+someone a received question was never sent, a cooldown that costs rows their
+label for the rest of a session, committing an IME pre-conversion buffer as
+durable material, and an aria-modal dialog with a reachable background.
+
 ## 2026-08-08 — The deployment build shape is configuration, not a command prefix
 
 Changed: `vercel.json` declares the dedicated-domain build shape in `build.env`

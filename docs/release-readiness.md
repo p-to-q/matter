@@ -150,6 +150,45 @@ deployment proof       after Git integration deploys, check the dedicated origin
                        with npm run check:deployment -- https://matter.ptoq.io
 ```
 
+## Candidate verification — 0.2.0-preview.14
+
+Preview.14 opens the three model gates on the deployed origin and corrects the
+surfaces those gates make reachable. `matter.ptoq.io` and a local `.env.local`
+now carry the same label, repair, and inquiry configuration.
+
+```text
+release proof          npm run check: 950 Vitest passed + 1 skipped; 32 Node
+                       tests passed; doctor, docs, typegen, typecheck, lint,
+                       and the production build all passed
+browser proof          npm run test:e2e: 43 passed + 2 capability-gated skips
+                       across 45 Chromium cases
+parity proof           /api/health reports thoughtLabel, transcriptRepair, and
+                       inquiry as available on the deployed origin, matching a
+                       local run with the same three gates
+```
+
+Corrections shipped with it, each one a state a live provider produces:
+
+- English spoken-punctuation substitution is removed from admission. "period"
+  and "comma" are ordinary nouns, so the rule rewrote wording, which
+  [`material.md`](material.md) forbids on the human path. CJK substitution
+  remains and now skips a punctuation word following a determiner.
+- A rate-limited or shed inquiry is reported as refused, not as never sent.
+- A label queue dropped on cooldown releases its session entries, so one bad
+  endpoint window no longer costs those rows their label for the session.
+- Enter and Escape yield to an IME composition wherever they commit or discard,
+  including the durable canvas title.
+- The material index is localized; `<html lang>` follows the canvas language.
+- A modal's inert set is live rather than a one-time snapshot and now covers the
+  docked material index.
+- The inquiry dictation and Ask controls meet the 24 CSS px floor, and the
+  browser receipt that claims that floor now actually measures them.
+
+Outstanding and deliberately not claimed: the distributed rate rules and
+provider spend ceiling in issue #34 are still absent, so the gates are open
+without an abuse or cost control. The `lasso-flow` stretch flake recorded under
+Preview.13 is unchanged.
+
 ## Candidate verification — 0.2.0-preview.13
 
 Preview.13 changes no product code. It makes the repository deployable again and

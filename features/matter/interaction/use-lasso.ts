@@ -233,6 +233,8 @@ export function useLasso(input: {
   ]);
 
   useEffect(() => {
+    let outerFrame = 0;
+    let innerFrame = 0;
     const invalidate = () => {
       // Return pointer authority before geometry disappears and capture can be lost.
       onGeometryInvalidated?.();
@@ -250,8 +252,17 @@ export function useLasso(input: {
         setSelectionColumn(null);
         setSelections([]);
       }
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => remeasureSelection(stateRef.current.selection));
+      // One remeasure is owed per invalidation burst, and it must not outlive
+      // the effect: a scroll or blur immediately before unmount would otherwise
+      // measure a detached canvas and set state on a gone component.
+      if (outerFrame !== 0) cancelAnimationFrame(outerFrame);
+      if (innerFrame !== 0) cancelAnimationFrame(innerFrame);
+      outerFrame = requestAnimationFrame(() => {
+        outerFrame = 0;
+        innerFrame = requestAnimationFrame(() => {
+          innerFrame = 0;
+          remeasureSelection(stateRef.current.selection);
+        });
       });
     };
     window.addEventListener("resize", invalidate);
@@ -274,6 +285,8 @@ export function useLasso(input: {
       window.visualViewport?.removeEventListener("resize", invalidate);
       window.visualViewport?.removeEventListener("scroll", invalidate);
       document.fonts?.removeEventListener?.("loadingdone", invalidate);
+      if (outerFrame !== 0) cancelAnimationFrame(outerFrame);
+      if (innerFrame !== 0) cancelAnimationFrame(innerFrame);
     };
   }, [dispatch, onGeometryInvalidated, remeasureSelection, writeInk]);
 
