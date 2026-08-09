@@ -18,7 +18,7 @@ import type {
   RepairFallbackReason,
   RepairRequest,
   RepairSuccess,
-} from "./repair-contract";
+} from "../protocol/repair-contract";
 import { REPAIR_SCENARIO } from "./repair-harness";
 
 /**

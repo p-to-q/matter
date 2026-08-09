@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
-import type { LabelRequest } from "./label-contract";
+import type { LabelRequest } from "../protocol/label-contract";
 import {
   DEFAULT_LABEL_LIMITS,
   buildLabelPrompt,

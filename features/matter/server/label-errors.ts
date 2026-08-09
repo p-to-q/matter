@@ -1,4 +1,4 @@
-import type { LabelErrorCode, LabelErrorEnvelope } from "./label-contract";
+import type { LabelErrorCode, LabelErrorEnvelope } from "../protocol/label-contract";
 
 /**
  * The only error type that may cross the label route boundary. Provider

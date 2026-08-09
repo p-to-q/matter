@@ -17,6 +17,63 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — The load window enters conflict instead of picking a winner
+
+Changed: material committed between mount and the first IndexedDB read no longer
+resolves against stored material by revision. Divergence raises the same
+explicit conflict a second tab already raises, and neither version is written
+over the other.
+
+Why: a revision is monotonic only inside one lineage. The live tree in that
+window descends from the seeded document and the stored tree descends from the
+last session, so comparing their numbers compared nothing. Both directions lost
+material silently: a stored r6 beat a live r6 and the sentence just spoken
+disappeared, and a live r7 beat a stored r6 and the whole prior session did.
+
+Forecloses: any rule that resolves two lineages by arithmetic, and any silent
+choice between two versions of a person's material.
+
+---
+
+## 2026-08-09 — A name that did not reach disk is not reported as kept
+
+Changed: label writes return a typed receipt. A manual name whose write failed
+returns to its editor with what was typed still in it; a model label ignores the
+receipt exactly as before. The read cap keeps manual rows ahead of cache rows.
+
+Why: the repository swallowed every storage failure and resolved, so the driver
+published the name as committed. A person typed a name, saw it, reloaded, and it
+was gone — with nothing having reported a failure. Losing a model label costs a
+regeneration; losing a name costs a decision, and the two shared one best-effort
+API. The read cap had the same shape: it cut in index order, so a manual name
+could be dropped in favour of a label that regenerates for free.
+
+Forecloses: a storage failure that presents as success, and a cache policy
+evicting something that cannot be recomputed.
+
+---
+
+## 2026-08-09 — The architecture fitness rules are executable
+
+Changed: `npm run check:architecture` holds four rules over the static import
+graph — layers point inward, a wire contract does not import either side of its
+wire, only server code reaches the model pool, and there are no cycles. It runs
+inside `npm test`. The three recorded exceptions were cleared first: the seeded
+document moved from `fixtures/` to `material/`, the wire contracts moved from
+`server/` to a neutral `protocol/`, and the two voice transports now share a
+`voice-port` module instead of importing each other.
+
+Why: `docs/engineering.md` already said a stable dependency rule belongs in
+`npm run check` rather than in prose. It stayed prose because the tree had
+exceptions, and a check that fails on the day it lands is a check someone
+silences. Type-only edges are not counted: they are erased before anything runs,
+and the rule is about the runtime graph.
+
+Forecloses: an architecture document that describes an aspiration, and a
+dependency rule whose final enforcement is whether a reviewer remembers it.
+
+---
+
 ## 2026-08-09 — A label's budget is sized for a cold connection
 
 Changed: the thought-label budget rises from 6 s to 12 s, with the browser's

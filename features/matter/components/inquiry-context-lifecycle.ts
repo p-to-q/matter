@@ -1,7 +1,7 @@
 import {
   sameInquiryContext,
   type InquiryContextPayload,
-} from "../server/inquiry-contract";
+} from "../protocol/inquiry-contract";
 
 /** A new projection callback is not itself a new material scope. */
 export function inquiryContextScopeChanged(

@@ -5,8 +5,12 @@ import {
   type LabelSessionState,
   type LabelWorkItem,
 } from "../runtime/label-session";
-import type { LabelRecord, LabelRepository } from "../persistence/label-repository";
-import type { LabelSuccess } from "../server/label-contract";
+import type {
+  LabelRecord,
+  LabelRepository,
+  LabelWriteReceipt,
+} from "../persistence/label-repository";
+import type { LabelSuccess } from "../protocol/label-contract";
 import type { ThoughtTree } from "../tree/model";
 import type { requestLabel } from "./label-client";
 
@@ -57,6 +61,12 @@ type PendingRequest = Readonly<{
  * later, after the reducer confirms the node, its material, and the operation
  * are all still current.
  */
+/**
+ * No write was attempted: disposed, empty, or already this name. Not a failure
+ * — there is nothing here that could have been lost.
+ */
+const WRITE_SKIPPED: LabelWriteReceipt = Object.freeze({ ok: true });
+
 export class LabelDriver {
   private state: LabelSessionState;
   private readonly dependencies: LabelDriverDependencies;
@@ -66,7 +76,7 @@ export class LabelDriver {
   private readonly listeners = new Set<(state: LabelSessionState) => void>();
   private readonly active = new Map<string, PendingRequest>();
   private readonly queue: PendingRequest[] = [];
-  private readonly durableMutations = new Map<string, Promise<void>>();
+  private readonly durableMutations = new Map<string, Promise<unknown>>();
   private consecutiveFailures = 0;
   private cooldownUntilMs = 0;
   private restoredTreeId: string | null = null;
@@ -148,36 +158,44 @@ export class LabelDriver {
     }
   }
 
-  /** Replaces the label of one node with a name the person typed. */
-  rename(nodeId: string, label: string): Promise<void> {
-    if (this.disposed) return Promise.resolve();
+  /**
+   * Replaces the label of one node with a name the person typed.
+   *
+   * Resolves to whether the name reached disk. The name is shown either way —
+   * it is their decision and discarding it would be the worse error — but a
+   * name that only exists in this session must not be reported as kept.
+   */
+  rename(nodeId: string, label: string): Promise<LabelWriteReceipt> {
+    if (this.disposed) return Promise.resolve(WRITE_SKIPPED);
     const trimmed = label.trim();
-    if (trimmed.length === 0) return Promise.resolve();
+    if (trimmed.length === 0) return Promise.resolve(WRITE_SKIPPED);
     const next = reduceLabelSession(this.state, { type: "rename", nodeId, label: trimmed });
-    if (next === this.state) return Promise.resolve();
+    if (next === this.state) return Promise.resolve(WRITE_SKIPPED);
     const treeId = this.state.treeId;
     const documentEpoch = this.state.documentEpoch;
     this.cancelPending(nodeId);
     return this.enqueueDurableMutation(treeId, nodeId, async () => {
+      let receipt: LabelWriteReceipt;
       try {
-        await this.dependencies.repository?.put(treeId, {
+        receipt = await this.dependencies.repository?.put(treeId, {
           nodeId,
           label: trimmed,
           origin: "user",
           basis: null,
           updatedAt: this.canonicalNow(),
-        });
+        }) ?? WRITE_SKIPPED;
       } catch {
-        // Storage is best effort; the in-memory name still belongs to the person.
+        receipt = Object.freeze({ ok: false, code: "STORAGE_UNAVAILABLE" });
       }
       if (
         this.disposed ||
         this.state.treeId !== treeId ||
         this.state.documentEpoch !== documentEpoch ||
         this.lastScope?.tree.nodes[nodeId] === undefined
-      ) return;
+      ) return receipt;
       const committed = reduceLabelSession(this.state, { type: "rename", nodeId, label: trimmed });
       if (committed !== this.state) this.publish(committed);
+      return receipt;
     });
   }
 
@@ -295,11 +313,11 @@ export class LabelDriver {
     }
   }
 
-  private enqueueDurableMutation(
+  private enqueueDurableMutation<Result>(
     treeId: string,
     nodeId: string,
-    mutation: () => Promise<void>,
-  ): Promise<void> {
+    mutation: () => Promise<Result>,
+  ): Promise<Result> {
     const key = `${treeId} ${nodeId}`;
     const previous = this.durableMutations.get(key) ?? Promise.resolve();
     const current = previous.catch(() => undefined).then(mutation);

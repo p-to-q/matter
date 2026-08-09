@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
-import { MAX_LABEL_RESPONSE_BYTES } from "../server/label-contract";
+import { MAX_LABEL_RESPONSE_BYTES } from "../protocol/label-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { LabelClientError, requestLabel } from "./label-client";
 

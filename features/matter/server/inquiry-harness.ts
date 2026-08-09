@@ -1,4 +1,4 @@
-import type { InquiryRequest } from "./inquiry-contract";
+import type { InquiryRequest } from "../protocol/inquiry-contract";
 import type { MatterScenario } from "./harness";
 import { composePrompt, fenceJson } from "./prompt-spine";
 

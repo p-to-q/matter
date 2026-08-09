@@ -6,7 +6,7 @@ import {
   parseInquiryRequest,
   type InquiryAnswer,
   type InquiryRequest,
-} from "./inquiry-contract";
+} from "../protocol/inquiry-contract";
 import { InquiryServerError, invalidInquiryRequest } from "./inquiry-errors";
 import { resolveInquiryAdapter } from "./inquiry-provider";
 import { INQUIRY_SCENARIO } from "./inquiry-harness";

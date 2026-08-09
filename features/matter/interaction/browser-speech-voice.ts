@@ -1,5 +1,5 @@
 import { RECORDING_LIMIT_MS } from "./audio-policy";
-import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./browser-voice";
+import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./voice-port";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 type SpeechAlternative = { readonly transcript: string };

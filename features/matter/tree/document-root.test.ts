@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
 import { projectLayoutProjection } from "../components/layout-projection";
 import { createNavigationState } from "../runtime/navigation";
 import { normalizeDocumentTree } from "./document-root";
@@ -7,7 +7,7 @@ import { createEmptyTree, validateThoughtTree } from "./invariants";
 
 describe("document root normalization", () => {
   it("migrates a legacy visible root into the first visible top-level node", () => {
-    const legacy = createRootedMaterialFixture().tree;
+    const legacy = createSeededDocument().tree;
     const tree = normalizeDocumentTree(legacy);
     const root = tree.nodes[tree.rootId!];
 
@@ -30,7 +30,7 @@ describe("document root normalization", () => {
   });
 
   it("is idempotent for an already normalized document", () => {
-    const tree = normalizeDocumentTree(createRootedMaterialFixture().tree);
+    const tree = normalizeDocumentTree(createSeededDocument().tree);
     expect(normalizeDocumentTree(tree)).toBe(tree);
   });
 
@@ -42,7 +42,7 @@ describe("document root normalization", () => {
   });
 
   it("repairs an early structural root that predates the explicit role", () => {
-    const normalized = normalizeDocumentTree(createRootedMaterialFixture().tree);
+    const normalized = normalizeDocumentTree(createSeededDocument().tree);
     const rootId = normalized.rootId!;
     const early = {
       ...normalized,

@@ -2,7 +2,7 @@ import {
   INQUIRY_CLIENT_TIMEOUT_MS,
   parseInquiryAnswer,
   type InquiryContextPayload,
-} from "../server/inquiry-contract";
+} from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { clientMatterBasePath } from "../config/base-path";
 

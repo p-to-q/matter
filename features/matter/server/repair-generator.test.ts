@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { TRANSCRIPT_REPAIR_PROMPT_VERSION } from "../material/transcript-repair";
 import { PROTOCOL_VERSION } from "../tree/model";
-import type { RepairRequest } from "./repair-contract";
+import type { RepairRequest } from "../protocol/repair-contract";
 import type { ScenarioAdapter } from "./harness";
 import { compileRepairPrompt } from "./repair-harness";
 import {

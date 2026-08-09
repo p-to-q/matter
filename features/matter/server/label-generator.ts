@@ -19,7 +19,7 @@ import {
   type LabelFallbackReason,
   type LabelRequest,
   type LabelSuccess,
-} from "./label-contract";
+} from "../protocol/label-contract";
 import { LabelServerError } from "./label-errors";
 import { LABEL_SCENARIO, buildLabelPrompt } from "./label-harness";
 import { resolvePoolAdapter } from "./model-pool";

@@ -1,4 +1,4 @@
-import type { RepairErrorCode, RepairErrorEnvelope } from "./repair-contract";
+import type { RepairErrorCode, RepairErrorEnvelope } from "../protocol/repair-contract";
 
 /**
  * The only error type that may cross the repair route boundary. Provider

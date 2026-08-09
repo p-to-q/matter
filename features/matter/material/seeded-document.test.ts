@@ -12,14 +12,13 @@ import {
 } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
 import {
-  ROOTED_FIXTURE_NODE_IDS,
-  ROOTED_FIXTURE_TEXT_VARIANTS,
-  ROOT_ONLY_FIXTURE_TREE_ID,
-  createFixtureInsertChildCommand,
-  createFixtureReplaceTextCommand,
+  SEEDED_DOCUMENT_NODE_IDS,
+  SEEDED_DOCUMENT_TEXT_VARIANTS,
+  SEEDED_ROOT_ONLY_TREE_ID,
+  createBranchChildCommand,
   createPerformanceThoughtTree,
-  createRootedMaterialFixture,
-} from "./rooted-material";
+  createSeededDocument,
+} from "./seeded-document";
 
 const TEST_HISTORY_LIMITS = {
   maxEntries: 16,
@@ -28,24 +27,24 @@ const TEST_HISTORY_LIMITS = {
 
 describe("rooted material fixture", () => {
   it("keeps the public root-only fixture free of prewritten descendants", () => {
-    const fixture = createRootedMaterialFixture("root");
+    const fixture = createSeededDocument("root");
 
-    expect(fixture.tree.id).toBe(ROOT_ONLY_FIXTURE_TREE_ID);
-    expect(fixture.tree.rootId).toBe(ROOTED_FIXTURE_NODE_IDS.root);
-    expect(Object.keys(fixture.tree.nodes)).toEqual([ROOTED_FIXTURE_NODE_IDS.root]);
-    expect(fixture.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root]?.children).toEqual([]);
+    expect(fixture.tree.id).toBe(SEEDED_ROOT_ONLY_TREE_ID);
+    expect(fixture.tree.rootId).toBe(SEEDED_DOCUMENT_NODE_IDS.root);
+    expect(Object.keys(fixture.tree.nodes)).toEqual([SEEDED_DOCUMENT_NODE_IDS.root]);
+    expect(fixture.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root]?.children).toEqual([]);
     expect(fixture.history.entries).toEqual([]);
   });
 
   it("grows semantic fixture branches through the second and third levels", () => {
-    const fixture = createRootedMaterialFixture("root");
+    const fixture = createSeededDocument("root");
     const rootId = fixture.tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
 
     const first = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, rootId, branchValues()),
+      createBranchChildCommand(fixture.tree, rootId, branchValues()),
       TEST_HISTORY_LIMITS,
     );
     if (!first.ok) throw new Error(first.error.code);
@@ -55,7 +54,7 @@ describe("rooted material fixture", () => {
     const second = commitTreeCommand(
       first.tree,
       first.history,
-      createFixtureInsertChildCommand(first.tree, secondLevelId, branchValues()),
+      createBranchChildCommand(first.tree, secondLevelId, branchValues()),
       TEST_HISTORY_LIMITS,
     );
     if (!second.ok) throw new Error(second.error.code);
@@ -68,29 +67,29 @@ describe("rooted material fixture", () => {
   });
 
   it("is deterministic, valid, and opens with a three-level source lineage", () => {
-    const first = createRootedMaterialFixture();
-    const second = createRootedMaterialFixture();
+    const first = createSeededDocument();
+    const second = createSeededDocument();
 
     expect(first).toEqual(second);
     expect(validateThoughtTree(first.tree)).toEqual({ ok: true });
-    expect(first.tree.rootId).toBe(ROOTED_FIXTURE_NODE_IDS.root);
-    expect(first.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root]).toMatchObject({
-      text: ROOTED_FIXTURE_TEXT_VARIANTS[0].text,
+    expect(first.tree.rootId).toBe(SEEDED_DOCUMENT_NODE_IDS.root);
+    expect(first.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root]).toMatchObject({
+      text: SEEDED_DOCUMENT_TEXT_VARIANTS[0].text,
       children: [
-        ROOTED_FIXTURE_NODE_IDS.imaginedLives,
-        ROOTED_FIXTURE_NODE_IDS.presentDistance,
-        ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+        SEEDED_DOCUMENT_NODE_IDS.imaginedLives,
+        SEEDED_DOCUMENT_NODE_IDS.presentDistance,
+        SEEDED_DOCUMENT_NODE_IDS.bodilyMemory,
       ],
     });
-    expect(first.tree.nodes[ROOTED_FIXTURE_NODE_IDS.imaginedLives]).toMatchObject({
-      parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    expect(first.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedLives]).toMatchObject({
+      parentId: SEEDED_DOCUMENT_NODE_IDS.root,
       children: [
-        ROOTED_FIXTURE_NODE_IDS.imaginedTime,
-        ROOTED_FIXTURE_NODE_IDS.imaginedRelations,
+        SEEDED_DOCUMENT_NODE_IDS.imaginedTime,
+        SEEDED_DOCUMENT_NODE_IDS.imaginedRelations,
       ],
     });
-    expect(first.tree.nodes[ROOTED_FIXTURE_NODE_IDS.bodilyReturn]).toMatchObject({
-      parentId: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    expect(first.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.bodilyReturn]).toMatchObject({
+      parentId: SEEDED_DOCUMENT_NODE_IDS.bodilyMemory,
       children: [],
     });
     expect(Object.keys(first.tree.nodes)).toHaveLength(10);
@@ -98,16 +97,16 @@ describe("rooted material fixture", () => {
   });
 
   it("starts with empty history after real bootstrap commits", () => {
-    const fixture = createRootedMaterialFixture();
+    const fixture = createSeededDocument();
 
     expect(fixture.history).toEqual(createTreeHistory());
   });
 
   it("carries the caller's identity and time into durable material", () => {
-    const fixture = createRootedMaterialFixture();
-    const firstCommand = createFixtureInsertChildCommand(
+    const fixture = createSeededDocument();
+    const firstCommand = createBranchChildCommand(
       fixture.tree,
-      ROOTED_FIXTURE_NODE_IDS.root,
+      SEEDED_DOCUMENT_NODE_IDS.root,
       branchValues(),
     );
     const firstCommit = commitTreeCommand(
@@ -120,9 +119,9 @@ describe("rooted material fixture", () => {
 
     const undone = undoTreeHistory(firstCommit.tree, firstCommit.history);
     if (!undone.ok) throw new Error(undone.error.code);
-    const secondCommand = createFixtureInsertChildCommand(
+    const secondCommand = createBranchChildCommand(
       undone.tree,
-      ROOTED_FIXTURE_NODE_IDS.root,
+      SEEDED_DOCUMENT_NODE_IDS.root,
       branchValues(),
     );
     const secondCommit = commitTreeCommand(
@@ -146,38 +145,20 @@ describe("rooted material fixture", () => {
     expect(new Date(firstCommand.createdAt).toISOString()).toBe(firstCommand.createdAt);
   });
 
-  it("builds a closed fixture text replacement with exact stale guards", () => {
-    const fixture = createRootedMaterialFixture();
-    const root = fixture.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root];
-    const command = createFixtureReplaceTextCommand(
-      fixture.tree,
-      root.id,
-      ROOTED_FIXTURE_TEXT_VARIANTS[1].text,
-    );
-
-    expect(command.mutation).toMatchObject({
-      type: "replace-text",
-      nodeId: root.id,
-      expectedText: root.text,
-      expectedUpdatedAt: root.updatedAt,
-      text: ROOTED_FIXTURE_TEXT_VARIANTS[1].text,
-    });
-  });
-
   it("leaves missing-parent and insertion-bound rejection to the tree engine", () => {
-    const fixture = createRootedMaterialFixture();
+    const fixture = createSeededDocument();
     const missingParent = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, "missing_parent", branchValues()),
+      createBranchChildCommand(fixture.tree, "missing_parent", branchValues()),
       TEST_HISTORY_LIMITS,
     );
     const badIndex = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(
+      createBranchChildCommand(
         fixture.tree,
-        ROOTED_FIXTURE_NODE_IDS.root,
+        SEEDED_DOCUMENT_NODE_IDS.root,
         branchValues(),
         999,
       ),

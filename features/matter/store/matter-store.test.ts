@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  ROOTED_FIXTURE_NODE_IDS,
-  ROOT_ONLY_FIXTURE_TREE_ID,
-} from "../fixtures/rooted-material";
+  SEEDED_DOCUMENT_NODE_IDS,
+  SEEDED_ROOT_ONLY_TREE_ID,
+} from "../material/seeded-document";
 import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
 
@@ -37,7 +37,7 @@ describe("Matter store", () => {
       status: "hydrated",
     });
     expect(store.getState().tree.title).toBe("被允许想象的其他生活");
-    expect(store.getState().tree.nodes[ROOTED_FIXTURE_NODE_IDS.imaginedLives]?.text)
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedLives]?.text)
       .toBe("被允许想象的其他生活");
   });
 
@@ -46,7 +46,7 @@ describe("Matter store", () => {
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
 
-    expect(store.getState().tree.id).toBe(ROOT_ONLY_FIXTURE_TREE_ID);
+    expect(store.getState().tree.id).toBe(SEEDED_ROOT_ONLY_TREE_ID);
     expect(store.getState().tree.nodes[rootId]?.children).toEqual([]);
     expect(store.getState().extendMaterial(rootId, branchValues())).toMatchObject({
       operation: "commit",
@@ -87,9 +87,9 @@ describe("Matter store", () => {
     expect(first.getState().history).not.toBe(second.getState().history);
     expect(first.getState().navigation).not.toBe(second.getState().navigation);
 
-    first.getState().select(ROOTED_FIXTURE_NODE_IDS.root);
+    first.getState().select(SEEDED_DOCUMENT_NODE_IDS.root);
     expect(first.getState().navigation.selectedNodeId).toBe(
-      ROOTED_FIXTURE_NODE_IDS.root,
+      SEEDED_DOCUMENT_NODE_IDS.root,
     );
     expect(second.getState().navigation.selectedNodeId).toBeNull();
   });
@@ -155,9 +155,9 @@ describe("Matter store", () => {
   it("uses current state preconditions for sequential named insertions", () => {
     const store = createMatterStore();
     const before = store.getState();
-    const firstReceipt = before.extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
+    const firstReceipt = before.extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
     const afterFirst = store.getState();
-    const secondReceipt = afterFirst.extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
+    const secondReceipt = afterFirst.extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
     const afterSecond = store.getState();
 
     expect(firstReceipt).toMatchObject({
@@ -170,8 +170,8 @@ describe("Matter store", () => {
       status: "committed",
       revision: before.tree.revision + 2,
     });
-    expect(afterSecond.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root].children).toHaveLength(
-      before.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root].children.length + 2,
+    expect(afterSecond.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root].children).toHaveLength(
+      before.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root].children.length + 2,
     );
     expect(afterSecond.history.entries).toHaveLength(2);
   });
@@ -223,9 +223,9 @@ describe("Matter store", () => {
 
   it("retains current identity for repeated navigation while issuing a receipt", () => {
     const store = createMatterStore();
-    store.getState().select(ROOTED_FIXTURE_NODE_IDS.root);
+    store.getState().select(SEEDED_DOCUMENT_NODE_IDS.root);
     const selected = store.getState();
-    const receipt = selected.select(ROOTED_FIXTURE_NODE_IDS.root);
+    const receipt = selected.select(SEEDED_DOCUMENT_NODE_IDS.root);
     const repeated = store.getState();
 
     expect(receipt).toMatchObject({ operation: "select", status: "navigated" });
@@ -236,7 +236,7 @@ describe("Matter store", () => {
 
   it("clears a selection without changing the material or history", () => {
     const store = createMatterStore();
-    store.getState().select(ROOTED_FIXTURE_NODE_IDS.root);
+    store.getState().select(SEEDED_DOCUMENT_NODE_IDS.root);
     const selected = store.getState();
 
     const receipt = selected.clearSelection();
@@ -268,10 +268,10 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const inserted = store
       .getState()
-      .extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
+      .extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
     expect(inserted.status).toBe("committed");
     const afterInsert = store.getState();
-    const insertedNodeId = afterInsert.tree.nodes[ROOTED_FIXTURE_NODE_IDS.root].children.at(-1);
+    const insertedNodeId = afterInsert.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root].children.at(-1);
     if (insertedNodeId === undefined) throw new Error("fixture child missing");
 
     afterInsert.focus(insertedNodeId);
@@ -288,8 +288,8 @@ describe("Matter store", () => {
     expect(undone.tree.nodes[insertedNodeId]).toBeUndefined();
     expect(undone.navigation).toMatchObject({
       mode: "focus",
-      focusNodeId: ROOTED_FIXTURE_NODE_IDS.root,
-      selectedNodeId: ROOTED_FIXTURE_NODE_IDS.root,
+      focusNodeId: SEEDED_DOCUMENT_NODE_IDS.root,
+      selectedNodeId: SEEDED_DOCUMENT_NODE_IDS.root,
     });
     expect(undone.lastError).toBeNull();
   });
@@ -298,16 +298,16 @@ describe("Matter store", () => {
     const store = createMatterStore();
     const initial = store.getState();
 
-    expect(initial.extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues()).status).toBe(
+    expect(initial.extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues()).status).toBe(
       "committed",
     );
-    const childId = store.getState().tree.nodes[ROOTED_FIXTURE_NODE_IDS.root].children[0];
+    const childId = store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root].children[0];
     if (childId === undefined) throw new Error("fixture child missing");
 
-    expect(initial.toggleFold(ROOTED_FIXTURE_NODE_IDS.root).status).toBe(
+    expect(initial.toggleFold(SEEDED_DOCUMENT_NODE_IDS.root).status).toBe(
       "navigated",
     );
-    expect(store.getState().navigation.foldedNodeIds.has(ROOTED_FIXTURE_NODE_IDS.root)).toBe(true);
+    expect(store.getState().navigation.foldedNodeIds.has(SEEDED_DOCUMENT_NODE_IDS.root)).toBe(true);
 
     store.getState().focus(childId);
     expect(store.getState().navigation.mode).toBe("focus");
@@ -316,7 +316,7 @@ describe("Matter store", () => {
       mode: "full",
       selectedNodeId: childId,
     });
-    expect(store.getState().navigation.foldedNodeIds.has(ROOTED_FIXTURE_NODE_IDS.root)).toBe(false);
+    expect(store.getState().navigation.foldedNodeIds.has(SEEDED_DOCUMENT_NODE_IDS.root)).toBe(false);
 
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
   });
@@ -324,16 +324,16 @@ describe("Matter store", () => {
   it("publishes a structural move once and restores it through named undo", () => {
     const store = createMatterStore();
     const before = store.getState().tree;
-    store.getState().select(ROOTED_FIXTURE_NODE_IDS.imaginedTime);
+    store.getState().select(SEEDED_DOCUMENT_NODE_IDS.imaginedTime);
     expect(store.getState().moveNode({
       commandId: "human_move_store",
-      nodeId: ROOTED_FIXTURE_NODE_IDS.imaginedTime,
-      targetParentId: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+      nodeId: SEEDED_DOCUMENT_NODE_IDS.imaginedTime,
+      targetParentId: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
       createdAt: "2026-08-07T00:00:00.000Z",
     })).toMatchObject({ operation: "commit", status: "committed" });
-    expect(store.getState().tree.nodes[ROOTED_FIXTURE_NODE_IDS.imaginedTime].parentId)
-      .toBe(ROOTED_FIXTURE_NODE_IDS.presentDistance);
-    expect(store.getState().navigation.selectedNodeId).toBe(ROOTED_FIXTURE_NODE_IDS.imaginedTime);
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime].parentId)
+      .toBe(SEEDED_DOCUMENT_NODE_IDS.presentDistance);
+    expect(store.getState().navigation.selectedNodeId).toBe(SEEDED_DOCUMENT_NODE_IDS.imaginedTime);
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(store.getState().tree.nodes).toEqual(before.nodes);
   });
@@ -341,10 +341,10 @@ describe("Matter store", () => {
   it("hydrates one validated snapshot while clearing runtime history and navigation", () => {
     const store = createMatterStore();
     const initial = store.getState();
-    initial.select(ROOTED_FIXTURE_NODE_IDS.root);
-    store.getState().extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
+    initial.select(SEEDED_DOCUMENT_NODE_IDS.root);
+    store.getState().extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
     const storedTree = store.getState().tree;
-    store.getState().extendMaterial(ROOTED_FIXTURE_NODE_IDS.root, branchValues());
+    store.getState().extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
 
     expect(store.getState().hydrateSnapshot(storedTree as ThoughtTree)).toEqual({
       operation: "hydrate",

@@ -5,7 +5,7 @@ import {
   MAX_REPAIR_REQUEST_BYTES,
   isRepairSuccess,
   parseRepairRequest,
-} from "./repair-contract";
+} from "../protocol/repair-contract";
 import { resetRepairGeneratorState } from "./repair-generator";
 import { handleRepairRequest, repairErrorResponse } from "./repair-route";
 

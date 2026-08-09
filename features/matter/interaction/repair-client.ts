@@ -5,7 +5,7 @@ import {
   REPAIR_CLIENT_TIMEOUT_MS,
   isRepairSuccess,
   type RepairSuccess,
-} from "../server/repair-contract";
+} from "../protocol/repair-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 
 /**

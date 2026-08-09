@@ -2,7 +2,7 @@ import {
   LABEL_CLIENT_TIMEOUT_MS,
   MAX_LABEL_REQUEST_BYTES,
   parseLabelRequest,
-} from "./label-contract";
+} from "../protocol/label-contract";
 import { LabelServerError, invalidLabelRequest } from "./label-errors";
 import { generateLabel } from "./label-generator";
 import {

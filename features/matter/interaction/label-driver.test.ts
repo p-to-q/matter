@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { labelFor } from "../runtime/label-session";
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
-import type { LabelSuccess } from "../server/label-contract";
+import type { LabelSuccess } from "../protocol/label-contract";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
 import { LabelDriver, DEFAULT_LABEL_DRIVER_LIMITS, type LabelScope } from "./label-driver";
 import type { requestLabel } from "./label-client";
@@ -90,6 +90,7 @@ type FakeRepository = LabelRepository & {
   readonly removed: string[];
   resolveLoad: () => void;
   resolvePut: () => void;
+  failNextPut: () => void;
 };
 
 function repository(
@@ -111,9 +112,11 @@ function repository(
         releasePut = resolve;
       })
     : Promise.resolve();
+  let putFails = false;
   return {
     stored,
     removed,
+    failNextPut: () => { putFails = true; },
     resolveLoad: () => release(),
     resolvePut: () => releasePut(),
     async loadAll() {
@@ -122,7 +125,9 @@ function repository(
     },
     async put(_treeId, record) {
       await putGate;
+      if (putFails) return { ok: false, code: "STORAGE_FULL" } as const;
       stored.set(record.nodeId, record);
+      return { ok: true } as const;
     },
     async remove(_treeId, nodeIds) {
       for (const nodeId of nodeIds) {
@@ -406,6 +411,28 @@ describe("LabelDriver", () => {
     expect(store.removed).toContain("root");
     instance.observe(ROOT, ["root"]);
     expect(labelFor(instance.getState(), "root")).not.toBe("过去的另一种生活");
+  });
+
+  it("does not report a manual name as kept when it never reached disk", async () => {
+    const recorded = recorder();
+    const store = repository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+
+    await expect(instance.rename("root", "过去的另一种生活")).resolves.toEqual({ ok: true });
+    expect(store.stored.get("root")?.label).toBe("过去的另一种生活");
+
+    store.failNextPut();
+    // The name is still theirs and still on screen — discarding what they typed
+    // would be the worse error — but the caller is told it exists only in this
+    // session, instead of a silent success and an empty field after a reload.
+    await expect(instance.rename("root", "另一种被允许的生活")).resolves.toEqual({
+      ok: false,
+      code: "STORAGE_FULL",
+    });
+    expect(labelFor(instance.getState(), "root")).toBe("另一种被允许的生活");
+    expect(store.stored.get("root")?.label).toBe("过去的另一种生活");
   });
 
   it("forgets the stored label of a deleted node", async () => {

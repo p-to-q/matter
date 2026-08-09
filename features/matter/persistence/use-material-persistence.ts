@@ -45,6 +45,12 @@ export function useMaterialPersistence(
       const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, storedTree);
       if (decision.action === "hydrate") hydrateSnapshot(decision.tree, storedHistory);
       else if (decision.action === "publish") controller.publish(decision.tree, latestHistoryRef.current);
+      // Material committed during the load window does not descend from the
+      // stored session. Neither is written over the other; the index footer
+      // offers the same reload gesture a second tab already raises.
+      else if (decision.action === "conflict") {
+        controller.declareConflict(decision.tree, latestHistoryRef.current);
+      }
       startedRef.current = true;
     });
     return () => {

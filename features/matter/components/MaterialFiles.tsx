@@ -60,7 +60,8 @@ export type MaterialFilesProps = Readonly<{
    * never overwritten automatically; an empty name returns the row to
    * automatic naming.
    */
-  onRenameNode?: (nodeId: string, label: string) => void | Promise<void>;
+  /** Resolves to whether the name reached disk. `false` returns it to its editor. */
+  onRenameNode?: (nodeId: string, label: string) => void | Promise<Readonly<{ ok: boolean }> | void>;
   onRenameDocument?: (title: string) => void;
   onResetNodeName?: (nodeId: string) => void | Promise<void>;
   /** Reports the rows worth labelling. Called from an effect, never in render. */
@@ -353,7 +354,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   };
 
   const commitRename = (nodeId: string, value: string) => {
-    const mutationKey = `${props.documentEpoch} ${nodeId}`;
+    const epochAtCommit = props.documentEpoch;
+    const mutationKey = `${epochAtCommit} ${nodeId}`;
     if (renameCommitRef.current === mutationKey) return;
     renameCommitRef.current = mutationKey;
     setRenaming(null);
@@ -361,7 +363,21 @@ export function MaterialFiles(props: MaterialFilesProps) {
     const mutation = trimmed.length === 0
       ? props.onResetNodeName?.(nodeId)
       : props.onRenameNode?.(nodeId, trimmed);
-    void Promise.resolve(mutation).catch(() => undefined).finally(() => {
+    void Promise.resolve(mutation).then(
+      (receipt) => {
+        // A name that did not reach disk is not a name they have. Returning the
+        // row to its editor, with what they typed still in it, is the whole
+        // signal: it says the same thing an empty field after a reload used to
+        // say silently, while there is still something to do about it.
+        if (
+          receipt !== undefined && receipt !== null && receipt.ok === false &&
+          props.documentEpoch === epochAtCommit
+        ) {
+          setRenaming({ epoch: epochAtCommit, nodeId });
+        }
+      },
+      () => undefined,
+    ).finally(() => {
       if (renameCommitRef.current === mutationKey) renameCommitRef.current = null;
     });
   };

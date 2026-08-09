@@ -95,12 +95,14 @@ and fan-in are concentration signals only; none is a refactoring requirement.
 
 ## Architecture fitness
 
-These are the rules a change is held to, not a description of what the tree
-already satisfies everywhere. Current named exceptions include an import cycle,
-browser code reaching into `server/*-contract`, and a fixture on a production
-path; they are recorded in
-[`reference/architecture-governance.md`](reference/architecture-governance.md).
-Where the two disagree, that note is the state and this section is the target.
+These are the rules a change is held to, and `npm run check:architecture` now
+holds the three of them that are syntactic: layers point inward, the protocol
+stays neutral, only a route reaches a provider, and the runtime import graph has
+no cycle. It runs inside `npm test`, so CI enforces it. The exceptions that used
+to live here — an import cycle between the two voice transports, browser code
+reaching into `server/*-contract`, and a fixture on a production path — were
+cleared before the check landed, because a check that fails on the day it
+arrives is a check someone silences.
 
 The runtime import graph must be acyclic. Dependencies point from composition
 and adapters toward application and domain code; a lower layer must not import

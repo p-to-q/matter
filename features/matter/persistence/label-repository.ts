@@ -32,9 +32,23 @@ export type LabelRecord = Readonly<{
   updatedAt: string;
 }>;
 
+/**
+ * Whether the row reached disk.
+ *
+ * A model label ignores this: losing one costs a regeneration. A name a person
+ * typed cannot, because the same swallowed failure that costs nothing there
+ * costs a decision here — the name was shown as taken, and after a reload it
+ * was gone with no signal that anything had failed.
+ */
+export type LabelWriteReceipt =
+  | Readonly<{ ok: true }>
+  | Readonly<{ ok: false; code: "STORAGE_UNAVAILABLE" | "STORAGE_FULL" | "REJECTED" }>;
+
+const WRITTEN: LabelWriteReceipt = Object.freeze({ ok: true });
+
 export type LabelRepository = Readonly<{
   loadAll(treeId: string): Promise<readonly LabelRecord[]>;
-  put(treeId: string, record: LabelRecord): Promise<void>;
+  put(treeId: string, record: LabelRecord): Promise<LabelWriteReceipt>;
   remove(treeId: string, nodeIds: readonly string[]): Promise<void>;
   clear(treeId: string): Promise<void>;
   close(): void;
@@ -50,20 +64,28 @@ export function createIndexedDbLabelRepository(): LabelRepository {
       try {
         const database = await handle.open();
         const stored = await database.getAllFromIndex("labels", "treeId", treeId);
-        const records: LabelRecord[] = [];
+        // The cap bounds one document's read, and it used to cut in index
+        // order — so a manual name that happened to sort late was dropped in
+        // favour of a model label that could have been regenerated for free.
+        const manual: LabelRecord[] = [];
+        const cached: LabelRecord[] = [];
         for (const entry of stored) {
           const record = toRecord(entry, treeId);
-          if (record !== null) records.push(record);
-          if (records.length >= MAX_NODES_PER_TREE) break;
+          if (record === null) continue;
+          if (record.origin === "user") manual.push(record);
+          else if (cached.length < MAX_NODES_PER_TREE) cached.push(record);
         }
-        return Object.freeze(records);
+        return Object.freeze([
+          ...manual.slice(0, MAX_NODES_PER_TREE),
+          ...cached.slice(0, Math.max(0, MAX_NODES_PER_TREE - manual.length)),
+        ]);
       } catch {
         return Object.freeze([]);
       }
     },
 
     async put(treeId, record) {
-      if (!isStorable(record)) return;
+      if (!isStorable(record)) return Object.freeze({ ok: false, code: "REJECTED" });
       try {
         const database = await handle.open();
         await database.put("labels", Object.freeze({
@@ -76,8 +98,16 @@ export function createIndexedDbLabelRepository(): LabelRepository {
           basis: record.basis,
           updatedAt: record.updatedAt,
         }));
-      } catch {
-        // A label that cannot be stored is still shown; it is regenerated later.
+        return WRITTEN;
+      } catch (error) {
+        // A model label that cannot be stored is still shown and regenerated
+        // later. A manual name's caller needs to know, so the reason survives.
+        return Object.freeze({
+          ok: false,
+          code: error instanceof DOMException && error.name === "QuotaExceededError"
+            ? "STORAGE_FULL"
+            : "STORAGE_UNAVAILABLE",
+        });
       }
     },
 

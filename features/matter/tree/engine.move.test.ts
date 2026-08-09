@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyTreeCommand } from "./engine";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
 import {
   canMoveNodeToParent,
   createNodeMovePolicy,
@@ -14,7 +14,7 @@ const NOW = "2026-08-07T00:00:00.000Z";
 
 describe("move-node", () => {
   it("moves a node across branches and its inverse restores it", () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const root = tree.nodes[tree.rootId!];
     const source = tree.nodes[root.children[0]];
     const target = tree.nodes[root.children[1]];
@@ -39,7 +39,7 @@ describe("move-node", () => {
   });
 
   it("moves a nested node back under the root and restores it through history", () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const root = tree.nodes[tree.rootId!];
     const source = tree.nodes[root.children[0]];
     const child = tree.nodes[source.children[0]];
@@ -63,7 +63,7 @@ describe("move-node", () => {
   });
 
   it("reorders siblings and restores their exact authored order", () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const root = tree.nodes[tree.rootId!];
     const source = tree.nodes[root.children[0]];
     const command = moveNodeToParentCommand(tree, {
@@ -84,7 +84,7 @@ describe("move-node", () => {
   });
 
   it("rejects root, same-slot, and descendant targets before constructing a command", () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const root = tree.nodes[tree.rootId!];
     const branch = tree.nodes[root.children[0]];
     const child = tree.nodes[branch.children[0]];
@@ -95,7 +95,7 @@ describe("move-node", () => {
   });
 
   it("projects legal targets once and rejects a parent at its child bound", () => {
-    const fixture = createRootedMaterialFixture().tree;
+    const fixture = createSeededDocument().tree;
     const root = fixture.nodes[fixture.rootId!];
     const sourceParent = fixture.nodes[root.children[0]];
     const source = fixture.nodes[sourceParent.children[0]];
@@ -117,7 +117,7 @@ describe("move-node", () => {
   });
 
   it("rejects a move whose complete subtree would exceed the depth bound", () => {
-    const fixture = createRootedMaterialFixture().tree;
+    const fixture = createSeededDocument().tree;
     const root = fixture.nodes[fixture.rootId!];
     const source = fixture.nodes[root.children[0]];
     const branch = fixture.nodes[root.children[1]];
@@ -141,7 +141,7 @@ describe("move-node", () => {
   });
 
   it("atomically rejects malformed and stale move mementos", () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const root = tree.nodes[tree.rootId!];
     const source = tree.nodes[root.children[0]];
     const target = tree.nodes[root.children[1]];

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  createFixtureInsertChildCommand,
+  createBranchChildCommand,
   createPerformanceThoughtTree,
-  createRootedMaterialFixture,
-} from "../fixtures/rooted-material";
+  createSeededDocument,
+} from "../material/seeded-document";
 import { commitTreeCommand } from "../tree/history";
 import { createEmptyTree } from "../tree/invariants";
 import { MAX_TREE_DEPTH } from "../tree/invariants";
@@ -18,11 +18,11 @@ describe("Markdown snapshot codec", () => {
     const empty = createEmptyTree("tree_empty", 7);
     expect(bundleToTree(treeToBundle(empty))).toEqual({ ok: true, tree: empty });
 
-    const fixture = createRootedMaterialFixture();
+    const fixture = createSeededDocument();
     const inserted = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
+      createBranchChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 4, maxRetainedInverseBytes: 100_000 },
     );
     if (!inserted.ok) throw new Error(inserted.error.message);
@@ -36,7 +36,7 @@ describe("Markdown snapshot codec", () => {
   });
 
   it("round-trips a reparented tree through the same Markdown hierarchy", () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const root = tree.nodes[tree.rootId!];
     const source = tree.nodes[root.children[0]];
     const target = tree.nodes[root.children[1]];
@@ -54,7 +54,7 @@ describe("Markdown snapshot codec", () => {
 
   it("round-trips the independent canvas title and invisible document root", () => {
     const tree = {
-      ...normalizeDocumentTree(createRootedMaterialFixture().tree),
+      ...normalizeDocumentTree(createSeededDocument().tree),
       title: "Allowed other lives",
     };
     const bundle = treeToBundle(tree);
@@ -68,11 +68,11 @@ describe("Markdown snapshot codec", () => {
   });
 
   it("allows readable slug renames without changing material identity", () => {
-    const fixture = createRootedMaterialFixture();
+    const fixture = createSeededDocument();
     const inserted = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
+      createBranchChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 4, maxRetainedInverseBytes: 100_000 },
     );
     if (!inserted.ok) throw new Error(inserted.error.message);
@@ -91,11 +91,11 @@ describe("Markdown snapshot codec", () => {
   });
 
   it("rejects protocol, path, frontmatter, duplicate id, and order failures atomically", () => {
-    const fixture = createRootedMaterialFixture();
+    const fixture = createSeededDocument();
     const inserted = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
+      createBranchChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 4, maxRetainedInverseBytes: 100_000 },
     );
     if (!inserted.ok) throw new Error(inserted.error.message);

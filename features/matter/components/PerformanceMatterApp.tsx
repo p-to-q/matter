@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createPerformanceThoughtTree } from "../fixtures/rooted-material";
+import { createPerformanceThoughtTree } from "../material/seeded-document";
 import {
   createNavigationState,
   clearSelection,

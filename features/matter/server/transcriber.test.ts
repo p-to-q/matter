@@ -5,7 +5,7 @@ import {
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
   TRANSCRIPTION_TRANSPORT_GRACE_MS,
   type TranscriptionRequest,
-} from "./transcription-contract";
+} from "../protocol/transcription-contract";
 import { TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";
 
