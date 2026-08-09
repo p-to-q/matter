@@ -77,6 +77,14 @@ export class LabelDriver {
   private readonly active = new Map<string, PendingRequest>();
   private readonly queue: PendingRequest[] = [];
   private readonly durableMutations = new Map<string, Promise<unknown>>();
+  /**
+   * Nodes whose manual name is in this session but not on disk.
+   *
+   * Without this, retrying the same name after a failed write is a no-op the
+   * reducer reports as unchanged — so the retry returns success and never
+   * reaches storage, which is the exact failure this receipt exists to end.
+   */
+  private readonly unpersistedNames = new Set<string>();
   private consecutiveFailures = 0;
   private cooldownUntilMs = 0;
   private restoredTreeId: string | null = null;
@@ -169,9 +177,13 @@ export class LabelDriver {
     if (this.disposed) return Promise.resolve(WRITE_SKIPPED);
     const trimmed = label.trim();
     if (trimmed.length === 0) return Promise.resolve(WRITE_SKIPPED);
-    const next = reduceLabelSession(this.state, { type: "rename", nodeId, label: trimmed });
-    if (next === this.state) return Promise.resolve(WRITE_SKIPPED);
     const treeId = this.state.treeId;
+    const next = reduceLabelSession(this.state, { type: "rename", nodeId, label: trimmed });
+    // An unchanged session is not a reason to skip the write when the last
+    // write did not land: that is precisely a retry of the same name.
+    if (next === this.state && !this.unpersistedNames.has(`${treeId} ${nodeId}`)) {
+      return Promise.resolve(WRITE_SKIPPED);
+    }
     const documentEpoch = this.state.documentEpoch;
     this.cancelPending(nodeId);
     return this.enqueueDurableMutation(treeId, nodeId, async () => {
@@ -187,6 +199,9 @@ export class LabelDriver {
       } catch {
         receipt = Object.freeze({ ok: false, code: "STORAGE_UNAVAILABLE" });
       }
+      const unpersistedKey = `${treeId} ${nodeId}`;
+      if (receipt.ok) this.unpersistedNames.delete(unpersistedKey);
+      else this.unpersistedNames.add(unpersistedKey);
       if (
         this.disposed ||
         this.state.treeId !== treeId ||
@@ -207,6 +222,7 @@ export class LabelDriver {
     const treeId = this.state.treeId;
     const documentEpoch = this.state.documentEpoch;
     return this.enqueueDurableMutation(treeId, nodeId, async () => {
+      this.unpersistedNames.delete(`${treeId} ${nodeId}`);
       try {
         await this.dependencies.repository?.remove(treeId, [nodeId]);
       } catch {

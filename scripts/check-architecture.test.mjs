@@ -33,7 +33,7 @@ test("a check that cannot fail proves nothing", () => {
         ["features/matter/interaction/label-client.ts", ["features/matter/server/model-pool.ts"]],
         ["features/matter/server/model-pool.ts", []],
       ]),
-      expect: /Only server code may reach a provider/u,
+      expect: /Only features\/matter\/server\/ may reach a provider/u,
     },
     {
       why: "two transports importing each other",

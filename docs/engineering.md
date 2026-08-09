@@ -96,9 +96,9 @@ and fan-in are concentration signals only; none is a refactoring requirement.
 ## Architecture fitness
 
 These are the rules a change is held to, and `npm run check:architecture` now
-holds the three of them that are syntactic: layers point inward, the protocol
-stays neutral, only a route reaches a provider, and the runtime import graph has
-no cycle. It runs inside `npm test`, so CI enforces it. The exceptions that used
+holds the four of them that are syntactic: layers point inward, the protocol
+stays neutral, only server code reaches a provider, and the runtime import graph
+has no cycle. It runs inside `npm test`, so CI enforces it. The exceptions that used
 to live here — an import cycle between the two voice transports, browser code
 reaching into `server/*-contract`, and a fixture on a production path — were
 cleared before the check landed, because a check that fails on the day it

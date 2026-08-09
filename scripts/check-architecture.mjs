@@ -120,10 +120,13 @@ export function findProblems(graph) {
       }
     }
 
-    // 3. Nothing outside a route reaches a provider, so a relay host, key, or
-    //    model name has exactly one place it can appear.
+    // 3. Nothing outside `server/` reaches a provider, so a relay host, key, or
+    //    model name has exactly one place in the tree it can appear. The bound
+    //    is the directory rather than the route: a route delegates to its
+    //    harness, and both are server-only code that never reaches a browser
+    //    bundle. What matters is that nothing outside them can.
     if (targets.includes(PROVIDER_MODULE) && !file.startsWith("features/matter/server/")) {
-      problems.push(`${file} imports the model pool. Only server code may reach a provider.`);
+      problems.push(`${file} imports the model pool. Only features/matter/server/ may reach a provider.`);
     }
   }
 

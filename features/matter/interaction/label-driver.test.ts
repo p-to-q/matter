@@ -91,6 +91,7 @@ type FakeRepository = LabelRepository & {
   resolveLoad: () => void;
   resolvePut: () => void;
   failNextPut: () => void;
+  allowPut: () => void;
 };
 
 function repository(
@@ -117,6 +118,7 @@ function repository(
     stored,
     removed,
     failNextPut: () => { putFails = true; },
+    allowPut: () => { putFails = false; },
     resolveLoad: () => release(),
     resolvePut: () => releasePut(),
     async loadAll() {
@@ -433,6 +435,25 @@ describe("LabelDriver", () => {
     });
     expect(labelFor(instance.getState(), "root")).toBe("另一种被允许的生活");
     expect(store.stored.get("root")?.label).toBe("过去的另一种生活");
+  });
+
+  it("writes a retry of the same name after the first write failed", () => {
+    const recorded = recorder();
+    const store = repository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+
+    return settle().then(async () => {
+      store.failNextPut();
+      await expect(instance.rename("root", "另一种被允许的生活")).resolves.toMatchObject({ ok: false });
+      expect(store.stored.get("root")).toBeUndefined();
+
+      // The session already holds this exact name, so the reducer reports no
+      // change. That must not be read as "already saved" — it is the retry.
+      store.allowPut();
+      await expect(instance.rename("root", "另一种被允许的生活")).resolves.toEqual({ ok: true });
+      expect(store.stored.get("root")?.label).toBe("另一种被允许的生活");
+    });
   });
 
   it("forgets the stored label of a deleted node", async () => {
