@@ -26,17 +26,22 @@ export function admitInquiryRequest(
   const timestamp = now();
   const identity = requestIdentity(request);
   const entry = windows.get(identity);
-  if (entry === undefined || timestamp - entry.startedAt >= WINDOW_MS) {
-    if (windows.size >= MAX_IDENTITIES) windows.delete(windows.keys().next().value ?? "");
-    windows.set(identity, { startedAt: timestamp, requests: 1 });
-  } else {
-    if (entry.requests >= REQUESTS_PER_WINDOW) {
-      return Object.freeze({ ok: false, reason: "RATE" });
-    }
-    entry.requests += 1;
+  const fresh = entry === undefined || timestamp - entry.startedAt >= WINDOW_MS;
+  if (!fresh && entry.requests >= REQUESTS_PER_WINDOW) {
+    return Object.freeze({ ok: false, reason: "RATE" });
   }
+  // Concurrency is checked before the window is charged. A request this
+  // instance refuses to serve must not spend the person's minute: they are
+  // told to try again shortly, and being told that must not make the retry
+  // itself a rate-limited one.
   if (active >= MAX_CONCURRENT) {
     return Object.freeze({ ok: false, reason: "BUSY" });
+  }
+  if (fresh) {
+    if (windows.size >= MAX_IDENTITIES) evictOneIdentity(timestamp);
+    windows.set(identity, { startedAt: timestamp, requests: 1 });
+  } else {
+    entry.requests += 1;
   }
   active += 1;
   let released = false;
@@ -53,6 +58,23 @@ export function admitInquiryRequest(
 export function resetInquiryAdmissionForTests(): void {
   windows.clear();
   active = 0;
+}
+
+/**
+ * Prefers an identity whose window has already elapsed. Map iteration is
+ * insertion order, so the plain eviction drops the oldest *seen* identity —
+ * which may be a person mid-window — while expired entries stay resident. A
+ * bounded scan keeps the common case free and never evicts a live window
+ * unless every retained one is still live.
+ */
+function evictOneIdentity(nowMs: number): void {
+  for (const [identity, entry] of windows) {
+    if (nowMs - entry.startedAt >= WINDOW_MS) {
+      windows.delete(identity);
+      return;
+    }
+  }
+  windows.delete(windows.keys().next().value ?? "");
 }
 
 function originAllowed(

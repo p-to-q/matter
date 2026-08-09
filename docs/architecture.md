@@ -86,6 +86,15 @@ short question + lassoed passages, or bounded virtual-tree projection when no la
   → transient paper-corner exchange; no tree command or persistence
 ```
 
+The composer holds **one** exchange — a question and its answer — and a new
+question replaces it. That is a type, not a convention: the state has a single
+nullable `exchange` rather than a list, so a transcript cannot accumulate one
+reasonable commit at a time. Closing, a document or scope change, and unmount
+each discard it, and an answer for an exchange the state no longer holds is
+dropped rather than shown under a later question. No prior answer is ever sent
+back as input; a request carries the question and the current visible material
+and nothing else.
+
 Only the tree engine applies durable mutations. Pointer, audio level, partial
 transcript, selection geometry, focus, fold, and derived labels remain
 transient.
