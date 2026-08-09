@@ -11,7 +11,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
-  type UIEvent as ReactUIEvent,
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
@@ -25,9 +24,10 @@ import {
   createInquiryState,
   canSubmitInquiry,
   inquiryText,
+  isInquiryPending,
   pendingAnswerId,
   reduceInquiry,
-  type InquiryTurnOutcome,
+  type InquiryAnswerState,
   type InquiryVoiceNotice,
 } from "./inquiry-composer";
 import { useInquiryDictation } from "./use-inquiry-dictation";
@@ -944,21 +944,19 @@ function InquiryBubble({
 }) {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
-  const threadRef = useRef<HTMLDivElement>(null);
+  const exchangeRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
   const submittingRef = useRef(false);
   const contextRef = useRef(context);
   const contextSnapshotRef = useRef<InquiryContextPayload | undefined>(undefined);
   const hasContextSnapshotRef = useRef(false);
-  const followThreadRef = useRef(true);
   const listening = state.phase === "listening";
   const transcribing = state.phase === "transcribing";
   const voiceBusy = listening || transcribing;
   const text = inquiryText(state);
   const canAsk = canSubmitInquiry(state);
-  const hasPendingAnswer = state.turns.some(
-    (turn) => turn.role === "matter" && turn.outcome.status === "pending",
-  );
+  const exchange = state.exchange;
+  const hasPendingAnswer = isInquiryPending(state);
   const dictation = useInquiryDictation({
     onHeard: (transcript) => dispatch({ type: "hear", value: transcript }),
     onProcessing: () => dispatch({ type: "transcribe" }),
@@ -1013,14 +1011,15 @@ function InquiryBubble({
     // where a double-click or repeated Enter could otherwise submit the same
     // transient question twice before the disabled button is rendered.
     submittingRef.current = true;
-    followThreadRef.current = true;
     const answerId = pendingAnswerId(state);
     dispatch({ type: "ask" });
     const payload = context?.();
     if (payload === undefined) {
-      dispatch({ type: "answer", id: answerId, outcome: NO_MATERIAL });
+      dispatch({ type: "answer", id: answerId, answer: NO_MATERIAL });
       return;
     }
+    // Only the question and the current visible material are sent. A prior
+    // answer is never carried forward as input; there is nothing to carry.
     requestRef.current?.abort();
     const request = new AbortController();
     requestRef.current = request;
@@ -1032,11 +1031,11 @@ function InquiryBubble({
           currentContext === undefined ||
           !sameInquiryContext(payload, currentContext)
         ) return;
-        dispatch({ type: "answer", id: answerId, outcome });
+        dispatch({ type: "answer", id: answerId, answer: outcome });
       })
       .catch(() => {
         if (requestRef.current === request) {
-          dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE });
+          dispatch({ type: "answer", id: answerId, answer: UNREACHABLE });
         }
       })
       .finally(() => {
@@ -1054,15 +1053,12 @@ function InquiryBubble({
     field.style.height = `${Math.min(field.scrollHeight, INQUIRY_FIELD_MAX_HEIGHT)}px`;
   }, [hidden, text]);
 
+  // One exchange replaces the last, so the person reads from its first line
+  // rather than from wherever the previous answer had been scrolled to.
   useLayoutEffect(() => {
-    const thread = threadRef.current;
-    if (thread !== null && followThreadRef.current) thread.scrollTop = thread.scrollHeight;
-  }, [state.turns]);
-
-  const trackThreadScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
-    const thread = event.currentTarget;
-    followThreadRef.current = thread.scrollHeight - thread.clientHeight - thread.scrollTop <= 2;
-  }, []);
+    const region = exchangeRef.current;
+    if (region !== null) region.scrollTop = 0;
+  }, [exchange?.id]);
 
   return (
     <div
@@ -1073,24 +1069,20 @@ function InquiryBubble({
       id="matter-inquiry"
       role="dialog"
     >
-      {state.turns.length === 0 ? null : (
+      {exchange === null ? null : (
         <div
           aria-live="polite"
-          className={styles.inquiryThread}
-          data-inquiry-thread
-          onScroll={trackThreadScroll}
-          ref={threadRef}
+          className={styles.inquiryExchange}
+          data-inquiry-exchange
+          key={exchange.id}
+          ref={exchangeRef}
         >
-          {state.turns.map((turn) => (
-            <p
-              className={styles.inquiryTurn}
-              data-inquiry-role={turn.role}
-              dir="auto"
-              key={turn.id}
-            >
-              {turn.role === "person" ? turn.text : answerCopy(copy, turn.outcome)}
-            </p>
-          ))}
+          <p className={styles.inquiryLine} data-inquiry-role="person" dir="auto">
+            {exchange.question}
+          </p>
+          <p className={styles.inquiryLine} data-inquiry-role="matter" dir="auto">
+            {answerCopy(copy, exchange.answer)}
+          </p>
         </div>
       )}
       <div className={styles.inquiryComposer}>
@@ -1144,7 +1136,7 @@ function InquiryBubble({
           {copy.ask}
         </button>
       </div>
-      {voiceBusy || state.notice !== null || state.turns.length === 0 ? (
+      {voiceBusy || state.notice !== null || exchange === null ? (
         <p className={styles.inquiryStatus}>
           {state.notice !== null
             ? voiceNoticeCopy(copy, state.notice)
@@ -1158,10 +1150,10 @@ function InquiryBubble({
 }
 
 const INQUIRY_FIELD_MAX_HEIGHT = 95;
-const NO_MATERIAL: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
-const UNREACHABLE: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
+const NO_MATERIAL: InquiryAnswerState = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
+const UNREACHABLE: InquiryAnswerState = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
 
-function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string {
+function answerCopy(copy: CanvasChromeCopy, outcome: InquiryAnswerState): string {
   if (outcome.status === "answered") return outcome.text;
   if (outcome.status === "pending") return copy.asking;
   switch (outcome.reason) {

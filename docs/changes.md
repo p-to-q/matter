@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-09 — Ask Matter holds one exchange, not a transcript
+
+Changed: the inquiry composer's state is a single nullable exchange — a question
+and its one answer — instead of a bounded list of turns. A new question replaces
+the previous one, close and scope change discard it, and an answer for an
+exchange the state no longer holds is dropped rather than shown under a later
+question. Admission also charges a source's minute only for a request it agrees
+to serve.
+
+Why: the list had a 40-turn bound, which is a chat transcript with a ceiling.
+Nothing in the product's own boundary asked for a second turn, and the shape
+invited a third: a list is what accumulates one reasonable commit at a time.
+Making the state hold one exchange makes the transcript unrepresentable rather
+than merely discouraged, and the prior answer that can never be fed back as
+prompt input is now the prior answer that no longer exists to feed.
+
+Forecloses: conversation memory in the paper's corner, a permanent assistant
+panel reached by growing the bubble, and any inquiry answer that depends on an
+earlier one.
+
+---
+
 ## 2026-08-09 — The load window enters conflict instead of picking a winner
 
 Changed: material committed between mount and the first IndexedDB read no longer

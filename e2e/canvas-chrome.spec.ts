@@ -5,6 +5,7 @@ const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const inquiryQuestions: string[] = [];
+  const inquiryBodies: string[] = [];
   await page.route("**/api/inquiry", async (route) => {
     const request = route.request().postDataJSON() as {
       protocolVersion: string;
@@ -20,6 +21,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
       };
     };
     inquiryQuestions.push(request.question);
+    inquiryBodies.push(route.request().postData() ?? "");
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -160,6 +162,26 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(matterTurn).not.toContainText("正在询问…", { timeout: 20_000 });
   await expect(matterTurn).toHaveText(/\S/u);
   expect(inquiryQuestions).toEqual(["这份材料在怀念什么？\n保留这里的停顿。"]);
+  const personTurn = inquiryDialog.locator('[data-inquiry-role="person"]');
+  await expect(personTurn).toHaveCount(1);
+
+  // A second question replaces the first exchange rather than appending to it.
+  // Ask Matter is one bounded look at visible material, not a transcript.
+  await inquiryField.fill("那它省略了什么？");
+  await inquiryField.press("Enter");
+  await expect(matterTurn).not.toContainText("正在询问…", { timeout: 20_000 });
+  await expect(personTurn).toHaveCount(1);
+  await expect(matterTurn).toHaveCount(1);
+  await expect(personTurn).toHaveText("那它省略了什么？");
+  expect(inquiryQuestions).toEqual([
+    "这份材料在怀念什么？\n保留这里的停顿。",
+    "那它省略了什么？",
+  ]);
+  // The request corpus is the proof that no prior answer is fed back as input.
+  for (const body of inquiryBodies) {
+    expect(body).not.toContain("它怀念的是");
+  }
+
   // Beginning another lasso swaps the context callback while its projected
   // tree context is still the same. That render must not discard this reply.
   await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
