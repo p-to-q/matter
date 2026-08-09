@@ -1,7 +1,7 @@
 import type {
   TranscriptionErrorCode,
   TranscriptionErrorEnvelope,
-} from "./transcription-contract";
+} from "../protocol/transcription-contract";
 
 export class TranscriptionServerError extends Error {
   constructor(

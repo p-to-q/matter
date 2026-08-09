@@ -7,7 +7,7 @@ import {
   MAX_REPAIR_REQUEST_BYTES,
   REPAIR_CLIENT_TIMEOUT_MS,
   parseRepairRequest,
-} from "./repair-contract";
+} from "../protocol/repair-contract";
 import { RepairServerError, invalidRepairRequest } from "./repair-errors";
 import { repairTranscript } from "./repair-generator";
 

@@ -5,61 +5,26 @@ import {
   RECORDING_LIMIT_MS,
 } from "./audio-policy";
 import { createBrowserSpeechVoicePort, isBrowserSpeechRecognitionAvailable } from "./browser-speech-voice";
+import {
+  VoiceError,
+  type VoiceCallbacks,
+  type VoiceOperation,
+  type VoicePort,
+  type VoiceRecording,
+  type VoiceSample,
+} from "./voice-port";
 
-export type VoiceOperation = Readonly<{
-  interactionId: string;
-  attempt: number;
-}>;
-
-export type VoiceSample = Readonly<{ level: number }>;
-
-export type VoiceRecording = Readonly<{
-  operation: VoiceOperation;
-  audio: Blob;
-  durationMs: number;
-  /** Browser-native recognition can provide a final transcript without audio upload. */
-  transcript?: string;
-}>;
-
-export type VoiceErrorCode =
-  | "VOICE_UNSUPPORTED"
-  | "MICROPHONE_DENIED"
-  | "MICROPHONE_NOT_FOUND"
-  | "MICROPHONE_UNAVAILABLE"
-  | "RECORDING_ACTIVE"
-  | "RECORDING_NOT_ACTIVE"
-  | "RECORDING_EMPTY"
-  | "RECORDING_TOO_LARGE"
-  | "RECORDING_FAILED"
-  | "RECORDING_CANCELLED";
-
-export class VoiceError extends Error {
-  readonly code: VoiceErrorCode;
-
-  constructor(code: VoiceErrorCode) {
-    super(code);
-    this.name = "VoiceError";
-    this.code = code;
-  }
-}
-
-export type VoicePort = Readonly<{
-  start(
-    operation: VoiceOperation,
-    callbacks?: VoiceCallbacks,
-  ): Promise<void>;
-  stop(operation: VoiceOperation): Promise<VoiceRecording>;
-  cancel(operation: VoiceOperation): void;
-}>;
-
-export type VoiceCallbacks = Readonly<{
-  onSample?: (sample: VoiceSample) => void;
-  onTranscript?: (transcript: string) => void;
-  locale?: string;
-  onDurationLimit?: (operation: VoiceOperation) => void;
-  onRecording?: (recording: VoiceRecording) => void;
-  onError?: (error: VoiceError) => void;
-}>;
+// Re-exported so the vocabulary keeps one import site for its callers, while
+// the transports below depend on `voice-port` directly.
+export {
+  VoiceError,
+  type VoiceCallbacks,
+  type VoiceErrorCode,
+  type VoiceOperation,
+  type VoicePort,
+  type VoiceRecording,
+  type VoiceSample,
+} from "./voice-port";
 
 type RecorderLike = Pick<
   MediaRecorder,

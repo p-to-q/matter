@@ -36,7 +36,7 @@ import { askInquiry } from "../interaction/inquiry-client";
 import {
   sameInquiryContext,
   type InquiryContextPayload,
-} from "../server/inquiry-contract";
+} from "../protocol/inquiry-contract";
 import { inquiryContextScopeChanged } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";

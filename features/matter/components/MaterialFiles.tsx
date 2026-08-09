@@ -60,7 +60,8 @@ export type MaterialFilesProps = Readonly<{
    * never overwritten automatically; an empty name returns the row to
    * automatic naming.
    */
-  onRenameNode?: (nodeId: string, label: string) => void | Promise<void>;
+  /** Resolves to whether the name reached disk. `false` returns it to its editor. */
+  onRenameNode?: (nodeId: string, label: string) => void | Promise<Readonly<{ ok: boolean }> | void>;
   onRenameDocument?: (title: string) => void;
   onResetNodeName?: (nodeId: string) => void | Promise<void>;
   /** Reports the rows worth labelling. Called from an effect, never in render. */
@@ -131,7 +132,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
     () => ({ epoch: props.documentEpoch, ids: new Set<string>() }),
   );
   const [focusedRowState, setFocusedRowState] = useState(() => ({ epoch: props.documentEpoch, nodeId: null as string | null }));
-  const [renaming, setRenaming] = useState<Readonly<{ epoch: number; nodeId: string }> | null>(null);
+  const [renaming, setRenaming] = useState<
+    Readonly<{ epoch: number; nodeId: string; draft?: string }> | null
+  >(null);
   const [renamingDocument, setRenamingDocument] = useState(false);
   const [documentTitleDraft, setDocumentTitleDraft] = useState("");
   const longPressRef = useRef<Readonly<{ timer: number; x: number; y: number }> | null>(null);
@@ -334,6 +337,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // A rename belongs to one document. Switching documents abandons it rather
   // than applying a name to whatever node now holds that id.
   const activeRename = renaming?.epoch === props.documentEpoch ? renaming.nodeId : null;
+  // What they typed, when the editor was reopened because the write failed.
+  const activeRenameDraft = activeRename === null ? undefined : renaming?.draft;
   const renameEnabled = props.onRenameNode !== undefined && props.onResetNodeName !== undefined;
 
   const beginRename = (nodeId: string) => {
@@ -353,7 +358,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   };
 
   const commitRename = (nodeId: string, value: string) => {
-    const mutationKey = `${props.documentEpoch} ${nodeId}`;
+    const epochAtCommit = props.documentEpoch;
+    const mutationKey = `${epochAtCommit} ${nodeId}`;
     if (renameCommitRef.current === mutationKey) return;
     renameCommitRef.current = mutationKey;
     setRenaming(null);
@@ -361,7 +367,21 @@ export function MaterialFiles(props: MaterialFilesProps) {
     const mutation = trimmed.length === 0
       ? props.onResetNodeName?.(nodeId)
       : props.onRenameNode?.(nodeId, trimmed);
-    void Promise.resolve(mutation).catch(() => undefined).finally(() => {
+    void Promise.resolve(mutation).then(
+      (receipt) => {
+        // A name that did not reach disk is not a name they have. Returning the
+        // row to its editor, with what they typed still in it, is the whole
+        // signal: it says the same thing an empty field after a reload used to
+        // say silently, while there is still something to do about it.
+        if (
+          receipt !== undefined && receipt !== null && receipt.ok === false &&
+          props.documentEpoch === epochAtCommit
+        ) {
+          setRenaming({ epoch: epochAtCommit, nodeId, draft: trimmed });
+        }
+      },
+      () => undefined,
+    ).finally(() => {
       if (renameCommitRef.current === mutationKey) renameCommitRef.current = null;
     });
   };
@@ -820,7 +840,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         aria-label={`Name for ${title}`}
                         autoFocus
                         className="material-file__rename"
-                        defaultValue={title}
+                        defaultValue={activeRenameDraft ?? title}
                         dir="auto"
                         maxLength={MAX_ROW_NAME_CODE_UNITS}
                         onBlur={(event) => {

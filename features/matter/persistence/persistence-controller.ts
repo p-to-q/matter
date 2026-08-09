@@ -30,6 +30,12 @@ export type PersistenceController = Readonly<{
   publish(tree: ThoughtTree, history?: TreeHistory): void;
   prepareImportedTree(tree: ThoughtTree): Promise<ImportedDocumentPreparation | ImportedDocumentRejection>;
   activateImportedDocument(prepared: ImportedDocumentPreparation): void;
+  /**
+   * Two versions of one document exist and neither descends from the other.
+   * The live tree is held unsaved rather than written over the stored one, and
+   * the person is given the same explicit choice a second tab raises.
+   */
+  declareConflict(tree: ThoughtTree, history?: TreeHistory): void;
   retry(): void;
   resolveConflict(): Promise<Readonly<{ storedTree: ThoughtTree | null; storedHistory: unknown | null }>>;
   flush(): void;
@@ -201,6 +207,17 @@ export function createPersistenceController(repository: DocumentRepository): Per
         persistedRevision: prepared.tree.revision,
         dirtyRevision: null,
         errorCode: null,
+      });
+    },
+
+    declareConflict(tree, history = createTreeHistory()) {
+      if (!active || !ready || tree.id !== activeTreeId) return;
+      pending = Object.freeze({ tree, history });
+      update({
+        phase: "error",
+        persistedRevision: status.persistedRevision,
+        dirtyRevision: tree.revision,
+        errorCode: "PERSISTENCE_CONFLICT",
       });
     },
 

@@ -3,12 +3,12 @@
 import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import {
-  createFixtureInsertChildCommand,
-  createRootedMaterialFixture,
-  ROOTED_FIXTURE_TREE_ID,
-  ROOT_ONLY_FIXTURE_TREE_ID,
-  type RootedMaterialFixtureVariant,
-} from "../fixtures/rooted-material";
+  createBranchChildCommand,
+  createSeededDocument,
+  SEEDED_DOCUMENT_TREE_ID,
+  SEEDED_ROOT_ONLY_TREE_ID,
+  type SeededDocumentVariant,
+} from "../material/seeded-document";
 import {
   DEFAULT_MATTER_DOCUMENT_TITLE,
   LEGACY_MATTER_DOCUMENT_TITLE,
@@ -137,13 +137,13 @@ export type MatterStore = {
  * React binding; tests and future document tabs must create their own store.
  */
 export function createMatterStore(
-  initialDocument: RootedMaterialFixtureVariant = normalizeMatterInitialDocument(
+  initialDocument: SeededDocumentVariant = normalizeMatterInitialDocument(
     process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
   ),
   options: Readonly<{ documentRoot?: boolean; initialTitle?: string }> = {},
 ): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
-  const fixture = createRootedMaterialFixture(initialDocument);
+  const fixture = createSeededDocument(initialDocument);
   const initialTree = options.documentRoot === true
     ? normalizeForDocumentModel(fixture.tree, options.initialTitle)
     : fixture.tree;
@@ -177,7 +177,7 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        const command = createFixtureInsertChildCommand(current.tree, parentId, values);
+        const command = createBranchChildCommand(current.tree, parentId, values);
         const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
@@ -477,7 +477,7 @@ function normalizeForDocumentModel(tree: ThoughtTree, initialTitle?: string): Th
  * These exact old defaults shipped before the document title was shortened.
  */
 function migrateFixtureDefaults(tree: ThoughtTree, initialTitle?: string): ThoughtTree {
-  if (tree.id !== ROOTED_FIXTURE_TREE_ID && tree.id !== ROOT_ONLY_FIXTURE_TREE_ID) return tree;
+  if (tree.id !== SEEDED_DOCUMENT_TREE_ID && tree.id !== SEEDED_ROOT_ONLY_TREE_ID) return tree;
   const nextTitle = initialTitle === DEFAULT_MATTER_DOCUMENT_TITLE && tree.title === LEGACY_MATTER_DOCUMENT_TITLE
     ? DEFAULT_MATTER_DOCUMENT_TITLE
     : tree.title;

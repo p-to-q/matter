@@ -17,6 +17,7 @@ export default defineConfig({
       "scripts/check-markdown-links.test.mjs",
       "scripts/check-deployment.test.mjs",
       "scripts/check-vercel-config.test.mjs",
+      "scripts/check-architecture.test.mjs",
     ],
   },
 });

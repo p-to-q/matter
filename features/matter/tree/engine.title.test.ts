@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
 import { renameDocumentCommand } from "../runtime/title";
 import { normalizeDocumentTree } from "./document-root";
 import { applyTreeCommand } from "./engine";
 
 describe("replace-title", () => {
   it("renames independently from material text and restores through its inverse", () => {
-    const tree = normalizeDocumentTree(createRootedMaterialFixture().tree);
+    const tree = normalizeDocumentTree(createSeededDocument().tree);
     const firstMaterialId = tree.nodes[tree.rootId!].children[0]!;
     const firstText = tree.nodes[firstMaterialId].text;
     const command = renameDocumentCommand(tree, {

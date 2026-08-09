@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { zipSync } from "fflate";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
 import { treeToBundle } from "./snapshot-codec";
 import { exportSnapshotArchive, importSnapshotArchive } from "./archive-transport";
 
 describe("material ZIP transport", () => {
   it("exports deterministic bytes and imports the exact validated tree", async () => {
-    const bundle = treeToBundle(createRootedMaterialFixture().tree);
+    const bundle = treeToBundle(createSeededDocument().tree);
     const first = await exportSnapshotArchive(bundle);
     const second = await exportSnapshotArchive(bundle);
 
@@ -18,12 +18,12 @@ describe("material ZIP transport", () => {
     await expect(importSnapshotArchive(first.bytes)).resolves.toEqual({
       ok: true,
       bundle,
-      tree: createRootedMaterialFixture().tree,
+      tree: createSeededDocument().tree,
     });
   });
 
   it("rejects unsafe paths, directory records, and normalized collisions before decoding", async () => {
-    const valid = treeToBundle(createRootedMaterialFixture().tree);
+    const valid = treeToBundle(createSeededDocument().tree);
     const root = valid.files["matter/index.md" as keyof typeof valid.files];
     const metadata = valid.files["matter/matter.json" as keyof typeof valid.files];
     const unsafe = zip({
@@ -57,7 +57,7 @@ describe("material ZIP transport", () => {
   });
 
   it("rejects invalid UTF-8 and complete-but-invalid bundles without producing a tree", async () => {
-    const valid = treeToBundle(createRootedMaterialFixture().tree);
+    const valid = treeToBundle(createSeededDocument().tree);
     const invalidUtf8 = zip({
       "matter/matter.json": valid.files["matter/matter.json" as keyof typeof valid.files],
       "matter/index.md": new Uint8Array([0xff, 0xfe]),
@@ -77,7 +77,7 @@ describe("material ZIP transport", () => {
   });
 
   it("rejects a central-directory CRC that does not match streamed material", async () => {
-    const exported = await exportSnapshotArchive(treeToBundle(createRootedMaterialFixture().tree));
+    const exported = await exportSnapshotArchive(treeToBundle(createSeededDocument().tree));
     if (!exported.ok) throw new Error("archive export failed");
     const corrupt = new Uint8Array(exported.bytes);
     const end = corrupt.length - 22;
@@ -102,7 +102,7 @@ describe("material ZIP transport", () => {
   });
 
   it("rejects material paths beyond the transport depth before decoding", async () => {
-    const valid = treeToBundle(createRootedMaterialFixture().tree);
+    const valid = treeToBundle(createSeededDocument().tree);
     const tooDeep = `matter/${Array.from({ length: 33 }, (_, index) => `level-${index}`).join("/")}/index.md`;
 
     await expect(importSnapshotArchive(zip({

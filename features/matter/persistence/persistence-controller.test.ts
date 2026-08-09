@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
 import type {
   DocumentRepository,
   LoadedSnapshot,
@@ -11,7 +11,7 @@ import type { TreeHistory } from "../tree/history";
 
 describe("persistence controller", () => {
   it("loads a stored tree and reports the persisted revision", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const repository = fakeRepository({ tree, writeGeneration: 3 });
     const controller = createPersistenceController(repository.port);
 
@@ -24,8 +24,51 @@ describe("persistence controller", () => {
     });
   });
 
+  it("holds a diverged load window unsaved instead of choosing a winner", async () => {
+    const seeded = createSeededDocument().tree;
+    // The person's last session, already on disk and further along.
+    const stored = { ...seeded, revision: seeded.revision + 5 };
+    const repository = controlledRepository({ tree: stored, writeGeneration: 4 });
+    const controller = createPersistenceController(repository.port);
+
+    await expect(controller.start(seeded)).resolves.toEqual({
+      storedTree: stored,
+      storedHistory: null,
+    });
+    // What they committed while the read was still in flight. Its revision is
+    // higher than the stored one and means nothing: it counts from the seed.
+    const live = { ...seeded, revision: seeded.revision + 9 };
+    controller.declareConflict(live);
+
+    expect(controller.getStatus()).toEqual({
+      phase: "error",
+      persistedRevision: stored.revision,
+      dirtyRevision: live.revision,
+      errorCode: "PERSISTENCE_CONFLICT",
+    });
+    // The stored session is untouched: nothing was written over it.
+    expect(repository.pending).toHaveLength(0);
+    expect(repository.savedRevisions).toEqual([]);
+
+    // A later commit does not quietly resume saving over the stored session.
+    controller.publish({ ...live, revision: live.revision + 1 });
+    await Promise.resolve();
+    expect(repository.savedRevisions).toEqual([]);
+
+    // The gesture the index footer already offers resolves it, and only then.
+    await expect(controller.resolveConflict()).resolves.toEqual({
+      storedTree: stored,
+      storedHistory: null,
+    });
+    expect(controller.getStatus()).toMatchObject({
+      phase: "saved",
+      persistedRevision: stored.revision,
+      errorCode: null,
+    });
+  });
+
   it("coalesces revisions published during one write into the latest snapshot", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
     await controller.start(tree);
@@ -44,7 +87,7 @@ describe("persistence controller", () => {
   });
 
   it("writes the inverse journal with the same snapshot transaction", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const history: TreeHistory = { entries: [], retainedInverseBytes: 0 };
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
@@ -57,7 +100,7 @@ describe("persistence controller", () => {
   });
 
   it("retains the latest dirty tree on conflict until explicit reload resolves it", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const newer = { ...tree, revision: tree.revision + 8 };
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
@@ -88,7 +131,7 @@ describe("persistence controller", () => {
   });
 
   it("keeps a newer local publish dirty while conflict reload is in flight", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
     await controller.start(tree);
@@ -110,7 +153,7 @@ describe("persistence controller", () => {
   });
 
   it("retains the latest dirty snapshot after storage fills and drains it on retry", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const second = { ...tree, revision: tree.revision + 1 };
     const latest = { ...tree, revision: tree.revision + 2 };
     const repository = controlledRepository();
@@ -150,8 +193,8 @@ describe("persistence controller", () => {
   });
 
   it("CAS-saves a foreign imported tree before it becomes the active persistence document", async () => {
-    const current = createRootedMaterialFixture().tree;
-    const imported = { ...createRootedMaterialFixture().tree, id: "imported_tree" };
+    const current = createSeededDocument().tree;
+    const imported = { ...createSeededDocument().tree, id: "imported_tree" };
     const saves: Array<{ treeId: string; expectedGeneration: number | null }> = [];
     const repository: DocumentRepository = {
       load: async () => ({ ok: true, value: null }),
@@ -178,7 +221,7 @@ describe("persistence controller", () => {
   });
 
   it("rejects a same-id import whose stored bundle differs without saving", async () => {
-    const imported = { ...createRootedMaterialFixture().tree, id: "existing_tree" };
+    const imported = { ...createSeededDocument().tree, id: "existing_tree" };
     const stored = { ...imported, revision: imported.revision + 1 };
     const save = vi.fn();
     const repository: DocumentRepository = {
@@ -196,7 +239,7 @@ describe("persistence controller", () => {
   });
 
   it("reserves a new generation for an identical same-id import", async () => {
-    const imported = { ...createRootedMaterialFixture().tree, id: "existing_tree" };
+    const imported = { ...createSeededDocument().tree, id: "existing_tree" };
     const save = vi.fn(async () => ({ ok: true as const, value: 4 }));
     const repository: DocumentRepository = {
       load: async () => ({ ok: true, value: { tree: imported, writeGeneration: 3 } }),

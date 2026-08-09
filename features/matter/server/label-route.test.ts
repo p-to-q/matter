@@ -6,7 +6,7 @@ import {
   MAX_LABEL_REQUEST_BYTES,
   isLabelSuccess,
   parseLabelRequest,
-} from "./label-contract";
+} from "../protocol/label-contract";
 import { handleLabelRequest, labelErrorResponse } from "./label-route";
 import { resetLabelGeneratorState } from "./label-generator";
 

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { createIndexedDbLabelRepository } from "../persistence/label-repository";
+import type { LabelWriteReceipt } from "../persistence/label-repository";
 import type { LabelSessionState } from "../runtime/label-session";
 import type { ThoughtTree } from "../tree/model";
 import { LabelDriver } from "./label-driver";
@@ -12,7 +13,7 @@ export type ThoughtLabels = Readonly<{
   /** Declares the nodes worth labelling now. Safe to call from an effect. */
   observe: (nodeIds: readonly string[]) => void;
   /** Replaces one node's label with a name the person typed. */
-  rename: (nodeId: string, label: string) => Promise<void>;
+  rename: (nodeId: string, label: string) => Promise<LabelWriteReceipt>;
   /** Returns one node to automatic naming. */
   resetName: (nodeId: string) => Promise<void>;
 }>;

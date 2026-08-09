@@ -2,8 +2,8 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import type {
   TranscriptionRequest,
   TranscriptionSuccess,
-} from "./transcription-contract";
-import { TRANSCRIPTION_SERVER_TIMEOUT_MS } from "./transcription-contract";
+} from "../protocol/transcription-contract";
+import { TRANSCRIPTION_SERVER_TIMEOUT_MS } from "../protocol/transcription-contract";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 
 export type TranscriptionAdapter = (

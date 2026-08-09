@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
-import { createFixtureInsertChildCommand } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
+import { createBranchChildCommand } from "../material/seeded-document";
 import { commitTreeCommand } from "../tree/history";
 import { allocateSnapshotPath, allocateSnapshotPaths, materialSlug } from "./snapshot-paths";
 
 describe("snapshot paths", () => {
   it("allocates one index.md per node in authored order", () => {
-    const fixture = createRootedMaterialFixture();
+    const fixture = createSeededDocument();
     const first = commitTreeCommand(
       fixture.tree,
       fixture.history,
-      createFixtureInsertChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
+      createBranchChildCommand(fixture.tree, fixture.tree.rootId!, branchValues()),
       { maxEntries: 10, maxRetainedInverseBytes: 100_000 },
     );
     if (!first.ok) throw new Error(first.error.message);
     const second = commitTreeCommand(
       first.tree,
       first.history,
-      createFixtureInsertChildCommand(first.tree, first.tree.rootId!, branchValues()),
+      createBranchChildCommand(first.tree, first.tree.rootId!, branchValues()),
       { maxEntries: 10, maxRetainedInverseBytes: 100_000 },
     );
     if (!second.ok) throw new Error(second.error.message);

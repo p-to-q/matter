@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { InquiryContextPayload } from "../server/inquiry-contract";
+import type { InquiryContextPayload } from "../protocol/inquiry-contract";
 import { inquiryContextScopeChanged } from "./inquiry-context-lifecycle";
 
 function context(overrides: Partial<InquiryContextPayload> = {}): InquiryContextPayload {

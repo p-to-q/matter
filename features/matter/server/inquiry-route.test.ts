@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
-import { MAX_INQUIRY_REQUEST_BYTES } from "./inquiry-contract";
+import { MAX_INQUIRY_REQUEST_BYTES } from "../protocol/inquiry-contract";
 import { handleInquiryRequest, inquiryErrorResponse } from "./inquiry-route";
 import { resetInquiryAdmissionForTests } from "./inquiry-admission";
 

@@ -9,7 +9,7 @@ import {
   isAcceptedAudioType,
   type TranscriptionPurpose,
   type TranscriptionRequest,
-} from "./transcription-contract";
+} from "../protocol/transcription-contract";
 import { isMatterLocale } from "../config/locales";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";

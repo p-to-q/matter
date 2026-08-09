@@ -9,7 +9,7 @@ import {
   type TranscriptionErrorEnvelope,
   type TranscriptionPurpose,
   type TranscriptionSuccess,
-} from "../server/transcription-contract";
+} from "../protocol/transcription-contract";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { clientMatterBasePath } from "../config/base-path";
 

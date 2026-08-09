@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { resolveInquiryAdapter } from "./inquiry-provider";
 import { INQUIRY_SCENARIO, compileInquiryPrompt } from "./inquiry-harness";
-import type { InquiryRequest } from "./inquiry-contract";
+import type { InquiryRequest } from "../protocol/inquiry-contract";
 
 describe("inquiry provider", () => {
   it("keeps inquiry independently gated", () => {

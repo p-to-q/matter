@@ -8,7 +8,7 @@ import {
   type LabelErrorCode,
   type LabelReference,
   type LabelSuccess,
-} from "../server/label-contract";
+} from "../protocol/label-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 
 export class LabelClientError extends Error {

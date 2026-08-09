@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_INQUIRY_ANSWER_CODE_POINTS,
   sameInquiryContext,
-} from "../server/inquiry-contract";
+} from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { askInquiry } from "./inquiry-client";
 

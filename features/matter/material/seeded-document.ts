@@ -1,3 +1,20 @@
+/**
+ * The document Matter opens with, and the material its Branch tool offers.
+ *
+ * This is product composition, not a test fixture: it is what a person meets
+ * on first load, and every durable id below is in their IndexedDB. The
+ * `matter_fixture_*` and `thought_fixture_*` spellings are kept exactly as they
+ * are for that reason — they are persisted identifiers, and renaming one to
+ * match a refactor orphans every document already saved under it.
+ *
+ * The Branch continuations are the one place the product composes material a
+ * person did not speak. That is a stated preview boundary rather than a
+ * generative surface: they are fixed sentences that decline to finish the
+ * thought, and they will be replaced by the bounded transform turn when it
+ * lands (#12). Identity and time still belong to the person; see
+ * `createBranchChildCommand`.
+ */
+
 import {
   commitTreeCommand,
   createTreeHistory,
@@ -11,12 +28,12 @@ import {
 } from "../tree/invariants";
 import type { ThoughtNode, ThoughtTree, TreeCommand } from "../tree/model";
 
-export const ROOTED_FIXTURE_TREE_ID = "matter_fixture_rooted_01";
-export const ROOT_ONLY_FIXTURE_TREE_ID = "matter_fixture_rooted_02";
+export const SEEDED_DOCUMENT_TREE_ID = "matter_fixture_rooted_01";
+export const SEEDED_ROOT_ONLY_TREE_ID = "matter_fixture_rooted_02";
 
-export type RootedMaterialFixtureVariant = "root" | "expanded";
+export type SeededDocumentVariant = "root" | "expanded";
 
-export const ROOTED_FIXTURE_NODE_IDS = {
+export const SEEDED_DOCUMENT_NODE_IDS = {
   root: "thought_fixture_root",
   imaginedLives: "thought_fixture_imagined_lives",
   imaginedTime: "thought_fixture_imagined_time",
@@ -29,9 +46,9 @@ export const ROOTED_FIXTURE_NODE_IDS = {
   bodilyReturn: "thought_fixture_bodily_return",
 } as const;
 
-export const ROOTED_FIXTURE_IMAGINED_LIVES_TEXT = "被允许想象的其他生活";
+export const SEEDED_IMAGINED_LIVES_TEXT = "被允许想象的其他生活";
 
-export const ROOTED_FIXTURE_TEXT_VARIANTS = [
+export const SEEDED_DOCUMENT_TEXT_VARIANTS = [
   {
     id: "quiet",
     label: "v1",
@@ -49,54 +66,53 @@ export const ROOTED_FIXTURE_TEXT_VARIANTS = [
   },
 ] as const;
 
-const FIXTURE_HISTORY_LIMITS = {
+const SEED_HISTORY_LIMITS = {
   maxEntries: 32,
   maxRetainedInverseBytes: 256_000,
 };
 
-const FIXTURE_INSERT_TIME = "2026-08-03T08:10:00.000Z";
 
-const FIXTURE_CHILD_TEXTS_BY_PARENT: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  [ROOTED_FIXTURE_NODE_IDS.root]: Object.freeze([
+const BRANCH_TEXTS_BY_PARENT: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  [SEEDED_DOCUMENT_NODE_IDS.root]: Object.freeze([
     "也许我们怀念的不是过去本身，而是今天还留给另一种生活的余地。",
     "过去之所以动人，也许因为它让今天暂时看见另一种安排。",
     "怀念不是返回原处，而是确认还有没有继续想象的入口。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.imaginedLives]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.imaginedLives]: Object.freeze([
     "被允许想象的生活，不必立刻证明自己有效。",
     "另一种生活先以可能的样子存在，再慢慢找到它的形状。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.imaginedTime]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.imaginedTime]: Object.freeze([
     "那种时间的价值，也许正在于它没有急着把一切变成结果。",
     "如果时间不只用来交付，迟疑也可以成为一种方向。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.presentDistance]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.presentDistance]: Object.freeze([
     "今天的距离也许来自我们已经习惯用现在的尺度解释过去。",
     "过去显得遥远，并不代表它曾经完整地存在过。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.presentFailure]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.presentFailure]: Object.freeze([
     "不完整并不是缺陷，它让今天仍有重新想象的缝隙。",
     "正因为无法被完全证明，这个入口才没有被封死。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.presentOpening]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.presentOpening]: Object.freeze([
     "入口不必把人带回过去，它只需要让别的安排暂时可见。",
     "只要还可以被看见，怀念就不只是回去的路线。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.bodilyMemory]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.bodilyMemory]: Object.freeze([
     "身体记住的不是年代，而是它曾经可以朝向别处的节奏。",
     "有些怀念先以步速和停顿回来，语言只是在后面追上它。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.bodilyGesture]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.bodilyGesture]: Object.freeze([
     "停顿留下的方向，比一句解释更早让身体知道该往哪里去。",
     "当语言追上动作时，记忆已经先替它保留了余地。",
   ]),
-  [ROOTED_FIXTURE_NODE_IDS.bodilyReturn]: Object.freeze([
+  [SEEDED_DOCUMENT_NODE_IDS.bodilyReturn]: Object.freeze([
     "所以这段话不急着把过去说清楚，只先留住调整方向的感觉。",
     "身体保留下来的那一点余地，足够让下一句话继续生长。",
   ]),
 });
 
-const GENERATED_FIXTURE_CHILD_TEXTS = Object.freeze([
+const BRANCH_TEXTS = Object.freeze([
   "这条想法还可以继续往下走，但先保留它没有说完的部分。",
   "这里暂时不替它下结论，只让一个更具体的方向留在旁边。",
   "它和前一句仍然有一点距离，这一点距离也可以成为新的入口。",
@@ -104,88 +120,88 @@ const GENERATED_FIXTURE_CHILD_TEXTS = Object.freeze([
 
 const BOOTSTRAP_NODES: readonly ThoughtNode[] = [
   {
-    id: ROOTED_FIXTURE_NODE_IDS.root,
-    text: ROOTED_FIXTURE_TEXT_VARIANTS[0].text,
+    id: SEEDED_DOCUMENT_NODE_IDS.root,
+    text: SEEDED_DOCUMENT_TEXT_VARIANTS[0].text,
     parentId: null,
     children: [],
     createdAt: "2026-08-03T08:00:00.000Z",
     updatedAt: "2026-08-03T08:00:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
-    text: ROOTED_FIXTURE_IMAGINED_LIVES_TEXT,
-    parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    id: SEEDED_DOCUMENT_NODE_IDS.imaginedLives,
+    text: SEEDED_IMAGINED_LIVES_TEXT,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.root,
     children: [],
     createdAt: "2026-08-03T08:01:00.000Z",
     updatedAt: "2026-08-03T08:01:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.imaginedTime,
+    id: SEEDED_DOCUMENT_NODE_IDS.imaginedTime,
     text: "也许怀念的是一种不必立刻证明效率的时间，它还没有被切成可以交付的单位。",
-    parentId: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.imaginedLives,
     children: [],
     createdAt: "2026-08-03T08:02:00.000Z",
     updatedAt: "2026-08-03T08:02:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.imaginedRelations,
+    id: SEEDED_DOCUMENT_NODE_IDS.imaginedRelations,
     text: "也许那里的人与人之间还有一些不必被计算的往来，慢一点也不会立刻失去位置。",
-    parentId: ROOTED_FIXTURE_NODE_IDS.imaginedLives,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.imaginedLives,
     children: [],
     createdAt: "2026-08-03T08:03:00.000Z",
     updatedAt: "2026-08-03T08:03:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+    id: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
     text: "过去为什么在今天显得遥远",
-    parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.root,
     children: [],
     createdAt: "2026-08-03T08:04:00.000Z",
     updatedAt: "2026-08-03T08:04:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.presentFailure,
+    id: SEEDED_DOCUMENT_NODE_IDS.presentFailure,
     text: "它未必真的存在过；正因为不完整，才更容易被今天的缺口照亮。",
-    parentId: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
     children: [],
     createdAt: "2026-08-03T08:05:00.000Z",
     updatedAt: "2026-08-03T08:05:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.presentOpening,
+    id: SEEDED_DOCUMENT_NODE_IDS.presentOpening,
     text: "怀念不是回去的路线，更像一个还没有被封死的入口，让别的安排暂时可以被看见。",
-    parentId: ROOTED_FIXTURE_NODE_IDS.presentDistance,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
     children: [],
     createdAt: "2026-08-03T08:06:00.000Z",
     updatedAt: "2026-08-03T08:06:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    id: SEEDED_DOCUMENT_NODE_IDS.bodilyMemory,
     text: "身体怎样保存这种怀念",
-    parentId: ROOTED_FIXTURE_NODE_IDS.root,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.root,
     children: [],
     createdAt: "2026-08-03T08:07:00.000Z",
     updatedAt: "2026-08-03T08:07:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.bodilyGesture,
+    id: SEEDED_DOCUMENT_NODE_IDS.bodilyGesture,
     text: "有些记忆先以步速、停顿和说话时的犹豫回来，语言只是在后面追上它们。",
-    parentId: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.bodilyMemory,
     children: [],
     createdAt: "2026-08-03T08:08:00.000Z",
     updatedAt: "2026-08-03T08:08:00.000Z",
   },
   {
-    id: ROOTED_FIXTURE_NODE_IDS.bodilyReturn,
+    id: SEEDED_DOCUMENT_NODE_IDS.bodilyReturn,
     text: "所以这段话不急着把过去说清楚，只想留住那一点仍能让身体调整方向的感觉。",
-    parentId: ROOTED_FIXTURE_NODE_IDS.bodilyMemory,
+    parentId: SEEDED_DOCUMENT_NODE_IDS.bodilyMemory,
     children: [],
     createdAt: "2026-08-03T08:09:00.000Z",
     updatedAt: "2026-08-03T08:09:00.000Z",
   },
 ] as const;
 
-export type RootedMaterialFixture = {
+export type SeededDocument = {
   tree: ThoughtTree;
   history: TreeHistory;
 };
@@ -195,11 +211,11 @@ export type RootedMaterialFixture = {
  * Bootstrap commands are then forgotten: opening a fixture must not present
  * setup work as a person's undo history.
  */
-export function createRootedMaterialFixture(
-  variant: RootedMaterialFixtureVariant = "expanded",
-): RootedMaterialFixture {
+export function createSeededDocument(
+  variant: SeededDocumentVariant = "expanded",
+): SeededDocument {
   let tree = createEmptyTree(
-    variant === "root" ? ROOT_ONLY_FIXTURE_TREE_ID : ROOTED_FIXTURE_TREE_ID,
+    variant === "root" ? SEEDED_ROOT_ONLY_TREE_ID : SEEDED_DOCUMENT_TREE_ID,
   );
   let history = createTreeHistory();
 
@@ -221,7 +237,7 @@ export function createRootedMaterialFixture(
       tree,
       history,
       command,
-      FIXTURE_HISTORY_LIMITS,
+      SEED_HISTORY_LIMITS,
     );
     if (!committed.ok) {
       throw new Error(
@@ -247,13 +263,13 @@ export function createRootedMaterialFixture(
  * made. The engine remains the sole owner of parent existence, child limits,
  * insertion bounds, and id-collision checks.
  */
-export function createFixtureInsertChildCommand(
+export function createBranchChildCommand(
   tree: ThoughtTree,
   parentId: string,
   values: Readonly<{ nodeId: string; createdAt: string }>,
   index = tree.nodes[parentId]?.children.length ?? 0,
 ): TreeCommand {
-  const text = fixtureChildText(tree, parentId);
+  const text = branchChildText(tree, parentId);
 
   return {
     id: `branch_${values.nodeId}`,
@@ -278,34 +294,10 @@ export function createFixtureInsertChildCommand(
   };
 }
 
-function fixtureChildText(tree: ThoughtTree, parentId: string): string {
+function branchChildText(tree: ThoughtTree, parentId: string): string {
   const parent = tree.nodes[parentId];
-  const options = FIXTURE_CHILD_TEXTS_BY_PARENT[parentId] ?? GENERATED_FIXTURE_CHILD_TEXTS;
-  return options[(parent?.children.length ?? 0) % options.length] ?? GENERATED_FIXTURE_CHILD_TEXTS[0];
-}
-
-export function createFixtureReplaceTextCommand(
-  tree: ThoughtTree,
-  nodeId: string,
-  text: string,
-): TreeCommand {
-  const node = tree.nodes[nodeId];
-  const sequence = tree.revision;
-  return {
-    id: `fixture_replace_r${sequence}`,
-    source: "fixture",
-    expectedTreeId: tree.id,
-    expectedRevision: tree.revision,
-    mutation: {
-      type: "replace-text",
-      nodeId,
-      expectedText: node?.text ?? "",
-      expectedUpdatedAt: node?.updatedAt ?? "",
-      text,
-      updatedAt: FIXTURE_INSERT_TIME,
-    },
-    createdAt: FIXTURE_INSERT_TIME,
-  };
+  const options = BRANCH_TEXTS_BY_PARENT[parentId] ?? BRANCH_TEXTS;
+  return options[(parent?.children.length ?? 0) % options.length] ?? BRANCH_TEXTS[0];
 }
 
 const PERFORMANCE_NODE_COUNT = 2_000;

@@ -4,7 +4,7 @@ import {
   MAX_ACCEPTED_RECORDING_MS,
   MAX_AUDIO_REQUEST_BYTES,
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
-} from "./transcription-contract";
+} from "../protocol/transcription-contract";
 
 const originalEnvironment = { ...process.env };
 

@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { createRootedMaterialFixture } from "../fixtures/rooted-material";
+import { createSeededDocument } from "../material/seeded-document";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
 import type { ImportedDocumentPreparation, PersistenceController } from "./persistence-controller";
 
 describe("document import coordinator", () => {
   it("switches runtime only after a prepared archive has a successful CAS", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const prepared: ImportedDocumentPreparation = { ok: true, tree, writeGeneration: 4 };
     const events: string[] = [];
     const persistence = {
@@ -30,7 +30,7 @@ describe("document import coordinator", () => {
   });
 
   it("leaves runtime untouched when persistence rejects a conflict", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const persistence = {
       prepareImportedTree: vi.fn(async () => ({ ok: false, errorCode: "IMPORT_CONFLICT" } as const)),
       activateImportedDocument: vi.fn(),
@@ -47,7 +47,7 @@ describe("document import coordinator", () => {
   });
 
   it("does not activate persistence if the named runtime switch rejects", async () => {
-    const tree = createRootedMaterialFixture().tree;
+    const tree = createSeededDocument().tree;
     const prepared: ImportedDocumentPreparation = { ok: true, tree, writeGeneration: 4 };
     const persistence = {
       prepareImportedTree: vi.fn(async () => prepared),

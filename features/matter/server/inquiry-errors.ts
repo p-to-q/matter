@@ -2,7 +2,7 @@ import type {
   InquiryErrorCode,
   InquiryErrorEnvelope,
   InquiryFallbackReason,
-} from "./inquiry-contract";
+} from "../protocol/inquiry-contract";
 
 export class InquiryServerError extends Error {
   constructor(

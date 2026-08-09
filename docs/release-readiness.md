@@ -189,6 +189,29 @@ deployment requirement after promotion, npm run check:deployment must report
                        surfaces actually answer
 ```
 
+## Candidate verification — 0.2.0-preview.19
+
+Three durability and boundary slices, and the first release where the
+architecture rules are enforced rather than described.
+
+```text
+load window            two lineages no longer resolve by revision. A commit
+                       during the read raises the conflict a second tab
+                       raises; neither version is overwritten
+manual names           label writes return a typed receipt; a failed manual
+                       write returns the row to its editor instead of looking
+                       taken and vanishing on reload
+architecture           npm run check:architecture holds 4 rules over 255 files;
+                       all 3 recorded exceptions cleared first
+release proof          npm run check: 963 Vitest passed, 1 opt-in live-pool
+                       skip; 34 Node tests passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2 skipped
+```
+
+Interface unchanged, with one deliberate exception: a manual name whose write
+fails returns to the editor it was typed in. That is the failure path, and it
+previously presented as success.
+
 ## Candidate verification — 0.2.0-preview.18
 
 Preview.18 is one measured tuning change, taken from the preview.17 promotion
