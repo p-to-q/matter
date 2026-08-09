@@ -174,6 +174,72 @@ describe("pool adapter", () => {
     expect(tried).toEqual(["hanging", "steady"]);
   });
 
+  it("cools a stalled relay after one hang, not after two", async () => {
+    // The production failure this exists for: one relay stops answering
+    // without refusing. Graded like a fast error it stays first in order for a
+    // second full-ceiling attempt, so the next caller pays the same stall
+    // again before the pool ever reaches a working relay.
+    let clock = 1_000;
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("stalling"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      () => clock,
+      async (_url, init) => {
+        const request = init as RequestInit;
+        const model = (JSON.parse(String(request.body)) as { model: string }).model;
+        tried.push(model);
+        if (model !== "stalling") return chatResponse("成本问题");
+        return new Promise<Response>((_resolve, reject) => {
+          request.signal?.addEventListener(
+            "abort",
+            () => {
+              // The stall consumed the whole attempt ceiling.
+              clock += 500;
+              reject(new DOMException("Aborted", "AbortError"));
+            },
+            { once: true },
+          );
+        });
+      },
+    );
+
+    await expect(adapter(adapterInput(1_000), new AbortController().signal))
+      .resolves.toEqual({ text: "成本问题" });
+    expect(tried).toEqual(["stalling", "steady"]);
+
+    // Second caller: the stalled relay is cooling, so the steady one answers
+    // first and nobody pays the ceiling again.
+    tried.length = 0;
+    await expect(adapter(adapterInput(1_000), new AbortController().signal))
+      .resolves.toEqual({ text: "成本问题" });
+    expect(tried).toEqual(["steady"]);
+  });
+
+  it("still needs two fast refusals before cooling a responsive relay", async () => {
+    // A relay that refuses quickly costs the caller almost nothing, so it keeps
+    // its place until it has actually proven unreliable.
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("refusing"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+        tried.push(model);
+        return model === "refusing" ? chatResponse("no", 500) : chatResponse("成本问题");
+      },
+    );
+
+    await adapter(adapterInput(), new AbortController().signal);
+    tried.length = 0;
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(tried).toEqual(["refusing", "steady"]);
+    tried.length = 0;
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(tried).toEqual(["steady"]);
+  });
+
   it("does not start an attempt that cannot finish inside the deadline", async () => {
     let clock = 1_000;
     let calls = 0;

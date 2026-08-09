@@ -101,6 +101,33 @@ describe("runScenario", () => {
     await first;
   });
 
+  it("does not cool a live relay because its answers were refused", async () => {
+    // A bound or a sibling set can make several requests in a row unanswerable
+    // while the relay is healthy. Counting those toward the provider cooldown
+    // would take the surface off a working provider for everyone on the
+    // instance, and the next person would wait for a floor that was always
+    // available.
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 2, cooldownMs: 5_000 };
+    let calls = 0;
+    const answering: ScenarioAdapter = async () => {
+      calls += 1;
+      return { text: "an answer the adjudicator will refuse" };
+    };
+    const refusing = {
+      ...ECHO,
+      adjudicate: () => ({ ok: false as const, reason: "refused" }),
+    };
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      expect(await runScenario(refusing, "a", answering, governor, { limits }))
+        .toEqual({ ok: false, fallback: "MODEL_REJECTED" });
+    }
+    // Every request reached the relay: none was shed by a cooldown.
+    expect(calls).toBe(4);
+    expect(governor.cooling(Date.now())).toBe(false);
+  });
+
   it("keeps one health counter across differently-shaped limits objects", async () => {
     const governor = new ScenarioGovernor();
     let clock = 1_000;

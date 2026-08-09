@@ -1,6 +1,6 @@
 {
   "name": "ptoq-matter",
-  "version": "0.2.0-preview.20",
+  "version": "0.2.0-preview.21",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,11 +15,12 @@
     "check:vercel": "node scripts/check-vercel-config.mjs",
     "typegen": "next typegen --webpack",
     "check": "npm run doctor && npm run check:docs && npm test && npm run typegen && npm run typecheck && npm run lint && npm run build",
-    "test": "node --test scripts/check-markdown-links.test.mjs scripts/check-deployment.test.mjs scripts/check-vercel-config.test.mjs scripts/check-architecture.test.mjs && node scripts/check-vercel-config.mjs && node scripts/check-architecture.mjs && vitest run",
+    "test": "node --test scripts/check-markdown-links.test.mjs scripts/check-deployment.test.mjs scripts/check-vercel-config.test.mjs scripts/check-architecture.test.mjs scripts/probe-model-pool.test.mjs && node scripts/check-vercel-config.mjs && node scripts/check-architecture.mjs && vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:receipt": "env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true npm run build && env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true MATTER_RUN_PERFORMANCE_RECEIPT=true node scripts/run-e2e.mjs e2e/rooted-performance.spec.ts --config=playwright.production.config.ts",
-    "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs"
+    "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
+    "probe:pool": "node scripts/probe-model-pool.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

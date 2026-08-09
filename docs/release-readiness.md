@@ -189,35 +189,32 @@ deployment requirement after promotion, npm run check:deployment must report
                        surfaces actually answer
 ```
 
-## Candidate verification — 0.2.0-preview.20
+## Candidate verification — 0.2.0-preview.21
 
-One product-boundary slice, one admission correction, and the production
-receipt that closes the inquiry failure.
+Two harness corrections found by measuring the pool from outside, and the
+instrument that found them.
 
 ```text
-inquiry shape          the composer holds one exchange, not a bounded list of
-                       turns. A second question replaces the first; a reply for
-                       an exchange the state no longer holds is dropped
-inquiry admission      concurrency is checked before a source's minute is
-                       charged, so a request the instance refuses to serve no
-                       longer spends the quota its own retry needs
-inquiry in production  six consecutive POSTs to https://matter.ptoq.io/api/
-                       inquiry on preview.19 answered in 1.7-3.2 s against a
-                       16 s budget, across a 2-node and a clipped 20-node
-                       context. #52 measured the whole budget and never
-                       answered; it no longer reproduces
-release proof          npm run check: 973 Vitest passed, 1 opt-in live-pool
-                       skip; 34 Node tests passed
-browser proof          npm run test:e2e: 45 Chromium cases passed, 2 skipped,
-                       including a repeated ask that proves one question and
-                       one answer remain on screen and that no prior answer
-                       appears in the request corpus
+refused answers      an adjudication rejection no longer counts toward the
+                     provider cooldown. Three refusable requests in a row used
+                     to take a surface off a live relay for 15 s, for everyone
+                     on that instance, while it was answering all along
+stalled relays       a candidate that spends its whole attempt without
+                     answering now reaches the cooldown threshold in one event
+                     rather than two. A fast refusal still needs two, because
+                     it costs the next caller nothing
+pool probe           npm run probe:pool <origin> asks repair, label, and
+                     inquiry each round and reads fallbackReason rather than
+                     status, so a floor answer is not mistaken for a working
+                     pool
+release proof        npm run check: 969 Vitest passed, 1 opt-in live-pool
+                     skip; 52 Node tests passed
+browser proof        npm run test:e2e: 45 Chromium cases passed, 2 skipped
 ```
 
-Interface changed in one place, deliberately: the inquiry bubble shows the
-current question and its answer rather than a scrollable sequence, and the
-region it may cover grew from 92px to 148px because one answer is read rather
-than scrolled through.
+Interface unchanged. The one-exchange inquiry change from preview.20 is
+reverted: Ask Matter keeps its scrollable record, which is the product
+decision.
 
 ## Candidate verification — 0.2.0-preview.19
 

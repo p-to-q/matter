@@ -241,7 +241,16 @@ export async function runScenario<Input, Value>(
     const answer = await Promise.race([work, boundary.promise]);
     const verdict = scenario.adjudicate(answer?.text, input);
     if (!verdict.ok) {
-      governor.failed(now(), limits);
+      // A rejection is a fact about this request, not about the relay. The
+      // relay answered, inside the deadline, and the adjudicator declined what
+      // it said — usually because the bound, the sibling set, or the material
+      // made no valid answer available. Counting that toward the cooldown
+      // conflates the two things the counter exists to separate: it is here so
+      // nobody pays a full deadline for a dead relay, and a rejection costs a
+      // fast answer instead. Three refusable requests in a row would otherwise
+      // take the whole surface off a live provider for the cooldown, for every
+      // person on that instance, while the provider was answering all along.
+      governor.succeeded();
       return fallback("MODEL_REJECTED");
     }
     governor.succeeded();

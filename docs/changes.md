@@ -17,25 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
-## 2026-08-09 — Ask Matter holds one exchange, not a transcript
+## 2026-08-09 — A refused answer is not a broken relay, and a stall is not a refusal
 
-Changed: the inquiry composer's state is a single nullable exchange — a question
-and its one answer — instead of a bounded list of turns. A new question replaces
-the previous one, close and scope change discard it, and an answer for an
-exchange the state no longer holds is dropped rather than shown under a later
-question. Admission also charges a source's minute only for a request it agrees
-to serve.
+Changed: `runScenario` no longer counts an adjudication rejection toward the
+provider cooldown, and the pool grades a candidate that spent its whole attempt
+without answering as reaching the cooldown threshold in one event rather than
+two. A candidate that refuses quickly still needs two.
 
-Why: the list had a 40-turn bound, which is a chat transcript with a ceiling.
-Nothing in the product's own boundary asked for a second turn, and the shape
-invited a third: a list is what accumulates one reasonable commit at a time.
-Making the state hold one exchange makes the transcript unrepresentable rather
-than merely discouraged, and the prior answer that can never be fed back as
-prompt input is now the prior answer that no longer exists to feed.
+Why: both conflated a fact about one request with a fact about a relay. Three
+refusable requests in a row — a tight bound, a sibling set with no room left —
+took a whole surface off a live provider for the cooldown, for every person on
+that instance, and the next person waited for a floor that was always there.
+The pool made the mirror-image error: a relay that hangs and one that refuses in
+200 ms cost the caller very different amounts, and were recorded identically, so
+one stalled relay kept its place at the front of the order and spent the next
+caller's deadline too. Measured in production, where which surface answered
+flipped between runs while the code did not.
 
-Forecloses: conversation memory in the paper's corner, a permanent assistant
-panel reached by growing the bubble, and any inquiry answer that depends on an
-earlier one.
+Forecloses: treating any per-request verdict as provider health, and any pool
+ordering that cannot tell a slow relay from an unavailable one.
 
 ---
 
