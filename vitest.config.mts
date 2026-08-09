@@ -18,6 +18,7 @@ export default defineConfig({
       "scripts/check-deployment.test.mjs",
       "scripts/check-vercel-config.test.mjs",
       "scripts/check-architecture.test.mjs",
+      "scripts/probe-model-pool.test.mjs",
     ],
   },
 });

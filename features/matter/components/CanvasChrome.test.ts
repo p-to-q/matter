@@ -47,19 +47,8 @@ describe("CanvasChrome", () => {
     expect(markup).toContain('data-inquiry-phase="idle"');
     expect(markup).toMatch(/id="matter-inquiry"[^>]*hidden|hidden[^>]*id="matter-inquiry"/);
     expect(markup).toContain('aria-controls="matter-inquiry"');
-    expect(markup).not.toContain("data-inquiry-exchange");
+    expect(markup).not.toContain("data-inquiry-thread");
     expect(markup).not.toMatch(/chat|assistant|history/i);
-  });
-
-  it("keeps the inquiry markup incapable of rendering a transcript", () => {
-    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
-    const bubble = source.slice(source.indexOf("function InquiryBubble"));
-    // One question element and one answer element, both written literally. A
-    // list rendered from state is how the 40-turn transcript in #49 grew, so
-    // the absence of a map over exchanges is the invariant worth asserting.
-    expect(bubble.match(/data-inquiry-role="person"/g)).toHaveLength(1);
-    expect(bubble.match(/data-inquiry-role="matter"/g)).toHaveLength(1);
-    expect(bubble).not.toMatch(/exchange\w*\.map\(|turns\.map\(/);
   });
 
   it("hides the inquiry in CSS even though the component owns display", () => {

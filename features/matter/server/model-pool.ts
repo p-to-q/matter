@@ -153,13 +153,21 @@ export function createPoolAdapter(
       if (remaining < limits.minimumAttemptMs) break;
       const isLast = index === ordered.length - 1;
       const attemptMs = isLast ? remaining : Math.min(remaining, attemptCeilingMs);
+      const startedAt = now();
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
-        recordOutcome(candidate, true, limits, now);
+        recordOutcome(candidate, "answered", limits, now);
         return { text };
       } catch (error) {
         if (signal.aborted) throw error;
-        recordOutcome(candidate, false, limits, now);
+        // A relay that spends its whole attempt and says nothing is worse than
+        // one that refuses in 200 ms, and the two used to be recorded
+        // identically. The difference is what the next caller pays: a fast
+        // refusal costs them nothing, while a hang costs them this ceiling
+        // again before the pool can even reach a working relay. Grading the
+        // hang harder is what stops one stalled relay from spending every
+        // caller's deadline until it happens to fail twice.
+        recordOutcome(candidate, now() - startedAt >= attemptMs ? "stalled" : "failed", limits, now);
         lastError = error;
       }
     }
@@ -289,19 +297,25 @@ async function readBounded(response: Response, maxBytes: number): Promise<string
   return new TextDecoder("utf-8", { fatal: true }).decode(merged);
 }
 
+export type CandidateOutcome = "answered" | "failed" | "stalled";
+
 function recordOutcome(
   candidate: PoolCandidate,
-  ok: boolean,
+  outcome: CandidateOutcome,
   limits: PoolLimits,
   now: () => number,
 ): void {
   const key = candidateKey(candidate);
-  if (ok) {
+  if (outcome === "answered") {
     health.delete(key);
     return;
   }
   const entry = health.get(key) ?? { failures: 0, cooldownUntilMs: 0 };
-  entry.failures += 1;
+  // A stall consumes the caller's budget rather than reporting a fault, so it
+  // reaches the cooldown threshold on its own. It is still only a demotion:
+  // `orderedCandidates` keeps trying cooling relays after the healthy ones, so
+  // a pool of stalled relays degrades to slow rather than to empty.
+  entry.failures += outcome === "stalled" ? limits.failuresBeforeCooldown : 1;
   if (entry.failures >= limits.failuresBeforeCooldown) {
     entry.cooldownUntilMs = now() + limits.cooldownMs;
     entry.failures = 0;

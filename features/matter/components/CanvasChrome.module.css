@@ -526,15 +526,9 @@
   animation: popoverIn 150ms ease-out;
 }
 
-/*
- * The bubble is bottom-anchored and grows upward, so this bound is how much
- * paper one answer may cover. 92px was sized for a scrolling transcript, where
- * the region was a window onto many turns; one bounded exchange is read rather
- * than scrolled, and the answer is capped at 1,200 code points either way.
- */
-.inquiryExchange {
+.inquiryThread {
   display: flex;
-  max-height: 148px;
+  max-height: 92px;
   flex-direction: column;
   gap: 6px;
   padding-bottom: 9px;
@@ -544,28 +538,28 @@
   scrollbar-width: none;
 }
 
-.inquiryExchange::-webkit-scrollbar {
+.inquiryThread::-webkit-scrollbar {
   width: 0;
   height: 0;
 }
 
-.inquiryLine {
+.inquiryTurn {
   max-width: 84%;
   margin: 0;
   padding: 6px 9px;
   font: 400 12px/17px var(--mono);
   letter-spacing: 0;
   overflow-wrap: anywhere;
-  animation: inquiryLineIn 160ms ease-out;
+  animation: inquiryTurnIn 160ms ease-out;
 }
 
-.inquiryLine[data-inquiry-role="person"] {
+.inquiryTurn[data-inquiry-role="person"] {
   align-self: flex-end;
   background: var(--chrome-primary);
   color: var(--chrome-primary-fg);
 }
 
-.inquiryLine[data-inquiry-role="matter"] {
+.inquiryTurn[data-inquiry-role="matter"] {
   align-self: flex-start;
   background: var(--chrome-answer);
   color: var(--chrome-answer-fg);
@@ -678,7 +672,7 @@
   50% { opacity: 1; }
 }
 
-@keyframes inquiryLineIn {
+@keyframes inquiryTurnIn {
   from { opacity: 0; transform: translateY(3px); }
   to { opacity: 1; transform: translateY(0); }
 }
@@ -757,7 +751,7 @@
   .popover,
   .mobileSheet,
   .inquiry,
-  .inquiryLine {
+  .inquiryTurn {
     animation: none;
   }
 
