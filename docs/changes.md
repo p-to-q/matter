@@ -17,6 +17,20 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-11 — Ask Matter retention is not a user-managed surface
+
+Changed: the inquiry no longer exposes a Clear record control. Retention still
+lives behind the existing repository boundary, but record management has no
+first-release UI, navigation, or visual language.
+
+Why: the retained exchange is a quiet continuity mechanism, not a log product.
+Giving it a management action turned a secondary orientation surface into an
+interface for storage rather than material.
+
+Forecloses: treating Ask Matter as a transcript manager, while preserving a
+future system/account adapter's ability to manage the record outside this
+surface.
+
 ## 2026-08-11 — Matter names its actual interface
 
 Changed: public, in-product, and repository copy now calls Matter an interface

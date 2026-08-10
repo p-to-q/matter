@@ -50,7 +50,6 @@ passages or, when no passages are selected, the bounded virtual material tree,
 and receive orientation that never edits material. A completed exchange may
 remain behind that same inquiry after reload, but it adds no separate product
 surface and is not material, history, archive content, or later model context.
-It can be cleared from the inquiry.
 Every generative material change still has an exact pointer undo.
 
 For a lassoed inquiry, selected passages are the working context. Without a

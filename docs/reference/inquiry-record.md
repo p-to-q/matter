@@ -33,9 +33,10 @@ nor becomes a second browser-owned document model.
 A save failure leaves the current exchange in memory and makes its unsaved state
 explicit inside the inquiry. A generation conflict never overwrites another
 tab's record. Closing the inquiry only closes the bubble; it does not erase a
-saved record. One Clear action within that same surface deletes the complete
-record through the same generation boundary. There is no per-message deletion
-in this first record shape, so deletion semantics remain unambiguous.
+saved record. The repository retains its complete-record clear operation for a
+future system/account adapter or recovery flow, but the first-release inquiry
+does not expose a record-management action. There is no per-message deletion
+shape.
 
 ## Export and migration
 
@@ -50,8 +51,8 @@ they never infer a record from a current transient composer.
 - completed record reloads for its own document, while draft and pending work do not;
 - a changed material revision preserves old visible exchanges but never gives
   them authority over a new request;
-- clear, quota, malformed data, and cross-tab generation conflict cannot modify
-  material or command history;
+- internal clear, quota, malformed data, and cross-tab generation conflict
+  cannot modify material or command history;
 - only bounded, terminal outcomes are encoded; provider content and material
   context never enter routine logs;
 - an archive round-trip leaves the record absent unless a future explicit

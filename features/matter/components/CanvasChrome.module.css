@@ -667,21 +667,6 @@
   cursor: default;
 }
 
-.inquiryClear {
-  align-self: flex-start;
-  padding: 0;
-  color: var(--chrome-muted);
-  font: 400 10px/15px var(--mono);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-
-.inquiryClear:hover,
-.inquiryClear:focus-visible {
-  color: var(--chrome-text);
-}
-
 @keyframes inquiryListening {
   0%, 100% { opacity: .3; }
   50% { opacity: 1; }

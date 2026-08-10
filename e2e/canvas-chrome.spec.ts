@@ -182,8 +182,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await askMatter.click();
   await expect(inquiryDialog).toContainText("这份材料在怀念什么？");
-  await inquiryDialog.getByRole("button", { name: "清除记录", exact: true }).click();
-  await expect(inquiryDialog.locator('[data-inquiry-role]')).toHaveCount(0);
+  await expect(inquiryDialog.getByRole("button", { name: "清除记录", exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.locator('[data-chrome-control="language"]').click({ force: true });
   await page.getByRole("menuitemradio", { name: "English" }).click();

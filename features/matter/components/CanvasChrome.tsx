@@ -73,7 +73,6 @@ type CanvasChromeCopy = Readonly<{
   appearance: Readonly<Record<CanvasAppearance, string>>;
   appearanceLabel: string;
   close: string;
-  clearRecord: string;
   closeMenu: string;
   dictate: string;
   dictateStop: string;
@@ -266,7 +265,6 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "Auto", dark: "Dark", light: "Light" }),
     appearanceLabel: "Appearance",
     close: "Close",
-    clearRecord: "Clear record",
     closeMenu: "Close Matter menu",
     dictate: "Dictate",
     dictateStop: "Stop dictating",
@@ -303,7 +301,6 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "自动", dark: "深色", light: "浅色" }),
     appearanceLabel: "外观",
     close: "关闭",
-    clearRecord: "清除记录",
     closeMenu: "关闭 Matter 菜单",
     dictate: "口述",
     dictateStop: "停止口述",
@@ -340,7 +337,6 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "自動", dark: "深色", light: "淺色" }),
     appearanceLabel: "外觀",
     close: "關閉",
-    clearRecord: "清除記錄",
     closeMenu: "關閉 Matter 選單",
     dictate: "口述",
     dictateStop: "停止口述",
@@ -377,7 +373,6 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "自動", dark: "ダーク", light: "ライト" }),
     appearanceLabel: "外観",
     close: "閉じる",
-    clearRecord: "記録を消去",
     closeMenu: "Matter メニューを閉じる",
     dictate: "音声入力",
     dictateStop: "音声入力を停止",
@@ -414,7 +409,6 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "Automatisch", dark: "Dunkel", light: "Hell" }),
     appearanceLabel: "Darstellung",
     close: "Schließen",
-    clearRecord: "Verlauf löschen",
     closeMenu: "Matter-Menü schließen",
     dictate: "Diktieren",
     dictateStop: "Diktat stoppen",
@@ -1125,15 +1119,6 @@ function InquiryBubble({
           ))}
         </div>
       )}
-      {record !== undefined && state.turns.length > 0 ? (
-        <button
-          className={styles.inquiryClear}
-          onClick={record.clear}
-          type="button"
-        >
-          {copy.clearRecord}
-        </button>
-      ) : null}
       <div className={styles.inquiryComposer}>
         <textarea
           aria-label={copy.askPlaceholder}

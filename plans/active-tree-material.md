@@ -209,9 +209,9 @@ compact `{ treeId, revision, scope }` receipt only. It stores neither a draft,
 pending request, audio, provider detail, nor copied material context; it never
 becomes model context. Retention appears only by reopening the existing inquiry
 surface: it creates no separate product UI, navigation, or log manager. Its
-single complete-record clear action remains separate from material undo/history
-and Matter `0.2` ZIP export, and future system-folder/account/sync adapters use
-only the same repository port.
+complete-record management remains inside the repository boundary, separate from
+material undo/history and Matter `0.2` ZIP export; future
+system-folder/account/sync adapters use only the same repository port.
 [`reference/inquiry-record.md`](../docs/reference/inquiry-record.md) is the
 implementation contract.
 
