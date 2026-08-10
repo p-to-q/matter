@@ -1,6 +1,6 @@
 {
   "name": "ptoq-matter",
-  "version": "0.2.0-preview.21",
+  "version": "0.2.0-preview.22",
   "private": true,
   "scripts": {
     "dev": "next dev",

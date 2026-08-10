@@ -6,6 +6,15 @@ Voice carries language. Gesture carries reference and degree. Structure keeps
 the lineage between thoughts. AI is intelligence inside the material, not an
 agent standing outside it.
 
+## The job at this stage
+
+Matter is not trying to become a general workspace, a second brain, or a
+voice-first text editor. Its current job is narrower and more valuable: let one
+unfinished thought arrive, let a person touch the exact language that matters,
+and let it grow once without surrendering authorship. The release should make
+that loop understandable in one sitting before it earns more memory, sync, or
+surface area.
+
 ## Two kinds of turn
 
 **Material admission.** A person speaks at the empty root, beneath the selected
@@ -38,7 +47,10 @@ autonomous chain of operations. Its primary output appears only as a change to
 the material a person is handling. One secondary exception exists: a person may
 open a small Matter inquiry, ask one short question about either the lassoed
 passages or, when no passages are selected, the bounded virtual material tree,
-and receive orientation that neither edits material nor survives a reload.
+and receive orientation that never edits material. A completed exchange may
+remain behind that same inquiry after reload, but it adds no separate product
+surface and is not material, history, archive content, or later model context.
+It can be cleared from the inquiry.
 Every generative material change still has an exact pointer undo.
 
 For a lassoed inquiry, selected passages are the working context. Without a
@@ -57,10 +69,12 @@ edit, address the user, or mention itself.
 
 ## Not Matter
 
-- a keyboard-free AI writing app;
+- an AI writing app whose primary interaction is a prompt box;
 - an infinite canvas with voice attached;
 - a separate memory layer, knowledge base, or second brain outside the material;
 - an automation product acting on a person's behalf.
+- a brain-computer interface: its inputs are ordinary voice and gesture, and it
+  makes no neural-input claim.
 
 Matter is not shaped around a demographic persona. The first proving task is
 more concrete: help someone move an unfinished thought into material they can

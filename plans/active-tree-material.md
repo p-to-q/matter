@@ -1,7 +1,7 @@
 # Plan: Matter first release
 
 Status: Active  
-Current phase: 2 — complete the generative turn
+Current phase: 2 — prove the fixture generative turn, then enable its live gate
 Destination: the first usable public release at `ptoq.io/matter`
 
 This is the only roadmap. It ends at the first release; it is not a forecast of
@@ -21,10 +21,61 @@ The release is complete when a person can, without a keyboard:
 7. complete the same path in fixture and live modes on the deployed origin.
 
 The release ends there. Accounts, sync, collaboration, touch parity, streaming,
-split/merge, cross-links, redo, tool prediction, retrieval, and a public SDK are
-not later phases of this plan. They remain outside the first release.
+split/merge, cross-links, tool prediction, retrieval, and a public SDK are not
+later phases of this plan. They remain outside the first release.
 
-## Next preview execution line
+## Current delivery lens
+
+The product is one interface for unfinished thought, not a bundle of AI
+surfaces. The next release work must make this one loop plain to a new person:
+
+```text
+admit a thought → focus it → lasso exact language → set degree → speak direction
+  → one reversible material change → undo/redo → reload
+```
+
+Ask Matter remains a closed secondary orientation surface. Its local completed
+record is a persistence concern, not a dashboard, memory product, or new visual
+language. System files, accounts, sync, collaboration, and native shells may
+arrive only after this loop has a live deployed receipt and a separate ownership
+contract.
+
+## Current phase — release convergence
+
+```text
+Outcome:    a new person can complete the one material loop with a warmed,
+            truthful voice path, then undo, redo, and reload it.
+Boundary:   first-turn voice readiness; the existing fixture transform vertical
+            slice; local tree/history durability; release receipt. No new
+            workspace, memory, or system surface.
+Invariants: readiness never requests microphone permission, captures audio, or
+            downloads a speech model; a voice start has a bounded failure;
+            Ask Matter retention remains behind its existing inquiry surface;
+            only the tree engine commits material.
+Proof:      focused voice readiness/lifecycle tests; one fixture browser flow
+            from lasso through transform, undo/redo and reload; full source
+            check and Chromium suite for the source preview.
+Non-goals:  live transform promotion, account/sync, an Ask Matter log manager,
+            CRDT/event-sourcing rewrite, renderer virtualization without a
+            measured trigger, or a native shell.
+```
+
+Execution order is deliberately narrow:
+
+1. Publish this source preview with the first-turn voice boundary, durable
+   history, bounded inquiry record, and fixture transform in one receipt.
+2. Prove the fixture loop end to end, including reload after undo/redo. If that
+   exposes a contract failure, repair that path before widening product scope.
+3. Gate the same transform scenario behind distributed rate/spend control and
+   obtain a deployed-origin receipt. Only then consider live promotion.
+4. Measure long-session history serialization and the complete layout path.
+   Replace either only when the receipt shows a real limit; the likely history
+   response is a segmented reversible journal, not a premature CRDT.
+
+## Archived preview implementation notes
+
+The following freezes explain earlier previews. They are trace, not the active
+execution line above.
 
 ## Preview.12 inquiry submit-key freeze
 
@@ -115,7 +166,7 @@ Invariants: document title is metadata; selected parent is revalidated at commit
             history and material save together or the newer pair is not advertised as durable.
 Proof:      parented-admission, repeated-lasso-and-stretch, reload-then-undo, corrupt-history recovery,
             two viewport browser flows, full check, and full browser suite.
-Non-goals:  server sync, collaboration, redo, rewriting past history, or promising recovery for records from before
+Non-goals:  server sync, collaboration, rewriting past history, or promising recovery for records from before
             durable history was first stored.
 ```
 
@@ -127,25 +178,42 @@ and each line closes with its focused proof before the next one starts:
    durable gesture until IndexedDB bootstrap has identified the home lineage.
    Then freeze and build one strict active-document pointer so a successfully
    imported foreign-id archive remains the local home document after reload.
-2. **Fixture transform loop.** Build the missing vertical `/api/turn` slice:
-   strict envelope and plan contracts, degree-to-length policy, server planner,
-   fixture provider, bounded route/client, synchronous plan translator, one
-   store commit, and the existing Voice control acting as direction while a
-   focused punctuation selection is stretched. The first proof ends with one
-   local change and exact pointer undo; a route alone is not a product receipt.
+2. **Fixture transform loop.** Implemented: strict envelope and plan contracts,
+   degree-to-length policy, server planner, fixture provider, bounded route and
+   client, synchronous plan translator, one store commit, and Voice direction
+   for a stretched focused selection. The remaining proof is an end-to-end
+   fixture receipt: one local change, exact pointer undo, and reload.
 3. **Live transform and deployed receipt.** Enable the same validated scenario
    behind server-only provider configuration, distributed rate and spend guards,
    then run the complete no-keyboard path on the deployed origin. Fixture output
    never silently substitutes for an unavailable live provider.
-4. **Large-tree renderer decision.** Either freeze viewport DOM over the complete
-   pure layout, or publish a smaller supported interactive bound. No local CSS or
-   memoization patch may weaken the existing strict `<100 ms` receipt.
+4. **Large-tree renderer decision.** Continue to reduce the measured cost of the
+   complete pure layout, and freeze viewport DOM only when measurement shows it
+   earns its complexity. The `<100 ms` receipt remains a fixed optimization
+   target and a guard against measurement laundering, not a release veto: a
+   miss requires an honest receipt and diagnosis, never a weakened measurement
+   or an invented supported bound.
 5. **Release integration.** Re-run fixture and live paths at laptop and narrow
    widths, close only issues whose shipped proof exists, and publish the next
    preview from that receipt.
 
 Directory export, multi-document UI, accounts, sync, collaboration, retrieval,
 streaming generation, and new gestures remain outside this execution line.
+
+## Durable inquiry record freeze
+
+Freeze, 2026-08-11: the record is one local, versioned, generation-checked
+`InquiryRecordRepository` entry per `treeId`, retaining at most twenty completed
+exchanges. It stores the question, terminal answer/outcome, local time, and
+compact `{ treeId, revision, scope }` receipt only. It stores neither a draft,
+pending request, audio, provider detail, nor copied material context; it never
+becomes model context. Retention appears only by reopening the existing inquiry
+surface: it creates no separate product UI, navigation, or log manager. Its
+single complete-record clear action remains separate from material undo/history
+and Matter `0.2` ZIP export, and future system-folder/account/sync adapters use
+only the same repository port.
+[`reference/inquiry-record.md`](../docs/reference/inquiry-record.md) is the
+implementation contract.
 
 ## How a phase moves
 
@@ -200,7 +268,7 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 | Visual composition | Local to each phase | quiet Matter form; refine from the running interface, not a second design system |
 | Right paper chrome | Frozen | anonymized private composition study; the rounded paper owns ambient media, right rail, and corner utilities |
 | Left material field | Re-frozen | 304 px manuscript index; structural depth steps, local disclosure, flat search, copy selection, archive, and local-only identity; drawer below 960 px |
-| Lightweight inquiry | Re-frozen | one secondary, non-persistent question surface; bounded visible lineage; no mutation; answer adapter may be unavailable |
+| Lightweight inquiry | Re-frozen | one secondary bounded question surface with a local completed record only within that surface; no mutation, archive inclusion, or model-memory retrieval; answer adapter may be unavailable |
 | Structural reparenting | Frozen | selected non-root node drops on a visible parent or explicit sibling slot; cross-parent and same-parent authored order use one exact pointer-undoable command; no authored coordinates |
 
 Preview.8 title/document freeze:
@@ -348,10 +416,12 @@ still retained and checked separately; “pointer primary” does not remove it.
 
 A production-build receipt uses a fixed realistic 2,000-node fixture. After
 three warmups, twenty fold/unfold and focus/full samples record pointer-to-paint
-median, p95, maximum, and long tasks. The slice reopens if, on the same machine,
-two of three runs have p95 at least `200 ms`, or an operation-related long task
-reaches `100 ms`. Results between `100–200 ms` p95 or `50–100 ms` long task need
-profiling or explanation. Virtualization is forbidden without this evidence.
+median, p95, maximum, and long tasks. The `<100 ms` long-task and `<200 ms` p95
+figures are persistent optimization targets: crossing either one requires a
+receipt and diagnosis on the same machine, but does not itself veto release.
+Results between `100–200 ms` p95 or `50–100 ms` long task still need profiling
+or explanation. Virtualization is forbidden without evidence that it earns its
+own cost.
 
 Product correction, 2026-08-03: the semantic renderer proves runtime behavior,
 accessibility, responsive wrapping, and the performance envelope, but its
@@ -1387,8 +1457,8 @@ State: Proven.
 
 ```text
 Outcome:    search engines, link unfurlers, and machine readers receive one
-            canonical Matter identity: "A brain-computer interface for thoughts
-            shaping," with complete discovery and structured metadata
+            canonical Matter identity: "An interface for unfinished thought,"
+            with complete discovery and structured metadata
 Boundary:   centralized public URL and product metadata, root page metadata and
             JSON-LD, robots, sitemap, manifest, social image, and LLM text maps
 Invariants: one resolver owns mount-versus-dedicated-domain URLs; internal preview

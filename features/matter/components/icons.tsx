@@ -58,6 +58,14 @@ export function UndoIcon({ className, ...props }: IconProps) {
   );
 }
 
+export function RedoIcon({ className, ...props }: IconProps) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" height="24" viewBox="0 0 24 24" width="24" {...props}>
+      <path d="M15.5 8h3.75V4.25M19 8c-1.65-2.25-4.08-3.5-7-3.5a7.5 7.5 0 1 0 6.82 10.61" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 export function FoldIcon({ className, ...props }: IconProps) {
   return (
     <svg {...sharedProps} className={className} {...props}>

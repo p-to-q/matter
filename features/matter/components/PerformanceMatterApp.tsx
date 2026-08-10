@@ -69,6 +69,7 @@ export function PerformanceMatterApp() {
       canvasPreferences={canvasPreferences}
       locale="zh-CN"
       canUndo={false}
+      canRedo={false}
       admission={{
         state: createAdmissionInteractionState(),
         start: () => undefined,
@@ -91,6 +92,7 @@ export function PerformanceMatterApp() {
       onMoveNode={() => undefined}
       onRenameDocument={() => undefined}
       onClearSelection={() => setNavigation((current) => clearSelection(current))}
+      onTransformCommit={() => false}
       onSelectNode={(nodeId) =>
         setNavigation((current) => {
           const result = selectNode(performanceTree, current, nodeId);
@@ -99,6 +101,7 @@ export function PerformanceMatterApp() {
       }
       onToggleFold={toggle}
       onUndo={() => undefined}
+      onRedo={() => undefined}
       performanceMarking
       tree={performanceTree}
     />

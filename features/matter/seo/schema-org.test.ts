@@ -15,7 +15,7 @@ describe("Matter schema.org graph", () => {
     ]);
     expect(nodes[1]?.url).toBe("https://matter.example/matter");
     expect(nodes[2]?.applicationCategory).toBe("DesignApplication");
-    expect(serialized).toContain("brain-computer interface for thoughts shaping");
+    expect(serialized).toContain("unfinished thought");
     expect(serialized).toContain("thinking with AI");
     expect(serialized).not.toContain("transcript");
     expect(serialized).not.toContain("provider");

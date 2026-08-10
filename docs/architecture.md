@@ -69,8 +69,8 @@ reading was already correct before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
 
-Each of those model paths — repair, labelling, inquiry, and the unbuilt
-transform — is one scenario on a single harness: a frozen prompt built from the
+Each of those model paths — repair, labelling, inquiry, and transform — is one
+scenario on a single harness: a frozen prompt built from the
 shared spine, a budget, and an adjudicator that decides whether the answer beats
 a floor that is already correct without a model.
 [`reference/prompt-harness.md`](reference/prompt-harness.md) records why the
@@ -83,7 +83,8 @@ turn:
 short question + lassoed passages, or bounded virtual-tree projection when no lasso exists
   → bounded InquiryRequest → POST /api/inquiry
   → answer text or a stated unavailable reason
-  → transient paper-corner exchange; no tree command or persistence
+  → paper-corner exchange; completed terminal pairs may enter the separate,
+    bounded local inquiry record, never a tree command or model context
 ```
 
 Only the tree engine applies durable mutations. Pointer, audio level, partial
@@ -133,10 +134,11 @@ requires one config entry, UI copy, and focused server/client tests.
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
 | Durable local choice | any active-document identity or manual name promised across reload; explicit failure, never cache eviction. |
-| Durable local history | complete forward/inverse journal paired atomically with the local snapshot; not exported. |
+| Durable local history | complete undo/redo journal paired atomically with the local snapshot; not exported. |
 | Navigation | focus and fold; derived view state, not history. |
 | Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
-| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, transient inquiry. |
+| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials. |
+| Durable local inquiry | bounded visible Ask Matter record per tree; never material, history, archive, or model context. |
 | Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
 
 Identifiers and units do not substitute for one another:
@@ -237,7 +239,7 @@ app/
   api/repair/route.ts              bounded transcript-repair boundary; answers are adjudicated before use
   api/label/route.ts               implemented label boundary; live adapter gated
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
-  api/turn/route.ts                gated generative transform boundary
+  api/turn/route.ts                fixture-gated generative transform boundary
 
 features/matter/
   server/harness.ts                the only place a model is awaited; one scenario contract
@@ -281,11 +283,12 @@ them:
 4. `server/*-provider.ts` owns credentials, model pools, transport quirks, health
    and fallback. It never chooses document scope.
 
-Past inquiry turns are transient and are not an index. The first release does
-not persist a chat transcript or feed prior answers back into the prompt.
-Durable material history remains tree commands plus snapshots. Derived labels
-live in `persistence/` keyed by tree, node, and material fingerprint. A future
-search or memory index belongs in its own repository beside persistence, stores
+The bounded completed Ask Matter record is local-only and is not an index. It
+never feeds prior answers back into a prompt. Durable material history remains
+tree commands plus snapshots; the record has its own generation-checked
+repository and is not exported with material. Derived labels live in
+`persistence/` keyed by tree, node, and material fingerprint. A future search
+or memory index belongs in its own repository beside persistence, stores
 revision-addressed derived records, and may supply context only through an
 explicit context projector. It must not become hidden retrieval for generative
 tree changes.

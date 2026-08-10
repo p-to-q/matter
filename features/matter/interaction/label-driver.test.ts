@@ -92,6 +92,8 @@ type FakeRepository = LabelRepository & {
   resolvePut: () => void;
   failNextPut: () => void;
   allowPut: () => void;
+  failNextRemove: () => void;
+  allowRemove: () => void;
 };
 
 function repository(
@@ -114,11 +116,14 @@ function repository(
       })
     : Promise.resolve();
   let putFails = false;
+  let removeFails = false;
   return {
     stored,
     removed,
     failNextPut: () => { putFails = true; },
     allowPut: () => { putFails = false; },
+    failNextRemove: () => { removeFails = true; },
+    allowRemove: () => { removeFails = false; },
     resolveLoad: () => release(),
     resolvePut: () => releasePut(),
     async loadAll() {
@@ -132,10 +137,12 @@ function repository(
       return { ok: true } as const;
     },
     async remove(_treeId, nodeIds) {
+      if (removeFails) return { ok: false, code: "STORAGE_FULL" } as const;
       for (const nodeId of nodeIds) {
         removed.push(nodeId);
         stored.delete(nodeId);
       }
+      return { ok: true } as const;
     },
     async clear() {
       stored.clear();
@@ -413,6 +420,25 @@ describe("LabelDriver", () => {
     expect(store.removed).toContain("root");
     instance.observe(ROOT, ["root"]);
     expect(labelFor(instance.getState(), "root")).not.toBe("过去的另一种生活");
+  });
+
+  it("does not report a reset when the durable manual name remains on disk", async () => {
+    const recorded = recorder();
+    const store = repository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+    await instance.rename("root", "过去的另一种生活");
+
+    store.failNextRemove();
+    await expect(instance.resetName("root")).resolves.toEqual({ ok: false, code: "STORAGE_FULL" });
+    expect(labelFor(instance.getState(), "root")).toBe("过去的另一种生活");
+    expect(store.stored.get("root")?.label).toBe("过去的另一种生活");
+
+    store.allowRemove();
+    await expect(instance.resetName("root")).resolves.toEqual({ ok: true });
+    expect(labelFor(instance.getState(), "root")).not.toBe("过去的另一种生活");
+    expect(store.stored.get("root")).toBeUndefined();
   });
 
   it("does not report a manual name as kept when it never reached disk", async () => {

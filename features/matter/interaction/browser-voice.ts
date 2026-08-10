@@ -464,11 +464,7 @@ function notify(callback: () => void): void {
 }
 
 export function createBrowserVoicePort(): VoicePort {
-  const transport = resolveBrowserVoiceTransport({
-    browserSpeechEnabled: browserSpeechIsEnabled(),
-    speechRecognitionAvailable: isBrowserSpeechRecognitionAvailable(),
-    audioUploadEnabled: recordedAudioFallbackIsEnabled(),
-  });
+  const transport = browserVoiceTransport();
   // Native recognition keeps raw audio out of the Matter server when the UA supports it.
   if (transport === "speech") return createBrowserSpeechVoicePort();
   // Audio upload is an explicit deployment capability. Missing configuration
@@ -499,18 +495,28 @@ export function createBrowserVoicePort(): VoicePort {
 }
 
 export function isBrowserVoiceTransportAvailable(): boolean {
+  return browserVoiceTransport() !== "unavailable";
+}
+
+export type BrowserVoiceTransport = "speech" | "audio" | "unavailable";
+
+/**
+ * This is a capability check only. It deliberately neither asks for microphone
+ * permission nor creates a recorder, so it is safe during hydration.
+ */
+export function browserVoiceTransport(): BrowserVoiceTransport {
   return resolveBrowserVoiceTransport({
     browserSpeechEnabled: browserSpeechIsEnabled(),
     speechRecognitionAvailable: isBrowserSpeechRecognitionAvailable(),
     audioUploadEnabled: recordedAudioFallbackIsEnabled(),
-  }) !== "unavailable";
+  });
 }
 
 export function resolveBrowserVoiceTransport(input: Readonly<{
   browserSpeechEnabled: boolean;
   speechRecognitionAvailable: boolean;
   audioUploadEnabled: boolean;
-}>): "speech" | "audio" | "unavailable" {
+}>): BrowserVoiceTransport {
   if (input.browserSpeechEnabled && input.speechRecognitionAvailable) return "speech";
   return input.audioUploadEnabled ? "audio" : "unavailable";
 }

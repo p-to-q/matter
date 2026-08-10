@@ -30,8 +30,10 @@ shared outside the deployment secret store must be rotated before use.
   fallback. Prompt construction, bounds, adjudication, cancellation, cooldown,
   and load shedding stay in the existing harness — do not duplicate them in a
   route or Vercel Function.
-- `POST /api/turn` is intentionally not deployed. The material-transform loop
-  needs the separately tracked translator work before it can become live.
+- `POST /api/turn` now exists as a fixture-gated material-transform vertical
+  slice. It remains unavailable for a live provider until the same distributed
+  rate/spend controls and deployed-origin proof required by other model routes
+  are in place.
 
 The relevant boundaries are [`reference/prompt-harness.md`](reference/prompt-harness.md),
 [`reference/voice-input.md`](reference/voice-input.md),
@@ -173,8 +175,8 @@ or to bypass the scenario adjudicator.
 ## Next development work
 
 - Issue #34: deployment controls and a real-origin receipt.
-- Issue #12: the frozen `/api/turn` translator and generated-text bound; this
-  is the missing material-transform path, not a configuration change.
+- Issue #12: prove the fixture `/api/turn` loop through browser reload, then
+  enable its already-frozen translator only after the live controls exist.
 - Issue #8: complete the active-document pointer/recovery boundary before
   promising multi-document persistence beyond the current local home document.
 

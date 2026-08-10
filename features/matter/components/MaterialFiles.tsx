@@ -63,7 +63,7 @@ export type MaterialFilesProps = Readonly<{
   /** Resolves to whether the name reached disk. `false` returns it to its editor. */
   onRenameNode?: (nodeId: string, label: string) => void | Promise<Readonly<{ ok: boolean }> | void>;
   onRenameDocument?: (title: string) => void;
-  onResetNodeName?: (nodeId: string) => void | Promise<void>;
+  onResetNodeName?: (nodeId: string) => void | Promise<Readonly<{ ok: boolean }> | void>;
   /** Reports the rows worth labelling. Called from an effect, never in render. */
   onVisibleNodes?: (nodeIds: readonly string[]) => void;
   onSelectNode: (nodeId: string) => void;

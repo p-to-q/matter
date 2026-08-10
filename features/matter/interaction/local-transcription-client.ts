@@ -27,6 +27,18 @@ export function resetLocalTranscriptionForTests(): void {
   if (worker !== null) retireWorker(worker, new LocalTranscriptionError("failed"));
 }
 
+/**
+ * Starts only the isolated worker and its code graph. It never opens a
+ * microphone, decodes audio, or downloads the Whisper model; model work stays
+ * behind an actual recorded utterance.
+ */
+export function prepareLocalTranscription(): void {
+  if (typeof window === "undefined" || typeof Worker === "undefined") {
+    throw new LocalTranscriptionError("unavailable");
+  }
+  void localTranscriptionWorker();
+}
+
 export async function transcribeLocally(input: Readonly<{
   interactionId: string;
   attempt: number;

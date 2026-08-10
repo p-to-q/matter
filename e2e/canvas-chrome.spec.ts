@@ -137,7 +137,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   );
   const inquiryField = inquiryDialog.getByRole("textbox", { name: "问一句关于这份材料的话" });
   const dictate = inquiryDialog.getByRole("button", { name: "口述", exact: true });
-  await expect(inquiryDialog).toContainText("先用麦克风说出根想法，再选中一段材料，继续向下生长。");
+  await expect(inquiryDialog).toContainText("就画面里的材料问一句短问题。询问不会改变它。");
   await expect(inquiryField).toBeFocused();
   await expect(dictate).toBeVisible();
   // The composer's controls carry data-inquiry-control rather than
@@ -178,6 +178,13 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.keyboard.press("Escape");
   await expect(inquiryDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
+  await page.reload();
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await askMatter.click();
+  await expect(inquiryDialog).toContainText("这份材料在怀念什么？");
+  await inquiryDialog.getByRole("button", { name: "清除记录", exact: true }).click();
+  await expect(inquiryDialog.locator('[data-inquiry-role]')).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await page.locator('[data-chrome-control="language"]').click({ force: true });
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await expect(page.locator(".matter-guidance__next")).toHaveText("Select one thought.");

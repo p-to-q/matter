@@ -13,9 +13,10 @@ describe("projectToolSurface", () => {
 
     const surface = projectToolSurface(tools);
 
-    expect(MAIN_RAIL_SLOT_IDS).toEqual(["voice", "lasso", "branch", "move", "undo"]);
+    expect(MAIN_RAIL_SLOT_IDS).toEqual(["voice", "lasso", "branch", "move", "undo", "redo"]);
     expect(surface.main.branch?.id).toBe("add-child");
     expect(surface.main.undo?.id).toBe("undo");
+    expect(surface.main.redo).toBeNull();
     expect(surface.local.map((tool) => tool.id)).toEqual(["focus", "fold"]);
   });
 
@@ -29,6 +30,7 @@ describe("projectToolSurface", () => {
 
     expect(surface.main.branch).toBeNull();
     expect(surface.main.undo).toMatchObject({ id: "undo", availability: "disabled" });
+    expect(surface.main.redo).toBeNull();
     expect(surface.local).toMatchObject([{ id: "show-all", availability: "disabled" }]);
     expect(Object.isFrozen(surface)).toBe(true);
     expect(Object.isFrozen(surface.main)).toBe(true);

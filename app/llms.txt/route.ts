@@ -9,7 +9,7 @@ import {
 
 const llms = `# Matter
 
-> Matter — A brain-computer interface for thoughts shaping.
+> Matter — An interface for unfinished thought.
 
 ${MATTER_PRODUCT_DESCRIPTION}
 
@@ -35,7 +35,8 @@ pointer.
 The current public build is an early, root-seeded preview. It demonstrates a
 rooted spatial tree, focus and folding, punctuation lasso selection, stretch
 degree preview, browser-native live voice admission, exact undo, and local Markdown
-durability. The generative transform turn remains gated;
+durability, and a fixture-gated generative transform turn. A live transform
+provider remains separately gated;
 the preview does not expose a chat transcript, assistant panel, or hidden
 retrieval.
 

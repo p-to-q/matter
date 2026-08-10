@@ -37,6 +37,16 @@ loads a quantized multilingual Whisper model in a worker. The model and runtime
 are fetched on first fallback use and may be cached by the browser; raw audio is
 decoded and transcribed on the person's device.
 
+At hydration, Matter first checks the selected transport without asking for
+permission. For the recorded-audio fallback it may create the isolated worker
+and load its code graph, but it never opens the microphone, decodes a recording,
+or downloads the Whisper model before a person actually starts a voice turn.
+Voice controls remain inert during that short readiness window; the first
+pointer action therefore reaches a prepared transport rather than a partially
+created one. Browser-native recognition also has a bounded start watchdog, so a
+browser that neither starts nor errors returns a recoverable failure instead of
+leaving the first turn indefinitely in "waiting for microphone".
+
 ## Admission boundary
 
 The voice control has a target only in the full material view: at an empty tree

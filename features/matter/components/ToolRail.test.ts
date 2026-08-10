@@ -5,7 +5,7 @@ import { projectToolSurface } from "../tools/project-tool-surface";
 import { projectTools } from "../tools/project-tools";
 import { ToolRail, type ToolRailProps } from "./ToolRail";
 
-const EXPECTED_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo"];
+const EXPECTED_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo", "redo"];
 
 describe("ToolRail", () => {
   it.each([
@@ -27,7 +27,7 @@ describe("ToolRail", () => {
         interaction: "idle" as const,
       },
     },
-  ])("keeps only the five physical editing controls for $name", ({ context }) => {
+  ])("keeps the fixed editing controls for $name", ({ context }) => {
     const markup = renderToolRail({
       surface: projectToolSurface(projectTools(context)),
     });
@@ -53,6 +53,7 @@ describe("ToolRail", () => {
     expect(markup).toContain('aria-label="Extend related thought"');
     expect(markup).toContain('aria-label="Return to canvas pan"');
     expect(markup).toContain('aria-label="Undo last change"');
+    expect(markup).toContain('aria-label="Redo last change"');
   });
 
   it("keeps the recording control available as stop", () => {

@@ -1,4 +1,7 @@
 import {
+  applyTreeCommand,
+} from "../tree/engine";
+import {
   createTreeHistory,
   undoTreeHistory,
   type TreeHistory,
@@ -17,7 +20,14 @@ export function recoverPersistedHistory(
   limits: TreeHistoryLimits,
 ): TreeHistory {
   if (!isHistoryShape(candidate, limits)) return createTreeHistory();
-  const history = candidate as TreeHistory;
+  // Snapshots from before redo existed remain valid documents. Normalize that
+  // journal at the persistence boundary so the running state has one shape.
+  const stored = candidate as TreeHistory;
+  const history: TreeHistory = {
+    entries: stored.entries,
+    redoEntries: stored.redoEntries ?? [],
+    retainedInverseBytes: stored.retainedInverseBytes,
+  };
   let cursorTree = tree;
   let cursorHistory = history;
   while (cursorHistory.entries.length > 0) {
@@ -26,15 +36,34 @@ export function recoverPersistedHistory(
     cursorTree = undone.tree;
     cursorHistory = undone.history;
   }
+
+  // Redo entries are ordered as a stack: the last undone command must be the
+  // first one that can be reapplied. Check that sequence too, otherwise a
+  // malformed cache could look undoable until a person presses Redo.
+  cursorTree = tree;
+  const redoEntries = history.redoEntries ?? [];
+  for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
+    const entry = redoEntries[index];
+    if (entry === undefined) return createTreeHistory();
+    const redone = applyTreeCommand(cursorTree, {
+      ...entry.inverse,
+      expectedRevision: cursorTree.revision,
+    });
+    if (!redone.ok) return createTreeHistory();
+    cursorTree = redone.tree;
+  }
   return history;
 }
 
 function isHistoryShape(value: unknown, limits: TreeHistoryLimits): boolean {
   if (!isPlainRecord(value) || !Array.isArray(value.entries) ||
+    (value.redoEntries !== undefined && !Array.isArray(value.redoEntries)) ||
     !isNonNegativeSafeInteger(value.retainedInverseBytes) ||
     value.entries.length > limits.maxEntries) return false;
+  const redoEntries = value.redoEntries ?? [];
+  if (redoEntries.length > limits.maxEntries) return false;
   let total = 0;
-  for (const entry of value.entries) {
+  for (const entry of [...value.entries, ...redoEntries]) {
     if (!isPlainRecord(entry) ||
       typeof entry.commandId !== "string" || entry.commandId.length === 0 ||
       (entry.source !== "human" && entry.source !== "agent" && entry.source !== "fixture") ||

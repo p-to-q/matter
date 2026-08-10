@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ELASTIC_PREVIEW_METRICS, elasticPreviewGeometry } from "./elastic-preview";
+import {
+  ELASTIC_PREVIEW_METRICS,
+  elasticPreviewGeometry,
+  prepareElasticPreviewSource,
+  projectElasticPreview,
+} from "./elastic-preview";
 
 const stepped = [
   { x: 100, y: 200, width: 120, height: 20 },
@@ -79,4 +84,19 @@ describe("elastic preview geometry", () => {
     expect(elasticPreviewGeometry([{ x: 0, y: 0, width: 0, height: 2 }], 0)).toBeNull();
     expect(elasticPreviewGeometry(stepped, Number.NaN)).toBeNull();
   });
+
+  it("reuses measured fragments while projecting many pointer degrees", () => {
+    const source = prepareElasticPreviewSource(stepped, { left: 80, top: 180, right: 260, bottom: 360 });
+    if (source === null) throw new Error("source should be valid");
+    const viewport = { left: 0, top: 0, right: 320, bottom: 480 };
+
+    const first = projectElasticPreview(source, 0.2, viewport, "bottom", "bottom");
+    const second = projectElasticPreview(source, 0.8, viewport, "bottom", "bottom");
+    expect(first?.fragments).toBe(source.fragments);
+    expect(second?.fragments).toBe(source.fragments);
+    expect(first?.visualLines).toBe(source.visualLines);
+    expect(second?.pocketDepth).toBeGreaterThan(first?.pocketDepth ?? 0);
+    expect(second).toEqual(elasticPreviewGeometry(stepped, 0.8, viewport, source.textColumn ?? undefined, "bottom", "bottom"));
+  });
+
 });

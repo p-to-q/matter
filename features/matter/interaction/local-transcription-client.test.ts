@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   LocalTranscriptionError,
+  prepareLocalTranscription,
   resampleChannels,
   resetLocalTranscriptionForTests,
   transcribeLocally,
@@ -12,6 +13,26 @@ afterEach(() => {
 });
 
 describe("local transcription audio projection", () => {
+  it("warms only the worker code before a person records", () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    prepareLocalTranscription();
+
+    expect(workers).toHaveLength(1);
+    expect(workers[0]?.postMessage).not.toHaveBeenCalled();
+  });
+
   it("downmixes channels and resamples without changing duration", () => {
     const result = resampleChannels([
       new Float32Array([0, 1, 0, -1]),

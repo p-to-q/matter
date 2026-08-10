@@ -2,6 +2,8 @@ import { RECORDING_LIMIT_MS } from "./audio-policy";
 import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./voice-port";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
+export const SPEECH_START_TIMEOUT_MS = 8_000;
+
 type SpeechAlternative = { readonly transcript: string };
 type SpeechResult = ArrayLike<SpeechAlternative> & { readonly isFinal: boolean };
 type SpeechEvent = { readonly resultIndex: number; readonly results: ArrayLike<SpeechResult> };
@@ -37,6 +39,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
   private callbacks: VoiceCallbacks = {};
   private startedAt = -1;
   private timer: number | null = null;
+  private startTimer: number | null = null;
   private stopping = false;
   private finalTranscript = "";
   private interimTranscript = "";
@@ -67,6 +70,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
     recognition.lang = callbacks.locale ?? "zh-CN";
     recognition.onstart = () => {
       if (this.recognition !== recognition) return;
+      if (this.startTimer !== null) window.clearTimeout(this.startTimer);
+      this.startTimer = null;
       if (this.startedAt < 0) {
         this.startedAt = performance.now();
         this.timer = window.setTimeout(() => {
@@ -121,7 +126,16 @@ export class BrowserSpeechVoicePort implements VoicePort {
       this.callbacks.onRecording?.(recording);
       this.cleanup();
     };
-    try { recognition.start(); } catch { this.fail(new VoiceError("RECORDING_FAILED")); }
+    try {
+      this.startTimer = window.setTimeout(() => {
+        if (this.recognition === recognition && this.startedAt < 0) {
+          this.fail(new VoiceError("RECORDING_FAILED"));
+        }
+      }, SPEECH_START_TIMEOUT_MS);
+      recognition.start();
+    } catch {
+      this.fail(new VoiceError("RECORDING_FAILED"));
+    }
     return startPromise;
   }
 
@@ -154,6 +168,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
   private cleanup(): void {
     if (this.timer !== null) window.clearTimeout(this.timer);
     this.timer = null;
+    if (this.startTimer !== null) window.clearTimeout(this.startTimer);
+    this.startTimer = null;
     if (this.recognition !== null) {
       // Detaching handlers only makes a live session invisible. Release it here
       // so no path can drop the reference while the microphone stays open —

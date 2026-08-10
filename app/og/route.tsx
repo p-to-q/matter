@@ -25,8 +25,8 @@ export function GET() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
           <div style={{ display: "flex", flexDirection: "column", fontSize: 56, lineHeight: 1.08 }}>
-            <div style={{ display: "flex" }}>A brain-computer interface</div>
-            <div style={{ display: "flex" }}>for thoughts shaping</div>
+            <div style={{ display: "flex" }}>An interface for</div>
+            <div style={{ display: "flex" }}>unfinished thought</div>
           </div>
           <div style={{ color: "#58616a", display: "flex", fontSize: 27 }}>
             {MATTER_PRODUCT_TAGLINE}

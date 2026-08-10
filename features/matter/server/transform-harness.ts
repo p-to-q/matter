@@ -1,5 +1,10 @@
 import type { MatterScenario } from "./harness";
 import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine";
+import {
+  TRANSFORM_LENGTH_TOLERANCE,
+  type TransformIntent,
+} from "../protocol/transform-contract";
+import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
 
 /**
  * Transforming one stretched passage.
@@ -29,7 +34,7 @@ import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine
 
 export const TRANSFORM_PROMPT_VERSION = "transform/1";
 
-export type TransformIntent = "expand" | "compress" | "reinterpret" | "refine";
+export type { TransformIntent } from "../protocol/transform-contract";
 
 export type TransformScenarioInput = Readonly<{
   locale: string;
@@ -52,8 +57,6 @@ export type TransformScenarioInput = Readonly<{
  * forced to hit one pads; a band keeps the degree meaningful without making the
  * result a word-count exercise.
  */
-export const TRANSFORM_LENGTH_TOLERANCE = 0.45;
-
 export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> = Object.freeze({
   id: "matter-transform",
   promptVersion: TRANSFORM_PROMPT_VERSION,
@@ -71,6 +74,7 @@ export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> 
 export type TransformRejection =
   | "EMPTY"
   | "NOT_ONE_PASSAGE"
+  | "OUTPUT_EXCEEDS_BOUND"
   | "LENGTH_IGNORES_DEGREE"
   | "ANSWERS_THE_DIRECTION";
 
@@ -90,6 +94,7 @@ export function adjudicateTransform(
   if (typeof answer !== "string") return reject("EMPTY");
   const text = unwrap(answer).trim();
   if (text.length === 0) return reject("EMPTY");
+  if (text.length > MAX_REPLACEMENT_TEXT_CODE_UNITS) return reject("OUTPUT_EXCEEDS_BOUND");
   // Speech-shaped material is one passage. A newline means the answer brought
   // structure — a list, a heading, a note about what it changed — that the
   // person did not stretch for.

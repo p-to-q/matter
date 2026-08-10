@@ -3,11 +3,11 @@
 Matter's public discovery surface is a product boundary, not a separate
 marketing site. The canonical product sentence is:
 
-> Matter — A brain-computer interface for thoughts shaping.
+> Matter — An interface for unfinished thought.
 
 "Thinking with AI" is related category language. It can help people find the
-product, but it does not replace the BCI definition or turn Matter into a chat
-product.
+product, but it does not replace the material-interface definition or turn
+Matter into a chat product.
 
 ## One origin resolver
 
@@ -64,9 +64,9 @@ disallowed in robots and return operational data rather than product copy.
 Public copy can describe the intended interaction grammar: reference a node or
 segment, set degree with gesture, speak direction, and receive one local,
 perceivable, reversible change. It must also say that the current public build
-is root-seeded, uses browser-native speech when supported, keeps the generative
-transform turn gated, and exposes Ask Matter only as a bounded non-mutating
-question whose answer adapter may be unavailable. Do not expose material,
+is root-seeded, uses browser-native speech when supported, keeps a live
+transform provider gated, and exposes Ask Matter only as a bounded
+non-mutating question whose answer adapter may be unavailable. Do not expose material,
 transcripts, provider configuration, hidden retrieval, or user state in metadata
 or machine-readable text.
 

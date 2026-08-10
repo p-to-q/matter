@@ -294,6 +294,28 @@ describe("Matter store", () => {
     expect(undone.lastError).toBeNull();
   });
 
+  it("can undo back to the document's first state and redo the exact sequence", () => {
+    const store = createMatterStore(undefined, { documentRoot: true });
+    const initial = structuredClone(store.getState().tree);
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("document root missing");
+
+    expect(store.getState().extendMaterial(rootId, branchValues()).status).toBe("committed");
+    expect(store.getState().extendMaterial(rootId, branchValues()).status).toBe("committed");
+    expect(store.getState().undo().status).toBe("committed");
+    expect(store.getState().undo().status).toBe("committed");
+    expect(store.getState().tree).toMatchObject({
+      ...initial,
+      revision: expect.any(Number),
+    });
+    expect(store.getState().tree.revision).toBeGreaterThan(initial.revision);
+    expect(store.getState().history.redoEntries).toHaveLength(2);
+    expect(store.getState().redo().status).toBe("committed");
+    expect(store.getState().redo().status).toBe("committed");
+    expect(store.getState().history.entries).toHaveLength(2);
+    expect(store.getState().history.redoEntries).toEqual([]);
+  });
+
   it("supports fold, focus, return, and empty undo through named actions", () => {
     const store = createMatterStore();
     const initial = store.getState();

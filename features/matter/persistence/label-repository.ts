@@ -33,7 +33,7 @@ export type LabelRecord = Readonly<{
 }>;
 
 /**
- * Whether the row reached disk.
+ * Whether a durable label mutation reached disk.
  *
  * A model label ignores this: losing one costs a regeneration. A name a person
  * typed cannot, because the same swallowed failure that costs nothing there
@@ -49,7 +49,7 @@ const WRITTEN: LabelWriteReceipt = Object.freeze({ ok: true });
 export type LabelRepository = Readonly<{
   loadAll(treeId: string): Promise<readonly LabelRecord[]>;
   put(treeId: string, record: LabelRecord): Promise<LabelWriteReceipt>;
-  remove(treeId: string, nodeIds: readonly string[]): Promise<void>;
+  remove(treeId: string, nodeIds: readonly string[]): Promise<LabelWriteReceipt>;
   clear(treeId: string): Promise<void>;
   close(): void;
 }>;
@@ -102,17 +102,12 @@ export function createIndexedDbLabelRepository(): LabelRepository {
       } catch (error) {
         // A model label that cannot be stored is still shown and regenerated
         // later. A manual name's caller needs to know, so the reason survives.
-        return Object.freeze({
-          ok: false,
-          code: error instanceof DOMException && error.name === "QuotaExceededError"
-            ? "STORAGE_FULL"
-            : "STORAGE_UNAVAILABLE",
-        });
+        return storageFailure(error);
       }
     },
 
     async remove(treeId, nodeIds) {
-      if (nodeIds.length === 0) return;
+      if (nodeIds.length === 0) return WRITTEN;
       try {
         const database = await handle.open();
         const transaction = database.transaction("labels", "readwrite");
@@ -120,8 +115,11 @@ export function createIndexedDbLabelRepository(): LabelRepository {
           await transaction.store.delete(labelKey(treeId, nodeId));
         }
         await transaction.done;
-      } catch {
-        // An orphan entry is inert: it is only ever read back by node id.
+        return WRITTEN;
+      } catch (error) {
+        // An orphan entry for a deleted node is inert, but an explicit reset
+        // must not claim success when the manual name would return on reload.
+        return storageFailure(error);
       }
     },
 
@@ -171,4 +169,13 @@ function isStorable(record: LabelRecord): boolean {
     record.label.length <= MAX_STORED_LABEL_CODE_UNITS &&
     (record.origin === "user" ? record.basis === null : typeof record.basis === "string")
   );
+}
+
+function storageFailure(error: unknown): LabelWriteReceipt {
+  return Object.freeze({
+    ok: false,
+    code: error instanceof DOMException && error.name === "QuotaExceededError"
+      ? "STORAGE_FULL"
+      : "STORAGE_UNAVAILABLE",
+  });
 }

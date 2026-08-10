@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import Image from "next/image";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
@@ -24,7 +24,11 @@ import type { AdmissionAnchor as InteractionAdmissionAnchor } from "../runtime/a
 import { useLasso } from "../interaction/use-lasso";
 import { useStretch } from "../interaction/use-stretch";
 import type { StretchPreviewSignal } from "../interaction/use-stretch";
-import { elasticPreviewGeometry } from "../interaction/elastic-preview";
+import {
+  elasticPreviewGeometry,
+  prepareElasticPreviewSource,
+  projectElasticPreview,
+} from "../interaction/elastic-preview";
 import { projectLanguageAroundSelection } from "../material/language-projection";
 import type { LanguageProjection } from "../material/language-projection";
 import { clientDepthToWorld, projectLanguageFlow } from "../interaction/language-flow";
@@ -57,7 +61,7 @@ import {
   createNodeMovePolicy,
   type NodeMovePolicy,
 } from "../runtime/move";
-import { isBrowserVoiceTransportAvailable } from "../interaction/browser-voice";
+import { useVoiceReadiness } from "../interaction/use-voice-readiness";
 import { projectInquiryContext } from "../material/inquiry-context";
 import {
   projectNodeDropLanes,
@@ -67,12 +71,16 @@ import {
   type NodeDropMode,
 } from "../interaction/node-drop-target";
 import { clientMatterBasePath } from "../config/base-path";
+import { useInquiryRecord } from "../interaction/use-inquiry-record";
+import { useTransformTurn } from "./use-transform-turn";
+import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
   admissionAnchor: InteractionAdmissionAnchor | null;
   archive?: MaterialArchiveActions;
   canUndo: boolean;
+  canRedo: boolean;
   canvasPreferences: CanvasPreferencesBinding;
   documentEpoch: number;
   locale: CanvasLanguage;
@@ -86,7 +94,9 @@ export type RootedMaterialProps = {
   onClearSelection: () => void;
   onSelectNode: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
+  onTransformCommit: (envelope: TransformEnvelope, plan: TransformPlan) => boolean;
   onUndo: () => void;
+  onRedo: () => void;
   tree: ThoughtTree;
   persistence: Readonly<{
     status: PersistenceStatus;
@@ -135,14 +145,16 @@ type NodeDragGesture = {
 };
 
 export function RootedMaterial(props: RootedMaterialProps) {
-  const { canUndo, navigation, onRemoveSelected, onUndo, tree } = props;
+  const { canRedo, canUndo, navigation, onRedo, onRemoveSelected, onUndo, tree } = props;
   const matterBasePath = clientMatterBasePath();
   const { canvasPreferences } = props;
+  const inquiryRecord = useInquiryRecord(tree.id, props.performanceMarking !== true);
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
   // bootstrap so hydration can never discard a load-window edit.
   const persistenceLoading = props.persistence.status.phase === "loading";
-  const interactionPending = persistenceLoading || (
+  const [transformPending, setTransformPending] = useState(false);
+  const interactionPending = persistenceLoading || transformPending || (
     props.admission.state.phase !== "idle" && props.admission.state.phase !== "error"
   );
   const shellRef = useRef<HTMLElement>(null);
@@ -179,15 +191,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
   const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
   const [canvasMode, setCanvasMode] = useState<"material" | "pan">("material");
-  const [browserVoiceSupported, setBrowserVoiceSupported] = useState(
-    process.env.NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED === "true",
-  );
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setBrowserVoiceSupported(
-      isBrowserVoiceTransportAvailable(),
-    ));
-    return () => cancelAnimationFrame(frame);
-  }, []);
+  const voiceReadiness = useVoiceReadiness();
   const [wheelMotionActive, setWheelMotionActive] = useState(false);
   const wheelMotionTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
@@ -334,6 +338,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
     return () => window.removeEventListener("keydown", undoFromKeyboard);
   }, [canUndo, interactionPending, onUndo]);
   useEffect(() => {
+    const redoFromKeyboard = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented || event.isComposing || event.altKey ||
+        (!event.metaKey && !event.ctrlKey) || !canRedo || interactionPending ||
+        isEditableEventTarget(event.target) || hasNativeTextSelection()
+      ) return;
+      const key = event.key.toLowerCase();
+      if ((key !== "z" || !event.shiftKey) && key !== "y") return;
+      event.preventDefault();
+      onRedo();
+    };
+    window.addEventListener("keydown", redoFromKeyboard);
+    return () => window.removeEventListener("keydown", redoFromKeyboard);
+  }, [canRedo, interactionPending, onRedo]);
+  useEffect(() => {
     const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
       const gesture = nodeDragRef.current;
       const shell = shellRef.current;
@@ -350,14 +369,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const elasticRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
+  // Range fragments and their visual-line grouping are stable until lasso
+  // geometry changes. Keeping them out of the pointer-move path prevents a
+  // long wrapped selection from paying that O(n log n) work every frame.
+  const elasticPreviewSource = useMemo(
+    () => prepareElasticPreviewSource(
+      lasso.selectionRects,
+      lasso.selectionColumn ?? undefined,
+    ),
+    [lasso.selectionColumn, lasso.selectionRects],
+  );
   const updateElasticPreview = useCallback((signal: StretchPreviewSignal) => {
     const element = elasticRef.current;
     const split = splitProjectionRef.current;
-    const preview = elasticPreviewGeometry(
-      lasso.selectionRects,
+    const preview = elasticPreviewSource === null
+      ? null
+      : projectElasticPreview(
+      elasticPreviewSource,
       signal.amount,
       clientViewport(),
-      lasso.selectionColumn ?? undefined,
       signal.handle,
       signal.handle,
     );
@@ -397,7 +427,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     element.style.setProperty("--pocket-width", `${preview.pocket.right - preview.pocket.left}px`);
     element.style.setProperty("--pocket-height", `${Math.max(0, rawBottomY - rawTopY)}px`);
     element.style.setProperty("--elastic-opacity", String(preview.opacity));
-  }, [lasso.selectionColumn, lasso.selectionRects, viewport.zoom]);
+  }, [elasticPreviewSource, viewport.zoom]);
   const navigationKey = `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`;
   const stretchSelection = lasso.selections.length === 1 ? lasso.selection : null;
   const stretch = useStretch({
@@ -409,6 +439,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
     layoutKey: `${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}`,
     onPreview: updateElasticPreview,
   });
+  const transformEligible = navigation.mode === "focus" && stretchSelection !== null && stretch.amount > 0;
+  const transform = useTransformTurn({
+    tree,
+    selection: stretchSelection,
+    amount: stretch.amount,
+    locale: props.locale,
+    enabled: transformEligible && !persistenceLoading,
+    commit: props.onTransformCommit,
+    onPhaseChange: (phase) => setTransformPending(phase !== "idle" && phase !== "error"),
+  });
+  const transformActive = transform.state.phase !== "idle" && transform.state.phase !== "error";
   useLayoutEffect(() => {
     stretchInvalidationRef.current = stretch.layoutInvalidated;
   }, [stretch.layoutInvalidated]);
@@ -502,7 +543,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectedNode =
     navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
   const toolTargetNode = resolveToolTargetNode(navigation, tree);
-  const voiceAvailable = props.admissionAnchor !== null && voiceAdmissionIsEnabled() && browserVoiceSupported;
+  const voiceAvailable = transformEligible
+    ? transform.supported === true
+    : props.admissionAnchor !== null && voiceAdmissionIsEnabled() && voiceReadiness.status === "ready";
   const tools = useMemo(
     () =>
       projectTools({
@@ -516,9 +559,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 isFolded: navigation.foldedNodeIds.has(toolTargetNode.id),
               },
         canUndo,
+        canRedo,
         interaction: interactionPending ? "pending" : "idle",
       }),
-    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
+    [canRedo, canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
   const projectInquiryPayload = useCallback(
@@ -816,6 +860,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
       data-stretching={stretch.dragging || undefined}
+      data-transform-phase={transform.state.phase === "idle" ? undefined : transform.state.phase}
       data-tree-revision={tree.revision}
       data-view={navigation.mode}
       data-viewport-x={viewport.x}
@@ -1102,6 +1147,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         onIntent={(intent) => dispatchToolIntent(intent, props)}
         onVoice={() => {
+          if (transformEligible) {
+            if (transform.state.phase === "recording") transform.stop();
+            else if (transformActive) transform.cancel();
+            else transform.start();
+            return;
+          }
           if (props.admission.state.phase === "recording") {
             props.admission.stop();
           } else if (props.admissionAnchor !== null) {
@@ -1113,14 +1164,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         surface={toolSurface}
         panActive={!lasso.active && canvasMode === "pan"}
-        voiceActive={props.admission.state.phase === "recording"}
+        voiceActive={props.admission.state.phase === "recording" || transformActive}
         voiceAvailable={voiceAvailable}
         // A navigation restriction must be named as one. The generic build
         // limitation is the last branch, because reaching for it first told a
         // person in focus view that the preview cannot record at all — and left
         // both navigation explanations unreachable.
         voiceLabel={
-          props.admission.state.phase === "recording"
+          transformEligible
+            ? transform.state.phase === "recording"
+              ? "Stop speaking the direction"
+              : transform.state.phase === "transcribing"
+                ? "Cancel while settling the spoken direction"
+              : transform.state.phase === "requesting"
+                ? "Cancel this material change"
+                : "Speak the direction for this stretched language"
+            : props.admission.state.phase === "recording"
             ? "Stop recording"
             : props.admissionAnchor?.kind === "root"
             ? "Record a root thought"
@@ -1130,7 +1189,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 ? "Record a thought below the selected material"
               : navigation.mode === "focus"
                 ? "Voice admission unavailable in focus view"
-                : !voiceAdmissionIsEnabled() || !browserVoiceSupported
+                : voiceReadiness.status === "checking"
+                  ? "Preparing voice input"
+                  : !voiceAdmissionIsEnabled() || voiceReadiness.status !== "ready"
                   ? "Voice admission is unavailable in this preview"
                   : "Voice admission unavailable outside the full material view"
         }
@@ -1205,7 +1266,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         >
           <p className="matter-guidance__next">{guidance.text}</p>
         </footer>
-        <CanvasChrome {...canvasPreferences} inquiryContext={projectInquiryPayload} />
+        <CanvasChrome {...canvasPreferences} inquiryContext={projectInquiryPayload} inquiryRecord={inquiryRecord} />
       </section>
       <LassoOverlay
         active={lasso.active}
@@ -1392,6 +1453,7 @@ function LassoOverlay({
   stretch: ReturnType<typeof useStretch>;
 }) {
   const bounds = selectionBounds(rects);
+  const descriptionId = useId();
   const preview = elasticPreviewGeometry(
     rects,
     stretch.amount,
@@ -1425,6 +1487,9 @@ function LassoOverlay({
       {bounds === null ? null : (
         <>
           <div
+            aria-label="Expansion degree"
+            aria-roledescription="two edge grips for one degree"
+            role="group"
             className="elastic-preview"
             data-preview-mode={stretch.amount === 0 ? "neutral" : "expand"}
             data-stretch-handle={stretch.activeHandle ?? stretch.lastHandle ?? "bottom"}
@@ -1441,9 +1506,12 @@ function LassoOverlay({
               "--elastic-opacity": String(preview?.opacity ?? .08),
             } as CSSProperties}
           >
+            <span className="visually-hidden" id={descriptionId}>
+              Both edge grips control the same expansion degree. Drag either grip away from the selected language, or use its arrow keys to refine the degree.
+            </span>
             <span aria-hidden="true" className="language-pocket" />
-            <StretchHandleButton handle="top" stretch={stretch} />
-            <StretchHandleButton handle="bottom" stretch={stretch} />
+            <StretchHandleButton descriptionId={descriptionId} handle="top" stretch={stretch} />
+            <StretchHandleButton descriptionId={descriptionId} handle="bottom" stretch={stretch} />
           </div>
         </>
       )}
@@ -1491,15 +1559,18 @@ function LanguageSplitProjection({
 }
 
 function StretchHandleButton({
+  descriptionId,
   handle,
   stretch,
 }: {
+  descriptionId: string;
   handle: "top" | "bottom";
   stretch: ReturnType<typeof useStretch>;
 }) {
   return (
     <button
-      aria-label={`Expand selected language from its ${handle} edge`}
+      aria-describedby={descriptionId}
+      aria-label={`Set selected language expansion from the ${handle} re-grab edge`}
       aria-orientation="vertical"
       aria-valuemax={1}
       aria-valuemin={0}
@@ -1540,12 +1611,11 @@ function StretchHandleButton({
         if (next === null) return;
         event.preventDefault();
         stretch.setAmount(next, handle);
-        // Geometry feedback can replace this button; keep a keyboard sequence
-        // on the same handle instead of sending the next key to the canvas.
+        const control = event.currentTarget;
+        // A layout publication can move the control. Preserve the current
+        // physical handle rather than querying a duplicate control globally.
         window.requestAnimationFrame(() => {
-          document
-            .querySelector<HTMLButtonElement>(`.stretch-handle--${handle}[role="slider"]`)
-            ?.focus();
+          if (control.isConnected) control.focus();
         });
       }}
       role="slider"
@@ -1770,6 +1840,7 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
                 isFolded: navigation.foldedNodeIds.has(toolTargetNode.id),
               },
         canUndo: props.canUndo,
+        canRedo: props.canRedo,
         interaction: "idle",
       },
       intent,
@@ -1805,6 +1876,9 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
       return;
     case "undo":
       if (props.canUndo) props.onUndo();
+      return;
+    case "redo":
+      if (props.canRedo) props.onRedo();
       return;
     default:
       return assertNever(intent);

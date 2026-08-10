@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RECORDING_LIMIT_MS } from "./audio-policy";
-import { BrowserSpeechVoicePort } from "./browser-speech-voice";
+import { BrowserSpeechVoicePort, SPEECH_START_TIMEOUT_MS } from "./browser-speech-voice";
 import type { VoiceOperation } from "./browser-voice";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
@@ -72,6 +72,23 @@ describe("BrowserSpeechVoicePort", () => {
     const started = port.start(OPERATION);
     FakeRecognition.instance?.onerror?.({ error: "not-allowed" });
     await expect(started).rejects.toMatchObject({ code: "MICROPHONE_DENIED" });
+  });
+
+  it("does not leave a first browser start waiting forever", async () => {
+    vi.useFakeTimers();
+    FakeRecognition.autoStart = false;
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    const started = port.start(OPERATION);
+    const assertion = expect(started).rejects.toMatchObject({ code: "RECORDING_FAILED" });
+
+    await vi.advanceTimersByTimeAsync(SPEECH_START_TIMEOUT_MS);
+
+    await assertion;
   });
 
   it("reports the duration limit through the same transient callback", async () => {

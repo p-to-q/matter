@@ -29,6 +29,7 @@ import {
   commitHumanAdmission,
   commitHumanRemoval,
   commitSessionCommand,
+  redoSession,
   undoSession,
   type RuntimeError,
   type RuntimeReceipt,
@@ -44,6 +45,11 @@ import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
 import { recoverPersistedHistory } from "../persistence/history-recovery";
+import {
+  planToTreeCommand,
+  type TransformEnvelope,
+  type TransformPlan,
+} from "../protocol/transform-contract";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   // Durable history must not silently discard an old inverse. Browser storage
@@ -97,6 +103,8 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
   renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
+  redo: () => MatterStoreReceipt;
+  commitTransform: (envelope: TransformEnvelope, plan: TransformPlan, nowMs: number) => MatterStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   clearSelection: () => MatterStoreReceipt;
   focus: (nodeId: string) => MatterStoreReceipt;
@@ -272,6 +280,47 @@ export function createMatterStore(
           lastError: domain.lastError,
           lastReceipt: protectValue(receipt),
         });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    redo: () => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const result = redoSession(runtimeState(current));
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({
+          ...current,
+          ...domain,
+          lastError: domain.lastError,
+          lastReceipt: protectValue(receipt),
+        });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    commitTransform: (envelope, plan, nowMs) => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const translated = Number.isFinite(nowMs) && nowMs >= 0
+          ? planToTreeCommand(current.tree, envelope, plan, {
+              source: "agent",
+              now: () => nowMs,
+            })
+          : null;
+        if (translated === null || !translated.ok) {
+          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
+          return freezeState({
+            ...current,
+            lastError: { code: "INVALID_COMMAND", message: "The material changed before this turn could commit." },
+            lastReceipt: receipt,
+          });
+        }
+        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(receipt) });
       });
       return requireSynchronousReceipt(receipt);
     },

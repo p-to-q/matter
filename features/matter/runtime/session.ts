@@ -1,5 +1,6 @@
 import {
   commitTreeCommand,
+  redoTreeHistory,
   undoTreeHistory,
   type EstimateInverseBytes,
   type TreeHistory,
@@ -25,6 +26,7 @@ export type RuntimeErrorCode =
   | CommandErrorCode
   | "HISTORY_LIMIT_EXCEEDED"
   | "EMPTY_HISTORY"
+  | "EMPTY_REDO"
   | AdmissionError["code"];
 
 export type RuntimeError = {
@@ -41,13 +43,13 @@ export type RuntimeState = {
 
 export type RuntimeReceipt =
   | {
-      operation: "commit" | "undo";
+      operation: "commit" | "undo" | "redo";
       status: "committed";
       revision: number;
       affectedNodeIds: readonly string[];
     }
   | {
-      operation: "commit" | "undo";
+      operation: "commit" | "undo" | "redo";
       status: "rejected";
       revision: number;
       errorCode: RuntimeErrorCode;
@@ -174,9 +176,22 @@ export function undoSession(state: RuntimeState): RuntimeResult {
   );
 }
 
+export function redoSession(state: RuntimeState): RuntimeResult {
+  const redone = redoTreeHistory(state.tree, state.history);
+  if (!redone.ok) return reject(state, "redo", redone.error);
+
+  return publish(
+    state,
+    "redo",
+    redone.tree,
+    redone.history,
+    redone.affectedNodeIds,
+  );
+}
+
 function publish(
   state: RuntimeState,
-  operation: "commit" | "undo",
+  operation: "commit" | "undo" | "redo",
   tree: ThoughtTree,
   history: TreeHistory,
   affectedNodeIds: string[],
@@ -196,7 +211,7 @@ function publish(
 
 function reject(
   state: RuntimeState,
-  operation: "commit" | "undo",
+  operation: "commit" | "undo" | "redo",
   error: RuntimeError,
 ): RuntimeResult {
   return {

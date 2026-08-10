@@ -16,7 +16,7 @@ const full = `# Matter — Full Product Map
 ## Canonical identity
 
 Name: Matter
-Definition: A brain-computer interface for thoughts shaping.
+Definition: An interface for unfinished thought.
 Description: ${MATTER_PRODUCT_DESCRIPTION}
 Manifesto: ${MATTER_PRODUCT_TAGLINE}
 Last public discovery update: ${MATTER_SITE_LAST_UPDATED_ISO}
@@ -35,9 +35,9 @@ Matter is rooted rather than infinite. The single tree is structure,
 presentation, and context. The visible root-to-focus lineage is the context
 boundary; there is no hidden retrieval layer. AI appears inside material as one
 local change. A separate, closed-by-default Ask Matter control may return one
-read-only orientation answer from the visible lineage; it is not a permanent
-assistant panel, durable chat transcript, autonomous chain, or voice that takes
-the handle from the person.
+read-only orientation answer from the visible lineage. Completed exchanges may
+remain in a bounded local record, but it is never model context, material
+history, or a permanent assistant panel.
 
 ## Interaction contract
 
@@ -57,14 +57,13 @@ selected node or segment.
 The running 0.2 preview is root-seeded. It currently includes the rooted
 tree, spatial layout, focus and folding runtime, material index, punctuation
 lasso, stretch projection, browser-native voice admission, local IndexedDB Markdown
-durability, ZIP archive transport, and exact pointer undo. The lasso and stretch
-projection are presentational in this preview; they do not claim a live model
-rewrite. Ask Matter has a bounded request boundary but no answer or memory
-adapter is connected in this build.
+durability, ZIP archive transport, exact pointer undo/redo, and a fixture-gated
+turn path. A live model rewrite remains separately gated. Ask Matter has a
+bounded request boundary and a local completed-record, never a memory adapter.
 
-Still gated or not yet released: the generative transform envelope and /api/turn
-route, the strict large-tree performance receipt, and account/sync features. Do
-not describe those as currently live.
+Still gated or not yet released: a live transform provider, its deployed
+rate/spend controls, the strict large-tree performance receipt, and account/sync
+features. Do not describe those as currently live.
 
 ## What Matter is not
 

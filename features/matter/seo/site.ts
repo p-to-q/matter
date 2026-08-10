@@ -2,20 +2,20 @@ import { normalizeMatterBasePath } from "../config/base-path";
 
 export const MATTER_PRODUCT_NAME = "Matter";
 export const MATTER_PRODUCT_TITLE =
-  "Matter — A brain-computer interface for thoughts shaping";
+  "Matter — An interface for unfinished thought";
 export const MATTER_PRODUCT_DESCRIPTION =
-  "Matter is a brain-computer interface for thoughts shaping. Voice carries intent, gesture shapes language, and AI lives inside the material.";
+  "Matter gives unfinished thought a material form: speak it into a rooted field, touch exact language, and make one local, reversible change.";
 export const MATTER_PRODUCT_TAGLINE =
   "AI gives language intelligence. Matter gives thought a body.";
-export const MATTER_SITE_LAST_UPDATED_ISO = "2026-08-07";
+export const MATTER_SITE_LAST_UPDATED_ISO = "2026-08-11";
 
 /**
  * Search terms describe the product's category and language without replacing
  * its canonical definition with a generic AI-writing label.
  */
 export const MATTER_PRODUCT_KEYWORDS = Object.freeze([
-  "brain-computer interface",
-  "thought shaping",
+  "unfinished thought",
+  "material interface",
   "thinking with AI",
   "spatial AI interface",
   "voice and gesture interface",

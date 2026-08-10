@@ -14,8 +14,8 @@ export type ThoughtLabels = Readonly<{
   observe: (nodeIds: readonly string[]) => void;
   /** Replaces one node's label with a name the person typed. */
   rename: (nodeId: string, label: string) => Promise<LabelWriteReceipt>;
-  /** Returns one node to automatic naming. */
-  resetName: (nodeId: string) => Promise<void>;
+  /** Returns one node to automatic naming after its durable name is removed. */
+  resetName: (nodeId: string) => Promise<LabelWriteReceipt>;
 }>;
 
 export function useThoughtLabels(input: Readonly<{

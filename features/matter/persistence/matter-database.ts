@@ -47,6 +47,42 @@ export type StoredLabel = Readonly<{
   updatedAt: string;
 }>;
 
+export type StoredInquiryOutcome =
+  | Readonly<{ status: "answered"; text: string }>
+  | Readonly<{
+      status: "unavailable";
+      reason: "NO_PROVIDER" | "NO_MATERIAL" | "RATE_LIMITED" | "BUSY" | "UNREACHABLE";
+    }>;
+
+/** A durable, local-only Ask Matter exchange; never a material command. */
+export type StoredInquiryExchange = Readonly<{
+  id: string;
+  askedAt: string;
+  question: string;
+  outcome: StoredInquiryOutcome;
+  basis: Readonly<{
+    treeId: string;
+    revision: number;
+    scope: "selection" | "tree";
+  }>;
+}>;
+
+export type StoredInquiryRecord = Readonly<{
+  storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
+  recordSchemaVersion: 1;
+  treeId: string;
+  writeGeneration: number;
+  /**
+   * A clear advances the record epoch instead of deleting the row. This lets a
+   * late save prove that it began before the clear and prevents resurrection.
+   * Records written before this field existed are active epoch zero.
+   */
+  recordEpoch?: number;
+  /** A retained clear marker, never visible as an exchange. */
+  cleared?: boolean;
+  exchanges: readonly StoredInquiryExchange[];
+}>;
+
 export interface MatterDatabase extends DBSchema {
   snapshots: {
     key: string;
@@ -57,10 +93,14 @@ export interface MatterDatabase extends DBSchema {
     value: StoredLabel;
     indexes: { treeId: string };
   };
+  inquiryRecords: {
+    key: string;
+    value: StoredInquiryRecord;
+  };
 }
 
 const DATABASE_NAME = "ptoq-matter";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 /**
  * Tree and node ids are drawn from `[A-Za-z0-9_-]`, so a space can never occur
@@ -95,6 +135,9 @@ export function createMatterDatabaseHandle(): {
         if (!db.objectStoreNames.contains("labels")) {
           const labels = db.createObjectStore("labels", { keyPath: "key" });
           labels.createIndex("treeId", "treeId");
+        }
+        if (!db.objectStoreNames.contains("inquiryRecords")) {
+          db.createObjectStore("inquiryRecords", { keyPath: "treeId" });
         }
       },
       blocked: resetIfCurrent,

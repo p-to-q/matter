@@ -10,6 +10,7 @@ import { useMaterialPersistence } from "../persistence/use-material-persistence"
 import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/archive-transport";
 import { treeToBundle } from "../persistence/snapshot-codec";
 import { useCanvasPreferences } from "./use-canvas-preferences";
+import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 
 export function MatterApp() {
   const tree = useMatterStore((state) => state.tree);
@@ -18,6 +19,8 @@ export function MatterApp() {
   const navigation = useMatterStore((state) => state.navigation);
   const extendMaterial = useMatterStore((state) => state.extendMaterial);
   const undo = useMatterStore((state) => state.undo);
+  const redo = useMatterStore((state) => state.redo);
+  const commitTransform = useMatterStore((state) => state.commitTransform);
   const select = useMatterStore((state) => state.select);
   const clearSelection = useMatterStore((state) => state.clearSelection);
   const focus = useMatterStore((state) => state.focus);
@@ -105,10 +108,15 @@ export function MatterApp() {
     title,
     createdAt: new Date().toISOString(),
   }), [renameDocument]);
+  const commitTransformTurn = useCallback((envelope: TransformEnvelope, plan: TransformPlan) => {
+    const receipt = commitTransform(envelope, plan, Date.now());
+    return receipt.operation === "commit" && receipt.status === "committed";
+  }, [commitTransform]);
 
   return (
     <RootedMaterial
       canUndo={history.entries.length > 0}
+      canRedo={(history.redoEntries?.length ?? 0) > 0}
       canvasPreferences={canvasPreferences}
       locale={canvasPreferences.preferences.language}
       documentEpoch={documentEpoch}
@@ -136,12 +144,14 @@ export function MatterApp() {
       onMoveNode={moveCurrentThought}
       onRenameDocument={renameCurrentDocument}
       onClearSelection={clearSelection}
+      onTransformCommit={commitTransformTurn}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={extendChild}
       onSelectNode={select}
       onToggleFold={toggleFold}
       onUndo={undo}
+      onRedo={redo}
       tree={tree}
     />
   );

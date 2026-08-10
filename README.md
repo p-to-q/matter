@@ -1,26 +1,27 @@
 # Matter
 
-> Matter — A brain-computer interface for thoughts shaping.
+> Matter — An interface for unfinished thought.
 
 Matter is an environment where thought becomes touchable material. Voice admits
-human thought and gives generative direction. Gesture identifies material and
-degree. A rooted tree keeps lineage. AI appears only as a local, reversible
-change to material. It is also a way of thinking with AI in material rather
-than through a prompt box or answer transcript.
+human thought and gives generative direction. Gesture identifies exact material
+and degree. A rooted tree keeps lineage. AI appears only as one local,
+reversible material change—not a chat or autonomous agent.
 
 ## State
 
 The running `0.2` pre-release surface is one rooted spatial thought tree with
-exact undo, focus, folding, derived geometry, a contextual editing instrument,
-browser-native live voice admission with a bounded transcript-repair pass,
-punctuation lasso selection, shared stretch degree, and
-local Markdown durability through IndexedDB. The selected-language projection is
-visual only: the original text DOM remains the source for ranges, copying, and
+exact undo/redo, focus, folding, derived geometry, browser-native voice
+admission, punctuation lasso selection, shared stretch degree, and local
+Markdown durability through IndexedDB. A completed Ask Matter exchange may
+remain in a separate small local record; it never enters material history,
+archives, or later model context. The selected-language projection is visual
+only: the original text DOM remains the source for ranges, copying, and
 accessibility.
 
-Still gated: the generative transform envelope, explicit directory export/import,
-and the strict large-tree performance receipt. The retired
-hackathon prototype is retained only under `archive/`.
+The fixture-gated generative turn is wired end-to-end. Still gated: a live
+transform provider and its deployed controls, explicit directory export/import,
+and the strict large-tree performance receipt. The retired hackathon prototype
+is retained only under `archive/`.
 
 See [`docs/surfaces.md`](docs/surfaces.md) for the exact boundary and
 [`plans/active-tree-material.md`](plans/active-tree-material.md) for the migration.

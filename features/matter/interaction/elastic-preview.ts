@@ -5,6 +5,17 @@ export type ElasticPreviewBounds = Readonly<{ left: number; top: number; right: 
 export type ElasticPreviewLine = Readonly<{ x1: number; x2: number; y: number }>;
 export type ElasticPreviewViewport = Readonly<{ left: number; top: number; right: number; bottom: number }>;
 
+/**
+ * Stable, measured selection geometry. Pointer movement changes only degree;
+ * it must not repeatedly clone and line-group DOM Range fragments.
+ */
+export type ElasticPreviewSource = Readonly<{
+  fragments: readonly ElasticPreviewRect[];
+  visualLines: readonly ElasticPreviewBounds[];
+  sourceBounds: ElasticPreviewBounds;
+  textColumn: ElasticPreviewBounds | null;
+}>;
+
 export type ElasticPreview = Readonly<{
   mode: "neutral" | "expand";
   amount: number;
@@ -59,10 +70,50 @@ export function elasticPreviewGeometry(
     !isOptionalHandle(activeHandle) || !isOptionalHandle(lastHandle)
   ) return null;
 
+  const source = prepareElasticPreviewSource(rects, textColumn);
+  return source === null
+    ? null
+    : projectElasticPreview(source, amount, viewport, activeHandle, lastHandle);
+}
+
+/** Prepares selection-dependent geometry once per DOM measurement epoch. */
+export function prepareElasticPreviewSource(
+  rects: readonly ElasticPreviewRect[],
+  textColumn?: ElasticPreviewBounds,
+): ElasticPreviewSource | null {
+  if (
+    !Array.isArray(rects) || rects.length === 0 ||
+    rects.some((rect) => !isFiniteNonEmptyRect(rect)) ||
+    (textColumn !== undefined && !isFiniteBounds(textColumn))
+  ) return null;
+
   const fragments = Object.freeze(rects.map(ownRect));
   const visualLines = groupVisualLines(fragments);
   if (visualLines.length === 0) return null;
   const sourceBounds = unionBounds(fragments);
+  return Object.freeze({
+    fragments,
+    visualLines,
+    sourceBounds,
+    textColumn: textColumn === undefined ? null : Object.freeze({ ...textColumn }),
+  });
+}
+
+/** Projects cheap degree-dependent geometry from a prepared measured source. */
+export function projectElasticPreview(
+  source: ElasticPreviewSource,
+  amount: number,
+  viewport?: ElasticPreviewViewport,
+  activeHandle: StretchHandle | null = null,
+  lastHandle: StretchHandle | null = null,
+): ElasticPreview | null {
+  if (
+    !Number.isFinite(amount) ||
+    (viewport !== undefined && !isFiniteBounds(viewport)) ||
+    !isOptionalHandle(activeHandle) || !isOptionalHandle(lastHandle)
+  ) return null;
+
+  const { fragments, sourceBounds, visualLines } = source;
   const normalizedAmount = roundClientValue(clamp(amount, 0, 1));
   const topLine = visualLines[0]!;
   const bottomLine = visualLines.at(-1)!;
@@ -83,7 +134,7 @@ export function elasticPreviewGeometry(
   );
   const topHandle = cueAt(topCenter, topY);
   const bottomHandle = cueAt(bottomCenter, bottomY);
-  const horizontal = pocketHorizontalBounds(textColumn ?? sourceBounds, viewport);
+  const horizontal = pocketHorizontalBounds(source.textColumn ?? sourceBounds, viewport);
   if (horizontal === null) return null;
   const pocket = Object.freeze({
     left: horizontal.left,

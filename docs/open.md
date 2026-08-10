@@ -141,8 +141,8 @@ Nothing before persistence.
 
 Recorded so they stop being re-proposed:
 
-- a permanent prompt box, assistant panel, or durable chat transcript — the
-  bounded Ask Matter exception remains secondary and non-mutating;
+- a permanent prompt box or assistant panel — the bounded Ask Matter record
+  remains secondary, explicitly opened, non-mutating, and never hidden context;
 - agent-initiated multi-step operations — the person keeps the handle;
 - vector store, embeddings, retrieval, memory service — [`material.md`](material.md);
 - infinite canvas panning, user-authored coordinates — Matter is rooted;

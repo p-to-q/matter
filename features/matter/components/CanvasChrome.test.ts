@@ -57,20 +57,20 @@ describe("CanvasChrome", () => {
   });
 
   it("keeps pre-release information honest and task-oriented", () => {
-    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("brain-computer interface");
+    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input is available");
-    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("still being built");
-    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("脑机接口");
+    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("separately gated");
+    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("未完成想法获得形体的界面");
     expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("实时语音输入已可使用");
-    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("仍在开发中");
+    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("仍需单独开启");
     expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("實時語音輸入已可使用");
     expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("リアルタイム音声入力");
     expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Live-Spracheingabe ist verfügbar");
     expect(CANVAS_CHROME_INFO["en-US"].pricing.body.join(" ")).toContain("no paid plan");
     expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("visible root-to-focus lineage");
     expect(CANVAS_CHROME_INFO["en-US"].terms.body.join(" ")).toContain("pre-release software");
-    expect(CANVAS_CHROME_INFO["en-US"].inquiry.body.join(" ")).toContain("Start with Voice");
-    expect(CANVAS_CHROME_INFO["zh-CN"].inquiry.body.join(" ")).toContain("先用麦克风说出根想法");
+    expect(CANVAS_CHROME_INFO["en-US"].inquiry.body.join(" ")).toContain("Asking never changes it");
+    expect(CANVAS_CHROME_INFO["zh-CN"].inquiry.body.join(" ")).toContain("询问不会改变它");
     expect(CANVAS_CHROME_INFO["zh-CN"].privacy.body.join(" ")).toContain("根节点至焦点路径");
   });
 

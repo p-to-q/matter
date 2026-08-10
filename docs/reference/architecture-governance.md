@@ -1,10 +1,11 @@
 # Architecture Governance
 
-Status: evidence note for protocol `0.2`, reviewed 2026-08-09. The current
-contract remains [`../architecture.md`](../architecture.md) and
+Status: evidence note for protocol `0.2`, reconciled with preview.21 on
+2026-08-10. The current contract remains
+[`../architecture.md`](../architecture.md) and
 [`../engineering.md`](../engineering.md); this note records why those rules
-exist, where the implementation currently departs from them, and how to improve
-the system without importing a generic engine architecture.
+exist, which earlier seams have since closed, and how to improve the system
+without importing a generic engine architecture.
 
 ## Judgment
 
@@ -15,13 +16,14 @@ transient interaction state outside the document. That resembles the useful
 parts of mature engines and editors more than replacing it with ECS, a scene
 graph, a service hierarchy, or a collaborative database would.
 
-The maintenance risk is that repository law is ahead of repository mechanics.
-Several important boundaries are prose-only; one runtime import cycle exists;
-browser code imports contracts from the provider-owned `server/` directory;
-fixture behavior reaches a production action; user-authored names share a
-best-effort cache; and three view modules own several independent lifecycles.
-The next architecture phase should therefore make ownership executable and
-repair named seams. It should not be a broad rewrite.
+The highest-leverage mechanical seams from the original audit are now closed:
+the import graph is checked in `npm run check`, voice ports are acyclic, browser
+and route code meet at neutral protocol contracts, seeded composition is no
+longer mistaken for a test fixture, and manual names report failed durability.
+The remaining maintenance risks are measured large-tree cost, an unbounded
+undo-capacity policy, live-model reliability/abuse controls, and concentration
+in three view modules. The next architecture phase should repair a named seam
+only when evidence identifies its owner; it should not become a broad rewrite.
 
 This is a code-quality judgment, not evidence that people repeatedly use the
 product. The repository proves that the product is substantial and seriously
@@ -131,11 +133,11 @@ The following are implementation findings, not architectural guesses.
 | Finding | Evidence | Consequence | Direction |
 | --- | --- | --- | --- |
 | Core mutation boundary is strong | `tree/engine.ts`, `tree/history.ts`, focused command and inverse tests | Durable changes have one authority and stale input can fail atomically. | Preserve; do not replace with a generic transaction or scene system. |
-| The import rules are not executable | `eslint.config.mjs` contains only Next defaults; `scripts/doctor.mjs` checks repository posture but not dependencies | New cycles, provider leaks, and fixture imports depend on review memory. | Add a small repository-owned import graph check to `npm run check`. |
-| One runtime cycle exists | `browser-voice.ts` constructs the speech adapter; `browser-speech-voice.ts` imports `VoiceError` and port types back from it | Contract and composition ownership are fused. | Extract a neutral voice port/error contract and keep factory wiring at the edge. |
-| Production imports fixture behavior | `matter-store.ts` and the Branch path call `fixtures/rooted-material.ts` | A disabled or unfinished capability can silently create fixture material. | Inject initial/demo data at composition; remove fixture mutations from production actions. |
-| Browser imports `server/*-contract` | transcription, label, repair, inquiry clients and inquiry UI import those files | The documented provider boundary is not a physical client/server boundary, and future server imports can leak into the client graph. | Move shared DTO/parser code to a neutral protocol surface and add server/client sentinels. |
-| A human decision shares cache failure semantics | `label-repository.ts` stores model and user labels and swallows every storage failure | The UI can show a manual name that disappears after reload without reporting an unsaved state. | Split authoritative manual metadata from disposable model-label cache or explicitly change the product promise. |
+| Import rules are executable | `scripts/check-architecture.mjs` runs in `npm test` over the production graph | A cycle, outward dependency, protocol leak, or provider reach now fails before merge. | Preserve the narrow check; add a rule only when a real seam has stable evidence. |
+| Voice contracts are neutral | `voice-port.ts` owns the shared vocabulary; each browser transport depends on it | The two transports are independently readable, testable, and replaceable. | Preserve the port boundary rather than adding a voice framework. |
+| Seeded composition is explicit product behavior | `material/seeded-document.ts` composes the initial document and fixed Branch continuations through the tree engine | The seed and fixed continuation are visible, undoable material behavior, not an accidental fixture fallback. | Preserve this preview capability until the bounded transform turn supersedes it; do not remove it merely because historic identifiers contain `fixture`. |
+| Browser and route share a neutral wire | `protocol/*-contract.ts` is consumed by HTTP clients and routes | Provider ownership remains server-only while the browser parses the same strict values. | Keep browser code out of `server/`; extend protocol only for versioned wire facts. |
+| Manual names have durable failure semantics | `LabelWriteReceipt` and the label driver return a failed write to the editor for retry | A human decision is no longer reported as kept when it never reached disk. | Preserve typed receipts; model-label caching may remain best effort. |
 | Three view modules contain several lifecycles | `RootedMaterial`, `CanvasChrome`, and `MaterialFiles` coordinate several kinds of state or browser behavior | Cancellation, exclusivity, focus, geometry, and network ownership deserve review when a current slice touches them. | Treat size as a concentration signal only; extract one owner only when behavior or change evidence identifies an independent lifecycle. |
 | Local inference cancellation has an explicit worker lease | active cancellation retires the worker lease, rejects its pending work, and makes late messages inert | A cancelled long job no longer occupies the next turn. | Preserve queued/active cancel, timeout, late-result, and retry proofs; do not generalize it into a worker framework. |
 | Undo capacity has two stories | implementation retains to physical limits while reference material also describes count/byte bounds | Recovery cost and the supported session length are undefined. | Measure save/hydrate/quota behavior, then freeze one policy before changing the structure. |
@@ -148,14 +150,13 @@ modules are a concentration signal, not a quality score or a refactoring plan.
 
 Use a guardrails-first, slice-by-slice route:
 
-1. **Freeze the dependency and state ledger.** Adopt the logical DAG above and
-   classify every persisted value before moving files.
-2. **Make cheap violations fail.** Detect cycles, forbidden fixture imports,
-   provider-to-client edges, and forbidden inner-to-outer imports in CI. Keep an
-   explicit short allowlist for known debt, with an issue beside each entry.
-3. **Repair semantic seams.** Separate manual names from label cache semantics;
-   remove fixture Branch behavior; move shared wire contracts to neutral
-   ownership; preserve the now-explicit local-inference cancellation proof.
+1. **Keep the dependency and state ledger true.** Classify every newly persisted
+   value before moving files, and keep the existing import fitness check green.
+2. **Make newly discovered cheap violations fail.** Add a narrow mechanical
+   rule only after its seam is evidenced; do not grow an abstract lint regime.
+3. **Repair semantic seams.** Finish live-model reliability and abuse controls,
+   measure undo capacity before setting a retention policy, and preserve the
+   explicit local-inference cancellation proof.
 4. **Review by lifecycle.** When a current slice exposes an independent owner,
    freeze its behavior and extract only that owner. Do not schedule a component
    split from size alone.
@@ -180,17 +181,15 @@ frozen and creates narrow issues only for newly verified gaps:
 | Priority | Work |
 | --- | --- |
 | P0 | [#52](https://github.com/p-to-q/matter/issues/52) makes the released inquiry surface answer from the deployed origin; [#34](https://github.com/p-to-q/matter/issues/34) closes distributed live-model abuse and spend controls. |
-| P1 | [#49](https://github.com/p-to-q/matter/issues/49) restores the single-inquiry boundary, the one place the shipped interface disagrees with a stated product invariant; [#46](https://github.com/p-to-q/matter/issues/46) separates manual-name durability from label caching; [#44](https://github.com/p-to-q/matter/issues/44) moves the seeded preview's composition out of `fixtures/`. |
+| P1 | Freeze the newly reopened durable-inquiry-record boundary before implementation; its scope, retention, export, deletion, recovery, and model-context rules are not yet an issue-sized implementation. |
 | P2 | [#8](https://github.com/p-to-q/matter/issues/8) establishes the durable active-document pointer; [#12](https://github.com/p-to-q/matter/issues/12) bounds the generated replacement when the transform route lands. |
 
-Preview.17 closed the durable half of #44: a branched thought now carries its
-own id and timestamp instead of a build constant that reached exported Markdown.
-What remains there is the module move, and the executable dependency check
-([#50](https://github.com/p-to-q/matter/issues/50), closed as not-now) should
-land in the same change so it starts green rather than with an allowlist. The
-local-inference cancellation proof ([#45](https://github.com/p-to-q/matter/issues/45))
-and the interaction receipts ([#42](https://github.com/p-to-q/matter/issues/42))
-are closed and covered by tests. Undo-journal capacity
+Preview.17 gave Branch-created material a fresh id and timestamp; preview.19
+then moved seeded composition to `material/`, added the executable architecture
+check, and closed the manual-name durability seam. The local-inference
+cancellation proof ([#45](https://github.com/p-to-q/matter/issues/45)) and the
+interaction receipts ([#42](https://github.com/p-to-q/matter/issues/42)) remain
+covered by tests. Undo-journal capacity
 ([#47](https://github.com/p-to-q/matter/issues/47)) is closed until it can be
 measured on the same rig as the large-tree gate. Component extraction remains an
 evidence-triggered future option rather than a current plan;
@@ -202,7 +201,7 @@ evidence-triggered future option rather than a current plan;
 | --- | --- | --- |
 | Only the tree engine applies durable material mutations | `tree/` | atomic forward/inverse/stale command tests and forbidden-import check |
 | Imports point inward and are acyclic | repository architecture check | production import graph fixture in `npm run check` |
-| Fixture code never implements a production capability | composition root | forbidden fixture import plus a browser proof of honest disabled state |
+| Seeded composition is explicit and bounded | composition root and tree engine | seed/Branch command tests, pointer undo, and no implicit model fallback |
 | Provider code never enters the client graph | server and protocol owners | neutral contract tests, `server-only`/`client-only` guard, production build |
 | Every external operation has one cleanup owner | adapter that starts it | cancel, timeout, late result, unmount, retry, and idempotent cleanup tests |
 | Caches never own human truth | persistence owner | quota/blocked/corrupt tests and visible failure receipt for authoritative writes |

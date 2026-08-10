@@ -16,7 +16,11 @@ export type TreeHistoryEntry = {
 };
 
 export type TreeHistory = {
+  /** Commands that can be applied backwards from the current material. */
   entries: TreeHistoryEntry[];
+  /** Commands that can restore a previously undone material change. */
+  redoEntries?: TreeHistoryEntry[];
+  /** Exact inverse bytes retained across both reversible stacks. */
   retainedInverseBytes: number;
 };
 
@@ -59,8 +63,24 @@ export type UndoTreeHistoryResult =
         | { code: CommandErrorCode; message: string };
     };
 
+export type RedoTreeHistoryResult =
+  | {
+      ok: true;
+      tree: ThoughtTree;
+      history: TreeHistory;
+      affectedNodeIds: string[];
+    }
+  | {
+      ok: false;
+      tree: ThoughtTree;
+      history: TreeHistory;
+      error:
+        | { code: "EMPTY_REDO"; message: string }
+        | { code: CommandErrorCode; message: string };
+    };
+
 export function createTreeHistory(): TreeHistory {
-  return { entries: [], retainedInverseBytes: 0 };
+  return { entries: [], redoEntries: [], retainedInverseBytes: 0 };
 }
 
 export function estimateSerializedInverseBytes(inverse: TreeCommand): number {
@@ -104,6 +124,9 @@ export function commitTreeCommand(
     };
   }
 
+  // A new durable change creates a new timeline. Its exact inverse remains
+  // available, but any alternate future that had been undone is no longer a
+  // valid redo target.
   const entries = [
     ...history.entries,
     {
@@ -113,7 +136,7 @@ export function commitTreeCommand(
       retainedInverseBytes,
     },
   ];
-  let totalBytes = history.retainedInverseBytes + retainedInverseBytes;
+  let totalBytes = retainedBytes(history.entries) + retainedInverseBytes;
 
   while (
     entries.length > limits.maxEntries ||
@@ -129,7 +152,7 @@ export function commitTreeCommand(
   return {
     ok: true,
     tree: result.tree,
-    history: { entries, retainedInverseBytes: totalBytes },
+    history: { entries, redoEntries: [], retainedInverseBytes: totalBytes },
     affectedNodeIds: result.affectedNodeIds,
   };
 }
@@ -166,11 +189,69 @@ export function undoTreeHistory(
     tree: result.tree,
     history: {
       entries: history.entries.slice(0, -1),
+      redoEntries: [
+        ...(history.redoEntries ?? []),
+        {
+          commandId: entry.commandId,
+          source: entry.source,
+          inverse: cloneTreeCommand(result.inverse),
+          retainedInverseBytes: estimateSerializedInverseBytes(result.inverse),
+        },
+      ],
       retainedInverseBytes:
-        history.retainedInverseBytes - entry.retainedInverseBytes,
+        history.retainedInverseBytes - entry.retainedInverseBytes +
+        estimateSerializedInverseBytes(result.inverse),
     },
     affectedNodeIds: result.affectedNodeIds,
   };
+}
+
+/**
+ * Restores the most recently undone change. Redo is intentionally another
+ * engine application, never a tree snapshot swap: the exact memento still has
+ * to agree with the current material and revision.
+ */
+export function redoTreeHistory(
+  tree: ThoughtTree,
+  history: TreeHistory,
+): RedoTreeHistoryResult {
+  const redoEntries = history.redoEntries ?? [];
+  const entry = redoEntries.at(-1);
+  if (entry === undefined) {
+    return {
+      ok: false,
+      tree,
+      history,
+      error: { code: "EMPTY_REDO", message: "There is no material change to redo." },
+    };
+  }
+
+  const result = applyTreeCommand(tree, {
+    ...entry.inverse,
+    expectedRevision: tree.revision,
+  });
+  if (!result.ok) return { ok: false, tree, history, error: result.error };
+
+  const inverse = cloneTreeCommand(result.inverse);
+  const retainedInverseBytes = estimateSerializedInverseBytes(inverse);
+  return {
+    ok: true,
+    tree: result.tree,
+    history: {
+      entries: [
+        ...history.entries,
+        { commandId: entry.commandId, source: entry.source, inverse, retainedInverseBytes },
+      ],
+      redoEntries: redoEntries.slice(0, -1),
+      retainedInverseBytes:
+        history.retainedInverseBytes - entry.retainedInverseBytes + retainedInverseBytes,
+    },
+    affectedNodeIds: result.affectedNodeIds,
+  };
+}
+
+function retainedBytes(entries: readonly TreeHistoryEntry[]): number {
+  return entries.reduce((total, entry) => total + entry.retainedInverseBytes, 0);
 }
 
 function assertHistoryLimits(limits: TreeHistoryLimits): void {

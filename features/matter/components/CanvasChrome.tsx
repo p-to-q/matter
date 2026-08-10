@@ -40,9 +40,12 @@ import {
 import { inquiryContextScopeChanged } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
+import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
+import type { StoredInquiryExchange } from "../persistence/inquiry-record-repository";
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
+  inquiryRecord?: InquiryRecordBinding;
 }>;
 
 export type CanvasChromeOverlay =
@@ -70,6 +73,7 @@ type CanvasChromeCopy = Readonly<{
   appearance: Readonly<Record<CanvasAppearance, string>>;
   appearanceLabel: string;
   close: string;
+  clearRecord: string;
   closeMenu: string;
   dictate: string;
   dictateStop: string;
@@ -94,6 +98,7 @@ type CanvasChromeCopy = Readonly<{
   preferences: string;
   pricing: string;
   privacy: string;
+  recordUnsaved: string;
   settings: string;
   terms: string;
 }>;
@@ -113,17 +118,17 @@ const ENGLISH_INFO: CanvasChromeInfo = Object.freeze({
     title: "About Matter",
     body: Object.freeze([
       "Matter is an invitation to stay with a thought before it becomes an answer.",
-      "We are building a brain-computer interface for thoughts shaping. Voice brings language in. Gesture touches what matters and sets how much it may change. A rooted structure lets each thought keep its lineage.",
+      "Matter is an interface for unfinished thought. Voice brings language in, gesture touches exact material and sets how much it may change, and a rooted structure keeps each thought's lineage.",
       "It is a way of thinking with AI in material, not through a chat. Unfinished thoughts deserve room to remain uncertain, to be touched, and to keep growing.",
       "AI gives language intelligence. Matter gives thought a body.",
-      "This is an early preview. Live voice input is available when the browser supports it; generative transformation is still being built. We are sharing Matter while its material language is becoming.",
+      "This is an early preview. Live voice input is available when the browser supports it; a live generative provider remains separately gated. We are sharing Matter while its material language is becoming.",
       <PToQAttribution after="." before="Matter is a project by " key="attribution" />,
     ]),
   }),
   inquiry: Object.freeze({
     title: "Ask Matter",
     body: Object.freeze([
-      "Start with Voice to admit a root thought, then select material to keep growing beneath it.",
+      "Ask one short question about the material visible here. Asking never changes it.",
       "Use Lasso to circle exact language, stretch to set how much should change, Branch to grow a related thought, and Undo to reverse the last committed change.",
     ]),
   }),
@@ -154,17 +159,17 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     title: "关于 Matter",
     body: Object.freeze([
       "Matter 邀请你在一个想法变成答案之前，先和它待在一起。",
-      "我们正在做一个用于塑造思想的脑机接口。声音把语言带进来；手势触碰你在意的地方，决定它可以改变多少；根状结构让每个想法保留自己的脉络。",
+      "Matter 是一个让未完成想法获得形体的界面。声音把语言带进来；手势触碰确切的材料，决定它可以改变多少；根状结构让每个想法保留自己的脉络。",
       "这是一种在材料中与 AI 一起思考的方式，而不是在对话框里等待答案。尚未成形的想法需要保留犹豫、被触碰，也继续生长的空间。",
       "AI 赋予语言智能，Matter 让思想拥有身体。",
-      "当前是早期预览。浏览器支持时，实时语音输入已可使用；生成式改变仍在开发中。我们在 Matter 的材料语言成形过程中把它打开。",
+      "当前是早期预览。浏览器支持时，实时语音输入已可使用；实时生成服务仍需单独开启。我们在 Matter 的材料语言成形过程中把它打开。",
       <PToQAttribution after=" 发起的项目。" before="Matter 是由 " key="attribution" />,
     ]),
   }),
   inquiry: Object.freeze({
     title: "询问 Matter",
     body: Object.freeze([
-      "先用麦克风说出根想法，再选中一段材料，继续向下生长。",
+      "就画面里的材料问一句短问题。询问不会改变它。",
       "用套索圈定确切语言，拖动边缘决定改变多少；用分支生成相关想法，用撤销退回上一次已提交的改变。",
     ]),
   }),
@@ -193,14 +198,14 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
 const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
   about: Object.freeze({ title: "關於 Matter", body: Object.freeze([
     "Matter 邀請你在一個想法變成答案之前，先和它待在一起。",
-    "我們正在做一個用來塑造思想的腦機介面。聲音帶入語言，手勢觸碰在意之處，根狀結構保留每個想法的脈絡。",
+    "Matter 是讓未完成想法獲得形體的介面。聲音帶入語言，手勢觸碰確切材料並決定改變多少，根狀結構保留每個想法的脈絡。",
     "這是在材料中與 AI 一起思考，而不是在對話框裡等待答案。未完成的想法需要保留猶豫、被觸碰並繼續生長的空間。",
     "AI 賦予語言智能，Matter 讓思想擁有身體。",
-    "這是早期預覽。瀏覽器支援時，實時語音輸入已可使用；生成式改變仍在開發中。",
+    "這是早期預覽。瀏覽器支援時，實時語音輸入已可使用；即時生成服務仍需單獨開啟。",
     <PToQAttribution after=" 發起的項目。" before="Matter 是由 " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "詢問 Matter", body: Object.freeze([
-    "先用麥克風說出根想法，再選取一段材料，繼續向下生長。",
+    "就畫面裡的材料問一句短問題。詢問不會改變它。",
     "用套索圈定語言，拖動邊緣決定改變多少；用分支生成相關想法，用復原退回上一次已提交的改變。",
   ]) }),
   pricing: Object.freeze({ title: "定價", body: Object.freeze(["Matter 仍在預覽階段，此版本沒有付費方案或結帳功能。"])}),
@@ -211,14 +216,14 @@ const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
 const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
   about: Object.freeze({ title: "Matter について", body: Object.freeze([
     "Matter は、考えが答えになる前に、その考えと留まるための環境です。",
-    "思考を形づくるためのブレイン・コンピューター・インターフェースをつくっています。声が言葉を運び、ジェスチャーが触れる場所と変化の量を決め、根のある構造が系譜を保ちます。",
+    "Matter は未完成の考えに形を与えるためのインターフェースです。声が言葉を運び、ジェスチャーが触れる場所と変化の量を決め、根のある構造が系譜を保ちます。",
     "これはチャットで答えを待つのではなく、素材の中で AI と考える方法です。未完成な考えにも、迷いを残し、触れ、育てる余白があります。",
     "AI は言葉に知性を与え、Matter は思考に身体を与えます。",
-    "初期プレビューです。ブラウザが対応している場合、リアルタイム音声入力は利用できますが、生成的な変更は開発中です。",
+    "初期プレビューです。ブラウザが対応している場合、リアルタイム音声入力は利用できます。ライブ生成プロバイダーは別途ゲートされています。",
     <PToQAttribution after=" の project です。" before="Matter は " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
-    "まず Voice で根の考えを話し、素材を選んで下へ育てます。",
+    "ここに見えている素材について短く尋ねます。尋ねても素材は変わりません。",
     "Lasso で言葉を囲み、伸縮で変化の量を決め、Branch で関連する考えを育て、Undo で直前の変更を戻します。",
   ]) }),
   pricing: Object.freeze({ title: "料金", body: Object.freeze(["Matter はプレビュー中です。このビルドに有料プランや決済はありません。"])}),
@@ -229,14 +234,14 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
 const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
   about: Object.freeze({ title: "Über Matter", body: Object.freeze([
     "Matter lädt dazu ein, bei einem Gedanken zu bleiben, bevor er zu einer Antwort wird.",
-    "Wir entwickeln eine Gehirn-Computer-Schnittstelle zum Formen von Gedanken. Die Stimme bringt Sprache herein, Gesten berühren das Wesentliche und bestimmen das Maß der Veränderung, eine verwurzelte Struktur bewahrt die Herkunft jedes Gedankens.",
+    "Matter ist eine Schnittstelle für unfertige Gedanken. Die Stimme bringt Sprache herein, Gesten berühren genaues Material und bestimmen das Maß der Veränderung, eine verwurzelte Struktur bewahrt die Herkunft jedes Gedankens.",
     "Es ist eine Art, mit KI im Material zu denken, nicht in einem Chat auf Antworten zu warten. Unfertige Gedanken dürfen unsicher bleiben, berührt werden und weiterwachsen.",
     "KI gibt Sprache Intelligenz. Matter gibt Gedanken einen Körper.",
-    "Dies ist eine frühe Vorschau. Live-Spracheingabe ist verfügbar, wenn der Browser sie unterstützt; generative Änderungen werden noch entwickelt.",
+    "Dies ist eine frühe Vorschau. Live-Spracheingabe ist verfügbar, wenn der Browser sie unterstützt; ein Live-Generierungsanbieter bleibt separat freigeschaltet.",
     <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
-    "Beginne mit Voice und sprich einen Wurzelgedanken ein. Wähle dann Material, um darunter weiterzuwachsen.",
+    "Stelle eine kurze Frage zu dem hier sichtbaren Material. Fragen verändert es nicht.",
     "Mit Lasso markierst du Sprache, mit Stretch bestimmst du das Ausmaß, Branch erzeugt einen verwandten Gedanken und Undo macht die letzte Änderung rückgängig.",
   ]) }),
   pricing: Object.freeze({ title: "Preise", body: Object.freeze(["Matter ist in der Vorschau. Dieser Build hat keinen kostenpflichtigen Plan und keine Kasse."])}),
@@ -261,6 +266,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "Auto", dark: "Dark", light: "Light" }),
     appearanceLabel: "Appearance",
     close: "Close",
+    clearRecord: "Clear record",
     closeMenu: "Close Matter menu",
     dictate: "Dictate",
     dictateStop: "Stop dictating",
@@ -285,6 +291,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     preferences: "Preferences",
     pricing: "Pricing",
     privacy: "Privacy",
+    recordUnsaved: "This record has not saved locally.",
     settings: "Matter settings",
     terms: "Terms",
   }),
@@ -296,6 +303,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "自动", dark: "深色", light: "浅色" }),
     appearanceLabel: "外观",
     close: "关闭",
+    clearRecord: "清除记录",
     closeMenu: "关闭 Matter 菜单",
     dictate: "口述",
     dictateStop: "停止口述",
@@ -320,6 +328,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     preferences: "偏好设置",
     pricing: "定价",
     privacy: "隐私政策",
+    recordUnsaved: "这份记录还没有保存在本地。",
     settings: "Matter 设置",
     terms: "服务条款",
   }),
@@ -331,6 +340,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "自動", dark: "深色", light: "淺色" }),
     appearanceLabel: "外觀",
     close: "關閉",
+    clearRecord: "清除記錄",
     closeMenu: "關閉 Matter 選單",
     dictate: "口述",
     dictateStop: "停止口述",
@@ -355,6 +365,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     preferences: "偏好設定",
     pricing: "定價",
     privacy: "隱私",
+    recordUnsaved: "這份記錄尚未儲存在本機。",
     settings: "Matter 設定",
     terms: "服務條款",
   }),
@@ -366,6 +377,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "自動", dark: "ダーク", light: "ライト" }),
     appearanceLabel: "外観",
     close: "閉じる",
+    clearRecord: "記録を消去",
     closeMenu: "Matter メニューを閉じる",
     dictate: "音声入力",
     dictateStop: "音声入力を停止",
@@ -390,6 +402,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     preferences: "設定",
     pricing: "料金",
     privacy: "プライバシー",
+    recordUnsaved: "この記録はまだこの端末に保存されていません。",
     settings: "Matter の設定",
     terms: "利用規約",
   }),
@@ -401,6 +414,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     appearance: Object.freeze({ auto: "Automatisch", dark: "Dunkel", light: "Hell" }),
     appearanceLabel: "Darstellung",
     close: "Schließen",
+    clearRecord: "Verlauf löschen",
     closeMenu: "Matter-Menü schließen",
     dictate: "Diktieren",
     dictateStop: "Diktat stoppen",
@@ -425,6 +439,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     preferences: "Einstellungen",
     pricing: "Preise",
     privacy: "Datenschutz",
+    recordUnsaved: "Dieser Verlauf wurde noch nicht lokal gespeichert.",
     settings: "Matter-Einstellungen",
     terms: "Nutzungsbedingungen",
   }),
@@ -469,6 +484,7 @@ const FOCUSABLE_SELECTOR = [
 
 export function CanvasChrome({
   inquiryContext,
+  inquiryRecord,
   preferences,
   resolvedAppearance,
   setAppearance,
@@ -734,6 +750,7 @@ export function CanvasChrome({
                 hidden={overlay !== "inquiry"}
                 hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
                 language={preferences.language}
+                record={inquiryRecord}
               />
             </div>
           </div>
@@ -935,12 +952,14 @@ function InquiryBubble({
   hidden,
   hint,
   language,
+  record,
 }: {
   context?: () => InquiryContextPayload;
   copy: CanvasChromeCopy;
   hidden: boolean;
   hint: string;
   language: CanvasLanguage;
+  record?: InquiryRecordBinding;
 }) {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
@@ -956,6 +975,8 @@ function InquiryBubble({
   const voiceBusy = listening || transcribing;
   const text = inquiryText(state);
   const canAsk = canSubmitInquiry(state);
+  const recordExchanges = record?.exchanges;
+  const recordPhase = record?.phase;
   const hasPendingAnswer = state.turns.some(
     (turn) => turn.role === "matter" && turn.outcome.status === "pending",
   );
@@ -966,6 +987,11 @@ function InquiryBubble({
     onFailed: (notice) => dispatch({ type: "listen-failed", notice }),
   }, language);
   const cancelDictation = dictation.cancel;
+
+  useEffect(() => {
+    if (recordExchanges === undefined || recordPhase === "loading") return;
+    dispatch({ type: "restore", turns: recordTurns(recordExchanges) });
+  }, [recordExchanges, recordPhase]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -1001,9 +1027,12 @@ function InquiryBubble({
       dispatch({ type: "close" });
       return;
     }
+    if (recordExchanges !== undefined) {
+      dispatch({ type: "restore", turns: recordTurns(recordExchanges) });
+    }
     const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
     return () => cancelAnimationFrame(frame);
-  }, [cancelDictation, hidden]);
+  }, [cancelDictation, hidden, recordExchanges]);
 
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
@@ -1015,6 +1044,7 @@ function InquiryBubble({
     submittingRef.current = true;
     followThreadRef.current = true;
     const answerId = pendingAnswerId(state);
+    const askedAt = new Date().toISOString();
     dispatch({ type: "ask" });
     const payload = context?.();
     if (payload === undefined) {
@@ -1033,10 +1063,12 @@ function InquiryBubble({
           !sameInquiryContext(payload, currentContext)
         ) return;
         dispatch({ type: "answer", id: answerId, outcome });
+        appendInquiryRecord(record, answerId, askedAt, question, payload, outcome);
       })
       .catch(() => {
         if (requestRef.current === request) {
           dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE });
+          appendInquiryRecord(record, answerId, askedAt, question, payload, UNREACHABLE);
         }
       })
       .finally(() => {
@@ -1045,7 +1077,7 @@ function InquiryBubble({
           submittingRef.current = false;
         }
       });
-  }, [canAsk, context, language, state]);
+  }, [canAsk, context, language, record, state]);
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -1093,6 +1125,15 @@ function InquiryBubble({
           ))}
         </div>
       )}
+      {record !== undefined && state.turns.length > 0 ? (
+        <button
+          className={styles.inquiryClear}
+          onClick={record.clear}
+          type="button"
+        >
+          {copy.clearRecord}
+        </button>
+      ) : null}
       <div className={styles.inquiryComposer}>
         <textarea
           aria-label={copy.askPlaceholder}
@@ -1121,7 +1162,7 @@ function InquiryBubble({
           className={styles.inquiryDictate}
           data-inquiry-control="dictate"
           data-voice-available={dictation.supported === true}
-          disabled={transcribing}
+          disabled={transcribing || (!listening && dictation.supported !== true)}
           onClick={() => {
             if (listening) {
               dictation.stop();
@@ -1144,9 +1185,9 @@ function InquiryBubble({
           {copy.ask}
         </button>
       </div>
-      {voiceBusy || state.notice !== null || state.turns.length === 0 ? (
+      {voiceBusy || state.notice !== null || state.turns.length === 0 || record?.phase === "error" ? (
         <p className={styles.inquiryStatus}>
-          {state.notice !== null
+          {record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
             ? voiceNoticeCopy(copy, state.notice)
             : listening ? copy.listening
               : transcribing ? copy.transcribing
@@ -1157,9 +1198,35 @@ function InquiryBubble({
   );
 }
 
+function recordTurns(exchanges: readonly StoredInquiryExchange[]): ReturnType<typeof createInquiryState>["turns"] {
+  return Object.freeze(exchanges.flatMap((exchange, index) => [
+    Object.freeze({ id: index * 2 + 1, role: "person" as const, text: exchange.question }),
+    Object.freeze({ id: index * 2 + 2, role: "matter" as const, outcome: exchange.outcome }),
+  ]));
+}
+
+function appendInquiryRecord(
+  record: InquiryRecordBinding | undefined,
+  answerId: number,
+  askedAt: string,
+  question: string,
+  context: InquiryContextPayload,
+  outcome: TerminalInquiryOutcome,
+) {
+  if (record === undefined) return;
+  record.append(Object.freeze({
+    id: `inquiry_${answerId}`,
+    askedAt,
+    question,
+    outcome,
+    basis: Object.freeze({ treeId: context.treeId, revision: context.revision, scope: context.scope }),
+  }));
+}
+
 const INQUIRY_FIELD_MAX_HEIGHT = 95;
-const NO_MATERIAL: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
-const UNREACHABLE: InquiryTurnOutcome = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
+type TerminalInquiryOutcome = Exclude<InquiryTurnOutcome, Readonly<{ status: "pending" }>>;
+const NO_MATERIAL: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
+const UNREACHABLE: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
 
 function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string {
   if (outcome.status === "answered") return outcome.text;

@@ -79,8 +79,8 @@ for (const viewport of [
     expect(new Set(gripSkin.map((grip) => grip.color)).size).toBe(1);
     expect(gripSkin[0]?.color).not.toBe("rgba(0, 0, 0, 0)");
     const sourceLayout = await sourceLayoutReceipt(page, text);
-    const topHandle = page.getByRole("slider", { name: "Expand selected language from its top edge" });
-    const handle = page.getByRole("slider", { name: "Expand selected language from its bottom edge" });
+    const topHandle = page.getByRole("slider", { name: "Set selected language expansion from the top re-grab edge" });
+    const handle = page.getByRole("slider", { name: "Set selected language expansion from the bottom re-grab edge" });
     await expect(topHandle).toHaveAttribute("aria-valuenow", "0");
     await expect(handle).toHaveAttribute("aria-valuenow", "0");
     const firstPink = await page.locator(".lasso-selection-fragment").first().boundingBox();
@@ -372,7 +372,7 @@ for (const viewport of [
       .toHaveText("拖动把手设定变化程度。");
     await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
-    await expect(page.getByRole("slider", { name: "Expand selected language from its bottom edge" }))
+    await expect(page.getByRole("slider", { name: "Set selected language expansion from the bottom re-grab edge" }))
       .toBeVisible();
 
     const before = page.locator(".language-split-before-copy");
@@ -387,7 +387,7 @@ for (const viewport of [
     expect(natural.afterGlyphTop).toBeCloseTo(sourceSuffixTop, 1);
     const sourceGlyphsBefore = await sourceGlyphReceipt(text, 0, "，");
 
-    const bottom = page.getByRole("slider", { name: "Expand selected language from its bottom edge" });
+    const bottom = page.getByRole("slider", { name: "Set selected language expansion from the bottom re-grab edge" });
     await bottom.press("End");
     await expect(bottom).toHaveAttribute("aria-valuenow", "1");
     await expect(page.locator(".matter-guidance__next"))
@@ -409,7 +409,7 @@ for (const viewport of [
     expect(sourceAfter.canvas.height).toBeGreaterThanOrEqual(sourceBefore.canvas.height);
 
     await bottom.press("Home");
-    const top = page.getByRole("slider", { name: "Expand selected language from its top edge" });
+    const top = page.getByRole("slider", { name: "Set selected language expansion from the top re-grab edge" });
     const neutralAgain = await projectionReceipt(page);
     await top.press("End");
     await expect(top).toHaveAttribute("aria-valuenow", "1");

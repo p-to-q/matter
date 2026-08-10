@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { commitTreeCommand, createTreeHistory } from "../tree/history";
+import { commitTreeCommand, createTreeHistory, redoTreeHistory, undoTreeHistory } from "../tree/history";
 import { createEmptyTree } from "../tree/invariants";
 import type { ThoughtNode } from "../tree/model";
 import { recoverPersistedHistory } from "./history-recovery";
@@ -34,6 +34,33 @@ describe("persisted undo history", () => {
       entries: [{ commandId: "bad", source: "human", inverse: {}, retainedInverseBytes: 0 }],
       retainedInverseBytes: 0,
     }, LIMITS)).toEqual(createTreeHistory());
+  });
+
+  it("recovers both stacks so an undone change can be redone after reload", () => {
+    const initialized = commitTreeCommand(
+      createEmptyTree("tree"),
+      createTreeHistory(),
+      initializeRoot("initial", "root", "first"),
+      LIMITS,
+    );
+    if (!initialized.ok) throw new Error(initialized.error.code);
+    const inserted = commitTreeCommand(
+      initialized.tree,
+      initialized.history,
+      insertChild("second", initialized.tree.revision, "root", "child", "second"),
+      LIMITS,
+    );
+    if (!inserted.ok) throw new Error(inserted.error.code);
+    const undone = undoTreeHistory(inserted.tree, inserted.history);
+    if (!undone.ok) throw new Error(undone.error.code);
+
+    const recovered = recoverPersistedHistory(undone.tree, structuredClone(undone.history), LIMITS);
+    expect(recovered.entries).toHaveLength(1);
+    expect(recovered.redoEntries).toHaveLength(1);
+    const redone = redoTreeHistory(undone.tree, recovered);
+    expect(redone.ok).toBe(true);
+    if (!redone.ok) return;
+    expect(redone.tree.nodes.child?.text).toBe("second");
   });
 });
 

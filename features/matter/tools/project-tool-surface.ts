@@ -11,6 +11,7 @@ export const MAIN_RAIL_SLOT_IDS = Object.freeze([
   "branch",
   "move",
   "undo",
+  "redo",
 ] as const);
 
 export type MainRailSlotId = (typeof MAIN_RAIL_SLOT_IDS)[number];
@@ -19,6 +20,7 @@ export type ProjectedToolSurface = Readonly<{
   main: Readonly<{
     branch: ProjectedTool | null;
     undo: ProjectedTool | null;
+    redo: ProjectedTool | null;
   }>;
   local: readonly ProjectedTool[];
 }>;
@@ -36,10 +38,11 @@ export function projectToolSurface(
 ): ProjectedToolSurface {
   const branch = tools.find((tool) => tool.id === "add-child") ?? null;
   const undo = tools.find((tool) => tool.id === "undo") ?? null;
+  const redo = tools.find((tool) => tool.id === "redo") ?? null;
   const local = tools.filter((tool) => LOCAL_TOOL_IDS.has(tool.id));
 
   return Object.freeze({
-    main: Object.freeze({ branch, undo }),
+    main: Object.freeze({ branch, undo, redo }),
     local: Object.freeze(local),
   });
 }

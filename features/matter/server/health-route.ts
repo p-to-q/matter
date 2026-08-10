@@ -34,7 +34,7 @@ export type MatterHealth = Readonly<{
      * with a stated unavailability rather than with invented prose.
      */
     inquiry: MatterHealthSurface;
-    transformTurn: "not-implemented";
+    transformTurn: MatterHealthSurface;
     archiveExportImport: "available";
   }>;
 }>;
@@ -60,7 +60,7 @@ export function healthSnapshot(): MatterHealth {
       thoughtLabel: thoughtLabelSurface(),
       transcriptRepair: transcriptRepairSurface(),
       inquiry: inquirySurface(),
-      transformTurn: "not-implemented",
+      transformTurn: transformTurnSurface(),
       archiveExportImport: "available",
     }),
   });
@@ -91,6 +91,10 @@ function inquirySurface(): MatterHealthSurface {
   return process.env.MATTER_INQUIRY_ADAPTER === "live" && readModelPool().length > 0
     ? "available"
     : "unavailable";
+}
+
+function transformTurnSurface(): MatterHealthSurface {
+  return adapterSurface(process.env.MATTER_TRANSFORM_ADAPTER);
 }
 
 /**

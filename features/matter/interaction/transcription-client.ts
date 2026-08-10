@@ -227,7 +227,7 @@ function basePath(): string {
   return clientMatterBasePath();
 }
 
-function localTranscriptionIsEnabled(): boolean {
+export function localTranscriptionIsEnabled(): boolean {
   return process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED === "true";
 }
 

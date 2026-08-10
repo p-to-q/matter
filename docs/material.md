@@ -5,11 +5,12 @@ Matter does not add a separate memory or session system beside it.
 
 A lightweight inquiry may read either the transient lasso selection or a bounded
 projection of the complete virtual material tree when no lasso selection exists.
-Its question, answer, pending state, and voice partials
-are transient chrome: they never enter the tree, persistence, export, or command
-history. A future memory adapter may replace the server's unavailable branch,
-but it must remain behind this same bounded contract rather than becoming a
-second browser-owned document model.
+Drafts, pending state, and voice partials are transient chrome. Completed
+question/answer exchanges may live in the separate, bounded local Ask Matter
+record, but never in the tree, material command history, or material archive.
+That record returns only through the existing inquiry surface, is removable,
+and never becomes model context; its adapter boundary is specified in
+[`reference/inquiry-record.md`](reference/inquiry-record.md).
 
 Browser speech admission performs punctuation-only normalization at the edge:
 spoken punctuation words become marks and a missing terminal mark is added. It
@@ -178,9 +179,9 @@ not turn it back into visible material.
 
 The snapshot preserves the complete `ThoughtTree`: current material, structure,
 ids, order, times, tree revision, and protocol version. The browser pairs that
-snapshot with its local inverse journal in one IndexedDB record, so an accepted
-command remains undoable after reload. Archive export deliberately contains only
-the material snapshot: importing an archive establishes a new undo boundary.
+snapshot with its local undo/redo journal in one IndexedDB record, so accepted
+commands remain reversible after reload. Archive export deliberately contains
+only the material snapshot: importing an archive establishes a new undo boundary.
 
 In a browser, local durability and a user-visible folder are different physical
 stores. IndexedDB keeps one versioned logical Markdown bundle and its paired

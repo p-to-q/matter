@@ -12,7 +12,8 @@ Concretely:
 - an inverse exists for every mutation, including subtree removal;
 - an invalid plan is rejected whole; partial application never happens;
 - undo restores text, structure, order, and time fields exactly;
-- history is bounded by both command count and retained inverse bytes;
+- history is never policy-trimmed; browser storage capacity is its only physical
+  bound and a failed save remains explicit;
 - transient state — pointer, audio level, partial transcript — never enters it.
 
 ## Prior art
@@ -71,17 +72,20 @@ type CommandResult =
 - The inverse initially expects the committed revision. When several latest
   commands are undone in sequence, the history controller rebases only the next
   inverse's revision token. Mutation mementos still verify exact current
-  material. A successful undo consumes the entry and does not push a new one;
-  failure preserves both tree and stack. Opening, importing, or hydrating a
-  document clears history and pending turns.
+  material. A successful undo moves the engine-produced inverse to the redo
+  stack; redo applies that inverse through the engine again. A new command
+  clears the alternate redo future. Failure preserves both tree and stacks.
+  Opening, importing, or hydrating a foreign document clears history and
+  pending turns.
 - `affectedNodeIds` is returned so motion can be local to what changed, rather
   than the view diffing to find out.
 - Exact undo restores text, structure, order, and node timestamps. Tree revision
   remains monotonic because undo is a new commit.
-- The undo stack holds committed human and agent commands. It drops oldest
-  entries to satisfy both a count cap and a retained-inverse byte budget; one
-  subtree memento may be close to the size of the document. Folding, focus, and
-  selection are view state and are not undoable.
+- The undo and redo stacks hold committed human and agent commands. Matter does
+  not discard an old inverse to satisfy an application policy; one subtree
+  memento may be close to the size of the document, so storage exhaustion is a
+  recoverable durability failure rather than a reason to rewrite history.
+  Folding, focus, and selection are view state and are not undoable.
 
 The public action vocabulary in [`../protocol.md`](../protocol.md) is smaller
 than `TreeMutation` on purpose: the agent can propose only a range replacement.
@@ -110,6 +114,6 @@ clones of affected nodes.
 sometimes change what a person sees and sometimes change what they wrote, and
 they would stop trusting it. Undo means "take back what was generated".
 
-**Redo, for now.** Not rejected on merit, just not built. Every turn is cheap to
-re-express by repeating the gesture, and a redo stack adds branching history
-semantics for a case that has not come up. Promote it if use shows otherwise.
+**Snapshot stacks and opaque browser history.** Still rejected. Redo is now a
+first-class inverse stack because a person must be able to move back through a
+local material timeline after reload without asking the model to recreate it.

@@ -35,6 +35,7 @@ export type InquiryEvent =
   | Readonly<{ type: "listen-failed"; notice: InquiryVoiceNotice }>
   | Readonly<{ type: "ask" }>
   | Readonly<{ type: "answer"; id: number; outcome: InquiryTurnOutcome }>
+  | Readonly<{ type: "restore"; turns: readonly InquiryTurn[] }>
   | Readonly<{ type: "scope-changed" }>
   | Readonly<{ type: "close" }>;
 
@@ -119,13 +120,36 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
             : turn,
         )),
       });
+    case "restore":
+      return restoreTurns(event.turns);
     case "scope-changed":
-      // An exchange is about one material context. Do not carry pending or
-      // answered turns into another document, revision, or selection scope.
-      return createInquiryState();
+      // A new request must not inherit a prior scope, but a completed local
+      // record remains visible as history. Pending work is deliberately gone.
+      return restoreTurns(state.turns);
     case "close":
       return createInquiryState();
   }
+}
+
+function restoreTurns(turns: readonly InquiryTurn[]): InquiryState {
+  const terminal: InquiryTurn[] = [];
+  for (let index = 0; index < turns.length - 1; index += 1) {
+    const question = turns[index];
+    const answer = turns[index + 1];
+    if (question?.role !== "person" || answer?.role !== "matter" || answer.outcome.status === "pending") continue;
+    terminal.push(question, answer);
+    index += 1;
+  }
+  const bounded = terminal.slice(-INQUIRY_MAX_TURNS);
+  const highestId = bounded.reduce((highest, turn) => Math.max(highest, turn.id), 0);
+  return freeze({
+    phase: "idle",
+    draft: "",
+    interim: "",
+    notice: null,
+    turns: Object.freeze(bounded),
+    nextTurnId: highestId + 1,
+  });
 }
 
 function settle(state: InquiryState, notice: InquiryVoiceNotice | null): InquiryState {

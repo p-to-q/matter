@@ -214,30 +214,34 @@ export class LabelDriver {
     });
   }
 
-  /** Returns one node to automatic naming. */
-  resetName(nodeId: string): Promise<void> {
-    if (this.disposed) return Promise.resolve();
+  /** Returns one node to automatic naming only after its manual name is gone from disk. */
+  resetName(nodeId: string): Promise<LabelWriteReceipt> {
+    if (this.disposed) return Promise.resolve(WRITE_SKIPPED);
     const next = reduceLabelSession(this.state, { type: "reset-name", nodeId });
-    if (next === this.state) return Promise.resolve();
+    if (next === this.state) return Promise.resolve(WRITE_SKIPPED);
     const treeId = this.state.treeId;
     const documentEpoch = this.state.documentEpoch;
     return this.enqueueDurableMutation(treeId, nodeId, async () => {
-      this.unpersistedNames.delete(`${treeId} ${nodeId}`);
+      let receipt: LabelWriteReceipt;
       try {
-        await this.dependencies.repository?.remove(treeId, [nodeId]);
+        receipt = await this.dependencies.repository?.remove(treeId, [nodeId]) ?? WRITE_SKIPPED;
       } catch {
-        // Storage is best effort; automatic naming still resumes in this session.
+        receipt = Object.freeze({ ok: false, code: "STORAGE_UNAVAILABLE" });
       }
+      if (!receipt.ok) return receipt;
+      this.unpersistedNames.delete(`${treeId} ${nodeId}`);
       if (
         this.disposed ||
         this.state.treeId !== treeId ||
         this.state.documentEpoch !== documentEpoch ||
         this.lastScope?.tree.nodes[nodeId] === undefined
-      ) return;
+      ) return receipt;
       const committed = reduceLabelSession(this.state, { type: "reset-name", nodeId });
-      if (committed === this.state) return;
-      this.publish(committed);
-      if (this.lastScope !== null) this.observe(this.lastScope, this.lastNodeIds);
+      if (committed !== this.state) {
+        this.publish(committed);
+        if (this.lastScope !== null) this.observe(this.lastScope, this.lastNodeIds);
+      }
+      return receipt;
     });
   }
 

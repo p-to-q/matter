@@ -17,6 +17,7 @@ describe("Matter health route", () => {
     process.env.MATTER_LABEL_ADAPTER = "fixture";
     process.env.MATTER_REPAIR_ADAPTER = "fixture";
     process.env.MATTER_INQUIRY_ADAPTER = "off";
+    process.env.MATTER_TRANSFORM_ADAPTER = "fixture";
     delete process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED;
     process.env.MATTER_BASE_PATH = "/matter";
     const response = GET();
@@ -35,7 +36,7 @@ describe("Matter health route", () => {
         thoughtLabel: "fixture",
         transcriptRepair: "fixture",
         inquiry: "unavailable",
-        transformTurn: "not-implemented",
+        transformTurn: "fixture",
         archiveExportImport: "available",
       },
     });
@@ -70,6 +71,12 @@ describe("Matter health route", () => {
     process.env.MATTER_INQUIRY_ADAPTER = "fixture";
 
     expect(healthSnapshot().surfaces.inquiry).toBe("unavailable");
+  });
+
+  it("reports transform unavailable when its provider and fixture gates are off", () => {
+    process.env.MATTER_TRANSFORM_ADAPTER = "off";
+
+    expect(healthSnapshot().surfaces.transformTurn).toBe("unavailable");
   });
 
   it("falls back to the canonical Matter base path for unsafe deployment values", () => {

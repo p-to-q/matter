@@ -16,12 +16,12 @@ shared allow-list, client copy, provider handling, and focused tests together.
 
 Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
-segment addressing, stretch degree, Markdown durability, and the non-mutating
-inquiry envelope and gated server-side answer adapter are implemented.
-Generative transformation remains specified for Phase 2 in
-[`plans/active-tree-material.md`](../plans/active-tree-material.md); `/api/turn` remains
-gated. Markdown archive
-export/import is available as a strict local return path.
+segment addressing, stretch degree, Markdown durability, bounded inquiry, and
+the fixture-gated transform vertical slice are implemented. `POST /api/turn`
+accepts one strict envelope, returns one server-built plan, and remains
+unavailable on a production origin until the separate transform provider gate is
+explicitly enabled. Markdown archive export/import is available as a strict
+local return path.
 
 `0.2` is a clean break because `0.1` has no persisted documents. A multi-passage
 lasso selection set is deliberately not a protocol field: it is transient UI
@@ -371,7 +371,10 @@ passages from one node. With no lasso selection it projects the virtual tree in
 authored preorder. Both scopes are bounded; the server parses the request whole,
 reports a receipt,
 and returns `Cache-Control: no-store`. No question, context, answer, or turn list
-enters `ThoughtTree`, command history, persistence, archive, or routine logs.
+enters `ThoughtTree`, command history, material archive, or routine logs.
+The browser may retain a completed exchange in its separate bounded Ask Matter
+record, without copied material context and never as later model input; see
+[`reference/inquiry-record.md`](reference/inquiry-record.md).
 
 Bounds: question 500 code points, request 24 KiB, lineage 64 nodes, each projected
 node 480 code points, total projected context 4,000 code points, and browser

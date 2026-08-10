@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import type { SegmentSelection } from "../material/text-segments";
 import {
   createStretchInteractionState,
@@ -9,6 +9,10 @@ import {
   type StretchInteractionEvent,
   type StretchPointerType,
 } from "../runtime/stretch-interaction";
+import {
+  createStretchPreviewFrame,
+  type StretchPreviewFrame,
+} from "./stretch-preview-frame";
 
 export type StretchController = Readonly<{
   amount: number;
@@ -51,6 +55,42 @@ export function useStretch(input: {
   const stateRef = useRef(state);
   const previousNavigationRef = useRef(`${documentEpoch}:${navigationKey}`);
   const previousLayoutRef = useRef(layoutKey);
+  const previewRef = useRef(onPreview);
+  const previewFrameRef = useRef<StretchPreviewFrame<StretchPreviewSignal> | null>(null);
+
+  useLayoutEffect(() => {
+    previewRef.current = onPreview;
+  }, [onPreview]);
+
+  useLayoutEffect(() => {
+    const frame = createStretchPreviewFrame<StretchPreviewSignal>({
+      request: (callback) => window.requestAnimationFrame(callback),
+      cancel: (handle) => window.cancelAnimationFrame(handle),
+    }, (signal) => previewRef.current(signal));
+    previewFrameRef.current = frame;
+    return () => {
+      frame.cancel();
+      if (previewFrameRef.current === frame) previewFrameRef.current = null;
+    };
+  }, []);
+
+  const flushPreview = useCallback((signal: StretchPreviewSignal) => {
+    const frame = previewFrameRef.current;
+    if (frame === null) {
+      previewRef.current(signal);
+      return;
+    }
+    frame.flush(signal);
+  }, []);
+
+  const schedulePreview = useCallback((signal: StretchPreviewSignal) => {
+    const frame = previewFrameRef.current;
+    if (frame === null) {
+      previewRef.current(signal);
+      return;
+    }
+    frame.schedule(signal);
+  }, []);
 
   const send = useCallback((event: StretchInteractionEvent) => {
     const next = reduceStretchInteraction(stateRef.current, event);
@@ -68,7 +108,7 @@ export function useStretch(input: {
   useEffect(() => {
     if (selection === null) {
       send({ type: "selection-invalidated" });
-      onPreview(previewSignal(createStretchInteractionState()));
+      flushPreview(previewSignal(createStretchInteractionState()));
       return;
     }
     send({
@@ -79,22 +119,22 @@ export function useStretch(input: {
         revision,
       },
     });
-  }, [onPreview, revision, selection, treeId, send]);
+  }, [flushPreview, revision, selection, treeId, send]);
 
   useEffect(() => {
     const sessionNavigationKey = `${documentEpoch}:${navigationKey}`;
     if (previousNavigationRef.current === sessionNavigationKey) return;
     previousNavigationRef.current = sessionNavigationKey;
     send({ type: "navigation-invalidated" });
-    onPreview(previewSignal(createStretchInteractionState()));
-  }, [documentEpoch, navigationKey, onPreview, send]);
+    flushPreview(previewSignal(createStretchInteractionState()));
+  }, [documentEpoch, flushPreview, navigationKey, send]);
 
   useEffect(() => {
     if (previousLayoutRef.current === layoutKey) return;
     previousLayoutRef.current = layoutKey;
     const next = send({ type: "layout-invalidated" });
-    onPreview(previewSignal(next));
-  }, [layoutKey, onPreview, send]);
+    flushPreview(previewSignal(next));
+  }, [flushPreview, layoutKey, send]);
 
   const pointerDown = useCallback((
     handle: StretchHandle,
@@ -109,43 +149,43 @@ export function useStretch(input: {
       button: event.button,
       clientY: event.clientY,
     });
-    onPreview(previewSignal(next));
+    flushPreview(previewSignal(next));
     return next.mode === "dragging" && next.pointerId === event.pointerId;
-  }, [onPreview, send]);
+  }, [flushPreview, send]);
 
   const pointerMove = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     const current = stateRef.current;
     if (current.mode !== "dragging" || current.pointerId !== event.pointerId) return false;
     const next = sendHot({ type: "pointer-move", pointerId: event.pointerId, clientY: event.clientY });
-    onPreview(previewSignal(next));
+    if (next !== current) schedulePreview(previewSignal(next));
     return true;
-  }, [onPreview, sendHot]);
+  }, [schedulePreview, sendHot]);
 
   const pointerUp = useCallback((event: React.PointerEvent<HTMLButtonElement>) => {
     const current = stateRef.current;
     if (current.mode !== "dragging" || current.pointerId !== event.pointerId) return false;
     const next = send({ type: "pointer-up", pointerId: event.pointerId, clientY: event.clientY });
-    onPreview(previewSignal(next));
+    flushPreview(previewSignal(next));
     return true;
-  }, [onPreview, send]);
+  }, [flushPreview, send]);
 
   const pointerCancel = useCallback((pointerId: number) => {
     const current = stateRef.current;
     if (current.mode !== "dragging" || current.pointerId !== pointerId) return false;
     const next = send({ type: "pointer-cancel", pointerId });
-    onPreview(previewSignal(next));
+    flushPreview(previewSignal(next));
     return true;
-  }, [onPreview, send]);
+  }, [flushPreview, send]);
 
   const setAmount = useCallback((amount: number, handle?: StretchHandle) => {
     const next = send({ type: "set-amount", amount, handle });
-    onPreview(previewSignal(next));
-  }, [onPreview, send]);
+    flushPreview(previewSignal(next));
+  }, [flushPreview, send]);
 
   const layoutInvalidated = useCallback(() => {
     const next = send({ type: "layout-invalidated" });
-    onPreview(previewSignal(next));
-  }, [onPreview, send]);
+    flushPreview(previewSignal(next));
+  }, [flushPreview, send]);
 
   return {
     amount: amountOf(state),

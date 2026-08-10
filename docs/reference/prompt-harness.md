@@ -149,15 +149,14 @@ flat because nothing waits on it. A caller passing `deadlineCeilingMs` can cut a
 scenario short — only the caller knows whether anyone is still waiting — but
 never lengthen it.
 
-## Transform is compiled and frozen, not wired
+## Transform is wired through a fixture gate
 
-`transform-harness.ts` has no route. The envelope, planner, and commit path in
-[`agent-boundary.md`](agent-boundary.md) and
-[`../protocol.md`](../protocol.md) remain gated. What is frozen here is the
-part that can be frozen without them — the prompt, the degree bound, and the
-judgement of an answer — because those are the parts that are hardest to change
-afterwards without changing what a person's material becomes. The scenario is
-compiled and tested; nothing calls it yet.
+`POST /api/turn` parses one bounded envelope, runs `transform-harness.ts`, and
+returns a server-built plan. The browser immediately translates that plan against
+its current tree before the tree engine can commit it; a stale result is simply
+discarded. The route uses a deterministic fixture only outside production by
+default. A live provider requires its own explicit server-only transform gate,
+so a fixture result can never silently impersonate a live change.
 
 ## Rejected
 

@@ -17,6 +17,102 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-11 — Matter names its actual interface
+
+Changed: public, in-product, and repository copy now calls Matter an interface
+for unfinished thought, not a brain-computer interface. The product promise is
+one rooted, reversible thought-growth loop; the saved Ask Matter record remains
+an internal persistence boundary rather than a new product surface.
+
+Why: the running web product uses ordinary voice and gesture, not neural input.
+Calling it BCI made the product sound more technically exotic while hiding the
+actual differentiator: precise authorship over one material change.
+
+Forecloses: using hardware-adjacent language as a substitute for a clear
+interaction contract, or turning a local persistence detail into a chat surface.
+
+## 2026-08-11 — First voice use waits for a real transport, never for permission by surprise
+
+Changed: hydration now prepares the selected voice transport before its first
+pointer activation. The recorded-audio path may create its worker and code
+graph, but cannot request permission, capture audio, decode a recording, or
+download a speech model until an actual voice turn. Browser speech start also
+has a bounded watchdog.
+
+Why: the old first turn combined capability discovery with the only pointer a
+person had offered. A slow worker or browser recognition that never started
+made that first action feel lost or remain in a waiting state with no outcome.
+
+Forecloses: using eager microphone permission or a speculative model download
+as a warm-up mechanism, and leaving a first browser recognition attempt
+unbounded.
+
+## 2026-08-11 — Ask Matter record is an explicit local exception
+
+Changed: top-level product and engineering contracts now name the bounded Ask
+Matter record as a clearable local exception. It survives reload only behind
+the existing inquiry surface; it never becomes material, undo history, archive
+content, or later model context.
+
+Why: a durable behavior cannot be left implied by lower-level storage code. The
+record is useful orientation, not a second knowledge system or a conversation
+authority beside the tree.
+
+Forecloses: a hidden chat transcript, implicit retrieval from prior answers,
+and ambiguity about whether an inquiry can alter material authority.
+
+---
+
+## 2026-08-11 — Reversibility and Ask Matter records have separate durable boundaries
+
+Changed: material history now keeps unlimited local undo and redo stacks through
+reload, while completed Ask Matter exchanges live in a separate, bounded,
+generation-checked per-tree record with one clear action inside Ask Matter.
+
+Why: a person must be able to return to the state before the first local change
+and move forward again without a snapshot swap. Inquiry can be worth returning
+to, but making it material history, archive content, or implicit model memory
+would give a secondary orientation surface authority it does not have.
+
+Forecloses: silently dropping old local inverses, a redo that cannot survive a
+reload, and a durable chat transcript that becomes hidden retrieval.
+
+---
+
+## 2026-08-10 — Resetting a manual name is durable or visibly unfinished
+
+Changed: removing a manual label now returns the same typed storage receipt as
+writing one. The automatic label resumes only after the delete reaches disk;
+when it fails, the editor remains available for retry instead of presenting a
+reset that reappears after reload.
+
+Why: a durable manual name is a human decision in both directions. Treating its
+deletion as best effort restored the exact silent-loss shape preview.19 removed
+for writes.
+
+Forecloses: a successful-looking reset whose old manual name returns after a
+reload, and a separate untyped failure contract for delete versus write.
+
+---
+
+## 2026-08-10 — Large-tree timing stays honest without becoming a launch veto
+
+Changed: the fixed 2,000-node receipt continues to record pointer-to-paint and
+long-task cost against the existing `<100 ms` target. Missing that target opens
+optimization and diagnosis work, but does not by itself block a release or force
+a smaller claimed product bound.
+
+Why: performance work is continuous. Treating one diagnostic threshold as a
+release veto encourages either a premature rendering rewrite or a softened
+measurement, while treating it as unimportant hides a real experience cost.
+The target stays fixed so progress remains comparable; the release decision
+still weighs the complete product path and its actual evidence.
+
+Forecloses: lowering the threshold to manufacture a pass, silently deleting the
+measurement, or making one benchmark result the authority over product launch.
+
+---
+
 ## 2026-08-09 — A refused answer is not a broken relay, and a stall is not a refusal
 
 Changed: `runScenario` no longer counts an adjudication rejection toward the

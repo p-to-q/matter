@@ -8,7 +8,7 @@ is deliberately absent.
 
 | Surface | Status | Evidence |
 | --- | --- | --- |
-| ThoughtTree kernel and exact inverse history | implemented | focused atomicity, ownership, bounds, and undo tests |
+| ThoughtTree kernel and exact reversible history | implemented | focused atomicity, ownership, undo/redo and reload tests |
 | Full/focus/fold navigation | implemented | pure runtime tests and exact-lineage selectors |
 | Rooted fixture renderer | implemented | pointer receipt at laptop and narrow widths |
 | 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open |
@@ -18,8 +18,9 @@ is deliberately absent.
 | Material files + IndexedDB durability | implemented | deterministic snapshot codec, generation conflict, reload/copy e2e |
 | Transcript repair before admission | implemented; live adapter independently gated | restores punctuation, sentence boundaries, and a misheard word; every answer adjudicated against the spoken skeleton, every failure admits the words as heard |
 | Derived thought labels | implemented | deterministic derivation, adjudication, staleness and cancellation tests; ordered relay pool with corpus evaluation; durable per-node store and manual rename proven by reload e2e |
-| Lightweight Matter inquiry | boundary and independently gated live adapter implemented | one paper-contained question field, lasso selection or bounded virtual-tree context, bounded answer or explicit unavailable result, no persistence or material mutation |
-| Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and per-surface gate status for voice, label, repair, inquiry, and the unbuilt transform |
+| Lightweight Matter inquiry | local bounded record and independently gated live adapter implemented | paper-contained questions, per-tree local completed-record, explicit clear, no material mutation or model-memory retrieval |
+| Fixture-gated transform turn | implemented | strict `/api/turn`, server-built plan, client revalidation, tree-engine commit, and exact undo/redo; live provider remains separately gated |
+| Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and per-surface gate status for voice, label, repair, inquiry, and transform |
 | Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
 
@@ -30,7 +31,7 @@ is deliberately absent.
 | Single-root ThoughtTree and tree engine | implemented |
 | Human material admission without generative rewrite | implemented with browser-native public speech; fixture HTTP path remains local-only |
 | Punctuation segment addressing | implemented |
-| Root-to-focus lineage context | implemented locally; agent envelope pending |
+| Root-to-focus lineage context | implemented locally and in the fixture-gated transform envelope |
 | Derived rooted layout with transient focus and fold | implemented |
 | Markdown snapshot and local durability | implemented |
 | Explicit ZIP export/import; directory export | ZIP implemented; directory export specified |
@@ -67,7 +68,7 @@ described as one. Durability is already IndexedDB's job; a cache layer would add
 its own versioning and update story. Whether Matter ends up on mobile, on the
 web, or on both — and whether those need separate builds — is undecided, so
 installation stays this thin until that is settled.
-The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
+The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo → Redo.
 Focus and fold remain navigation capabilities but have no first-release canvas
 presenter; the disclosure control in the left material outline is a separate
 file-tree affordance.
@@ -76,7 +77,7 @@ The paper corner system is presentation state only. About, pre-release pricing,
 privacy and terms are static information rather than a support agent. Ask Matter
 is the one secondary-input exception: it stays closed until requested, submits
 one bounded question with lassoed passages or the bounded virtual-tree context,
-persists no exchange, and cannot mutate material. Language changes canvas guidance and corner
+keeps only a bounded local completed record, and cannot mutate material. Language changes canvas guidance and corner
 copy, leaf FX pauses and hides only decorative media, and appearance scopes theme
 tokens to the paper. Desktop controls follow a 24 px edge grid; below 768 px they
 collapse into one paper-contained menu with inert background, bounded focus and
@@ -97,11 +98,11 @@ durable memory service, permanent assistant UI, and a public SDK.
 
 The public interface is a root-seeded preview. Its browser-native voice path is
 enabled on `matter.ptoq.io` when the browser exposes Web Speech recognition; no
-fixture transcript is used there. `/api/turn`, account/sync, and the strict
-large-tree performance receipt remain gated. The transform's prompt, degree
-bound, and answer judgement are frozen and tested ahead of that route; nothing
-calls them. ZIP export/import is available;
-directory export remains absent.
+fixture transcript is used there. The transform route exists but a live provider,
+account/sync, and the strict large-tree performance receipt remain gated. The
+fixture path proves the prompt, degree bound, plan, revalidation, and command
+translation without impersonating live generation. ZIP export/import is
+available; directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).

@@ -3,6 +3,7 @@ import { applyTreeCommand } from "./engine";
 import {
   commitTreeCommand,
   createTreeHistory,
+  redoTreeHistory,
   undoTreeHistory,
 } from "./history";
 import { createEmptyTree } from "./invariants";
@@ -90,7 +91,18 @@ describe("tree history", () => {
     expect(secondUndo.ok).toBe(true);
     if (!secondUndo.ok) return;
     expect(secondUndo.tree).toMatchObject({ rootId: null, nodes: {}, revision: 4 });
-    expect(secondUndo.history).toEqual(createTreeHistory());
+    expect(secondUndo.history.entries).toEqual([]);
+    expect(secondUndo.history.redoEntries).toHaveLength(2);
+
+    const firstRedo = redoTreeHistory(secondUndo.tree, secondUndo.history);
+    expect(firstRedo.ok).toBe(true);
+    if (!firstRedo.ok) return;
+    const secondRedo = redoTreeHistory(firstRedo.tree, firstRedo.history);
+    expect(secondRedo.ok).toBe(true);
+    if (!secondRedo.ok) return;
+    expect(secondRedo.tree.nodes.child?.text).toBe("Child");
+    expect(secondRedo.history.redoEntries).toEqual([]);
+    expect(secondRedo.history.entries).toHaveLength(2);
   });
 
   it("preserves the exact tree and stack when an inverse memento no longer matches", () => {
@@ -224,5 +236,26 @@ describe("tree history", () => {
     expect(result).toMatchObject({ ok: false, error: { code: "EMPTY_HISTORY" } });
     expect(result.tree).toBe(tree);
     expect(result.history).toBe(history);
+  });
+
+  it("drops redo only when a new material commit creates another timeline", () => {
+    const initialized = commitTreeCommand(
+      createEmptyTree("tree_1"),
+      createTreeHistory(),
+      command("init", 0, { type: "initialize-root", root: node("root", "Root", null) }),
+      LIMITS,
+    );
+    if (!initialized.ok) throw new Error(initialized.error.code);
+    const undone = undoTreeHistory(initialized.tree, initialized.history);
+    if (!undone.ok) throw new Error(undone.error.code);
+
+    const branched = commitTreeCommand(
+      undone.tree,
+      undone.history,
+      command("other-init", undone.tree.revision, { type: "initialize-root", root: node("other", "Other", null) }),
+      LIMITS,
+    );
+    if (!branched.ok) throw new Error(branched.error.code);
+    expect(branched.history.redoEntries).toEqual([]);
   });
 });

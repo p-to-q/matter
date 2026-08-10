@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   createBrowserVoicePort,
-  isBrowserVoiceTransportAvailable,
   VoiceError,
   type VoiceOperation,
   type VoicePort,
 } from "../interaction/browser-voice";
+import { useVoiceReadiness } from "../interaction/use-voice-readiness";
 import {
   requestTranscriptRepair,
   transcriptRepairEnabled,
@@ -37,11 +37,8 @@ export function useInquiryDictation(
   callbacks: InquiryDictationCallbacks,
   locale: string,
 ): InquiryDictation {
-  const supported = useSyncExternalStore(
-    subscribeToNothing,
-    inquirySpeechIsAvailable,
-    readUnknownOnServer,
-  );
+  const readiness = useVoiceReadiness();
+  const supported = readiness.status === "checking" ? null : readiness.status === "ready";
   const portRef = useRef<VoicePort | null>(null);
   const transcriptionRef = useRef<AbortController | null>(null);
   const repairRef = useRef<AbortController | null>(null);
@@ -155,7 +152,7 @@ export function useInquiryDictation(
 
   const start = useCallback(() => {
     if (activeRef.current) return;
-    if (!isBrowserVoiceTransportAvailable()) {
+    if (supported !== true) {
       callbacksRef.current.onFailed("voice-unsupported");
       return;
     }
@@ -179,7 +176,7 @@ export function useInquiryDictation(
       },
       onError: (error) => finish(noticeForVoiceError(error)),
     }).catch((error: unknown) => finish(noticeForVoiceError(error)));
-  }, [finish, locale, operation, stopOperation]);
+  }, [finish, locale, operation, stopOperation, supported]);
 
   const stop = useCallback(() => {
     if (!activeRef.current) return;
@@ -187,18 +184,6 @@ export function useInquiryDictation(
   }, [operation, stopOperation]);
 
   return { supported, start, stop, cancel };
-}
-
-function subscribeToNothing(): () => void {
-  return () => undefined;
-}
-
-function readUnknownOnServer(): null {
-  return null;
-}
-
-function inquirySpeechIsAvailable(): boolean {
-  return isBrowserVoiceTransportAvailable();
 }
 
 function noticeForVoiceError(error: unknown): InquiryVoiceNotice {

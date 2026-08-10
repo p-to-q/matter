@@ -36,6 +36,38 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.22
+
+Preview.22 is a source-preview convergence receipt. It does not widen Matter
+into a workspace or promote live material transformation. It joins four
+already-narrow paths: exact local undo/redo through reload; a bounded Ask Matter
+record behind the existing inquiry; the fixture-gated transform vertical slice;
+and first-turn voice readiness. The voice warm-up prepares only capability and
+worker code. It never pre-asks for microphone permission, captures audio, or
+downloads a speech model; a browser recognition start that never settles now
+fails recoverably instead of remaining indefinitely pending.
+
+```text
+release proof          npm run check: 996 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 47 Chromium cases passed, including
+                       browser speech, local transcription, undo, lasso,
+                       archive, mobile chrome, reparenting, and 2,000-node
+                       diagnostics
+product boundary       Ask Matter record introduces no new panel, navigation,
+                       or log manager; retained exchanges return only within
+                       the existing inquiry surface
+still gated            live transform provider, distributed rate/spend control,
+                       deployed-origin transform receipt, and the strict
+                       large-tree optimization target
+```
+
+The first remaining product proof is intentionally singular: execute the full
+fixture transform loop in a browser, then undo, redo, and reload it. Until that
+receipt exists, this is a source preview of the completed boundaries—not a
+claim that live generative transformation is publicly ready.
+
 ## Candidate verification — 0.2.0-preview.8
 
 The proprietary candidate was rebuilt and verified locally on 2026-08-07:
@@ -51,15 +83,15 @@ npm run test:receipt   measured, but the strict 2,000-node raw long-task gate re
 
 The current production diagnostic keeps 4,359 elements and a `93 ms` cold
 task. Its measured fold p95 is `111.9–115.8 ms`, focus p95 is `113.5–116.5 ms`,
-selection p95 is `34.2–39.7 ms`, and the maximum raw long task is `111 ms`, so
-the unchanged `<100 ms` raw gate correctly fails. Most full-tree measurement
-tasks now land below `100 ms`, but occasional complete-DOM remount spikes remain.
-The root-seeded preview does not claim that large-tree release bound; the
-viewport-DOM renderer decision remains open in the active plan.
+selection p95 is `34.2–39.7 ms`, and the maximum raw long task is `111 ms`.
+Most full-tree measurement tasks now land below `100 ms`, but occasional
+complete-DOM remount spikes remain. The `<100 ms` target remains deliberately
+visible and is never weakened to manufacture a pass; it is an optimization
+target rather than a release veto. The viewport-DOM renderer decision remains
+open in the active plan.
 
 These receipts prove the proprietary, root-seeded preview boundary. They do not
-promote the missing transform, accounts/sync, or strict large-tree gate listed
-below. The repository and release
+promote the missing transform or accounts/sync. The repository and release
 artifacts are currently publicly visible for operational reasons, but remain
 proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
 
@@ -510,12 +542,13 @@ already the product's signature.
 
 ## Hard gates before a public pre-release
 
-- `POST /api/turn` does not exist yet, so the four-signal generative transform
-  is still specified rather than running.
+- `POST /api/turn` is now a strict fixture-gated vertical slice. It still needs
+  an end-to-end fixture/reload receipt, a separately enabled live provider, and
+  deployed-origin rate/spend controls before it can support a public claim.
 - `POST /api/inquiry` validates a bounded selection-or-tree question; a live
   adapter is enabled only by server environment and otherwise returns an honest
-  unavailable result. No memory adapter is connected; each answer is bounded to
-  the submitted selection or virtual material tree.
+  unavailable result. No server memory adapter is connected; each answer is
+  bounded to the submitted selection or virtual material tree.
 - Inquiry has same-origin, per-instance burst, and concurrency guards. The
   owning Vercel project must retain a distributed
   Firewall rate rule and a provider spend ceiling; serverless instances do not
