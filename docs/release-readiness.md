@@ -53,7 +53,7 @@ receipt and timers on a real unmount. It remains presentation only: no old-text
 layer, per-character DOM, status, history, persistence, archive, or context.
 
 ```text
-release proof          npm run check: 1,067 Vitest passed, 2 skipped; 47 Node
+release proof          npm run check: 1,067 Vitest passed, 2 skipped; 48 Node
                        tests passed; doctor, docs, architecture, typegen,
                        typecheck, lint, and production build passed
 browser proof          npm run test:e2e: 45 Chromium cases passed, 2
