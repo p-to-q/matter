@@ -20,7 +20,7 @@ const HEALTH = {
     thoughtLabel: "available",
     transcriptRepair: "available",
     inquiry: "available",
-    transformTurn: "not-implemented",
+    transformTurn: "unavailable",
     archiveExportImport: "available",
   },
 };

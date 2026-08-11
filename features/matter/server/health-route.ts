@@ -6,8 +6,7 @@ import { readModelPool } from "./model-pool";
 export type MatterHealthSurface =
   | "available"
   | "fixture"
-  | "unavailable"
-  | "not-implemented";
+  | "unavailable";
 
 export type MatterHealth = Readonly<{
   protocolVersion: typeof PROTOCOL_VERSION;

@@ -12,7 +12,7 @@ const HEALTH_SURFACES = [
   "transformTurn",
   "archiveExportImport",
 ];
-const SURFACE_STATES = new Set(["available", "fixture", "unavailable", "not-implemented"]);
+const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
 
 export function normalizeDeploymentOrigin(value) {
   const url = new URL(value);
@@ -50,7 +50,7 @@ export function inspectDeploymentHealth(value, expectedVersion) {
   if (value.surfaces.voiceAdmission !== "available") {
     failures.push("Public voice admission is not available.");
   }
-  if (value.surfaces.transformTurn !== "not-implemented") {
+  if (value.surfaces.transformTurn !== "unavailable") {
     failures.push("Transform health claim changed; update the release boundary before deploying.");
   }
   return failures;
