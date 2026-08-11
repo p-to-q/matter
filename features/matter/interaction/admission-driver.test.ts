@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AdmissionAnchor } from "../runtime/admission-interaction";
-import type { MatterStoreReceipt } from "../store/matter-store";
+import type {
+  AdmissionRepairStoreReceipt,
+  AdmissionStoreReceipt,
+} from "../store/matter-store";
 import type {
   VoiceCallbacks,
   VoiceOperation,
@@ -55,15 +58,19 @@ class ControlledVoice implements VoicePort {
 
 function harness(options: {
   commit?: AdmissionDriverDependencies["commit"];
+  settleRepair?: AdmissionDriverDependencies["settleRepair"];
   transcribe?: AdmissionDriverDependencies["transcribe"];
-  repair?: AdmissionDriverDependencies["repair"];
+  repair?: AdmissionDriverDependencies["repair"]["repair"];
+  afterBaselinePaint?: AdmissionDriverDependencies["afterBaselinePaint"];
+  onRepairCommitted?: AdmissionDriverDependencies["onRepairCommitted"];
 } = {}) {
   const voice = new ControlledVoice();
-  const commit = options.commit ?? vi.fn((): MatterStoreReceipt => ({
+  const commit = options.commit ?? vi.fn((): AdmissionStoreReceipt => ({
     operation: "commit",
     status: "committed",
     revision: 5,
     affectedNodeIds: ["thought_1"],
+    repairLeaseId: "repair_lease_voice_1",
   }));
   const transcribe = options.transcribe ?? vi.fn(async (input) => ({
     protocolVersion: "0.2" as const,
@@ -71,11 +78,29 @@ function harness(options: {
     attempt: input.attempt,
     transcript: "保留这句话。",
   }));
+  const settleRepair = options.settleRepair ?? vi.fn((): AdmissionRepairStoreReceipt => ({
+    operation: "commit",
+    status: "committed",
+    revision: 6,
+    affectedNodeIds: ["thought_1"],
+  }));
+  const repair = options.repair ?? vi.fn(async (input) => ({
+    text: input.text,
+    source: "rules" as const,
+  }));
+  const disposeRepair = vi.fn();
+  const onRepairCommitted = options.onRepairCommitted ?? vi.fn();
   const driver = new AdmissionDriver({
     commit,
+    settleRepair,
+    onRepairCommitted,
     createVoice: () => voice,
     transcribe,
-    ...(options.repair === undefined ? {} : { repair: options.repair }),
+    repair: { repair, dispose: disposeRepair },
+    afterBaselinePaint: options.afterBaselinePaint ?? ((callback) => {
+      queueMicrotask(callback);
+      return () => undefined;
+    }),
     createInteractionId: () => "voice_1",
     createMaterialId: () => "thought_1",
     canonicalNow: () => "2026-08-03T10:00:00.000Z",
@@ -83,11 +108,11 @@ function harness(options: {
     locale: "zh-CN",
   });
   driver.updateScope(SCOPE);
-  return { commit, driver, transcribe, voice };
+  return { commit, disposeRepair, driver, onRepairCommitted, repair, settleRepair, transcribe, voice };
 }
 
 /** Runs the microtasks between a finished recording and a settled commit. */
-async function settle(times = 6): Promise<void> {
+async function settle(times = 10): Promise<void> {
   for (let index = 0; index < times; index += 1) await Promise.resolve();
 }
 
@@ -126,14 +151,10 @@ describe("AdmissionDriver", () => {
     expect(h.voice.cancel).toHaveBeenCalledTimes(1);
   });
 
-  it("admits the repaired transcript when repair answers in time", async () => {
-    const repair = vi.fn(async (input) => ({
-      protocolVersion: "0.2" as const,
-      promptVersion: "transcript-repair/1" as const,
-      operationId: input.operationId,
-      attempt: input.attempt,
+  it("admits immediately, then applies an in-window repair as a second command", async () => {
+    const repair: AdmissionDriverDependencies["repair"]["repair"] = vi.fn(async () => ({
       text: "保留这句话，先别删。",
-      source: "model" as const,
+      source: "local-model" as const,
     }));
     const h = harness({ repair });
     await reachRecording(h.driver, h.voice);
@@ -142,16 +163,74 @@ describe("AdmissionDriver", () => {
     await settle();
 
     expect(repair).toHaveBeenCalledWith(expect.objectContaining({
-      operationId: "voice_1",
-      attempt: 1,
       locale: "zh-CN",
       text: "保留这句话。",
     }));
     expect(h.commit).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ transcript: "保留这句话，先别删。" }),
+      expect.objectContaining({ transcript: "保留这句话。" }),
+    );
+    expect(h.settleRepair).toHaveBeenCalledWith(
+      {
+        repairLeaseId: "repair_lease_voice_1",
+        outcome: "candidate",
+        text: "保留这句话，先别删。",
+        source: "local-model",
+        createdAt: "2026-08-03T10:00:00.000Z",
+      },
     );
     expect(h.driver.getState()).toEqual({ phase: "idle" });
+  });
+
+  it("computes repair beside the paint gate but cannot commit before baseline paint", async () => {
+    let releasePaint!: () => void;
+    const h = harness({
+      repair: vi.fn(async () => ({ text: "修好了。", source: "rules" as const })),
+      afterBaselinePaint: (callback) => {
+        releasePaint = callback;
+        return () => undefined;
+      },
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.repair).toHaveBeenCalledTimes(1);
+    expect(h.settleRepair).not.toHaveBeenCalled();
+
+    releasePaint();
+    await settle();
+    expect(h.settleRepair).toHaveBeenCalledWith(expect.objectContaining({ outcome: "candidate" }));
+  });
+
+  it("publishes presentation only from a successfully committed repair receipt", async () => {
+    const repairChange = {
+      id: "repair_command_1",
+      treeId: "tree_1",
+      documentEpoch: 0,
+      nodeId: "thought_1",
+      committedRevision: 6,
+      before: { text: "保留这句话。", updatedAt: "2026-08-03T10:00:00.000Z" },
+      after: { text: "修好了。", updatedAt: "2026-08-03T10:00:00.100Z" },
+    } as const;
+    const h = harness({
+      repair: vi.fn(async () => ({ text: "修好了。", source: "rules" as const })),
+      settleRepair: vi.fn((): AdmissionRepairStoreReceipt => ({
+        operation: "commit",
+        status: "committed",
+        revision: 6,
+        affectedNodeIds: ["thought_1"],
+        repairChange,
+      })),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.onRepairCommitted).toHaveBeenCalledWith(repairChange);
   });
 
   it("admits what was heard when repair fails", async () => {
@@ -168,23 +247,23 @@ describe("AdmissionDriver", () => {
       expect.anything(),
       expect.objectContaining({ transcript: "保留这句话。" }),
     );
+    expect(h.settleRepair).toHaveBeenCalledWith({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "discarded",
+    });
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
-  it("aborts repair on cancellation and ignores its late answer", async () => {
+  it("aborts late repair on document replacement and ignores its answer", async () => {
     let releaseRepair!: () => void;
     const h = harness({
-      repair: vi.fn(async (input) => {
+      repair: vi.fn(async () => {
         await new Promise<void>((resolve) => {
           releaseRepair = resolve;
         });
         return {
-          protocolVersion: "0.2" as const,
-          promptVersion: "transcript-repair/1" as const,
-          operationId: input.operationId,
-          attempt: input.attempt,
           text: "太晚了。",
-          source: "model" as const,
+          source: "local-model" as const,
         };
       }),
     });
@@ -192,15 +271,45 @@ describe("AdmissionDriver", () => {
     h.driver.stop();
     h.voice.finish({ interactionId: "voice_1", attempt: 1 });
     await settle(4);
-    expect(h.driver.getState().phase).toBe("repairing");
+    expect(h.driver.getState().phase).toBe("idle");
 
-    h.driver.cancel();
+    h.driver.updateScope({ treeId: "tree_2", revision: 0, documentEpoch: 1 });
     expect(h.driver.getState()).toEqual({ phase: "idle" });
 
     releaseRepair();
     await settle();
-    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.settleRepair).toHaveBeenCalledWith({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "discarded",
+    });
     expect(h.driver.getState()).toEqual({ phase: "idle" });
+  });
+
+  it("lets a precise material gesture discard an optional pending repair", async () => {
+    let releaseRepair!: () => void;
+    const h = harness({
+      repair: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        return { text: "太晚了。", source: "local-model" as const };
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle(4);
+
+    h.driver.discardPendingRepairs();
+    releaseRepair();
+    await settle();
+
+    expect(h.settleRepair).toHaveBeenCalledWith({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "discarded",
+    });
+    expect(h.settleRepair).toHaveBeenCalledTimes(1);
   });
 
   it("invalidates capture immediately when the document scope changes", async () => {
@@ -278,8 +387,28 @@ describe("AdmissionDriver", () => {
     h.driver.start(ANCHOR);
 
     expect(h.voice.cancel).toHaveBeenCalledTimes(1);
+    expect(h.disposeRepair).toHaveBeenCalledTimes(1);
     expect(h.driver.getState()).toEqual({ phase: "idle" });
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("contains a synchronous local-repair throw and consumes the lease", async () => {
+    const h = harness({
+      repair: vi.fn(() => {
+        throw new Error("synchronous adapter failure");
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.settleRepair).toHaveBeenCalledWith({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "discarded",
+    });
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
   it("survives a Strict Mode lease replay but disposes after the final release", async () => {

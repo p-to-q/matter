@@ -4,7 +4,7 @@ import {
   normalizeRepairInput,
   type NormalizedRepairInput,
 } from "../material/transcript-repair";
-import { normalizeAdmittedTranscript } from "../runtime/transcript-punctuation";
+import { repairAdmittedTranscript } from "../runtime/transcript-punctuation";
 import { PROTOCOL_VERSION } from "../tree/model";
 import {
   ScenarioGovernor,
@@ -76,16 +76,15 @@ export async function repairTranscript(
 
 /**
  * Proves the whole model path without a provider. The fixture returns the
- * deterministic normalization the browser would have applied anyway, so the
- * wire, the adjudication, and the admission path are all exercised while the
- * admitted material stays exactly what a fixture run is expected to produce.
+ * deterministic late-repair floor, so the wire and adjudication are exercised
+ * against the same conservative rule result as the browser-local port.
  * `MATTER_FIXTURE_REPAIR` pins one answer for a deterministic browser test.
  */
 export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
   const configured = process.env.MATTER_FIXTURE_REPAIR;
   if (configured !== undefined) return { text: configured };
   const input = call.input as NormalizedRepairInput;
-  return { text: normalizeAdmittedTranscript(input.text) };
+  return { text: repairAdmittedTranscript(input.text, input.locale) };
 };
 
 /**

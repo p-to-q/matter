@@ -48,7 +48,11 @@ buy an editing model we have deliberately removed.
 ## Chosen
 
 **Rendering.** A node is plain text in a block element. No per-character or
-per-token spans.
+per-token spans. A committed late transcript repair keeps that exact canonical
+text and may add one transient per-node data attribute for a 240ms opacity
+settle. The final string is complete in the first rendered frame; no old/new
+overlay, character stagger, `aria-live` announcement, or layout-changing motion
+exists. Reduced-motion and forced-colors presentations skip the animation.
 
 **Segmentation.** `Intl.Segmenter("en", { granularity: "grapheme" })` first
 produces the only legal UTF-16 boundaries. A forward scan over those graphemes
@@ -127,6 +131,13 @@ the epoch, and remeasures before handles or stretch can operate. Scroll retains
 the address; handles and fallback rects remeasure on animation frame. Custom
 Highlight follows layout itself. An old async turn cleans up only resources
 tagged with its own interaction id.
+
+A repair presentation validates the same tree id and document epoch plus the
+committed node text and timestamp at read time. An unrelated later revision may
+leave its brief settle intact; a same-node edit, removal, Undo, Redo, hydrate,
+import, or document switch clears or invalidates it. The hint is bounded per
+node and never becomes measured geometry, a text address, material, history,
+persistence, archive, or model context.
 
 Before DOM measurement, envelope construction, server planning, and synchronous
 plan-to-command translation, the shared selection validation runs. The tree

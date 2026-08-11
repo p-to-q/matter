@@ -251,13 +251,39 @@ carrying the fingerprint of the material it came from, so a node is named once
 rather than once per reload. A deterministic label is never stored: recomputing
 it is cheaper than reading it back.
 
-## Repair envelope
+## Repair boundaries
 
-Transcript repair sits between a final transcript and its admission. It is the
-smallest boundary in the protocol: it carries one utterance and gets one back,
-and it names no tree, node, revision, lineage, or target, because it changes
-nothing. What it returns becomes the text of one ordinary human admission
-command, so repair adds no mutation, no plan, and no history entry of its own.
+Material admission does not use a network envelope. The final transcript first
+commits through the ordinary human admission translator. That successful call
+returns an opaque, non-persisted repair capability directly to the admission
+driver; it is deliberately omitted from observable store receipts. After the
+baseline commits, the local port may compute beside the first-paint gate, but
+no candidate may settle before the baseline crosses that boundary. Settling or
+abandoning the attempt always consumes the capability.
+
+The interaction owner captures a document epoch beside its material anchor.
+The store validates that epoch in the same atomic update that calls the pure
+translator, so a hydration or conflict replacement with the same tree id and
+revision still rejects a late transcript. Repair capability ids are generated
+by the store instance rather than derived solely from caller command ids; two
+otherwise valid admissions can never overwrite each other's authority.
+
+The store owns the deadline and authority check. A rules candidate must equal
+the current pure rule result exactly; a future local-model candidate must pass
+the semantic adjudicator. Either path must still match the document epoch,
+tree, node text, and node timestamp captured at admission. Only then does the
+runtime construct one `replace-text` command with `source: "repair"`. It is a
+separate undo entry. The capability, worker, cache, input, and candidate are
+never serialized.
+
+A committed repair may return a transient `repairChange` receipt containing the
+actual before/after node mementos and committed revision to its synchronous
+owner. Observable store state keeps the base runtime receipt, so this view hint
+cannot become a wire value, persisted log, replay signal, or restored animation.
+
+The existing managed envelope remains for Ask Matter dictation drafts and an
+explicit future managed adapter. It carries one utterance and gets one back,
+and names no tree, node, revision, lineage, or target:
 
 ```ts
 export type RepairRequest = {
@@ -286,7 +312,7 @@ export type RepairSuccess = {
 };
 ```
 
-`operationId` and `attempt` echo the admission interaction, so a late answer for
+`operationId` and `attempt` echo the dictation interaction, so a late answer for
 a superseded attempt is discarded by identity rather than by timing.
 `source: "verbatim"` with a `fallbackReason` is a success, not an error: it means
 the words as heard are the answer. The only error codes are `INVALID_REQUEST`
@@ -366,6 +392,14 @@ that operation and complete projected context are still current. Closing the
 surface, changing documents, committing material, or changing the selection
 aborts the request and makes a late completion inert.
 
+An error response is also parsed as an exact Matter envelope. Its server message
+is validated and discarded; only the closed `fallbackReason` receipt may select
+localized client copy. `MODEL_BUSY`, `MODEL_TIMEOUT`, and temporary model
+unavailability remain distinct. A legacy, malformed, oversized, unknown, or
+proxy-authored 429/503 fails closed as unreachable instead of claiming that
+Matter received the question. No provider message, status, model, or relay
+identity crosses this boundary.
+
 The browser projects lasso passages in authored order, including multiple
 passages from one node. With no lasso selection it projects the virtual tree in
 authored preorder. Both scopes are bounded; the server parses the request whole,
@@ -376,7 +410,7 @@ The browser may retain a completed exchange in its separate bounded Ask Matter
 record, without copied material context and never as later model input; see
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
-Bounds: question 500 code points, request 24 KiB, lineage 64 nodes, each projected
+Bounds: question 500 code points, request 24 KiB, response 8 KiB, lineage 64 nodes, each projected
 node 480 code points, total projected context 4,000 code points, and browser
 deadline 20 seconds. Answer text is bounded to 1,201 code points. The response is either one text answer or an explicit
 unavailable reason; no fallback prose is invented. The current build has no
@@ -433,7 +467,7 @@ export type TreeMutation =
 
 export type TreeCommand = {
   id: string;
-  source: "human" | "agent" | "fixture";
+  source: "human" | "repair" | "agent" | "fixture";
   interactionId?: string;
   expectedTreeId: string;
   expectedRevision: number;
@@ -486,8 +520,8 @@ commands without treating provenance as authorization.
 `expectedRevision` is checked inside the engine for normal commits and undo,
 not only while translating a plan. Undo restores material, structure, sibling
 order, and node timestamps exactly. It is itself a new commit, so tree revision
-always increments and is never rolled back. Committed human and agent commands
-may enter pointer undo history; their source remains distinguishable. The browser
+always increments and is never rolled back. Committed human, repair, and agent
+commands may enter pointer undo history; their source remains distinguishable. The browser
 retains the complete local inverse journal alongside its material snapshot,
 within the physical IndexedDB quota, and saves both in one compare-and-swap
 record. It is deliberately excluded from archives.

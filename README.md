@@ -11,12 +11,17 @@ reversible material change—not a chat or autonomous agent.
 
 The running `0.2` pre-release surface is one rooted spatial thought tree with
 exact undo/redo, focus, folding, derived geometry, browser-native voice
-admission, punctuation lasso selection, shared stretch degree, and local
+admission with a separately undoable short local repair lease, punctuation
+lasso selection, shared stretch degree, and local
 Markdown durability through IndexedDB. A completed Ask Matter exchange may
 remain in a separate small local record; it never enters material history,
 archives, or later model context. The selected-language projection is visual
 only: the original text DOM remains the source for ranges, copying, and
 accessibility.
+The heard transcript becomes material first. A correction may compute in
+parallel but cannot commit before that first paint; if it commits, the complete
+canonical text performs one short settle rather than exposing repair status or
+retyping the paragraph.
 
 The fixture-gated generative turn is wired end-to-end. Still gated: a live
 transform provider and its deployed controls, explicit directory export/import,

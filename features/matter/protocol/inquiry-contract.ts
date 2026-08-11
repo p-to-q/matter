@@ -3,6 +3,7 @@ import { isMatterLocale } from "../config/locales";
 
 /** A bounded, non-mutating question about visible material. */
 export const MAX_INQUIRY_REQUEST_BYTES = 24 * 1_024;
+export const MAX_INQUIRY_RESPONSE_BYTES = 8 * 1_024;
 export const MAX_INQUIRY_QUESTION_CODE_POINTS = 500;
 export const MAX_INQUIRY_ANSWER_CODE_POINTS = 1_201;
 export const MAX_INQUIRY_LINEAGE_NODES = 64;
@@ -96,6 +97,17 @@ export type InquiryErrorEnvelope = Readonly<{
   }>;
 }>;
 
+/**
+ * The browser may branch only on this closed receipt. The server's prose is
+ * validated as part of the wire envelope, then deliberately discarded so a
+ * provider, proxy, or future route message can never become interface copy.
+ */
+export type InquiryErrorReceipt = Readonly<{
+  code: InquiryErrorCode;
+  retryable: boolean;
+  fallbackReason?: InquiryFallbackReason;
+}>;
+
 export type InquiryParseResult =
   | Readonly<{ ok: true; request: InquiryRequest }>
   | Readonly<{ ok: false; message: string }>;
@@ -178,6 +190,36 @@ export function parseInquiryAnswer(
     status: "unavailable",
     reason: payload.reason,
     receipt,
+  });
+}
+
+export function parseInquiryError(payload: unknown): InquiryErrorReceipt | null {
+  if (!isRecord(payload) || !hasExactKeys(payload, ["error"])) return null;
+  const error = payload.error;
+  if (!isRecord(error)) return null;
+  const hasFallback = Object.hasOwn(error, "fallbackReason");
+  if (!hasExactKeys(
+    error,
+    hasFallback
+      ? ["code", "message", "retryable", "fallbackReason"]
+      : ["code", "message", "retryable"],
+  )) return null;
+  if (error.code !== "INVALID_REQUEST" && error.code !== "INQUIRY_FAILED") return null;
+  if (
+    typeof error.message !== "string" ||
+    error.message.length === 0 ||
+    Array.from(error.message).length > 500 ||
+    typeof error.retryable !== "boolean"
+  ) return null;
+  const fallbackReason = hasFallback ? parseFallbackReason(error.fallbackReason) : undefined;
+  if (hasFallback && fallbackReason === undefined) return null;
+  if (fallbackReason !== undefined && (error.code !== "INQUIRY_FAILED" || !error.retryable)) {
+    return null;
+  }
+  return Object.freeze({
+    code: error.code,
+    retryable: error.retryable,
+    ...(fallbackReason === undefined ? {} : { fallbackReason }),
   });
 }
 
@@ -317,6 +359,18 @@ function sameReceipt(left: InquiryReceipt, right: InquiryReceipt): boolean {
     left.contextCodePoints === right.contextCodePoints &&
     left.clipped === right.clipped &&
     left.thoughtCount === right.thoughtCount;
+}
+
+function parseFallbackReason(value: unknown): InquiryFallbackReason | undefined {
+  switch (value) {
+    case "MODEL_TIMEOUT":
+    case "MODEL_UNAVAILABLE":
+    case "MODEL_BUSY":
+    case "MODEL_REJECTED":
+      return value;
+    default:
+      return undefined;
+  }
 }
 
 function boundedId(value: unknown): string | null {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   MAX_INQUIRY_ANSWER_CODE_POINTS,
+  MAX_INQUIRY_RESPONSE_BYTES,
   sameInquiryContext,
 } from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
@@ -41,19 +42,54 @@ describe("inquiry client", () => {
   it("separates a refused question from an unsent one", async () => {
     // A rate-limited or shed question was received. Reporting it as never sent
     // is untrue and invites an immediate retry into the same limiter.
-    const limited = vi.fn(() => Promise.resolve(new Response("", { status: 429 }))) as unknown as typeof fetch;
+    const limited = refuse(429);
     expect(await askInquiry({ ...INPUT, fetchImpl: limited }))
       .toEqual({ status: "unavailable", reason: "RATE_LIMITED" });
 
-    const busy = vi.fn(() => Promise.resolve(new Response("", { status: 503 }))) as unknown as typeof fetch;
+    const busy = refuse(503);
     expect(await askInquiry({ ...INPUT, fetchImpl: busy }))
       .toEqual({ status: "unavailable", reason: "BUSY" });
 
-    // Anything else may not have arrived, so unreachable stays the honest answer.
-    for (const status of [400, 403, 404, 500, 504]) {
-      const other = vi.fn(() => Promise.resolve(new Response("", { status }))) as unknown as typeof fetch;
+    expect(await askInquiry({ ...INPUT, fetchImpl: refuse(503, "MODEL_BUSY") }))
+      .toEqual({ status: "unavailable", reason: "BUSY" });
+    expect(await askInquiry({ ...INPUT, fetchImpl: refuse(503, "MODEL_TIMEOUT") }))
+      .toEqual({ status: "unavailable", reason: "TIMED_OUT" });
+    for (const reason of ["MODEL_UNAVAILABLE", "MODEL_REJECTED"] as const) {
+      expect(await askInquiry({ ...INPUT, fetchImpl: refuse(503, reason, "qwen-secret-detail") }))
+        .toEqual({ status: "unavailable", reason: "TEMPORARILY_UNAVAILABLE" });
+    }
+    expect(await askInquiry({ ...INPUT, fetchImpl: refuse(504) }))
+      .toEqual({ status: "unavailable", reason: "TIMED_OUT" });
+
+    // A status without Matter's exact envelope may have come from a proxy and
+    // cannot prove the application received the question.
+    for (const status of [400, 403, 404, 429, 500, 503, 504]) {
+      const other = vi.fn(() => Promise.resolve(new Response("legacy", { status }))) as unknown as typeof fetch;
       expect(await askInquiry({ ...INPUT, fetchImpl: other }))
         .toEqual({ status: "unavailable", reason: "UNREACHABLE" });
+    }
+  });
+
+  it("rejects oversized and non-strict error responses without trusting their status", async () => {
+    const oversized = vi.fn(() => Promise.resolve(new Response(
+      "x".repeat(MAX_INQUIRY_RESPONSE_BYTES + 1),
+      { status: 503 },
+    ))) as unknown as typeof fetch;
+    await expect(askInquiry({ ...INPUT, fetchImpl: oversized })).resolves.toEqual({
+      status: "unavailable",
+      reason: "UNREACHABLE",
+    });
+
+    for (const error of [
+      { code: "INQUIRY_FAILED", message: "Busy", retryable: true, fallbackReason: "UNKNOWN" },
+      { code: "INQUIRY_FAILED", message: "Busy", retryable: true, fallbackReason: "MODEL_BUSY", extra: true },
+      { code: "INQUIRY_FAILED", message: "Busy", retryable: false, fallbackReason: "MODEL_BUSY" },
+    ]) {
+      const malformed = vi.fn(() => Promise.resolve(Response.json({ error }, { status: 503 }))) as unknown as typeof fetch;
+      await expect(askInquiry({ ...INPUT, fetchImpl: malformed })).resolves.toEqual({
+        status: "unavailable",
+        reason: "UNREACHABLE",
+      });
     }
   });
 
@@ -120,4 +156,19 @@ function respondWith(payload: unknown) {
   return vi.fn(() => Promise.resolve(Response.json(payload))) as unknown as typeof fetch & {
     mock: { calls: Array<[unknown, RequestInit | undefined]> };
   };
+}
+
+function refuse(
+  status: number,
+  fallbackReason?: "MODEL_UNAVAILABLE" | "MODEL_TIMEOUT" | "MODEL_REJECTED" | "MODEL_BUSY",
+  message = "Matter could not answer just now.",
+) {
+  return vi.fn(() => Promise.resolve(Response.json({
+    error: {
+      code: "INQUIRY_FAILED",
+      message,
+      retryable: true,
+      ...(fallbackReason === undefined ? {} : { fallbackReason }),
+    },
+  }, { status }))) as unknown as typeof fetch;
 }

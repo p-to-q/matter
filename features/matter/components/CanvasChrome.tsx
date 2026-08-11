@@ -87,6 +87,8 @@ type CanvasChromeCopy = Readonly<{
   noticeNoMaterial: string;
   noticeRateLimited: string;
   noticeBusy: string;
+  noticeTimedOut: string;
+  noticeTemporarilyUnavailable: string;
   noticeUnreachable: string;
   noticeVoiceDenied: string;
   noticeVoiceFailed: string;
@@ -279,6 +281,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     noticeNoMaterial: "There is no material to answer about yet.",
     noticeRateLimited: "Matter has this question. Give it a moment before asking again.",
     noticeBusy: "Matter has this question but is busy right now. Try again shortly.",
+    noticeTimedOut: "Matter received this question, but the answer did not arrive in time. Try again.",
+    noticeTemporarilyUnavailable: "Matter received this question but could not answer it this time.",
     noticeUnreachable: "Matter could not be reached. The question was not sent further.",
     noticeVoiceDenied: "Microphone access was declined, so nothing was heard.",
     noticeVoiceFailed: "Dictation stopped early. Anything already heard was kept.",
@@ -315,6 +319,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     noticeNoMaterial: "还没有材料可以回答。",
     noticeRateLimited: "Matter 收到了这句话，先等一下再问。",
     noticeBusy: "Matter 收到了这句话，但现在有点忙，稍后再试。",
+    noticeTimedOut: "Matter 收到了这句话，但回答没有及时回来。可以再试一次。",
+    noticeTemporarilyUnavailable: "Matter 收到了这句话，但这一次没能回答。",
     noticeUnreachable: "没能连上 Matter，这句话没有继续发送。",
     noticeVoiceDenied: "麦克风权限被拒绝，没有听到任何内容。",
     noticeVoiceFailed: "口述提前结束，已经听到的部分保留了下来。",
@@ -351,6 +357,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     noticeNoMaterial: "還沒有材料可以回答。",
     noticeRateLimited: "Matter 收到了這句話，先等一下再問。",
     noticeBusy: "Matter 收到了這句話，但現在有點忙，稍後再試。",
+    noticeTimedOut: "Matter 收到了這句話，但回答沒有及時回來。可以再試一次。",
+    noticeTemporarilyUnavailable: "Matter 收到了這句話，但這一次未能回答。",
     noticeUnreachable: "沒能連上 Matter，這句話沒有繼續傳送。",
     noticeVoiceDenied: "麥克風權限被拒絕，沒有聽到任何內容。",
     noticeVoiceFailed: "口述提前結束，已聽到的部分保留了下來。",
@@ -387,6 +395,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     noticeNoMaterial: "まだ答える材料がありません。",
     noticeRateLimited: "Matter はこの問いを受け取りました。少し待ってからもう一度どうぞ。",
     noticeBusy: "Matter はこの問いを受け取りましたが、今は混み合っています。少し後でどうぞ。",
+    noticeTimedOut: "Matter はこの問いを受け取りましたが、回答が間に合いませんでした。もう一度お試しください。",
+    noticeTemporarilyUnavailable: "Matter はこの問いを受け取りましたが、今回は回答できませんでした。",
     noticeUnreachable: "Matter に接続できず、この問いは送信されませんでした。",
     noticeVoiceDenied: "マイクへのアクセスが拒否されたため、何も聞き取れませんでした。",
     noticeVoiceFailed: "音声入力が途中で終了しました。聞き取った内容は保持されています。",
@@ -423,6 +433,8 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     noticeNoMaterial: "Es gibt noch kein Material für eine Antwort.",
     noticeRateLimited: "Matter hat die Frage. Warte einen Moment, bevor du erneut fragst.",
     noticeBusy: "Matter hat die Frage, ist aber gerade ausgelastet. Versuche es gleich noch einmal.",
+    noticeTimedOut: "Matter hat die Frage erhalten, aber die Antwort kam nicht rechtzeitig. Versuche es erneut.",
+    noticeTemporarilyUnavailable: "Matter hat die Frage erhalten, konnte sie diesmal aber nicht beantworten.",
     noticeUnreachable: "Matter war nicht erreichbar; die Frage wurde nicht weitergesendet.",
     noticeVoiceDenied: "Der Mikrofonzugriff wurde abgelehnt; es wurde nichts gehört.",
     noticeVoiceFailed: "Das Diktat endete vorzeitig. Bereits Gehörtes wurde behalten.",
@@ -1221,6 +1233,8 @@ function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string
     case "NO_MATERIAL": return copy.noticeNoMaterial;
     case "RATE_LIMITED": return copy.noticeRateLimited;
     case "BUSY": return copy.noticeBusy;
+    case "TIMED_OUT": return copy.noticeTimedOut;
+    case "TEMPORARILY_UNAVAILABLE": return copy.noticeTemporarilyUnavailable;
     case "UNREACHABLE": return copy.noticeUnreachable;
   }
 }

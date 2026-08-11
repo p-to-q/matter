@@ -58,6 +58,282 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes[rootId]?.children).toEqual([]);
   });
 
+  it("publishes late transcript repair as its own undoable command", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_store_1",
+      commandId: "human_admission_store_1",
+      nodeId: "voice_node_store_1",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    expect(admission).toMatchObject({ operation: "commit", status: "committed" });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+    expect("repairLeaseId" in (store.getState().lastReceipt ?? {})).toBe(false);
+    expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("呃，我觉得可以。");
+
+    nowMs = 200;
+    const repair = store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:00.100Z",
+    });
+    expect(repair).toMatchObject({
+      operation: "commit",
+      status: "committed",
+      repairChange: {
+        id: "human_admission_repair_voice_node_store_1",
+        treeId: store.getState().tree.id,
+        documentEpoch: 0,
+        nodeId: "voice_node_store_1",
+        committedRevision: 3,
+        before: {
+          text: "呃，我觉得可以。",
+          updatedAt: "2026-08-11T10:00:00.000Z",
+        },
+        after: {
+          text: "我觉得可以。",
+          updatedAt: "2026-08-11T10:00:00.100Z",
+        },
+      },
+    });
+    expect("repairChange" in (store.getState().lastReceipt ?? {})).toBe(false);
+    expect(JSON.stringify(store.getState().history)).not.toContain(admission.repairLeaseId);
+    expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("我觉得可以。");
+    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("呃，我觉得可以。");
+    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_store_1).toBeUndefined();
+    expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("呃，我觉得可以。");
+    expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("我觉得可以。");
+  });
+
+  it("rejects an admission from an earlier document epoch", () => {
+    const store = createMatterStore("root");
+    const initial = store.getState();
+    const rootId = initial.tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const staleAnchor = {
+      target: "child" as const,
+      treeId: initial.tree.id,
+      baseRevision: initial.tree.revision,
+      parentNodeId: rootId,
+    };
+    const sameMaterial = structuredClone(initial.tree) as ThoughtTree;
+
+    expect(store.getState().hydrateSnapshot(sameMaterial)).toMatchObject({
+      operation: "hydrate",
+      status: "hydrated",
+    });
+    expect(store.getState().tree.id).toBe(staleAnchor.treeId);
+    expect(store.getState().tree.revision).toBe(staleAnchor.baseRevision);
+    expect(store.getState().documentEpoch).toBe(1);
+
+    expect(store.getState().admitHumanTranscript(staleAnchor, {
+      interactionId: "voice_stale_epoch",
+      commandId: "human_admission_stale_epoch",
+      nodeId: "voice_node_stale_epoch",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "这段迟到的文字不应该写入",
+      expectedDocumentEpoch: 0,
+    })).toMatchObject({
+      operation: "commit",
+      status: "rejected",
+      errorCode: "INVALID_INTERACTION",
+    });
+    expect(store.getState().tree.nodes.voice_node_stale_epoch).toBeUndefined();
+  });
+
+  it("keeps repair capabilities distinct when admission command ids repeat", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    const admit = (suffix: string) => store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: `voice_duplicate_${suffix}`,
+      commandId: "human_admission_duplicate",
+      nodeId: `voice_node_duplicate_${suffix}`,
+      createdAt: `2026-08-11T10:00:00.${suffix === "first" ? "000" : "100"}Z`,
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: nowMs,
+      repairLocale: "zh-CN",
+    });
+
+    const first = admit("first");
+    nowMs = 200;
+    const second = admit("second");
+    if (!("repairLeaseId" in first) || !("repairLeaseId" in second)) {
+      throw new Error("repair lease missing");
+    }
+    expect(first.repairLeaseId).not.toBe(second.repairLeaseId);
+
+    nowMs = 300;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: first.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:00.200Z",
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_duplicate_first.text).toBe("我觉得可以。");
+    expect(store.getState().tree.nodes.voice_node_duplicate_second.text).toBe("呃，我觉得可以。");
+
+    nowMs = 400;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: second.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:00.300Z",
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_duplicate_second.text).toBe("我觉得可以。");
+  });
+
+  it("keeps a stale repair silent and leaves store diagnostics unchanged", () => {
+    const store = createMatterStore("root");
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const before = store.getState();
+    expect(before.settleHumanTranscriptRepair({
+      repairLeaseId: "missing_repair_lease",
+      outcome: "discarded",
+    })).toMatchObject({ operation: "commit", status: "rejected", errorCode: "REPAIR_STALE" });
+    expect(store.getState()).toBe(before);
+  });
+
+  it("does not restore repair authority through undo and redo", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_undo_redo",
+      commandId: "human_admission_undo_redo",
+      nodeId: "voice_node_undo_redo",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().redo()).toMatchObject({ status: "committed" });
+    nowMs = 200;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:00.100Z",
+    })).toMatchObject({ status: "rejected", errorCode: "REPAIR_STALE" });
+    expect(store.getState().tree.nodes.voice_node_undo_redo.text).toBe("呃，我觉得可以。");
+  });
+
+  it("uses the store clock to expire a repair capability", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_expiry",
+      commandId: "human_admission_expiry",
+      nodeId: "voice_node_expiry",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    nowMs = 12_101;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:12.001Z",
+    })).toMatchObject({ status: "rejected", errorCode: "REPAIR_EXPIRED" });
+    expect(store.getState().tree.nodes.voice_node_expiry.text).toBe("呃，我觉得可以。");
+  });
+
+  it("restores the admission and repair as two undo steps after hydration", () => {
+    let nowMs = 100;
+    const source = createMatterStore("root", {
+      documentRoot: true,
+      monotonicNow: () => nowMs,
+    });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("document root missing");
+    const admission = source.getState().admitHumanTranscript({
+      target: "child",
+      treeId: source.getState().tree.id,
+      baseRevision: source.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_reload",
+      commandId: "human_admission_reload",
+      nodeId: "voice_node_reload",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+    nowMs = 200;
+    expect(source.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:00.100Z",
+    })).toMatchObject({ status: "committed" });
+
+    const tree = structuredClone(source.getState().tree) as ThoughtTree;
+    const history = structuredClone(source.getState().history);
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(tree, history)).toMatchObject({ status: "hydrated" });
+    expect(restored.getState().undo()).toMatchObject({ status: "committed" });
+    expect(restored.getState().tree.nodes.voice_node_reload.text).toBe("呃，我觉得可以。");
+    expect(restored.getState().undo()).toMatchObject({ status: "committed" });
+    expect(restored.getState().tree.nodes.voice_node_reload).toBeUndefined();
+  });
+
   it("keeps a valid persisted undo chain after hydration", () => {
     const source = createMatterStore("root", { documentRoot: true });
     const rootId = source.getState().tree.rootId;

@@ -141,7 +141,7 @@ for (const viewport of [
           rect.bottom > box.y;
       }).map((node) => node.getAttribute("data-thought-id")), feedbackBox);
     expect(overlaps).toEqual([]);
-    await feedback.getByRole("button", { name: "Cancel recording", exact: true }).click();
+    await feedback.getByRole("button", { name: "取消录音", exact: true }).click();
     await expect(feedback).toHaveCount(0);
   });
 }

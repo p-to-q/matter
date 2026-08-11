@@ -19,10 +19,11 @@ surface area.
 
 **Material admission.** A person speaks at the empty root, beneath the selected
 visible passage, or — when nothing is selected — as a first-level thought in
-the full material view. Transcription enters the tree as human material, without a generative
-rewrite. This preserves the person's first expression rather than silently
-replacing it with an AI version. Once committed, admission is pointer-undoable
-like every other material change.
+the full material view. The final transcript enters the tree immediately as
+human material. A bounded local repair may then remove low-ambiguity recognition
+artifacts or lightly settle formatting for twelve seconds, but only while that
+exact passage remains untouched. Admission and repair are separate
+pointer-undoable changes, so the person's first expression stays recoverable.
 
 **Material transformation.** A person acts on material that already exists. An
 AI change is composed from four signals:
@@ -62,9 +63,10 @@ Matter is rooted, not infinite. Thought grows downward from one root; focus and
 folding are navigation, while layout derives position from structure. A person
 never authors a coordinate.
 
-AI preserves the speaker's vocabulary, rhythm, hesitation, and uncertainty. It
-does not raise the register, resolve ambiguity without being asked, explain its
-edit, address the user, or mention itself.
+AI preserves the speaker's vocabulary, rhythm, uncertainty, and meaningful
+hesitation. Admission repair may remove only a closed set of low-ambiguity
+fillers and recognition echoes; it does not raise the register, resolve
+ambiguity, explain its edit, address the user, or mention itself.
 
 ## Not Matter
 

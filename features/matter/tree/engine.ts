@@ -466,7 +466,7 @@ export function applyTreeCommand(tree: ThoughtTree, command: TreeCommand): Comma
     command.id.length === 0 ||
     typeof command.expectedTreeId !== "string" ||
     !isCanonicalTimestamp(command.createdAt) ||
-    !["human", "agent", "fixture"].includes(command.source) ||
+    !["human", "repair", "agent", "fixture"].includes(command.source) ||
     (command.interactionId !== undefined &&
       (typeof command.interactionId !== "string" || command.interactionId.length === 0))
   ) {

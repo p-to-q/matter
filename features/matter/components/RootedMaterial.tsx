@@ -74,6 +74,11 @@ import { clientMatterBasePath } from "../config/base-path";
 import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import { useTransformTurn } from "./use-transform-turn";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
+import { isRepairPresentationCurrent } from "../interaction/use-repair-presentation";
+import {
+  admissionFeedbackActions,
+  admissionFeedbackMessage,
+} from "./admission-feedback-copy";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -892,6 +897,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
         if (lasso.pointerDown(event)) {
+          props.admission.discardPendingRepairs();
           event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -972,6 +978,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           if (!nodeDrag.dragging && Math.hypot(event.clientX - nodeDrag.startX, event.clientY - nodeDrag.startY) >= (event.pointerType === "touch" ? 8 : 4)) {
             nodeDrag.dragging = true;
             if (nodeDrag.sourceId !== null && nodeDrag.policy !== null && nodeDrag.sourceElement !== null) {
+              props.admission.discardPendingRepairs();
               event.currentTarget.dataset.nodeDragging = "true";
               nodeDrag.sourceElement.dataset.dragSource = "true";
             }
@@ -1238,6 +1245,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             ref={canvasRef}
           >
             <CanvasThoughtList
+              documentEpoch={props.documentEpoch}
               interactionPending={interactionPending}
               lassoSelection={stretchSelection}
               lassoSelections={lasso.selections}
@@ -1245,12 +1253,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
               navigation={navigation}
               onSelectNode={props.onSelectNode}
               projection={projection}
+              repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
+              tree={tree}
             />
             <AdmissionFeedback
               anchor={admissionAnchor}
               parentBox={admissionParentBox}
               controller={props.admission}
+              locale={props.locale}
               onHeightChange={setAdmissionFeedbackHeight}
             />
           </div>
@@ -1278,6 +1289,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         rects={lasso.selectionSetRects.length > 0 ? lasso.selectionSetRects : lasso.selectionRects}
         selectedText={stretchSelection?.selectedText ?? null}
         elasticRef={elasticRef}
+        onPreciseGesture={props.admission.discardPendingRepairs}
         textColumn={lasso.selectionColumn}
         stretch={stretch}
       />
@@ -1292,6 +1304,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
  * retain their normal declarative ownership.
  */
 const CanvasThoughtList = memo(function CanvasThoughtList({
+  documentEpoch,
   interactionPending,
   lassoSelection,
   lassoSelections,
@@ -1299,8 +1312,11 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   navigation,
   onSelectNode,
   projection,
+  repairPresentations,
   splitProjectionRef,
+  tree,
 }: {
+  documentEpoch: number;
   interactionPending: boolean;
   lassoSelection: ReturnType<typeof useLasso>["selection"];
   lassoSelections: ReturnType<typeof useLasso>["selections"];
@@ -1308,12 +1324,15 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
   projection: readonly LayoutProjectionItem[];
+  repairPresentations: AdmissionController["repairPresentations"];
   splitProjectionRef: React.RefObject<HTMLDivElement | null>;
+  tree: ThoughtTree;
 }) {
   const lassoSelectedNodeIds = useMemo(
     () => new Set(lassoSelections.map(({ nodeId }) => nodeId)),
     [lassoSelections],
   );
+  const repairPresentationScope = { treeId: tree.id, documentEpoch };
   const handleThoughtClick = useCallback((event: ReactMouseEvent<HTMLOListElement>) => {
     if (interactionPending) return;
     const target = event.target instanceof Element
@@ -1330,6 +1349,12 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
         const isLassoSelected = lassoSelectedNodeIds.has(node.id);
+        const isRepairSettling = repairPresentations.size > 0 &&
+          isRepairPresentationCurrent(
+            repairPresentations.get(node.id),
+            repairPresentationScope,
+            tree,
+          );
         const languageProjection = isProjected && lassoSelection !== null
           ? projectLanguageAroundSelection(node.text, lassoSelection)
           : null;
@@ -1344,6 +1369,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-parent-id={parentId ?? undefined}
             data-tree-parent-id={node.parentId ?? undefined}
             data-movable={node.parentId !== null || undefined}
+            data-material-motion={isRepairSettling ? "repair" : undefined}
             key={node.id}
           >
             <button
@@ -1437,6 +1463,7 @@ function LassoOverlay({
   rects,
   selectedText,
   elasticRef,
+  onPreciseGesture,
   textColumn,
   stretch,
 }: {
@@ -1449,6 +1476,7 @@ function LassoOverlay({
   rects: readonly { x: number; y: number; width: number; height: number }[];
   selectedText: string | null;
   elasticRef: React.RefObject<HTMLDivElement | null>;
+  onPreciseGesture: () => void;
   textColumn: Readonly<{ left: number; top: number; right: number; bottom: number }> | null;
   stretch: ReturnType<typeof useStretch>;
 }) {
@@ -1510,8 +1538,8 @@ function LassoOverlay({
               Both edge grips control the same expansion degree. Drag either grip away from the selected language, or use its arrow keys to refine the degree.
             </span>
             <span aria-hidden="true" className="language-pocket" />
-            <StretchHandleButton descriptionId={descriptionId} handle="top" stretch={stretch} />
-            <StretchHandleButton descriptionId={descriptionId} handle="bottom" stretch={stretch} />
+            <StretchHandleButton descriptionId={descriptionId} handle="top" onPreciseGesture={onPreciseGesture} stretch={stretch} />
+            <StretchHandleButton descriptionId={descriptionId} handle="bottom" onPreciseGesture={onPreciseGesture} stretch={stretch} />
           </div>
         </>
       )}
@@ -1561,10 +1589,12 @@ function LanguageSplitProjection({
 function StretchHandleButton({
   descriptionId,
   handle,
+  onPreciseGesture,
   stretch,
 }: {
   descriptionId: string;
   handle: "top" | "bottom";
+  onPreciseGesture: () => void;
   stretch: ReturnType<typeof useStretch>;
 }) {
   return (
@@ -1589,6 +1619,7 @@ function StretchHandleButton({
       onPointerDown={(event) => {
         event.stopPropagation();
         if (stretch.pointerDown(handle, event)) {
+          onPreciseGesture();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
@@ -1610,6 +1641,7 @@ function StretchHandleButton({
         const next = keyboardStretchAmount(event.key, stretch.amount, handle);
         if (next === null) return;
         event.preventDefault();
+        onPreciseGesture();
         stretch.setAmount(next, handle);
         const control = event.currentTarget;
         // A layout publication can move the control. Preserve the current
@@ -1715,11 +1747,13 @@ function AdmissionFeedback({
   anchor,
   parentBox,
   controller,
+  locale,
   onHeightChange,
 }: {
   anchor: InteractionAdmissionAnchor | null;
   parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
+  locale: CanvasLanguage;
   onHeightChange: (height: number) => void;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
@@ -1744,7 +1778,8 @@ function AdmissionFeedback({
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
   } as CSSProperties;
-  const copy = admissionCopy(controller.state);
+  const copy = admissionFeedbackMessage(locale, controller.state);
+  const actions = admissionFeedbackActions(locale);
   return (
     <div
       aria-live={phase === "error" ? undefined : "polite"}
@@ -1758,52 +1793,24 @@ function AdmissionFeedback({
     >
       <span aria-hidden="true" className="admission-feedback__signal" />
       <span>{copy}</span>
-      {/*
-        The same preview element spans listening and settling, so the words a
-        person watched appear do not blink out and back while repair runs. The
-        one change they should perceive is the thought itself arriving.
-      */}
-      {(phase === "recording" || phase === "repairing") &&
+      {phase === "recording" &&
       "transcript" in controller.state &&
       controller.state.transcript ? (
         <span className="admission-feedback__preview" dir="auto">{controller.state.transcript}</span>
       ) : null}
       {phase === "recording" ? (
-        <button onClick={controller.stop} type="button">Stop recording</button>
+        <button onClick={controller.stop} type="button">{actions.stop}</button>
       ) : null}
       {phase === "error" ? (
         <>
-          <button onClick={controller.retry} type="button">Record again</button>
-          <button onClick={controller.dismiss} type="button">Dismiss</button>
+          <button onClick={controller.retry} type="button">{actions.retry}</button>
+          <button onClick={controller.dismiss} type="button">{actions.dismiss}</button>
         </>
       ) : (
-        <button onClick={controller.cancel} type="button">Cancel recording</button>
+        <button onClick={controller.cancel} type="button">{actions.cancel}</button>
       )}
     </div>
   );
-}
-
-function admissionCopy(state: AdmissionController["state"]): string {
-  switch (state.phase) {
-    case "requesting": return "Waiting for microphone access";
-    case "recording": return "Listening";
-    case "stopping": return "Finishing the recording";
-    case "transcribing": return "Turning voice into material";
-    case "repairing": return "Settling the words";
-    case "committing": return "Placing the thought";
-    case "error":
-      switch (state.errorCode) {
-        case "MICROPHONE_DENIED": return "Microphone access is blocked.";
-        case "MICROPHONE_UNAVAILABLE": return "No microphone is available.";
-        case "RECORDING_UNSUPPORTED": return "Voice recording isn’t available here.";
-        case "NO_AUDIO":
-        case "EMPTY_TRANSCRIPT": return "No words were heard.";
-        case "STALE_TARGET": return "That thought changed before the recording finished.";
-        default: return "Couldn’t turn that recording into words.";
-      }
-    case "idle": return "";
-    default: return assertNever(state);
-  }
 }
 
 function normalizeDeltaMode(value: number): 0 | 1 | 2 {

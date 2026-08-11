@@ -36,6 +36,57 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.24
+
+Preview.24 closes one speech-to-material boundary without widening the product.
+The recognized transcript becomes durable material immediately; a detachable,
+rules-only local repair may commit one separately undoable correction within a
+twelve-second capability lease. First-use voice readiness prepares only an
+unstarted browser recognizer or evaluated worker code graph, never permission,
+audio, or model bytes. Ask Matter remains visually unchanged: its bounded local
+record stays behind the existing inquiry, while strict response receipts now
+distinguish application busy, provider timeout, temporary unavailability, and
+an unreachable request without exposing provider prose.
+
+```text
+release proof          npm run check: 1,028 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2
+                       capability-gated cases skipped; voice admission,
+                       on-device transcription, Undo/Redo, lasso, archives,
+                       reparenting, narrow layouts, and 2,000-node diagnostics
+                       all passed
+product boundary       no repair status, cache UI, record manager, chat panel,
+                       hidden retrieval, or new material authority
+still gated            live transform provider and deployed-origin transform
+                       receipt; local repair model remains a measured future
+                       adapter, with deterministic rules as the complete floor
+```
+
+## Production spot check — 0.2.0-preview.23
+
+Checked through the public interface on 2026-08-11. `matter.ptoq.io` loaded the
+root-seeded canvas; selection, Branch, Undo, Redo, reload, and Undo/Redo after
+reload all preserved the same local tree and history. Entering Lasso disabled
+conflicting file actions and exposed the bounded selection guidance. The test
+browser denied microphone permission, and the product returned to an idle,
+retryable state with a permission instruction; this proves the denied path, not
+real acoustic capture.
+
+The inquiry health capability reported `available`, but one real bounded
+inquiry spent its browser deadline and returned the retryable busy answer. A
+later generated-data pool probe reached inquiry and received a model answer in
+915ms; a second real browser question also answered, kept the input focused,
+and produced no console warning. In the same probe, label reached the pool in
+1.128s while repair used its deterministic floor after a 5.591s model timeout.
+Preview.23 therefore proves an intermittent pool, not a permanently absent
+inquiry provider. The health payload explicitly is not a dependency monitor,
+and the old client also collapsed a provider timeout into `BUSY`; neither
+signal may stand in for an actual answer receipt. The dedicated root is the
+live product URL; `www.ptoq.io/matter` currently returns the marketing site's
+intentional 404 and is not an alias.
+
 ## Candidate verification — 0.2.0-preview.22
 
 Preview.22 is a source-preview convergence receipt. It does not widen Matter

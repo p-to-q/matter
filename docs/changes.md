@@ -17,6 +17,60 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-11 — Ask Matter distinguishes a timeout from a busy application
+
+Changed: the browser reads the bounded, exact inquiry error envelope and maps
+only its closed fallback receipt to localized terminal copy. A timeout,
+temporary model failure, application admission busy, and an unsent request are
+separate outcomes in the bounded local inquiry record. Unknown or malformed
+429/503 responses fail closed as unreachable; server and provider prose is
+discarded.
+
+Why: the live preview returned `MODEL_TIMEOUT` after its provider budget, but
+the browser classified every 503 as busy. That made a configured health gate
+look like a contradictory dependency receipt and gave the person the wrong
+recovery instruction.
+
+Forecloses: status-only refusal classification, treating the health probe as a
+relay monitor, persisting unparsed provider detail, or showing a gateway 503 as
+proof that Matter received the question.
+
+## 2026-08-11 — Transcript correction settles as material, not status
+
+Changed: local repair computes beside the baseline paint gate but may commit
+only after it. A successful repair returns a private, exact before/after receipt
+to a bounded per-node presentation owner; the complete canonical text then
+performs one short opacity settle. Store state, persistence, history, archives,
+context, rejected repairs, Undo/Redo, reduced motion, and forced colors do not
+replay or expose it.
+
+Why: a person should notice that heard text was corrected without seeing a
+spinner, breathing draft, duplicated text layer, or paragraph retyped one
+character at a time. Keeping the final DOM text whole preserves selection,
+shaping, layout measurement, focus, and accessibility.
+
+Forecloses: a repair status surface, infinite pulse, old/new semantic overlays,
+per-character DOM wrapping, and animation as a second source of truth.
+
+## 2026-08-11 — Voice admission precedes detachable local repair
+
+Changed: a final transcript commits and paints immediately. A lifecycle-local
+repair port may settle one conservative candidate within twelve seconds; an
+opaque store capability, store-owned clock, document epoch, exact node memento,
+and semantic floor gate a separate `source: "repair"` command. Every terminal
+path consumes the capability, and admission and repair remain separate undo
+steps across reload. The store atomically rejects an admission from an earlier
+document epoch and generates capability identity itself rather than trusting a
+caller command id to be globally unique.
+
+Why: speech should become material as soon as transcription finishes, while
+small recognition artifacts can still disappear without making a network call
+or granting a late worker authority over material the person has changed.
+
+Forecloses: blocking admission on repair, exposing model/cache status in the UI,
+restoring repair authority through Undo/Redo, trusting caller timing, or letting
+light cleanup become silent interpretive rewriting.
+
 ## 2026-08-11 — Ask Matter retention is not a user-managed surface
 
 Changed: the inquiry no longer exposes a Clear record control. Retention still
@@ -48,9 +102,10 @@ interaction contract, or turning a local persistence detail into a chat surface.
 ## 2026-08-11 — First voice use waits for a real transport, never for permission by surprise
 
 Changed: hydration now prepares the selected voice transport before its first
-pointer activation. The recorded-audio path may create its worker and code
-graph, but cannot request permission, capture audio, decode a recording, or
-download a speech model until an actual voice turn. Browser speech start also
+pointer activation. Browser speech constructs one unstarted recognition lease;
+the recorded-audio path waits for a bounded worker code-graph handshake. Neither
+path can request permission, capture audio, decode a recording, invoke Whisper,
+or download a speech model until an actual voice turn. Browser speech start also
 has a bounded watchdog.
 
 Why: the old first turn combined capability discovery with the only pointer a

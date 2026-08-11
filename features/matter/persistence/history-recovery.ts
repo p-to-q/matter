@@ -66,7 +66,7 @@ function isHistoryShape(value: unknown, limits: TreeHistoryLimits): boolean {
   for (const entry of [...value.entries, ...redoEntries]) {
     if (!isPlainRecord(entry) ||
       typeof entry.commandId !== "string" || entry.commandId.length === 0 ||
-      (entry.source !== "human" && entry.source !== "agent" && entry.source !== "fixture") ||
+      (entry.source !== "human" && entry.source !== "repair" && entry.source !== "agent" && entry.source !== "fixture") ||
       !isPlainRecord(entry.inverse) ||
       !isNonNegativeSafeInteger(entry.retainedInverseBytes)
     ) return false;

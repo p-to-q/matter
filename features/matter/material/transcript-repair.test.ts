@@ -138,6 +138,21 @@ describe("adjudicateRepair", () => {
     });
   });
 
+  it("never lets a small edit delete negation, uncertainty, or numeric facts", () => {
+    expect(adjudicateRepair(en("this is not ready yet"), "this is ready yet.")).toEqual({
+      ok: false,
+      reason: "MEANING_CHANGED",
+    });
+    expect(adjudicateRepair(zh("这个可能不需要再改"), "这个需要再改。")).toEqual({
+      ok: false,
+      reason: "MEANING_CHANGED",
+    });
+    expect(adjudicateRepair(en("the limit is 1,000 items"), "the limit is 100 items.")).toEqual({
+      ok: false,
+      reason: "MEANING_CHANGED",
+    });
+  });
+
   it("rejects added commentary and multi-line answers", () => {
     const original = zh("我在想这件事到底该怎么做");
     expect(adjudicateRepair(original, "我在想，这件事到底该怎么做。\n（已修正标点）")).toEqual({

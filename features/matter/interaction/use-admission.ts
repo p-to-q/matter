@@ -2,32 +2,35 @@
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import type { AdmissionAnchor as RuntimeAdmissionAnchor } from "../runtime/admission";
+import type { MatterLocale } from "../config/locales";
 import {
   type AdmissionAnchor,
   type AdmissionInteractionState,
 } from "../runtime/admission-interaction";
-import type { MatterStoreReceipt } from "../store/matter-store";
+import type {
+  AdmissionRepairCommittedChange,
+  AdmissionRepairSettlement,
+  AdmissionRepairStoreReceipt,
+  AdmissionStoreReceipt,
+  MatterAdmissionValues,
+} from "../store/matter-store";
 import {
   AdmissionDriver,
   type AdmissionScope,
 } from "./admission-driver";
 import { createBrowserVoicePort } from "./browser-voice";
-import { requestTranscriptRepair, transcriptRepairEnabled } from "./repair-client";
+import { createLocalTranscriptRepairPort } from "./local-transcript-repair";
 import { requestTranscription } from "./transcription-client";
+import { useRepairPresentation } from "./use-repair-presentation";
 
 export type UseAdmissionInput = {
   commit: (
     anchor: RuntimeAdmissionAnchor,
-    values: {
-      interactionId: string;
-      commandId: string;
-      nodeId: string;
-      createdAt: string;
-      transcript: string;
-    },
-  ) => MatterStoreReceipt;
+    values: MatterAdmissionValues,
+  ) => AdmissionStoreReceipt;
+  settleRepair: (settlement: AdmissionRepairSettlement) => AdmissionRepairStoreReceipt;
   scope: AdmissionScope;
-  locale?: string;
+  locale?: MatterLocale;
   /**
    * Terms from the person's own visible material, for transcript repair. A
    * plain value rather than a callback: the caller already recomputes it when
@@ -38,34 +41,45 @@ export type UseAdmissionInput = {
 
 export type AdmissionController = {
   state: AdmissionInteractionState;
+  repairPresentations: ReadonlyMap<string, AdmissionRepairCommittedChange>;
   start: (anchor: AdmissionAnchor) => void;
   stop: () => void;
   cancel: () => void;
   retry: () => void;
   dismiss: () => void;
+  discardPendingRepairs: () => void;
+  clearRepairPresentations: () => void;
 };
 
 const NO_VOCABULARY: readonly string[] = Object.freeze([]);
 
 export function useAdmission({
   commit,
+  settleRepair,
   scope,
   locale = "zh-CN",
   vocabulary = NO_VOCABULARY,
 }: UseAdmissionInput): AdmissionController {
+  const repairPresentation = useRepairPresentation({
+    treeId: scope.treeId,
+    documentEpoch: scope.documentEpoch ?? 0,
+  });
   const driver = useMemo(
     () => new AdmissionDriver({
       commit,
+      settleRepair,
+      onRepairCommitted: repairPresentation.publish,
       createVoice: createBrowserVoicePort,
       transcribe: requestTranscription,
-      ...(transcriptRepairEnabled() ? { repair: requestTranscriptRepair } : {}),
+      repair: createLocalTranscriptRepairPort(),
+      afterBaselinePaint,
       createInteractionId,
       createMaterialId,
       canonicalNow,
       monotonicNow,
       locale,
     }),
-    [commit, locale],
+    [commit, settleRepair, repairPresentation.publish, locale],
   );
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -93,11 +107,14 @@ export function useAdmission({
 
   return {
     state,
+    repairPresentations: repairPresentation.byNode,
     start: (anchor) => driver.start(anchor),
     stop: () => driver.stop(),
     cancel: () => driver.cancel(),
     retry: () => driver.retry(),
     dismiss: () => driver.dismiss(),
+    discardPendingRepairs: () => driver.discardPendingRepairs(),
+    clearRepairPresentations: repairPresentation.clearAll,
   };
 }
 
@@ -117,4 +134,20 @@ function canonicalNow(): string {
 
 function monotonicNow(): number {
   return performance.now();
+}
+
+/** Two frames guarantee that the synchronous baseline commit can paint first. */
+function afterBaselinePaint(callback: () => void): () => void {
+  let cancelled = false;
+  let secondFrame: number | undefined;
+  const firstFrame = requestAnimationFrame(() => {
+    secondFrame = requestAnimationFrame(() => {
+      if (!cancelled) callback();
+    });
+  });
+  return () => {
+    cancelled = true;
+    cancelAnimationFrame(firstFrame);
+    if (secondFrame !== undefined) cancelAnimationFrame(secondFrame);
+  };
 }

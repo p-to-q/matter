@@ -25,6 +25,10 @@ let transcriber: ReturnType<typeof createTranscriber> | null = null;
 let queue = Promise.resolve();
 const cancelled = new Set<string>();
 
+// Reaching this line proves the worker module graph is evaluated. The model is
+// still untouched: `createTranscriber()` remains behind an actual utterance.
+scope.postMessage({ status: "ready" });
+
 scope.addEventListener("message", (event) => {
   const request = event.data;
   if (request.type === "cancel") {

@@ -91,6 +91,22 @@ describe("BrowserSpeechVoicePort", () => {
     await assertion;
   });
 
+  it("settles a constructor failure instead of stranding the operation", async () => {
+    class ThrowingRecognition {
+      constructor() { throw new Error("native constructor failed"); }
+    }
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: ThrowingRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+
+    await expect(port.start(OPERATION)).rejects.toMatchObject({
+      code: "RECORDING_FAILED",
+    });
+  });
+
   it("reports the duration limit through the same transient callback", async () => {
     vi.useFakeTimers();
     const onDurationLimit = vi.fn();

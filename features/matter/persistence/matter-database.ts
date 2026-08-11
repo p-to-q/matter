@@ -51,7 +51,14 @@ export type StoredInquiryOutcome =
   | Readonly<{ status: "answered"; text: string }>
   | Readonly<{
       status: "unavailable";
-      reason: "NO_PROVIDER" | "NO_MATERIAL" | "RATE_LIMITED" | "BUSY" | "UNREACHABLE";
+      reason:
+        | "NO_PROVIDER"
+        | "NO_MATERIAL"
+        | "RATE_LIMITED"
+        | "BUSY"
+        | "TIMED_OUT"
+        | "TEMPORARILY_UNAVAILABLE"
+        | "UNREACHABLE";
     }>;
 
 /** A durable, local-only Ask Matter exchange; never a material command. */

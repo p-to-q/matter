@@ -12,6 +12,7 @@ ordinary component and store work needs no matching document.
 | [`tool-system.md`](tool-system.md) | contextual tool projection and rail behavior |
 | [`history-and-undo.md`](history-and-undo.md) | atomic tree commands and exact inverse |
 | [`voice-input.md`](voice-input.md) | microphone and transcription lifecycle |
+| [`local-transcript-repair.md`](local-transcript-repair.md) | deterministic repair, local model fallback, worker, and cache policy |
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
 | [`prompt-harness.md`](prompt-harness.md) | how any Matter prompt is built, budgeted, and judged |
 | [`thought-label.md`](thought-label.md) | naming a node in the material index |

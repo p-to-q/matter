@@ -977,7 +977,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     ? copy.storageFullAction
                     : copy.saveFailedAction}
                 className="material-files__profile-action"
+                disabled={props.interactionPending}
                 onClick={() => {
+                  if (props.interactionPending) return;
                   if (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT") {
                     props.persistence.resolveConflict();
                   } else if (storageFull && props.archive !== undefined) {

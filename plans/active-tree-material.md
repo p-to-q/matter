@@ -45,14 +45,21 @@ contract.
 ```text
 Outcome:    a new person can complete the one material loop with a warmed,
             truthful voice path, then undo, redo, and reload it.
-Boundary:   first-turn voice readiness; the existing fixture transform vertical
+Boundary:   first-turn voice readiness; immediate admission plus detachable
+            twelve-second local repair; the existing fixture transform vertical
             slice; local tree/history durability; release receipt. No new
             workspace, memory, or system surface.
 Invariants: readiness never requests microphone permission, captures audio, or
             downloads a speech model; a voice start has a bounded failure;
+            repair computes without extending first-paint latency but cannot
+            commit before that boundary; only a committed correction gets one
+            short material-native settle and owns no visible status;
             Ask Matter retention remains behind its existing inquiry surface;
             only the tree engine commits material.
-Proof:      focused voice readiness/lifecycle tests; one fixture browser flow
+Proof:      focused voice readiness/lifecycle/rule tests; admission→repair→
+            private receipt→canonical settle; two-step undo/redo and
+            hydrated-history recovery; same-id/same-revision epoch rejection;
+            duplicate-command capability isolation; one fixture browser flow
             from lasso through transform, undo/redo and reload; full source
             check and Chromium suite for the source preview.
 Non-goals:  live transform promotion, account/sync, an Ask Matter log manager,

@@ -27,6 +27,7 @@ import {
 } from "../runtime/navigation";
 import {
   commitHumanAdmission,
+  commitHumanAdmissionRepair,
   commitHumanRemoval,
   commitSessionCommand,
   redoSession,
@@ -36,6 +37,15 @@ import {
   type RuntimeState,
 } from "../runtime/session";
 import type { AdmissionAnchor, AdmissionValues } from "../runtime/admission";
+import {
+  ADMISSION_REPAIR_WINDOW_MS,
+  type AdmissionRepairValues,
+} from "../runtime/admission-repair";
+import {
+  adjudicateRepair,
+  normalizeRepairInput,
+} from "../material/transcript-repair";
+import { repairAdmittedTranscript } from "../runtime/transcript-punctuation";
 import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
@@ -50,6 +60,7 @@ import {
   type TransformEnvelope,
   type TransformPlan,
 } from "../protocol/transform-contract";
+import { isMatterLocale, type MatterLocale } from "../config/locales";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   // Durable history must not silently discard an old inverse. Browser storage
@@ -91,14 +102,75 @@ export type DocumentSwitchReceipt =
       errorCode: "TREE_INVARIANT_VIOLATION";
     };
 
-export type MatterStoreReceipt = RuntimeReceipt | NavigationReceipt | HydrationReceipt | DocumentSwitchReceipt;
+export type AdmissionCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
+  Readonly<{ repairLeaseId: string }>;
+
+export type MatterAdmissionValues = AdmissionValues & Readonly<{
+  expectedDocumentEpoch: number;
+  admittedAtMs?: number;
+  repairLocale?: MatterLocale;
+}>;
+
+export type AdmissionRepairCommittedChange = Readonly<{
+  id: string;
+  treeId: string;
+  documentEpoch: number;
+  nodeId: string;
+  committedRevision: number;
+  before: Readonly<{ text: string; updatedAt: string }>;
+  after: Readonly<{ text: string; updatedAt: string }>;
+}>;
+
+/**
+ * Returned only to the synchronous repair owner. The material store keeps the
+ * base runtime receipt in observable state so ephemeral presentation data can
+ * never become a persistence, replay, or cross-document protocol.
+ */
+export type AdmissionRepairCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
+  Readonly<{ repairChange: AdmissionRepairCommittedChange }>;
+
+export type AdmissionRepairSettlement =
+  | Readonly<{ repairLeaseId: string; outcome: "discarded" }>
+  | Readonly<{
+      repairLeaseId: string;
+      outcome: "candidate";
+      text: string;
+      source: "rules" | "local-model";
+      createdAt: string;
+    }>;
+
+type AdmissionRepairLease = Readonly<{
+  id: string;
+  treeId: string;
+  nodeId: string;
+  expectedText: string;
+  expectedUpdatedAt: string;
+  documentEpoch: number;
+  admittedAtMs: number;
+  locale: MatterLocale;
+  interactionId: string;
+}>;
+
+export type ObservableMatterStoreReceipt =
+  | RuntimeReceipt
+  | NavigationReceipt
+  | HydrationReceipt
+  | DocumentSwitchReceipt;
+
+export type AdmissionStoreReceipt = RuntimeReceipt | AdmissionCommitReceipt;
+export type AdmissionRepairStoreReceipt = RuntimeReceipt | AdmissionRepairCommitReceipt;
+export type MatterStoreReceipt =
+  | ObservableMatterStoreReceipt
+  | AdmissionCommitReceipt
+  | AdmissionRepairCommitReceipt;
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
   lastError: MatterStoreError | null;
-  lastReceipt: MatterStoreReceipt | null;
+  lastReceipt: ObservableMatterStoreReceipt | null;
   extendMaterial: (parentId: string, values: BranchValues) => MatterStoreReceipt;
-  admitHumanTranscript: (anchor: AdmissionAnchor, values: AdmissionValues) => MatterStoreReceipt;
+  admitHumanTranscript: (anchor: AdmissionAnchor, values: MatterAdmissionValues) => AdmissionStoreReceipt;
+  settleHumanTranscriptRepair: (settlement: AdmissionRepairSettlement) => AdmissionRepairStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
   moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
   renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
@@ -148,9 +220,18 @@ export function createMatterStore(
   initialDocument: SeededDocumentVariant = normalizeMatterInitialDocument(
     process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
   ),
-  options: Readonly<{ documentRoot?: boolean; initialTitle?: string }> = {},
+  options: Readonly<{
+    documentRoot?: boolean;
+    initialTitle?: string;
+    monotonicNow?: () => number;
+  }> = {},
 ): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
+  // Leases are capability state, not document state. Undo/redo, hydration,
+  // import, reload, or store disposal cannot recreate one from a tree memento.
+  const repairLeases = new Map<string, AdmissionRepairLease>();
+  let repairLeaseSequence = 0;
+  const monotonicNow = options.monotonicNow ?? defaultMonotonicNow;
   const fixture = createSeededDocument(initialDocument);
   const initialTree = options.documentRoot === true
     ? normalizeForDocumentModel(fixture.tree, options.initialTitle)
@@ -200,8 +281,30 @@ export function createMatterStore(
     },
 
     admitHumanTranscript: (anchor, values) => {
-      let receipt: MatterStoreReceipt | undefined;
+      let receipt: AdmissionStoreReceipt | undefined;
       set((current) => {
+        pruneExpiredRepairLeases(repairLeases, monotonicNow());
+        if (
+          !Number.isSafeInteger(values.expectedDocumentEpoch) ||
+          values.expectedDocumentEpoch < 0 ||
+          values.expectedDocumentEpoch !== current.documentEpoch
+        ) {
+          const error: MatterStoreError = {
+            code: "INVALID_INTERACTION",
+            message: "The material document changed before admission completed.",
+          };
+          receipt = {
+            operation: "commit",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: error.code,
+          };
+          return freezeState({
+            ...current,
+            lastError: protectValue(error),
+            lastReceipt: protectValue(receipt),
+          });
+        }
         const result = commitHumanAdmission(
           runtimeState(current),
           anchor,
@@ -209,12 +312,136 @@ export function createMatterStore(
           HISTORY_LIMITS,
         );
         receipt = result.receipt;
+        if (
+          result.ok &&
+          Number.isFinite(values.admittedAtMs) &&
+          (values.admittedAtMs ?? -1) >= 0 &&
+          typeof values.repairLocale === "string" &&
+          isMatterLocale(values.repairLocale)
+        ) {
+          const node = result.state.tree.nodes[values.nodeId];
+          if (node !== undefined) {
+            const repairLeaseId =
+              `admission_repair_lease_${++repairLeaseSequence}_${values.commandId}`;
+            repairLeases.set(repairLeaseId, Object.freeze({
+              id: repairLeaseId,
+              treeId: result.state.tree.id,
+              nodeId: node.id,
+              expectedText: node.text,
+              expectedUpdatedAt: node.updatedAt,
+              documentEpoch: current.documentEpoch,
+              admittedAtMs: values.admittedAtMs ?? 0,
+              locale: values.repairLocale,
+              interactionId: values.interactionId,
+            }));
+            receipt = Object.freeze({ ...result.receipt, repairLeaseId });
+          }
+        }
         const domain = protectDomain(result.state);
         return freezeState({
           ...current,
           ...domain,
           lastError: domain.lastError,
-          lastReceipt: protectValue(receipt),
+          // The lease is returned synchronously to the admission driver but is
+          // not observable store state. It is a short-lived capability, not a
+          // user-facing receipt or recoverable material value.
+          lastReceipt: protectValue(result.receipt),
+        });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    settleHumanTranscriptRepair: (settlement) => {
+      let receipt: AdmissionRepairStoreReceipt | undefined;
+      set((current) => {
+        const settledAtMs = monotonicNow();
+        const lease = repairLeases.get(settlement.repairLeaseId);
+        repairLeases.delete(settlement.repairLeaseId);
+        pruneExpiredRepairLeases(repairLeases, settledAtMs);
+        if (
+          lease !== undefined &&
+          settledAtMs - lease.admittedAtMs > ADMISSION_REPAIR_WINDOW_MS
+        ) {
+          receipt = silentRepairRejection(current.tree.revision, "REPAIR_EXPIRED");
+          return current;
+        }
+        if (
+          lease === undefined ||
+          lease.documentEpoch !== current.documentEpoch ||
+          lease.treeId !== current.tree.id
+        ) {
+          receipt = silentRepairRejection(current.tree.revision, "REPAIR_STALE");
+          return current;
+        }
+        if (settlement.outcome === "discarded") {
+          receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
+          return current;
+        }
+        const adjudicated = settlement.source === "rules"
+          ? settlement.text === repairAdmittedTranscript(lease.expectedText, lease.locale)
+            ? Object.freeze({ ok: true as const, text: settlement.text, changed: settlement.text !== lease.expectedText })
+            : Object.freeze({ ok: false as const })
+          : adjudicateRepair(
+              normalizeRepairInput({ text: lease.expectedText, locale: lease.locale }),
+              settlement.text,
+            );
+        if (!adjudicated.ok || !adjudicated.changed) {
+          receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
+          return current;
+        }
+        const values: AdmissionRepairValues = {
+          interactionId: lease.interactionId,
+          // A consumed capability is still not durable identity. The admitted
+          // node id is already validated, bounded, document-unique material;
+          // never persist the opaque lease token used to authorize this call.
+          commandId: `human_admission_repair_${lease.nodeId}`,
+          treeId: lease.treeId,
+          nodeId: lease.nodeId,
+          expectedText: lease.expectedText,
+          expectedUpdatedAt: lease.expectedUpdatedAt,
+          text: adjudicated.text,
+          createdAt: settlement.createdAt,
+          admittedAtMs: lease.admittedAtMs,
+          settledAtMs,
+        };
+        const result = commitHumanAdmissionRepair(
+          runtimeState(current),
+          values,
+          HISTORY_LIMITS,
+        );
+        receipt = result.receipt;
+        // A late repair owns no visible failure state. Stale text, an expired
+        // lease, or a rejected candidate all mean the admitted words remain
+        // authoritative; they must not replace an unrelated existing error or
+        // advertise a failed user action in the store.
+        if (!result.ok) return current;
+        const afterNode = result.state.tree.nodes[lease.nodeId];
+        if (afterNode === undefined) return current;
+        const baseReceipt = result.receipt;
+        receipt = Object.freeze({
+          ...baseReceipt,
+          repairChange: Object.freeze({
+            id: values.commandId,
+            treeId: lease.treeId,
+            documentEpoch: lease.documentEpoch,
+            nodeId: lease.nodeId,
+            committedRevision: result.state.tree.revision,
+            before: Object.freeze({
+              text: lease.expectedText,
+              updatedAt: lease.expectedUpdatedAt,
+            }),
+            after: Object.freeze({
+              text: afterNode.text,
+              updatedAt: afterNode.updatedAt,
+            }),
+          }),
+        });
+        const domain = protectDomain(result.state);
+        return freezeState({
+          ...current,
+          ...domain,
+          lastError: domain.lastError,
+          lastReceipt: protectValue(baseReceipt),
         });
       });
       return requireSynchronousReceipt(receipt);
@@ -273,6 +500,7 @@ export function createMatterStore(
       set((current) => {
         const result = undoSession(runtimeState(current));
         receipt = result.receipt;
+        if (result.ok) invalidateRepairLeases(repairLeases, result.receipt.affectedNodeIds);
         const domain = protectDomain(result.state);
         return freezeState({
           ...current,
@@ -289,6 +517,7 @@ export function createMatterStore(
       set((current) => {
         const result = redoSession(runtimeState(current));
         receipt = result.receipt;
+        if (result.ok) invalidateRepairLeases(repairLeases, result.receipt.affectedNodeIds);
         const domain = protectDomain(result.state);
         return freezeState({
           ...current,
@@ -422,6 +651,7 @@ export function createMatterStore(
           persistedHistory,
           HISTORY_LIMITS,
         );
+        repairLeases.clear();
         receipt = { operation: "hydrate", status: "hydrated", revision: normalizedTree.revision };
         return freezeState({
           ...current,
@@ -460,6 +690,7 @@ export function createMatterStore(
 
         // Import is a document boundary, not hydration of the current tree.
         // No in-session inverse, focus, or fold can cross that boundary.
+        repairLeases.clear();
         receipt = {
           operation: "switch-document",
           status: "switched",
@@ -570,13 +801,49 @@ function navigationUpdate(
   };
 }
 
-function requireSynchronousReceipt(
-  receipt: MatterStoreReceipt | undefined,
-): MatterStoreReceipt {
+function requireSynchronousReceipt<Receipt extends MatterStoreReceipt>(
+  receipt: Receipt | undefined,
+): Receipt {
   if (receipt === undefined) {
     throw new Error("The Zustand state updater did not execute synchronously.");
   }
   return receipt;
+}
+
+function silentRepairRejection(
+  revision: number,
+  errorCode: "REPAIR_STALE" | "INVALID_REPAIR" | "REPAIR_EXPIRED",
+): Extract<RuntimeReceipt, { status: "rejected" }> {
+  return Object.freeze({
+    operation: "commit",
+    status: "rejected",
+    revision,
+    errorCode,
+  });
+}
+
+function pruneExpiredRepairLeases(
+  leases: Map<string, AdmissionRepairLease>,
+  nowMs: number,
+): void {
+  if (!Number.isFinite(nowMs)) return;
+  for (const [id, lease] of leases) {
+    if (nowMs - lease.admittedAtMs > ADMISSION_REPAIR_WINDOW_MS) leases.delete(id);
+  }
+}
+
+function invalidateRepairLeases(
+  leases: Map<string, AdmissionRepairLease>,
+  affectedNodeIds: readonly string[],
+): void {
+  const affected = new Set(affectedNodeIds);
+  for (const [id, lease] of leases) {
+    if (affected.has(lease.nodeId)) leases.delete(id);
+  }
+}
+
+function defaultMonotonicNow(): number {
+  return performance.now();
 }
 
 function assertFixedHistoryLimits(limits: Readonly<TreeHistoryLimits>): void {

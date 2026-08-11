@@ -23,6 +23,13 @@ type SpeechRecognitionLike = {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 type SpeechWindow = Window & { SpeechRecognition?: SpeechRecognitionConstructor; webkitSpeechRecognition?: SpeechRecognitionConstructor };
 
+type PreparedRecognition = Readonly<{
+  Constructor: SpeechRecognitionConstructor;
+  recognition: SpeechRecognitionLike;
+}>;
+
+let preparedRecognition: PreparedRecognition | null = null;
+
 export function speechRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
   if (typeof window === "undefined") return undefined;
   const target = window as SpeechWindow;
@@ -33,7 +40,29 @@ export function isBrowserSpeechRecognitionAvailable(): boolean {
   return speechRecognitionConstructor() !== undefined;
 }
 
+/**
+ * Constructs the first native recognition lease without starting it. The
+ * constructor is the only browser-speech setup that is safe before a pointer
+ * gesture: calling `start()` here would request permission and could capture
+ * audio. The prepared object is consumed by the first voice port that starts.
+ */
+export function prepareBrowserSpeechRecognition(): void {
+  const Constructor = speechRecognitionConstructor();
+  if (Constructor === undefined) throw new VoiceError("VOICE_UNSUPPORTED");
+  if (preparedRecognition?.Constructor === Constructor) return;
+  preparedRecognition = Object.freeze({
+    Constructor,
+    recognition: new Constructor(),
+  });
+}
+
+/** Test-only cleanup prevents the prepared first-turn lease crossing cases. */
+export function resetBrowserSpeechPreparationForTests(): void {
+  preparedRecognition = null;
+}
+
 export class BrowserSpeechVoicePort implements VoicePort {
+  private prepared: PreparedRecognition | null;
   private recognition: SpeechRecognitionLike | null = null;
   private operation: VoiceOperation | null = null;
   private callbacks: VoiceCallbacks = {};
@@ -50,6 +79,11 @@ export class BrowserSpeechVoicePort implements VoicePort {
   private resolveStop: ((recording: VoiceRecording) => void) | null = null;
   private rejectStop: ((error: VoiceError) => void) | null = null;
 
+  constructor() {
+    this.prepared = preparedRecognition;
+    preparedRecognition = null;
+  }
+
   start(operation: VoiceOperation, callbacks: VoiceCallbacks = {}): Promise<void> {
     if (this.recognition !== null) return Promise.reject(new VoiceError("RECORDING_ACTIVE"));
     const Constructor = speechRecognitionConstructor();
@@ -62,7 +96,17 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.stopping = false;
     const startPromise = new Promise<void>((resolve, reject) => { this.resolveStart = resolve; this.rejectStart = reject; });
     this.startPromise = startPromise;
-    const recognition = new Constructor();
+    let recognition: SpeechRecognitionLike;
+    try {
+      recognition = this.prepared?.Constructor === Constructor
+        ? this.prepared.recognition
+        : new Constructor();
+      this.prepared = null;
+    } catch {
+      this.prepared = null;
+      this.fail(new VoiceError("RECORDING_FAILED"));
+      return startPromise;
+    }
     this.recognition = recognition;
     recognition.continuous = true;
     recognition.interimResults = true;

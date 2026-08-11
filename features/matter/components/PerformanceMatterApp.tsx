@@ -72,11 +72,14 @@ export function PerformanceMatterApp() {
       canRedo={false}
       admission={{
         state: createAdmissionInteractionState(),
+        repairPresentations: new Map(),
         start: () => undefined,
         stop: () => undefined,
         cancel: () => undefined,
         retry: () => undefined,
         dismiss: () => undefined,
+        discardPendingRepairs: () => undefined,
+        clearRepairPresentations: () => undefined,
       }}
       admissionAnchor={null}
       navigation={navigation}

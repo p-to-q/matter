@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createIndexedDbInquiryRecordRepository } from "./inquiry-record-repository";
+import { isStoredInquiryExchange } from "./inquiry-record-policy";
 
 vi.mock("idb", () => ({ openDB: vi.fn() }));
 
@@ -115,4 +116,14 @@ describe("IndexedDB Ask Matter record repository", () => {
       ok: false, error: { code: "PERSISTENCE_CORRUPT" },
     });
   });
+
+  it.each(["TIMED_OUT", "TEMPORARILY_UNAVAILABLE"] as const)(
+    "keeps the stable %s terminal outcome in the bounded local record",
+    (reason) => {
+      expect(isStoredInquiryExchange({
+        ...RECORD.exchanges[0],
+        outcome: { status: "unavailable", reason },
+      })).toBe(true);
+    },
+  );
 });

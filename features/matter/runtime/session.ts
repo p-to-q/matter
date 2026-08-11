@@ -14,6 +14,11 @@ import {
   type AdmissionValues,
 } from "./admission";
 import {
+  admissionRepairToTreeCommand,
+  type AdmissionRepairError,
+  type AdmissionRepairValues,
+} from "./admission-repair";
+import {
   selectedNodeToRemovalCommand,
   type HumanRemovalValues,
 } from "./removal";
@@ -27,7 +32,8 @@ export type RuntimeErrorCode =
   | "HISTORY_LIMIT_EXCEEDED"
   | "EMPTY_HISTORY"
   | "EMPTY_REDO"
-  | AdmissionError["code"];
+  | AdmissionError["code"]
+  | AdmissionRepairError["code"];
 
 export type RuntimeError = {
   code: RuntimeErrorCode;
@@ -148,6 +154,23 @@ export function commitHumanAdmission(
       },
     },
   };
+}
+
+/**
+ * Publishes a bounded repair as a second ordinary command. The translator uses
+ * the latest tree revision but requires the admitted node's exact text and
+ * timestamp, so unrelated material may move without granting a late result
+ * permission to overwrite the person's own follow-up edit.
+ */
+export function commitHumanAdmissionRepair(
+  state: RuntimeState,
+  values: AdmissionRepairValues,
+  limits: TreeHistoryLimits,
+  estimateBytes?: EstimateInverseBytes,
+): RuntimeResult {
+  const translated = admissionRepairToTreeCommand(state.tree, values);
+  if (!translated.ok) return reject(state, "commit", translated.error);
+  return commitSessionCommand(state, translated.command, limits, estimateBytes);
 }
 
 export function commitHumanRemoval(

@@ -1,5 +1,6 @@
 const WHISPER_SAMPLE_RATE = 16_000;
 const LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000;
+export const LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS = 15_000;
 
 type LocalTranscriptionFailure = "unavailable" | "failed" | "no-speech" | "timeout";
 
@@ -21,6 +22,11 @@ type Pending = {
 let worker: Worker | null = null;
 const pending = new Map<string, Pending>();
 const cancelled = new WeakMap<Worker, Set<string>>();
+const readiness = new WeakMap<Worker, Readonly<{
+  promise: Promise<void>;
+  resolve: () => void;
+  reject: (error: LocalTranscriptionError) => void;
+}>>();
 
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
@@ -32,11 +38,37 @@ export function resetLocalTranscriptionForTests(): void {
  * microphone, decodes audio, or downloads the Whisper model; model work stays
  * behind an actual recorded utterance.
  */
-export function prepareLocalTranscription(): void {
+export async function prepareLocalTranscription(): Promise<void> {
   if (typeof window === "undefined" || typeof Worker === "undefined") {
     throw new LocalTranscriptionError("unavailable");
   }
-  void localTranscriptionWorker();
+  const target = localTranscriptionWorker();
+  const prepared = readiness.get(target);
+  if (prepared === undefined) throw new LocalTranscriptionError("failed");
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      prepared.promise,
+      new Promise<never>((_resolve, reject) => {
+        timeout = globalThis.setTimeout(
+          () => reject(new LocalTranscriptionError("timeout")),
+          LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } catch (error) {
+    if (worker === target) {
+      retireWorker(
+        target,
+        error instanceof LocalTranscriptionError
+          ? error
+          : new LocalTranscriptionError("failed"),
+      );
+    }
+    throw error;
+  } finally {
+    if (timeout !== undefined) globalThis.clearTimeout(timeout);
+  }
 }
 
 export async function transcribeLocally(input: Readonly<{
@@ -89,8 +121,26 @@ function localTranscriptionWorker(): Worker {
     type: "module",
   });
   const target = worker;
+  let resolveReadiness!: () => void;
+  let rejectReadiness!: (error: LocalTranscriptionError) => void;
+  const readinessPromise = new Promise<void>((resolve, reject) => {
+    resolveReadiness = resolve;
+    rejectReadiness = reject;
+  });
+  // Transcription may create the worker without calling the optional readiness
+  // preflight. Keep a later retirement from becoming an unhandled rejection.
+  void readinessPromise.catch(() => undefined);
+  readiness.set(target, {
+    promise: readinessPromise,
+    resolve: resolveReadiness,
+    reject: rejectReadiness,
+  });
   worker.addEventListener("message", (event: MessageEvent<unknown>) => {
     if (!isWorkerResponse(event.data)) return;
+    if (event.data.status === "ready") {
+      readiness.get(target)?.resolve();
+      return;
+    }
     if (event.data.status === "cancelled") {
       cancelled.get(target)?.delete(event.data.id);
       return;
@@ -219,6 +269,8 @@ function cancelRequest(id: string, target: Worker, error: LocalTranscriptionErro
 function retireWorker(target: Worker, error: LocalTranscriptionError): void {
   if (worker === target) worker = null;
   cancelled.delete(target);
+  readiness.get(target)?.reject(error);
+  readiness.delete(target);
   target.terminate();
   for (const [id, request] of [...pending]) {
     if (request.worker === target) settle(id, error);
@@ -244,12 +296,14 @@ function throwIfAborted(signal: AbortSignal): void {
 }
 
 function isWorkerResponse(value: unknown): value is
+  | Readonly<{ status: "ready" }>
   | Readonly<{ id: string; status: "started" }>
   | Readonly<{ id: string; status: "cancelled" }>
   | Readonly<{ id: string; status: "failed" }>
   | Readonly<{ id: string; status: "complete"; text: string }> {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
+  if (candidate.status === "ready") return Object.keys(candidate).length === 1;
   return typeof candidate.id === "string" && (
     candidate.status === "started" ||
     candidate.status === "cancelled" ||

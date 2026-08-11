@@ -27,6 +27,7 @@ export function MatterApp() {
   const showFull = useMatterStore((state) => state.showFull);
   const toggleFold = useMatterStore((state) => state.toggleFold);
   const admitHumanTranscript = useMatterStore((state) => state.admitHumanTranscript);
+  const settleHumanTranscriptRepair = useMatterStore((state) => state.settleHumanTranscriptRepair);
   const removeSelected = useMatterStore((state) => state.removeSelected);
   const moveNode = useMatterStore((state) => state.moveNode);
   const renameDocument = useMatterStore((state) => state.renameDocument);
@@ -81,10 +82,23 @@ export function MatterApp() {
   );
   const admission = useAdmission({
     commit: admitHumanTranscript,
+    settleRepair: settleHumanTranscriptRepair,
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
     locale: canvasPreferences.preferences.language,
     vocabulary: materialVocabulary,
   });
+  const clearRepairPresentations = admission.clearRepairPresentations;
+  const discardPendingRepairs = admission.discardPendingRepairs;
+  const undoWithPresentationReset = useCallback(() => {
+    discardPendingRepairs();
+    clearRepairPresentations();
+    undo();
+  }, [clearRepairPresentations, discardPendingRepairs, undo]);
+  const redoWithPresentationReset = useCallback(() => {
+    discardPendingRepairs();
+    clearRepairPresentations();
+    redo();
+  }, [clearRepairPresentations, discardPendingRepairs, redo]);
   const admissionAnchor = createAdmissionAnchor(tree, navigation);
   const removeCurrentThought = useCallback(() => removeSelected({
     commandId: `human_removal_${createOperationId()}`,
@@ -150,8 +164,8 @@ export function MatterApp() {
       onInsertChild={extendChild}
       onSelectNode={select}
       onToggleFold={toggleFold}
-      onUndo={undo}
-      onRedo={redo}
+      onUndo={undoWithPresentationReset}
+      onRedo={redoWithPresentationReset}
       tree={tree}
     />
   );

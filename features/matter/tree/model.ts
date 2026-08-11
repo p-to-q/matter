@@ -68,7 +68,7 @@ export type TreeMutation =
 
 export type TreeCommand = {
   id: string;
-  source: "human" | "agent" | "fixture";
+  source: "human" | "repair" | "agent" | "fixture";
   interactionId?: string;
   expectedTreeId: string;
   expectedRevision: number;

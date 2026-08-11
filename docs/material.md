@@ -12,13 +12,14 @@ That record returns only through the existing inquiry surface and never becomes
 model context; its adapter boundary is specified in
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
-Browser speech admission performs punctuation-only normalization at the edge:
-spoken punctuation words become marks and a missing terminal mark is added. It
-does not rewrite wording or introduce generated content. This boundary leaves a
-future context/memory layer open for an explicit text-processing action: a user
-may later ask an AI workflow to inspect selected material under fixed prompts,
-with the server constructing a durable tree command only after that plan is
-accepted.
+Browser speech admission performs punctuation-only normalization at the edge,
+then enters the tree immediately. A detachable local repair port may settle a
+closed set of filler, recognition-echo, punctuation, spacing, and casing rules
+for twelve seconds. A result is a second `replace-text` command only when the
+tree, node, admitted text, timestamp, and document epoch still match; reload,
+expiry, undo, deletion, or a human edit makes it inert. The first expression and
+the repair are separately undoable. Interpretive rewriting remains an explicit
+selected-material transformation.
 
 Moving a node is a durable tree mutation. Exact source and target child-order
 mementos make one undo restore the previous virtual file-system projection and
@@ -190,7 +191,9 @@ the bundle only. They share one codec, not one filesystem object.
 
 ## Deliberately absent
 
-- vector store, embeddings, retrieval, or conversation history;
+- vector store, embeddings, retrieval, or material/model-fed conversation
+  history; the bounded local Ask Matter record remains the explicit exception
+  described above;
 - user-authored coordinates;
 - cross-branch links or a node type system;
 - persisted fold, focus, selection, pointer, audio, or transcript state.

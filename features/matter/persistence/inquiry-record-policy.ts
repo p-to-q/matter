@@ -109,7 +109,8 @@ function isStoredOutcome(value: unknown): boolean {
   return value.status === "unavailable" &&
     hasOnlyKeys(value, ["status", "reason"]) &&
     (value.reason === "NO_PROVIDER" || value.reason === "NO_MATERIAL" || value.reason === "RATE_LIMITED" ||
-      value.reason === "BUSY" || value.reason === "UNREACHABLE");
+      value.reason === "BUSY" || value.reason === "TIMED_OUT" ||
+      value.reason === "TEMPORARILY_UNAVAILABLE" || value.reason === "UNREACHABLE");
 }
 
 function isBoundedId(value: unknown): value is string {

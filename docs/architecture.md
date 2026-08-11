@@ -9,16 +9,37 @@ selected visible node (or document root) + microphone
   → browser-native Web Speech API (preferred)
   → POST /api/transcribe when an explicit server adapter exists
   → transcript
-  → POST /api/repair, bounded and optional, restores what recognition lost
-  → human insert command
-  → tree engine
+  → formatting-only human insert command → tree engine → first paint
+  ↘ detachable local repair computation, bounded to twelve seconds
+  → first-paint gate + admissible candidate
+  → opaque store lease + exact node/document revalidation
+  → optional repair command → tree engine
+  → transient material-settle receipt → canonical text renders once
 ```
 
-Repair is part of hearing, not of thinking. It may only restore punctuation,
-sentence boundaries, and a misheard word; a deterministic adjudication rejects
-anything larger, and every rejection admits the transcript as spoken. It
-therefore stays inside the human path and never opens the generative envelope:
-one command, one undo, no agent-sourced mutation.
+Repair is part of hearing, not of thinking. Admission never waits for it: the
+formatting floor is durable before repair computes, and a correction cannot
+commit until that floor has crossed a paint boundary. Day one uses a pure
+TypeScript rule port; a future cached worker may replace that composition
+without entering React, the store, or the tree engine. The store mints one
+store-unique short-lived capability after admission and consumes it on candidate,
+no-change, failure, cancellation, or timeout. The driver captures the current
+document epoch before speech starts; the store checks it atomically before the
+pure admission translator and again through the repair capability. Its own
+monotonic clock and the exact node memento decide remaining authority. A valid result is a second command with
+`source: "repair"`, so both the heard expression and the correction remain
+pointer-undoable. No repair lifecycle or model/cache state enters material.
+
+A successful repair returns one private `repairChange` value to its driver,
+while observable store state retains only the ordinary runtime receipt. A
+feature-local bounded presentation owner validates the exact tree, document
+epoch, node text, and node timestamp, then marks the canonical DOM text for one
+240ms opacity settle. It never renders an old-text copy, fragments characters,
+announces a status, or enters history, persistence, archive, or context. Undo,
+Redo, replacement, expiry, failure, reload, and reduced-motion rendering do not
+replay it.
+Lasso, stretch, node drag, and Undo/Redo synchronously discard pending repair
+capabilities: precise material control has priority over optional correction.
 
 Human structure changes through the same durable kernel:
 
@@ -69,8 +90,8 @@ reading was already correct before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
 
-Each of those model paths — repair, labelling, inquiry, and transform — is one
-scenario on a single harness: a frozen prompt built from the
+Each managed model path — inquiry-draft repair, labelling, inquiry, and
+transform — is one scenario on a single harness: a frozen prompt built from the
 shared spine, a budget, and an adjudicator that decides whether the answer beats
 a floor that is already correct without a model.
 [`reference/prompt-harness.md`](reference/prompt-harness.md) records why the
@@ -137,7 +158,7 @@ requires one config entry, UI copy, and focused server/client tests.
 | Durable local history | complete undo/redo journal paired atomically with the local snapshot; not exported. |
 | Navigation | focus and fold; derived view state, not history. |
 | Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
-| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials. |
+| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials, and bounded per-node repair presentation hints. |
 | Durable local inquiry | bounded visible Ask Matter record per tree; never material, history, archive, or model context. |
 | Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
 
@@ -301,7 +322,10 @@ frozen same-origin credential boundary). Browser speech and MediaRecorder upload
 are distinct, explicit client build capabilities and both default off; API
 presence and a server adapter name never implicitly select a transport or grant
 the browser permission to collect or upload audio. Voice admission is reported
-available only when at least one of those client transports is enabled.
+available only when at least one of those client transports is enabled. Client
+readiness may construct one unstarted native recognition object or await a
+bounded local-worker code handshake; permission, capture, audio decoding, and
+model initialization remain behind the person's first voice turn.
 
 `app/api/health` is a deployment probe, not a debug console; under the Matter
 base path it is reached as `/matter/api/health`. It reports only stable Matter

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS,
   LocalTranscriptionError,
   prepareLocalTranscription,
   resampleChannels,
@@ -9,11 +10,12 @@ import {
 
 afterEach(() => {
   resetLocalTranscriptionForTests();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("local transcription audio projection", () => {
-  it("warms only the worker code before a person records", () => {
+  it("waits for the worker code graph without starting model work", async () => {
     const workers: FakeWorker[] = [];
     vi.stubGlobal("window", {
       AudioContext: FakeAudioContext,
@@ -27,10 +29,38 @@ describe("local transcription audio projection", () => {
       }
     });
 
-    prepareLocalTranscription();
+    const preparation = prepareLocalTranscription();
 
     expect(workers).toHaveLength(1);
     expect(workers[0]?.postMessage).not.toHaveBeenCalled();
+    workers[0]?.emit({ status: "ready" });
+    await expect(preparation).resolves.toBeUndefined();
+    expect(workers[0]?.postMessage).not.toHaveBeenCalled();
+  });
+
+  it("bounds a worker code graph that never becomes ready", async () => {
+    vi.useFakeTimers();
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const preparation = prepareLocalTranscription();
+    const assertion = expect(preparation).rejects.toEqual(
+      new LocalTranscriptionError("timeout"),
+    );
+
+    await vi.advanceTimersByTimeAsync(LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS);
+
+    await assertion;
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
   });
 
   it("downmixes channels and resamples without changing duration", () => {

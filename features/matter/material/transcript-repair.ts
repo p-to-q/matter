@@ -156,11 +156,47 @@ export function adjudicateRepair(
   const source = repairSkeleton(original.text);
   const repaired = repairSkeleton(text);
   if (repaired.length === 0) return reject("EMPTY");
+  if (!preservesProtectedMeaning(original.text, text)) return reject("MEANING_CHANGED");
   const budget = repairBudget(source.length);
   if (Math.abs(source.length - repaired.length) > budget) return reject("MEANING_CHANGED");
   if (boundedEditDistance(source, repaired, budget) > budget) return reject("MEANING_CHANGED");
 
   return Object.freeze({ ok: true, text, changed: text !== original.text });
+}
+
+const PROTECTED_MEANING_PATTERNS: readonly RegExp[] = Object.freeze([
+  /\b(?:not|no|never|cannot|can't|won't|don't|isn't|aren't|wasn't|weren't|shouldn't|wouldn't|couldn't|mustn't)\b/giu,
+  /(?:不能|不要|別|别|沒|没|未|無|无|非|不)/gu,
+  /(?:じゃない|ではない|ません|ない)/gu,
+  /\b(?:nicht|kein|keine|keinen|keinem|keiner|keines|nie)\b/giu,
+  /\b(?:may|might|maybe|perhaps|probably|possibly|should|could|would|must)\b/giu,
+  /(?:可能|也许|也許|大概|应该|應該|或许|或許|未必)/gu,
+]);
+
+/**
+ * Edit distance alone cannot distinguish a typo from deleting one short word
+ * that reverses a thought. Numeric facts, negation, and uncertainty markers
+ * therefore form a zero-change semantic floor for every model-backed repair.
+ */
+function preservesProtectedMeaning(original: string, candidate: string): boolean {
+  if (!sameSequence(numericFacts(original), numericFacts(candidate))) return false;
+  for (const pattern of PROTECTED_MEANING_PATTERNS) {
+    if (!sameSequence(matches(original, pattern), matches(candidate, pattern))) return false;
+  }
+  return true;
+}
+
+function numericFacts(value: string): readonly string[] {
+  return [...value.matchAll(/\p{N}+(?:[.,]\p{N}+)*/gu)]
+    .map((match) => (match[0] ?? "").replace(/[.,]/gu, ""));
+}
+
+function matches(value: string, pattern: RegExp): readonly string[] {
+  return [...value.matchAll(pattern)].map((match) => (match[0] ?? "").toLocaleLowerCase());
+}
+
+function sameSequence(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 /**
