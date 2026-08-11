@@ -88,6 +88,32 @@ Non-goals:  free-form tone rewriting, streaming mutations, repair status UI,
             the twelve-second lease.
 ```
 
+### Active sub-slice — changed ink arrives in time
+
+Implementation evidence and corrected product intent reopen only the repair
+presentation freeze: a whole-passage ink settle does not reveal which language
+was repaired.
+
+```text
+Outcome:    after the heard baseline has had time to register, only inserted or
+            replaced graphemes arrive in a short readable sequence; unchanged
+            language never moves or fades.
+Boundary:   pure bounded grapheme-diff presentation policy, the existing
+            feature-local repair presentation owner, canonical text rendering,
+            and focused CSS/browser proof.
+Invariants: the final tree command remains atomic and separately undoable;
+            rendered textContent always equals canonical node text; layout,
+            selection, focus, hit testing, persistence, and accessibility never
+            read a provisional string; deletion-only repairs still receive one
+            bounded seam cue; reduced motion receives the final text immediately.
+Proof:      multilingual grapheme/diff/timing corpus; textContent and range
+            geometry tests; Strict Mode cleanup; laptop and narrow admission,
+            selection, Undo/reload, reduced-motion, full source and Chromium.
+Non-goals:  model-token streaming, old-text overlays, per-character durable
+            mutations, a repair status label, sound, caret simulation, or an
+            unbounded animation whose duration grows with transcript length.
+```
+
 Execution order is deliberately narrow:
 
 1. Publish this source preview with the first-turn voice boundary, durable

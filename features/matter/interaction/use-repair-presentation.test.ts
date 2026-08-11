@@ -84,9 +84,9 @@ describe("repair presentation ownership", () => {
     });
     controller.publish(CHANGE);
 
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(900);
     expect(controller.getSnapshot().get("node_1")).toBe(CHANGE);
-    vi.advanceTimersByTime(700);
+    vi.advanceTimersByTime(300);
     expect(controller.getSnapshot().size).toBe(0);
     controller.dispose();
   });

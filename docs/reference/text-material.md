@@ -47,12 +47,15 @@ buy an editing model we have deliberately removed.
 
 ## Chosen
 
-**Rendering.** A node is plain text in a block element. No per-character or
-per-token spans. A committed late transcript repair keeps that exact canonical
-text and may add one transient per-node data attribute for a 240ms opacity
-settle. The final string is complete in the first rendered frame; no old/new
-overlay, character stagger, `aria-live` announcement, or layout-changing motion
-exists. Reduced-motion and forced-colors presentations skip the animation.
+**Rendering.** A node is normally plain text in a block element. A committed
+late transcript repair keeps that exact canonical text while one transient,
+bounded presentation may split it into coalesced stable runs and at most 64
+changed grapheme timing units. Stable language is never animated. Changed units
+appear after a short recognition beat without changing their reserved geometry;
+then the plain-text DOM shape returns. `textContent` is canonical throughout,
+and there is no old/new overlay, `aria-live` announcement, caret, token stream,
+or layout-changing motion. Reduced-motion and forced-colors presentations skip
+the sequence.
 
 **Segmentation.** `Intl.Segmenter("en", { granularity: "grapheme" })` first
 produces the only legal UTF-16 boundaries. A forward scan over those graphemes

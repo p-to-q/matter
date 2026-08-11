@@ -3,11 +3,15 @@
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { AdmissionRepairCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
+import { REPAIR_REVEAL_MAX_TOTAL_MS } from "./repair-reveal";
 
 const PRESENTATION_LIMIT = 3;
 // Retention starts before React publishes the repaired tree. Keep it separate
-// from the 240ms CSS duration so a busy layout cannot truncate the motion.
-const PRESENTATION_RETENTION_MS = 1_000;
+// from the bounded reveal duration so a busy layout cannot truncate the final
+// grapheme. Retained before/after text is still released promptly afterwards.
+const PRESENTATION_RETENTION_MS = Math.ceil(
+  (REPAIR_REVEAL_MAX_TOTAL_MS + 400) / 100,
+) * 100;
 
 export type RepairPresentationScope = Readonly<{
   treeId: string;

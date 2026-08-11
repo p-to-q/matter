@@ -57,10 +57,14 @@ more important than the positive corpus; the function must be idempotent.
 
 The baseline remains fully canonical material while this work runs. The final
 candidate appears atomically after two animation-frame opportunities and at
-least 650 ms of baseline visibility, then receives one 240 ms non-looping ink
-settle. There is no provisional text layer, spinner, typing simulation, or
-layout fork. Selection, accessibility, history, and persistence always read the
-same complete node text.
+least 650 ms of baseline visibility. Its canonical text is complete in the DOM,
+history, and accessibility tree on the repair commit. A pure grapheme diff then
+keeps stable language untouched, pauses 160 ms, and reveals only inserted or
+replaced graphemes in reading order. A deletion-only repair cues one adjacent
+seam glyph because deleted language has no final glyph to animate. The sequence
+is compressed to at most 64 timing units and less than 800 ms. There is no model
+token stream, old-text overlay, spinner, provisional string, or layout fork.
+Reduced motion skips the sequence.
 
 ## Current managed fallback
 

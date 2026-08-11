@@ -39,10 +39,14 @@ pointer-undoable. No repair lifecycle or model/cache state enters material.
 A successful repair returns one private `repairChange` value to its driver,
 while observable store state retains only the ordinary runtime receipt. A
 feature-local bounded presentation owner validates the exact tree, document
-epoch, node text, and node timestamp, then marks only the canonical glyph color
-for one 240ms ink settle. Selection fill, focus outline, geometry, and hit
-targets remain steady. It never renders an old-text copy, fragments characters,
-announces a status, or enters history, persistence, archive, or context. Undo,
+epoch, node text, and node timestamp, then a pure bounded grapheme diff divides
+the canonical string into stable runs and changed reveal units. After a 160ms
+recognition beat, only inserted or replaced units arrive in reading order; a
+deletion-only repair lends one adjacent glyph to the seam cue. The whole visual
+sequence is capped below 800ms and retained for at most 1.2 seconds. DOM
+`textContent`, selection fill, focus outline, geometry, hit targets, and the
+accessible name remain complete and steady. It never renders an old-text copy,
+announces status, or enters history, persistence, archive, or context. Undo,
 Redo, replacement, expiry, failure, reload, and reduced-motion rendering do not
 replay it.
 Lasso, stretch, node drag, and Undo/Redo synchronously discard pending repair

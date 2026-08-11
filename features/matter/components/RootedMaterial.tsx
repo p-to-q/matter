@@ -75,6 +75,7 @@ import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import { useTransformTurn } from "./use-transform-turn";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import { isRepairPresentationCurrent } from "../interaction/use-repair-presentation";
+import { RepairingMaterialText } from "./RepairingMaterialText";
 import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
@@ -1349,12 +1350,15 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
         const isLassoSelected = lassoSelectedNodeIds.has(node.id);
+        const repairChange = repairPresentations.get(node.id);
         const isRepairSettling = repairPresentations.size > 0 &&
-          isRepairPresentationCurrent(
-            repairPresentations.get(node.id),
-            repairPresentationScope,
-            tree,
-          );
+          isRepairPresentationCurrent(repairChange, repairPresentationScope, tree);
+        const materialText = (
+          <RepairingMaterialText
+            change={isRepairSettling ? repairChange : undefined}
+            text={node.text}
+          />
+        );
         const languageProjection = isProjected && lassoSelection !== null
           ? projectLanguageAroundSelection(node.text, lassoSelection)
           : null;
@@ -1379,7 +1383,9 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               data-visual-projection={isProjected || undefined}
               type="button"
             >
-              {isSelected ? <span className="spatial-thought__label">{node.text}</span> : node.text}
+              {isSelected
+                ? <span className="spatial-thought__label">{materialText}</span>
+                : materialText}
             </button>
             {languageProjection?.ok ? (
               <LanguageSplitProjection

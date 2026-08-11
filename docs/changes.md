@@ -17,6 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-12 — Repair reveals changed ink, not a changed paragraph
+
+Changed: the repair command remains atomic, but its bounded presentation now
+diffs canonical before/after text by grapheme. Stable language never animates;
+after a 160 ms recognition beat, only inserted or replaced units arrive in
+reading order. Deletion-only repair cues one adjacent seam glyph. At most 64
+timing units complete below 800 ms, while reduced motion presents the final text
+whole.
+
+Why: a whole-passage fade says that something happened but hides what changed.
+The person needs enough time to register the heard baseline, then see the exact
+language Matter restored, without turning provider latency into a fake stream or
+letting animation become a second text model.
+
+Forecloses: animating unchanged language, token streaming into the tree,
+per-character commands, an old-text overlay, unbounded typewriter duration, or
+using visual fragments as selection, accessibility, history, or persistence
+authority.
+
 ## 2026-08-12 — Repair's live budget and visual signal match its real role
 
 Changed: one managed repair now receives six to eight seconds inside the

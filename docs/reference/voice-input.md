@@ -154,11 +154,13 @@ modality, and uncertainty. Rewriting, translating, answering, and obeying an
 instruction spoken inside the utterance are refused regardless of model output.
 
 Repair is allowed to fail and does so silently. There is no `repairing` UI
-phase, spinner, retry, cache status, or error. A committed correction lets the
-canonical node glyphs perform one short non-looping color settle while selection
-fill and focus chrome remain steady; the full final text is present, selectable,
-and accessible from its first frame. It is not a typing animation or alternate
-text layer. A successful admission mints one
+phase, spinner, retry, cache status, or error. A committed correction leaves
+unchanged language visually still, gives the changed seam one short recognition
+beat, then reveals only inserted or replaced graphemes in reading order. This is
+a bounded repair cue, not model-token streaming: the full final text is already
+present, selectable, and accessible, and focus, selection, hit testing, and
+layout never read a provisional string. Reduced motion presents it whole. A
+successful admission mints one
 opaque capability that is returned only to the driver and omitted from
 observable store state. No-change, adapter failure, abort, timeout, document
 replacement, and candidate settlement all consume it. The store uses its own

@@ -22,11 +22,17 @@ for (const viewport of [
       "saved",
     );
     await page.evaluate(() => {
-      const observed = window as Window & { __matterRepairAnimations?: string[] };
+      const observed = window as Window & {
+        __matterRepairAnimations?: Array<{ name: string; time: number; text: string }>;
+      };
       observed.__matterRepairAnimations = [];
       document.addEventListener("animationstart", (event) => {
-        if (event.animationName === "material-ink-settle") {
-          observed.__matterRepairAnimations?.push(event.animationName);
+        if (event.animationName === "material-grapheme-arrive") {
+          observed.__matterRepairAnimations?.push({
+            name: event.animationName,
+            time: performance.now(),
+            text: (event.target as HTMLElement).textContent ?? "",
+          });
         }
       });
     });
@@ -85,14 +91,41 @@ for (const viewport of [
     // The fixture model resolves immediately. The raw transcript must still be
     // the first canonical material for the complete visibility floor.
     await expect(heard).toHaveCount(1);
+    const rawSeenAt = await page.evaluate(() => performance.now());
     await expect(admitted).toHaveCount(1, { timeout: 2_000 });
     await expect(heard).toHaveCount(0);
-    expect(await page.evaluate(() =>
-      (window as Window & { __matterRepairAnimations?: string[] }).__matterRepairAnimations,
-    )).toContain("material-ink-settle");
+    const reveal = admitted.locator(".repair-text");
+    await expect(reveal).toHaveAttribute("data-repair-reveal-count", /[1-9]\d*/u);
+    await expect(reveal).toHaveText(repairedTranscript, { useInnerText: false });
+    const revealCount = Number(await reveal.getAttribute("data-repair-reveal-count"));
+    const changedInk = await reveal.locator('[data-repair-part="changed"]').allTextContents();
+    expect(changedInk.join("")).toContain("，");
+    expect(changedInk.join("")).toContain("时");
+    expect(changedInk.join("")).not.toContain("方案");
+    await expect.poll(async () => page.evaluate(() =>
+      (window as Window & { __matterRepairAnimations?: unknown[] })
+        .__matterRepairAnimations?.length ?? 0,
+    )).toBe(revealCount);
+    const animations = await page.evaluate(() =>
+      (window as Window & {
+        __matterRepairAnimations?: Array<{ name: string; time: number; text: string }>;
+      }).__matterRepairAnimations ?? [],
+    );
+    expect(animations.every(({ name }) => name === "material-grapheme-arrive")).toBe(true);
+    expect(Math.min(...animations.map(({ time }) => time)) - rawSeenAt).toBeGreaterThanOrEqual(120);
+    expect(Math.max(...animations.map(({ time }) => time)) -
+      Math.min(...animations.map(({ time }) => time))).toBeGreaterThan(40);
     expect(await admitted.locator(".spatial-thought__text").evaluate((element) =>
       getComputedStyle(element).opacity,
     )).toBe("1");
+    await expect(admitted.getByRole("button", { name: repairedTranscript, exact: true })).toHaveCount(1);
+    const revealingBox = await admitted.locator(".spatial-thought__text").boundingBox();
+    await expect(reveal).toHaveCount(0, { timeout: 2_000 });
+    const settledBox = await admitted.locator(".spatial-thought__text").boundingBox();
+    expect(revealingBox).not.toBeNull();
+    expect(settledBox).not.toBeNull();
+    expect(Math.abs(revealingBox!.width - settledBox!.width)).toBeLessThan(0.5);
+    expect(Math.abs(revealingBox!.height - settledBox!.height)).toBeLessThan(0.5);
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute(
       "data-interaction-pending",
       "true",
@@ -169,3 +202,33 @@ for (const viewport of [
     await expect(feedback).toHaveCount(0);
   });
 }
+
+test("reduced motion presents repaired text whole without a reveal sequence", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page
+    .locator(`[data-thought-id="${parentId}"]`)
+    .locator("[data-thought-text-id]")
+    .click();
+  await page.getByRole("button", {
+    name: "Record a thought below the selected material",
+    exact: true,
+  }).click();
+  await page.waitForTimeout(350);
+  await page
+    .getByRole("navigation", { name: "Editing tools" })
+    .getByRole("button", { name: "Stop recording", exact: true })
+    .click();
+
+  const admitted = page.locator('[data-thought-id^="thought_"]')
+    .filter({ hasText: repairedTranscript });
+  await expect(admitted).toHaveCount(1, { timeout: 2_000 });
+  const changed = admitted.locator('[data-repair-part="changed"]');
+  await expect(changed.first()).toBeAttached();
+  expect(await changed.evaluateAll((elements) => elements.every((element) => {
+    const style = getComputedStyle(element);
+    return style.animationName === "none" && style.color !== "rgba(0, 0, 0, 0)";
+  }))).toBe(true);
+  await expect(admitted.getByRole("button", { name: repairedTranscript, exact: true })).toHaveCount(1);
+});

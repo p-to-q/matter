@@ -36,6 +36,35 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.27
+
+Preview.27 changes only how an already-committed transcript repair is perceived.
+The heard baseline still remains visible for at least 650 ms and repair still
+commits as one exact tree command. A bounded Myers grapheme diff then keeps
+stable language still, reserves 160 ms for recognition, and reveals only
+inserted or replaced units in reading order. Deletion-only repair cues one
+adjacent seam glyph because the deleted text has no final glyph. At most 64
+timing units finish below 800 ms; the short-lived before/after receipt and DOM
+shape are released by 1.2 seconds.
+
+```text
+release proof          npm run check: 1,082 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 46 Chromium cases passed, 2
+                       capability-gated cases skipped; laptop and 390px repair
+                       flows observed delayed ordered grapheme arrivals while
+                       unchanged text, opacity, accessible name, and pre/post
+                       reveal geometry stayed exact
+accessibility proof    reduced motion rendered the complete repaired text with
+                       no animation; forced colors shares that final-state rule
+material boundary      DOM textContent is canonical from the repair commit;
+                       no old-text layer, token stream, per-character command,
+                       timer per glyph, cache, status, or persistent fragment
+still gated            the external managed model pool; deterministic rules
+                       remain the complete offline repair path
+```
+
 ## Candidate verification — 0.2.0-preview.26
 
 Preview.26 makes the managed repair budget reachable in the deployed user
