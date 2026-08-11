@@ -211,6 +211,40 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes.voice_node_duplicate_second.text).toBe("我觉得可以。");
   });
 
+  it("revalidates a model delta from the recomputed rule floor", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_composite_repair",
+      commandId: "human_admission_composite_repair",
+      nodeId: "voice_node_composite_repair",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "i think we need to i think we need to ship teh module",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "en-US",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    nowMs = 200;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "I think we need to ship the module.",
+      source: "model",
+      createdAt: "2026-08-11T10:00:00.100Z",
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_composite_repair.text)
+      .toBe("I think we need to ship the module.");
+  });
+
   it("keeps a stale repair silent and leaves store diagnostics unchanged", () => {
     const store = createMatterStore("root");
     const rootId = store.getState().tree.rootId;
@@ -256,6 +290,46 @@ describe("Matter store", () => {
       createdAt: "2026-08-11T10:00:00.100Z",
     })).toMatchObject({ status: "rejected", errorCode: "REPAIR_STALE" });
     expect(store.getState().tree.nodes.voice_node_undo_redo.text).toBe("呃，我觉得可以。");
+  });
+
+  it("consumes repair authority when an unrelated structural drag commits", () => {
+    let nowMs = 100;
+    const store = createMatterStore("expanded", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_move_repair",
+      commandId: "human_admission_move_repair",
+      nodeId: "voice_node_move_repair",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    expect(store.getState().moveNode({
+      commandId: "human_move_while_repair_pending",
+      nodeId: SEEDED_DOCUMENT_NODE_IDS.imaginedTime,
+      targetParentId: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
+      createdAt: "2026-08-11T10:00:00.050Z",
+    })).toMatchObject({ status: "committed" });
+
+    nowMs = 200;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:00.100Z",
+    })).toMatchObject({ status: "rejected", errorCode: "REPAIR_STALE" });
+    expect(store.getState().tree.nodes.voice_node_move_repair.text).toBe("呃，我觉得可以。");
   });
 
   it("uses the store clock to expire a repair capability", () => {

@@ -135,7 +135,7 @@ export type AdmissionRepairSettlement =
       repairLeaseId: string;
       outcome: "candidate";
       text: string;
-      source: "rules" | "local-model";
+      source: "rules" | "model";
       createdAt: string;
     }>;
 
@@ -377,12 +377,17 @@ export function createMatterStore(
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;
         }
+        const ruleFloor = repairAdmittedTranscript(lease.expectedText, lease.locale);
         const adjudicated = settlement.source === "rules"
-          ? settlement.text === repairAdmittedTranscript(lease.expectedText, lease.locale)
+          ? settlement.text === ruleFloor
             ? Object.freeze({ ok: true as const, text: settlement.text, changed: settlement.text !== lease.expectedText })
             : Object.freeze({ ok: false as const })
           : adjudicateRepair(
-              normalizeRepairInput({ text: lease.expectedText, locale: lease.locale }),
+              // Rules and model are one candidate, not two model edits. The
+              // recomputed floor is trusted only because the rules branch above
+              // is pure and exact; the model receives authority solely over its
+              // bounded delta from that floor.
+              normalizeRepairInput({ text: ruleFloor, locale: lease.locale }),
               settlement.text,
             );
         if (!adjudicated.ok || !adjudicated.changed) {
@@ -473,6 +478,7 @@ export function createMatterStore(
         }
         const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
         receipt = result.receipt;
+        if (result.ok) repairLeases.clear();
         const domain = protectDomain(result.state);
         return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(receipt) });
       });
@@ -498,9 +504,9 @@ export function createMatterStore(
     undo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
+        repairLeases.clear();
         const result = undoSession(runtimeState(current));
         receipt = result.receipt;
-        if (result.ok) invalidateRepairLeases(repairLeases, result.receipt.affectedNodeIds);
         const domain = protectDomain(result.state);
         return freezeState({
           ...current,
@@ -515,9 +521,9 @@ export function createMatterStore(
     redo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
+        repairLeases.clear();
         const result = redoSession(runtimeState(current));
         receipt = result.receipt;
-        if (result.ok) invalidateRepairLeases(repairLeases, result.receipt.affectedNodeIds);
         const domain = protectDomain(result.state);
         return freezeState({
           ...current,
@@ -829,16 +835,6 @@ function pruneExpiredRepairLeases(
   if (!Number.isFinite(nowMs)) return;
   for (const [id, lease] of leases) {
     if (nowMs - lease.admittedAtMs > ADMISSION_REPAIR_WINDOW_MS) leases.delete(id);
-  }
-}
-
-function invalidateRepairLeases(
-  leases: Map<string, AdmissionRepairLease>,
-  affectedNodeIds: readonly string[],
-): void {
-  const affected = new Set(affectedNodeIds);
-  for (const [id, lease] of leases) {
-    if (affected.has(lease.nodeId)) leases.delete(id);
   }
 }
 

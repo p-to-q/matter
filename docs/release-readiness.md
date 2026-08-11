@@ -36,6 +36,37 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.25
+
+Preview.25 makes transcript repair a real staged path without making it a new
+surface. Recognizer text still becomes human material immediately. An ordered,
+locale-exact analyzer produces the offline floor; one bounded managed proposal
+may then resolve a contextual restart, correction, misrecognition, or forced
+grammar seam. Rules and model settle as one separately undoable repair command
+after the baseline has remained visible for at least 650 ms. Failure keeps the
+rules, and neither branch exposes status, retains transcript/output cache, or
+receives material identity.
+
+```text
+release proof          npm run check: 1,066 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2
+                       capability-gated cases skipped; raw-before-repair,
+                       managed repair, reload, two-step Undo, narrow layout,
+                       lasso/stretch, archives, and 2,000-node diagnostics passed
+repair boundary        33 runtime corpus groups cover punctuation, filler,
+                       echo, stutter, restart, correction, ITN, literal guards,
+                       idempotence, and negative semantic cases; server,
+                       browser, and store independently adjudicate model output
+product boundary       no repair panel, progress, typing simulation, transcript
+                       cache, retry queue, retrieved context, material address,
+                       or structure created by a spoken formatting command
+still gated            a measured browser repair model and live transform
+                       promotion; managed repair remains an optional proposal
+                       above the deterministic offline floor
+```
+
 ## Candidate verification — 0.2.0-preview.24
 
 Preview.24 closes one speech-to-material boundary without widening the product.

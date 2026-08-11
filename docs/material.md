@@ -13,13 +13,21 @@ model context; its adapter boundary is specified in
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
 Browser speech admission performs punctuation-only normalization at the edge,
-then enters the tree immediately. A detachable local repair port may settle a
-closed set of filler, recognition-echo, punctuation, spacing, and casing rules
-for twelve seconds. A result is a second `replace-text` command only when the
-tree, node, admitted text, timestamp, and document epoch still match; reload,
-expiry, undo, deletion, or a human edit makes it inert. The first expression and
-the repair are separately undoable. Interpretive rewriting remains an explicit
-selected-material transformation.
+then enters the tree immediately. A detachable browser repair port always
+computes an ordered locale-rule floor for punctuation, clause signals, spacing,
+casing, filler residue, ASR echoes, restarts, corrections, and spoken commands.
+When its existing gate is enabled, it may send only that one utterance, locale,
+and bounded vocabulary to `POST /api/repair`; the model may resolve an abandoned
+start, contextual filler, correction, or forced grammar seam, but never receives
+a tree, node, address, or repair capability. The rule floor wins on timeout,
+rejection, malformed output, or an unavailable provider. A result is a second
+`replace-text` command only when the
+tree, node, admitted text, timestamp, document epoch, semantic guards, and
+twelve-second store lease still match. Reload, expiry, undo, deletion, or a
+human edit makes it inert. The first expression stays visible for a short
+perceptual floor before any correction, and admission and repair remain
+separately undoable. Free rewriting remains an explicit selected-material
+transformation.
 
 Moving a node is a durable tree mutation. Exact source and target child-order
 mementos make one undo restore the previous virtual file-system projection and

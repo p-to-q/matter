@@ -13,10 +13,11 @@ the running product, not how ambitious a feature sounds.
    thread.
 3. **Structure is restraint.** One rooted tree is simultaneously presentation,
    lineage, and the model's context boundary. Hidden retrieval is not context.
-4. **Unfinished language stays unfinished.** Preserve vocabulary, rhythm,
-   uncertainty, and meaningful hesitation. A short repair lease may remove only
-   low-ambiguity recognition artifacts; anything interpretive requires the
-   person's direction and remains separately undoable.
+4. **Unfinished language stays unfinished.** Preserve vocabulary, intent,
+   uncertainty, and meaningful emphasis. A short, separately undoable repair
+   lease may aggressively remove recognizable transcription debris, abandoned
+   speech, and a spoken correction, then lightly settle the intended wording;
+   changing a claim or completing an idea still requires their direction.
 5. **The primary path is bodily.** Pointer and voice must be sufficient. Normal
    web accessibility remains supported; keyboard absence is never an excuse to
    make semantics inaccessible.

@@ -19,7 +19,8 @@ import {
   type AdmissionScope,
 } from "./admission-driver";
 import { createBrowserVoicePort } from "./browser-voice";
-import { createLocalTranscriptRepairPort } from "./local-transcript-repair";
+import { afterBaselineVisible } from "./repair-presentation-gate";
+import { createTranscriptRepairPort } from "./transcript-repair-port";
 import { requestTranscription } from "./transcription-client";
 import { useRepairPresentation } from "./use-repair-presentation";
 
@@ -71,8 +72,8 @@ export function useAdmission({
       onRepairCommitted: repairPresentation.publish,
       createVoice: createBrowserVoicePort,
       transcribe: requestTranscription,
-      repair: createLocalTranscriptRepairPort(),
-      afterBaselinePaint,
+      repair: createTranscriptRepairPort(),
+      afterBaselineVisible,
       createInteractionId,
       createMaterialId,
       canonicalNow,
@@ -134,20 +135,4 @@ function canonicalNow(): string {
 
 function monotonicNow(): number {
   return performance.now();
-}
-
-/** Two frames guarantee that the synchronous baseline commit can paint first. */
-function afterBaselinePaint(callback: () => void): () => void {
-  let cancelled = false;
-  let secondFrame: number | undefined;
-  const firstFrame = requestAnimationFrame(() => {
-    secondFrame = requestAnimationFrame(() => {
-      if (!cancelled) callback();
-    });
-  });
-  return () => {
-    cancelled = true;
-    cancelAnimationFrame(firstFrame);
-    if (secondFrame !== undefined) cancelAnimationFrame(secondFrame);
-  };
 }

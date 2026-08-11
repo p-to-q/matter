@@ -69,6 +69,21 @@ describe("repairTranscript", () => {
     expect(result.fallbackReason).toBeUndefined();
   });
 
+  it("accepts the person's later choice in an unmistakable backtrack", async () => {
+    const spoken = "How about we meet tomorrow at 7, actually, let's do 3";
+    const adapter: ScenarioAdapter = async () => ({
+      text: "How about we meet tomorrow at 3?",
+    });
+    const result = await repairTranscript(repairRequest({
+      locale: "en-US",
+      text: spoken,
+    }), idle(), adapter);
+    expect(result).toMatchObject({
+      source: "model",
+      text: "How about we meet tomorrow at 3?",
+    });
+  });
+
   it("discards an answer that rewrote the thought", async () => {
     const adapter: ScenarioAdapter = async () => ({
       text: "建议先搁置这件事，等条件成熟后再评估它的可行性和成本结构。",
@@ -202,7 +217,9 @@ describe("compileRepairPrompt", () => {
   });
 
   it("states the mandate and its limits", () => {
-    expect(prompt).toContain("nothing added and nothing taken away");
+    expect(prompt).toContain("remove abandoned speech and recognition debris");
+    expect(prompt).toContain("self-correction");
+    expect(prompt).toContain("light spoken-to-written smoothing");
     expect(prompt).toContain("translate, summarize, expand, explain, continue, or answer");
     expect(prompt).toContain("leave it exactly as it is");
   });

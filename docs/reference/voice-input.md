@@ -23,7 +23,7 @@ pointer starts at empty root / node / segment
   → on-device Whisper worker, or POST /api/transcribe (explicit fallbacks)
   → transcript
   → immediate human material admission, or transient transform direction
-  → for admission only: one local repair lease after the first paint
+  → for admission only: one repair lease after a short visibility floor
 ```
 
 Raw audio is never written to storage or logs. Failure preserves the anchor or
@@ -129,22 +129,26 @@ frozen target; provider messages and voice content never enter routine logs.
 
 ## Transcript repair
 
-Recognition can lose punctuation and produce low-ambiguity artifacts such as a
-filler seam or one repeated function word. Retyping is exactly the keyboard the
-primary path is built to avoid, but waiting for correction makes the microphone
+Recognition can lose punctuation, duplicate a seam, retain verbal scaffolding,
+or record both sides of a correction. Retyping is exactly the keyboard the
+primary path is built to avoid, but waiting for cleanup makes the microphone
 feel slower than transcription. The final transcript therefore commits first
-with a formatting-only floor. Repair may compute beside the browser paint gate,
-but its second command cannot settle until the baseline has crossed that gate.
+with a formatting-only floor. Repair computes beside a visibility gate, but its
+second command cannot settle until the baseline has crossed two animation-frame
+opportunities and remained visible for at least 650 ms.
 
-Its mandate is restoration, not improvement. The day-one pure TypeScript rules
-may settle CJK/Latin spacing, explicit spoken CJK punctuation, a closed locale
-list of fillers, and recognition echoes with visible token boundaries. They
-deliberately preserve uncertainty, meaningful hesitation, numbers, names,
-negation, emphasis, false starts, and ambiguous discourse markers. A false
-negative is acceptable; a semantic false positive is not.
+Its mandate is faithful spoken-to-written recovery, not free improvement. The ordered pure TypeScript rules
+settle CJK/Latin spacing, locale punctuation and sentence shape, explicit spoken
+punctuation, a closed filler list, bounded recognition echoes and stutters,
+well-formed addresses, stable product casing, and explicit self-correction
+shapes. The managed proposal may additionally resolve a contextual filler,
+abandoned start, later correction, misheard word, or forced grammar seam.
+Destructive passes protect URLs, email addresses, numbers, units, negation,
+uncertainty, quantifiers, emphasis, and punctuation words used as ordinary
+nouns. A false negative is acceptable; changing a claim is not.
 
-That mandate is enforced outside any future model. A rules candidate must equal
-the pure function result exactly. A local-model candidate must pass the existing
+That mandate is enforced outside the model. A rules candidate must equal the
+pure function result exactly. A managed-model candidate must pass the existing
 spoken-skeleton edit budget plus zero-change guards for numeric facts, negation,
 modality, and uncertainty. Rewriting, translating, answering, and obeying an
 instruction spoken inside the utterance are refused regardless of model output.
@@ -178,16 +182,19 @@ store also owns a unique sequence in every repair lease id, so correctness does
 not depend on a caller making command ids globally unique.
 
 The admission composition uses a detachable lifecycle-local port with only
-`repair(input)` and `dispose()`. Day one injects the rule implementation and
-makes no repair network request. A future worker port may own one pinned local
+`repair(input)` and `dispose()`. It always computes the rule floor first, then
+may send that floor through the existing bounded `/api/repair` envelope. A
+disabled, busy, slow, rejected, malformed, or failed managed proposal returns
+the rule result without status or retry. A future worker port may replace the
+managed proposal while keeping this exact boundary; it may own one pinned local
 model, cache, single-flight load, busy shedding, deadline, and session-local
 circuit breaker. Cold loading prepares a later utterance and returns rules for
 the current one; model/runtime state stays inside the adapter. The worker,
 fallback, cache, and candidate gates are frozen in
 [`local-transcript-repair.md`](local-transcript-repair.md).
 
-`POST /api/repair` remains a separate managed envelope for Ask Matter dictation
-drafts and a future explicit managed adapter. It receives protocol and prompt
+`POST /api/repair` is the shared managed envelope for Ask Matter dictation
+drafts and one post-admission proposal. It receives protocol and prompt
 version, operation identity, locale, and one utterance — no tree, node, lineage,
 or target. A dictated question is a draft rather than material, so closing the
 inquiry aborts the request and no repair command or lease exists.

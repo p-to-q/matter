@@ -46,13 +46,13 @@ contract.
 Outcome:    a new person can complete the one material loop with a warmed,
             truthful voice path, then undo, redo, and reload it.
 Boundary:   first-turn voice readiness; immediate admission plus detachable
-            twelve-second local repair; the existing fixture transform vertical
+            twelve-second composite repair; the existing fixture transform vertical
             slice; local tree/history durability; release receipt. No new
             workspace, memory, or system surface.
 Invariants: readiness never requests microphone permission, captures audio, or
             downloads a speech model; a voice start has a bounded failure;
             repair computes without extending first-paint latency but cannot
-            commit before that boundary; only a committed correction gets one
+            commit before the 650ms visibility boundary; only a committed correction gets one
             short material-native settle and owns no visible status;
             Ask Matter retention remains behind its existing inquiry surface;
             only the tree engine commits material.
@@ -65,6 +65,27 @@ Proof:      focused voice readiness/lifecycle/rule tests; admission→repair→
 Non-goals:  live transform promotion, account/sync, an Ask Matter log manager,
             CRDT/event-sourcing rewrite, renderer virtualization without a
             measured trigger, or a native shell.
+```
+
+### Active slice — repair that visibly earns its second change
+
+```text
+Outcome:    the heard baseline still appears first, then a materially broader
+            correction can settle once: stronger locale rules immediately,
+            or one bounded managed proposal when it beats that rule floor.
+Boundary:   transcript-repair rule policy, the lifecycle-local repair port,
+            existing POST /api/repair, and the baseline-presentation gate.
+Invariants: no repair delays admission; one lease permits at most one second
+            command; the server sees no tree/address; every proposal is
+            adjudicated again against the admitted baseline; failure returns
+            rules; the baseline remains visible for a short measured minimum;
+            Undo/Redo, expiry, human gestures, and reload keep their authority.
+Proof:      positive/negative/idempotence corpora; remote success, rejection,
+            timeout and abort tests; minimum-visibility scheduler test; driver,
+            store, history, focused browser, full source and Chromium receipts.
+Non-goals:  free-form tone rewriting, streaming mutations, repair status UI,
+            cached transcript/output, a second provider framework, or widening
+            the twelve-second lease.
 ```
 
 Execution order is deliberately narrow:

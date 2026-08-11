@@ -13,7 +13,7 @@
  * lightly" means in code rather than in a deck:
  *
  * 1. **A model answer is a suggestion.** Every scenario has a floor that is
- *    already correct without a model — the words as heard, the deterministic
+ *    already correct without a model — the repair request floor, the deterministic
  *    label, a stated unavailability, the passage unchanged — and adjudication
  *    decides whether the suggestion beats the floor. Nothing here can fail in a
  *    way a person has to handle.

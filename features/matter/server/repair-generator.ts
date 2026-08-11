@@ -24,11 +24,11 @@ import { REPAIR_SCENARIO } from "./repair-harness";
 /**
  * Settles one repair request.
  *
- * The floor is the words as heard, and it is never far away: this module's only
+ * The floor is the request text, and it is never far away: this module's only
  * job is to decide whether asking is worth it, ask through the shared harness,
  * and settle either way. There is no cache and no request coalescing, unlike
  * labelling — two people never say the same sentence twice, so a cache here
- * would hold memory and answer nothing.
+ * would retain user language and answer almost nothing.
  */
 
 export type RepairGeneratorLimits = ScenarioGovernorLimits;

@@ -54,7 +54,7 @@ makes the whole path allowed to fail:
 
 | Scenario | Floor when no answer is usable |
 | --- | --- |
-| transcript repair | the words as heard |
+| transcript repair | the deterministic rule floor computed from the words as heard |
 | thought label | the deterministic label already on screen |
 | inquiry | a stated unavailability — never invented prose |
 | transform | the passage unchanged, and a pointer retry |
@@ -68,8 +68,12 @@ judges the answer against what the person fixed, and each judgement is a
 different shape because each scenario withholds something different:
 
 - repair compares *spoken skeletons* — both texts stripped to what was actually
-  pronounced — inside a proportional edit budget, so punctuation is free and
-  rewriting is impossible. It is also what lets repair accept a vocabulary hint
+  pronounced — inside a capped proportional edit budget, so punctuation is free
+  while wholesale rewriting is impossible. Numeric and unit facts, literal
+  addresses, negation, uncertainty, quantifiers, and ordering cues are locked.
+  One separately checked deletion-only shape permits adopting the replacement
+  side of an explicit correction; it cannot insert or reorder anything. This is
+  also what lets repair accept a vocabulary hint
   safely: a term from the person's own material may correct a misheard word, and
   still cannot be inserted into a sentence that did not contain it
   ([`voice-input.md`](voice-input.md));

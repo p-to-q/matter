@@ -9,12 +9,9 @@ import {
 import { PROTOCOL_VERSION } from "../tree/model";
 
 /**
- * Asks the server to repair one transcript before it is admitted.
- *
- * The caller already holds a usable transcript, so this boundary is allowed to
- * fail: the deadline is short, there is no retry, and an unreadable or
- * unrecognised answer is simply not applied. Every rejection path here ends in
- * the same place — the words the person actually said become material.
+ * Asks the server for one bounded proposal after the usable transcript has
+ * already become material. The request may fail without retry or visible error:
+ * every rejection leaves the person's admitted baseline in place.
  */
 export type RepairRequestInput = Readonly<{
   operationId: string;
@@ -50,9 +47,8 @@ export async function requestTranscriptRepair(input: RepairRequestInput): Promis
   });
   const deadline = withDeadline(input.signal, input.timeoutMs ?? REPAIR_CLIENT_TIMEOUT_MS);
 
-  let response: Response;
   try {
-    response = await Promise.race([
+    const response = await Promise.race([
       fetch(`${clientMatterBasePath()}/api/repair`, {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/json" },
@@ -63,25 +59,30 @@ export async function requestTranscriptRepair(input: RepairRequestInput): Promis
       }),
       deadline.settlement,
     ]);
+    // Fetch may resolve as soon as response headers arrive. Keep the same
+    // deadline around the bounded body read so a slow or stalled proxy cannot
+    // outlive the repair lease while retaining request resources.
+    const text = await Promise.race([
+      readBoundedText(response, MAX_REPAIR_RESPONSE_BYTES, deadline.signal),
+      deadline.settlement,
+    ]);
+    if (!response.ok) throw new RepairUnavailable();
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text) as unknown;
+    } catch {
+      throw new RepairUnavailable();
+    }
+    if (!isRepairSuccess(payload, { operationId: input.operationId, attempt: input.attempt })) {
+      throw new RepairUnavailable();
+    }
+    return payload;
   } catch (error) {
     if (input.signal.aborted) throw error;
     throw new RepairUnavailable();
   } finally {
     deadline.dispose();
   }
-
-  const text = await readBoundedText(response, MAX_REPAIR_RESPONSE_BYTES);
-  if (!response.ok) throw new RepairUnavailable();
-  let payload: unknown;
-  try {
-    payload = JSON.parse(text) as unknown;
-  } catch {
-    throw new RepairUnavailable();
-  }
-  if (!isRepairSuccess(payload, { operationId: input.operationId, attempt: input.attempt })) {
-    throw new RepairUnavailable();
-  }
-  return payload;
 }
 
 /**
@@ -100,7 +101,11 @@ export class RepairUnavailable extends Error {
  * Reads at most `maxBytes` and refuses malformed UTF-8. A replacement character
  * would turn a broken response into a plausible-looking sentence.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<string> {
   const declared = response.headers.get("content-length");
   if (declared !== null && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
     await response.body?.cancel().catch(() => undefined);
@@ -111,6 +116,11 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  const cancelReader = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  if (signal.aborted) cancelReader();
+  else signal.addEventListener("abort", cancelReader, { once: true });
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -121,6 +131,7 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
       chunks.push(value);
     }
   } finally {
+    signal.removeEventListener("abort", cancelReader);
     reader.releaseLock();
     if (total > maxBytes) await body.cancel().catch(() => undefined);
   }

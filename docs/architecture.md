@@ -10,17 +10,23 @@ selected visible node (or document root) + microphone
   → POST /api/transcribe when an explicit server adapter exists
   → transcript
   → formatting-only human insert command → tree engine → first paint
-  ↘ detachable local repair computation, bounded to twelve seconds
-  → first-paint gate + admissible candidate
+  ↘ detachable repair port: ordered locale rules → optional POST /api/repair
+  → two-paint + 650ms visibility gate + admissible candidate
   → opaque store lease + exact node/document revalidation
   → optional repair command → tree engine
   → transient material-settle receipt → canonical text renders once
 ```
 
-Repair is part of hearing, not of thinking. Admission never waits for it: the
+Repair is faithful intent recovery at the hearing boundary, not generative
+thinking. Admission never waits for it: the
 formatting floor is durable before repair computes, and a correction cannot
-commit until that floor has crossed a paint boundary. Day one uses a pure
-TypeScript rule port; a future cached worker may replace that composition
+commit until that floor has crossed two paint opportunities and remained
+visible for 650ms. The browser port computes a pure TypeScript floor first, then
+may ask the existing managed repair route to improve that floor. The request
+carries one utterance, locale, and bounded vocabulary, never tree identity or
+address. It may remove clearly abandoned speech and lightly settle forced
+grammar, but semantic facts remain locked. Timeout, rejection, malformed output, and provider absence all return
+the local rules; a future cached worker can become another proposal source
 without entering React, the store, or the tree engine. The store mints one
 store-unique short-lived capability after admission and consumes it on candidate,
 no-change, failure, cancellation, or timeout. The driver captures the current
@@ -90,7 +96,7 @@ reading was already correct before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
 
-Each managed model path — inquiry-draft repair, labelling, inquiry, and
+Each managed model path — admission or inquiry-draft repair, labelling, inquiry, and
 transform — is one scenario on a single harness: a frozen prompt built from the
 shared spine, a budget, and an adjudicator that decides whether the answer beats
 a floor that is already correct without a model.

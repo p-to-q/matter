@@ -25,9 +25,9 @@ import {
   type VoiceRecording,
 } from "./browser-voice";
 import type {
-  LocalTranscriptRepairPort,
-  LocalTranscriptRepairResult,
-} from "./local-transcript-repair";
+  TranscriptRepairPort,
+  TranscriptRepairResult,
+} from "./transcript-repair-port";
 import {
   TranscriptionClientError,
   type requestTranscription,
@@ -50,8 +50,8 @@ export type AdmissionDriverDependencies = Readonly<{
   onRepairCommitted: (change: AdmissionRepairCommittedChange) => void;
   createVoice: () => VoicePort;
   transcribe: Transcribe;
-  repair: LocalTranscriptRepairPort;
-  afterBaselinePaint: (callback: () => void) => () => void;
+  repair: TranscriptRepairPort;
+  afterBaselineVisible: (callback: () => void) => () => void;
   createInteractionId: () => string;
   createMaterialId: () => string;
   canonicalNow: () => string;
@@ -70,9 +70,9 @@ type LateRepairResources = {
   controller: AbortController;
   repairLeaseId: string;
   timeout?: ReturnType<typeof setTimeout>;
-  cancelPaintGate?: () => void;
-  paintReady: boolean;
-  candidate?: LocalTranscriptRepairResult;
+  cancelVisibilityGate?: () => void;
+  baselineVisible: boolean;
+  candidate?: TranscriptRepairResult;
 };
 
 /**
@@ -135,6 +135,10 @@ export class AdmissionDriver {
   }
 
   start(anchor: AdmissionAnchor): void {
+    // A new utterance is a fresh material decision. An older optional repair
+    // must not land after this pointer action, advance the tree revision, and
+    // invalidate the microphone operation that the person just started.
+    this.cancelLateRepairs();
     this.send({
       type: "start",
       token: this.dependencies.createInteractionId(),
@@ -406,7 +410,7 @@ export class AdmissionDriver {
     const resources: LateRepairResources = {
       controller,
       repairLeaseId: input.repairLeaseId,
-      paintReady: false,
+      baselineVisible: false,
     };
     this.lateRepairs.set(key, resources);
     resources.timeout = setTimeout(
@@ -414,12 +418,12 @@ export class AdmissionDriver {
       ADMISSION_REPAIR_WINDOW_MS,
     );
     try {
-      resources.cancelPaintGate = this.dependencies.afterBaselinePaint(
+      resources.cancelVisibilityGate = this.dependencies.afterBaselineVisible(
         () => {
           const active = this.lateRepairs.get(key);
           if (active === undefined || active.controller.signal.aborted) return;
-          active.cancelPaintGate = undefined;
-          active.paintReady = true;
+          active.cancelVisibilityGate = undefined;
+          active.baselineVisible = true;
           this.commitLateRepairIfReady(key, input);
         },
       );
@@ -445,6 +449,8 @@ export class AdmissionDriver {
     // returning its promise just as strictly as an asynchronous rejection.
     void Promise.resolve()
       .then(() => this.dependencies.repair.repair({
+        operationId: input.operation.interactionId,
+        attempt: input.operation.attempt,
         text: input.baseline,
         locale: this.dependencies.locale,
         vocabulary: this.vocabulary,
@@ -479,7 +485,7 @@ export class AdmissionDriver {
     if (
       resources === undefined ||
       resources.controller.signal.aborted ||
-      !resources.paintReady ||
+      !resources.baselineVisible ||
       resources.candidate === undefined
     ) return;
     if (this.dependencies.monotonicNow() - input.admittedAtMs > ADMISSION_REPAIR_WINDOW_MS) {
@@ -500,7 +506,7 @@ export class AdmissionDriver {
     if (repair === undefined) return;
     this.lateRepairs.delete(key);
     if (repair.timeout !== undefined) clearTimeout(repair.timeout);
-    repair.cancelPaintGate?.();
+    repair.cancelVisibilityGate?.();
     try {
       const receipt = this.dependencies.settleRepair(settlement);
       if (

@@ -4,11 +4,11 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
  * Owns the deterministic half of transcript repair: which utterances are worth
  * asking about, and what a model answer must preserve to be usable at all.
  *
- * Repair restores what a person said. It does not improve it. Recognition
- * reliably loses three things — punctuation, sentence boundaries, and the
- * occasional misheard character — and those three are the entire mandate.
- * Everything else in an utterance, including the hesitation, the repetition and
- * the false start, is the person's material and is not the model's to touch.
+ * Repair restores what a person said. It does not improve it. Recognition can
+ * flatten punctuation and casing, duplicate a streaming seam, retain acoustic
+ * filler, or write the discarded side of an explicit self-correction. Each
+ * broader edit is authorised as a closed repair class; everything outside those
+ * classes remains the person's material and is not the model's to touch.
  *
  * That distinction is enforced here rather than asked for in the prompt. A
  * prompt states an intention; this module decides whether the answer kept it.
@@ -24,7 +24,7 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
  * parse it, and a request whose prompt version the server does not recognise is
  * refused rather than answered by a different scenario than the client asked for.
  */
-export const TRANSCRIPT_REPAIR_PROMPT_VERSION = "transcript-repair/1";
+export const TRANSCRIPT_REPAIR_PROMPT_VERSION = "transcript-repair/3";
 
 export const MAX_REPAIR_TEXT_CODE_UNITS = MAX_NODE_TEXT_CODE_UNITS;
 
@@ -35,6 +35,7 @@ export const MAX_REPAIR_TEXT_CODE_UNITS = MAX_NODE_TEXT_CODE_UNITS;
  * on a round trip that cannot change the answer.
  */
 export const MIN_REPAIR_SKELETON_LENGTH = 8;
+export const MIN_CJK_REPAIR_SKELETON_LENGTH = 4;
 
 /**
  * How far an answer may move.
@@ -45,15 +46,18 @@ export const MIN_REPAIR_SKELETON_LENGTH = 8;
  * change and nothing larger: rewriting, translating, summarizing, or answering
  * the utterance all move far past it, because they change most of the string.
  */
-const REPAIR_BUDGET_RATIO = 0.12;
-const MIN_REPAIR_BUDGET = 1;
+const REPAIR_BUDGET_RATIO = 0.28;
+const MIN_REPAIR_BUDGET = 3;
+const REPAIR_GROWTH_RATIO = 0.12;
+const MIN_REPAIR_GROWTH = 2;
+const MAX_REPAIR_GROWTH = 12;
 /**
- * A long utterance must not buy a proportionally large licence. At 12% a
- * two-hundred-character thought would allow twenty-four edits, which is already
- * more misrecognition than any usable transcript contains; past that the ratio
- * stops being evidence of repair.
+ * A long utterance must not buy a proportionally unlimited licence. This budget
+ * admits a faithful spoken-to-written cleanup with several recognition fixes,
+ * but sixty-four code-point edits is the absolute ceiling; past that,
+ * similarity stops being evidence of the same utterance.
  */
-const MAX_REPAIR_BUDGET = 24;
+const MAX_REPAIR_BUDGET = 64;
 
 export type RepairSource = "verbatim" | "model";
 
@@ -87,13 +91,17 @@ export function normalizeRepairInput(
  */
 export function repairSkeleton(value: string): string {
   return value
+    .replace(/(\p{N})\s*%/gu, "$1percent")
     .replace(/[\p{P}\p{S}\p{Z}\s]/gu, "")
     .toLowerCase();
 }
 
 export function decideRepairRequest(input: NormalizedRepairInput): boolean {
   if (input.text.length === 0 || input.text.length > MAX_REPAIR_TEXT_CODE_UNITS) return false;
-  return repairSkeleton(input.text).length >= MIN_REPAIR_SKELETON_LENGTH;
+  const minimum = input.locale === "zh-CN" || input.locale === "zh-TW"
+    ? MIN_CJK_REPAIR_SKELETON_LENGTH
+    : MIN_REPAIR_SKELETON_LENGTH;
+  return repairSkeleton(input.text).length >= minimum;
 }
 
 export function repairBudget(skeletonLength: number): number {
@@ -156,9 +164,18 @@ export function adjudicateRepair(
   const source = repairSkeleton(original.text);
   const repaired = repairSkeleton(text);
   if (repaired.length === 0) return reject("EMPTY");
+  if (isExplicitCorrectionReduction(original.text, source, repaired)) {
+    return Object.freeze({ ok: true, text, changed: text !== original.text });
+  }
   if (!preservesProtectedMeaning(original.text, text)) return reject("MEANING_CHANGED");
+  if (!preservesSharedAnchorOrder(original.text, text)) return reject("MEANING_CHANGED");
   const budget = repairBudget(source.length);
-  if (Math.abs(source.length - repaired.length) > budget) return reject("MEANING_CHANGED");
+  const growthBudget = Math.min(
+    MAX_REPAIR_GROWTH,
+    Math.max(MIN_REPAIR_GROWTH, Math.ceil(source.length * REPAIR_GROWTH_RATIO)),
+  );
+  if (repaired.length - source.length > growthBudget) return reject("MEANING_CHANGED");
+  if (source.length - repaired.length > budget) return reject("MEANING_CHANGED");
   if (boundedEditDistance(source, repaired, budget) > budget) return reject("MEANING_CHANGED");
 
   return Object.freeze({ ok: true, text, changed: text !== original.text });
@@ -171,7 +188,88 @@ const PROTECTED_MEANING_PATTERNS: readonly RegExp[] = Object.freeze([
   /\b(?:nicht|kein|keine|keinen|keinem|keiner|keines|nie)\b/giu,
   /\b(?:may|might|maybe|perhaps|probably|possibly|should|could|would|must)\b/giu,
   /(?:可能|也许|也許|大概|应该|應該|或许|或許|未必)/gu,
+  /\b(?:all|every|only|none|always|never|least|most|before|after)\b/giu,
+  /(?:全部|所有|每个|每個|只有|仅|僅|至少|至多|之前|之后|之後)/gu,
 ]);
+
+type CorrectionMarkerKind = "sorry" | "rather" | "late" | "explicit";
+
+type CorrectionMarker = Readonly<{
+  kind: CorrectionMarkerKind;
+  start: number;
+  end: number;
+}>;
+
+/**
+ * An explicit correction is the one safe deletion shape broader than the
+ * ordinary edit budget. The repaired skeleton must equal the source with one
+ * contiguous span removed, and that exact removed span must carry the spoken
+ * correction marker. Nothing may be inserted, reordered, or paraphrased.
+ */
+function isExplicitCorrectionReduction(
+  original: string,
+  source: string,
+  repaired: string,
+): boolean {
+  if (source.length <= repaired.length) return false;
+  let prefix = 0;
+  while (prefix < repaired.length && source[prefix] === repaired[prefix]) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < repaired.length - prefix &&
+    source[source.length - 1 - suffix] === repaired[repaired.length - 1 - suffix]
+  ) suffix += 1;
+  if (prefix + suffix !== repaired.length) return false;
+  const deleted = source.slice(prefix, source.length - suffix);
+  if (deleted.length > Math.min(128, Math.ceil(source.length * 0.7))) return false;
+  const deletionEnd = source.length - suffix;
+  const marker = correctionMarkers(original).find((candidate) =>
+    candidate.start >= prefix && candidate.end <= deletionEnd);
+  if (marker === undefined) return false;
+  const beforeMarker = source.slice(prefix, marker.start);
+  const afterMarker = source.slice(marker.end, deletionEnd);
+  if (beforeMarker.length + afterMarker.length < 2) return false;
+  if (marker.kind === "sorry" && /(?:iam|im)$/iu.test(beforeMarker)) return false;
+  if (marker.kind === "rather" && /would$/iu.test(beforeMarker)) return false;
+  if (marker.kind === "late" && !containsLateCorrectionFact(beforeMarker)) return false;
+  // This is deletion-only: the candidate is exactly the untouched prefix and
+  // suffix of the original spoken skeleton. Facts inside the discarded side
+  // may legitimately differ from the replacement; nothing can be inserted,
+  // reordered, or invented through this wider path.
+  return true;
+}
+
+/**
+ * Maps surface-level, token-bounded correction markers into spoken-skeleton
+ * offsets. Searching the flattened skeleton directly would mistake `factually`
+ * for `actually` and turn an ordinary word into repair authority.
+ */
+function correctionMarkers(value: string): readonly CorrectionMarker[] {
+  const markers: CorrectionMarker[] = [];
+  const patterns: ReadonlyArray<readonly [RegExp, CorrectionMarkerKind]> = [
+    [/\b(?:sorry|i\s+mean|correction)\b/giu, "sorry"],
+    [/\brather\b/giu, "rather"],
+    [/\b(?:actually|wait)\b/giu, "late"],
+    [/(?:不对|不對|我是说|我是說|应该是|應該是|更正|改成|准确地说|準確地說)/gu, "explicit"],
+  ];
+  for (const [pattern, kind] of patterns) {
+    for (const match of value.matchAll(pattern)) {
+      const surfaceStart = match.index;
+      const surfaceText = match[0] ?? "";
+      const start = repairSkeleton(value.slice(0, surfaceStart)).length;
+      markers.push(Object.freeze({
+        kind,
+        start,
+        end: start + repairSkeleton(surfaceText).length,
+      }));
+    }
+  }
+  return Object.freeze(markers.sort((left, right) => left.start - right.start));
+}
+
+function containsLateCorrectionFact(value: string): boolean {
+  return /\p{N}|(?:today|tomorrow|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|am|pm|noon|midnight)|(?:今天|明天|昨天|周[一二三四五六日天]|星期[一二三四五六日天]|礼拜[一二三四五六日天]|禮拜[一二三四五六日天])/iu.test(value);
+}
 
 /**
  * Edit distance alone cannot distinguish a typo from deleting one short word
@@ -180,6 +278,9 @@ const PROTECTED_MEANING_PATTERNS: readonly RegExp[] = Object.freeze([
  */
 function preservesProtectedMeaning(original: string, candidate: string): boolean {
   if (!sameSequence(numericFacts(original), numericFacts(candidate))) return false;
+  if (!sameSequence(unitFacts(original), unitFacts(candidate))) return false;
+  const originalLiterals = literalFacts(original);
+  if (originalLiterals.length > 0 && !sameSequence(originalLiterals, literalFacts(candidate))) return false;
   for (const pattern of PROTECTED_MEANING_PATTERNS) {
     if (!sameSequence(matches(original, pattern), matches(candidate, pattern))) return false;
   }
@@ -188,7 +289,30 @@ function preservesProtectedMeaning(original: string, candidate: string): boolean
 
 function numericFacts(value: string): readonly string[] {
   return [...value.matchAll(/\p{N}+(?:[.,]\p{N}+)*/gu)]
-    .map((match) => (match[0] ?? "").replace(/[.,]/gu, ""));
+    .map((match) => canonicalNumericFact(match[0] ?? ""));
+}
+
+function canonicalNumericFact(value: string): string {
+  return /^\p{N}{1,3}(?:,\p{N}{3})+(?:\.\p{N}+)?$/u.test(value)
+    ? value.replace(/,/gu, "")
+    : value;
+}
+
+function unitFacts(value: string): readonly string[] {
+  return [...value.matchAll(
+    /\p{N}+(?:[.,]\p{N}+)*\s*(%|percent|per cent|kg|g|km|m|cm|mm|ms|s|mb|gb|tb|°c|°f)\b|\p{N}+(?:[.,]\p{N}+)*\s*%/giu,
+  )].map((match) => {
+    const unit = (match[1] ?? "%").toLocaleLowerCase();
+    return unit === "%" || unit === "percent" || unit === "per cent" ? "percent" : unit;
+  });
+}
+
+function literalFacts(value: string): readonly string[] {
+  return [...value.matchAll(
+    /(?:https?:\/\/|www\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/giu,
+  )].map((match) => (match[0] ?? "")
+    .replace(/[.,;:!?，。！？；：]+$/u, "")
+    .toLocaleLowerCase());
 }
 
 function matches(value: string, pattern: RegExp): readonly string[] {
@@ -197,6 +321,51 @@ function matches(value: string, pattern: RegExp): readonly string[] {
 
 function sameSequence(left: readonly string[], right: readonly string[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+/**
+ * Levenshtein distance limits how much may change, but a short clause swap can
+ * still be cheap. Unique lexical words and Han bigrams act as order anchors:
+ * substitutions may remove an anchor, while surviving anchors may never cross.
+ */
+function preservesSharedAnchorOrder(original: string, candidate: string): boolean {
+  const source = semanticAnchorPositions(original);
+  const repaired = semanticAnchorPositions(candidate);
+  const shared = [...source.entries()]
+    .filter(([anchor]) => repaired.has(anchor))
+    .sort((left, right) => left[1] - right[1]);
+  if (shared.length < 2) return true;
+  let last = -1;
+  for (const [anchor] of shared) {
+    const position = repaired.get(anchor);
+    if (position === undefined) continue;
+    if (position < last) return false;
+    last = position;
+  }
+  return true;
+}
+
+function semanticAnchorPositions(value: string): ReadonlyMap<string, number> {
+  const occurrences = new Map<string, number[]>();
+  const record = (anchor: string, position: number) => {
+    const positions = occurrences.get(anchor) ?? [];
+    positions.push(position);
+    occurrences.set(anchor, positions);
+  };
+  for (const match of value.toLocaleLowerCase().matchAll(/\p{Script=Latin}[\p{L}\p{N}'’-]{2,}/gu)) {
+    record(`l:${match[0]}`, match.index);
+  }
+  for (const match of value.matchAll(/\p{Script=Han}{2,}/gu)) {
+    const chars = Array.from(match[0]);
+    for (let index = 0; index < chars.length - 1; index += 1) {
+      record(`h:${chars[index]}${chars[index + 1]}`, match.index + index);
+    }
+  }
+  const unique = new Map<string, number>();
+  for (const [anchor, positions] of occurrences) {
+    if (positions.length === 1) unique.set(anchor, positions[0] ?? 0);
+  }
+  return unique;
 }
 
 /**

@@ -61,7 +61,7 @@ function harness(options: {
   settleRepair?: AdmissionDriverDependencies["settleRepair"];
   transcribe?: AdmissionDriverDependencies["transcribe"];
   repair?: AdmissionDriverDependencies["repair"]["repair"];
-  afterBaselinePaint?: AdmissionDriverDependencies["afterBaselinePaint"];
+  afterBaselineVisible?: AdmissionDriverDependencies["afterBaselineVisible"];
   onRepairCommitted?: AdmissionDriverDependencies["onRepairCommitted"];
 } = {}) {
   const voice = new ControlledVoice();
@@ -97,7 +97,7 @@ function harness(options: {
     createVoice: () => voice,
     transcribe,
     repair: { repair, dispose: disposeRepair },
-    afterBaselinePaint: options.afterBaselinePaint ?? ((callback) => {
+    afterBaselineVisible: options.afterBaselineVisible ?? ((callback) => {
       queueMicrotask(callback);
       return () => undefined;
     }),
@@ -154,7 +154,7 @@ describe("AdmissionDriver", () => {
   it("admits immediately, then applies an in-window repair as a second command", async () => {
     const repair: AdmissionDriverDependencies["repair"]["repair"] = vi.fn(async () => ({
       text: "保留这句话，先别删。",
-      source: "local-model" as const,
+      source: "model" as const,
     }));
     const h = harness({ repair });
     await reachRecording(h.driver, h.voice);
@@ -175,7 +175,7 @@ describe("AdmissionDriver", () => {
         repairLeaseId: "repair_lease_voice_1",
         outcome: "candidate",
         text: "保留这句话，先别删。",
-        source: "local-model",
+        source: "model",
         createdAt: "2026-08-03T10:00:00.000Z",
       },
     );
@@ -186,7 +186,7 @@ describe("AdmissionDriver", () => {
     let releasePaint!: () => void;
     const h = harness({
       repair: vi.fn(async () => ({ text: "修好了。", source: "rules" as const })),
-      afterBaselinePaint: (callback) => {
+      afterBaselineVisible: (callback) => {
         releasePaint = callback;
         return () => undefined;
       },
@@ -263,7 +263,7 @@ describe("AdmissionDriver", () => {
         });
         return {
           text: "太晚了。",
-          source: "local-model" as const,
+          source: "model" as const,
         };
       }),
     });
@@ -293,7 +293,7 @@ describe("AdmissionDriver", () => {
         await new Promise<void>((resolve) => {
           releaseRepair = resolve;
         });
-        return { text: "太晚了。", source: "local-model" as const };
+        return { text: "太晚了。", source: "model" as const };
       }),
     });
     await reachRecording(h.driver, h.voice);
@@ -310,6 +310,37 @@ describe("AdmissionDriver", () => {
       outcome: "discarded",
     });
     expect(h.settleRepair).toHaveBeenCalledTimes(1);
+  });
+
+  it("discards an older pending repair before a new microphone operation starts", async () => {
+    let releaseRepair!: () => void;
+    const h = harness({
+      repair: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        return { text: "旧的修复不应落下。", source: "model" as const };
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle(4);
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+
+    h.driver.start(ANCHOR);
+    expect(h.settleRepair).toHaveBeenCalledWith({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "discarded",
+    });
+    h.voice.grantPermission();
+    await settle();
+    expect(h.driver.getState().phase).toBe("recording");
+
+    releaseRepair();
+    await settle();
+    expect(h.settleRepair).toHaveBeenCalledTimes(1);
+    expect(h.driver.getState().phase).toBe("recording");
   });
 
   it("invalidates capture immediately when the document scope changes", async () => {

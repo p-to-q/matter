@@ -23,9 +23,9 @@ export type MatterHealth = Readonly<{
      */
     thoughtLabel: MatterHealthSurface;
     /**
-     * `available` means a live provider may repair a transcript before it is
-     * admitted. Every other value still admits every utterance, because the
-     * words as heard need no server.
+     * `available` means a live provider may improve the post-admission rule
+     * floor. Every other value still admits every utterance and applies local
+     * rules, because neither depends on the server.
      */
     transcriptRepair: MatterHealthSurface;
     /**

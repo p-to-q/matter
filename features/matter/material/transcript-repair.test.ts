@@ -49,8 +49,10 @@ describe("decideRepairRequest", () => {
     expect(decideRepairRequest(en("Yes."))).toBe(false);
   });
 
-  it("accepts an ordinary spoken thought", () => {
+  it("accepts a short CJK thought and an ordinary Latin thought", () => {
+    expect(decideRepairRequest(zh("这可以吗。"))).toBe(true);
     expect(decideRepairRequest(zh("我在想这件事到底该怎么做"))).toBe(true);
+    expect(decideRepairRequest(en("This works."))).toBe(true);
   });
 
   it("declines an empty or over-long transcript", () => {
@@ -93,6 +95,52 @@ describe("adjudicateRepair", () => {
     const original = zh("这个功能的实现事件比预期长");
     const verdict = adjudicateRepair(original, "这个功能的实现时间比预期长。");
     expect(verdict.ok).toBe(true);
+  });
+
+  it("accepts one explicit spoken correction as a single bounded deletion", () => {
+    expect(adjudicateRepair(
+      en("meet on Tuesday, sorry, Wednesday"),
+      "Meet on Wednesday.",
+    )).toEqual({ ok: true, text: "Meet on Wednesday.", changed: true });
+    expect(adjudicateRepair(
+      zh("我想周三，不对，周四去"),
+      "我想周四去。",
+    )).toEqual({ ok: true, text: "我想周四去。", changed: true });
+    expect(adjudicateRepair(
+      zh("我们周五发布，更正，周六发布"),
+      "我们周六发布。",
+    )).toEqual({ ok: true, text: "我们周六发布。", changed: true });
+    expect(adjudicateRepair(
+      en("meet tomorrow at 7 actually let's do 3"),
+      "Meet tomorrow at 3.",
+    )).toEqual({ ok: true, text: "Meet tomorrow at 3.", changed: true });
+  });
+
+  it("does not turn an ordinary deletion into a repair without the exact correction shape", () => {
+    expect(adjudicateRepair(
+      en("meet on Tuesday and Wednesday"),
+      "Meet on Wednesday.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      zh("我不想周三，不对，周四去"),
+      "我想周四去。",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("I actually like this version"),
+      "I like this version.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("I am sorry this happened"),
+      "This happened.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("This is factually wrong"),
+      "This is wrong.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("I actually really like this version"),
+      "I like this version.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
   });
 
   it("accepts an unchanged utterance and says so", () => {
@@ -151,6 +199,44 @@ describe("adjudicateRepair", () => {
       ok: false,
       reason: "MEANING_CHANGED",
     });
+    expect(adjudicateRepair(en("the ratio is 1.5"), "the ratio is 15.")).toEqual({
+      ok: false,
+      reason: "MEANING_CHANGED",
+    });
+    expect(adjudicateRepair(en("only this path runs before launch"), "this path runs after launch.")).toEqual({
+      ok: false,
+      reason: "MEANING_CHANGED",
+    });
+  });
+
+  it("rejects cheap clause reordering and unspoken growth", () => {
+    expect(adjudicateRepair(
+      en("alpha follows beta before launch"),
+      "Beta follows alpha before launch.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      zh("先讨论设计再检查工程"),
+      "先检查工程再讨论设计。",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("this works today"),
+      "This works very reliably for every team today.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+  });
+
+  it("allows numeric formatting but protects units and literal addresses", () => {
+    expect(adjudicateRepair(en("the limit is 1000 items"), "The limit is 1,000 items.").ok)
+      .toBe(true);
+    expect(adjudicateRepair(en("the rate is 20 percent"), "The rate is 20%.").ok)
+      .toBe(true);
+    expect(adjudicateRepair(en("the timeout is 20 ms"), "The timeout is 20 s.")).toEqual({
+      ok: false,
+      reason: "MEANING_CHANGED",
+    });
+    expect(adjudicateRepair(
+      en("open https://example.com/docs"),
+      "Open https://example.org/docs.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
   });
 
   it("rejects added commentary and multi-line answers", () => {
@@ -189,8 +275,9 @@ describe("adjudicateRepair", () => {
   });
 
   it("scales the licence with the utterance rather than granting it", () => {
-    expect(repairBudget(10)).toBe(2);
-    expect(repairBudget(8)).toBe(1);
-    expect(repairBudget(4_000)).toBe(24);
+    expect(repairBudget(10)).toBe(3);
+    expect(repairBudget(8)).toBe(3);
+    expect(repairBudget(30)).toBe(9);
+    expect(repairBudget(4_000)).toBe(64);
   });
 });

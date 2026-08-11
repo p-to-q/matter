@@ -6,47 +6,85 @@ rules, or a future browser model. The product contract lives in `product.md`,
 
 ## Product position
 
-Dictation products commonly compose capture, STT, an AI cleanup pass, and final
-insertion. Typeless advertises automatic removal of repetitions and self-
-corrections; open projects such as [OpenTypeless](https://github.com/tover0314-w/opentypeless)
-and [Voquill](https://github.com/voquill/voquill) similarly separate
-transcription from AI polish. Matter shares the separation but not the commit
-order or breadth: the recognizer result becomes material first, and a local
-repair may only make a narrow, separately undoable correction.
+Dictation products commonly compose capture, STT, a cleanup pass, and final
+insertion. [Typeless](https://www.typeless.com/help/quickstart/key-features)
+advertises filler, repetition, and self-correction handling; [Wispr Flow](https://docs.wisprflow.ai/articles/5373093536-how-do-i-use-smart-formatting-and-backtrack)
+separates contextual Backtrack from ordinary formatting. Open projects such as
+[OpenTypeless](https://github.com/tover0314-w/opentypeless) and
+[Voquill](https://github.com/voquill/voquill) similarly separate transcription
+from polish, and the [Four-in-One](https://arxiv.org/abs/2210.15063) work models
+inverse text normalization, punctuation, casing, and disfluency as distinct
+decisions rather than one rewrite instruction. Matter shares that staged
+architecture but reverses the trust and commit order: recognizer text becomes
+material first, deterministic rules establish the always-available floor, and
+a managed model may propose one more intent-aware, separately undoable
+spoken-to-written cleanup through the same semantic gate.
 
 ## Day-one boundary
 
 The composition injects one lifecycle-local object:
 
 ```ts
-type LocalTranscriptRepairPort = Readonly<{
+type TranscriptRepairPort = Readonly<{
   repair(input: {
+    operationId: string;
+    attempt: number;
     text: string;
     locale: MatterLocale;
     vocabulary: readonly string[];
     signal: AbortSignal;
-  }): Promise<{ text: string; source: "rules" | "local-model" }>;
+  }): Promise<{ text: string; source: "rules" | "model" }>;
   dispose(): void;
 }>;
 ```
 
-It never sees a tree, node, revision, lease, model id, or deadline. Day one
-injects a zero-dependency TypeScript implementation. Except for caller abort, a
-future adapter must contain expected infrastructure failures and return the rule
-floor. UI never observes warmup, cache, model, busy, or fallback state.
+It never sees a tree, node, revision, lease, model id, or durable deadline. The
+current adapter computes a zero-dependency TypeScript floor and, only when the
+utterance is worth asking about, sends that floor through the existing bounded
+managed envelope. Except for caller abort, expected infrastructure failures are
+contained and return the rule floor. UI never observes warmup, cache, model,
+busy, or fallback state.
 
-Rules are locale-exact and deliberately incomplete. They may handle terminal
-punctuation, safe CJK/Latin spacing, horizontally delimited spoken CJK
-punctuation, `um/uh/erm` or `呃/额/額`, and whitespace-delimited recognition
-echoes. They preserve `嗯`, Cantonese `唔`, names, numbers, negation, uncertainty,
-meaningful repetition, false starts, and ordinary mentions of punctuation. The
-negative corpus is more important than the positive corpus; the function must
-be idempotent.
+Rules are locale-exact, ordered, and deliberately closed. They handle terminal
+and high-confidence sentence punctuation, safe CJK/Latin spacing, spoken
+punctuation commands, low-information fillers, bounded recognition echoes and
+stutters, obvious restart/correction shapes, common dictated address forms, and
+stable casing for a tiny reviewed product vocabulary. Literal URLs and emails
+are protected before destructive passes and restored after them. Rules preserve
+`嗯`, Cantonese `唔`, numbers, negation, uncertainty, meaningful repetition,
+ordinary punctuation nouns, and ambiguous false starts. The negative corpus is
+more important than the positive corpus; the function must be idempotent.
+
+The baseline remains fully canonical material while this work runs. The final
+candidate appears atomically after two animation-frame opportunities and at
+least 650 ms of baseline visibility, then receives one 240 ms non-looping ink
+settle. There is no provisional text layer, spinner, typing simulation, or
+layout fork. Selection, accessibility, history, and persistence always read the
+same complete node text.
+
+## Current managed fallback
+
+The composite port is one path, not a provider framework:
+
+```text
+heard baseline → deterministic rule floor → optional POST /api/repair
+                                           ↘ failure/rejection → rule floor
+managed proposal → local adjudication → store lease + exact revalidation
+```
+
+The managed request carries operation identity, locale, one utterance, and a
+bounded vocabulary hint. It carries no material address. It has one 6.8-second
+client deadline covering headers and the bounded body, no retry, and no response
+cache. The server applies the shared prompt, pool, deadline, load shedding, and
+adjudicator. The browser and store recompute the deterministic floor and judge
+only the model's additional delta from it, so a safe restart removal is not
+charged twice. The store is still the only owner allowed to create the repair
+tree command.
 
 ## Future worker and fallback
 
 Do not add a generic provider framework. A future worker-backed factory may
-replace the injected port only after an evaluated model exists:
+replace the managed-proposal portion only after an evaluated model exists:
 
 ```text
 disabled → cold → loading → ready
@@ -99,10 +137,11 @@ states that its usage and quota values are approximate.
 The first evaluated profile is WASM plus q8. WebGPU is an optional later profile
 only after it materially improves measured p95; WebGPU and WASM sessions do not
 co-reside or retry within one utterance. While the local transcription flag is
-enabled, repair remains rules-only until combined Whisper→repair receipts prove
-that transfer, peak memory, main-thread tasks, and worker survival stay within
-the release budgets below. This avoids adding a speculative cross-model resource
-manager to day one.
+enabled, browser-model repair remains disabled until combined Whisper→repair
+receipts prove that transfer, peak memory, main-thread tasks, and worker survival
+stay within the release budgets below. The managed proposal and deterministic
+floor remain available without a second browser model. This avoids adding a
+speculative cross-model resource manager to day one.
 
 ## Candidate direction and gate
 

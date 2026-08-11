@@ -253,12 +253,14 @@ it is cheaper than reading it back.
 
 ## Repair boundaries
 
-Material admission does not use a network envelope. The final transcript first
+Material admission never waits on a network envelope. The final transcript first
 commits through the ordinary human admission translator. That successful call
 returns an opaque, non-persisted repair capability directly to the admission
 driver; it is deliberately omitted from observable store receipts. After the
-baseline commits, the local port may compute beside the first-paint gate, but
-no candidate may settle before the baseline crosses that boundary. Settling or
+baseline commits, the repair port computes its deterministic rule floor and may
+ask the existing managed envelope for one stronger proposal beside the
+visibility gate, but no candidate may settle before the baseline crosses two
+animation-frame opportunities and a 650 ms minimum. Settling or
 abandoning the attempt always consumes the capability.
 
 The interaction owner captures a document epoch beside its material anchor.
@@ -269,20 +271,30 @@ by the store instance rather than derived solely from caller command ids; two
 otherwise valid admissions can never overwrite each other's authority.
 
 The store owns the deadline and authority check. A rules candidate must equal
-the current pure rule result exactly; a future local-model candidate must pass
+the current pure rule result exactly; a managed-model candidate must pass
 the semantic adjudicator. Either path must still match the document epoch,
 tree, node text, and node timestamp captured at admission. Only then does the
 runtime construct one `replace-text` command with `source: "repair"`. It is a
 separate undo entry. The capability, worker, cache, input, and candidate are
 never serialized.
 
+Rules and model form one candidate, not two accumulating edits. The server sees
+the rule floor; the browser and store independently recompute it and adjudicate
+only the model delta from that floor. This prevents an authorised filler or
+restart removal from consuming the spelling-fix budget a second time. Numeric,
+unit, literal-address, negation, uncertainty, and quantifier locks apply to the
+ordinary model path. The only wider case is an exact deletion-only correction:
+the candidate must be the untouched prefix and suffix around a spoken correction
+marker, so it can choose the fact the person actually supplied but cannot insert
+or reorder one.
+
 A committed repair may return a transient `repairChange` receipt containing the
 actual before/after node mementos and committed revision to its synchronous
 owner. Observable store state keeps the base runtime receipt, so this view hint
 cannot become a wire value, persisted log, replay signal, or restored animation.
 
-The existing managed envelope remains for Ask Matter dictation drafts and an
-explicit future managed adapter. It carries one utterance and gets one back,
+The existing managed envelope is shared by Ask Matter dictation drafts and the
+post-admission repair port. It carries one utterance and gets one back,
 and names no tree, node, revision, lineage, or target:
 
 ```ts
@@ -315,21 +327,21 @@ export type RepairSuccess = {
 `operationId` and `attempt` echo the dictation interaction, so a late answer for
 a superseded attempt is discarded by identity rather than by timing.
 `source: "verbatim"` with a `fallbackReason` is a success, not an error: it means
-the words as heard are the answer. The only error codes are `INVALID_REQUEST`
-and `REPAIR_FAILED`, and neither reaches the person, because the browser admits
-the transcript it already holds.
+the request text is the answer. For material admission that request text is the
+deterministic rule floor, not the raw transcript. The only error codes are
+`INVALID_REQUEST` and `REPAIR_FAILED`, and neither reaches the person, because
+the browser already holds durable material and keeps the rule floor.
 
-`vocabulary` is a hint, not context: bounded terms the person already repeated
+`vocabulary` is a bounded recognition hint, not material structure: terms the person already repeated
 in their own visible material, most-used first, carrying no node id, depth, or
 ordering. It can only help a model recognise a word that was said —
-`adjudicateRepair` still rejects any answer that moves the spoken skeleton past
-its edit budget, so a hinted term cannot be inserted into a sentence that did
-not contain it. Absent, malformed, or over-long vocabulary is refused or
-ignored, and repair proceeds without it.
+`adjudicateRepair` gives the hint no special authority, and still applies the
+same edit, growth, fact, and order guards. Absent, malformed, or over-long
+vocabulary is refused or ignored, and repair proceeds without it.
 
 Bounds: transcript 2,000 code units, vocabulary 24 terms of 32 code units,
 request and response 12 KiB, provider deadline scaled to the utterance with a
-4-second ceiling, and a browser deadline 800 ms above it.
+6-second ceiling, and a browser deadline 800 ms above it.
 
 ## Inquiry envelope
 

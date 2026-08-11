@@ -19,9 +19,11 @@ archives, or later model context. The selected-language projection is visual
 only: the original text DOM remains the source for ranges, copying, and
 accessibility.
 The heard transcript becomes material first. A correction may compute in
-parallel but cannot commit before that first paint; if it commits, the complete
-canonical text performs one short settle rather than exposing repair status or
-retyping the paragraph.
+parallel but cannot commit before two paint opportunities and a short 650ms
+visibility floor. Ordered locale rules are always available; one bounded managed
+proposal may beat that floor without receiving the tree. If a correction
+commits, the complete canonical text performs one short settle rather than
+exposing repair status or retyping the paragraph.
 
 The fixture-gated generative turn is wired end-to-end. Still gated: a live
 transform provider and its deployed controls, explicit directory export/import,

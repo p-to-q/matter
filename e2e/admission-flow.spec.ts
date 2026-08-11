@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
 const parentId = "thought_fixture_imagined_lives";
+const heardTranscript = "呃，我觉得我觉得这个方案可以但是它的实现事件比预期长。";
+const repairedTranscript = "我觉得这个方案可以，但是它的实现时间比预期长。";
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
@@ -69,10 +71,13 @@ for (const viewport of [
     await page.waitForTimeout(350);
     await stop.click();
 
-    const admitted = page.locator('[data-thought-id^="thought_"]').filter({
-      hasText: "也许我还没有想清楚",
-    });
-    await expect(admitted).toHaveCount(1);
+    const heard = page.locator('[data-thought-id^="thought_"]').filter({ hasText: heardTranscript });
+    const admitted = page.locator('[data-thought-id^="thought_"]').filter({ hasText: repairedTranscript });
+    // The fixture model resolves immediately. The raw transcript must still be
+    // the first canonical material for the complete visibility floor.
+    await expect(heard).toHaveCount(1);
+    await expect(admitted).toHaveCount(1, { timeout: 2_000 });
+    await expect(heard).toHaveCount(0);
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute(
       "data-interaction-pending",
       "true",
@@ -108,6 +113,10 @@ for (const viewport of [
     await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
     await expect(admitted).toHaveCount(1);
     await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await expect(heard).toHaveCount(1);
+    await expect(admitted).toHaveCount(0);
+    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await expect(heard).toHaveCount(0);
     await expect(admitted).toHaveCount(0);
     expect(browserErrors).toEqual([]);
   });

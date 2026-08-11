@@ -162,6 +162,10 @@ for (const viewport of [
       x: secondHandleBox.x + secondHandleBox.width / 2,
       y: secondHandleBox.y + secondHandleBox.height / 2,
     };
+    // `hover()` targeted the previous layout sample. Re-aim at the box we just
+    // measured so a busy parallel run cannot press beside a handle that moved
+    // between actionability and the fresh receipt.
+    await page.mouse.move(secondStart.x, secondStart.y);
     await page.mouse.down();
     await page.mouse.move(secondStart.x, secondStart.y + 60, { steps: 5 });
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-stretching", "true");

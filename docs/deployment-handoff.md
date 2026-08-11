@@ -85,7 +85,7 @@ declares all three non-secret `live` switches in `vercel.json`. The encrypted
 project environment remains the only place for the pool's endpoint and key.
 `npm run check:vercel` and `npm run check:deployment` now fail if a deployment
 leaves labels, repair, or inquiry unavailable. A missing or failing pool remains
-safe at any time: labels stay deterministic, repair admits the words as heard,
+safe at any time: labels stay deterministic, repair keeps its local rule floor,
 and inquiry states that it is unavailable, so turning one gate off remains a
 complete rollback for that surface.
 

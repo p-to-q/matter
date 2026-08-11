@@ -17,6 +17,31 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-12 — Repair earns its second material change
+
+Changed: a heard transcript is still committed immediately, then an ordered,
+locale-exact rule pipeline and one optional managed proposal compete to produce
+a single repair command. The baseline remains visible for at least 650 ms. The
+rules cover high-confidence punctuation, filler residue, ASR echoes and
+stutters, exact restarts, explicit correction shapes, dictated addresses,
+bounded unit forms, casing, and mixed CJK/Latin spacing while protecting
+literals and semantic facts. The managed level may remove contextually empty
+scaffolding and abandoned speech, adopt a later correction, and lightly settle
+forced grammar without changing a claim. Short CJK utterances may now reach the
+managed path; the browser and store judge a model only against the recomputed
+rule floor.
+
+Why: the prior material path never called the existing repair route, most local
+inputs therefore changed only by terminal punctuation, short Chinese thoughts
+were excluded by a Latin-sized threshold, and safe rule deletions were charged
+again when a model candidate was revalidated. Mature dictation systems use a
+staged cleanup pipeline; Matter needs the same engineering separation without
+adopting their silent rewriting authority.
+
+Forecloses: blocking admission on a model, treating repair as one unconstrained
+rewrite budget, replaying token streams into material, caching transcripts or
+outputs, retrying a late proposal, or exposing provider/cache status in the UI.
+
 ## 2026-08-11 — Ask Matter distinguishes a timeout from a busy application
 
 Changed: the browser reads the bounded, exact inquiry error envelope and maps

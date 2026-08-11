@@ -20,9 +20,14 @@ surface area.
 **Material admission.** A person speaks at the empty root, beneath the selected
 visible passage, or — when nothing is selected — as a first-level thought in
 the full material view. The final transcript enters the tree immediately as
-human material. A bounded local repair may then remove low-ambiguity recognition
-artifacts or lightly settle formatting for twelve seconds, but only while that
-exact passage remains untouched. Admission and repair are separate
+human material. A bounded admission repair may then turn the heard utterance
+into a faithful written version for twelve seconds: it can remove recognition
+debris, non-semantic fillers, abandoned starts, repeated verbal scaffolding, or
+the discarded side of an unmistakable correction, and lightly settle grammar
+without changing a claim. A deterministic floor is always available; one
+managed proposal may resolve the intent-dependent cases without seeing the
+tree. The correction can settle only while that exact passage
+remains untouched. Admission and repair are separate
 pointer-undoable changes, so the person's first expression stays recoverable.
 
 **Material transformation.** A person acts on material that already exists. An
@@ -63,10 +68,12 @@ Matter is rooted, not infinite. Thought grows downward from one root; focus and
 folding are navigation, while layout derives position from structure. A person
 never authors a coordinate.
 
-AI preserves the speaker's vocabulary, rhythm, uncertainty, and meaningful
-hesitation. Admission repair may remove only a closed set of low-ambiguity
-fillers and recognition echoes; it does not raise the register, resolve
-ambiguity, explain its edit, address the user, or mention itself.
+AI preserves the speaker's claims, vocabulary, tone, uncertainty, and meaningful
+emphasis. Admission repair may act forcefully on recognition echoes, filler
+residue, abandoned starts, sentence restarts, and self-correction, and may add
+only grammatical glue forced by the utterance, because its result is separately
+undoable. It still may not raise the register, invent reasoning, resolve an
+unstated ambiguity, explain its edit, address the user, or mention itself.
 
 ## Not Matter
 
