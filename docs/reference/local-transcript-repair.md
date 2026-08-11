@@ -73,13 +73,15 @@ managed proposal → local adjudication → store lease + exact revalidation
 ```
 
 The managed request carries operation identity, locale, one utterance, and a
-bounded vocabulary hint. It carries no material address. It has one 6.8-second
-client deadline covering headers and the bounded body, no retry, and no response
-cache. The server applies the shared prompt, pool, deadline, load shedding, and
-adjudicator. The browser and store recompute the deterministic floor and judge
-only the model's additional delta from it, so a safe restart removal is not
-charged twice. The store is still the only owner allowed to create the repair
-tree command.
+bounded vocabulary hint. It carries no material address. It has one 8.8-second
+client ceiling covering headers and the bounded body, no retry, and no response
+cache. The server grants six to eight seconds according to utterance length and
+reserves almost all of it for one relay; production evidence showed the former
+2.6-second short floor expired before that relay could answer. The server still
+applies the shared prompt, pool, load shedding, and adjudicator. The browser and
+store recompute the deterministic floor and judge only the model's additional
+delta from it, so a safe restart removal is not charged twice. The store is
+still the only owner allowed to create the repair tree command.
 
 ## Future worker and fallback
 

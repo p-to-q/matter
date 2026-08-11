@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-12 — Repair's live budget and visual signal match its real role
+
+Changed: one managed repair now receives six to eight seconds inside the
+twelve-second material lease, with 95% of that budget available to the first
+relay. The browser ceiling is 8.8 seconds and still covers the entire bounded
+response body. A committed result settles only the glyph color for 240 ms;
+selection fill, focus outline, geometry, and hit targets remain visually steady.
+Its feature-local owner tolerates React development effect replay and disposes
+retained before/after text only after the final lifecycle release.
+
+Why: two deployed short-utterance probes exhausted the former 2.6-second floor
+before the production relay answered, so the managed level existed in health
+metadata but not in the user journey. The old whole-button opacity also faded
+interaction chrome together with text, making a correction look like focus or
+selection instability instead of new ink settling into material. The first
+effect cleanup also used to terminally dispose a memoized presentation owner,
+so development Strict Mode could erase the feedback before any repair arrived.
+
+Forecloses: calling a configured health gate proof of a working model, spending
+the repair lease on retries, letting a late result outlive the lease, or using
+focus/selection flicker as correction feedback.
+
 ## 2026-08-12 — Repair earns its second material change
 
 Changed: a heard transcript is still committed immediately, then an ordered,

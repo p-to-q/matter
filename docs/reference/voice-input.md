@@ -155,9 +155,10 @@ instruction spoken inside the utterance are refused regardless of model output.
 
 Repair is allowed to fail and does so silently. There is no `repairing` UI
 phase, spinner, retry, cache status, or error. A committed correction lets the
-canonical node text perform one short non-looping opacity settle; the full final
-text is present, selectable, and accessible from its first frame. It is not a
-typing animation or alternate text layer. A successful admission mints one
+canonical node glyphs perform one short non-looping color settle while selection
+fill and focus chrome remain steady; the full final text is present, selectable,
+and accessible from its first frame. It is not a typing animation or alternate
+text layer. A successful admission mints one
 opaque capability that is returned only to the driver and omitted from
 observable store state. No-change, adapter failure, abort, timeout, document
 replacement, and candidate settlement all consume it. The store uses its own

@@ -33,7 +33,7 @@ export const MAX_LOCALE_LENGTH = 35;
  * attributable answer instead of a dead socket, and admission continues with the
  * transcript it already has either way.
  */
-export const REPAIR_PROVIDER_CEILING_MS = 6_000;
+export const REPAIR_PROVIDER_CEILING_MS = 8_000;
 export const REPAIR_TRANSPORT_GRACE_MS = 800;
 export const REPAIR_CLIENT_TIMEOUT_MS = REPAIR_PROVIDER_CEILING_MS + REPAIR_TRANSPORT_GRACE_MS;
 

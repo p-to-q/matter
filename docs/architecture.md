@@ -39,8 +39,9 @@ pointer-undoable. No repair lifecycle or model/cache state enters material.
 A successful repair returns one private `repairChange` value to its driver,
 while observable store state retains only the ordinary runtime receipt. A
 feature-local bounded presentation owner validates the exact tree, document
-epoch, node text, and node timestamp, then marks the canonical DOM text for one
-240ms opacity settle. It never renders an old-text copy, fragments characters,
+epoch, node text, and node timestamp, then marks only the canonical glyph color
+for one 240ms ink settle. Selection fill, focus outline, geometry, and hit
+targets remain steady. It never renders an old-text copy, fragments characters,
 announces a status, or enters history, persistence, archive, or context. Undo,
 Redo, replacement, expiry, failure, reload, and reduced-motion rendering do not
 replay it.

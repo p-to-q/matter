@@ -1,7 +1,7 @@
 import { handleRepairRequest, repairErrorResponse } from "@/features/matter/server/repair-route";
 
 export const runtime = "nodejs";
-// Repair may spend 6 s with the pool before it admits the words as heard.
+// Repair may spend 8 s with the pool; durable admitted words already exist.
 export const maxDuration = 15;
 
 export async function POST(request: Request): Promise<Response> {

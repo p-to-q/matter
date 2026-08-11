@@ -341,7 +341,8 @@ vocabulary is refused or ignored, and repair proceeds without it.
 
 Bounds: transcript 2,000 code units, vocabulary 24 terms of 32 code units,
 request and response 12 KiB, provider deadline scaled to the utterance with a
-6-second ceiling, and a browser deadline 800 ms above it.
+six-second floor and eight-second ceiling, and a browser deadline 800 ms above
+it. The twelve-second store lease remains the final authority.
 
 ## Inquiry envelope
 

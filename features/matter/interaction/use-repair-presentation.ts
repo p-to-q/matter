@@ -23,6 +23,8 @@ export type RepairPresentationBinding = Readonly<{
 export type RepairPresentationController = RepairPresentationBinding & Readonly<{
   getSnapshot: () => ReadonlyMap<string, AdmissionRepairCommittedChange>;
   subscribe: (listener: () => void) => () => void;
+  retain: () => void;
+  release: () => void;
   dispose: () => void;
 }>;
 
@@ -49,7 +51,10 @@ export function useRepairPresentation(
     controller.getSnapshot,
     emptyRepairPresentations,
   );
-  useEffect(() => () => controller.dispose(), [controller]);
+  useEffect(() => {
+    controller.retain();
+    return () => controller.release();
+  }, [controller]);
   return {
     byNode,
     publish: controller.publish,
@@ -62,6 +67,8 @@ export function createRepairPresentationController(
 ): RepairPresentationController {
   let snapshot = EMPTY_PRESENTATIONS;
   let disposed = false;
+  let leases = 0;
+  let leaseGeneration = 0;
   const listeners = new Set<() => void>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -73,6 +80,14 @@ export function createRepairPresentationController(
     for (const timer of timers.values()) clearTimeout(timer);
     timers.clear();
     if (snapshot.size > 0) publishSnapshot(EMPTY_PRESENTATIONS);
+  };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true;
+    for (const timer of timers.values()) clearTimeout(timer);
+    timers.clear();
+    snapshot = EMPTY_PRESENTATIONS;
+    listeners.clear();
   };
   const publish = (change: AdmissionRepairCommittedChange) => {
     if (
@@ -114,16 +129,28 @@ export function createRepairPresentationController(
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
+    retain: () => {
+      if (disposed) return;
+      leases += 1;
+      leaseGeneration += 1;
+    },
+    release: () => {
+      if (disposed || leases === 0) return;
+      leases -= 1;
+      const generation = ++leaseGeneration;
+      if (leases !== 0) return;
+      // React development reconnects effects within one task. Delay terminal
+      // disposal so that replay can retain this same controller; a real
+      // unmount still clears text receipts and timers before the next task.
+      queueMicrotask(() => {
+        if (!disposed && leases === 0 && leaseGeneration === generation) {
+          dispose();
+        }
+      });
+    },
     publish,
     clearAll,
-    dispose: () => {
-      if (disposed) return;
-      disposed = true;
-      for (const timer of timers.values()) clearTimeout(timer);
-      timers.clear();
-      snapshot = EMPTY_PRESENTATIONS;
-      listeners.clear();
-    },
+    dispose,
   });
 }
 

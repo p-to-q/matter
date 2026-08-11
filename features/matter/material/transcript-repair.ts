@@ -114,15 +114,15 @@ export function repairBudget(skeletonLength: number): number {
 /**
  * A deadline proportional to the utterance. Repair emits roughly as much text
  * as it reads, so one fixed budget either abandons long thoughts before they
- * can be answered or makes short ones wait for nothing. The person is reading
- * their own words while this runs, which is what buys the upper end. Both ends
- * carry a second relay's attempt as well as a first: the pool gives one relay
- * at most half of this, so a budget sized for a single call falls back to the
- * words as heard the moment the nearest relay is the slow one.
+ * can be answered or lets long thoughts occupy the whole repair lease. The
+ * person is reading durable words while this runs, which buys a narrow six-to-
+ * eight-second range. Production evidence showed the relay needs more than the
+ * old 2.6-second short-utterance floor merely to return a first token; timing it
+ * out there made the managed level nominal rather than usable.
  */
 export function repairDeadlineMs(input: NormalizedRepairInput): number {
   const codePoints = Array.from(input.text).length;
-  return Math.min(6_000, Math.max(2_600, 2_600 + codePoints * 8));
+  return Math.min(8_000, Math.max(6_000, 6_000 + codePoints * 8));
 }
 
 /** Output ceiling for the provider, in the same proportion as the deadline. */

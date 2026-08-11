@@ -36,6 +36,39 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.26
+
+Preview.26 makes the managed repair budget reachable in the deployed user
+journey and narrows its visible effect to the material ink. One proposal gets a
+six-to-eight-second server deadline inside the existing twelve-second material
+lease; the browser bounds headers, body, and parsing at 8.8 seconds. The raw
+transcript and deterministic floor remain the complete offline path, so the
+additional wait never blocks admission and never creates a retry queue.
+
+The canonical repaired text is present from its first frame. Its glyph color
+settles once for 240 ms, while selection fill, focus outline, opacity, geometry,
+hit testing, and accessibility remain steady. The feature-local presentation
+owner survives React development effect replay but releases its retained text
+receipt and timers on a real unmount. It remains presentation only: no old-text
+layer, per-character DOM, status, history, persistence, archive, or context.
+
+```text
+release proof          npm run check: 1,067 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2
+                       capability-gated cases skipped; laptop and narrow voice
+                       admission observed the repair animation while the text
+                       control remained fully opaque
+lifecycle proof        a Strict Mode release/retain replay keeps the owner live;
+                       a real final release clears receipts, timers, and future
+                       publications
+product boundary       no typing simulation, correction badge, confidence UI,
+                       provider status, transcript/output cache, or retry
+still gated            a successful deployed managed-repair answer receipt;
+                       health configuration alone is not that proof
+```
+
 ## Candidate verification — 0.2.0-preview.25
 
 Preview.25 makes transcript repair a real staged path without making it a new

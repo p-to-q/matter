@@ -119,4 +119,25 @@ describe("repair presentation ownership", () => {
     expect(controller.getSnapshot().size).toBe(0);
     controller.dispose();
   });
+
+  it("survives a Strict Mode effect replay and disposes after a real release", async () => {
+    vi.useFakeTimers();
+    const controller = createRepairPresentationController({
+      treeId: "tree_1",
+      documentEpoch: 4,
+    });
+
+    controller.retain();
+    controller.release();
+    controller.retain();
+    await Promise.resolve();
+    controller.publish(CHANGE);
+    expect(controller.getSnapshot().get("node_1")).toBe(CHANGE);
+
+    controller.release();
+    await Promise.resolve();
+    expect(controller.getSnapshot().size).toBe(0);
+    controller.publish(CHANGE);
+    expect(controller.getSnapshot().size).toBe(0);
+  });
 });

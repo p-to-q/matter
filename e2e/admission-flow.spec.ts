@@ -21,6 +21,15 @@ for (const viewport of [
       "data-persistence-phase",
       "saved",
     );
+    await page.evaluate(() => {
+      const observed = window as Window & { __matterRepairAnimations?: string[] };
+      observed.__matterRepairAnimations = [];
+      document.addEventListener("animationstart", (event) => {
+        if (event.animationName === "material-ink-settle") {
+          observed.__matterRepairAnimations?.push(event.animationName);
+        }
+      });
+    });
 
     await page
       .locator(`[data-thought-id="${parentId}"]`)
@@ -78,6 +87,12 @@ for (const viewport of [
     await expect(heard).toHaveCount(1);
     await expect(admitted).toHaveCount(1, { timeout: 2_000 });
     await expect(heard).toHaveCount(0);
+    expect(await page.evaluate(() =>
+      (window as Window & { __matterRepairAnimations?: string[] }).__matterRepairAnimations,
+    )).toContain("material-ink-settle");
+    expect(await admitted.locator(".spatial-thought__text").evaluate((element) =>
+      getComputedStyle(element).opacity,
+    )).toBe("1");
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute(
       "data-interaction-pending",
       "true",

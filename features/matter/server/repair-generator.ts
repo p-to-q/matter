@@ -98,7 +98,7 @@ export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
  * and every short utterance is admitted as heard. The floor here is already
  * correct, so one real attempt is worth more than two doomed ones.
  */
-const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.85 });
+const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.95 });
 
 export function resolveRepairAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,
