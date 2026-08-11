@@ -5,6 +5,7 @@ import {
   deriveProvisionalLabel,
   materialFingerprint,
   normalizeLabelInput,
+  type NormalizedLabelInput,
   type SemanticLabelSource,
 } from "../material/semantic-label";
 import type { ThoughtTree } from "../tree/model";
@@ -13,9 +14,10 @@ import type { ThoughtTree } from "../tree/model";
  * Owns which label belongs to which node, and when a late answer is still
  * allowed to change it.
  *
- * A label is derived presentation. It never enters `ThoughtTree`, command
- * history, persistence, or an archive, so this state may be rebuilt from the
- * tree at any moment and losing it costs nothing.
+ * Labels never enter `ThoughtTree`, material command history, or an archive.
+ * The provisional floor is rebuilt from the tree; manual names and accepted
+ * model labels may be restored from their separate `LabelRepository`. Pending
+ * ownership remains transient and losing it never loses material.
  *
  * Everything here is pure: ids, transport, and time belong to the driver.
  */
@@ -92,7 +94,14 @@ export type LabelSessionEvent =
       label: string;
       source: SemanticLabelSource;
     }>
-  | Readonly<{ type: "failed"; nodeId: string; basis: string; operationId: string }>
+  | Readonly<{
+      type: "failed";
+      nodeId: string;
+      basis: string;
+      operationId: string;
+      /** The operation never ran and may be planned again after cooldown. */
+      deferred?: boolean;
+    }>
   | Readonly<{ type: "prune"; liveNodeIds: ReadonlySet<string> }>
   | Readonly<{ type: "restore"; treeId: string; entries: readonly DurableLabel[] }>
   | Readonly<{ type: "rename"; nodeId: string; label: string }>
@@ -104,6 +113,26 @@ export function createLabelSessionState(treeId: string, documentEpoch: number): 
 
 export function labelFor(state: LabelSessionState, nodeId: string): string | null {
   return state.entries.get(nodeId)?.label ?? null;
+}
+
+/** Reconstructs the exact semantic input captured by one browser work item. */
+export function inputForLabelWorkItem(item: LabelWorkItem): NormalizedLabelInput {
+  return normalizeLabelInput({
+    text: item.text,
+    locale: item.locale,
+    maxGraphemes: item.maxGraphemes,
+    context: {
+      parentLabel: item.reference.parentLabel ?? null,
+      parentExcerpt: item.reference.parentExcerpt ?? null,
+      siblingLabels: item.reference.siblingLabels ?? [],
+    },
+  });
+}
+
+/** Returns the context-free material identity used by automatic labels. */
+export function labelMaterialBasis(text: string, locale: string): string | null {
+  if (text.trim().length === 0) return null;
+  return materialFingerprint(normalizeLabelInput({ text, locale }));
 }
 
 /**
@@ -213,7 +242,11 @@ export function reduceLabelSession(
       if (existing.basis !== event.basis) return state;
       if (existing.pendingOperationId !== event.operationId) return state;
       // Failure is silent: the deterministic label already on screen stands.
-      return withEntry(state, event.nodeId, { ...existing, pendingOperationId: null });
+      return withEntry(state, event.nodeId, {
+        ...existing,
+        pendingOperationId: null,
+        deferred: event.deferred === true,
+      });
     }
 
     case "restore": {
@@ -225,7 +258,15 @@ export function reduceLabelSession(
       for (const entry of event.entries) {
         const existing = entries.get(entry.nodeId);
         if (existing?.origin === "user") continue;
-        if (existing !== undefined && existing.origin === "model") continue;
+        // A durable manual name outranks every automatic result, including a
+        // model answer that happened to settle while storage was opening.
+        if (entry.origin !== "user") {
+          if (existing?.origin === "model") continue;
+          // The driver filters against the current tree as well. This pure
+          // guard prevents a stale stored model result from briefly replacing
+          // a provisional label when an entry already owns the current basis.
+          if (existing !== undefined && existing.basis !== entry.basis) continue;
+        }
         entries.set(entry.nodeId, Object.freeze({
           label: entry.label,
           origin: entry.origin,

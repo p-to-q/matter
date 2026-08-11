@@ -66,7 +66,7 @@ malformed answer, and a rejected answer all leave the label already on screen.
 | --- | --- |
 | `material/semantic-label.ts` | derivation, validation, adjudication, the remote gate, fingerprints |
 | `runtime/label-session.ts` | which label belongs to which node, and when a late answer may apply |
-| `server/label-contract.ts` | the wire shape, its bounds, and its parser |
+| `protocol/label-contract.ts` | the wire shape, its bounds, and its parser |
 | `server/label-generator.ts` | prompt, provider deadline, shedding, single-flight, cache, cooldown |
 | `interaction/label-client.ts` | one bounded HTTP request |
 | `interaction/label-driver.ts` | request scheduling, cancellation, client cooldown |
@@ -228,6 +228,13 @@ nobody reads. A station missing a key, a base URL, or HTTPS is skipped without
 disturbing the others, and an empty pool is not an error — it is deterministic
 labelling, which is what a person sees while any model is still thinking.
 
+The registry, secrets, and transport are shared with Matter's other managed
+scenarios; the mutable candidate-health lane is not. Health is evaluated under
+this label scenario's background deadline, so a shorter repair stall cannot
+reorder label candidates and one successful label cannot erase repair's own
+cooldown. Accepted labels alone use the bounded label caches described above;
+no transcript or repair answer enters them.
+
 Keys live only in git-ignored `.env.local`, are read at call time, and appear in
 no cache key, log line, error, or response.
 
@@ -268,7 +275,9 @@ adjudication ever ran.
   on real material from this product remain the deciding measurements.
 - Chinese, Japanese, and Latin have tuned deterministic paths; other scripts
   fall back to the Latin rules.
-- Search still matches material text and the 32-grapheme material title, not the
-  semantic label. Whether the label should join the search haystack is unsettled.
-- A person cannot yet rename a node. When that arrives, a manual name must lock
-  the row against every automatic replacement.
+- Search matches the label on screen as well as the underlying material. A
+  manual name can therefore remain findable even when it shares no words with
+  the passage.
+- A person may name a row explicitly. That durable local decision outranks
+  deterministic and model labels until they clear it; it is never an automatic
+  document-title change.

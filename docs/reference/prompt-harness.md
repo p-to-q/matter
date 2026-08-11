@@ -140,12 +140,17 @@ to a confident imperative inside the quotation.
 `fenceJson` serializes structured context so a node's text cannot be mistaken
 for one of the prompt's own lines and a truncation is visible as a field.
 
-**One pool, four gates.** `model-pool.ts` is the only file where an endpoint,
-a model name, or a key appears. Each scenario has its own environment switch
+**One provider foundation, four execution lanes.** `model-pool.ts` is the only
+file where an endpoint, a model name, or a key appears. Each scenario has its own environment switch
 (`MATTER_LABEL_ADAPTER`, `MATTER_REPAIR_ADAPTER`, `MATTER_INQUIRY_ADAPTER`), so
 authority is granted per surface rather than per credential. The variables are
 still spelled `MATTER_LABEL_*` because they are a deployed secret layout, and
 renaming a secret to match a refactor is how a deployment loses its credentials.
+The ordered candidate registry and transport are shared. Mutable candidate
+health is keyed by scenario, because a stall is a judgement made against that
+scenario's deadline: a relay that is too slow for foreground repair may still
+be healthy for a background label. Governors, cache policy, and adjudication
+were already scenario-local; health follows the same ownership boundary.
 
 **The scenario's budget scales with its input; the caller may only shorten it.**
 Repair scales with the utterance, transform with the target length, labelling is
@@ -178,8 +183,10 @@ correct answer without a model, so a fixture only proves plumbing. An inquiry
 does not, and a fixture answer would be invented prose arriving in the one place
 this product refuses to invent prose.
 
-**Per-scenario provider pools.** Rejected: four pools means four places a key
-can leak and four different pictures of which relay is unwell.
+**Per-scenario provider configuration.** Rejected: four registries mean four
+places a key can leak and four topologies that can drift. Scenario-local mutable
+health is not another provider pool; it is a bounded runtime judgement over the
+same shared candidates under a different latency contract.
 
 **Retrying a rejected answer.** Rejected, as in `agent-boundary.md`. Every
 scenario already has a floor, so a retry buys a slightly different answer at

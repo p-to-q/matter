@@ -17,6 +17,31 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-12 — One provider foundation no longer means one failure domain
+
+Changed: thought labels and transcript repair still share one server-only model
+registry, credential boundary, transport, and prompt harness, while each
+scenario now owns its mutable candidate-health lane. A label request keeps one
+deadline through headers, bounded body, decoding, parsing, and validation. The
+browser independently revalidates and adjudicates every returned label, sheds
+after bounded upstream fallback, cancels obsolete material bases, and refuses a
+stale cached model name before it can appear. Cache restoration is scoped to a
+document epoch and generation, so an older load cannot release a newer restore
+barrier. Oversized or stalled response bodies cannot hold a request lane, and a
+manual name releases its cancelled lane immediately. Deterministic labels and
+local repair rules remain the complete provider-free paths.
+
+Why: repair and labels have different latency contracts and product authority.
+A short repair stall used to reorder label candidates, a label success could
+erase repair's cooldown, and a stalled label body could occupy every browser
+request slot. The server was also the only semantic judge of a label despite
+the browser being the last boundary before presentation and persistence.
+
+Forecloses: merging the two APIs, sharing their business caches, treating one
+scenario's latency as another's health, trusting a server label because its
+envelope is valid, retaining obsolete requests, adding provider status UI, or
+turning a navigation label into the durable canvas title.
+
 ## 2026-08-12 — Repair reveals changed ink, not a changed paragraph
 
 Changed: the repair command remains atomic, but its bounded presentation now

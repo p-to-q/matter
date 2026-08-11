@@ -51,9 +51,8 @@ export async function requestLabel(input: LabelRequestInput): Promise<LabelSucce
   });
   const deadline = withDeadline(input.signal, input.timeoutMs ?? LABEL_CLIENT_TIMEOUT_MS);
 
-  let response: Response;
   try {
-    response = await Promise.race([
+    const response = await Promise.race([
       fetch(`${clientMatterBasePath()}/api/label`, {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/json" },
@@ -64,52 +63,72 @@ export async function requestLabel(input: LabelRequestInput): Promise<LabelSucce
       }),
       deadline.settlement,
     ]);
+    const text = await Promise.race([
+      readBoundedText(response, MAX_LABEL_RESPONSE_BYTES, deadline.signal),
+      deadline.settlement,
+    ]);
+    deadline.signal.throwIfAborted();
+    let payload: unknown;
+    try {
+      payload = JSON.parse(text) as unknown;
+    } catch {
+      throw new LabelClientError("LABEL_FAILED", "The label response could not be read.", true);
+    }
+    deadline.signal.throwIfAborted();
+    if (!response.ok) throw parseErrorEnvelope(payload);
+    if (!isLabelSuccess(payload, {
+      operationId: input.operationId,
+      basis: input.basis,
+      promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
+    })) {
+      throw new LabelClientError("LABEL_FAILED", "The label response was invalid.", false);
+    }
+    return payload;
   } catch (error) {
     if (deadline.didTimeout()) {
       throw new LabelClientError("LABEL_FAILED", "The label request timed out.", true);
     }
     if (input.signal.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
+    if (error instanceof LabelClientError) throw error;
     throw new LabelClientError("LABEL_UNAVAILABLE", "Label generation is unavailable.", true);
   } finally {
     deadline.dispose();
   }
-
-  const text = await readBoundedText(response, MAX_LABEL_RESPONSE_BYTES);
-  let payload: unknown;
-  try {
-    payload = JSON.parse(text) as unknown;
-  } catch {
-    throw new LabelClientError("LABEL_FAILED", "The label response could not be read.", true);
-  }
-  if (!response.ok) throw parseErrorEnvelope(payload);
-  if (!isLabelSuccess(payload, {
-    operationId: input.operationId,
-    basis: input.basis,
-    promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
-  })) {
-    throw new LabelClientError("LABEL_FAILED", "The label response was invalid.", false);
-  }
-  return payload;
 }
 
 /**
  * Reads at most `maxBytes` and refuses malformed UTF-8. A replacement character
  * would turn a broken response into a plausible-looking label.
  */
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<string> {
   const declared = response.headers.get("content-length");
   if (declared !== null && /^\d+$/.test(declared) && Number(declared) > maxBytes) {
-    await response.body?.cancel().catch(() => undefined);
+    // Refuse the envelope immediately. Stream cancellation is best-effort and
+    // must not become a second unbounded wait controlled by the remote body.
+    void response.body?.cancel().catch(() => undefined);
     throw new LabelClientError("LABEL_FAILED", "The label response is too large.", false);
   }
   const body = response.body;
   if (body === null) return "";
+  if (signal.aborted) {
+    await body.cancel(signal.reason).catch(() => undefined);
+    signal.throwIfAborted();
+  }
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
   try {
     for (;;) {
       const { done, value } = await reader.read();
+      signal.throwIfAborted();
       if (done) break;
       if (value === undefined) continue;
       total += value.byteLength;
@@ -119,8 +138,9 @@ async function readBoundedText(response: Response, maxBytes: number): Promise<st
       chunks.push(value);
     }
   } finally {
+    signal.removeEventListener("abort", cancel);
+    if (signal.aborted || total > maxBytes) cancel();
     reader.releaseLock();
-    if (total > maxBytes) await body.cancel().catch(() => undefined);
   }
 
   const merged = new Uint8Array(total);

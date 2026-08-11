@@ -1,4 +1,4 @@
-import type { ScenarioAdapter } from "./harness";
+import type { MatterScenarioId, ScenarioAdapter } from "./harness";
 
 /**
  * One ordered pool of OpenAI-compatible endpoints, shared by every scenario.
@@ -65,6 +65,11 @@ export const DEFAULT_POOL_LIMITS: PoolLimits = Object.freeze({
 
 type CandidateHealth = { failures: number; cooldownUntilMs: number };
 
+/**
+ * Candidate ordering is shared code, but its mutable evidence belongs to the
+ * scenario that paid for the call. A repair stall must not silently demote a
+ * relay for a label that may use a different budget and prompt shape.
+ */
 const health = new Map<string, CandidateHealth>();
 
 export function resetPoolHealth(): void {
@@ -139,7 +144,7 @@ export function createPoolAdapter(
     const deadlineAtMs = now() + input.deadlineMs;
     let lastError: unknown = new Error("The model pool is empty.");
 
-    const ordered = orderedCandidates(pool, now());
+    const ordered = orderedCandidates(pool, input.scenario, now());
     const attemptCeilingMs = Math.max(
       limits.minimumAttemptMs,
       Math.round(input.deadlineMs * limits.maxAttemptShare),
@@ -156,7 +161,7 @@ export function createPoolAdapter(
       const startedAt = now();
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
-        recordOutcome(candidate, "answered", limits, now);
+        recordOutcome(candidate, input.scenario, "answered", limits, now);
         return { text };
       } catch (error) {
         if (signal.aborted) throw error;
@@ -167,7 +172,13 @@ export function createPoolAdapter(
         // again before the pool can even reach a working relay. Grading the
         // hang harder is what stops one stalled relay from spending every
         // caller's deadline until it happens to fail twice.
-        recordOutcome(candidate, now() - startedAt >= attemptMs ? "stalled" : "failed", limits, now);
+        recordOutcome(
+          candidate,
+          input.scenario,
+          now() - startedAt >= attemptMs ? "stalled" : "failed",
+          limits,
+          now,
+        );
         lastError = error;
       }
     }
@@ -182,12 +193,13 @@ export function createPoolAdapter(
  */
 function orderedCandidates(
   pool: readonly PoolCandidate[],
+  scenario: MatterScenarioId,
   nowMs: number,
 ): readonly PoolCandidate[] {
   const healthy: PoolCandidate[] = [];
   const cooling: PoolCandidate[] = [];
   for (const candidate of pool) {
-    const entry = health.get(candidateKey(candidate));
+    const entry = health.get(healthKey(scenario, candidate));
     if (entry !== undefined && nowMs < entry.cooldownUntilMs) cooling.push(candidate);
     else healthy.push(candidate);
   }
@@ -301,11 +313,12 @@ export type CandidateOutcome = "answered" | "failed" | "stalled";
 
 function recordOutcome(
   candidate: PoolCandidate,
+  scenario: MatterScenarioId,
   outcome: CandidateOutcome,
   limits: PoolLimits,
   now: () => number,
 ): void {
-  const key = candidateKey(candidate);
+  const key = healthKey(scenario, candidate);
   if (outcome === "answered") {
     health.delete(key);
     return;
@@ -326,6 +339,10 @@ function recordOutcome(
 /** Identity excludes the key, so rotating a key does not reset health. */
 function candidateKey(candidate: PoolCandidate): string {
   return `${candidate.station} ${candidate.baseUrl} ${candidate.model}`;
+}
+
+function healthKey(scenario: MatterScenarioId, candidate: PoolCandidate): string {
+  return `${scenario} ${candidateKey(candidate)}`;
 }
 
 function isHttpsOrLocal(value: string): boolean {

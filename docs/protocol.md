@@ -239,7 +239,7 @@ answers badly, the response carries the deterministic label with a
 stored label without a schema change.
 
 Bounds: request 8 KiB, response 4 KiB, label 32 graphemes (Chinese material asks
-for 14, Japanese for 20), browser deadline 3,500 ms, provider deadline 3,000 ms. There is no
+for 14, Japanese for 20), browser deadline 13,000 ms, provider deadline 12,000 ms. There is no
 retry. Nothing waits on those deadlines — a label is already on screen — so
 they are set from measured relay latency rather than from a perceived-response
 budget.
@@ -426,9 +426,10 @@ record, without copied material context and never as later model input; see
 Bounds: question 500 code points, request 24 KiB, response 8 KiB, lineage 64 nodes, each projected
 node 480 code points, total projected context 4,000 code points, and browser
 deadline 20 seconds. Answer text is bounded to 1,201 code points. The response is either one text answer or an explicit
-unavailable reason; no fallback prose is invented. The current build has no
-answer or memory adapter connected. A future adapter remains server-owned and
-must preserve this same visible-context and non-mutation contract.
+unavailable reason; no fallback prose is invented. The live answer adapter is
+independently server-gated. Its optional local completed record is not an answer
+adapter or model memory and never changes this visible-context, non-mutation
+contract.
 
 ## Private commands
 

@@ -15,7 +15,8 @@ The current online-safe claim is narrow:
   file outline, focus/fold, copy, lasso, stretch projection
   explicit canvas-pan mode and undoable cross-branch structural reparenting
   browser-native live voice admission (no fixture voice on the public origin)
-  derived navigation labels, with a fixture model adapter behind them
+  deterministic navigation labels, with an independently gated managed proposal
+  immediate transcript admission, with local repair rules and an independently gated managed proposal
   lightweight Ask Matter boundary, with its server-side answer adapter independently gated
   no live model transformation
 ```
@@ -35,6 +36,36 @@ proof uses the inverse capability pair and never contacts browser speech.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.28
+
+Preview.28 keeps one server-only provider foundation without making its product
+surfaces one failure domain. Label and repair still share the ordered candidate
+registry, credentials, transport, and prompt harness; candidate health is now
+scoped to the scenario whose deadline observed it. A repair stall cannot reorder
+label candidates, and a label success cannot clear repair's cooldown.
+
+The left material index remains deterministic-first and quiet. The browser keeps
+the same deadline through the complete label response body, cancels stale work
+when the passage basis changes or disappears, treats bounded upstream fallback
+as background failure, and repeats semantic validation before publishing or
+storing a model label. A manual name continues to outrank every automatic path.
+Transcript repair remains immediate-admission-first, rule-backed, separately
+undoable, uncached, and visually unchanged from Preview.27.
+
+```text
+source proof           npm run check: 1,104 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 46 Chromium cases passed, 2
+                       capability-gated cases skipped
+isolation proof        295 focused pool/label/repair tests passed;
+                       cross-scenario stall, cooldown and success remain local
+fallback proof         deterministic label and transcript-rule floors remain;
+                       no provider, cache, breaker, or fallback status enters UI
+still gated            a fresh deployed source:model receipt for both label and
+                       repair; configured health alone is not that proof
+```
 
 ## Candidate verification — 0.2.0-preview.27
 

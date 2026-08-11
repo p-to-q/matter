@@ -1,7 +1,7 @@
 # Architecture Governance
 
-Status: evidence note for protocol `0.2`, reconciled with preview.21 on
-2026-08-10. The current contract remains
+Status: evidence note for protocol `0.2`, reconciled with preview.27 on
+2026-08-12. The current contract remains
 [`../architecture.md`](../architecture.md) and
 [`../engineering.md`](../engineering.md); this note records why those rules
 exist, which earlier seams have since closed, and how to improve the system
@@ -20,8 +20,8 @@ The highest-leverage mechanical seams from the original audit are now closed:
 the import graph is checked in `npm run check`, voice ports are acyclic, browser
 and route code meet at neutral protocol contracts, seeded composition is no
 longer mistaken for a test fixture, and manual names report failed durability.
-The remaining maintenance risks are measured large-tree cost, an unbounded
-undo-capacity policy, live-model reliability/abuse controls, and concentration
+The remaining maintenance risks are measured large-tree cost, long-session
+history cost at physical browser limits, live-model reliability/abuse controls, and concentration
 in three view modules. The next architecture phase should repair a named seam
 only when evidence identifies its owner; it should not become a broad rewrite.
 
@@ -140,10 +140,11 @@ The following are implementation findings, not architectural guesses.
 | Manual names have durable failure semantics | `LabelWriteReceipt` and the label driver return a failed write to the editor for retry | A human decision is no longer reported as kept when it never reached disk. | Preserve typed receipts; model-label caching may remain best effort. |
 | Three view modules contain several lifecycles | `RootedMaterial`, `CanvasChrome`, and `MaterialFiles` coordinate several kinds of state or browser behavior | Cancellation, exclusivity, focus, geometry, and network ownership deserve review when a current slice touches them. | Treat size as a concentration signal only; extract one owner only when behavior or change evidence identifies an independent lifecycle. |
 | Local inference cancellation has an explicit worker lease | active cancellation retires the worker lease, rejects its pending work, and makes late messages inert | A cancelled long job no longer occupies the next turn. | Preserve queued/active cancel, timeout, late-result, and retry proofs; do not generalize it into a worker framework. |
-| Undo capacity has two stories | implementation retains to physical limits while reference material also describes count/byte bounds | Recovery cost and the supported session length are undefined. | Measure save/hydrate/quota behavior, then freeze one policy before changing the structure. |
+| Undo/Redo retains to physical limits | production history silently evicts nothing and persists exact inverses beside the snapshot | Logical reversibility is settled; long-session serialization and browser quota remain measured implementation limits. | Measure save/hydrate/quota behavior before introducing segmented storage; do not reintroduce silent count or byte eviction. |
+| Inquiry retention is a bounded local exception | its generation-checked repository stores terminal exchanges without context and exposes them only through the existing inquiry | Continuity does not become material, archive, or model memory, and no log-management UI is implied. | Preserve the detachable repository and clear/tombstone semantics; add a new surface only after a separate product freeze. |
 
 The codebase is not a hollow scaffold: it contains substantial product code,
-91 focused test files and 14 browser specifications. The three largest view
+104 focused product test files and 14 browser specifications. The three largest view
 modules are a concentration signal, not a quality score or a refactoring plan.
 
 ## Recommended route

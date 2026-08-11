@@ -67,7 +67,37 @@ Non-goals:  live transform promotion, account/sync, an Ask Matter log manager,
             measured trigger, or a native shell.
 ```
 
+### Active sub-slice — one model foundation, separate product fallbacks
+
+```text
+Outcome:    the left material index and a newly admitted utterance may both use
+            the managed model foundation without either one becoming dependent
+            on the other or on provider availability.
+Boundary:   shared server-only pool transport and prompt harness; independent
+            label and repair routes, protocols, governors, candidate-health
+            lanes, deadlines, caches, adjudicators, and browser lifecycles.
+Invariants: a label is synchronous deterministic presentation before any
+            request; repair admits heard text before one optional correction;
+            label cache never contains a transcript; repair has no response
+            cache; one scenario's stall, success, or cooldown cannot rewrite
+            another's candidate order; every returned label is judged again in
+            the browser; neither failure creates status UI; a node label never
+            becomes the durable canvas title.
+Proof:      stalled response-body cancellation; cross-scenario pool-health
+            isolation; label fallback shedding; browser label revalidation;
+            stale basis and document-epoch rejection; model-label and manual-name
+            persistence; repair fallback and two-step Undo/Redo/reload; generated
+            deployed probes for label and repair.
+Non-goals:  merged AI route, shared business cache, retry queue, provider status
+            UI, automatic canvas-title generation, generic model service bus,
+            distributed scheduler, or live transform promotion.
+```
+
 ### Active slice — repair that visibly earns its second change
+
+Status: proven in Preview.25–Preview.27. Retained here as the current release
+contract while the shared model foundation is hardened; it is not permission to
+add another repair surface.
 
 ```text
 Outcome:    the heard baseline still appears first, then a materially broader
@@ -89,6 +119,8 @@ Non-goals:  free-form tone rewriting, streaming mutations, repair status UI,
 ```
 
 ### Active sub-slice — changed ink arrives in time
+
+Status: proven in Preview.27.
 
 Implementation evidence and corrected product intent reopen only the repair
 presentation freeze: a whole-passage ink settle does not reveal which language

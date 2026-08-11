@@ -88,6 +88,20 @@ describe("requestLabel", () => {
     await expect(request()).rejects.toMatchObject({ code: "LABEL_FAILED", retryable: false });
   });
 
+  it("does not wait for cancellation of a declared-oversized body", async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise(() => undefined),
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, {
+      headers: { "content-length": String(MAX_LABEL_RESPONSE_BYTES + 1) },
+    })));
+
+    await expect(request({ timeoutMs: 100 })).rejects.toMatchObject({
+      code: "LABEL_FAILED",
+      retryable: false,
+    });
+  });
+
   it("refuses a response that is not valid UTF-8", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(new Uint8Array([0xff, 0xfe]))));
     await expect(request()).rejects.toMatchObject({ code: "LABEL_FAILED" });
@@ -98,12 +112,65 @@ describe("requestLabel", () => {
     await expect(request({ timeoutMs: 20 })).rejects.toMatchObject({ code: "LABEL_FAILED" });
   });
 
+  it("applies the same deadline while a response body is stalled and cancels its reader", async () => {
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+
+    await expect(request({ timeoutMs: 20 })).rejects.toMatchObject({
+      code: "LABEL_FAILED",
+      message: "The label request timed out.",
+    });
+    expect(cancelled).toBe(true);
+  });
+
   it("propagates caller cancellation instead of reporting a failure", async () => {
     const controller = new AbortController();
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
     const pending = request({ signal: controller.signal });
     controller.abort();
     await expect(pending).rejects.not.toBeInstanceOf(LabelClientError);
+  });
+
+  it("cancels a stalled response reader when the caller walks away", async () => {
+    const controller = new AbortController();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+
+    const pending = request({ signal: controller.signal });
+    await Promise.resolve();
+    controller.abort(new DOMException("The label is no longer wanted.", "AbortError"));
+
+    await expect(pending).rejects.not.toBeInstanceOf(LabelClientError);
+    expect(cancelled).toBe(true);
+  });
+
+  it("reads a complete streamed response without cancelling it", async () => {
+    let cancelled = false;
+    const encoded = new TextEncoder().encode(JSON.stringify(SUCCESS));
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoded.subarray(0, 17));
+        controller.enqueue(encoded.subarray(17));
+        controller.close();
+      },
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+
+    await expect(request({ timeoutMs: 100 })).resolves.toEqual(SUCCESS);
+    expect(cancelled).toBe(false);
   });
 
   it("reports an unreachable endpoint as unavailable", async () => {

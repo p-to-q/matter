@@ -22,9 +22,12 @@ function candidate(model: string, station = "abc"): PoolCandidate {
   return { station, baseUrl: "https://relay.example/v1", apiKey: "key", model };
 }
 
-function adapterInput(deadlineMs = 3_000) {
+function adapterInput(
+  deadlineMs = 3_000,
+  scenario: "matter-thought-label" | "matter-transcript-repair" = "matter-thought-label",
+) {
   return {
-    scenario: "matter-thought-label" as const,
+    scenario,
     prompt: "name it",
     locale: "zh-CN",
     input: null,
@@ -214,6 +217,102 @@ describe("pool adapter", () => {
     await expect(adapter(adapterInput(1_000), new AbortController().signal))
       .resolves.toEqual({ text: "成本问题" });
     expect(tried).toEqual(["steady"]);
+  });
+
+  it("keeps a stalled relay's cooldown inside the scenario that observed it", async () => {
+    let clock = 1_000;
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("stalling"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      () => clock,
+      async (_url, init) => {
+        const request = init as RequestInit;
+        const model = (JSON.parse(String(request.body)) as { model: string }).model;
+        tried.push(model);
+        if (model === "steady") return chatResponse("成本问题");
+        return new Promise<Response>((_resolve, reject) => {
+          request.signal?.addEventListener(
+            "abort",
+            () => {
+              clock += 500;
+              reject(new DOMException("Aborted", "AbortError"));
+            },
+            { once: true },
+          );
+        });
+      },
+    );
+
+    await adapter(adapterInput(1_000, "matter-transcript-repair"), new AbortController().signal);
+    expect(tried).toEqual(["stalling", "steady"]);
+
+    tried.length = 0;
+    await adapter(adapterInput(1_000, "matter-thought-label"), new AbortController().signal);
+    expect(tried).toEqual(["stalling", "steady"]);
+
+    tried.length = 0;
+    await adapter(adapterInput(1_000, "matter-transcript-repair"), new AbortController().signal);
+    expect(tried).toEqual(["steady"]);
+  });
+
+  it("does not let one scenario's success erase another scenario's failure evidence", async () => {
+    const tried: string[] = [];
+    let firstAnswers = false;
+    const adapter = createPoolAdapter(
+      [candidate("first"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+        tried.push(model);
+        if (model === "steady" || firstAnswers) return chatResponse("成本问题");
+        return chatResponse("no", 503);
+      },
+    );
+
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+    expect(tried).toEqual(["first", "steady"]);
+
+    tried.length = 0;
+    firstAnswers = true;
+    await adapter(adapterInput(3_000, "matter-thought-label"), new AbortController().signal);
+    expect(tried).toEqual(["first"]);
+
+    tried.length = 0;
+    firstAnswers = false;
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+    expect(tried).toEqual(["first", "steady"]);
+
+    tried.length = 0;
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+    expect(tried).toEqual(["steady"]);
+  });
+
+  it("still lets a same-scenario success clear that scenario's failure evidence", async () => {
+    const tried: string[] = [];
+    let firstAnswers = false;
+    const adapter = createPoolAdapter(
+      [candidate("first"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+        tried.push(model);
+        if (model === "steady" || firstAnswers) return chatResponse("成本问题");
+        return chatResponse("no", 503);
+      },
+    );
+
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+    firstAnswers = true;
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+
+    firstAnswers = false;
+    tried.length = 0;
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+    await adapter(adapterInput(3_000, "matter-transcript-repair"), new AbortController().signal);
+    expect(tried).toEqual(["first", "steady", "first", "steady"]);
   });
 
   it("still needs two fast refusals before cooling a responsive relay", async () => {

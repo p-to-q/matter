@@ -187,6 +187,22 @@ describe("reduceLabelSession", () => {
     });
   });
 
+  it("releases queued ownership while preserving the right to plan after cooldown", () => {
+    const state = reduceLabelSession(begun([rootItem]), {
+      type: "failed",
+      nodeId: "root",
+      basis: rootItem.basis,
+      operationId: "op-1",
+      deferred: true,
+    });
+    expect(state.entries.get("root")).toMatchObject({
+      label: rootItem.provisional,
+      pendingOperationId: null,
+      deferred: true,
+    });
+    expect(planLabelWork(ROOT, ["root"], state, "zh-CN")).toHaveLength(1);
+  });
+
   it("clears everything at a document boundary", () => {
     const state = reduceLabelSession(begun([rootItem]), {
       type: "document-changed",
@@ -240,6 +256,37 @@ describe("reduceLabelSession", () => {
       entries: [{ nodeId: "root", label: "旧的名字", origin: "model", basis: "old" }],
     });
     expect(labelFor(restored, "root")).toBe("想象的生活");
+  });
+
+  it("does not restore a model label over a different current material basis", () => {
+    const current = begun([rootItem]);
+    const restored = reduceLabelSession(current, {
+      type: "restore",
+      treeId: "tree-1",
+      entries: [{ nodeId: "root", label: "旧的名字", origin: "model", basis: "old-basis" }],
+    });
+    expect(restored).toBe(current);
+  });
+
+  it("lets a durable manual name outrank an automatic answer", () => {
+    const settled = reduceLabelSession(begun([rootItem]), {
+      type: "settled",
+      nodeId: "root",
+      basis: rootItem.basis,
+      operationId: "op-1",
+      label: "想象的生活",
+      source: "model",
+    });
+    const restored = reduceLabelSession(settled, {
+      type: "restore",
+      treeId: "tree-1",
+      entries: [{ nodeId: "root", label: "我给它的名字", origin: "user", basis: null }],
+    });
+    expect(restored.entries.get("root")).toMatchObject({
+      label: "我给它的名字",
+      origin: "user",
+      basis: null,
+    });
   });
 
   it("keeps a name a person typed against every automatic path", () => {

@@ -1,10 +1,16 @@
 import {
   createLabelSessionState,
+  inputForLabelWorkItem,
+  labelMaterialBasis,
   planLabelWork,
   reduceLabelSession,
   type LabelSessionState,
   type LabelWorkItem,
 } from "../runtime/label-session";
+import {
+  adjudicateModelLabel,
+  validateSemanticLabel,
+} from "../material/semantic-label";
 import type {
   LabelRecord,
   LabelRepository,
@@ -88,6 +94,7 @@ export class LabelDriver {
   private consecutiveFailures = 0;
   private cooldownUntilMs = 0;
   private restoredTreeId: string | null = null;
+  private restoreGeneration = 0;
   private restoring = false;
   private lastScope: LabelScope | null = null;
   private lastNodeIds: readonly string[] = [];
@@ -146,7 +153,9 @@ export class LabelDriver {
     this.restoreOnce(scope.tree.id);
 
     const items = planLabelWork(scope.tree, nodeIds, this.state, this.dependencies.locale);
+    let cancelledSupersededWork = false;
     for (const item of items) {
+      cancelledSupersededWork = this.cancelSupersededPending(item) || cancelledSupersededWork;
       // While stored labels are still loading, the deterministic label is
       // committed but nothing is asked: a node that was named in an earlier
       // session must not be paid for twice.
@@ -164,6 +173,9 @@ export class LabelDriver {
       this.publish(next);
       if (operationId !== null) this.enqueue({ item, operationId, controller: new AbortController() });
     }
+    // A changed node may no longer need a model at all. Its cancelled request
+    // must still free the lane for unrelated visible work.
+    if (cancelledSupersededWork) this.drain();
   }
 
   /**
@@ -186,6 +198,7 @@ export class LabelDriver {
     }
     const documentEpoch = this.state.documentEpoch;
     this.cancelPending(nodeId);
+    this.drain();
     return this.enqueueDurableMutation(treeId, nodeId, async () => {
       let receipt: LabelWriteReceipt;
       try {
@@ -262,6 +275,8 @@ export class LabelDriver {
     });
     if (next !== this.state) {
       this.restoredTreeId = null;
+      this.restoreGeneration += 1;
+      this.restoring = false;
       // Node ids are unique per document, so no outstanding answer may survive.
       for (const pending of [...this.active.values(), ...this.queue]) pending.controller.abort();
       this.active.clear();
@@ -275,6 +290,8 @@ export class LabelDriver {
     if (pruned === this.state) return;
     this.publish(pruned);
     if (removed.length > 0) {
+      for (const nodeId of removed) this.cancelPending(nodeId);
+      this.drain();
       void this.dependencies.repository?.remove(this.state.treeId, removed);
     }
   }
@@ -289,28 +306,53 @@ export class LabelDriver {
     if (this.restoredTreeId === treeId || this.dependencies.repository === undefined) return;
     this.restoredTreeId = treeId;
     this.restoring = true;
+    const documentEpoch = this.state.documentEpoch;
+    const generation = ++this.restoreGeneration;
     void this.dependencies.repository.loadAll(treeId).then(
-      (records) => this.applyRestored(treeId, records),
-      () => this.applyRestored(treeId, []),
+      (records) => this.applyRestored(treeId, documentEpoch, generation, records),
+      () => this.applyRestored(treeId, documentEpoch, generation, []),
     );
   }
 
-  private applyRestored(treeId: string, records: readonly LabelRecord[]): void {
+  private applyRestored(
+    treeId: string,
+    documentEpoch: number,
+    generation: number,
+    records: readonly LabelRecord[],
+  ): void {
     // A load that resolves for a previous document must not clear the flag the
     // current document's load is still holding, or stored labels are re-asked
     // of the model while their own restore is in flight.
-    if (this.disposed || this.state.treeId !== treeId) return;
+    if (
+      this.disposed ||
+      this.state.treeId !== treeId ||
+      this.state.documentEpoch !== documentEpoch ||
+      this.restoreGeneration !== generation
+    ) {
+      return;
+    }
     this.restoring = false;
     if (records.length > 0) {
+      const tree = this.lastScope?.tree;
       const next = reduceLabelSession(this.state, {
         type: "restore",
         treeId,
-        entries: records.map((record) => Object.freeze({
-          nodeId: record.nodeId,
-          label: record.label,
-          origin: record.origin,
-          basis: record.basis,
-        })),
+        entries: records.flatMap((record) => {
+          const node = tree?.nodes[record.nodeId];
+          if (node === undefined) return [];
+          if (
+            record.origin === "model" &&
+            record.basis !== labelMaterialBasis(node.text, this.dependencies.locale)
+          ) {
+            return [];
+          }
+          return [Object.freeze({
+            nodeId: record.nodeId,
+            label: record.label,
+            origin: record.origin,
+            basis: record.basis,
+          })];
+        }),
       });
       if (next !== this.state) this.publish(next);
     }
@@ -331,6 +373,31 @@ export class LabelDriver {
       pending.controller.abort();
       this.queue.splice(index, 1);
     }
+  }
+
+  /** Cancels work whose captured material can no longer name this node. */
+  private cancelSupersededPending(item: LabelWorkItem): boolean {
+    let cancelled = false;
+    for (const [operationId, pending] of this.active) {
+      if (pending.item.nodeId !== item.nodeId || pending.item.basis === item.basis) continue;
+      pending.controller.abort();
+      this.active.delete(operationId);
+      cancelled = true;
+    }
+    for (let index = this.queue.length - 1; index >= 0; index -= 1) {
+      const pending = this.queue[index];
+      if (
+        pending === undefined ||
+        pending.item.nodeId !== item.nodeId ||
+        pending.item.basis === item.basis
+      ) {
+        continue;
+      }
+      pending.controller.abort();
+      this.queue.splice(index, 1);
+      cancelled = true;
+    }
+    return cancelled;
   }
 
   private enqueueDurableMutation<Result>(
@@ -386,24 +453,64 @@ export class LabelDriver {
         reference: item.reference,
         signal: controller.signal,
       });
+      if (controller.signal.aborted || this.active.get(operationId) !== pending) return;
       this.settleSuccess(item, operationId, success);
     } catch {
       if (!controller.signal.aborted) this.settleFailure(item, operationId);
     } finally {
-      this.active.delete(operationId);
+      if (this.active.get(operationId) === pending) this.active.delete(operationId);
       this.drain();
     }
   }
 
   private settleSuccess(item: LabelWorkItem, operationId: string, success: LabelSuccess): void {
     if (this.disposed) return;
-    this.consecutiveFailures = 0;
+    let label = success.label;
+    if (success.source === "provisional") {
+      // A fallback is allowed to report only the floor the browser already
+      // derived from this exact request. It cannot smuggle a second proposal
+      // through the less-trusted provisional origin.
+      if (label !== item.provisional) {
+        this.releaseRejectedResult(item, operationId);
+        return;
+      }
+      if (
+        success.fallbackReason === "MODEL_TIMEOUT" ||
+        success.fallbackReason === "MODEL_UNAVAILABLE" ||
+        success.fallbackReason === "MODEL_BUSY"
+      ) {
+        this.recordProviderFailure();
+      } else {
+        // MODEL_REJECTED means the provider answered and the semantic gate did
+        // its job. It is not evidence that the endpoint is unavailable.
+        this.consecutiveFailures = 0;
+      }
+    } else {
+      // The provider returned content. Semantic refusal is not an
+      // infrastructure outage and therefore closes any prior failure streak.
+      this.consecutiveFailures = 0;
+      if (success.fallbackReason !== undefined) {
+        this.releaseRejectedResult(item, operationId);
+        return;
+      }
+      const input = inputForLabelWorkItem(item);
+      const validation = validateSemanticLabel(label, {
+        locale: input.locale,
+        maxGraphemes: input.maxGraphemes,
+        siblingLabels: input.context.siblingLabels,
+      });
+      if (!validation.ok || !adjudicateModelLabel(input, item.provisional, validation.label).ok) {
+        this.releaseRejectedResult(item, operationId);
+        return;
+      }
+      label = validation.label;
+    }
     const next = reduceLabelSession(this.state, {
       type: "settled",
       nodeId: item.nodeId,
       basis: item.basis,
       operationId,
-      label: success.label,
+      label,
       source: success.source,
     });
     if (next === this.state) return;
@@ -411,7 +518,7 @@ export class LabelDriver {
     if (success.source === "model") {
       void this.dependencies.repository?.put(this.state.treeId, {
         nodeId: item.nodeId,
-        label: success.label,
+        label,
         origin: "model",
         basis: item.basis,
         updatedAt: this.canonicalNow(),
@@ -421,6 +528,17 @@ export class LabelDriver {
 
   private settleFailure(item: LabelWorkItem, operationId: string): void {
     if (this.disposed) return;
+    this.recordProviderFailure();
+    const next = reduceLabelSession(this.state, {
+      type: "failed",
+      nodeId: item.nodeId,
+      basis: item.basis,
+      operationId,
+    });
+    if (next !== this.state) this.publish(next);
+  }
+
+  private recordProviderFailure(): void {
     this.consecutiveFailures += 1;
     if (this.consecutiveFailures >= this.limits.failuresBeforeCooldown) {
       // The endpoint, not this node, is failing. Stop asking for a while rather
@@ -439,10 +557,14 @@ export class LabelDriver {
           nodeId: queued.item.nodeId,
           basis: queued.item.basis,
           operationId: queued.operationId,
+          deferred: true,
         });
         if (released !== this.state) this.publish(released);
       }
     }
+  }
+
+  private releaseRejectedResult(item: LabelWorkItem, operationId: string): void {
     const next = reduceLabelSession(this.state, {
       type: "failed",
       nodeId: item.nodeId,

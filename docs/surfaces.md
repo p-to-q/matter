@@ -106,5 +106,6 @@ available; directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
-Its current phase is the fixture generative-turn slice; its endpoint is the first
-publicly usable release, not a speculative platform roadmap.
+Its current phase is release convergence: make the existing admission, repair,
+label, transform-fixture, Undo/Redo, and reload paths truthful together. Its
+endpoint is the first publicly usable release, not a speculative platform roadmap.

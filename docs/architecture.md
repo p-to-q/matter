@@ -90,14 +90,17 @@ visible rows
   → POST /api/label
   → model returns { text } only
   → server validates and adjudicates against the deterministic label
+  → browser repeats validation and adjudication
   → label session re-checks node, material fingerprint, latest operation
   → the row changes, or the answer is discarded
 ```
 
 A label is derived presentation, not material: it never enters `ThoughtTree`,
-history, persistence, or an archive, so it needs no protocol field and no
-migration. Failure is invisible by construction, because the label a person is
-reading was already correct before the request was sent.
+material history, the material snapshot, or an archive, so it needs no document
+protocol field and no migration. Accepted model labels and manual names may live
+in their own browser repository; the deterministic label remains the authority
+on a miss. Failure is invisible by construction, because the label a person is
+reading was already usable before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
 
@@ -107,6 +110,13 @@ shared spine, a budget, and an adjudicator that decides whether the answer beats
 a floor that is already correct without a model.
 [`reference/prompt-harness.md`](reference/prompt-harness.md) records why the
 prompt has a shape and where each scenario's judgement differs.
+
+The provider registry, credentials, endpoint parsing, and transport stay shared
+and server-only. Mutable execution state does not: each scenario owns its
+governor, deadline, cache policy, and candidate-health lane. A short repair stall
+therefore cannot reorder the candidates used for a background label, and a label
+success cannot erase repair's own cooldown. This is one provider foundation,
+not one cross-product failure domain.
 
 The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
@@ -245,8 +255,8 @@ measured ranges key on `layoutEpoch`; encoded snapshots key on tree revision;
 server label answers key on a non-cryptographic fingerprint of the material,
 locale, bound, and prompt version, and are re-validated on every read rather
 than trusted because they were written by this process.
-They are disposable and never authoritative. Raw audio, transcripts, model
-responses, and lineage are not cached. A bounded diagnostic trace may record
+They are disposable and never authoritative. Raw audio, transcripts, repair or
+inquiry answers, transform responses, and lineage are not cached. A bounded diagnostic trace may record
 operation ids, state transitions, error codes, durations, and byte counts, but
 never material or voice content.
 
@@ -356,11 +366,11 @@ Matter is independently deployed beneath `ptoq.io/matter` by default. The base
 path is `MATTER_BASE_PATH=/matter`; a dedicated custom domain may set the value
 to an empty string so `app/page.tsx` owns `/` without forking the application.
 Therefore `app/page.tsx` is the product page and
-the future `app/api/turn` route resolves under `/matter/api/turn` when built.
+`app/api/turn` resolves under `/matter/api/turn` at the default base path.
 
 `0.2` has no compatibility aliases because no `0.1` document was persisted.
-The generative mutation route remains absent until its Matter-native envelope
-and error boundary are implemented. `/api/inquiry` exists separately because it
+The generative mutation route is a strict fixture-gated vertical slice; its live
+provider remains separately gated. `/api/inquiry` exists separately because it
 cannot construct a plan or mutate material; an old scene route is never renamed
 into place.
 
