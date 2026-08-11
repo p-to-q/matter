@@ -9,9 +9,15 @@ import {
   normalizeOrigin,
   parseArguments,
   probeModelPool,
+  REPAIR_PROMPT_VERSION,
   repairRequest,
   summarize,
 } from "./probe-model-pool.mjs";
+
+test("uses the deployed transcript-repair prompt contract", () => {
+  assert.equal(REPAIR_PROMPT_VERSION, "transcript-repair/3");
+  assert.equal(repairRequest(1).promptVersion, REPAIR_PROMPT_VERSION);
+});
 
 test("accepts a deployed HTTPS origin and a loopback one", () => {
   assert.equal(normalizeOrigin("https://matter.ptoq.io/"), "https://matter.ptoq.io");

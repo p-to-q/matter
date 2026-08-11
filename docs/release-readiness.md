@@ -69,6 +69,24 @@ still gated            a successful deployed managed-repair answer receipt;
                        health configuration alone is not that proof
 ```
 
+## Production spot check — 0.2.0-preview.26
+
+The deployment gate reached `matter.ptoq.io` after nine probes and confirmed
+the Preview.26 version and capability shape. The hydrated interface restored
+its bounded local material, enabled the voice and pointer tools, and exposed no
+new repair, cache, or provider surface. Before hydration and voice readiness,
+the same controls remained visible but inert rather than accepting a recording
+they could not yet own.
+
+Two generated repair utterances reached the new server budget in 6.72 and 6.59
+seconds, then safely returned the unchanged floor with `MODEL_UNAVAILABLE`. One
+generated cross-surface round returned repair `MODEL_UNAVAILABLE`, label
+`MODEL_TIMEOUT`, and inquiry `MODEL_TIMEOUT`; that is a pool-down receipt, not a
+repair-only fault. Health still reports the configured transcript-repair
+capability, exactly as designed, but is not evidence that a relay answered.
+Preview.26 therefore proves the longer repair path and its fallback online; a
+managed repair answer remains gated on restoring a responding relay.
+
 ## Candidate verification — 0.2.0-preview.25
 
 Preview.25 makes transcript repair a real staged path without making it a new
