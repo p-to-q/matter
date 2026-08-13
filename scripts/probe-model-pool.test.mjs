@@ -15,7 +15,7 @@ import {
 } from "./probe-model-pool.mjs";
 
 test("uses the deployed transcript-repair prompt contract", () => {
-  assert.equal(REPAIR_PROMPT_VERSION, "transcript-repair/3");
+  assert.equal(REPAIR_PROMPT_VERSION, "transcript-repair/4");
   assert.equal(repairRequest(1).promptVersion, REPAIR_PROMPT_VERSION);
 });
 

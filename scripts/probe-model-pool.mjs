@@ -25,7 +25,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export const PROTOCOL_VERSION = "0.2";
-export const REPAIR_PROMPT_VERSION = "transcript-repair/3";
+export const REPAIR_PROMPT_VERSION = "transcript-repair/4";
 export const LABEL_PROMPT_VERSION = "thought-label/2";
 export const SURFACES = Object.freeze(["repair", "label", "inquiry"]);
 

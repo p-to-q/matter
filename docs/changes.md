@@ -17,6 +17,17 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-13 — The pool probe speaks the deployed repair contract
+
+Changed: the generated cross-surface deployment probe now sends
+`transcript-repair/4`, matching the strict repair route and its source prompt.
+
+Why: a stale `/3` probe was correctly refused by the `/4` route but could be
+misread as a model-pool or repair outage during release verification.
+
+Forecloses: accepting old prompt contracts at the route, weakening strict wire
+parsing, or treating an operational probe as independent protocol authority.
+
 ## 2026-08-13 — Repair gains evidence-backed redraft; the rail returns to Undo only
 
 Changed: transcript repair now distinguishes a narrow lexical correction from

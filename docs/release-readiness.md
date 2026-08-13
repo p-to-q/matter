@@ -37,6 +37,22 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.30
+
+Preview.30 is an operational-contract correction over Preview.29. The deployed
+repair route already requires `transcript-repair/4`; the cross-surface pool probe
+now sends that same version and its test freezes the equality. Product behavior,
+material documents, UI, history, and network response shapes do not change.
+
+```text
+source proof           focused Node probe contract, typecheck, lint, production
+                       build, architecture, doctor, docs and diff checks passed
+browser proof          unchanged from Preview.29: 46 Chromium cases passed, 2
+                       capability-gated cases skipped
+operational boundary   a probe contract mismatch can no longer masquerade as a
+                       provider or transcript-repair failure
+```
+
 ## Candidate verification — 0.2.0-preview.29
 
 Preview.29 strengthens the spoken-to-written boundary without turning admission
