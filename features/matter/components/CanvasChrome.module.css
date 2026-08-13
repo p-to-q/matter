@@ -550,7 +550,8 @@
   font: 400 12px/17px var(--mono);
   letter-spacing: 0;
   overflow-wrap: anywhere;
-  animation: inquiryTurnIn 160ms ease-out;
+  transform-origin: center bottom;
+  animation: inquiryBubbleIn 250ms cubic-bezier(.2, .86, .25, 1.18);
 }
 
 .inquiryTurn[data-inquiry-role="person"] {
@@ -563,6 +564,34 @@
   align-self: flex-start;
   background: var(--chrome-answer);
   color: var(--chrome-answer-fg);
+}
+
+/* A new reply begins in a slightly too-large frame, centred around its final
+   text footprint, then settles. The actual flex item already owns its stack
+   space, so the temporary frame can never make later bubbles drift. */
+.inquiryTurn[data-inquiry-role="matter"][data-inquiry-frame] {
+  transform-origin: center;
+  animation: inquiryFrameSettle 620ms cubic-bezier(.18, .85, .22, 1) forwards;
+  text-align: center;
+}
+
+.inquiryLoading {
+  display: inline-flex;
+  min-width: 21px;
+  justify-content: space-between;
+  letter-spacing: 0;
+}
+
+.inquiryLoading span {
+  animation: inquiryDot 1.1s ease-in-out infinite;
+}
+
+.inquiryLoading span:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.inquiryLoading span:nth-child(3) {
+  animation-delay: 280ms;
 }
 
 .inquiryComposer {
@@ -672,9 +701,22 @@
   50% { opacity: 1; }
 }
 
-@keyframes inquiryTurnIn {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes inquiryBubbleIn {
+  0% { opacity: 0; transform: translateY(5px) scale(.92); }
+  42% { opacity: 1; transform: translateY(0) scale(1.045); }
+  70% { transform: translateY(0) scale(.982); }
+  100% { transform: translateY(0) scale(1); }
+}
+
+@keyframes inquiryFrameSettle {
+  0% { transform: scale(1.12, 1.22); }
+  52% { transform: scale(.985); }
+  100% { transform: scale(1); }
+}
+
+@keyframes inquiryDot {
+  0%, 100% { opacity: .28; transform: translateY(0); }
+  42% { opacity: 1; transform: translateY(-1px); }
 }
 
 @keyframes popoverIn {
@@ -751,12 +793,17 @@
   .popover,
   .mobileSheet,
   .inquiry,
-  .inquiryTurn {
+  .inquiryTurn,
+  .inquiryLoading span {
     animation: none;
   }
 
   .inquiry[data-inquiry-phase="listening"] .inquiryStatus::before {
     animation: none;
+  }
+
+  .inquiryTurn[data-inquiry-role="matter"][data-inquiry-frame] {
+    background: var(--chrome-answer);
   }
 
   .textControl::before,

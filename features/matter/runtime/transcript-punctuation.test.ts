@@ -13,6 +13,8 @@ describe("normalizeAdmittedTranscript", () => {
     expect(normalizeAdmittedTranscript("我也不知道……")).toBe("我也不知道……");
     expect(normalizeAdmittedTranscript("（完成。）")).toBe("（完成。）");
     expect(normalizeAdmittedTranscript("She said “done.”")).toBe("She said “done.”");
+    expect(normalizeAdmittedTranscript("他说“可以”")).toBe("他说“可以”。");
+    expect(normalizeAdmittedTranscript("“可以”")).toBe("“可以。”");
   });
 
   it("does not add spaces inside numeric separators", () => {
@@ -165,6 +167,84 @@ describe("repairAdmittedTranscript", () => {
     )).toBe("如果这个可行，那么我们测试，然后我们发布。");
     expect(repairAdmittedTranscript("why isn't this ready", "en-US"))
       .toBe("Why isn't this ready?");
+    expect(repairAdmittedTranscript("we test it and then we ship it", "en-US"))
+      .toBe("We test it and then we ship it.");
+  });
+
+  it("repairs bounded Japanese dictation without touching ordinary punctuation nouns", () => {
+    expect(repairAdmittedTranscript("えーと、これは これは必要です", "ja-JP"))
+      .toBe("これは必要です。");
+    expect(repairAdmittedTranscript("なぜこれは必要ですか", "ja-JP"))
+      .toBe("なぜこれは必要ですか？");
+    expect(repairAdmittedTranscript("先に確認 読点 次に公開 句点", "ja-JP"))
+      .toBe("先に確認、次に公開。");
+    expect(repairAdmittedTranscript("句点という言葉を使う", "ja-JP"))
+      .toBe("句点という言葉を使う。");
+    expect(repairAdmittedTranscript("あの、人は来ない", "ja-JP"))
+      .toBe("あの、人は来ない。");
+    expect(repairAdmittedTranscript("これは説明なの", "ja-JP"))
+      .toBe("これは説明なの。");
+  });
+
+  it("repairs bounded German dictation without erasing semantic um", () => {
+    expect(repairAdmittedTranscript("ähm, ich ich glaube das funktioniert", "de-DE"))
+      .toBe("Ich glaube das funktioniert.");
+    expect(repairAdmittedTranscript("warum ist das noch nicht fertig", "de-DE"))
+      .toBe("Warum ist das noch nicht fertig?");
+    expect(repairAdmittedTranscript("zuerst testen Komma dann veröffentlichen Punkt", "de-DE"))
+      .toBe("Zuerst testen, dann veröffentlichen.");
+    expect(repairAdmittedTranscript("das Wort Komma ist wichtig", "de-DE"))
+      .toBe("Das Wort Komma ist wichtig.");
+    expect(repairAdmittedTranscript("Wir treffen uns um acht", "de-DE"))
+      .toBe("Wir treffen uns um acht.");
+  });
+
+  it("normalizes only cue-bound multilingual numbers and preserves trailing zeros", () => {
+    expect(repairAdmittedTranscript("the threshold is twenty five percent", "en-US"))
+      .toBe("The threshold is 25%.");
+    expect(repairAdmittedTranscript("the threshold is three point zero percent", "en-US"))
+      .toBe("The threshold is 3.0%.");
+    expect(repairAdmittedTranscript("the timeout is twenty milliseconds", "en-US"))
+      .toBe("The timeout is 20 ms.");
+    expect(repairAdmittedTranscript("version two point zero is ready", "en-US"))
+      .toBe("Version 2.0 is ready.");
+    expect(repairAdmittedTranscript("成功率是百分之二十五", "zh-CN"))
+      .toBe("成功率是25%。");
+    expect(repairAdmittedTranscript("延迟是二十毫秒", "zh-CN"))
+      .toBe("延迟是20毫秒。");
+    expect(repairAdmittedTranscript("版本二点零需要保留", "zh-CN"))
+      .toBe("版本 2.0 需要保留。");
+    expect(repairAdmittedTranscript("二零二六年八月十三日发布", "zh-CN"))
+      .toBe("2026年8月13日发布。");
+    expect(repairAdmittedTranscript("成功率は二十パーセント", "ja-JP"))
+      .toBe("成功率は20%。");
+    expect(repairAdmittedTranscript("バージョン二点零を使う", "ja-JP"))
+      .toBe("バージョン 2.0を使う。");
+    expect(repairAdmittedTranscript("die Rate ist zwanzig Prozent", "de-DE"))
+      .toBe("Die Rate ist 20 %.");
+    expect(repairAdmittedTranscript("Version zwei Punkt null ist stabil", "de-DE"))
+      .toBe("Version 2.0 ist stabil.");
+  });
+
+  it("does not rewrite bare number words or protected literal spans", () => {
+    expect(repairAdmittedTranscript("twenty ideas remain", "en-US"))
+      .toBe("Twenty ideas remain.");
+    expect(repairAdmittedTranscript("我有二十个想法", "zh-CN"))
+      .toBe("我有二十个想法。");
+    expect(repairAdmittedTranscript("二十の案がある", "ja-JP"))
+      .toBe("二十の案がある。");
+    expect(repairAdmittedTranscript("zwanzig Ideen bleiben", "de-DE"))
+      .toBe("Zwanzig Ideen bleiben.");
+    expect(repairAdmittedTranscript('say "twenty percent" exactly', "en-US"))
+      .toBe('Say "twenty percent" exactly.');
+    expect(repairAdmittedTranscript("他说“百分之二十”", "zh-CN"))
+      .toBe("他说“百分之二十”。");
+    expect(repairAdmittedTranscript("「二十パーセント」と言った", "ja-JP"))
+      .toBe("「二十パーセント」と言った。");
+    expect(repairAdmittedTranscript('er sagte "zwanzig Prozent"', "de-DE"))
+      .toBe('Er sagte "zwanzig Prozent".');
+    expect(repairAdmittedTranscript("https://example.com/v2.0", "de-DE"))
+      .toBe("https://example.com/v2.0.");
   });
 
   it("recovers strongly signalled web addresses without editing literals", () => {
@@ -235,9 +315,9 @@ describe("repairAdmittedTranscript", () => {
       .toBe("UM is a university abbreviation.");
     expect(repairAdmittedTranscript("um", "en-US")).toBe("um.");
     expect(repairAdmittedTranscript("呃", "zh-CN")).toBe("呃。");
-    expect(repairAdmittedTranscript("openaiを使う", "ja-JP")).toBe("openaiを使う。");
+    expect(repairAdmittedTranscript("openaiを使う", "ja-JP")).toBe("OpenAIを使う。");
     expect(repairAdmittedTranscript("openai ist noch nicht bereit", "de-DE"))
-      .toBe("openai ist noch nicht bereit.");
+      .toBe("OpenAI ist noch nicht bereit.");
   });
 
   it("removes bounded vocal scaffolding but preserves affect and uncertainty", () => {
@@ -380,6 +460,10 @@ describe("repairAdmittedTranscript", () => {
       ["我也不知道……", "zh-CN"],
       ["ありがとう", "ja-JP"],
       ["Wir treffen uns um acht", "de-DE"],
+      ["the threshold is three point zero percent", "en-US"],
+      ["成功率是百分之二十五", "zh-CN"],
+      ["成功率は二十パーセント", "ja-JP"],
+      ["die Rate ist zwanzig Prozent", "de-DE"],
     ];
     for (const [text, locale] of corpus) {
       const once = repairAdmittedTranscript(text, locale);

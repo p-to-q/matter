@@ -56,6 +56,11 @@ describe("CanvasChrome", () => {
     expect(css).toMatch(/\.inquiry\[hidden\]\s*\{[^}]*display:\s*none/);
   });
 
+  it("keeps animation out of the shared thread", () => {
+    const markup = renderChrome();
+    expect(markup).not.toContain('aria-live="polite"');
+  });
+
   it("keeps pre-release information honest and task-oriented", () => {
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input is available");

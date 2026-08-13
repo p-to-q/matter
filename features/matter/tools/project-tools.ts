@@ -22,15 +22,8 @@ export function projectTools(context: ToolContext): readonly ProjectedTool[] {
   const undo = context.canUndo
     ? projectAvailability({ id: "undo", intent: { type: "undo" } }, context.interaction)
     : disabledTool("undo", "history-empty");
-  // `canRedo` was added after the initial tool contract. Omitted means an
-  // older non-interactive projection, not an implicit history capability.
-  const redo = context.canRedo === undefined
-    ? []
-    : [context.canRedo
-      ? projectAvailability({ id: "redo", intent: { type: "redo" } }, context.interaction)
-      : disabledTool("redo", "redo-empty")];
 
-  return Object.freeze([...contextual, undo, ...redo]);
+  return Object.freeze([...contextual, undo]);
 }
 
 function projectApplicableTools(context: ToolContext): readonly ApplicableTool[] {

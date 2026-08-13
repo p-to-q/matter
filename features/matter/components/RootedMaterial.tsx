@@ -565,10 +565,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 isFolded: navigation.foldedNodeIds.has(toolTargetNode.id),
               },
         canUndo,
-        canRedo,
         interaction: interactionPending ? "pending" : "idle",
       }),
-    [canRedo, canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
+    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
   const projectInquiryPayload = useCallback(
@@ -1853,7 +1852,6 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
                 isFolded: navigation.foldedNodeIds.has(toolTargetNode.id),
               },
         canUndo: props.canUndo,
-        canRedo: props.canRedo,
         interaction: "idle",
       },
       intent,
@@ -1889,9 +1887,6 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
       return;
     case "undo":
       if (props.canUndo) props.onUndo();
-      return;
-    case "redo":
-      if (props.canRedo) props.onRedo();
       return;
     default:
       return assertNever(intent);

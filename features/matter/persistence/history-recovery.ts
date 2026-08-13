@@ -39,7 +39,7 @@ export function recoverPersistedHistory(
 
   // Redo entries are ordered as a stack: the last undone command must be the
   // first one that can be reapplied. Check that sequence too, otherwise a
-  // malformed cache could look undoable until a person presses Redo.
+  // malformed cache could look reversible until a person uses the shortcut.
   cursorTree = tree;
   const redoEntries = history.redoEntries ?? [];
   for (let index = redoEntries.length - 1; index >= 0; index -= 1) {

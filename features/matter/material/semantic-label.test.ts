@@ -88,6 +88,15 @@ describe("provisional derivation", () => {
       .toBe("Migrate API v2 authentication");
   });
 
+  it("never splits a dotted identifier or leaves a dangling contrast opener", () => {
+    expect(label({ text: "我们先检查 API v2.3 的兼容，然后再决定是否发布。" }))
+      .toBe("API v2.3 兼容");
+    expect(label({ text: "但是这个方案的缓存边界还没有想清楚。" }))
+      .not.toMatch(/^是/u);
+    expect(label({ text: "是撤销机制还是日志快照需要先确定。" }))
+      .not.toMatch(/^是/u);
+  });
+
   it("gives Han a tighter bound than Latin", () => {
     expect(normalizeLabelInput({ text: "重新思考首页结构" }).maxGraphemes).toBe(14);
     expect(normalizeLabelInput({ text: "Rethink the home page structure" }).maxGraphemes)

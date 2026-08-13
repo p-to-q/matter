@@ -21,11 +21,16 @@ Repair is faithful intent recovery at the hearing boundary, not generative
 thinking. Admission never waits for it: the
 formatting floor is durable before repair computes, and a correction cannot
 commit until that floor has crossed two paint opportunities and remained
-visible for 650ms. The browser port computes a pure TypeScript floor first, then
-may ask the existing managed repair route to improve that floor. The request
+visible for 650ms. The browser port computes a pure TypeScript floor first: it
+protects literals, applies locale-specific disfluency cleanup, classifies only
+high-confidence spoken number/date/time/version/unit spans, renders them without
+numeric precision loss, then settles punctuation and casing. It may then ask
+the existing managed repair route to improve that floor. The request
 carries one utterance, locale, and bounded vocabulary, never tree identity or
-address. It may remove clearly abandoned speech and lightly settle forced
-grammar, but semantic facts remain locked. Timeout, rejection, malformed output, and provider absence all return
+address. A model may make one evidence-backed faithful redraft of broken spoken
+grammar, but clean prose keeps a narrow edit budget and numbers, units, stable
+identifiers, vocabulary, speaker, modality, relations, question type, and claim
+order remain locked. Timeout, rejection, malformed output, and provider absence all return
 the local rules; a future cached worker can become another proposal source
 without entering React, the store, or the tree engine. The store mints one
 store-unique short-lived capability after admission and consumes it on candidate,
@@ -176,7 +181,7 @@ requires one config entry, UI copy, and focused server/client tests.
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
 | Durable local choice | any active-document identity or manual name promised across reload; explicit failure, never cache eviction. |
-| Durable local history | complete undo/redo journal paired atomically with the local snapshot; not exported. |
+| Durable local history | complete inverse journal paired atomically with the local snapshot; Undo is visible, while Redo remains a platform keyboard convention and is not exported. |
 | Navigation | focus and fold; derived view state, not history. |
 | Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
 | Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials, and bounded per-node repair presentation hints. |

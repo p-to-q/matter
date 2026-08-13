@@ -23,8 +23,10 @@ the full material view. The final transcript enters the tree immediately as
 human material. A bounded admission repair may then turn the heard utterance
 into a faithful written version for twelve seconds: it can remove recognition
 debris, non-semantic fillers, abandoned starts, repeated verbal scaffolding, or
-the discarded side of an unmistakable correction, and lightly settle grammar
-without changing a claim. A deterministic floor is always available; one
+the discarded side of an unmistakable correction. When the utterance itself
+proves a broken spoken seam, it may redraft that seam into the shortest natural
+written phrasing without changing speaker, modality, relation, fact, or claim
+order. A deterministic five-locale floor is always available; one
 managed proposal may resolve the intent-dependent cases without seeing the
 tree. The correction can settle only while that exact passage
 remains untouched. Admission and repair are separate
@@ -56,7 +58,8 @@ passages or, when no passages are selected, the bounded virtual material tree,
 and receive orientation that never edits material. A completed exchange may
 remain behind that same inquiry after reload, but it adds no separate product
 surface and is not material, history, archive content, or later model context.
-Every generative material change still has an exact pointer undo.
+Every generative material change still has an exact pointer undo. Redo is a
+platform keyboard safety convention, not a visible canvas tool.
 
 For a lassoed inquiry, selected passages are the working context. Without a
 lasso selection, the virtual material tree is projected within the protocol

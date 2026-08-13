@@ -59,7 +59,7 @@ for (const viewport of [
     await expect(page.locator(".spatial-thought svg")).toHaveCount(0);
     expect(await page.getByRole("navigation", { name: "Editing tools" }).locator("[data-tool-id]").evaluateAll(
       (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
-    )).toEqual(["voice", "lasso", "branch", "move", "undo", "redo"]);
+    )).toEqual(["voice", "lasso", "branch", "move", "undo"]);
     await expect(page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name: "Focus" })).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
     const ambientVideo = page.locator("video.matter-ambient__video");
@@ -150,8 +150,12 @@ for (const viewport of [
     await expect(tool("Undo")).toBeEnabled();
     await tool("Undo").click();
     await expect.poll(() => visibleIds(page)).toEqual(initialIds);
-    await expect(page.getByRole("button", { name: "Redo last change", exact: true })).toBeEnabled();
-    await page.getByRole("button", { name: "Redo last change", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Redo last change", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Meta+Shift+z");
+    await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
+    await tool("Undo").click();
+    await expect.poll(() => visibleIds(page)).toEqual(initialIds);
+    await page.keyboard.press("Control+y");
     await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
     await tool("Undo").click();
     await expect.poll(() => visibleIds(page)).toEqual(initialIds);

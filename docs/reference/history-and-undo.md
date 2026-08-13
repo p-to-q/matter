@@ -73,8 +73,10 @@ type CommandResult =
   commands are undone in sequence, the history controller rebases only the next
   inverse's revision token. Mutation mementos still verify exact current
   material. A successful undo moves the engine-produced inverse to the redo
-  stack; redo applies that inverse through the engine again. A new command
-  clears the alternate redo future. Failure preserves both tree and stacks.
+  stack; keyboard redo applies that inverse through the engine again. A new
+  command clears the alternate redo future. Failure preserves both tree and
+  stacks. The paper rail exposes only Undo; `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`
+  retain the platform convention without adding another visible tool.
   Opening, importing, or hydrating a foreign document clears history and
   pending turns.
 - `affectedNodeIds` is returned so motion can be local to what changed, rather
@@ -114,6 +116,7 @@ clones of affected nodes.
 sometimes change what a person sees and sometimes change what they wrote, and
 they would stop trusting it. Undo means "take back what was generated".
 
-**Snapshot stacks and opaque browser history.** Still rejected. Redo is now a
-first-class inverse stack because a person must be able to move back through a
-local material timeline after reload without asking the model to recreate it.
+**Snapshot stacks and opaque browser history.** Still rejected. Redo remains a
+first-class inverse stack because a person may reverse an accidental Undo after
+reload without asking the model to recreate material. It is a keyboard safety
+convention, not part of the visible canvas vocabulary.

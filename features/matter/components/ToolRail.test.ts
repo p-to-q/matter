@@ -5,7 +5,7 @@ import { projectToolSurface } from "../tools/project-tool-surface";
 import { projectTools } from "../tools/project-tools";
 import { ToolRail, type ToolRailProps } from "./ToolRail";
 
-const EXPECTED_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo", "redo"];
+const EXPECTED_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo"];
 
 describe("ToolRail", () => {
   it.each([
@@ -53,7 +53,7 @@ describe("ToolRail", () => {
     expect(markup).toContain('aria-label="Extend related thought"');
     expect(markup).toContain('aria-label="Return to canvas pan"');
     expect(markup).toContain('aria-label="Undo last change"');
-    expect(markup).toContain('aria-label="Redo last change"');
+    expect(markup).not.toContain("Redo");
   });
 
   it("keeps the recording control available as stop", () => {

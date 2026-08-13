@@ -17,6 +17,43 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-13 — Repair gains evidence-backed redraft; the rail returns to Undo only
+
+Changed: transcript repair now distinguishes a narrow lexical correction from
+an evidence-backed faithful redraft. The prompt boundary is
+`transcript-repair/4`; stronger edits require spoken scaffolding and preserve
+numbers, units, stable identifiers, vocabulary, speaker, modality, relations,
+question type, and claim order. The right editing rail no longer displays Redo.
+Exact Redo remains available through `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`, backed by
+the same persisted inverse journal.
+
+Why: spoken language sometimes needs a real local redraft rather than a final
+period, while a global rewrite budget would transfer authorship to the model.
+The visible rail needs one quiet direction of retreat without taking away the
+platform safety convention for reversing an accidental Undo.
+
+Forecloses: free style polishing at admission, model-authored facts or logic,
+locale-blind numeric replacement, a visible Redo rail tool, and snapshot-based
+history restoration.
+
+## 2026-08-13 — Ask Matter answers arrive as bounded material feedback
+
+Changed: the existing, closed Ask Matter bubble now presents a pending request
+as three visual dots, then reveals a terminal answer with a short elastic
+entrance. Its visual frame begins slightly larger around the growing text, which
+remains centred before the frame settles to normal; stacking remains native
+layout. Terminal punctuation is briefly withheld while the answer becomes
+readable and then restored or lent by locale. The canonical response, request
+protocol, record, and material tree are unchanged.
+
+Why: an answer arriving all at once gave no sense of local material becoming
+present, while a transform-only scale or a second text model would let frames
+and words desynchronize as the small stack changes width and height.
+
+Forecloses: server token streaming in this surface, durable partial responses,
+using animation state as inquiry authority, a permanent transcript UI, and a
+game-derived visual skin.
+
 ## 2026-08-12 — One provider foundation no longer means one failure domain
 
 Changed: thought labels and transcript repair still share one server-only model

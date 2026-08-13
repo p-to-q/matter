@@ -14,7 +14,7 @@ import { composePrompt, fence } from "./prompt-spine";
  * The floor is the request utterance: raw dictation for an inquiry draft, or
  * the deterministic rule floor for admitted material. This scenario handles
  * the remaining contextual boundary, correction, and misrecognition cases. It
- * restores; it does not improve.
+ * restores; it does not turn admission into a general writing surface.
  */
 export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string> = Object.freeze({
   id: "matter-transcript-repair",
@@ -46,7 +46,7 @@ export function compileRepairPrompt(input: NormalizedRepairInput): string {
     background: false,
     mandate: [
       "Speech recognition wrote down one thing a person said, and wrote parts of it down wrong.",
-      "Return the faithful written form of the utterance they intended: remove abandoned speech and recognition debris, lightly settle spoken grammar, add no idea, and change no claim.",
+      "Return a faithful written redraft of the utterance they intended: remove abandoned speech and recognition debris, settle broken spoken grammar into the shortest natural form, add no idea, and change no claim.",
     ],
     fixed: [
       `the language: answer in the language of the utterance, whose locale is ${JSON.stringify(input.locale)}. A translation is never a repair.`,
@@ -63,6 +63,8 @@ export function compileRepairPrompt(input: NormalizedRepairInput): string {
       "one explicit or contextually unmistakable self-correction where the person gives a mistaken fragment, then says sorry, I mean, rather, actually, wait, 不对, 我是说, 更正, or the locale-equivalent and supplies the replacement: keep the version they ultimately chose;",
       "a minimal missing article, agreement form, or function word only when the spoken grammar makes exactly one completion possible;",
       "light spoken-to-written smoothing that removes verbal scaffolding while preserving the person's vocabulary, tone, uncertainty, emphasis, claim order, and degree of completion;",
+      "within one visibly spoken or grammatically fractured clause, paraphrase verbal scaffolding into the shortest natural written phrasing, but only when speaker, register, modality, causality, facts, and clause order remain identical;",
+      "write an explicitly spoken number, percentage, date, time, version, currency, or unit in the ordinary written form of the utterance's locale, without changing its semantic value or precision;",
       "a character or word the recognizer misheard, when the surrounding words make the intended one unambiguous: a homophone, a near-homophone, a proper noun it did not know;",
       "one consistent spelling for a term the person said more than once.",
     ],
@@ -72,9 +74,9 @@ export function compileRepairPrompt(input: NormalizedRepairInput): string {
     ],
     never: [
       "translate, summarize, expand, explain, continue, or answer the utterance;",
-      "reorder clauses, merge separate thoughts, or split one thought for tidiness;",
+      "reorder claims, merge separate thoughts, or change cause, condition, sequence, speaker, question, command, or statement type;",
       "add a fact, example, reason, conclusion, transition, confidence, or specificity the person did not express;",
-      "polish the voice into a higher register, make it more persuasive, or replace a serviceable phrase merely because another sounds better;",
+      "polish the voice into a higher register, make it more persuasive, or perform a style-only rewrite when there is no spoken or grammatical residue to repair;",
       "delete meaningful repetition, an ambiguous filler, a side note, or a false start whose replacement is not clear in the utterance.",
     ],
     unsure: "When you are not certain a word is wrong, leave it exactly as it is. Leaving one misheard word is a small failure; returning a sentence the person did not say is a total one. If the utterance is already correct, return it unchanged.",

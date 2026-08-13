@@ -15,6 +15,12 @@ import {
   type WheelEvent as ReactWheelEvent,
 } from "react";
 import {
+  INQUIRY_REVEAL_STEP_MS,
+  INQUIRY_TERMINAL_SETTLE_MS,
+  inquiryPresentationText,
+  revealSteps,
+} from "./inquiry-bubble-presentation";
+import {
   CANVAS_APPEARANCE_OPTIONS,
   CANVAS_LANGUAGE_OPTIONS,
   type CanvasAppearance,
@@ -1113,22 +1119,13 @@ function InquiryBubble({
     >
       {state.turns.length === 0 ? null : (
         <div
-          aria-live="polite"
+          aria-live="off"
           className={styles.inquiryThread}
           data-inquiry-thread
           onScroll={trackThreadScroll}
           ref={threadRef}
         >
-          {state.turns.map((turn) => (
-            <p
-              className={styles.inquiryTurn}
-              data-inquiry-role={turn.role}
-              dir="auto"
-              key={turn.id}
-            >
-              {turn.role === "person" ? turn.text : answerCopy(copy, turn.outcome)}
-            </p>
-          ))}
+          {state.turns.map((turn) => <InquiryTurn copy={copy} key={turn.id} turn={turn} />)}
         </div>
       )}
       <div className={styles.inquiryComposer}>
@@ -1193,6 +1190,82 @@ function InquiryBubble({
       ) : null}
     </div>
   );
+}
+
+function InquiryTurn({ copy, turn }: Readonly<{ copy: CanvasChromeCopy; turn: ReturnType<typeof createInquiryState>["turns"][number] }>) {
+  // Restored terminal exchanges are already settled. Only a component that
+  // first saw a pending Matter turn earns the arrival treatment when that same
+  // keyed turn receives its answer.
+  const [beganPending] = useState(
+    () => turn.role === "matter" && turn.outcome.status === "pending",
+  );
+  const openingAnswer = beganPending && turn.role === "matter" && turn.outcome.status === "answered";
+  const accessibleAnswer = turn.role === "matter" ? answerCopy(copy, turn.outcome) : undefined;
+
+  return (
+    <p
+      aria-atomic={turn.role === "matter" ? "true" : undefined}
+      aria-label={accessibleAnswer}
+      aria-live={turn.role === "matter" && beganPending ? "polite" : "off"}
+      className={styles.inquiryTurn}
+      data-inquiry-frame={openingAnswer ? "opening" : undefined}
+      data-inquiry-role={turn.role}
+      dir="auto"
+    >
+      {turn.role === "person" ? turn.text : (
+        <InquiryAnswer animate={beganPending} outcome={turn.outcome} copy={copy} />
+      )}
+    </p>
+  );
+}
+
+function InquiryAnswer({ animate, copy, outcome }: Readonly<{
+  animate: boolean;
+  copy: CanvasChromeCopy;
+  outcome: InquiryTurnOutcome;
+}>) {
+  const visible = outcome.status === "pending" ? (
+    <span aria-hidden="true" className={styles.inquiryLoading} data-inquiry-loading>
+      <span>.</span><span>.</span><span>.</span>
+    </span>
+  ) : outcome.status === "answered" && animate ? (
+    <AnimatedInquiryAnswer answer={outcome.text} />
+  ) : <span aria-hidden="true">{answerCopy(copy, outcome)}</span>;
+  return visible;
+}
+
+function AnimatedInquiryAnswer({ answer }: Readonly<{ answer: string }>) {
+  const [presentation] = useState(() => inquiryPresentationText(answer));
+  const [steps] = useState(() => revealSteps(presentation.typed));
+  const [text, setText] = useState(() => {
+    const reducedMotion = typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return reducedMotion ? presentation.terminal : steps[0] ?? presentation.terminal;
+  });
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let index = 0;
+    const reveal = window.setInterval(() => {
+      index += 1;
+      const next = steps[index];
+      if (next === undefined) {
+        window.clearInterval(reveal);
+        return;
+      }
+      setText(next);
+    }, INQUIRY_REVEAL_STEP_MS);
+    const settle = window.setTimeout(() => {
+      window.clearInterval(reveal);
+      setText(presentation.terminal);
+    }, Math.max(steps.length * INQUIRY_REVEAL_STEP_MS, INQUIRY_TERMINAL_SETTLE_MS));
+    return () => {
+      window.clearInterval(reveal);
+      window.clearTimeout(settle);
+    };
+  }, [presentation.terminal, steps]);
+
+  return <span aria-hidden="true">{text}</span>;
 }
 
 function recordTurns(exchanges: readonly StoredInquiryExchange[]): ReturnType<typeof createInquiryState>["turns"] {

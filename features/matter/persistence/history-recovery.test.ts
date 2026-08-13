@@ -36,7 +36,7 @@ describe("persisted undo history", () => {
     }, LIMITS)).toEqual(createTreeHistory());
   });
 
-  it("recovers both stacks so an undone change can be redone after reload", () => {
+  it("recovers both stacks so a keyboard redo remains exact after reload", () => {
     const initialized = commitTreeCommand(
       createEmptyTree("tree"),
       createTreeHistory(),

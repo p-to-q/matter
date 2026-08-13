@@ -220,6 +220,8 @@ describe("compileRepairPrompt", () => {
     expect(prompt).toContain("remove abandoned speech and recognition debris");
     expect(prompt).toContain("self-correction");
     expect(prompt).toContain("light spoken-to-written smoothing");
+    expect(prompt).toContain("faithful written redraft");
+    expect(prompt).toContain("paraphrase verbal scaffolding");
     expect(prompt).toContain("translate, summarize, expand, explain, continue, or answer");
     expect(prompt).toContain("leave it exactly as it is");
   });

@@ -24,7 +24,7 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
  * parse it, and a request whose prompt version the server does not recognise is
  * refused rather than answered by a different scenario than the client asked for.
  */
-export const TRANSCRIPT_REPAIR_PROMPT_VERSION = "transcript-repair/3";
+export const TRANSCRIPT_REPAIR_PROMPT_VERSION = "transcript-repair/4";
 
 export const MAX_REPAIR_TEXT_CODE_UNITS = MAX_NODE_TEXT_CODE_UNITS;
 
@@ -47,6 +47,7 @@ export const MIN_CJK_REPAIR_SKELETON_LENGTH = 4;
  * the utterance all move far past it, because they change most of the string.
  */
 const REPAIR_BUDGET_RATIO = 0.28;
+const REDRAFT_BUDGET_RATIO = 0.45;
 const MIN_REPAIR_BUDGET = 3;
 const REPAIR_GROWTH_RATIO = 0.12;
 const MIN_REPAIR_GROWTH = 2;
@@ -54,10 +55,12 @@ const MAX_REPAIR_GROWTH = 12;
 /**
  * A long utterance must not buy a proportionally unlimited licence. This budget
  * admits a faithful spoken-to-written cleanup with several recognition fixes,
- * but sixty-four code-point edits is the absolute ceiling; past that,
- * similarity stops being evidence of the same utterance.
+ * but every path has an absolute ceiling; past that, similarity stops being
+ * evidence of the same utterance. The wider ceiling below is reachable only
+ * when the source itself proves a spoken redraft is needed.
  */
 const MAX_REPAIR_BUDGET = 64;
+const MAX_REDRAFT_BUDGET = 80;
 
 export type RepairSource = "verbatim" | "model";
 
@@ -167,9 +170,11 @@ export function adjudicateRepair(
   if (isExplicitCorrectionReduction(original.text, source, repaired)) {
     return Object.freeze({ ok: true, text, changed: text !== original.text });
   }
-  if (!preservesProtectedMeaning(original.text, text)) return reject("MEANING_CHANGED");
+  if (!preservesProtectedMeaning(original, text)) return reject("MEANING_CHANGED");
   if (!preservesSharedAnchorOrder(original.text, text)) return reject("MEANING_CHANGED");
-  const budget = repairBudget(source.length);
+  const budget = hasFaithfulRedraftEvidence(original)
+    ? redraftBudget(source.length)
+    : repairBudget(source.length);
   const growthBudget = Math.min(
     MAX_REPAIR_GROWTH,
     Math.max(MIN_REPAIR_GROWTH, Math.ceil(source.length * REPAIR_GROWTH_RATIO)),
@@ -190,7 +195,43 @@ const PROTECTED_MEANING_PATTERNS: readonly RegExp[] = Object.freeze([
   /(?:可能|也许|也許|大概|应该|應該|或许|或許|未必)/gu,
   /\b(?:all|every|only|none|always|never|least|most|before|after)\b/giu,
   /(?:全部|所有|每个|每個|只有|仅|僅|至少|至多|之前|之后|之後)/gu,
+  /\b(?:and|or|either|neither|if|unless|because|since|therefore|so that|first|then|finally)\b/giu,
+  /(?:而且|以及|或者|还是|還是|如果|除非|因为|因為|所以|先|然后|然後|最后|最後)/gu,
+  /(?:そして|または|もし|なければ|だから|なので|まず|それから|最後)/gu,
+  /\b(?:und|oder|entweder|weder|wenn|falls|weil|deshalb|zuerst|dann|schließlich)\b/giu,
+  /\b(?:i|we|you|he|she|they|my|our|your|his|her|their)\b/giu,
+  /(?:我们|我們|你们|你們|他们|他們|她们|她們|我|你|他|她)/gu,
+  /(?:私たち|私達|僕たち|俺たち|彼ら|彼女たち|私|僕|俺|あなた|彼|彼女)/gu,
+  /\b(?:ich|wir|du|ihr|er|sie|es|mein|meine|unser|unsere|dein|deine|sein|seine|ihr|ihre)\b/giu,
 ]);
+
+/**
+ * A wider edit budget is authority, so it is granted only when the utterance
+ * itself still contains evidence of spoken scaffolding or a fractured clause.
+ * The deterministic floor has already removed low-ambiguity noise; these
+ * markers cover the residue whose written form may legitimately require a
+ * local redraft. Clean prose stays on the narrower lexical budget.
+ */
+function hasFaithfulRedraftEvidence(input: NormalizedRepairInput): boolean {
+  const text = input.text;
+  if (input.locale === "zh-CN" || input.locale === "zh-TW") {
+    return /(?:我(?:觉得|覺得|感觉|感覺|认为|認為)|怎么说|怎麼說|就是说|就是說|这个(?:地方|东西)|這個(?:地方|東西)|有(?:一)?点|有(?:一)?點|不太|其实|其實|反正|然后|然後)/u.test(text);
+  }
+  if (input.locale === "ja-JP") {
+    return /(?:というか|なんというか|なんか|と思う|感じがする|ちょっと|実は)/u.test(text);
+  }
+  if (input.locale === "de-DE") {
+    return /\b(?:ich denke|ich meine|eigentlich|sozusagen|irgendwie|ein bisschen|die sache ist)\b/iu.test(text);
+  }
+  return /\b(?:i think|i feel|i mean|the thing is|basically|kind of|sort of|a little|you know)\b/iu.test(text);
+}
+
+function redraftBudget(skeletonLength: number): number {
+  return Math.min(
+    MAX_REDRAFT_BUDGET,
+    Math.max(MIN_REPAIR_BUDGET, Math.ceil(skeletonLength * REDRAFT_BUDGET_RATIO)),
+  );
+}
 
 type CorrectionMarkerKind = "sorry" | "rather" | "late" | "explicit";
 
@@ -276,14 +317,24 @@ function containsLateCorrectionFact(value: string): boolean {
  * that reverses a thought. Numeric facts, negation, and uncertainty markers
  * therefore form a zero-change semantic floor for every model-backed repair.
  */
-function preservesProtectedMeaning(original: string, candidate: string): boolean {
-  if (!sameSequence(numericFacts(original), numericFacts(candidate))) return false;
-  if (!sameSequence(unitFacts(original), unitFacts(candidate))) return false;
-  const originalLiterals = literalFacts(original);
+function preservesProtectedMeaning(original: NormalizedRepairInput, candidate: string): boolean {
+  if (!sameSequence(numericFacts(original.text), numericFacts(candidate))) return false;
+  if (!sameSequence(unitFacts(original.text), unitFacts(candidate))) return false;
+  const originalLiterals = literalFacts(original.text);
   if (originalLiterals.length > 0 && !sameSequence(originalLiterals, literalFacts(candidate))) return false;
-  for (const pattern of PROTECTED_MEANING_PATTERNS) {
-    if (!sameSequence(matches(original, pattern), matches(candidate, pattern))) return false;
+  const originalIdentifiers = stableIdentifierFacts(original.text);
+  if (
+    originalIdentifiers.length > 0 &&
+    !sameSequence(originalIdentifiers, stableIdentifierFacts(candidate))
+  ) return false;
+  for (const term of original.vocabulary) {
+    const count = vocabularyCount(original.text, term);
+    if (count > 0 && vocabularyCount(candidate, term) !== count) return false;
   }
+  for (const pattern of PROTECTED_MEANING_PATTERNS) {
+    if (!sameSequence(matches(original.text, pattern), matches(candidate, pattern))) return false;
+  }
+  if (isQuestion(original.text, original.locale) !== isQuestion(candidate, original.locale)) return false;
   return true;
 }
 
@@ -300,11 +351,51 @@ function canonicalNumericFact(value: string): string {
 
 function unitFacts(value: string): readonly string[] {
   return [...value.matchAll(
-    /\p{N}+(?:[.,]\p{N}+)*\s*(%|percent|per cent|kg|g|km|m|cm|mm|ms|s|mb|gb|tb|°c|°f)\b|\p{N}+(?:[.,]\p{N}+)*\s*%/giu,
+    /\p{N}+(?:[.,]\p{N}+)*\s*(%|percent|per cent|kg|g|km|m|cm|mm|ms|s|mb|gb|tb|°c|°f|公里|千米|公斤|千克|克|毫秒|秒|分钟|分鐘|小时|小時|キログラム|キロメートル|ミリ秒|kilogramm|kilometer|millisekunden?|sekunden?)|\p{N}+(?:[.,]\p{N}+)*\s*%/giu,
   )].map((match) => {
     const unit = (match[1] ?? "%").toLocaleLowerCase();
     return unit === "%" || unit === "percent" || unit === "per cent" ? "percent" : unit;
   });
+}
+
+function stableIdentifierFacts(value: string): readonly string[] {
+  return [...value.matchAll(
+    /\b(?:v\d+(?:\.\d+)+|[A-Z]{2,}\d*|[A-Za-z][A-Za-z0-9]*[._-][A-Za-z0-9._-]+|[A-Za-z]+\d+)\b/gu,
+  )].map((match) => (match[0] ?? "").toLocaleLowerCase());
+}
+
+function vocabularyCount(value: string, term: string): number {
+  if (term.length === 0) return 0;
+  let count = 0;
+  let cursor = 0;
+  const haystack = value.toLocaleLowerCase();
+  const needle = term.toLocaleLowerCase();
+  while (cursor <= haystack.length - needle.length) {
+    const found = haystack.indexOf(needle, cursor);
+    if (found < 0) break;
+    if (
+      !/^\p{Script=Latin}[\p{Script=Latin}\p{N}'’-]*$/u.test(needle) ||
+      isLatinTermBoundary(haystack, found, needle.length)
+    ) count += 1;
+    cursor = found + needle.length;
+  }
+  return count;
+}
+
+function isLatinTermBoundary(value: string, start: number, length: number): boolean {
+  const before = start === 0 ? "" : value[start - 1] ?? "";
+  const after = value[start + length] ?? "";
+  return !/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after);
+}
+
+function isQuestion(value: string, locale: string): boolean {
+  if (/[?？][\p{Pe}\p{Pf}“"']*$/u.test(value.trim())) return true;
+  if (locale === "zh-CN" || locale === "zh-TW") {
+    return /^(?:请问|請問|为什么|為什麼|怎么|怎麼|如何|谁|誰|哪|何时|何時|多少|几|幾)|(?:吗|嗎|呢)[。.]?$/u.test(value.trim());
+  }
+  if (locale === "ja-JP") return /(?:か|でしょうか)[。.]?$/u.test(value.trim());
+  if (locale === "de-DE") return /^(?:warum|wie|was|wer|wo|wann|welch|kann|können|ist|sind|hat|haben)\b/iu.test(value.trim());
+  return /^(?:why|how|what|who|where|when|which|can|could|would|should|do|does|did|is|are|was|were|will|have|has)\b/iu.test(value.trim());
 }
 
 function literalFacts(value: string): readonly string[] {

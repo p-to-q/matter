@@ -9,8 +9,7 @@ export type ToolId =
   | "fold"
   | "unfold"
   | "show-all"
-  | "undo"
-  | "redo";
+  | "undo";
 
 export type ToolGroup = "contextual" | "utility";
 
@@ -23,10 +22,9 @@ export type ToolIntent =
       readonly folded: boolean;
     }
   | { readonly type: "show-full" }
-  | { readonly type: "undo" }
-  | { readonly type: "redo" };
+  | { readonly type: "undo" };
 
-export type ToolDisabledReason = "history-empty" | "redo-empty" | "operation-pending";
+export type ToolDisabledReason = "history-empty" | "operation-pending";
 
 export type SelectedToolTarget = {
   readonly nodeId: string;
@@ -38,7 +36,6 @@ export type ToolContext = {
   readonly view: "full" | "focus";
   readonly selected: SelectedToolTarget | null;
   readonly canUndo: boolean;
-  readonly canRedo?: boolean;
   readonly interaction: "idle" | "pending";
 };
 

@@ -10,7 +10,7 @@ reversible material change—not a chat or autonomous agent.
 ## State
 
 The running `0.2` pre-release surface is one rooted spatial thought tree with
-exact undo/redo, focus, folding, derived geometry, browser-native voice
+exact pointer undo, keyboard redo, focus, folding, derived geometry, browser-native voice
 admission with a separately undoable short local repair lease, punctuation
 lasso selection, shared stretch degree, and local
 Markdown durability through IndexedDB. A completed Ask Matter exchange may
@@ -20,7 +20,8 @@ only: the original text DOM remains the source for ranges, copying, and
 accessibility.
 The heard transcript becomes material first. A correction may compute in
 parallel but cannot commit before two paint opportunities and a short 650ms
-visibility floor. Ordered locale rules are always available; one bounded managed
+visibility floor. Ordered five-locale rules and high-confidence spoken-number
+normalization are always available; one bounded managed
 proposal may beat that floor without receiving the tree. If a correction
 commits, only inserted or replaced graphemes arrive in one short sequence;
 unchanged language stays still, while the canonical text remains complete for

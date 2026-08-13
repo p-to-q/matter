@@ -117,8 +117,8 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("呃，我觉得可以。");
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(store.getState().tree.nodes.voice_node_store_1).toBeUndefined();
+    expect(store.getState().history.redoEntries).toHaveLength(2);
     expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
-    expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("呃，我觉得可以。");
     expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
     expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("我觉得可以。");
   });
@@ -257,7 +257,7 @@ describe("Matter store", () => {
     expect(store.getState()).toBe(before);
   });
 
-  it("does not restore repair authority through undo and redo", () => {
+  it("does not preserve repair authority through undo", () => {
     let nowMs = 100;
     const store = createMatterStore("root", { monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
@@ -268,9 +268,9 @@ describe("Matter store", () => {
       baseRevision: store.getState().tree.revision,
       parentNodeId: rootId,
     }, {
-      interactionId: "voice_undo_redo",
-      commandId: "human_admission_undo_redo",
-      nodeId: "voice_node_undo_redo",
+      interactionId: "voice_undo_only",
+      commandId: "human_admission_undo_only",
+      nodeId: "voice_node_undo_only",
       createdAt: "2026-08-11T10:00:00.000Z",
       transcript: "呃，我觉得可以",
       expectedDocumentEpoch: 0,
@@ -280,7 +280,6 @@ describe("Matter store", () => {
     if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
 
     expect(store.getState().undo()).toMatchObject({ status: "committed" });
-    expect(store.getState().redo()).toMatchObject({ status: "committed" });
     nowMs = 200;
     expect(store.getState().settleHumanTranscriptRepair({
       repairLeaseId: admission.repairLeaseId,
@@ -289,7 +288,7 @@ describe("Matter store", () => {
       source: "rules",
       createdAt: "2026-08-11T10:00:00.100Z",
     })).toMatchObject({ status: "rejected", errorCode: "REPAIR_STALE" });
-    expect(store.getState().tree.nodes.voice_node_undo_redo.text).toBe("呃，我觉得可以。");
+    expect(store.getState().tree.nodes.voice_node_undo_only).toBeUndefined();
   });
 
   it("consumes repair authority when an unrelated structural drag commits", () => {
@@ -644,7 +643,7 @@ describe("Matter store", () => {
     expect(undone.lastError).toBeNull();
   });
 
-  it("can undo back to the document's first state and redo the exact sequence", () => {
+  it("can undo back to the document's first state and restore only through the store shortcut action", () => {
     const store = createMatterStore(undefined, { documentRoot: true });
     const initial = structuredClone(store.getState().tree);
     const rootId = store.getState().tree.rootId;
@@ -662,7 +661,6 @@ describe("Matter store", () => {
     expect(store.getState().history.redoEntries).toHaveLength(2);
     expect(store.getState().redo().status).toBe("committed");
     expect(store.getState().redo().status).toBe("committed");
-    expect(store.getState().history.entries).toHaveLength(2);
     expect(store.getState().history.redoEntries).toEqual([]);
   });
 

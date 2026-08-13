@@ -9,7 +9,6 @@ import {
   BranchIcon,
   LassoIcon,
   MoveIcon,
-  RedoIcon,
   UndoIcon,
   VoiceIcon,
 } from "./icons";
@@ -47,7 +46,7 @@ export function ToolRail({
   voiceAvailable,
   voiceLabel,
 }: ToolRailProps) {
-  const { branch, redo, undo } = surface.main;
+  const { branch, undo } = surface.main;
 
   return (
     <nav
@@ -116,19 +115,6 @@ export function ToolRail({
         }
         shortLabel="Undo"
         toolId="undo"
-      />
-      <ToolButton
-        disabled={interactionPending || redo?.availability !== "available"}
-        group="history"
-        icon={<RedoIcon />}
-        label="Redo last change"
-        onClick={
-          redo?.availability === "available"
-            ? () => onIntent(redo.intent)
-            : undefined
-        }
-        shortLabel="Redo"
-        toolId="redo"
       />
     </nav>
   );

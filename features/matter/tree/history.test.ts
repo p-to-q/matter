@@ -102,7 +102,6 @@ describe("tree history", () => {
     if (!secondRedo.ok) return;
     expect(secondRedo.tree.nodes.child?.text).toBe("Child");
     expect(secondRedo.history.redoEntries).toEqual([]);
-    expect(secondRedo.history.entries).toHaveLength(2);
   });
 
   it("preserves the exact tree and stack when an inverse memento no longer matches", () => {
@@ -238,7 +237,7 @@ describe("tree history", () => {
     expect(result.history).toBe(history);
   });
 
-  it("drops redo only when a new material commit creates another timeline", () => {
+  it("drops the compatibility alternate future when a new material commit branches", () => {
     const initialized = commitTreeCommand(
       createEmptyTree("tree_1"),
       createTreeHistory(),

@@ -193,6 +193,7 @@ const KANA_INTERROGATIVE_OPENER = /^(?:なぜ|どうして|どのように|ど�
 const KANA_FUNCTION_EDGE = /^[はがをのにでともへやかねよ]+|[はがをのにと]+$/gu;
 
 const LOW_INFORMATION_PREFIX = [
+  "但是", "不过", "不過", "然而", "可是",
   "这个", "那个", "这些", "那些", "一个", "一种", "一些",
   "其他", "我们", "自己", "现在", "今天", "其实", "可能", "也许", "比较", "非常",
 ];
@@ -207,7 +208,9 @@ const SPOKEN_DISFLUENCY =
   /(?:嗯|呃|额|唔|就是说|我觉得|我认为|然后呢|反正|你知道|\bum+\b|\buh+\b|\byou know\b|\bi think\b)/iu;
 
 const CLAUSE_BREAK = /[\n\r，,、；;：:（）()「」『』【】]+/u;
-const SENTENCE_BREAK = /(?<=[。．.!！?？])\s*|[\n\r]+/u;
+// A Latin full stop is a sentence seam only when it is not inside a stable
+// identifier such as `v2.3`, an IP address, or a dotted product name.
+const SENTENCE_BREAK = /(?<=[。．!！?？])\s*|(?<=\.)(?![\p{L}\p{N}])\s*|[\n\r]+/u;
 
 const LATIN_STOPWORDS = new Set([
   "a", "an", "the", "and", "or", "but", "to", "of", "for", "in", "on", "at",
@@ -513,6 +516,10 @@ function scoreCandidate(
   if (GENERIC_ONLY.test(candidate)) score -= 4;
   if (CONTEXT_DEPENDENT.test(candidate)) score -= 1.5;
   if (length < 2) score -= 4;
+  // A grounded version, protocol, or product identifier carries more naming
+  // information than a generic trailing clause and must never lose merely
+  // because Han and Latin use different length targets.
+  score += stableIdentifiers(candidate).length * 1.4;
 
   // Brevity is a weight, not a veto.
   //
@@ -689,12 +696,42 @@ function fitToBound(value: string, input: NormalizedLabelInput): string {
   }
 
   const source = withoutOpener.length === 0 ? trimmed : withoutOpener;
+  const stableWindow = stableIdentifierWindow(source, input.maxGraphemes);
+  if (stableWindow !== null) return stableWindow;
   const window = isMostlyHan(source)
     ? hanTailWindow(source, input.maxGraphemes)
     : latinHeadWindow(source, input.maxGraphemes);
   if (window === null) return "";
   const fitted = trimLowInformationEdges(stripOpening(window));
   return graphemeCount(fitted) <= input.maxGraphemes ? fitted : "";
+}
+
+/**
+ * A version or protocol name is usually the identity of a technical thought,
+ * not optional detail. Preserve the contiguous identifier run and use the
+ * nearest grounded tail as its description instead of cutting through the
+ * identifier to satisfy a Han-sized bound.
+ */
+function stableIdentifierWindow(value: string, maxGraphemes: number): string | null {
+  const identifiers = Array.from(value.matchAll(STABLE_IDENTIFIER));
+  if (identifiers.length === 0) return null;
+  const first = identifiers[0];
+  const last = identifiers[identifiers.length - 1];
+  if (first?.index === undefined || last?.index === undefined) return null;
+  const start = first.index;
+  const end = last.index + last[0].length;
+  const identity = value.slice(start, end).trim();
+  if (identity.length === 0 || graphemeCount(identity) > maxGraphemes) return null;
+
+  const right = trimLowInformationEdges(
+    value.slice(end).replace(/^[\s的之，,、：:；;。．.!！?？]+/u, ""),
+  );
+  const rightUnit = splitClauses(right)[0] ?? "";
+  if (rightUnit.length > 0) {
+    const described = `${identity} ${rightUnit}`;
+    if (graphemeCount(described) <= maxGraphemes) return described;
+  }
+  return identity;
 }
 
 /**
@@ -798,6 +835,7 @@ function stripOpening(value: string): string {
 
 function trimLowInformationEdges(value: string): string {
   let result = value.trim();
+  result = result.replace(/^是(?!非)(?=.{5,})/u, "");
   for (let pass = 0; pass < 4; pass += 1) {
     const before = result;
     for (const token of LOW_INFORMATION_PREFIX) {

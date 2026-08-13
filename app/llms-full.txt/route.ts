@@ -57,7 +57,7 @@ selected node or segment.
 The running 0.2 preview is root-seeded. It currently includes the rooted
 tree, spatial layout, focus and folding runtime, material index, punctuation
 lasso, stretch projection, browser-native voice admission, local IndexedDB Markdown
-durability, ZIP archive transport, exact pointer undo/redo, and a fixture-gated
+durability, ZIP archive transport, exact pointer undo with keyboard redo, and a fixture-gated
 turn path. A live model rewrite remains separately gated. Ask Matter has a
 bounded request boundary and a local completed-record, never a memory adapter.
 

@@ -31,7 +31,7 @@ surfaces. The next release work must make this one loop plain to a new person:
 
 ```text
 admit a thought → focus it → lasso exact language → set degree → speak direction
-  → one reversible material change → undo/redo → reload
+  → one reversible material change → pointer undo (keyboard redo) → reload
 ```
 
 Ask Matter remains a closed secondary orientation surface. Its local completed
@@ -44,7 +44,7 @@ contract.
 
 ```text
 Outcome:    a new person can complete the one material loop with a warmed,
-            truthful voice path, then undo, redo, and reload it.
+            truthful voice path, then pointer undo, keyboard redo, and reload it.
 Boundary:   first-turn voice readiness; immediate admission plus detachable
             twelve-second composite repair; the existing fixture transform vertical
             slice; local tree/history durability; release receipt. No new
@@ -113,7 +113,7 @@ Invariants: no repair delays admission; one lease permits at most one second
 Proof:      positive/negative/idempotence corpora; remote success, rejection,
             timeout and abort tests; minimum-visibility scheduler test; driver,
             store, history, focused browser, full source and Chromium receipts.
-Non-goals:  free-form tone rewriting, streaming mutations, repair status UI,
+Non-goals:  style-only rewriting without spoken repair evidence, streaming mutations, repair status UI,
             cached transcript/output, a second provider framework, or widening
             the twelve-second lease.
 ```
@@ -144,6 +144,31 @@ Proof:      multilingual grapheme/diff/timing corpus; textContent and range
 Non-goals:  model-token streaming, old-text overlays, per-character durable
             mutations, a repair status label, sound, caret simulation, or an
             unbounded animation whose duration grows with transcript length.
+```
+
+### Active sub-slice — Ask Matter arrives as local, temporary material
+
+```text
+Outcome:    a submitted Ask Matter exchange visibly arrives as a short stack of
+            measured bubbles: waiting is three quiet dots, a completed answer
+            types into its own frame, settles its terminal stop, and pushes the
+            earlier visible exchange upward. A new frame begins slightly larger
+            around the growing answer, keeps its one visible text copy centred,
+            then returns exactly to the prior bubble geometry.
+Boundary:   the existing client-only Ask Matter presentation and its local CSS;
+            the inquiry request, response protocol, record, and material tree
+            remain unchanged.
+Invariants: pending dots and partial letters are render-only; the record stores
+            only the terminal response; after a bounded centred frame settle,
+            width cap, padding, alignment, thread height and gap equal the prior
+            geometry; close, abort, scope change, and reduced motion cancel or
+            bypass presentation work; no permanent chat surface or status chrome
+            is introduced.
+Proof:      terminal-punctuation and bounded reveal tests; inquiry component
+            assertions; the existing pointer-only browser inquiry path at
+            desktop and narrow widths.
+Non-goals:  server streaming, token/chunk protocol changes, changing model text,
+            durable partial answers, a new composer, sound, or a game-like skin.
 ```
 
 Execution order is deliberately narrow:

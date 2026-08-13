@@ -18,7 +18,7 @@ export type TreeHistoryEntry = {
 export type TreeHistory = {
   /** Commands that can be applied backwards from the current material. */
   entries: TreeHistoryEntry[];
-  /** Commands that can restore a previously undone material change. */
+  /** Commands reachable only through the platform Redo keyboard convention. */
   redoEntries?: TreeHistoryEntry[];
   /** Exact inverse bytes retained across both reversible stacks. */
   retainedInverseBytes: number;
@@ -209,7 +209,8 @@ export function undoTreeHistory(
 /**
  * Restores the most recently undone change. Redo is intentionally another
  * engine application, never a tree snapshot swap: the exact memento still has
- * to agree with the current material and revision.
+ * to agree with the current material and revision. Product UI does not expose
+ * this as a button; the platform keyboard convention is its only entry point.
  */
 export function redoTreeHistory(
   tree: ThoughtTree,

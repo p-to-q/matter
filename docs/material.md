@@ -15,16 +15,23 @@ model context; its adapter boundary is specified in
 Browser speech admission performs punctuation-only normalization at the edge,
 then enters the tree immediately. A detachable browser repair port always
 computes an ordered locale-rule floor for punctuation, clause signals, spacing,
-casing, filler residue, ASR echoes, restarts, corrections, and spoken commands.
+casing, filler residue, ASR echoes, restarts, corrections, spoken commands, and
+high-confidence spoken percentages, decimals, dates, times, versions, and
+units. Literal masking and locale-specific classification happen before
+rendering so an ambiguous bare number word, code span, URL, email, or quoted
+phrase remains untouched.
 When its existing gate is enabled, it may send only that one utterance, locale,
 and bounded vocabulary to `POST /api/repair`; the model may resolve an abandoned
-start, contextual filler, correction, or forced grammar seam, but never receives
+start, contextual filler, correction, or forced grammar seam, and may redraft
+that locally into the shortest natural written phrasing, but never receives
 a tree, node, address, or repair capability. The rule floor wins on timeout,
 rejection, malformed output, or an unavailable provider. A result is a second
 `replace-text` command only when the
 tree, node, admitted text, timestamp, document epoch, semantic guards, and
 twelve-second store lease still match. Reload, expiry, undo, deletion, or a
-human edit makes it inert. The first expression stays visible for a short
+human edit makes it inert. Model output is accepted only while numeric facts,
+units, stable identifiers, vocabulary, speaker, modality, logical relations,
+question type, and claim order remain invariant. The first expression stays visible for a short
 perceptual floor before any correction, and admission and repair remain
 separately undoable. Free rewriting remains an explicit selected-material
 transformation.
@@ -188,7 +195,7 @@ not turn it back into visible material.
 
 The snapshot preserves the complete `ThoughtTree`: current material, structure,
 ids, order, times, tree revision, and protocol version. The browser pairs that
-snapshot with its local undo/redo journal in one IndexedDB record, so accepted
+snapshot with its local inverse journal in one IndexedDB record, so accepted
 commands remain reversible after reload. Archive export deliberately contains
 only the material snapshot: importing an archive establishes a new undo boundary.
 

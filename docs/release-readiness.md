@@ -37,6 +37,43 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.29
+
+Preview.29 strengthens the spoken-to-written boundary without turning admission
+into a writing assistant. The dependency-free local floor now applies ordered,
+literal-safe repair across English, Simplified and Traditional Chinese,
+Japanese, and German, including only high-confidence spoken percentages,
+decimals, measures, dates, times, and version spans. One managed proposal may
+faithfully redraft a proven broken spoken seam, but the browser and store still
+lock facts, stable identifiers, bounded vocabulary, speaker, modality, logical
+relations, question type, and claim order before one separately undoable repair
+can settle.
+
+The right rail again exposes a single retreat direction: Undo. Exact Redo stays
+available through `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`, using the same durable inverse
+journal without a second visible tool. Ask Matter's existing bounded bubble now
+uses a presentation-only pending pulse and grapheme-aware terminal reveal; the
+full answer remains its accessible name, restored answers do not replay, and no
+partial text enters its record or protocol.
+
+```text
+source proof           npm run check: 1,118 Vitest passed, 1 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 46 Chromium cases passed, 2
+                       capability-gated cases skipped; visible Undo, both Redo
+                       shortcuts, inquiry arrival, repair, reload, archives,
+                       narrow layouts, and 2,000-node diagnostics passed
+repair proof           locale-exact positive, ambiguity, literal, semantic-lock,
+                       idempotence, and model-adjudication corpora passed; no
+                       worker download, transcript cache, or new dependency
+product boundary       no visible Redo, repair controls or provider status;
+                       no free style rewrite or durable partial inquiry answer
+still gated            a fresh deployed source:model repair receipt and live
+                       transform promotion; deterministic repair is complete
+                       when every managed proposal fails
+```
+
 ## Candidate verification — 0.2.0-preview.28
 
 Preview.28 keeps one server-only provider foundation without making its product

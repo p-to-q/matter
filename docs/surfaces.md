@@ -8,7 +8,7 @@ is deliberately absent.
 
 | Surface | Status | Evidence |
 | --- | --- | --- |
-| ThoughtTree kernel and exact reversible history | implemented | focused atomicity, ownership, undo/redo and reload tests |
+| ThoughtTree kernel and exact reversible history | implemented | focused atomicity, ownership, pointer undo, keyboard redo, and reload tests |
 | Full/focus/fold navigation | implemented | pure runtime tests and exact-lineage selectors |
 | Rooted fixture renderer | implemented | pointer receipt at laptop and narrow widths |
 | 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open |
@@ -68,7 +68,9 @@ described as one. Durability is already IndexedDB's job; a cache layer would add
 its own versioning and update story. Whether Matter ends up on mobile, on the
 web, or on both — and whether those need separate builds — is undecided, so
 installation stays this thin until that is settled.
-The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo → Redo.
+The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
+Redo remains available through the platform keyboard conventions
+`Cmd/Ctrl+Shift+Z` and `Ctrl+Y`; it is not a second visible rail tool.
 Focus and fold remain navigation capabilities but have no first-release canvas
 presenter; the disclosure control in the left material outline is a separate
 file-tree affordance.

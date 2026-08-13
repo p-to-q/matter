@@ -155,6 +155,28 @@ describe("adjudicateRepair", () => {
     expect(verdict).toEqual({ ok: false, reason: "MEANING_CHANGED" });
   });
 
+  it("allows a stronger local redraft only when spoken scaffolding proves the need", () => {
+    expect(adjudicateRepair(
+      zh("我觉得这个方案它就是不太行因为成本太高"),
+      "我觉得这个方案不太可行，因为成本太高。",
+    )).toEqual({
+      ok: true,
+      text: "我觉得这个方案不太可行，因为成本太高。",
+      changed: true,
+    });
+    expect(adjudicateRepair(
+      en("i think the thing is it kind of feels a little too complicated"),
+      "I think it feels a little too complicated.",
+    ).ok).toBe(true);
+  });
+
+  it("does not grant a clean sentence the wider redraft budget", () => {
+    expect(adjudicateRepair(
+      en("this implementation is slow and difficult to maintain"),
+      "This approach feels sluggish and is hard to support.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+  });
+
   it("rejects a translation", () => {
     const original = zh("我在想这件事到底该怎么做");
     expect(adjudicateRepair(original, "I am wondering how this should be done.")).toEqual({
@@ -207,6 +229,45 @@ describe("adjudicateRepair", () => {
       ok: false,
       reason: "MEANING_CHANGED",
     });
+  });
+
+  it("locks relations, speaker, question type, identifiers, and existing vocabulary", () => {
+    expect(adjudicateRepair(
+      en("i think we test first and then ship API v2"),
+      "I think we ship first and then test API v2.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("i think we should test because the cache is cold"),
+      "I think they should test because the cache is cold.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("i think this can work"),
+      "I think this can work?",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("i think API v2 is kind of unstable"),
+      "I think the API is somewhat unstable.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      normalizeRepairInput({
+        text: "i think Matter is kind of difficult to explain",
+        locale: "en-US",
+        vocabulary: ["Matter"],
+      }),
+      "I think the product is somewhat difficult to explain.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      en("i think we should test this"),
+      "I think I should test this.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
+    expect(adjudicateRepair(
+      normalizeRepairInput({
+        text: "i think Matter is kind of difficult to explain",
+        locale: "en-US",
+        vocabulary: ["Matter"],
+      }),
+      "I think Mattermost is kind of difficult to explain.",
+    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
   });
 
   it("rejects cheap clause reordering and unspoken growth", () => {

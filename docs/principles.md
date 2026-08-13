@@ -16,7 +16,8 @@ the running product, not how ambitious a feature sounds.
 4. **Unfinished language stays unfinished.** Preserve vocabulary, intent,
    uncertainty, and meaningful emphasis. A short, separately undoable repair
    lease may aggressively remove recognizable transcription debris, abandoned
-   speech, and a spoken correction, then lightly settle the intended wording;
+   speech, and a spoken correction, then faithfully redraft a proven broken
+   spoken seam while locking speaker, modality, facts, relations, and order;
    changing a claim or completing an idea still requires their direction.
 5. **The primary path is bodily.** Pointer and voice must be sufficient. Normal
    web accessibility remains supported; keyboard absence is never an excuse to
