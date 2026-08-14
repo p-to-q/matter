@@ -565,6 +565,21 @@
   color: var(--chrome-answer-fg);
 }
 
+.inquiryLoading {
+  display: inline-block;
+  width: 3ch;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.inquiryLoading span {
+  display: inline-block;
+  width: 3ch;
+  animation:
+    inquiryLoadingFirst 180ms steps(1, end) both,
+    inquiryLoadingCycle 760ms steps(1, end) 180ms infinite;
+}
+
 .inquiryComposer {
   display: flex;
   align-items: flex-end;
@@ -677,6 +692,15 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes inquiryLoadingFirst {
+  from, to { clip-path: inset(0 2ch 0 0); }
+}
+
+@keyframes inquiryLoadingCycle {
+  0%, 49% { clip-path: inset(0 1ch 0 0); }
+  50%, 100% { clip-path: inset(0 0 0 0); }
+}
+
 @keyframes popoverIn {
   from { opacity: 0; transform: translateY(-3px); }
   to { opacity: 1; transform: translateY(0); }
@@ -751,7 +775,8 @@
   .popover,
   .mobileSheet,
   .inquiry,
-  .inquiryTurn {
+  .inquiryTurn,
+  .inquiryLoading span {
     animation: none;
   }
 

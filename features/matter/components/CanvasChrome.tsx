@@ -1219,6 +1219,13 @@ function InquiryAnswer({ animate, copy, outcome }: Readonly<{
   copy: CanvasChromeCopy;
   outcome: InquiryTurnOutcome;
 }>) {
+  if (outcome.status === "pending") {
+    return (
+      <span aria-hidden="true" className={styles.inquiryLoading} data-inquiry-loading>
+        <span>...</span>
+      </span>
+    );
+  }
   if (outcome.status !== "answered" || !animate) {
     return <span aria-hidden="true">{answerCopy(copy, outcome)}</span>;
   }

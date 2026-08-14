@@ -19,8 +19,9 @@ Forecloses: what this makes harder or impossible
 
 ## 2026-08-14 — Ask Matter restores its original frame while keeping text arrival
 
-Changed: the closed Ask Matter surface again uses its original input, waiting,
-frame, alignment, and short entry transition. A completed answer still becomes
+Changed: the closed Ask Matter surface again uses its original input, frame,
+alignment, and short entry transition. Pending work starts with one `.` then
+uses a fixed-width `.. ↔ ...` dot cycle. A completed answer still becomes
 readable by grapheme and settles its existing or locale-appropriate terminal
 stop; this is text presentation only.
 
@@ -30,8 +31,8 @@ but the original frame preserves the established inquiry behavior without
 changing its record or wire contract.
 
 Forecloses: treating render-only animation as an authority for the inquiry text,
-or widening the surface with a loader redesign, scaled frame, or new visual
-system before a tested visual direction exists.
+or widening the surface with a scaled frame or new visual system before a
+tested visual direction exists.
 
 ## 2026-08-13 — The pool probe speaks the deployed repair contract
 

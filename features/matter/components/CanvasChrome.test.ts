@@ -56,6 +56,16 @@ describe("CanvasChrome", () => {
     expect(css).toMatch(/\.inquiry\[hidden\]\s*\{[^}]*display:\s*none/);
   });
 
+  it("keeps the inquiry waiting mark compact and cyclic", () => {
+    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.inquiryLoading\s*\{[^}]*width:\s*3ch;/s);
+    expect(css).toContain("inquiryLoadingFirst 180ms");
+    expect(css).toContain("inquiryLoadingCycle 760ms");
+    expect(css).toMatch(/@keyframes inquiryLoadingFirst\s*\{\s*from, to\s*\{[^}]*2ch/s);
+    expect(css).toContain("0%, 49% { clip-path: inset(0 1ch 0 0); }");
+    expect(css).toContain("50%, 100% { clip-path: inset(0 0 0 0); }");
+  });
+
   it("keeps pre-release information honest and task-oriented", () => {
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input is available");
