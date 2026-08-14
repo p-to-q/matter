@@ -165,6 +165,25 @@ Proof:      targeted component and browser inquiry checks, followed by the full
 Non-goals:  streaming, frame scaling, new controls, or a new visual system.
 ```
 
+### Active sub-slice — material held aside from the working context
+
+```text
+Outcome:    a person can subtract one visible passage or branch from the current
+            working material with `−`; it remains faintly legible on the paper
+            and in the index as `+`, but cannot be selected or sent to Ask Matter.
+Boundary:   the Material root's transient set-aside branch lifecycle and pure
+            projection, the material-index and canvas render edges, lasso target
+            filtering, and inquiry projection.
+Invariants: material text, tree structure, exports, history, and persistence do
+            not change; a lasso is the only explicit inquiry context and cannot
+            address held-aside text; focus explicitly restores its own lineage.
+Proof:      navigation and context projection tests; component/browser proof of
+            `− → +`, faded non-interactive text, and an inquiry request without
+            the held-aside branch; full repository and Chromium suites.
+Non-goals:  a second durable document visibility model, a hidden-retrieval
+            channel, a chat filter, or changing the existing structural fold.
+```
+
 Execution order is deliberately narrow:
 
 1. Publish this source preview with the first-turn voice boundary, durable

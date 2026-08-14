@@ -68,6 +68,8 @@ export function useLasso(input: {
   epoch: MeasurementEpoch;
   documentEpoch?: number;
   navigationKey: string;
+  /** Render-edge eligibility prevents faded material from reaching DOM Range reads. */
+  eligibleNodeIds?: ReadonlySet<string>;
   onGeometryInvalidated?: () => void;
 }): LassoController {
   const { onGeometryInvalidated } = input;
@@ -329,7 +331,11 @@ export function useLasso(input: {
     strokeDocumentEpochRef.current = input.documentEpoch ?? 0;
     const snapshotKey = measurementEpochKey(latestEpochRef.current, input.navigationKey);
     if (targetSnapshotKeyRef.current !== snapshotKey || targetSnapshotRef.current === null) {
-      targetSnapshotRef.current = measureLassoTargets(input.canvasRef.current, input.tree);
+      targetSnapshotRef.current = measureLassoTargets(
+        input.canvasRef.current,
+        input.tree,
+        input.eligibleNodeIds,
+      );
       targetSnapshotKeyRef.current = snapshotKey;
     }
     sampledPointsRef.current = [{ x: event.clientX, y: event.clientY }];
@@ -339,7 +345,7 @@ export function useLasso(input: {
     setSelections([]);
     writeInk(sampledPointsRef.current);
     return true;
-  }, [input.canvasRef, input.documentEpoch, input.navigationKey, input.tree, selections, writeInk]);
+  }, [input.canvasRef, input.documentEpoch, input.eligibleNodeIds, input.navigationKey, input.tree, selections, writeInk]);
 
   const pointerMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
     const current = stateRef.current;
@@ -539,12 +545,14 @@ function appendSampledPoint(
 function measureLassoTargets(
   canvas: HTMLDivElement | null,
   tree: ThoughtTree,
+  eligibleNodeIds?: ReadonlySet<string>,
 ): readonly LassoTarget[] {
   if (canvas === null) return Object.freeze([]);
   const viewport = clientViewportBounds();
   const targets: LassoTarget[] = [];
   for (const root of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
     const nodeId = root.dataset.thoughtTextId ?? "";
+    if (eligibleNodeIds !== undefined && !eligibleNodeIds.has(nodeId)) continue;
     const node = tree.nodes[nodeId];
     if (node === undefined) continue;
     const rect = root.getBoundingClientRect();

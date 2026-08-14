@@ -22,7 +22,7 @@ import {
 import { createNavigationState, type NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
-import { ChevronIcon, CopyIcon, DownloadIcon, SearchIcon, SidebarIcon, SyncIcon } from "./icons";
+import { CopyIcon, DownloadIcon, MinusIcon, PlusIcon, SearchIcon, SidebarIcon, SyncIcon } from "./icons";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import { allocateSnapshotPath } from "../persistence/snapshot-paths";
 import { projectMaterialFilesSurface } from "./material-files-surface";
@@ -70,6 +70,11 @@ export type MaterialFilesProps = Readonly<{
   tree: ThoughtTree;
   /** Transient passages addressed by the canvas lasso; never persisted. */
   lassoSelectedNodeIds?: ReadonlySet<string>;
+  /** Branch roots are the only independently restorable working-context state. */
+  heldAsideRootIds?: ReadonlySet<string>;
+  /** Includes inherited descendants so this render edge never climbs ancestry. */
+  heldAsideNodeIds?: ReadonlySet<string>;
+  onToggleHeldAside?: (nodeId: string) => void;
   persistence: Readonly<{
     status: PersistenceStatus;
     retry: () => void;
@@ -123,14 +128,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const [preparedImport, setPreparedImport] = useState<File | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState({ top: 0, height: 0 });
   const [rowHeight, setRowHeight] = useState(40);
-  /**
-   * Which rows have been closed. Material arrives expanded, so this stays empty
-   * until someone deliberately collapses a branch. Closing belongs to the index,
-   * not to the canvas: reading past a branch must not restructure the canvas.
-   */
-  const [collapsedState, setCollapsedState] = useState<Readonly<{ epoch: number; ids: ReadonlySet<string> }>>(
-    () => ({ epoch: props.documentEpoch, ids: new Set<string>() }),
-  );
   const [focusedRowState, setFocusedRowState] = useState(() => ({ epoch: props.documentEpoch, nodeId: null as string | null }));
   const [renaming, setRenaming] = useState<
     Readonly<{ epoch: number; nodeId: string; draft?: string }> | null
@@ -163,20 +160,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
     props.navigation.mode === "focus"
       ? props.navigation.focusNodeId
       : props.navigation.selectedNodeId;
-  /**
-   * Expansion is derived, not synchronized. Whatever moves the canvas — a lasso,
-   * voice admission, focus — reopens the branch the active thought sits in,
-   * because an index that cannot answer "where am I" is not an index.
-   */
-  const collapsedNodeIds = useMemo(() => {
-    const closed = new Set(collapsedState.epoch === props.documentEpoch ? collapsedState.ids : []);
-    if (activeNodeId !== null) {
-      for (const ancestorId of projectMaterialAncestry(props.tree, activeNodeId)) {
-        closed.delete(ancestorId);
-      }
-    }
-    return closed;
-  }, [activeNodeId, collapsedState, props.documentEpoch, props.tree]);
   const rootId = props.tree.rootId;
   const documentTitle = props.tree.title ?? "Untitled matter";
   const titleForNode = useMemo(() => (nodeId: string): string => {
@@ -197,9 +180,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
       // Copying spans the complete rooted outline, independently of canvas fold.
       return mode === "select"
         ? projectMaterialFileSubtree(props.tree, rootId)
-        : projectMaterialFileOutline(props.tree, collapsedNodeIds);
+        // Context controls also give the index its compact reading rhythm:
+        // held branches stay recoverable at their root while their descendants
+        // close here only. Canvas geometry and material structure do not move.
+        : projectMaterialFileOutline(props.tree, props.heldAsideRootIds ?? new Set<string>());
     },
-    [collapsedNodeIds, mode, open, props.labels, props.tree, rootId, visibleQuery],
+    [mode, open, props.heldAsideRootIds, props.labels, props.tree, rootId, visibleQuery],
   );
   const effectiveFocusedRowId = focusedRowState.epoch === props.documentEpoch ? focusedRowState.nodeId : null;
   const focusedRowIndex = effectiveFocusedRowId === null
@@ -322,7 +308,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setMode("browse");
     setQuery("");
     setSelectionState({ epoch: props.documentEpoch, ids: new Set<string>() });
-    setCollapsedState({ epoch: props.documentEpoch, ids: new Set<string>() });
     setFocusedRowState({ epoch: props.documentEpoch, nodeId: null });
     setRenaming(null);
     setRenamingDocument(false);
@@ -464,24 +449,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const openNode = (nodeId: string) => {
     if (props.navigation.mode === "focus") props.onFocusNode(nodeId);
     else props.onSelectNode(nodeId);
-  };
-
-  /** Reading a thought reopens it, the way a file tree opens what you click. */
-  const openAndExpand = (nodeId: string, hasChildren: boolean) => {
-    openNode(nodeId);
-    if (!hasChildren || !collapsedNodeIds.has(nodeId)) return;
-    const ids = new Set(collapsedNodeIds);
-    ids.delete(nodeId);
-    setCollapsedState({ epoch: props.documentEpoch, ids });
-  };
-
-  /** Opens or closes a branch in place. It never moves the canvas. */
-  const toggleExpanded = (nodeId: string) => {
-    if (surface.rowInteractionDisabled) return;
-    setCollapsedState({
-      epoch: props.documentEpoch,
-      ids: toggleSetValue(collapsedNodeIds, nodeId),
-    });
   };
 
   const copySelection = async () => {
@@ -764,7 +731,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 const checked = currentSelectedIds.has(file.nodeId);
                 const active = activeNodeId === file.nodeId;
                 const lassoSelected = props.lassoSelectedNodeIds?.has(file.nodeId) === true;
-                const expanded = file.hasChildren && !collapsedNodeIds.has(file.nodeId);
+                const heldAside = props.heldAsideNodeIds?.has(file.nodeId) === true;
+                const heldAsideRoot = props.heldAsideRootIds?.has(file.nodeId) === true;
                 const materialNode = props.tree.nodes[file.nodeId];
                 const derivedLabel = props.labels?.get(file.nodeId);
                 const title = derivedLabel ?? (materialNode === undefined
@@ -780,6 +748,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     data-label-origin={props.labelOrigins?.get(file.nodeId)}
                     data-direct-match={file.directMatch || undefined}
                     data-in-lineage={activeLineageIds.has(file.nodeId) || undefined}
+                    data-context-excluded={heldAside || undefined}
                     key={file.nodeId}
                     style={{ "--material-file-depth": file.depth } as CSSProperties}
                     data-node-id={file.nodeId}
@@ -796,24 +765,22 @@ export function MaterialFiles(props: MaterialFilesProps) {
                       setFocusedRowState({ epoch: props.documentEpoch, nodeId: file.nodeId });
                     }}
                     data-has-children={file.hasChildren || undefined}
-                    data-expanded={expanded || undefined}
                   >
                     {mode === "browse" ? (
-                      // Disclosure keeps a fixed hit column; structural depth is
-                      // carried by the row's measured horizontal step.
-                      <button
-                        aria-expanded={file.hasChildren ? expanded : undefined}
-                        aria-label={file.hasChildren
-                          ? `${expanded ? "Collapse" : "Expand"} ${title}`
-                          : undefined}
-                        className="material-file__disclosure"
-                        disabled={!file.hasChildren || surface.rowInteractionDisabled}
-                        onClick={() => toggleExpanded(file.nodeId)}
-                        tabIndex={file.hasChildren ? 0 : -1}
-                        type="button"
-                      >
-                        {file.hasChildren ? <ChevronIcon /> : <span aria-hidden="true" />}
-                      </button>
+                      heldAside && !heldAsideRoot ? <span aria-hidden="true" className="material-file__context-space" /> : (
+                        <button
+                          aria-label={heldAsideRoot
+                            ? `Include ${title} in Matter working context`
+                            : `Set ${title} aside from Matter working context`}
+                          aria-pressed={!heldAside}
+                          className="material-file__context-control"
+                          disabled={surface.rowInteractionDisabled || props.onToggleHeldAside === undefined}
+                          onClick={() => props.onToggleHeldAside?.(file.nodeId)}
+                          type="button"
+                        >
+                          {heldAsideRoot ? <PlusIcon /> : <MinusIcon />}
+                        </button>
+                      )
                     ) : null}
                     {mode === "select" ? (
                       <label className="material-file__check" title={`Include ${title} when copying`}>
@@ -870,7 +837,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                       <button
                         aria-current={active ? "page" : undefined}
                         className="material-file__open"
-                        disabled={surface.rowInteractionDisabled}
+                        disabled={surface.rowInteractionDisabled || heldAside}
                         onClick={() => {
                           // A long press already opened the name editor; the
                           // click it also produces must not navigate away.
@@ -878,7 +845,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                             suppressOpenRef.current = false;
                             return;
                           }
-                          openAndExpand(file.nodeId, file.hasChildren);
+                          openNode(file.nodeId);
                         }}
                         onDoubleClick={() => beginRename(file.nodeId)}
                         onPointerCancel={cancelLongPress}

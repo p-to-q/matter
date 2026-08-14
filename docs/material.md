@@ -4,7 +4,7 @@ One rooted tree carries the canvas, document structure, and context boundary.
 Matter does not add a separate memory or session system beside it.
 
 A lightweight inquiry may read either the transient lasso selection or a bounded
-projection of the complete virtual material tree when no lasso selection exists.
+projection of the active working material when no lasso selection exists.
 Drafts, pending state, and voice partials are transient chrome. Completed
 question/answer exchanges may live in the separate, bounded local Ask Matter
 record, but never in the tree, material command history, or material archive.
@@ -149,6 +149,13 @@ descendants in the full tree view. Focusing opens the root-to-node working path.
 Neither is persisted in the material document or placed in the generative undo
 history.
 
+The working context is a separate transient projection: a person may hold one
+visible node and its descendants aside with the material-index `−` control.
+Those passages remain faintly legible but are unavailable to pointer selection,
+lasso, inquiry, and later model-facing work until the `+` control returns them.
+It is never material, history, export, archive, or hidden retrieval. See
+[`reference/working-context.md`](reference/working-context.md).
+
 Lasso selection sets are interaction state. They preserve the visible order of
 the addressed passages and support copy, clear, and locate actions at the
 rendering edge. They are never serialized, sent as hidden context, or included
@@ -158,8 +165,9 @@ action; selecting language does not imply deletion.
 The full view is depth-first order minus folded descendants. The focus view is
 the exact root-to-focus path and ignores folds along that path. A generative
 transformation can begin only in focus view; human admission may still attach a
-child from the full view. This keeps visible and sent context identical for
-every model turn.
+child from the full view. The active working projection — rather than every
+faintly visible held-aside passage — is the exact context boundary for a model
+turn.
 
 ## Persistence and export
 

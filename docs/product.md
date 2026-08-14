@@ -54,7 +54,8 @@ Intent is anchored to a node or segment. AI has no permanent panel, persona, or
 autonomous chain of operations. Its primary output appears only as a change to
 the material a person is handling. One secondary exception exists: a person may
 open a small Matter inquiry, ask one short question about either the lassoed
-passages or, when no passages are selected, the bounded virtual material tree,
+passages or, when no passages are selected, the bounded active working
+projection of the material tree,
 and receive orientation that never edits material. Each opening begins clean:
 a completed exchange is not replayed after closing or reload. It adds no
 separate product surface and is not material, history, archive content, or
@@ -63,8 +64,10 @@ Every generative material change still has an exact pointer undo. Redo is a
 platform keyboard safety convention, not a visible canvas tool.
 
 For a lassoed inquiry, selected passages are the working context. Without a
-lasso selection, the virtual material tree is projected within the protocol
-budget; hidden external retrieval is never implied.
+lasso selection, the active working projection is projected within the protocol
+budget; held-aside material is not sent and hidden external retrieval is never
+implied. Its transient, person-controlled boundary is specified in
+[`reference/working-context.md`](reference/working-context.md).
 
 ## Form
 

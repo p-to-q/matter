@@ -17,6 +17,20 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-15 — Working context can hold material aside
+
+Changed: the material index now uses `−` and `+` to temporarily set aside or
+restore a complete material branch for the active working context. The branch
+remains readable but is excluded from canvas interaction, lasso measurement, and
+Ask Matter's bounded projection; its descendants close and reopen with the same
+control in the left index only.
+
+Why: a person needs to narrow what Matter can read without hiding, deleting, or
+rewriting their material.
+
+Forecloses: treating index disclosure as model scope, persisting a second
+visibility model, or sending held-aside ids as a hidden inquiry channel.
+
 ## 2026-08-15 — Ask Matter does not replay finished replies
 
 Changed: closing or reloading Ask Matter now opens a clean inquiry composer.

@@ -64,6 +64,14 @@ import {
 import { useVoiceReadiness } from "../interaction/use-voice-readiness";
 import { projectInquiryContext } from "../material/inquiry-context";
 import {
+  createHeldAsideNodeIds,
+  isNodeHeldAside,
+  projectWorkingContext,
+  reconcileHeldAsideNodeIds,
+  restoreHeldAsideLineage,
+  toggleHeldAsideBranch,
+} from "../material/working-context";
+import {
   projectNodeDropLanes,
   resolveBlankNodeDropTarget,
   type NodeDropBounds,
@@ -160,6 +168,61 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // bootstrap so hydration can never discard a load-window edit.
   const persistenceLoading = props.persistence.status.phase === "loading";
   const [transformPending, setTransformPending] = useState(false);
+  const [workingContextState, setWorkingContextState] = useState<Readonly<{
+    documentEpoch: number;
+    epoch: number;
+    heldAsideRootIds: ReadonlySet<string>;
+  }>>(() => ({
+    documentEpoch: props.documentEpoch,
+    epoch: 0,
+    heldAsideRootIds: createHeldAsideNodeIds(),
+  }));
+  const heldAsideRootIds = useMemo(
+    () => reconcileHeldAsideNodeIds(
+      tree,
+      workingContextState.documentEpoch === props.documentEpoch
+        ? workingContextState.heldAsideRootIds
+        : createHeldAsideNodeIds(),
+    ),
+    [props.documentEpoch, tree, workingContextState.documentEpoch, workingContextState.heldAsideRootIds],
+  );
+  const workingContext = useMemo(
+    () => projectWorkingContext(tree, heldAsideRootIds),
+    [heldAsideRootIds, tree],
+  );
+  const toggleHeldAside = useCallback((nodeId: string) => {
+    const next = toggleHeldAsideBranch(tree, heldAsideRootIds, nodeId);
+    if (next === heldAsideRootIds) return;
+    if (
+      navigation.selectedNodeId !== null &&
+      isNodeHeldAside(tree, next, navigation.selectedNodeId)
+    ) props.onClearSelection();
+    if (
+      navigation.mode === "focus" &&
+      isNodeHeldAside(tree, next, navigation.focusNodeId)
+    ) props.onExitFocus();
+    setWorkingContextState((current) => ({
+      documentEpoch: props.documentEpoch,
+      epoch: current.epoch + 1,
+      heldAsideRootIds: next,
+    }));
+  }, [heldAsideRootIds, navigation.focusNodeId, navigation.mode, navigation.selectedNodeId, props, tree]);
+  const focusWorkingNode = useCallback((nodeId: string) => {
+    setWorkingContextState((current) => {
+      const currentIds = current.documentEpoch === props.documentEpoch
+        ? current.heldAsideRootIds
+        : createHeldAsideNodeIds();
+      const next = restoreHeldAsideLineage(tree, currentIds, nodeId);
+      return next === currentIds && current.documentEpoch === props.documentEpoch
+        ? current
+        : {
+            documentEpoch: props.documentEpoch,
+            epoch: current.epoch + 1,
+            heldAsideRootIds: next,
+          };
+    });
+    props.onFocusNode(nodeId);
+  }, [props, tree]);
   const interactionPending = persistenceLoading || transformPending || (
     props.admission.state.phase !== "idle" && props.admission.state.phase !== "error"
   );
@@ -247,6 +310,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => projectLayoutProjection(layoutInput),
     [layoutInput],
   );
+  const activeWorkingProjection = useMemo(
+    () => projection
+      .filter(({ node }) => workingContext.activeNodeIds.has(node.id))
+      .map(({ node, depth }) => Object.freeze({ nodeId: node.id, depth })),
+    [projection, workingContext.activeNodeIds],
+  );
   const activeLayout = published?.key === projectionKey ? published.layout : null;
   const admissionParentBox = useMemo(
     () => findAdmissionFeedbackParentBox(
@@ -299,7 +368,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       viewportY: viewport.y,
       viewportZoom: viewport.zoom,
     },
-    navigationKey: `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`,
+    navigationKey: `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}:${workingContextState.epoch}`,
+    eligibleNodeIds: workingContext.activeNodeIds,
     onGeometryInvalidated: invalidateStretchGeometry,
   });
   useEffect(() => {
@@ -571,8 +641,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
   const projectInquiryPayload = useCallback(
-    () => projectInquiryContext(tree, navigation, lasso.selections),
-    [lasso.selections, navigation, tree],
+    () => projectInquiryContext(tree, activeWorkingProjection, lasso.selections),
+    [activeWorkingProjection, lasso.selections, tree],
   );
   const materialGuidance: CanvasMaterialGuidanceState = tree.rootId === null
     ? { kind: "empty" }
@@ -908,9 +978,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           return;
         }
         if (!event.isPrimary || (event.pointerType !== "touch" && event.button !== 0)) return;
-        pointerOriginNodeRef.current =
+        const pointerCandidateId =
           (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]")?.dataset
             .thoughtId ?? null;
+        pointerOriginNodeRef.current = pointerCandidateId !== null && workingContext.activeNodeIds.has(pointerCandidateId)
+          ? pointerCandidateId
+          : null;
         const originNodeId = pointerOriginNodeRef.current;
         if (canvasMode === "material") {
           const sourceId = navigation.mode === "full" && originNodeId !== null &&
@@ -1001,7 +1074,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
           const hitElement = document.elementFromPoint(event.clientX, event.clientY)
             ?.closest<HTMLElement>("[data-thought-id]") ?? null;
           const hitId = hitElement?.dataset.thoughtId ?? null;
-          const directTargetId = hitId !== null && nodeDrag.policy.validTargetIds.has(hitId)
+          const directTargetId = hitId !== null &&
+            workingContext.activeNodeIds.has(hitId) &&
+            nodeDrag.policy.validTargetIds.has(hitId)
             ? hitId
             : null;
           const blankTarget = directTargetId === null && hitId === null
@@ -1016,7 +1091,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 startY: nodeDrag.startY,
               })
             : null;
-          const targetId = directTargetId ?? blankTarget?.targetId ?? null;
+          const targetCandidateId = directTargetId ?? blankTarget?.targetId ?? null;
+          const targetId = targetCandidateId !== null && (
+            targetCandidateId === tree.rootId || workingContext.activeNodeIds.has(targetCandidateId)
+          )
+            ? targetCandidateId
+            : null;
           const targetMode = directTargetId !== null ? "nest" : blankTarget?.mode ?? null;
           const targetIndex = directTargetId !== null
             ? null
@@ -1120,11 +1200,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
         labelOrigins={labelOriginByNodeId}
         locale={props.canvasPreferences.preferences.language}
         navigation={navigation}
-        onFocusNode={props.onFocusNode}
+        heldAsideNodeIds={workingContext.heldAsideNodeIds}
+        heldAsideRootIds={heldAsideRootIds}
+        onFocusNode={focusWorkingNode}
         onRenameNode={labels.rename}
         onRenameDocument={props.onRenameDocument}
         onResetNodeName={labels.resetName}
         onSelectNode={props.onSelectNode}
+        onToggleHeldAside={toggleHeldAside}
         onVisibleNodes={labels.observe}
         persistence={props.persistence}
         tree={tree}
@@ -1252,6 +1335,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSourceText={lasso.sourceText}
               navigation={navigation}
               onSelectNode={props.onSelectNode}
+              activeNodeIds={workingContext.activeNodeIds}
+              heldAsideNodeIds={workingContext.heldAsideNodeIds}
               projection={projection}
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
@@ -1311,6 +1396,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText,
   navigation,
   onSelectNode,
+  activeNodeIds,
+  heldAsideNodeIds,
   projection,
   repairPresentations,
   splitProjectionRef,
@@ -1323,6 +1410,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText: string | null;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
+  activeNodeIds: ReadonlySet<string>;
+  heldAsideNodeIds: ReadonlySet<string>;
   projection: readonly LayoutProjectionItem[];
   repairPresentations: AdmissionController["repairPresentations"];
   splitProjectionRef: React.RefObject<HTMLDivElement | null>;
@@ -1339,13 +1428,14 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
       ? event.target.closest<HTMLElement>("[data-thought-text-id]")
       : null;
     const nodeId = target?.dataset.thoughtTextId;
-    if (nodeId !== undefined && event.currentTarget.contains(target)) onSelectNode(nodeId);
-  }, [interactionPending, onSelectNode]);
+    if (nodeId !== undefined && activeNodeIds.has(nodeId) && event.currentTarget.contains(target)) onSelectNode(nodeId);
+  }, [activeNodeIds, interactionPending, onSelectNode]);
 
   return (
     <ol className="spatial-thoughts" onClick={handleThoughtClick}>
       {projection.map(({ node, parentId }) => {
         const isSelected = node.id === navigation.selectedNodeId;
+        const isHeldAside = heldAsideNodeIds.has(node.id);
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
         const isLassoSelected = lassoSelectedNodeIds.has(node.id);
@@ -1365,6 +1455,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
           <li
             className="spatial-thought"
             data-focused={isFocused || undefined}
+            data-context-excluded={isHeldAside || undefined}
             data-layout-node-id={node.id}
             data-selected={isSelected || undefined}
             data-lasso-selected={isLassoSelected || undefined}
@@ -1380,6 +1471,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               className="spatial-thought__text"
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
+              disabled={isHeldAside}
               type="button"
             >
               {isSelected

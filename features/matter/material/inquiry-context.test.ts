@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
-import type { NavigationState } from "../runtime/navigation";
 import { inquiryContextWeight, projectInquiryContext } from "./inquiry-context";
+import { projectActiveWorkingContext } from "./working-context";
 
 describe("inquiry context", () => {
   it("uses the full virtual tree when no lasso selection exists", () => {
-    const context = projectInquiryContext(TREE, selected("grandchild"));
+    const context = projectInquiryContext(TREE, working(TREE));
     expect(context.scope).toBe("tree");
     expect(context.lineage.map((node) => node.nodeId)).toEqual(["root", "child", "grandchild", "sibling"]);
     expect(context).toMatchObject({ treeId: "tree_inquiry", revision: 4, thoughtCount: 4 });
   });
 
   it("uses selected lasso text in authored order, including two ranges in one node", () => {
-    const context = projectInquiryContext(TREE, selected(null), [
+    const context = projectInquiryContext(TREE, working(TREE), [
       { type: "segment-range", nodeId: "grandchild", start: 0, end: 2, selectedText: "孙段" },
       { type: "segment-range", nodeId: "grandchild", start: 3, end: 5, selectedText: "后段" },
     ]);
@@ -21,28 +21,29 @@ describe("inquiry context", () => {
   });
 
   it("does not invent material for an empty tree", () => {
-    const focus: NavigationState = {
-      mode: "focus",
-      focusNodeId: "sibling",
-      selectedNodeId: "grandchild",
-      foldedNodeIds: new Set(),
-    };
-    expect(projectInquiryContext(TREE, focus).lineage.map((node) => node.nodeId))
-      .toEqual(["root", "child", "grandchild", "sibling"]);
-    expect(projectInquiryContext(TREE, selected(null)).lineage.map((node) => node.nodeId))
+    expect(projectInquiryContext(TREE, working(TREE)).lineage.map((node) => node.nodeId))
       .toEqual(["root", "child", "grandchild", "sibling"]);
     const empty = { ...TREE, rootId: null, nodes: {} };
-    expect(projectInquiryContext(empty, selected(null)).lineage).toEqual([]);
+    expect(projectInquiryContext(empty, working(empty)).lineage).toEqual([]);
   });
 
   it("clips a full-tree context to the shared budget", () => {
-    const context = projectInquiryContext(chain(8), selected("n7"), {
+    const material = chain(8);
+    const context = projectInquiryContext(material, working(material), {
       maxNodeCodePoints: 10,
       maxContextCodePoints: 30,
     });
     expect(context.clipped).toBe(true);
     expect(context.lineage[0]?.nodeId).toBe("n0");
     expect(inquiryContextWeight(context)).toBeLessThanOrEqual(30);
+  });
+
+  it("never falls back to the tree when a selected passage has been set aside", () => {
+    const context = projectInquiryContext(TREE, working(TREE, new Set(["child"])), [
+      { type: "segment-range", nodeId: "grandchild", start: 0, end: 2, selectedText: "孙段" },
+    ]);
+
+    expect(context).toMatchObject({ scope: "selection", lineage: [], thoughtCount: 2 });
   });
 });
 
@@ -83,6 +84,6 @@ function node(id: string, parentId: string | null, children: string[], text = id
   };
 }
 
-function selected(nodeId: string | null): NavigationState {
-  return { mode: "full", focusNodeId: null, selectedNodeId: nodeId, foldedNodeIds: new Set() };
+function working(tree: ThoughtTree, heldAsideNodeIds?: ReadonlySet<string>) {
+  return projectActiveWorkingContext(tree, heldAsideNodeIds);
 }

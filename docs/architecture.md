@@ -127,7 +127,7 @@ The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
 
 ```text
-short question + lassoed passages, or bounded virtual-tree projection when no lasso exists
+short question + lassoed passages, or bounded active-working projection when no lasso exists
   → bounded InquiryRequest → POST /api/inquiry
   → answer text or a stated unavailable reason
   → paper-corner exchange; completed terminal pairs may enter the separate,
@@ -184,6 +184,7 @@ requires one config entry, UI copy, and focused server/client tests.
 | Durable local choice | any active-document identity or manual name promised across reload; explicit failure, never cache eviction. |
 | Durable local history | complete inverse journal paired atomically with the local snapshot; Undo is visible, while Redo remains a platform keyboard convention and is not exported. |
 | Navigation | focus and fold; derived view state, not history. |
+| Working context | held-aside branch ids and their pure active projection; transient, local, and never a second document model. |
 | Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
 | Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials, and bounded per-node repair presentation hints. |
 | Durable local inquiry | bounded Ask Matter record per tree; it is never replayed, material, history, archive, or model context. |
@@ -226,10 +227,11 @@ layout caches, provider policy, or persistence, and it never becomes a generic
 Selection state separates a semantic `TextAddress` from layout-epoch-bound DOM
 rectangles. A lasso may yield an ordered transient set of addresses; contiguous
 runs remain independently addressable so a gap can never silently become one
-replacement range. Full-tree projection removes folded descendants. Focus projection
-returns the exact root-to-node path and ignores folds on it. Only focus view can
-start a generative transform, so model context cannot be narrower than the
-material visible during that turn.
+replacement range. Full-tree projection removes folded descendants; the active
+working projection also excludes held-aside branches. Focus projection returns
+the exact root-to-node path and ignores folds on it. Only focus view can start a
+generative transform, so model context cannot be narrower than the material
+visible during that turn.
 
 Async effects are limited to recording, transcription, labelling, inquiry, planning,
 persistence, and archive transport. Every completion returns with

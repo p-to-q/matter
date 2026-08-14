@@ -18,6 +18,10 @@ export function ChevronIcon({ className, ...props }: IconProps) {
   );
 }
 
+export function MinusIcon({ className, ...props }: IconProps) {
+  return <svg {...sharedProps} className={className} {...props}><path d="M3.5 8h9" stroke="currentColor" strokeLinecap="round" /></svg>;
+}
+
 export function ArrowLeftIcon({ className, ...props }: IconProps) {
   return (
     <svg {...sharedProps} className={className} {...props}>

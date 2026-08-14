@@ -73,7 +73,7 @@ for (const viewport of [
     // first-level material and may share its wording with that metadata.
     await expect(contextRow).toHaveAttribute("data-node-id", rootId);
     await expect(rows).toHaveCount(10);
-    await expect(sidebar.locator('.material-file[data-expanded="true"]')).toHaveCount(4);
+    await expect(sidebar.locator(".material-file__context-control")).toHaveCount(10);
     const rootTitle = (await contextTitle.innerText()).trim();
     expect(rootTitle).toBe("被允许想象的其他生活");
     await expect(rows.locator(".material-file__title").filter({ hasText: /^被允许想象的其他生活$/u }))
@@ -107,21 +107,27 @@ for (const viewport of [
     await expect(sidebar.getByRole("textbox", { name: "Canvas title" })).toBeVisible();
     await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
 
-    // A branch closes in place rather than replacing the outline, and closing is
-    // the index's own state: the canvas does not move with it.
+    // One control owns both a compact index and the temporary model boundary:
+    // holding a branch aside closes its descendants in this drawer but keeps the
+    // same material faintly positioned on the canvas.
     const branch = rows.nth(1);
     const descendantId = await rows.nth(2).getAttribute("data-node-id");
     if (descendantId === null) throw new Error("fixture descendant is missing");
-    await branch.locator(".material-file__disclosure").click();
-    await expect(branch).not.toHaveAttribute("data-expanded", "true");
+    await branch.locator(".material-file__context-control").click();
+    await expect(branch.locator(".material-file__context-control")).toHaveAttribute("aria-pressed", "false");
+    await expect(branch.locator(".material-file__context-control")).toHaveAttribute("aria-label", /^Include /u);
     await expect(rows).toHaveCount(8);
     await expect(contextTitle).toHaveText(rootTitle);
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
+    await expect(page.locator(`[data-thought-id="${descendantId}"]`)).toHaveAttribute("data-context-excluded", "true");
 
+    // The branch has one recovery handle. Restoring also reopens the index;
+    // held-aside text is never selected merely because it remains visible.
+    await branch.locator(".material-file__context-control").click();
+    await expect(rows).toHaveCount(10);
     if (viewport.name === "narrow") await setSidebarOpen(false);
     await page.locator(`[data-thought-id="${descendantId}"] [data-thought-text-id]`).click();
     if (viewport.name === "narrow") await setSidebarOpen(true);
-    await expect(branch).toHaveAttribute("data-expanded", "true");
     await expect(rows).toHaveCount(10);
 
     await page.reload();
@@ -147,14 +153,12 @@ for (const viewport of [
     await expect(sidebar).toHaveAttribute("data-mode", "browse");
     await expect(rows).toHaveCount(10);
 
-    // A thought admitted under a closed branch opens that branch, so the index
-    // can always answer "where am I".
+    // The index remains fully available for a new admitted thought.
     await rows.first().locator(".material-file__open").click();
     const before = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-node-id")),
     );
     await clickTool(page.getByRole("button", { name: "Extend related thought", exact: true }));
-    await expect(rows.first()).toHaveAttribute("data-expanded", "true");
     await expect(rows).toHaveCount(11);
     const after = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-node-id")),
@@ -225,4 +229,55 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
   await expect(archive).toContainText("Local storage is full");
   await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
   await expect(archive.getByRole("button", { name: "Retry saving" })).toBeEnabled();
+});
+
+test("a held-aside index branch is omitted from Ask Matter", async ({ page }) => {
+  const requests: Array<{ lineage: Array<{ nodeId: string }>; thoughtCount: number }> = [];
+  await page.route("**/api/inquiry", async (route) => {
+    const request = route.request().postDataJSON() as {
+      protocolVersion: string;
+      requestId: string;
+      context: { treeId: string; revision: number; scope: "selection" | "tree"; lineage: Array<{ nodeId: string; text: string }>; thoughtCount: number; clipped: boolean };
+    };
+    requests.push({ lineage: request.context.lineage, thoughtCount: request.context.thoughtCount });
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        protocolVersion: request.protocolVersion,
+        basis: {
+          requestId: request.requestId,
+          treeId: request.context.treeId,
+          revision: request.context.revision,
+          scope: request.context.scope,
+        },
+        status: "answered",
+        text: "剩余材料仍可回答。",
+        receipt: {
+          scope: request.context.scope,
+          lineageNodes: request.context.lineage.length,
+          contextCodePoints: request.context.lineage.reduce((total, node) => total + Array.from(node.text).length, 0),
+          clipped: request.context.clipped,
+          thoughtCount: request.context.thoughtCount,
+        },
+      }),
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const rows = page.locator("aside.material-files .material-file");
+  const heldDescendantId = await rows.nth(2).getAttribute("data-node-id");
+  if (heldDescendantId === null) throw new Error("fixture descendant is missing");
+  await rows.nth(1).locator(".material-file__context-control").click();
+  await expect(page.locator(`[data-thought-id="${heldDescendantId}"]`)).toHaveAttribute("data-context-excluded", "true");
+
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill("还剩下什么？");
+  await field.press("Enter");
+  await expect.poll(() => requests.length).toBe(1);
+  expect(requests[0]?.lineage.map(({ nodeId }) => nodeId)).not.toContain(heldDescendantId);
+  expect(requests[0]?.thoughtCount).toBe(7);
 });

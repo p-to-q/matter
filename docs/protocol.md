@@ -348,8 +348,10 @@ it. The twelve-second store lease remains the final authority.
 
 Ask Matter is a read-only orientation boundary, separate from transformation.
 It cannot name an action or create a tree command. Its context scope is
-`selection` when lasso passages exist, otherwise `tree` for the bounded virtual
-file-system projection.
+`selection` when lasso passages exist, otherwise `tree` for the bounded active
+working projection. `tree` names the resulting material shape, not every node
+in the durable tree: held-aside branches are omitted before this envelope is
+constructed and their ids are never sent.
 
 ```ts
 export type InquiryContextNodePayload = {
@@ -414,8 +416,8 @@ Matter received the question. No provider message, status, model, or relay
 identity crosses this boundary.
 
 The browser projects lasso passages in authored order, including multiple
-passages from one node. With no lasso selection it projects the virtual tree in
-authored preorder. Both scopes are bounded; the server parses the request whole,
+passages from one node. With no lasso selection it projects the active working
+tree in authored preorder. Both scopes are bounded; the server parses the request whole,
 reports a receipt,
 and returns `Cache-Control: no-store`. No question, context, answer, or turn list
 enters `ThoughtTree`, command history, material archive, or routine logs.
