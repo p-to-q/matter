@@ -1193,13 +1193,9 @@ function InquiryBubble({
 }
 
 function InquiryTurn({ copy, turn }: Readonly<{ copy: CanvasChromeCopy; turn: ReturnType<typeof createInquiryState>["turns"][number] }>) {
-  // Restored terminal exchanges are already settled. Only a component that
-  // first saw a pending Matter turn earns the arrival treatment when that same
-  // keyed turn receives its answer.
   const [beganPending] = useState(
     () => turn.role === "matter" && turn.outcome.status === "pending",
   );
-  const openingAnswer = beganPending && turn.role === "matter" && turn.outcome.status === "answered";
   const accessibleAnswer = turn.role === "matter" ? answerCopy(copy, turn.outcome) : undefined;
 
   return (
@@ -1208,12 +1204,11 @@ function InquiryTurn({ copy, turn }: Readonly<{ copy: CanvasChromeCopy; turn: Re
       aria-label={accessibleAnswer}
       aria-live={turn.role === "matter" && beganPending ? "polite" : "off"}
       className={styles.inquiryTurn}
-      data-inquiry-frame={openingAnswer ? "opening" : undefined}
       data-inquiry-role={turn.role}
       dir="auto"
     >
       {turn.role === "person" ? turn.text : (
-        <InquiryAnswer animate={beganPending} outcome={turn.outcome} copy={copy} />
+        <InquiryAnswer animate={beganPending} copy={copy} outcome={turn.outcome} />
       )}
     </p>
   );
@@ -1224,14 +1219,10 @@ function InquiryAnswer({ animate, copy, outcome }: Readonly<{
   copy: CanvasChromeCopy;
   outcome: InquiryTurnOutcome;
 }>) {
-  const visible = outcome.status === "pending" ? (
-    <span aria-hidden="true" className={styles.inquiryLoading} data-inquiry-loading>
-      <span>.</span><span>.</span><span>.</span>
-    </span>
-  ) : outcome.status === "answered" && animate ? (
-    <AnimatedInquiryAnswer answer={outcome.text} />
-  ) : <span aria-hidden="true">{answerCopy(copy, outcome)}</span>;
-  return visible;
+  if (outcome.status !== "answered" || !animate) {
+    return <span aria-hidden="true">{answerCopy(copy, outcome)}</span>;
+  }
+  return <AnimatedInquiryAnswer answer={outcome.text} />;
 }
 
 function AnimatedInquiryAnswer({ answer }: Readonly<{ answer: string }>) {

@@ -146,29 +146,21 @@ Non-goals:  model-token streaming, old-text overlays, per-character durable
             unbounded animation whose duration grows with transcript length.
 ```
 
-### Active sub-slice — Ask Matter arrives as local, temporary material
+### Reverted sub-slice — Ask Matter visual arrival
 
 ```text
-Outcome:    a submitted Ask Matter exchange visibly arrives as a short stack of
-            measured bubbles: waiting is three quiet dots, a completed answer
-            types into its own frame, settles its terminal stop, and pushes the
-            earlier visible exchange upward. A new frame begins slightly larger
-            around the growing answer, keeps its one visible text copy centred,
-            then returns exactly to the prior bubble geometry.
-Boundary:   the existing client-only Ask Matter presentation and its local CSS;
-            the inquiry request, response protocol, record, and material tree
-            remain unchanged.
-Invariants: pending dots and partial letters are render-only; the record stores
-            only the terminal response; after a bounded centred frame settle,
-            width cap, padding, alignment, thread height and gap equal the prior
-            geometry; close, abort, scope change, and reduced motion cancel or
-            bypass presentation work; no permanent chat surface or status chrome
-            is introduced.
-Proof:      terminal-punctuation and bounded reveal tests; inquiry component
-            assertions; the existing pointer-only browser inquiry path at
-            desktop and narrow widths.
-Non-goals:  server streaming, token/chunk protocol changes, changing model text,
-            durable partial answers, a new composer, sound, or a game-like skin.
+Outcome:    Ask Matter returns to its previously shipped input, waiting frame,
+            geometry, alignment, and short entry transition, while a completed
+            answer still reveals by grapheme and then settles its terminal stop.
+Boundary:   the existing client-only inquiry rendering and its local CSS; the
+            request, response, record, composer, and material tree do not move.
+Invariants: the terminal record remains the single visible text authority; the
+            existing closed inquiry surface and native geometry remain unchanged;
+            partial text is render-only and never enters the record or protocol.
+Proof:      targeted component and browser inquiry checks, followed by the full
+            repository and browser suites.
+Non-goals:  streaming, loader redesign, frame scaling, new controls, or a new
+            visual system.
 ```
 
 Execution order is deliberately narrow:
