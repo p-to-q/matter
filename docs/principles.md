@@ -8,8 +8,8 @@ the running product, not how ambitious a feature sounds.
 2. **Intelligence is a property of material.** There is no permanent assistant
    surface. Material turns become local, perceivable, pointer-undoable changes;
    the small inquiry exception may orient from lassoed passages or the bounded
-   virtual tree, but never edits material. It may retain a bounded local record
-   behind the same inquiry surface; it never becomes model context or a chat
+   virtual tree, but never edits material. A prior exchange never replays when
+   the inquiry is opened again, and it never becomes model context or a chat
    thread.
 3. **Structure is restraint.** One rooted tree is simultaneously presentation,
    lineage, and the model's context boundary. Hidden retrieval is not context.

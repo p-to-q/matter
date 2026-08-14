@@ -17,6 +17,20 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-15 — Ask Matter does not replay finished replies
+
+Changed: closing or reloading Ask Matter now opens a clean inquiry composer.
+The answer shown during the current opening still has its pending-dot,
+grapheme-reveal, and terminal-punctuation presentation; a saved completed
+exchange is not re-injected into that UI.
+
+Why: reopening into an old answer turned the small orientation surface into a
+visible chat residue, including text that was no longer the person’s current
+question.
+
+Forecloses: a persistent transcript behind the inquiry trigger, or treating a
+storage record as a second render authority.
+
 ## 2026-08-14 — Ask Matter restores its original frame while keeping text arrival
 
 Changed: the closed Ask Matter surface again uses its original input, frame,

@@ -131,7 +131,8 @@ short question + lassoed passages, or bounded virtual-tree projection when no la
   → bounded InquiryRequest → POST /api/inquiry
   → answer text or a stated unavailable reason
   → paper-corner exchange; completed terminal pairs may enter the separate,
-    bounded local inquiry record, never a tree command or model context
+    bounded local inquiry record, never a tree command or model context;
+    reopening begins with a clean exchange
 ```
 
 Only the tree engine applies durable mutations. Pointer, audio level, partial
@@ -185,7 +186,7 @@ requires one config entry, UI copy, and focused server/client tests.
 | Navigation | focus and fold; derived view state, not history. |
 | Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
 | Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials, and bounded per-node repair presentation hints. |
-| Durable local inquiry | bounded visible Ask Matter record per tree; never material, history, archive, or model context. |
+| Durable local inquiry | bounded Ask Matter record per tree; it is never replayed, material, history, archive, or model context. |
 | Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
 
 Identifiers and units do not substitute for one another:

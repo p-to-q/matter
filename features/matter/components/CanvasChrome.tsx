@@ -47,7 +47,6 @@ import { inquiryContextScopeChanged } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
-import type { StoredInquiryExchange } from "../persistence/inquiry-record-repository";
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
@@ -987,8 +986,6 @@ function InquiryBubble({
   const voiceBusy = listening || transcribing;
   const text = inquiryText(state);
   const canAsk = canSubmitInquiry(state);
-  const recordExchanges = record?.exchanges;
-  const recordPhase = record?.phase;
   const hasPendingAnswer = state.turns.some(
     (turn) => turn.role === "matter" && turn.outcome.status === "pending",
   );
@@ -999,11 +996,6 @@ function InquiryBubble({
     onFailed: (notice) => dispatch({ type: "listen-failed", notice }),
   }, language);
   const cancelDictation = dictation.cancel;
-
-  useEffect(() => {
-    if (recordExchanges === undefined || recordPhase === "loading") return;
-    dispatch({ type: "restore", turns: recordTurns(recordExchanges) });
-  }, [recordExchanges, recordPhase]);
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -1039,12 +1031,9 @@ function InquiryBubble({
       dispatch({ type: "close" });
       return;
     }
-    if (recordExchanges !== undefined) {
-      dispatch({ type: "restore", turns: recordTurns(recordExchanges) });
-    }
     const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
     return () => cancelAnimationFrame(frame);
-  }, [cancelDictation, hidden, recordExchanges]);
+  }, [cancelDictation, hidden]);
 
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
@@ -1264,13 +1253,6 @@ function AnimatedInquiryAnswer({ answer }: Readonly<{ answer: string }>) {
   }, [presentation.terminal, steps]);
 
   return <span aria-hidden="true">{text}</span>;
-}
-
-function recordTurns(exchanges: readonly StoredInquiryExchange[]): ReturnType<typeof createInquiryState>["turns"] {
-  return Object.freeze(exchanges.flatMap((exchange, index) => [
-    Object.freeze({ id: index * 2 + 1, role: "person" as const, text: exchange.question }),
-    Object.freeze({ id: index * 2 + 2, role: "matter" as const, outcome: exchange.outcome }),
-  ]));
 }
 
 function appendInquiryRecord(

@@ -8,8 +8,8 @@ projection of the complete virtual material tree when no lasso selection exists.
 Drafts, pending state, and voice partials are transient chrome. Completed
 question/answer exchanges may live in the separate, bounded local Ask Matter
 record, but never in the tree, material command history, or material archive.
-That record returns only through the existing inquiry surface and never becomes
-model context; its adapter boundary is specified in
+They are not replayed when the inquiry is opened again and never become model
+context; its adapter boundary is specified in
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
 Browser speech admission performs punctuation-only normalization at the edge,

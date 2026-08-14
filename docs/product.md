@@ -55,9 +55,10 @@ autonomous chain of operations. Its primary output appears only as a change to
 the material a person is handling. One secondary exception exists: a person may
 open a small Matter inquiry, ask one short question about either the lassoed
 passages or, when no passages are selected, the bounded virtual material tree,
-and receive orientation that never edits material. A completed exchange may
-remain behind that same inquiry after reload, but it adds no separate product
-surface and is not material, history, archive content, or later model context.
+and receive orientation that never edits material. Each opening begins clean:
+a completed exchange is not replayed after closing or reload. It adds no
+separate product surface and is not material, history, archive content, or
+later model context.
 Every generative material change still has an exact pointer undo. Redo is a
 platform keyboard safety convention, not a visible canvas tool.
 
