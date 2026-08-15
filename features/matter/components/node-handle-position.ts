@@ -15,7 +15,7 @@ type Input = Readonly<{
   railRect: ClientRect | null;
   textRect: ClientRect;
   toolCount: number;
-  coarse: boolean;
+  largeTargets: boolean;
 }>;
 
 /**
@@ -25,11 +25,12 @@ type Input = Readonly<{
  */
 export function projectNodeHandlePosition(input: Input): NodeHandlePosition | null {
   if (!Number.isInteger(input.toolCount) || input.toolCount < 1) return null;
-  const button = input.coarse ? 48 : 44;
+  const button = input.largeTargets ? 48 : 44;
   const gap = 4;
-  const padding = 5;
-  const width = button + padding * 2;
-  const height = input.toolCount * button + Math.max(0, input.toolCount - 1) * gap + padding * 2;
+  // The border-box reserves 4px padding and a 1px border on both sides.
+  const chrome = 10;
+  const width = button + chrome;
+  const height = input.toolCount * button + Math.max(0, input.toolCount - 1) * gap + chrome;
   const inset = 12;
   const minimumLeft = input.documentRect.left + inset;
   const maximumLeft = input.documentRect.right - inset - width;
@@ -40,42 +41,28 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
   const maximumTop = guidanceTop - height;
   if (maximumLeft < minimumLeft || maximumTop < minimumTop) return null;
 
-  const top = clamp(
-    input.textRect.top + input.textRect.height / 2 - height / 2,
+  const sideTop = clamp(
+    input.textRect.top - 10,
     minimumTop,
     maximumTop,
   );
-  const preferredRight = input.textRect.left + input.textRect.width / 2 < input.documentRect.left + input.documentRect.width / 2;
-  const candidates = preferredRight
-    ? [input.textRect.right + 12, input.textRect.left - width - 12]
-    : [input.textRect.left - width - 12, input.textRect.right + 12];
+  const rightAlignedLeft = clamp(input.textRect.right - width, minimumLeft, maximumLeft);
+  const candidates = [
+    { left: input.textRect.right + 12, top: sideTop },
+    { left: rightAlignedLeft, top: input.textRect.top - height - 12 },
+    { left: input.textRect.left - width - 12, top: sideTop },
+    { left: rightAlignedLeft, top: input.textRect.bottom + 12 },
+  ];
 
-  for (const left of candidates) {
-    const rect = rectangle(left, top, width, height);
+  for (const candidate of candidates) {
+    const rect = rectangle(candidate.left, candidate.top, width, height);
     if (
       contains(input.documentRect, rect) &&
       !intersects(input.textRect, rect) &&
       !intersectsNullable(input.railRect, rect) &&
       !intersectsNullable(input.guidanceRect, rect)
     ) {
-      return Object.freeze({ left: Math.round(left), top: Math.round(top) });
-    }
-  }
-
-  const centeredLeft = clamp(
-    input.textRect.left + input.textRect.width / 2 - width / 2,
-    minimumLeft,
-    maximumLeft,
-  );
-  for (const verticalTop of [input.textRect.top - height - 12, input.textRect.bottom + 12]) {
-    const rect = rectangle(centeredLeft, verticalTop, width, height);
-    if (
-      contains(input.documentRect, rect) &&
-      !intersects(input.textRect, rect) &&
-      !intersectsNullable(input.railRect, rect) &&
-      !intersectsNullable(input.guidanceRect, rect)
-    ) {
-      return Object.freeze({ left: Math.round(centeredLeft), top: Math.round(verticalTop) });
+      return Object.freeze({ left: Math.round(candidate.left), top: Math.round(candidate.top) });
     }
   }
   return null;

@@ -13,7 +13,9 @@ The current online-safe claim is narrow:
   local Markdown durability through IndexedDB
   ZIP export/import of the same strict Markdown tree
   file outline, focus/fold, copy, lasso, stretch projection
+  transient working-context subtraction without hiding or rewriting material
   explicit canvas-pan mode and undoable cross-branch structural reparenting
+  FX-off structural paper ruling and one passage-local Branch/Focus lens
   browser-native live voice admission (no fixture voice on the public origin)
   deterministic navigation labels, with an independently gated managed proposal
   immediate transcript admission, with local repair rules and an independently gated managed proposal
@@ -36,6 +38,38 @@ proof uses the inverse capability pair and never contacts browser speech.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.32
+
+Preview.32 gives the leaf-off paper a quiet structural rhythm without turning
+Matter into a coordinate editor. One solid, low-contrast ruling repeats the
+derived column and vertical steps, remains fixed to the paper during camera
+movement, and never enters material, hit testing, persistence, or protocol.
+
+One shared action lens now serves the complete canvas rather than mounting
+controls per passage. It measures the real first line of the current text and
+prefers its upper-right clear space. Full view offers the existing undoable
+Branch and transient Focus actions; focus view offers Show all. Fine pointers
+hover, coarse pointers act from selection, and keyboard focus enters with
+ArrowRight, moves through the vertical toolbar, and returns with Escape. Lasso,
+stretch, pan, wheel motion, node drag, pending work, held-aside material, Chrome
+overlays, stale tree revisions, and unsafe adjacent space all remove the lens.
+
+```text
+source proof           npm run check: 1,144 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 55 Chromium cases passed, 2
+                       capability-gated cases skipped; the focused 7-case
+                       ruling/lens matrix passed at light/dark, laptop/narrow,
+                       keyboard, true coarse pointer, held context and 2,000 nodes
+scale proof            one ruling and at most one lens are mounted at 2,000 nodes;
+                       the production receipt kept 4,463 elements and responsive
+                       fold/focus/selection samples, while its 122 ms raw cold task
+                       honestly leaves the existing <100 ms optimization gate open
+product boundary       no snapping, free coordinates, local delete/fold, blank AI
+                       nodes, second tool catalog, or new durable/transmitted state
+```
 
 ## Candidate verification — 0.2.0-preview.31
 

@@ -186,6 +186,34 @@ Non-goals:  a second durable document visibility model, a hidden-retrieval
             channel, a chat filter, or changing the existing structural fold.
 ```
 
+### Active sub-slice — structural paper and local node actions
+
+State: Proven.
+
+```text
+Outcome:    turning leaf FX off reveals a quiet right-growing structural ruling;
+            hovering or keyboard-focusing active material reveals one small
+            adjacent lens for Branch and Focus, or Show all in focus view.
+Boundary:   one paper-owned decorative ruling, one render-edge action presenter,
+            the existing pure tool projection, and collision-safe DOM measurement.
+Invariants: tree structure remains the only layout authority; ruling and lens
+            never enter material, history, persistence, context, or protocol;
+            no per-node action controls mount; precise gestures and pending work win.
+Proof:      pure collision geometry; wide/narrow and light/dark browser receipts;
+            hover, keyboard, coarse-pointer, pan, lasso, drag, modal and focus
+            state matrix; one-lens DOM bound and the existing 2,000-node gate.
+Non-goals:  infinite authored coordinates, snapping, decorative card tiles,
+            local delete/fold, blank AI nodes, or changing the five-slot rail.
+```
+
+Build receipt, 2026-08-16: one paper-fixed ruling and one delegated action lens
+now cover light/dark, laptop/narrow, fine/coarse pointer, keyboard, Chrome
+overlay, pan, lasso, held-context, revision and 2,000-node boundaries. The lens
+measures the first rendered text line and revalidates its intent immediately
+before dispatch. Full repository and Chromium suites pass; the production
+2,000-node diagnostic retains its separately recorded raw-long-task optimization
+gate without adding per-node controls or another state owner.
+
 Execution order is deliberately narrow:
 
 1. Publish this source preview with the first-turn voice boundary, durable
@@ -1226,7 +1254,8 @@ State: Frozen.
 ```text
 Outcome:    the right instrument keeps five stable targets with legible icons;
             Delete removes a selected non-root thought pointer-undoably; voice
-            admits first-level material below the root after the first admission
+            admits beneath selected active material, or as first-level material
+            when no visible passage is selected
 Boundary:   rail presenter/CSS/icons; a private human removal translator and
             store action; admission-anchor policy and its existing browser path
 Invariants: only the tree engine mutates material; removal is exact-undoable;
@@ -1245,8 +1274,9 @@ larger candidate proved visually heavy, the desktop rail returned to its first
 56 px outer width, 40 px visible targets, and 16 px artwork. A 44 px invisible
 hit area preserves reach, while narrow layouts retain 48 px physical targets.
 Only the internal black-and-white surface changes, so the rail never shifts.
-Deep selections no longer retarget human
-admission: nonempty full-view voice always appends under the sole root. The
+Full-view voice admits beneath the selected active material when one exists and
+otherwise beneath the invisible structural root as first-level material. The
+target is frozen at gesture start and remains a human-material operation. The
 fixture transcription remains explicit until a verified provider adapter is
 configured; it is not presented as a real transcription result.
 

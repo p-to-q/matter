@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-16 — Leaf-off paper exposes structure and one local action lens
+
+Changed: turning leaf atmosphere off now reveals one low-contrast, solid-line
+structural ruling fixed to the paper and aligned to the derived column rhythm.
+One collision-safe action lens is delegated across every active canvas passage:
+full view exposes the existing Branch and Focus intents, focus view exposes Show
+all, and coarse pointers receive 48 px actions after selection. Its placement
+measures the actual first text line rather than the passage column; ArrowRight
+enters its vertical keyboard actions and Escape returns to the passage. Precise
+gestures, pending work, held material, Chrome overlays, stale material, and
+unsafe adjacent space suppress the lens.
+
+Why: the blank FX-off paper lacked spatial orientation, while reaching only for
+the fixed rail made a precise passage feel unnecessarily remote. One paper layer
+and one measured lens add locality without changing material geometry.
+
+Forecloses: treating the ruling as authored coordinates or snapping, mounting
+controls per node, using a hover `×` for deletion, or creating a second tool
+catalog outside the current revalidated intent path.
+
 ## 2026-08-16 — Directory disclosure no longer reads as subtraction
 
 Changed: the material index again uses `›` / `⌄` as its default branch control.

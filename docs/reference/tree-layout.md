@@ -93,6 +93,13 @@ relative to one another. Thus every new child still appears to the parent's
 right, first-child top alignment and sibling left alignment remain exact, and a
 viewport gesture cannot author a coordinate.
 
+When leaf atmosphere is disabled, one paper-fixed structural ruling may echo the
+column step as an orientation aid. It is deliberately outside the transformed
+world and outside this layout result: no node reads it, no line is a hit target,
+and pan or zoom never converts it into authored coordinates. Its rightward-only
+extent describes the product's growth direction without claiming an infinite
+four-direction canvas.
+
 The DOM edge measures fixed-width text boxes in CSS pixels. A pure `layout/`
 function computes subtree heights bottom-up and node positions top-down in
 `O(visible nodes)`. It receives serializable projected nodes, measurements,
