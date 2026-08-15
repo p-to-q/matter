@@ -51,4 +51,26 @@ describe("projectNodeHandlePosition", () => {
       toolCount: 2,
     })).toEqual({ left: 468, top: 230 });
   });
+
+  it("rejects an above placement inside the paper inset and falls below", () => {
+    expect(projectNodeHandlePosition({
+      largeTargets: false,
+      documentRect: rect(0, 0, 500, 500),
+      guidanceRect: null,
+      railRect: null,
+      textRect: rect(20, 119, 460, 20),
+      toolCount: 2,
+    })).toEqual({ left: 426, top: 151 });
+  });
+
+  it("uses the safe above placement when a wide line is near the bottom edge", () => {
+    expect(projectNodeHandlePosition({
+      largeTargets: false,
+      documentRect: rect(0, 0, 500, 500),
+      guidanceRect: null,
+      railRect: null,
+      textRect: rect(20, 440, 460, 20),
+      toolCount: 2,
+    })).toEqual({ left: 426, top: 326 });
+  });
 });

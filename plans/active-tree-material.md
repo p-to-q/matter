@@ -207,7 +207,7 @@ Non-goals:  infinite authored coordinates, snapping, decorative card tiles,
 ```
 
 Build receipt, 2026-08-16: one paper-fixed ruling and one delegated action lens
-now cover light/dark, laptop/narrow, fine/coarse pointer, keyboard, Chrome
+now cover light/dark, laptop/narrow, fine/coarse pointer, keyboard, canvas chrome
 overlay, pan, lasso, held-context, revision and 2,000-node boundaries. The lens
 measures the first rendered text line and revalidates its intent immediately
 before dispatch. Full repository and Chromium suites pass; the production
@@ -703,13 +703,15 @@ Non-goals:  lasso, stretch, generative turn, partial/streaming transcript,
 ```
 
 An empty tree admits a root. In full view, a selected node admits a child;
-material without a selection and focus view do not provide an admission target.
+without a selection, voice admits first-level material beneath the invisible
+structural root. Focus view does not provide an admission target.
 The activation freezes `{ interactionId, attempt, treeId, baseRevision, target }`
 and every async completion must match it. A fold-only navigation change does not
 invalidate the material target. Any material revision, missing parent, changed
 selection/focus, duplicate completion, or document switch does. Successful
 child admission preserves the parent selection, so repeated utterances create
-siblings; descending requires an explicit pointer selection.
+siblings; without a selection they create top-level siblings. Descending
+requires an explicit pointer selection.
 
 Interaction moves through requesting → recording → stopping → transcribing →
 committing → idle/error. The browser runner owns all streams, recorder chunks,

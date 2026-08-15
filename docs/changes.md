@@ -26,8 +26,8 @@ full view exposes the existing Branch and Focus intents, focus view exposes Show
 all, and coarse pointers receive 48 px actions after selection. Its placement
 measures the actual first text line rather than the passage column; ArrowRight
 enters its vertical keyboard actions and Escape returns to the passage. Precise
-gestures, pending work, held material, Chrome overlays, stale material, and
-unsafe adjacent space suppress the lens.
+gestures, pending work, held material, canvas chrome overlays, stale material,
+and unsafe adjacent space suppress the lens.
 
 Why: the blank FX-off paper lacked spatial orientation, while reaching only for
 the fixed rail made a precise passage feel unnecessarily remote. One paper layer

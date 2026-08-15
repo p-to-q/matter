@@ -79,6 +79,15 @@ export function NodeActionLens({
     clearCloseTimer();
     closeTimerRef.current = window.setTimeout(close, CLOSE_DELAY_MS);
   }, [clearCloseTimer, close]);
+  const focusPendingKeyboardEntry = useCallback((nodeId: string) => {
+    const lens = lensRef.current;
+    if (pendingKeyboardEntryRef.current !== nodeId || lens?.dataset.nodeId !== nodeId) return false;
+    const button = lens.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    if (button === null) return false;
+    button.focus();
+    pendingKeyboardEntryRef.current = null;
+    return true;
+  }, []);
 
   useEffect(() => {
     const media = window.matchMedia("(pointer: coarse)");
@@ -153,13 +162,7 @@ export function NodeActionLens({
       dismissedFocusNodeIdRef.current = null;
       pendingKeyboardEntryRef.current = candidate.nodeId;
       reveal(candidate, "focus");
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (pendingKeyboardEntryRef.current !== candidate.nodeId) return;
-          lensRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-          pendingKeyboardEntryRef.current = null;
-        });
-      });
+      focusPendingKeyboardEntry(candidate.nodeId);
     };
     const pointerDown = () => close();
     const syncChromeSuppression = () => {
@@ -187,12 +190,14 @@ export function NodeActionLens({
       canvas.removeEventListener("pointerdown", pointerDown);
       chromeObserver.disconnect();
     };
-  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, scheduleClose]);
+  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, scheduleClose]);
 
-  const selectedTarget = coarse && navigation.selectedNodeId !== null &&
-    activeNodeIds.has(navigation.selectedNodeId)
-      ? { nodeId: navigation.selectedNodeId, source: "selection" as const }
-      : null;
+  const selectedTarget = useMemo<LensTarget | null>(
+    () => coarse && navigation.selectedNodeId !== null && activeNodeIds.has(navigation.selectedNodeId)
+      ? { nodeId: navigation.selectedNodeId, source: "selection" }
+      : null,
+    [activeNodeIds, coarse, navigation.selectedNodeId],
+  );
   const retainedTarget = target !== null && activeNodeIds.has(target.nodeId) && tree.nodes[target.nodeId] !== undefined
     ? target
     : null;
@@ -259,12 +264,8 @@ export function NodeActionLens({
 
   useLayoutEffect(() => {
     if (position === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
-    const frame = requestAnimationFrame(() => {
-      lensRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
-      pendingKeyboardEntryRef.current = null;
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [activeTarget, position]);
+    focusPendingKeyboardEntry(activeTarget.nodeId);
+  }, [activeTarget, focusPendingKeyboardEntry, position]);
 
   if (activeTarget === null || position === null || tools.length === 0) return null;
 

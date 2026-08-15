@@ -52,11 +52,12 @@ prefers its upper-right clear space. Full view offers the existing undoable
 Branch and transient Focus actions; focus view offers Show all. Fine pointers
 hover, coarse pointers act from selection, and keyboard focus enters with
 ArrowRight, moves through the vertical toolbar, and returns with Escape. Lasso,
-stretch, pan, wheel motion, node drag, pending work, held-aside material, Chrome
-overlays, stale tree revisions, and unsafe adjacent space all remove the lens.
+stretch, pan, wheel motion, node drag, pending work, held-aside material, canvas
+chrome overlays, stale tree revisions, and unsafe adjacent space all remove the
+lens.
 
 ```text
-source proof           npm run check: 1,144 Vitest passed, 2 skipped; 48 Node
+source proof           npm run check: 1,146 Vitest passed, 2 skipped; 48 Node
                        tests passed; doctor, docs, architecture, typegen,
                        typecheck, lint, and production build passed
 browser proof          npm run test:e2e: 55 Chromium cases passed, 2

@@ -141,7 +141,7 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   if (textBox === null || lensBox === null) throw new Error("thought and action lens must be measurable");
   const gapPoint = nearestGapPoint(textBox, lensBox);
   await page.mouse.move(gapPoint.x, gapPoint.y);
-  await page.waitForTimeout(150);
+  await page.waitForTimeout(80);
   await page.mouse.move(lensBox.x + lensBox.width / 2, lensBox.y + lensBox.height / 2);
   await expect(lens).toBeVisible();
 

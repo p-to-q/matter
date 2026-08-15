@@ -57,7 +57,10 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
   for (const candidate of candidates) {
     const rect = rectangle(candidate.left, candidate.top, width, height);
     if (
-      contains(input.documentRect, rect) &&
+      candidate.left >= minimumLeft &&
+      candidate.left <= maximumLeft &&
+      candidate.top >= minimumTop &&
+      candidate.top <= maximumTop &&
       !intersects(input.textRect, rect) &&
       !intersectsNullable(input.railRect, rect) &&
       !intersectsNullable(input.guidanceRect, rect)
@@ -70,11 +73,6 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
 
 function rectangle(left: number, top: number, width: number, height: number): ClientRect {
   return { left, top, right: left + width, bottom: top + height, width, height };
-}
-
-function contains(outer: ClientRect, inner: ClientRect): boolean {
-  return inner.left >= outer.left && inner.right <= outer.right &&
-    inner.top >= outer.top && inner.bottom <= outer.bottom;
 }
 
 function intersectsNullable(rect: ClientRect | null, candidate: ClientRect): boolean {
