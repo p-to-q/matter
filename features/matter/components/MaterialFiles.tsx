@@ -865,7 +865,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
                               ? expanded ? copy.collapseBranch(title) : copy.expandBranch(title)
                               : undefined}
                           aria-expanded={!heldAsideRoot && file.hasChildren ? expanded : undefined}
-                          aria-pressed={heldAsideRoot ? false : undefined}
                           className={heldAsideRoot
                             ? "material-file__structure-control material-file__context-control material-file__context-control--restore"
                             : "material-file__structure-control"}
@@ -996,7 +995,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     {mode === "browse" && !heldAside ? (
                       <button
                         aria-label={copy.setAsideFromWorkingContext(title)}
-                        aria-pressed="true"
                         className="material-file__context-control material-file__context-control--set-aside"
                         data-context-action="set-aside"
                         disabled={surface.rowInteractionDisabled || props.onToggleHeldAside === undefined}

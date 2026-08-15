@@ -126,7 +126,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__context-control--restore { width: var(--material-file-action-width); color: var(--index-muted); opacity: .86; }
 .material-file__context-control:disabled { cursor: default; opacity: .22; }
 .material-file[data-context-excluded="true"] { color: color-mix(in srgb, var(--index-ink) 44%, transparent); }
-.material-file[data-context-excluded="true"] .material-file__title { color: currentColor; }
+.material-file[data-context-excluded="true"] .material-file__title { color: currentcolor; }
 
 /* Each segment names one adjacent sibling relationship. It uses the exact
    centre axis of that group's disclosure/recovery slot; labels never supply geometry. */

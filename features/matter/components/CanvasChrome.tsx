@@ -148,7 +148,7 @@ const ENGLISH_INFO: CanvasChromeInfo = Object.freeze({
     title: "Privacy",
     body: Object.freeze([
       "Material is kept in this browser unless you export it or invoke a model-powered change.",
-      "A published privacy policy is not available for this pre-release. Each model call receives only its bounded task material. An inquiry sends exact lassoed language or the bounded material included on this canvas; held-aside material is not sent.",
+      "A published privacy policy is not available for this pre-release. Each model call receives only its bounded task material. An inquiry sends only bounded lassoed language or the bounded material included on this canvas; held-aside material is not sent.",
     ]),
   }),
   terms: Object.freeze({
@@ -189,7 +189,7 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     title: "隐私",
     body: Object.freeze([
       "材料保存在当前浏览器中，除非你主动导出，或发起一次由模型完成的改变。",
-      "内测阶段尚未发布正式隐私政策。每次模型调用只接收该任务所需的有限材料；询问只发送套索圈定的语言，或画面里被纳入的有限材料，暂不纳入的材料不会发送。",
+      "内测阶段尚未发布正式隐私政策。每次模型调用只接收该任务所需的有限材料；询问只发送套索圈定且受限长度的语言，或画面里被纳入的有限材料，暂不纳入的材料不会发送。",
     ]),
   }),
   terms: Object.freeze({
@@ -215,7 +215,7 @@ const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     "用套索圈定語言，拖動邊緣決定改變多少；用分支生成相關想法，用復原退回上一次已提交的改變。",
   ]) }),
   pricing: Object.freeze({ title: "定價", body: Object.freeze(["Matter 仍在預覽階段，此版本沒有付費方案或結帳功能。"])}),
-  privacy: Object.freeze({ title: "隱私", body: Object.freeze(["材料保存在目前瀏覽器中，除非你主動匯出或發起模型改變。", "每次模型呼叫只接收該任務所需的有限材料；詢問只傳送套索圈定的語言，或畫面裡被納入的有限材料，暫不納入的材料不會傳送。"])}),
+  privacy: Object.freeze({ title: "隱私", body: Object.freeze(["材料保存在目前瀏覽器中，除非你主動匯出或發起模型改變。", "每次模型呼叫只接收該任務所需的有限材料；詢問只傳送套索圈定且受限長度的語言，或畫面裡被納入的有限材料，暫不納入的材料不會傳送。"])}),
   terms: Object.freeze({ title: "服務條款", body: Object.freeze(["Matter 仍是預覽軟體，正式服務條款尚未發布。", "產品仍在驗證階段，請為無法替代的材料保留匯出副本。"])}),
 });
 
@@ -233,7 +233,7 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
     "Lasso で言葉を囲み、伸縮で変化の量を決め、Branch で関連する考えを育て、Undo で直前の変更を戻します。",
   ]) }),
   pricing: Object.freeze({ title: "料金", body: Object.freeze(["Matter はプレビュー中です。このビルドに有料プランや決済はありません。"])}),
-  privacy: Object.freeze({ title: "プライバシー", body: Object.freeze(["素材は、書き出しまたはモデルによる変更を行わない限り、このブラウザに保存されます。", "各モデル呼び出しには、その処理に必要な範囲の素材だけが渡されます。問い合わせでは、Lasso で選んだ言葉、またはこの画面に含まれている範囲内の素材だけを送り、除外した素材は送りません。"])}),
+  privacy: Object.freeze({ title: "プライバシー", body: Object.freeze(["素材は、書き出しまたはモデルによる変更を行わない限り、このブラウザに保存されます。", "各モデル呼び出しには、その処理に必要な範囲の素材だけが渡されます。問い合わせでは、上限内の Lasso で選んだ言葉、またはこの画面に含まれている範囲内の素材だけを送り、除外した素材は送りません。"])}),
   terms: Object.freeze({ title: "利用規約", body: Object.freeze(["Matter はプレビューソフトウェアで、正式な利用規約はまだありません。", "置き換えられない素材は、検証中のあいだ書き出しを保管してください。"])}),
 });
 
@@ -247,11 +247,11 @@ const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
     <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
-    "Stelle eine kurze Frage zu dem Material, das auf dieser Fläche einbezogen ist. Fragen verändert es nicht.",
+    "Stelle eine kurze Frage zu dem Material, das auf dieser Fläche einbezogen ist. Eine Frage verändert es nicht.",
     "Mit Lasso markierst du Sprache, mit Stretch bestimmst du das Ausmaß, Branch erzeugt einen verwandten Gedanken und Undo macht die letzte Änderung rückgängig.",
   ]) }),
   pricing: Object.freeze({ title: "Preise", body: Object.freeze(["Matter ist in der Vorschau. Dieser Build hat keinen kostenpflichtigen Plan und keine Kasse."])}),
-  privacy: Object.freeze({ title: "Datenschutz", body: Object.freeze(["Material bleibt in diesem Browser, außer du exportierst es oder startest eine modellgestützte Änderung.", "Jeder Modellaufruf erhält nur das für seine begrenzte Aufgabe nötige Material. Eine Frage sendet die mit Lasso markierte Sprache oder das begrenzte, auf dieser Fläche einbezogene Material; zurückgestelltes Material wird nicht gesendet."])}),
+  privacy: Object.freeze({ title: "Datenschutz", body: Object.freeze(["Material bleibt in diesem Browser, außer du exportierst es oder startest eine modellgestützte Änderung.", "Jeder Modellaufruf erhält nur das für seine begrenzte Aufgabe nötige Material. Eine Frage sendet begrenztes, mit Lasso markiertes Sprachmaterial oder das begrenzte, auf dieser Fläche einbezogene Material; zurückgestelltes Material wird nicht gesendet."])}),
   terms: Object.freeze({ title: "Nutzungsbedingungen", body: Object.freeze(["Matter ist Vorschau-Software; veröffentlichte Nutzungsbedingungen gibt es noch nicht.", "Bewahre für unersetzliches Material einen Export auf, solange das Produkt erprobt wird."])}),
 });
 
