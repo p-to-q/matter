@@ -178,8 +178,10 @@ Invariants: material text, tree structure, exports, history, and persistence do
             not change; a lasso is the only explicit inquiry context and cannot
             address held-aside text; focus explicitly restores its own lineage.
 Proof:      navigation and context projection tests; component/browser proof of
-            `− → +`, faded non-interactive text, and an inquiry request without
-            the held-aside branch; full repository and Chromium suites.
+            disclosure, `− → +`, faded non-interactive text, and an inquiry request without
+            the held-aside branch; virtualized parent-owned sibling-edge projection,
+            localized recovery names, and held-search restore proof; full
+            repository and Chromium suites.
 Non-goals:  a second durable document visibility model, a hidden-retrieval
             channel, a chat filter, or changing the existing structural fold.
 ```

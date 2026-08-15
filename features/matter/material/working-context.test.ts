@@ -93,6 +93,28 @@ describe("working context", () => {
     expect(held).toEqual(new Set(["document", "a", "a1", "a2", "b", "missing"]));
   });
 
+  it("does not restore a deleted held branch when Undo brings its id back", () => {
+    const material = tree();
+    const held = toggleHeldAsideBranch(material, new Set(), "a");
+    const afterDeletion: ThoughtTree = {
+      ...material,
+      nodes: {
+        ...material.nodes,
+        document: { ...material.nodes.document!, children: ["b"] },
+        b: { ...material.nodes.b! },
+      },
+    };
+    delete afterDeletion.nodes.a;
+    delete afterDeletion.nodes.a1;
+    delete afterDeletion.nodes.a2;
+
+    // The local owner commits this normalized result after each tree change.
+    // Otherwise the old root id would become meaningful again on Undo.
+    const reconciledAfterDeletion = reconcileHeldAsideNodeIds(afterDeletion, held);
+    expect(reconciledAfterDeletion).toEqual(new Set());
+    expect(reconcileHeldAsideNodeIds(material, reconciledAfterDeletion)).toEqual(new Set());
+  });
+
   it("preserves original depth when a sibling branch is held aside", () => {
     const material = tree();
     const projection = projectActiveWorkingContext(material, new Set(["a"]));

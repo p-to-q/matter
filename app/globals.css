@@ -77,16 +77,17 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__search { display: flex; min-width: 0; height: 32px; flex: 1 1 auto; align-items: center; gap: 7px; padding-left: 8px; color: var(--index-faint); animation: material-search-enter 150ms cubic-bezier(.2,.8,.2,1) both; }
 .material-files__search svg { width: 13px; height: 13px; flex: 0 0 auto; }
 .material-files__search input { width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; background: transparent; color: var(--index-ink); font: 11px/1 var(--mono); }
-.material-files__search input::placeholder { color: var(--index-faint); }
+.material-files__search input::placeholder { color: var(--index-faint); letter-spacing: -.02em; }
 .material-files__search input::-webkit-search-cancel-button { display: none; }
 .material-files__search-close { display: grid; width: 32px; height: 32px; flex: 0 0 auto; padding: 0; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--index-muted); font: 15px/1 var(--mono); cursor: pointer; }
 .material-files__search-close:hover { background: rgba(22,29,39,.05); color: var(--index-ink); }
+.material-files[data-mode="search"] .material-files__search { gap: 5px; }
 
 /* Structural depth advances by one restrained step without imitating canvas geometry. */
 .material-files__body { min-height: 0; padding: 0 2px; overflow: auto; overscroll-behavior: contain; scrollbar-color: rgba(22,29,39,.14) transparent; scrollbar-width: thin; }
-.material-files__tree { margin: 0; padding: 0; list-style: none; }
+.material-files__tree { --material-file-action-width: 24px; --material-file-context-width: 24px; --material-file-context-icon: 11px; --material-file-guide-width: 1px; --material-file-step: 14px; position: relative; margin: 0; padding: 0; list-style: none; }
 .material-file__spacer { display: block; min-height: 0; pointer-events: none; }
-.material-file { --material-file-step: 14px; position: relative; display: grid; min-width: 0; min-height: var(--index-row); grid-template-columns: 24px minmax(0,1fr); align-items: center; padding-left: calc(var(--material-file-depth, 0) * var(--material-file-step)); color: var(--index-muted); transition: color 120ms ease; }
+.material-file { --material-file-step: 14px; position: relative; display: grid; min-width: 0; min-height: var(--index-row); grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); align-items: center; padding-left: calc(var(--material-file-depth, 0) * var(--material-file-step)); color: var(--index-muted); transition: color 120ms ease; }
 .material-file:hover { color: var(--index-ink); }
 .material-file[data-active="true"] { color: var(--index-ink); }
 .material-file[data-lasso-selected="true"] .material-file__open { border-radius: 8px; background: rgba(22,29,39,.065); color: var(--index-ink); }
@@ -99,24 +100,56 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__title { max-width: 100%; overflow: hidden; font: 400 13px/1.35 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
 .material-file[data-active="true"] .material-file__title { font-weight: 600; }
 .material-file__path { max-width: 100%; overflow: hidden; color: var(--index-faint); font: 10px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
-.material-file__context-control,
-.material-file__context-space { display: grid; width: 24px; height: var(--index-row); place-items: center; }
-.material-file__context-control { padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; opacity: .46; transition: opacity 120ms ease, color 120ms ease; }
-.material-file__context-control svg { width: 11px; height: 11px; }
+.material-file__structure-control,
+.material-file__context-space { position: relative; z-index: 1; display: grid; width: var(--material-file-action-width); height: var(--index-row); place-items: center; padding: 0; border: 0; background: transparent; color: inherit; }
+.material-file__structure-control { cursor: pointer; opacity: .46; transition: opacity 120ms ease, color 120ms ease; }
+.material-file__structure-control:disabled { cursor: default; opacity: 0; }
+.material-file:hover .material-file__structure-control:not(:disabled),
+.material-file[data-expanded="true"] .material-file__structure-control,
+.material-file__structure-control:focus-visible { opacity: 1; }
+.material-file__structure-glyph { position: relative; display: block; width: var(--material-file-context-icon); height: var(--material-file-context-icon); pointer-events: none; }
+.material-file__structure-glyph svg { position: absolute; inset: 0; width: var(--material-file-context-icon); height: var(--material-file-context-icon); transform-origin: center; }
+.material-file__restore-plus { opacity: 0; transform: rotate(-24deg) scale(.86); transition: opacity 70ms linear, transform 130ms cubic-bezier(.2,.8,.2,1); }
+.material-file__disclosure-chevron { opacity: 0; transform: rotate(72deg) scale(.86); transition: opacity 80ms 20ms linear, transform 140ms 10ms cubic-bezier(.2,.8,.2,1); }
+.material-file__structure-control[data-structure-action="restore"] .material-file__restore-plus { opacity: 1; transform: rotate(0deg) scale(1); transition-delay: 20ms, 10ms; }
+.material-file__structure-control[data-structure-action="collapsed"] .material-file__disclosure-chevron { opacity: 1; transform: rotate(0deg) scale(1); }
+.material-file__structure-control[data-structure-action="expanded"] .material-file__disclosure-chevron { opacity: 1; transform: rotate(90deg) scale(1); }
+.material-file__context-control { position: relative; z-index: 2; display: grid; width: var(--material-file-context-width); height: var(--index-row); place-items: center; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; transition: opacity 100ms ease, color 120ms ease; }
+.material-file__context-control svg { width: var(--material-file-context-icon); height: var(--material-file-context-icon); }
+.material-file__context-control--set-aside { grid-column: 3; opacity: 0; pointer-events: none; }
+.material-file__context-control--set-aside svg { transform: rotate(-15deg) scale(.86); transition: transform 140ms cubic-bezier(.2,.8,.2,1); }
+.material-file:hover .material-file__context-control--set-aside,
+.material-file__context-control--set-aside:focus-visible { opacity: .68; pointer-events: auto; }
+.material-file:hover .material-file__context-control--set-aside svg,
+.material-file__context-control--set-aside:focus-visible svg { transform: rotate(0deg) scale(1); }
+.material-file__context-control--set-aside:focus-visible { opacity: 1; }
+.material-file__context-control--restore { width: var(--material-file-action-width); color: var(--index-muted); opacity: .86; }
 .material-file__context-control:disabled { cursor: default; opacity: .22; }
-.material-file:hover .material-file__context-control,
-.material-file__context-control:focus-visible { opacity: 1; }
 .material-file[data-context-excluded="true"] { color: color-mix(in srgb, var(--index-ink) 44%, transparent); }
-.material-file[data-context-excluded="true"] .material-file__context-control { opacity: .74; }
+.material-file[data-context-excluded="true"] .material-file__title { color: currentColor; }
+
+/* Each segment names one adjacent sibling relationship. It uses the exact
+   centre axis of that group's disclosure/recovery slot; labels never supply geometry. */
+.material-files__tree-guides { position: absolute; z-index: 0; inset: 0; pointer-events: none; }
+.material-files__tree-guide { position: absolute; top: var(--material-file-guide-top); left: calc((var(--material-file-guide-child-depth) * var(--material-file-step)) + (var(--material-file-action-width) / 2)); width: var(--material-file-guide-width); height: var(--material-file-guide-height); background: rgba(22,29,39,.18); transform: translateX(-50%); transition: background 120ms ease; }
+.material-files:hover .material-files__tree-guide { background: rgba(22,29,39,.24); }
+.material-file__open { position: relative; z-index: 1; }
+
+/* Coarse pointers have no hover. Selection exposes the same secondary action
+   there only, preserving a pointer-only path without changing desktop state. */
+@media (hover: none) {
+  .material-file[data-active="true"] .material-file__context-control--set-aside { opacity: .68; pointer-events: auto; }
+  .material-file[data-active="true"] .material-file__context-control--set-aside svg { transform: rotate(0deg) scale(1); }
+}
 
 /* A branch title identifies a group, while its children retain their own
    horizontal structural step. Weight may clarify role; it never replaces depth. */
-.material-file[data-has-children="true"] .material-file__title { color: var(--index-ink); }
-.material-file__check { position: relative; display: flex; min-width: 0; height: var(--index-row); align-items: center; gap: 9px; padding: 0 9px 0 10px; grid-column: 1 / -1; cursor: pointer; }
+.material-file[data-has-children="true"]:not([data-context-excluded="true"]) .material-file__title { color: var(--index-ink); }
+.material-file__check { position: relative; display: grid; min-width: 0; height: var(--index-row); grid-template-columns: var(--material-file-action-width) minmax(0,1fr); align-items: center; padding: 0 9px 0 0; grid-column: 1 / -1; cursor: pointer; }
 .material-file__check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.material-file__check-mark { display: grid; width: 13px; height: 13px; flex: 0 0 auto; place-items: center; border: 1px solid rgba(22,29,39,.22); border-radius: 3px; background: rgba(255,255,255,.4); transition: border-color 120ms ease, background 120ms ease; }
-.material-file__check input:checked + .material-file__check-mark { border-color: var(--active); background: var(--active); }
-.material-file__check input:checked + .material-file__check-mark::after { width: 6px; height: 3px; border-bottom: 1px solid var(--paper); border-left: 1px solid var(--paper); content: ""; transform: translateY(-1px) rotate(-45deg); }
+.material-file__check-mark { box-sizing: border-box; display: grid; width: 11px; height: 11px; justify-self: center; place-items: center; border: 1px solid rgba(22,29,39,.28); border-radius: 2px; background: transparent; transition: border-color 120ms ease; }
+.material-file__check input:checked + .material-file__check-mark { border-color: var(--active); background: transparent; }
+.material-file__check input:checked + .material-file__check-mark::after { width: 5px; height: 2.5px; border-bottom: 1px solid var(--active); border-left: 1px solid var(--active); content: ""; transform: translateY(-.5px) rotate(-45deg); }
 .material-file__check input:focus-visible + .material-file__check-mark { outline: 1px solid var(--ink); outline-offset: 3px; }
 .material-file__rename { width: calc(100% - 12px); min-width: 0; height: calc(var(--index-row) - 10px); margin: 0 2px 0 0; grid-column: 2; padding: 0 5px; border: 1px solid var(--active); border-radius: 5px; background: rgba(255,255,255,.62); color: var(--index-ink); font: 400 12px/1.35 var(--matter-face); unicode-bidi: plaintext; }
 .material-file__rename:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
@@ -326,14 +359,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .material-files[data-mode="search"] { --index-row: 60px; }
   .material-files__context { padding-bottom: 4px; }
   .material-files__search-close { width: 48px; height: 48px; }
+  .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }
+  .material-file__structure-control,
   .material-file__context-control,
-  .material-file__context-space { width: 26px; height: 48px; }
-  .material-file { grid-template-columns: 26px minmax(0,1fr); }
+  .material-file__context-space { height: 48px; }
+  .material-file { grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); }
   .material-files__context-title { min-height: 48px; padding-left: 28px; }
   .material-files__controls { height: 56px; padding-bottom: 6px; }
   .material-files__mode-action { min-width: 48px; min-height: 48px; }
   .material-files__search { height: 48px; }
-  .material-file__check { padding-left: 14px; }
   .material-files__copy { min-width: 48px; height: 48px; }
   .material-files__profile { min-height: 70px; margin-top: 20px; padding-top: 12px; }
   .material-files__profile-action { width: 48px; height: 48px; }
@@ -355,14 +389,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .material-files[data-mode="search"] { --index-row: 60px; }
   .material-files__context { padding-bottom: 4px; }
   .material-files__search-close { width: 48px; height: 48px; }
+  .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }
+  .material-file__structure-control,
   .material-file__context-control,
-  .material-file__context-space { width: 26px; height: 48px; }
-  .material-file { grid-template-columns: 26px minmax(0,1fr); }
+  .material-file__context-space { height: 48px; }
+  .material-file { grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); }
   .material-files__context-title { min-height: 48px; padding-left: 28px; }
   .material-files__controls { height: 56px; padding-bottom: 6px; }
   .material-files__mode-action { min-width: 48px; min-height: 48px; }
   .material-files__search { height: 48px; }
-  .material-file__check { padding-left: 14px; }
   .material-files__copy { min-width: 48px; height: 48px; }
   .material-files__identity { padding-top: 20px; }
   .material-files__profile { min-height: 68px; }
@@ -406,6 +441,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (forced-colors: active) {
+  .material-files__tree-guide { background: CanvasText; }
+  .material-file__check-mark { border-color: ButtonText; }
+  .material-file__check input:checked + .material-file__check-mark,
+  .material-file__check input:checked + .material-file__check-mark::after { border-color: Highlight; }
   .repair-text__grapheme { animation: none !important; color: var(--material-text-color); }
   .lasso-selection-fragment,
   .language-pocket { border: 1px solid Highlight; background: transparent; }

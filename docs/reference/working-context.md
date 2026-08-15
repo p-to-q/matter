@@ -7,22 +7,45 @@ or a hidden retrieval rule.
 
 ## Form
 
-The left material index gives every material passage one context control:
+The left material index separates directory disclosure from working context:
 
 ```text
-−  this passage and its branch are present in the working context
-+  this passage and its branch are held aside from the working context
+› / ⌄  close or open an included branch in the index only
+−      hold the current passage and its branch aside
++      return a held passage and reopen its branch
 ```
 
+An included row does not permanently display `−`: on a precise pointer it
+appears at the trailing edge only on row hover or direct keyboard focus, so
+selection remains a reading state rather than an editing mode. A coarse pointer
+has no hover, so its current row exposes the same action as a touch fallback. A
+leaf therefore has no leading mark.
 Pressing `−` holds that node and all of its descendants aside. They remain on
-the canvas and in the index at a restrained lower opacity, so their place in
-the thought remains legible, but they cannot receive a normal selection or a
-lasso. In the index, that same action closes the branch beneath its root, so the
-root's `+` remains the one compact recovery handle; it does not change canvas
-layout or structural fold. Pressing `+` returns that branch and reopens its
-index descendants. A node held aside by an ancestor has no independent control
-until its ancestor is returned; this prevents a hidden exception inside an
-otherwise withheld branch.
+the canvas at a restrained lower opacity, so their place in the thought remains
+legible, but they cannot receive a normal selection or a lasso. In the browse
+index, that same action closes the branch beneath its faint root, so the root's
+`+` replaces the disclosure mark as the one compact recovery handle. Search and
+Select can still discover the durable descendants; neither changes canvas
+layout or structural fold. Pressing `+` returns that branch and reopens its index
+descendants. The browse outline derives one thin vertical segment for
+each adjacent pair when that *visible* sibling group continues into a deeper
+visible level: three siblings therefore have two distinct relations, owned by
+their parent rather than by a leaf. A singleton has no relation to draw, and a
+group that is entirely the terminal visible leaf level has no redundant rail.
+A small joint gap keeps a larger group from becoming one accidental long rail.
+An inherited parent segment may still pass a leaf row. Segments stop when a
+branch closes and share the exact centre axis of the corresponding disclosure
+or recovery slot. Select mode keeps the same guide topology, with its checkbox
+centred in that slot rather than shifting the title. The original 11-pixel
+control proportion keeps six pixels of endpoint clearance; a blank leaf joint
+keeps four so separate edges remain distinct without floating away from the
+row. The trailing `−` and row title do not supply guide geometry. Guides are
+only a reading aid, never another hierarchy. A held result found by search
+explicitly restores its lineage and selects that result in full view; a
+search result opened from an existing focus view keeps that explicit focus
+intent. A node held aside by an ancestor has no independent control until its
+ancestor is returned; this prevents a hidden exception inside an otherwise
+withheld branch.
 
 The document root is not a control. A visible root passage may be held aside,
 including the last active passage; an inquiry then has no material context and
@@ -48,11 +71,13 @@ current view projection
 ```
 
 The canvas receives both the active projection and the complementary held-aside
-set so it can keep held material faintly visible. The material index, pointer
-selection, lasso target measurement, inquiry projection, and future model
-turns consume only the active projection. An explicit lasso is still the narrow
-inquiry context, but it may only address active passages; it cannot override a
-held-aside decision.
+set so it can keep held material faintly visible. The material index receives
+both sets as the recovery surface. Pointer selection, lasso target measurement,
+inquiry projection, and future model turns consume only the active projection.
+Navigation labels remain a local presentation exception: they may name one node
+from its own text, but never use it as model context or affect an inquiry. An
+explicit lasso is still the narrow inquiry context, but it may only address
+active passages; it cannot override a held-aside decision.
 
 The browser sends only the resulting bounded material payload to `/api/inquiry`.
 It sends neither the held-aside ids nor their count, so the server cannot infer

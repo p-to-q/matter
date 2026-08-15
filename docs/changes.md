@@ -17,6 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-16 — Directory disclosure no longer reads as subtraction
+
+Changed: the material index again uses `›` / `⌄` as its default branch control.
+The context `−` is a trailing action revealed by hover or direct focus; current
+selection exposes it only on coarse pointers that have no hover. A held branch
+replaces its disclosure with a persistent `+` recovery handle. Directory
+disclosure never changes working context. Chevron, plus and minus restore the
+original 11 px / 1 px icon proportion; the 1 px relationship rail leaves 6 px
+at a glyph endpoint and 4 px at a blank leaf endpoint. Select retains the same
+guide axis and keeps its 11 px checkbox in the disclosure slot without moving
+titles. At narrow widths, both action columns expose a real 48 px pointer target
+without changing that shared axis.
+
+Why: a permanent `−` on every row made the initial material read like a list of
+pending removals and made relationship guides compete with context controls.
+
+Forecloses: using one default glyph for both directory disclosure and model
+scope, or hiding the only recovery action for held material.
+
 ## 2026-08-15 — Working context can hold material aside
 
 Changed: the material index now uses `−` and `+` to temporarily set aside or
