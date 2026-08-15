@@ -77,11 +77,19 @@ describe("CanvasChrome", () => {
     expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("リアルタイム音声入力");
     expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Live-Spracheingabe ist verfügbar");
     expect(CANVAS_CHROME_INFO["en-US"].pricing.body.join(" ")).toContain("no paid plan");
-    expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("visible root-to-focus lineage");
+    expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("bounded lassoed language");
+    expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("held-aside material is not sent");
     expect(CANVAS_CHROME_INFO["en-US"].terms.body.join(" ")).toContain("pre-release software");
     expect(CANVAS_CHROME_INFO["en-US"].inquiry.body.join(" ")).toContain("Asking never changes it");
     expect(CANVAS_CHROME_INFO["zh-CN"].inquiry.body.join(" ")).toContain("询问不会改变它");
-    expect(CANVAS_CHROME_INFO["zh-CN"].privacy.body.join(" ")).toContain("根节点至焦点路径");
+    expect(CANVAS_CHROME_INFO["zh-CN"].privacy.body.join(" ")).toContain("受限长度");
+    expect(CANVAS_CHROME_INFO["zh-CN"].privacy.body.join(" ")).toContain("暂不纳入的材料不会发送");
+    expect(CANVAS_CHROME_INFO["zh-TW"].privacy.body.join(" ")).toContain("受限長度");
+    expect(CANVAS_CHROME_INFO["zh-TW"].privacy.body.join(" ")).toContain("暫不納入的材料不會傳送");
+    expect(CANVAS_CHROME_INFO["ja-JP"].privacy.body.join(" ")).toContain("上限内");
+    expect(CANVAS_CHROME_INFO["ja-JP"].privacy.body.join(" ")).toContain("除外した素材は送りません");
+    expect(CANVAS_CHROME_INFO["de-DE"].privacy.body.join(" ")).toContain("begrenztes, mit Lasso markiertes Sprachmaterial");
+    expect(CANVAS_CHROME_INFO["de-DE"].privacy.body.join(" ")).toContain("zurückgestelltes Material wird nicht gesendet");
   });
 
   it("pins the desktop corners, accessible gear target, and 767px mobile handoff", () => {

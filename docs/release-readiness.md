@@ -37,6 +37,43 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.31
+
+Preview.31 gives the person a transient working-context boundary without
+creating a second material model. Directory disclosure remains `›` / `⌄`; a
+quiet trailing `−` holds one branch aside, and the branch's persistent `+`
+returns it. Held material remains faintly legible but is unavailable to normal
+selection, lasso, and Ask Matter. Its ids never enter the document, command
+history, persistence, archive, or request payload.
+
+The browse index derives parent-owned relationship segments in one linear
+projection over the visible outline. Only adjacent siblings in a group that
+continues deeper receive a segment; singleton and terminal leaf groups remain
+unmarked. A 1 px rail shares the disclosure/selection axis, with 8 px clearance
+at controls and 6 px at blank leaf joints. Windowing clips those pure segments
+without DOM measurement.
+
+The release also advances the existing Nano ID 3.x transitive override to
+3.3.18, the patched version for its zero-length custom-generator denial of
+service advisory. Matter does not call that generator path; the update removes
+the known vulnerable package from both the active lockfile and its archived
+prototype lockfile without changing a dependency line or product behavior.
+
+```text
+source proof           npm run check: 1,136 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 48 Chromium cases passed, 2
+                       capability-gated cases skipped; desktop and narrow
+                       disclosure, recovery, search, Select, Ask Matter,
+                       deletion/Undo, and 48 px pointer targets passed
+scale proof            exact 2,000-row / 32-level guide projection passed;
+                       the existing full-canvas remount gate remains the
+                       separately recorded release risk below
+privacy boundary       held material cannot leak through pointer selection,
+                       lasso measurement, aggregate count, or inquiry payload
+```
+
 ## Candidate verification — 0.2.0-preview.30
 
 Preview.30 is an operational-contract correction over Preview.29. The deployed

@@ -137,7 +137,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   );
   const inquiryField = inquiryDialog.getByRole("textbox", { name: "问一句关于这份材料的话" });
   const dictate = inquiryDialog.getByRole("button", { name: "口述", exact: true });
-  await expect(inquiryDialog).toContainText("就画面里的材料问一句短问题。询问不会改变它。");
+  await expect(inquiryDialog).toContainText("就画面里被纳入的材料问一句短问题。询问不会改变它。");
   await expect(inquiryField).toBeFocused();
   await expect(dictate).toBeVisible();
   // The composer's controls carry data-inquiry-control rather than

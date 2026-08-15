@@ -186,6 +186,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
     ),
     [props.documentEpoch, tree, workingContextState.documentEpoch, workingContextState.heldAsideRootIds],
   );
+  if (
+    workingContextState.documentEpoch !== props.documentEpoch ||
+    heldAsideRootIds !== workingContextState.heldAsideRootIds
+  ) {
+    // Commit reconciliation before children observe this render. Once a durable
+    // edit removes a held root, Undo must not resurrect that obsolete decision.
+    setWorkingContextState({
+      documentEpoch: props.documentEpoch,
+      epoch: workingContextState.epoch + 1,
+      heldAsideRootIds,
+    });
+  }
   const workingContext = useMemo(
     () => projectWorkingContext(tree, heldAsideRootIds),
     [heldAsideRootIds, tree],
@@ -222,6 +234,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
           };
     });
     props.onFocusNode(nodeId);
+  }, [props, tree]);
+  const restoreWorkingNode = useCallback((nodeId: string) => {
+    setWorkingContextState((current) => {
+      const currentIds = current.documentEpoch === props.documentEpoch
+        ? current.heldAsideRootIds
+        : createHeldAsideNodeIds();
+      const next = restoreHeldAsideLineage(tree, currentIds, nodeId);
+      return next === currentIds && current.documentEpoch === props.documentEpoch
+        ? current
+        : {
+            documentEpoch: props.documentEpoch,
+            epoch: current.epoch + 1,
+            heldAsideRootIds: next,
+          };
+    });
+    props.onSelectNode(nodeId);
   }, [props, tree]);
   const interactionPending = persistenceLoading || transformPending || (
     props.admission.state.phase !== "idle" && props.admission.state.phase !== "error"
@@ -1206,6 +1234,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onRenameNode={labels.rename}
         onRenameDocument={props.onRenameDocument}
         onResetNodeName={labels.resetName}
+        onRestoreNode={restoreWorkingNode}
         onSelectNode={props.onSelectNode}
         onToggleHeldAside={toggleHeldAside}
         onVisibleNodes={labels.observe}
