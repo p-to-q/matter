@@ -11,10 +11,23 @@ export function isCurrentToolIntent(
   context: ToolContext,
   intent: ToolIntent,
 ): boolean {
-  const serialized = JSON.stringify(intent);
   return projectTools(context).some(
     (tool) =>
       tool.availability === "available" &&
-      JSON.stringify(tool.intent) === serialized,
+      sameToolIntent(tool.intent, intent),
   );
+}
+
+export function sameToolIntent(left: ToolIntent, right: ToolIntent): boolean {
+  switch (left.type) {
+    case "insert-child":
+      return right.type === left.type && right.parentNodeId === left.parentNodeId;
+    case "focus-node":
+      return right.type === left.type && right.nodeId === left.nodeId;
+    case "set-fold":
+      return right.type === left.type && right.nodeId === left.nodeId && right.folded === left.folded;
+    case "show-full":
+    case "undo":
+      return right.type === left.type;
+  }
 }

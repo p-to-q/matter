@@ -46,6 +46,17 @@ targets. The selected desktop rail uses the second preview's `60px` / `22px`
 outer geometry and `44px` / `13px` button geometry.
 `aria-pressed` is reserved for a real persistent mode or toggle.
 
+The paper may also present one transient local action lens for a precise passage.
+It does not create another catalog or state owner: full view reprojects Add child
+and Focus against the hovered or keyboard-focused active node; focus view
+reprojects only Show all. The render edge measures one collision-safe position
+and mounts one shared lens regardless of tree size. Lasso, stretch, pan, node
+drag, pending work, modal chrome, held-aside material, and lack of clear adjacent
+space all suppress it. Canvas Fold/Unfold remains an unpresented navigation
+capability in this first-release surface. The material index has a separate
+view-local disclosure control: it neither dispatches canvas Fold nor changes
+canvas visibility. Delete stays behind the explicit selection contract.
+
 Dispatch revalidates the projected target, revision-sensitive capability, and
 pending lock. Pointer down must not accidentally select material behind the
 rail. Removing a selected node through undo reconciles selection before the next

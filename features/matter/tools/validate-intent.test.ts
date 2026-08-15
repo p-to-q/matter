@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ToolContext } from "./model";
-import { isCurrentToolIntent } from "./validate-intent";
+import { isCurrentToolIntent, sameToolIntent } from "./validate-intent";
 
 const context: ToolContext = {
   view: "full",
@@ -23,5 +23,16 @@ describe("isCurrentToolIntent", () => {
         { type: "focus-node", nodeId: "selected" },
       ),
     ).toBe(false);
+  });
+
+  it("compares each closed intent by meaning rather than object serialization", () => {
+    expect(sameToolIntent(
+      { type: "set-fold", nodeId: "selected", folded: true },
+      { folded: true, nodeId: "selected", type: "set-fold" },
+    )).toBe(true);
+    expect(sameToolIntent(
+      { type: "set-fold", nodeId: "selected", folded: true },
+      { type: "set-fold", nodeId: "selected", folded: false },
+    )).toBe(false);
   });
 });

@@ -23,6 +23,8 @@ is deliberately absent.
 | Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and per-surface gate status for voice, label, repair, inquiry, and transform |
 | Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
+| Transient working context | implemented | held branches stay legible while selection, lasso, and bounded inquiry omit them; disclosure remains independent |
+| Structural paper ruling + local node actions | implemented | FX-off-only one-layer ruling and one measured Branch/Focus lens; no document coordinates or per-node control mount |
 
 ## Specified for `0.2`
 
@@ -48,6 +50,11 @@ paper never enlarges. The root names the outline, descendant rows step right by
 structural depth, and each branch expands or closes in place without changing
 canvas fold state. Search is a flat result view whose rows carry ancestry paths.
 The tree shadow is the supplied decorative asset inside the paper, never document state.
+Turning that atmosphere off reveals the paper's structural ruling rather than a
+blank canvas. The ruling follows the current derived column rhythm only as a
+visual orientation aid: it is fixed to the paper, begins around the root growth
+band, extends rightward, and cannot become a coordinate, snap target, or second
+layout authority.
 `app/icon.svg` is explicitly provisional and is not the product mark: it draws
 the same rooted figure the material index draws, on ink and paper only, sized so
 it survives 16 px. `app/apple-icon.tsx` renders that same figure full-bleed at
@@ -71,9 +78,11 @@ installation stays this thin until that is settled.
 The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
 Redo remains available through the platform keyboard conventions
 `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`; it is not a second visible rail tool.
-Focus and fold remain navigation capabilities but have no first-release canvas
-presenter; the disclosure control in the left material outline is a separate
-file-tree affordance.
+Focus and fold remain navigation capabilities but have no first-release fixed-rail
+presenter. A single local action lens may expose Branch and Focus for the precise
+hovered or keyboard-focused passage, or Show all in focus view. The disclosure
+control in the left material outline remains a separate file-tree affordance.
+The lens is transient rendering state and never mounts one control set per node.
 
 The paper corner system is presentation state only. About, pre-release pricing,
 privacy and terms are static information rather than a support agent. Ask Matter
@@ -87,11 +96,12 @@ focus return. The left material field is outside this system.
 
 The right-side canvas composition is frozen in
 [`reference/ambient-workbench-ui.md`](reference/ambient-workbench-ui.md): the
-rounded paper owns the atmosphere, the right editing rail, and every corner
-utility. The left material field now has its own first-release freeze: a quiet
-304 px manuscript index with local branch disclosure, flat search, copy selection,
-archive access, and a non-account local identity. It remains outside the
-paper-only tool vocabulary.
+rounded paper owns the atmosphere or structural ruling, the local action lens,
+the right editing rail, and every corner utility. The left material field now
+has its own first-release freeze: a quiet 304 px manuscript index with local
+branch disclosure, transient working-context controls, flat search, copy
+selection, archive access, and a non-account local identity. It remains outside
+the paper-only tool vocabulary.
 
 ## Gated in this migration
 

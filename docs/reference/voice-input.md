@@ -53,12 +53,21 @@ microphone".
 
 ## Admission boundary
 
-The voice control has a target only in the full material view: at an empty tree
-it initializes the root; in a nonempty tree it appends a first-level child under
-the sole root. Activation freezes that target, tree id and revision;
-transcription never reads a newer selection and never relocates a result. A
-successful admission keeps the current selection, so recording never changes
-what a person is handling.
+The voice control has a target only in the full material view. A truly empty
+tree initializes its root. In the document-root runtime, speaking with no
+visible passage selected appends first-level material beneath the invisible
+structural root; speaking with an active visible passage selected appends a
+child beneath that passage. Activation freezes the exact parent, tree id, and
+revision. Transcription never chooses a newer target or relocates its result.
+A successful admission keeps the current selection, so recording does not
+select the material it creates.
+
+Commit revalidates that frozen handle. A different tree or revision, leaving
+the full view, losing the parent, or selecting another non-empty target makes
+the result stale. Clearing the selection or changing only fold state does not
+retarget or invalidate it. Working-context exclusion clears an affected
+selection before admission can start, so held-aside material never becomes a
+voice parent through this path.
 
 The framework-free controller owns these serializable phases:
 
@@ -79,9 +88,11 @@ React does not interpret these effects directly. A small Matter-specific driver
 serializes reducer events, owns the operation registry, and disposes idempotently.
 It receives the current `{ treeId, revision }` scope; a document or material
 revision change cancels capture or fetch immediately. Fold and selection remain
-outside that scope, so navigation alone does not waste or retarget an utterance.
-Client and server deadlines settle independently of whether a fetch wrapper or
-provider adapter observes its abort signal.
+outside that asynchronous resource scope. The synchronous commit boundary still
+applies the frozen-parent rules above, so a later selection can invalidate an
+utterance but can never retarget it. Client and server deadlines settle
+independently of whether a fetch wrapper or provider adapter observes its abort
+signal.
 
 The first-release recording policy prefers WebM/Opus and falls back to MP4/AAC
 where supported. Capture stops at 60 seconds; the route allows 65 seconds of

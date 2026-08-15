@@ -54,6 +54,8 @@ import {
   projectAdmissionFeedbackPresentation,
 } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
+import { CanvasRuling } from "./CanvasRuling";
+import { NodeActionLens } from "./NodeActionLens";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
@@ -84,6 +86,7 @@ import { useTransformTurn } from "./use-transform-turn";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import { isRepairPresentationCurrent } from "../interaction/use-repair-presentation";
 import { RepairingMaterialText } from "./RepairingMaterialText";
+import { isCurrentNodeActionIntent } from "../tools/project-node-actions";
 import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
@@ -668,6 +671,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
     [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
+  const handleNodeActionIntent = useCallback((nodeId: string, intent: ToolIntent) => {
+    const context = {
+      activeNodeIds: workingContext.activeNodeIds,
+      interaction: interactionPending ? "pending" as const : "idle" as const,
+      navigation,
+      nodeId,
+      tree,
+    };
+    if (!isCurrentNodeActionIntent(context, intent)) return;
+    applyToolIntent(intent, props);
+  }, [interactionPending, navigation, props, tree, workingContext.activeNodeIds]);
   const projectInquiryPayload = useCallback(
     () => projectInquiryContext(tree, activeWorkingProjection, lasso.selections),
     [activeWorkingProjection, lasso.selections, tree],
@@ -909,6 +923,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const worldStyle = {
     transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.zoom})`,
   } as CSSProperties;
+  const nodeActionsEnabled = activeLayout !== null &&
+    canvasMode === "material" &&
+    !interactionPending &&
+    !lasso.active &&
+    !lasso.drawing &&
+    !stretch.dragging &&
+    stretch.amount === 0 &&
+    !transformActive &&
+    !wheelMotionActive &&
+    viewport.gesture?.dragging !== true;
 
   const updateViewport = (event: Parameters<typeof reduceCanvasViewport>[1]) => {
     setViewport((current) => {
@@ -1327,6 +1351,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           enabled={canvasPreferences.preferences.leafFx}
           navigationActive={wheelMotionActive || viewport.gesture?.dragging === true}
         />
+        <CanvasRuling active={!canvasPreferences.preferences.leafFx} />
         {lasso.selections.length > 1 ? (
           <div
             aria-live="polite"
@@ -1381,6 +1406,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
           </div>
           </div>
         )}
+        {nodeActionsEnabled ? (
+          <NodeActionLens
+            activeNodeIds={workingContext.activeNodeIds}
+            canvasRef={canvasRef}
+            documentRef={documentRef}
+            enabled
+            geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}`}
+            interaction="idle"
+            key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
+            navigation={navigation}
+            onIntent={handleNodeActionIntent}
+            tree={tree}
+          />
+        ) : null}
         <footer
           aria-label="Matter guidance"
           className="matter-guidance"
@@ -1497,6 +1536,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
           >
             <button
               aria-pressed={isSelected}
+              aria-keyshortcuts={isHeldAside ? undefined : "ArrowRight"}
               className="spatial-thought__text"
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
@@ -1980,6 +2020,11 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
   ) {
     return;
   }
+  applyToolIntent(intent, props);
+}
+
+function applyToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
+  const { navigation, tree } = props;
   switch (intent.type) {
     case "insert-child":
       if (navigation.mode === "full" && tree.nodes[intent.parentNodeId] !== undefined) {
