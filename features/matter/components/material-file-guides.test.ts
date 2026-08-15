@@ -27,29 +27,29 @@ describe("material file indentation guides", () => {
       ranges: [{ start: 2, end: 5 }],
       rowHeight: 40,
     })).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 1, toIndex: 4, top: 80, height: 96 },
-      { parentId: "root", laneDepth: 0, fromIndex: 4, toIndex: 6, top: 184, height: 16 },
+      { parentId: "root", laneDepth: 0, fromIndex: 1, toIndex: 4, top: 80, height: 94 },
+      { parentId: "root", laneDepth: 0, fromIndex: 4, toIndex: 6, top: 186, height: 14 },
     ]);
   });
 
-  it("leaves a compact four-pixel joint around a leaf endpoint", () => {
+  it("leaves six pixels around a leaf endpoint", () => {
     expect(projectMaterialFileGuideSegments({
       edges: [{ parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1 }],
       ranges: [{ start: 0, end: 2 }],
       rowHeight: 40,
     })).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1, top: 24, height: 32 },
+      { parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1, top: 26, height: 28 },
     ]);
   });
 
-  it("leaves six pixels around a disclosure or recovery control", () => {
+  it("leaves eight pixels around a disclosure or recovery control", () => {
     expect(projectMaterialFileGuideSegments({
       edges: [{ parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1 }],
       ranges: [{ start: 0, end: 2 }],
       controlRowIndexes: new Set([0, 1]),
       rowHeight: 40,
     })).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1, top: 26, height: 28 },
+      { parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1, top: 28, height: 24 },
     ]);
   });
 
@@ -91,8 +91,8 @@ describe("material file indentation guides", () => {
       ranges: [{ start: 1_952, end: 1_985 }],
       rowHeight: 40,
     })).toEqual([
-      { parentId: "document", laneDepth: -1, fromIndex: 1_920, toIndex: 1_952, top: 78_080, height: 16 },
-      { parentId: "document", laneDepth: -1, fromIndex: 1_952, toIndex: 1_984, top: 78_104, height: 1_272 },
+      { parentId: "document", laneDepth: -1, fromIndex: 1_920, toIndex: 1_952, top: 78_080, height: 14 },
+      { parentId: "document", laneDepth: -1, fromIndex: 1_952, toIndex: 1_984, top: 78_106, height: 1_268 },
     ]);
   });
 

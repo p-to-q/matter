@@ -37,8 +37,8 @@ An inherited parent segment may still pass a leaf row. Segments stop when a
 branch closes and share the exact centre axis of the corresponding disclosure
 or recovery slot. Select mode keeps the same guide topology, with its checkbox
 centred in that slot rather than shifting the title. The original 11-pixel
-control proportion keeps six pixels of endpoint clearance; a blank leaf joint
-keeps four so separate edges remain distinct without floating away from the
+control proportion keeps eight pixels of endpoint clearance; a blank leaf joint
+keeps six so separate edges remain distinct without floating away from the
 row. The trailing `−` and row title do not supply guide geometry. Guides are
 only a reading aid, never another hierarchy. A held result found by search
 explicitly restores its lineage and selects that result in full view; a

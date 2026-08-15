@@ -24,8 +24,8 @@ The context `−` is a trailing action revealed by hover or direct focus; curren
 selection exposes it only on coarse pointers that have no hover. A held branch
 replaces its disclosure with a persistent `+` recovery handle. Directory
 disclosure never changes working context. Chevron, plus and minus restore the
-original 11 px / 1 px icon proportion; the 1 px relationship rail leaves 6 px
-at a glyph endpoint and 4 px at a blank leaf endpoint. Select retains the same
+original 11 px / 1 px icon proportion; the 1 px relationship rail leaves 8 px
+at a glyph endpoint and 6 px at a blank leaf endpoint. Select retains the same
 guide axis and keeps its 11 px checkbox in the disclosure slot without moving
 titles. At narrow widths, both action columns expose a real 48 px pointer target
 without changing that shared axis.

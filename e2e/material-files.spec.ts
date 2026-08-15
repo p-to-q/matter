@@ -126,8 +126,8 @@ for (const viewport of [
           fromMiddle: fromRect.top + fromRect.height / 2,
           guideCenter: guideRect.left + guideRect.width / 2,
           iconSize: Number.parseFloat(getComputedStyle(fromControl.querySelector("svg")!).width),
-          fromClearance: fromControl.dataset.structureAction === "leaf" ? 4 : 6,
-          toClearance: toControl.dataset.structureAction === "leaf" ? 4 : 6,
+          fromClearance: fromControl.dataset.structureAction === "leaf" ? 6 : 8,
+          toClearance: toControl.dataset.structureAction === "leaf" ? 6 : 8,
           toMiddle: toRect.top + toRect.height / 2,
           top: guideRect.top,
         };

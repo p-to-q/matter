@@ -24,9 +24,9 @@ type PreviousSibling = {
   index: number;
 };
 /** Blank leaf joints need only enough air to keep adjacent edges distinct. */
-const LEAF_ENDPOINT_CLEARANCE = 4;
+const LEAF_ENDPOINT_CLEARANCE = 6;
 /** The 11px disclosure/recovery glyph keeps a quiet optical gap from the rail. */
-const CONTROL_ENDPOINT_CLEARANCE = 6;
+const CONTROL_ENDPOINT_CLEARANCE = 8;
 
 /**
  * A guide is an edge between adjacent visible siblings, owned by their parent.
