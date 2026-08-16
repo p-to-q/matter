@@ -15,6 +15,7 @@ import {
   deriveMaterialFileLabel,
   projectMaterialAncestry,
   projectMaterialFileOutline,
+  projectMaterialFileRows,
   projectMaterialFileSubtree,
   projectMaterialFiles,
   serializeMaterialSelection,
@@ -34,6 +35,7 @@ import {
 import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
 import { materialFilesCopy } from "./material-files-copy";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
+import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
 import type { MatterLocale } from "../config/locales";
 
 export type MaterialFilesProps = Readonly<{
@@ -205,6 +207,13 @@ export function MaterialFiles(props: MaterialFilesProps) {
         : projectMaterialFileOutline(props.tree, compactedNodeIds);
     },
     [compactedNodeIds, mode, open, props.labels, props.tree, rootId, visibleQuery],
+  );
+  // This follows authored structure rather than the locally compacted outline,
+  // so a terminal mark never appears or disappears merely because a nearby
+  // branch was folded in the index.
+  const terminalMarkerIds = useMemo(
+    () => projectMaterialFileTerminalMarkerIds(projectMaterialFileRows(props.tree, COMPLETE_INDEX_NAVIGATION)),
+    [props.tree],
   );
   const effectiveFocusedRowId = focusedRowState.epoch === props.documentEpoch ? focusedRowState.nodeId : null;
   const guideEdges = useMemo(
@@ -819,6 +828,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   : file.hasChildren
                     ? expanded ? "expanded" : "collapsed"
                     : "leaf";
+                const shallowerTerminal = !heldAsideRoot && terminalMarkerIds.has(file.nodeId);
                 const materialNode = props.tree.nodes[file.nodeId];
                 const derivedLabel = props.labels?.get(file.nodeId);
                 const title = derivedLabel ?? (materialNode === undefined
@@ -855,7 +865,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   >
                     {mode === "browse" ? (
                       (heldAside && !heldAsideRoot) || (!heldAsideRoot && !file.hasChildren) ? (
-                        <span aria-hidden="true" className="material-file__context-space" />
+                        <span
+                          aria-hidden="true"
+                          className={shallowerTerminal
+                            ? "material-file__context-space material-file__terminal-marker"
+                            : "material-file__context-space"}
+                        />
                       ) : (
                         <button
                           aria-label={heldAsideRoot
