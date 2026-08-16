@@ -188,31 +188,39 @@ Non-goals:  a second durable document visibility model, a hidden-retrieval
 
 ### Active sub-slice — structural paper and local node actions
 
-State: Proven.
+State: Proven after corrected product evidence.
 
 ```text
-Outcome:    turning leaf FX off reveals a quiet right-growing structural ruling;
-            hovering or keyboard-focusing active material reveals one small
-            adjacent lens for Branch and Focus, or Show all in focus view.
-Boundary:   one paper-owned decorative ruling, one render-edge action presenter,
+Outcome:    turning leaf FX off reveals a legible, repeating structural ruling
+            that moves with the canvas camera; hovering or keyboard-focusing
+            active material reveals one upper-left frosted action field whose
+            Branch and Focus actions arrive with the blur, or Show all in focus.
+Boundary:   one camera-bound render-only ruling, one render-edge action presenter,
             the existing pure tool projection, and collision-safe DOM measurement.
 Invariants: tree structure remains the only layout authority; ruling and lens
             never enter material, history, persistence, context, or protocol;
             no per-node action controls mount; precise gestures and pending work win.
-Proof:      pure collision geometry; wide/narrow and light/dark browser receipts;
-            hover, keyboard, coarse-pointer, pan, lasso, drag, modal and focus
-            state matrix; one-lens DOM bound and the existing 2,000-node gate.
-Non-goals:  infinite authored coordinates, snapping, decorative card tiles,
+Proof:      pure ruling and collision geometry; wide/narrow and light/dark browser
+            receipts; pan/zoom phase, hover, keyboard, coarse-pointer, lasso,
+            drag, modal and focus state matrix; one-lens DOM bound and the
+            existing 2,000-node gate.
+Non-goals:  authored coordinates, snapping, decorative card tiles,
             local delete/fold, blank AI nodes, or changing the five-slot rail.
 ```
 
-Build receipt, 2026-08-16: one paper-fixed ruling and one delegated action lens
-now cover light/dark, laptop/narrow, fine/coarse pointer, keyboard, canvas chrome
-overlay, pan, lasso, held-context, revision and 2,000-node boundaries. The lens
-measures the first rendered text line and revalidates its intent immediately
-before dispatch. Full repository and Chromium suites pass; the production
-2,000-node diagnostic retains its separately recorded raw-long-task optimization
-gate without adding per-node controls or another state owner.
+Correction evidence, 2026-08-16: the shipped paper-fixed ruling did not move with
+Pan and was too faint to orient the material. The vertical action capsule exposed
+the intents but omitted the reference's simultaneous local blur field. This
+reopens presentation and camera projection only; tree layout, intents, history,
+working context, protocol, and the constant-count DOM boundary stay frozen.
+
+Build receipt, 2026-08-17: the ruling now follows the transient camera through a
+pure render projection while the browser proof freezes the established online
+column width and gap at every tested breakpoint. The upper-left frosted field and
+its projected actions reveal together and retain the existing revalidation and
+suppression paths. Full source proof and all 57 Chromium cases pass (55 passed,
+2 capability-gated skips), including Pan deltas, keyboard, coarse pointer, held
+context, narrow geometry, and the one-field/one-ruling 2,000-node bound.
 
 Execution order is deliberately narrow:
 

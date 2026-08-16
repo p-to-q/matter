@@ -17,6 +17,23 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-17 — Canvas ruling follows the camera without moving material
+
+Changed: the leaf-off ruling is now one full-paper render layer whose repeated
+phase and scale follow transient pan and zoom. Its cell width remains exactly the
+existing online column width plus gap; the taller vertical rhythm and stronger
+one-pixel line add orientation without changing any material box. Direct hover
+or keyboard focus now reveals one upper-left frosted field and its Branch/Focus
+actions in the same frame, with Show all as the focus-view projection.
+
+Why: a paper-fixed, faint ruling stopped reading as a canvas reference during
+movement, while the first vertical action capsule exposed icons without the
+local softened field the interaction needed.
+
+Forecloses: fitting material to decorative lines, persisting camera/grid state,
+mounting a toolbar per node, or letting the auxiliary field become another tool
+catalog or material mutation path.
+
 ## 2026-08-16 — Leaf-off paper exposes structure and one local action lens
 
 Changed: turning leaf atmosphere off now reveals one low-contrast, solid-line

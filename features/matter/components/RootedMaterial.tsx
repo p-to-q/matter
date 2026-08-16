@@ -1351,7 +1351,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           enabled={canvasPreferences.preferences.leafFx}
           navigationActive={wheelMotionActive || viewport.gesture?.dragging === true}
         />
-        <CanvasRuling active={!canvasPreferences.preferences.leafFx} />
+        <CanvasRuling
+          active={!canvasPreferences.preferences.leafFx}
+          viewport={{ x: viewport.x, y: viewport.y, zoom: viewport.zoom }}
+        />
         {lasso.selections.length > 1 ? (
           <div
             aria-live="polite"

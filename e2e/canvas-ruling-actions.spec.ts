@@ -4,8 +4,8 @@ const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 const ROOT_ID = "thought_fixture_root";
 
 for (const viewport of [
-  { name: "laptop", width: 1280, height: 800, cell: "636px 160px", clearance: 58, lens: { width: 54, height: 102 } },
-  { name: "narrow", width: 390, height: 844, cell: "344px 128px", clearance: 32, lens: { width: 58, height: 110 } },
+  { name: "laptop", width: 1280, height: 800, cell: "636px 196px", column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 136, height: 78 } },
+  { name: "narrow", width: 390, height: 844, cell: "344px 172px", column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 144, height: 82 } },
 ]) {
   test(`structural paper and one local action lens remain bounded at ${viewport.name}`, async ({ page }) => {
     const browserErrors: string[] = [];
@@ -33,33 +33,56 @@ for (const viewport of [
     await expect(ruling).toHaveCSS("pointer-events", "none");
     await expect(ruling).toHaveCSS("opacity", "1");
     expect(await ruling.evaluate((element) => {
+      const color = getComputedStyle(element).backgroundColor;
+      const alpha = Number.parseFloat(color.match(/([\d.]+)\)$/)?.[1] ?? "1");
+      return alpha;
+    })).toBeGreaterThanOrEqual(.11);
+    expect(await ruling.evaluate((element) => {
       const style = getComputedStyle(element);
       return style.maskSize || style.webkitMaskSize;
     })).toBe(viewport.cell);
+    expect(await page.locator(".matter-canvas").evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        gap: style.getPropertyValue("--matter-column-gap").trim(),
+        width: style.getPropertyValue("--matter-column-width").trim(),
+      };
+    })).toEqual(viewport.column);
 
-    const rulingGeometry = await page.evaluate(({ clearance, rootId }) => {
+    const rulingGeometry = await page.evaluate(({ rootId }) => {
       const rulingElement = document.querySelector<HTMLElement>("[data-canvas-ruling]");
-      const rootElement = document.querySelector<HTMLElement>(`[data-thought-id="${rootId}"]`);
+      const rootElement = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
       const paperElement = document.querySelector<HTMLElement>(".matter-document");
       if (rulingElement === null || rootElement === null || paperElement === null) return null;
-      const rulingRect = rulingElement.getBoundingClientRect();
+      const style = getComputedStyle(rulingElement);
       const rootRect = rootElement.getBoundingClientRect();
       const paperRect = paperElement.getBoundingClientRect();
+      const cellWidth = Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-width"));
+      const cellHeight = Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-height"));
+      const originX = Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-x"));
+      const originY = Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-y"));
+      const modulo = (value: number, step: number) => ((value % step) + step) % step;
+      const leftInset = modulo(rootRect.left - paperRect.left - originX, cellWidth);
+      const topInset = modulo(rootRect.top - paperRect.top - originY, cellHeight);
       return {
-        expectedLeft: Math.max(paperRect.left, rootRect.left - clearance),
-        left: rulingRect.left,
-        paperLeft: paperRect.left,
+        bottomInset: cellHeight - topInset - rootRect.height,
+        leftInset,
+        rightInset: cellWidth - leftInset - rootRect.width,
+        topInset,
       };
-    }, { clearance: viewport.clearance, rootId: ROOT_ID });
+    }, { rootId: ROOT_ID });
     expect(rulingGeometry).not.toBeNull();
-    expect(Math.abs(rulingGeometry!.left - rulingGeometry!.expectedLeft)).toBeLessThanOrEqual(1);
-    expect(rulingGeometry!.left).toBeGreaterThanOrEqual(rulingGeometry!.paperLeft);
+    expect(rulingGeometry!.leftInset).toBeGreaterThanOrEqual(viewport.horizontalInset);
+    expect(rulingGeometry!.rightInset).toBeGreaterThanOrEqual(viewport.horizontalInset);
+    expect(rulingGeometry!.topInset).toBeGreaterThanOrEqual(6);
+    expect(rulingGeometry!.bottomInset).toBeGreaterThanOrEqual(4);
 
     if (viewport.name === "narrow") await rootText.click();
     else await rootText.hover();
     const lens = page.getByRole("toolbar", { name: "Thought actions" });
     await expect(lens).toBeVisible();
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
+    await expect(lens).toHaveAttribute("aria-orientation", "horizontal");
     await expect(lens.getByRole("button")).toHaveCount(2);
     await expect(lens.getByRole("button", { name: "Extend from this thought" })).toBeVisible();
     await expect(lens.getByRole("button", { name: "Focus this thought" })).toBeVisible();
@@ -74,15 +97,27 @@ for (const viewport of [
       return {
         width: Math.round(lensRect.width),
         height: Math.round(lensRect.height),
-        centers: buttons.map((button) => Math.round((button.left + button.width / 2 - lensRect.left) * 10) / 10),
-        lensCenter: Math.round(lensRect.width * 5) / 10,
+        centers: buttons.map((button) => ({
+          x: Math.round((button.left + button.width / 2 - lensRect.left) * 10) / 10,
+          y: Math.round((button.top + button.height / 2 - lensRect.top) * 10) / 10,
+        })),
       };
     })).toEqual({
       ...viewport.lens,
-      centers: [viewport.lens.width / 2, viewport.lens.width / 2],
-      lensCenter: viewport.lens.width / 2,
+      centers: viewport.name === "narrow"
+        ? [{ x: 45, y: 41 }, { x: 99, y: 41 }]
+        : [{ x: 43, y: 39 }, { x: 93, y: 39 }],
     });
     expect(await noLensCollision(page)).toBe(true);
+    expect(await lens.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(20px)");
+    expect(await page.evaluate((rootId) => {
+      const text = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
+      const field = document.querySelector<HTMLElement>("[data-node-action-lens]");
+      if (text === null || field === null) return false;
+      const textRect = text.getBoundingClientRect();
+      const fieldRect = field.getBoundingClientRect();
+      return fieldRect.left <= textRect.left && fieldRect.bottom <= textRect.top + 1;
+    }, ROOT_ID)).toBe(true);
 
     const beforeBranch = await page.locator("[data-thought-id]").count();
     await lens.getByRole("button", { name: "Extend from this thought" }).click();
@@ -112,11 +147,11 @@ for (const viewport of [
     if (viewport.name === "laptop") {
       await page.locator('[data-chrome-control="appearance"]').click();
       await expect(page.locator(".matter-document")).toHaveAttribute("data-canvas-theme", "dark");
-      await expect(ruling).toHaveCSS("background-color", "rgba(240, 242, 243, 0.09)");
+      await expect(ruling).toHaveCSS("background-color", "rgba(240, 242, 243, 0.14)");
       await rootText.hover();
       await expect(lens).toBeVisible();
       await expect(lens).toHaveCSS("color", "rgb(243, 244, 241)");
-      expect(await lens.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(12px)");
+      expect(await lens.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(20px)");
       await page.locator('[data-chrome-control="fx"]').click();
       await expect(ruling).not.toHaveAttribute("data-active", "true");
       await expect(ruling).toHaveCSS("opacity", "0");
@@ -128,6 +163,9 @@ for (const viewport of [
 }
 
 test("the action lens is hoverable across its clear gap and yields to pan and chrome overlays", async ({ page }) => {
+  await page.addInitScript(({ key }) => {
+    localStorage.setItem(key, JSON.stringify({ version: 1, language: "zh-CN", leafFx: false, appearance: "light" }));
+  }, { key: PREFERENCES_KEY });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -149,6 +187,18 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
     .getByRole("button", { name: "Canvas pan" });
   await pan.click();
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
+  const beforePan = await rulingCameraReceipt(page);
+  const paper = await page.locator(".matter-document").boundingBox();
+  if (paper === null) throw new Error("paper must be measurable");
+  await page.mouse.move(paper.x + paper.width * .46, paper.y + paper.height * .7);
+  await page.mouse.down();
+  await page.mouse.move(paper.x + paper.width * .46 + 64, paper.y + paper.height * .7 + 38);
+  await page.mouse.up();
+  const afterPan = await rulingCameraReceipt(page);
+  expect(afterPan.viewportX - beforePan.viewportX).toBeCloseTo(64, 0);
+  expect(afterPan.viewportY - beforePan.viewportY).toBeCloseTo(38, 0);
+  expect(afterPan.originX - beforePan.originX).toBeCloseTo(afterPan.viewportX - beforePan.viewportX, 1);
+  expect(afterPan.originY - beforePan.originY).toBeCloseTo(afterPan.viewportY - beforePan.viewportY, 1);
   await page.getByRole("button", { name: "Exit canvas pan" }).click();
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
   await rootText.hover();
@@ -180,9 +230,9 @@ test("the action lens has one direct keyboard path and restores the thought focu
   await expect(lens).toBeVisible();
   await rootText.press("ArrowRight");
   await expect(branch).toBeFocused();
-  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowRight");
   await expect(focus).toBeFocused();
-  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowLeft");
   await expect(branch).toBeFocused();
   await page.keyboard.press("End");
   await expect(focus).toBeFocused();
@@ -226,7 +276,7 @@ test.describe("coarse pointer action lens", () => {
     expect(await lens.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
-    })).toEqual({ width: 58, height: 110 });
+    })).toEqual({ width: 144, height: 82 });
     expect(await lens.locator("button").evaluateAll((buttons) => buttons.every((button) => {
       const rect = button.getBoundingClientRect();
       return Math.round(rect.width) === 48 && Math.round(rect.height) === 48;
@@ -270,6 +320,21 @@ async function noLensCollision(page: Page): Promise<boolean> {
       lensRect.top >= paperRect.top + 12 && lensRect.bottom <= paperRect.bottom - 12 &&
       !overlaps(text) && !overlaps(rail) && !overlaps(guidance);
   }, ROOT_ID);
+}
+
+async function rulingCameraReceipt(page: Page) {
+  return page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>("main.matter-shell");
+    const ruling = document.querySelector<HTMLElement>("[data-canvas-ruling]");
+    if (shell === null || ruling === null) throw new Error("camera receipt requires shell and ruling");
+    const style = getComputedStyle(ruling);
+    return {
+      originX: Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-x")),
+      originY: Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-y")),
+      viewportX: Number.parseFloat(shell.dataset.viewportX ?? "NaN"),
+      viewportY: Number.parseFloat(shell.dataset.viewportY ?? "NaN"),
+    };
+  });
 }
 
 function nearestGapPoint(

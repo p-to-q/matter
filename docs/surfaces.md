@@ -52,9 +52,9 @@ canvas fold state. Search is a flat result view whose rows carry ancestry paths.
 The tree shadow is the supplied decorative asset inside the paper, never document state.
 Turning that atmosphere off reveals the paper's structural ruling rather than a
 blank canvas. The ruling follows the current derived column rhythm only as a
-visual orientation aid: it is fixed to the paper, begins around the root growth
-band, extends rightward, and cannot become a coordinate, snap target, or second
-layout authority.
+visual orientation aid: its repeated phase follows the transient pan/zoom camera
+while the actual material widths, gaps, and derived boxes remain unchanged. It
+cannot become a coordinate, snap target, or second layout authority.
 `app/icon.svg` is explicitly provisional and is not the product mark: it draws
 the same rooted figure the material index draws, on ink and paper only, sized so
 it survives 16 px. `app/apple-icon.tsx` renders that same figure full-bleed at
@@ -79,10 +79,11 @@ The right editing island exposes exactly Voice → Lasso → Branch → Move →
 Redo remains available through the platform keyboard conventions
 `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`; it is not a second visible rail tool.
 Focus and fold remain navigation capabilities but have no first-release fixed-rail
-presenter. A single local action lens may expose Branch and Focus for the precise
-hovered or keyboard-focused passage, or Show all in focus view. The disclosure
-control in the left material outline remains a separate file-tree affordance.
-The lens is transient rendering state and never mounts one control set per node.
+presenter. One upper-left frosted local action field may expose Branch and Focus
+for the precise hovered or keyboard-focused passage, or Show all in focus view.
+Its field and actions arrive in the same reveal. The disclosure control in the
+left material outline remains a separate file-tree affordance. The field is
+transient rendering state and never mounts one control set per node.
 
 The paper corner system is presentation state only. About, pre-release pricing,
 privacy and terms are static information rather than a support agent. Ask Matter

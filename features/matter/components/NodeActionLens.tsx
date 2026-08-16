@@ -282,7 +282,7 @@ export function NodeActionLens({
       restoreTargetFocus();
       return;
     }
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
     if (buttons.length === 0) return;
     event.preventDefault();
@@ -291,7 +291,7 @@ export function NodeActionLens({
       ? 0
       : event.key === "End"
         ? buttons.length - 1
-        : event.key === "ArrowDown"
+        : event.key === "ArrowDown" || event.key === "ArrowRight"
           ? (currentIndex + 1) % buttons.length
           : (currentIndex - 1 + buttons.length) % buttons.length;
     buttons[nextIndex]?.focus();
@@ -319,7 +319,7 @@ export function NodeActionLens({
       }}
       ref={lensRef}
       role="toolbar"
-      aria-orientation="vertical"
+      aria-orientation="horizontal"
       style={{ left: position.left, top: position.top }}
     >
       {tools.map((tool, index) => (

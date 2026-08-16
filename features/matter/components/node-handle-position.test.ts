@@ -8,7 +8,7 @@ const rect = (left: number, top: number, width: number, height: number) => ({
 describe("projectNodeHandlePosition", () => {
   const documentRect = rect(8, 66, 304, 646);
 
-  it("chooses a clear adjacent side within a compact canvas", () => {
+  it("places the compact action field above the material's left edge", () => {
     expect(projectNodeHandlePosition({
       largeTargets: true,
       documentRect,
@@ -16,10 +16,10 @@ describe("projectNodeHandlePosition", () => {
       railRect: rect(270, 312, 34, 300),
       textRect: rect(72, 264, 120, 62),
       toolCount: 2,
-    })).toEqual({ left: 204, top: 254 });
+    })).toEqual({ left: 54, top: 168 });
   });
 
-  it("uses a third clear position instead of clamping controls over full-width material", () => {
+  it("keeps a full-width passage's field inside the paper inset", () => {
     expect(projectNodeHandlePosition({
       largeTargets: true,
       documentRect,
@@ -27,7 +27,7 @@ describe("projectNodeHandlePosition", () => {
       railRect: rect(242, 312, 62, 300),
       textRect: rect(20, 264, 272, 62),
       toolCount: 2,
-    })).toEqual({ left: 234, top: 142 });
+    })).toEqual({ left: 20, top: 168 });
   });
 
   it("returns null when no side or third position avoids material and guidance", () => {
@@ -41,7 +41,7 @@ describe("projectNodeHandlePosition", () => {
     })).toBeNull();
   });
 
-  it("keeps the lens beside the upper right of a short ink line", () => {
+  it("keeps the field above-left of a short ink line", () => {
     expect(projectNodeHandlePosition({
       largeTargets: false,
       documentRect: rect(0, 0, 900, 700),
@@ -49,7 +49,7 @@ describe("projectNodeHandlePosition", () => {
       railRect: rect(820, 200, 60, 300),
       textRect: rect(300, 240, 156, 32),
       toolCount: 2,
-    })).toEqual({ left: 468, top: 230 });
+    })).toEqual({ left: 282, top: 148 });
   });
 
   it("rejects an above placement inside the paper inset and falls below", () => {
@@ -58,9 +58,9 @@ describe("projectNodeHandlePosition", () => {
       documentRect: rect(0, 0, 500, 500),
       guidanceRect: null,
       railRect: null,
-      textRect: rect(20, 119, 460, 20),
+      textRect: rect(20, 90, 460, 20),
       toolCount: 2,
-    })).toEqual({ left: 426, top: 151 });
+    })).toEqual({ left: 12, top: 124 });
   });
 
   it("uses the safe above placement when a wide line is near the bottom edge", () => {
@@ -71,6 +71,6 @@ describe("projectNodeHandlePosition", () => {
       railRect: null,
       textRect: rect(20, 440, 460, 20),
       toolCount: 2,
-    })).toEqual({ left: 426, top: 326 });
+    })).toEqual({ left: 12, top: 348 });
   });
 });

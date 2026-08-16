@@ -39,6 +39,42 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.33
+
+Preview.33 corrects the auxiliary canvas layer without moving material. The
+solid one-pixel ruling is now legible across the full paper and its repeated
+phase and scale follow transient pan/zoom. Each responsive cell width remains
+exactly the established online column width plus gap (`520 + 116`, `280 + 64`,
+or `236 + 56` px); only the non-authoritative vertical reference rhythm is more
+open. The ruling remains pointer-inert and outside material, history,
+persistence, context, and protocol.
+
+Direct hover, keyboard focus, or coarse selection now reveals one upper-left
+frosted field and all of its currently projected actions in the same frame.
+Full view retains Branch and Focus; focus view retains Show all. The presenter
+still revalidates the active node and revision immediately before dispatch and
+yields to lasso, stretch, pan, wheel motion, node drag, pending work, held
+material, overlays, and unsafe geometry.
+
+```text
+source proof           npm run check: 1,150 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 55 Chromium cases passed, 2
+                       capability-gated cases skipped; focused 7-case ruling/
+                       field matrix passed at light/dark, laptop/narrow,
+                       keyboard, coarse pointer, held context, Pan and 2,000 nodes
+layout proof           browser receipts freeze the online 520/116 and 280/64
+                       column tokens; the ruling adapts to those values and Pan
+                       deltas without changing a thought box
+scale proof            one full-paper ruling and at most one delegated field are
+                       mounted at 2,000 nodes; geometry is pure O(1) per camera
+                       update and creates no per-node controls or measurements
+product boundary       no authored coordinates, snapping, layout refit, local
+                       delete/fold, blank AI nodes, new intents, or new durable/
+                       transmitted state
+```
+
 ## Candidate verification — 0.2.0-preview.32
 
 Preview.32 gives the leaf-off paper a quiet structural rhythm without turning
