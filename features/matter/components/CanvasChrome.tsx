@@ -43,7 +43,10 @@ import {
   sameInquiryContext,
   type InquiryContextPayload,
 } from "../protocol/inquiry-contract";
-import { inquiryContextScopeChanged } from "./inquiry-context-lifecycle";
+import {
+  inquiryContextChanged,
+  inquiryContextScopeChanged,
+} from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
@@ -1013,13 +1016,20 @@ function InquiryBubble({
     }
     const previousContext = contextSnapshotRef.current;
     contextSnapshotRef.current = nextContext;
-    if (!inquiryContextScopeChanged(previousContext, nextContext)) return;
+    if (!inquiryContextChanged(previousContext, nextContext)) return;
     // A parent render may replace this callback without changing the bounded
-    // material it projects. Only an actual scope change may discard a reply.
+    // material it projects. Any real change ends the request in flight, because
+    // its answer would describe material that has moved.
     requestRef.current?.abort();
     requestRef.current = null;
     submittingRef.current = false;
-    dispatch({ type: "scope-changed" });
+    if (inquiryContextScopeChanged(previousContext, nextContext)) {
+      dispatch({ type: "scope-changed" });
+      return;
+    }
+    // Same material, new revision. The record is kept; only the unanswerable
+    // turn settles.
+    dispatch({ type: "settle-pending", outcome: UNREACHABLE });
   }, [context]);
 
   useEffect(() => {
@@ -1067,10 +1077,14 @@ function InquiryBubble({
         appendInquiryRecord(record, answerId, askedAt, question, payload, outcome);
       })
       .catch(() => {
-        if (requestRef.current === request) {
-          dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE });
-          appendInquiryRecord(record, answerId, askedAt, question, payload, UNREACHABLE);
-        }
+        if (requestRef.current !== request) return;
+        dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE });
+        const currentContext = contextRef.current?.();
+        // A late failure is a no-op against material it no longer describes.
+        // The turn still settles on screen, but the durable record must not
+        // gain a completed exchange belonging to a document that has moved.
+        if (currentContext === undefined || !sameInquiryContext(payload, currentContext)) return;
+        appendInquiryRecord(record, answerId, askedAt, question, payload, UNREACHABLE);
       })
       .finally(() => {
         if (requestRef.current === request) {

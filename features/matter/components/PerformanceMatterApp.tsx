@@ -13,9 +13,20 @@ import {
 } from "../runtime/navigation";
 import { RootedMaterial } from "./RootedMaterial";
 import { createAdmissionInteractionState } from "../runtime/admission-interaction";
+import type { AdmissionRepairCommittedChange } from "../store/matter-store";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 
 const performanceTree = createPerformanceThoughtTree();
+
+/**
+ * The product passes a stable store action and a stable presentation snapshot
+ * here. Rebuilding either one per render would break the `CanvasThoughtList`
+ * memo that the shipped renderer relies on, so the harness would measure 2,000
+ * row reconciles that production never performs — and the receipt would report
+ * a cold-start cost the product does not have.
+ */
+const NO_REPAIR_PRESENTATIONS: ReadonlyMap<string, AdmissionRepairCommittedChange> = new Map();
+const admissionState = createAdmissionInteractionState();
 
 type PerformanceNavigationBridge = Readonly<{
   focus: (nodeId: string) => void;
@@ -37,6 +48,12 @@ export function PerformanceMatterApp() {
   );
   const exitFocus = useCallback(() => {
     setNavigation((current) => showFull(performanceTree, current));
+  }, []);
+  const select = useCallback((nodeId: string) => {
+    setNavigation((current) => {
+      const result = selectNode(performanceTree, current, nodeId);
+      return result.ok ? result.navigation : current;
+    });
   }, []);
   const focus = useCallback((nodeId: string) => {
     setNavigation((current) => {
@@ -71,8 +88,8 @@ export function PerformanceMatterApp() {
       canUndo={false}
       canRedo={false}
       admission={{
-        state: createAdmissionInteractionState(),
-        repairPresentations: new Map(),
+        state: admissionState,
+        repairPresentations: NO_REPAIR_PRESENTATIONS,
         start: () => undefined,
         stop: () => undefined,
         cancel: () => undefined,
@@ -96,12 +113,7 @@ export function PerformanceMatterApp() {
       onRenameDocument={() => undefined}
       onClearSelection={() => setNavigation((current) => clearSelection(current))}
       onTransformCommit={() => false}
-      onSelectNode={(nodeId) =>
-        setNavigation((current) => {
-          const result = selectNode(performanceTree, current, nodeId);
-          return result.ok ? result.navigation : current;
-        })
-      }
+      onSelectNode={select}
       onToggleFold={toggle}
       onUndo={() => undefined}
       onRedo={() => undefined}

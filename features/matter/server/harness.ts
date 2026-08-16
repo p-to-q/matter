@@ -179,7 +179,37 @@ export type RunScenarioOptions = Readonly<{
    * but only the caller knows how long anyone is still waiting.
    */
   deadlineCeilingMs?: number;
+  /**
+   * Where a settled fallback is recorded. Defaults to one stdout line, which is
+   * what makes the reason a deployment fact instead of a value only the browser
+   * holding one response can see.
+   */
+  observe?: (observation: ScenarioObservation) => void;
 }>;
+
+/**
+ * One settled fallback, as the deployment sees it. It carries no material, no
+ * prompt, no provider identity, and no credential — only which surface fell
+ * back, why, and how long it waited first.
+ */
+export type ScenarioObservation = Readonly<{
+  scenario: MatterScenarioId;
+  reason: ScenarioFallback;
+  elapsedMs: number;
+}>;
+
+/**
+ * The default sink. `ScenarioFallback` exists so a deployment can tell a cold
+ * provider from a rejected answer, and that distinction is only real if
+ * something outside the response writes it down: when every surface degrades to
+ * its floor at once, each request still looks locally successful, so an outage
+ * is visible only in aggregate.
+ */
+export function recordScenarioFallback(observation: ScenarioObservation): void {
+  console.warn(
+    `matter.scenario ${observation.scenario} ${observation.reason} ${Math.round(observation.elapsedMs)}ms`,
+  );
+}
 
 export async function runScenario<Input, Value>(
   scenario: MatterScenario<Input, Value>,
@@ -190,10 +220,20 @@ export async function runScenario<Input, Value>(
 ): Promise<ScenarioOutcome<Value>> {
   const now = options.now ?? Date.now;
   const limits = options.limits ?? DEFAULT_GOVERNOR_LIMITS;
+  const startedAtMs = now();
+  const observe = options.observe ?? recordScenarioFallback;
+  // Only outcomes that say something about the relay or the governor are
+  // recorded. A surface with no adapter is a configuration fact and would
+  // otherwise log once per request forever; a caller that walked away is a fact
+  // about the caller. Logging either would bury the outage they surround.
+  const settle = <T,>(reason: ScenarioFallback): ScenarioOutcome<T> => {
+    observe({ scenario: scenario.id, reason, elapsedMs: now() - startedAtMs });
+    return fallback(reason);
+  };
   if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
   if (adapter === null) return fallback("MODEL_UNAVAILABLE");
-  if (governor.cooling(now())) return fallback("MODEL_UNAVAILABLE");
-  if (!governor.admit(limits)) return fallback("MODEL_BUSY");
+  if (governor.cooling(now())) return settle("MODEL_UNAVAILABLE");
+  if (!governor.admit(limits)) return settle("MODEL_BUSY");
 
   // The slot is held until the provider promise itself settles, not until this
   // function returns. A provider that ignores the abort keeps its slot, so
@@ -232,7 +272,7 @@ export async function runScenario<Input, Value>(
     boundary?.dispose();
     options.signal?.removeEventListener("abort", cancel);
     if (!options.signal?.aborted) governor.failed(now(), limits);
-    return fallback("MODEL_UNAVAILABLE");
+    return options.signal?.aborted ? fallback("MODEL_UNAVAILABLE") : settle("MODEL_UNAVAILABLE");
   }
 
   try {
@@ -251,7 +291,7 @@ export async function runScenario<Input, Value>(
       // take the whole surface off a live provider for the cooldown, for every
       // person on that instance, while the provider was answering all along.
       governor.succeeded();
-      return fallback("MODEL_REJECTED");
+      return settle("MODEL_REJECTED");
     }
     governor.succeeded();
     return Object.freeze({ ok: true, value: verdict.value });
@@ -259,12 +299,9 @@ export async function runScenario<Input, Value>(
     // An adjudicator that throws is a defect, not a provider failure, but it
     // reaches the person the same way: the floor. Distinguishing them here
     // would only add a code nothing branches on.
-    if (!options.signal?.aborted) governor.failed(now(), limits);
-    return fallback(
-      deadline.signal.aborted && !options.signal?.aborted
-        ? "MODEL_TIMEOUT"
-        : "MODEL_UNAVAILABLE",
-    );
+    if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
+    governor.failed(now(), limits);
+    return settle(deadline.signal.aborted ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
   } finally {
     clearTimeout(timer);
     boundary.dispose();

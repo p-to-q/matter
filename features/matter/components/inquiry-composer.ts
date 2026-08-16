@@ -35,6 +35,7 @@ export type InquiryEvent =
   | Readonly<{ type: "listen-failed"; notice: InquiryVoiceNotice }>
   | Readonly<{ type: "ask" }>
   | Readonly<{ type: "answer"; id: number; outcome: InquiryTurnOutcome }>
+  | Readonly<{ type: "settle-pending"; outcome: InquiryTurnOutcome }>
   | Readonly<{ type: "scope-changed" }>
   | Readonly<{ type: "close" }>;
 
@@ -115,6 +116,19 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
         ...state,
         turns: Object.freeze(state.turns.map((turn) =>
           turn.id === event.id && turn.role === "matter"
+            ? Object.freeze({ ...turn, outcome: event.outcome })
+            : turn,
+        )),
+      });
+    case "settle-pending":
+      // The material moved while a question was in flight. The record keeps the
+      // question — that is what it is for — but the turn must reach a terminal
+      // outcome, or it animates forever and `canSubmitInquiry` blocks every
+      // later question.
+      return freeze({
+        ...state,
+        turns: Object.freeze(state.turns.map((turn) =>
+          turn.role === "matter" && turn.outcome.status === "pending"
             ? Object.freeze({ ...turn, outcome: event.outcome })
             : turn,
         )),

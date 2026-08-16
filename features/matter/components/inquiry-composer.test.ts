@@ -60,6 +60,32 @@ describe("inquiry composer", () => {
     expect(reduceInquiry(state, { type: "scope-changed" })).toEqual(createInquiryState());
   });
 
+  it("keeps the record and settles the pending turn when the material is edited", () => {
+    // The record exists so a person can look back over earlier questions.
+    // Material changing underneath it must not empty it — only leave no turn
+    // animating forever, which would also block every later question.
+    let state = reduceInquiry(createInquiryState(), { type: "type", value: "第一个问题" });
+    state = reduceInquiry(state, { type: "ask" });
+    state = reduceInquiry(state, {
+      type: "answer",
+      id: state.turns.at(-1)!.id,
+      outcome: { status: "answered", text: "第一个回答" },
+    });
+    state = reduceInquiry(state, { type: "type", value: "第二个问题" });
+    state = reduceInquiry(state, { type: "ask" });
+
+    const settled = reduceInquiry(state, {
+      type: "settle-pending",
+      outcome: { status: "unavailable", reason: "UNREACHABLE" },
+    });
+
+    expect(settled.turns).toHaveLength(4);
+    expect(settled.turns[0]).toMatchObject({ role: "person", text: "第一个问题" });
+    expect(settled.turns[1]).toMatchObject({ outcome: { status: "answered", text: "第一个回答" } });
+    expect(settled.turns[3]).toMatchObject({ outcome: { status: "unavailable", reason: "UNREACHABLE" } });
+    expect(canSubmitInquiry(reduceInquiry(settled, { type: "type", value: "第三个问题" }))).toBe(true);
+  });
+
   it("clears a closed inquiry rather than retaining a transient exchange", () => {
     let state = reduceInquiry(createInquiryState(), { type: "type", value: "旧问题" });
     state = reduceInquiry(state, { type: "ask" });

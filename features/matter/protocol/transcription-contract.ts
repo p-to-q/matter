@@ -65,7 +65,12 @@ export function baseAudioMimeType(mimeType: string): string {
 
 export function audioFileExtension(mimeType: string): string | null {
   const base = baseAudioMimeType(mimeType);
-  return AUDIO_EXTENSIONS[base as keyof typeof AUDIO_EXTENSIONS] ?? null;
+  // `Object.hasOwn`, not a bare index: the table inherits from Object.prototype,
+  // so "constructor", "toString" and "valueOf" would otherwise resolve to
+  // inherited members and pass the accepted-type gate on the upload route.
+  return Object.hasOwn(AUDIO_EXTENSIONS, base)
+    ? AUDIO_EXTENSIONS[base as keyof typeof AUDIO_EXTENSIONS]
+    : null;
 }
 
 export function isAcceptedAudioType(mimeType: string): boolean {

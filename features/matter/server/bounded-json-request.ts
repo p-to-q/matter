@@ -52,10 +52,35 @@ export async function withBoundedJsonRequest<T>(
     } catch {
       throw policy.fail("not-json");
     }
-    return await handle(payload, boundary.signal);
+    try {
+      return await handle(payload, boundary.signal);
+    } catch (error) {
+      // The boundary covers `handle` too, but only the body read raises the
+      // policy's own error. Work that observes the signal rejects with a bare
+      // AbortError, which no route recognises, so a deadline reached while the
+      // model was answering was reported as an opaque 500 and the `timed-out`
+      // branch was unreachable in practice. Attribute it here, once, rather
+      // than in every route.
+      //
+      // A caller that disconnected is deliberately left to propagate: nobody is
+      // waiting for the response, and the route contract is that this is the
+      // one case that throws rather than answering.
+      if (
+        boundary.signal.aborted &&
+        isAbortError(error) &&
+        boundedRequestInterruption(boundary.signal) === "timed-out"
+      ) {
+        throw policy.fail("timed-out");
+      }
+      throw error;
+    }
   } finally {
     boundary.dispose();
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
 }
 
 /** Distinguishes a deadline from a disconnect so a route can attribute it. */
