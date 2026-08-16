@@ -48,22 +48,17 @@ actions reveal in the same frame, with Show all as the focus-view projection.
 The material index keeps its active/normal/faint hierarchy while raising the
 two quiet text tiers and its selection and drawer controls to readable text
 and non-text contrast. On narrow paper, the index entry and Matter menu now
-share one right-hand instrument axis and one icon scale. An explicit inquiry selection that
-becomes empty after hold-aside now reaches the existing `NO_MATERIAL` outcome
-without widening to tree scope.
+share one right-hand instrument axis and one icon scale.
 
 Why: a screen-fixed or separately phased ruling stopped reading as one canvas
 during movement. Balanced complete dashes and a transparent joint at every
 crossing keep the texture quiet and deterministic, while the first vertical
 action capsule exposed icons without the local softened field the interaction
-needed. The earlier quiet index tiers fell below readable small-text contrast,
-and rejecting an explicitly selected context after all of its passages became
-held aside made the privacy-preserving fail-narrow request unusable.
+needed. The earlier quiet index tiers fell below readable small-text contrast.
 
 Forecloses: fitting material to decorative lines, persisting camera/grid state,
 mounting a toolbar per node, or letting the auxiliary field become another tool
-catalog or material mutation path. It also forecloses silently widening an
-emptied explicit selection to the remaining working tree.
+catalog or material mutation path.
 
 ## 2026-08-16 — Leaf-off paper exposes structure and one local action lens
 
