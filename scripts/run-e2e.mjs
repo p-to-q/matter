@@ -14,6 +14,7 @@ const executable = process.platform === "win32" ? "npx.cmd" : "npx";
 const releaseRunLock = await acquireE2eRunLock(e2eLockPath);
 let terminator = null;
 let terminate = null;
+let signalTarget = null;
 let executionError = null;
 
 try {
@@ -30,7 +31,8 @@ try {
     env: process.env,
     stdio: "inherit",
   });
-  terminator = createSignalTerminator(createProcessSignalTarget(child));
+  signalTarget = createProcessSignalTarget(child);
+  terminator = createSignalTerminator(signalTarget);
   terminate = (signal) => {
     terminator.request(signal);
   };
@@ -49,6 +51,15 @@ try {
 let cleanupError = null;
 try {
   terminator?.clear();
+  // Playwright owns the web server, but it reaches that server through a
+  // wrapper process, and a hard kill of the wrapper leaves the real server
+  // holding the port. The next run then fails to start and reads as a failed
+  // proof rather than a dirty machine. This runner spawned Playwright as a
+  // detached group leader, so one signal to that group reaps whatever outlived
+  // it — after a pass, a failed assertion, a start-up failure, or an error —
+  // and it is exact rather than a guess, because the group is precisely what
+  // this runner started. Signalling an empty group is already a no-op.
+  signalTarget?.kill("SIGTERM");
   if (terminate !== null) {
     process.off("SIGINT", terminate);
     process.off("SIGTERM", terminate);

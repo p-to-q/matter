@@ -55,6 +55,28 @@ test("a check that cannot fail proves nothing", () => {
   }
 });
 
+test("an aliased import is an edge, not an exemption", () => {
+  // `@/*` resolves to the repository root. While the resolver dropped these,
+  // every rule was a direct path check against a graph that did not contain
+  // them, so an aliased provider import would have passed by being invisible —
+  // and the check would still have printed "no provider leak".
+  const graph = buildRepositoryGraph();
+  const aliasedEdges = [...graph]
+    .filter(([file]) => file.startsWith("app/"))
+    .flatMap(([, targets]) => targets.filter((target) => target.startsWith("features/matter/")));
+  assert.ok(
+    aliasedEdges.length > 0,
+    "app/ reaches features/ only through @/ imports; an empty set means the resolver dropped them again",
+  );
+  assert.ok(
+    findProblems(new Map([
+      ["app/api/turn/route.ts", ["features/matter/server/model-pool.ts"]],
+      ["features/matter/server/model-pool.ts", []],
+    ])).length > 0,
+    "a route reaching the provider module must still be reported",
+  );
+});
+
 test("a test file may reach anywhere, because a proof is not a dependency", () => {
   assert.deepEqual(
     findProblems(new Map([

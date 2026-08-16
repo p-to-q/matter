@@ -180,8 +180,17 @@ function sourceFiles() {
 }
 
 function resolveLocal(file, specifier) {
-  if (!specifier.startsWith(".")) return null;
-  const base = relative(ROOT, resolve(ROOT, dirname(file), specifier)).replaceAll("\\", "/");
+  // `@/*` maps to the repository root through tsconfig paths. Dropping those
+  // edges would leave the graph silently incomplete, and silence is the worst
+  // failure available here: the provider and layering rules are direct path
+  // checks, so an aliased import passes every rule by never appearing at all,
+  // while the console still reports no leak and no cycle.
+  const aliased = specifier.startsWith("@/");
+  if (!aliased && !specifier.startsWith(".")) return null;
+  const target = aliased
+    ? resolve(ROOT, specifier.slice(2))
+    : resolve(ROOT, dirname(file), specifier);
+  const base = relative(ROOT, target).replaceAll("\\", "/");
   for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}.mjs`, `${base}/index.ts`]) {
     try {
       if (statSync(join(ROOT, candidate)).isFile()) return candidate;

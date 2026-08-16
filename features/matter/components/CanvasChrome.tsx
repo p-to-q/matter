@@ -692,6 +692,12 @@ export function CanvasChrome({
     <div
       className={styles.root}
       data-canvas-chrome
+      // The shell's wheel listener is native and attached lower in the tree, so
+      // it runs before React's delegated `onWheel` below and cannot be stopped
+      // by it. Without this attribute the shell claims the wheel while a lasso
+      // is active or the canvas is panning — the two modes Ask Matter is opened
+      // from — and the inquiry record cannot be scrolled by pointer at all.
+      data-canvas-interactive
       data-language={preferences.language}
       data-overlay={overlay ?? "none"}
       data-resolved-appearance={resolvedAppearance}

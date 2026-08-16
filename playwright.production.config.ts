@@ -27,6 +27,10 @@ export default defineConfig({
     },
     url: "http://127.0.0.1:3200/matter",
     reuseExistingServer: false,
+    // SIGTERM, not a hard kill: the command runs the server behind an `npm run`
+    // wrapper, and killing the wrapper outright orphans the server it started,
+    // which then holds the port for every later run.
+    gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
     timeout: 60_000,
   },
 });
