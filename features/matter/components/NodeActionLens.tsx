@@ -111,9 +111,11 @@ export function NodeActionLens({
     const canvas = canvasRef.current;
     const paper = documentRef.current;
     if (canvas === null || paper === null) return;
+    const shell = paper.closest<HTMLElement>(".matter-shell");
     const chrome = paper.querySelector<HTMLElement>("[data-canvas-chrome]");
     const chromeIsSuppressed = () => paper.dataset.canvasModalOpen === "true" ||
-      (chrome?.dataset.overlay !== undefined && chrome.dataset.overlay !== "none");
+      (chrome?.dataset.overlay !== undefined && chrome.dataset.overlay !== "none") ||
+      shell?.dataset.nodeDragging === "true";
 
     const materialTarget = (eventTarget: EventTarget | null) => {
       if (!(eventTarget instanceof Element)) return null;
@@ -181,6 +183,7 @@ export function NodeActionLens({
     syncChromeSuppression();
     chromeObserver.observe(paper, { attributes: true, attributeFilter: ["data-canvas-modal-open"] });
     if (chrome !== null) chromeObserver.observe(chrome, { attributes: true, attributeFilter: ["data-overlay"] });
+    if (shell !== null) chromeObserver.observe(shell, { attributes: true, attributeFilter: ["data-node-dragging"] });
     return () => {
       canvas.removeEventListener("pointerover", pointerOver);
       canvas.removeEventListener("pointerout", pointerOut);
@@ -282,7 +285,7 @@ export function NodeActionLens({
       restoreTargetFocus();
       return;
     }
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
     if (buttons.length === 0) return;
     event.preventDefault();
@@ -291,7 +294,7 @@ export function NodeActionLens({
       ? 0
       : event.key === "End"
         ? buttons.length - 1
-        : event.key === "ArrowDown"
+        : event.key === "ArrowDown" || event.key === "ArrowRight"
           ? (currentIndex + 1) % buttons.length
           : (currentIndex - 1 + buttons.length) % buttons.length;
     buttons[nextIndex]?.focus();
@@ -319,7 +322,7 @@ export function NodeActionLens({
       }}
       ref={lensRef}
       role="toolbar"
-      aria-orientation="vertical"
+      aria-orientation="horizontal"
       style={{ left: position.left, top: position.top }}
     >
       {tools.map((tool, index) => (

@@ -55,8 +55,8 @@ export type CanvasViewportEvent =
   | Readonly<{ type: "lost-pointer-capture"; pointerId: number }>
   | Readonly<{
       type: "wheel";
-      clientX: number;
-      clientY: number;
+      surfaceX: number;
+      surfaceY: number;
       deltaX: number;
       deltaY: number;
       deltaMode: 0 | 1 | 2;
@@ -284,7 +284,7 @@ export function reduceCanvasViewport(
     }
 
     case "wheel": {
-      if (!validPoint(event.clientX, event.clientY)) {
+      if (!validPoint(event.surfaceX, event.surfaceY)) {
         return failure("INVALID_POINTER_COORDINATE");
       }
       if (!isFiniteNumber(event.deltaX) || !isFiniteNumber(event.deltaY)) {
@@ -306,8 +306,8 @@ export function reduceCanvasViewport(
           ),
         );
         const ratio = zoom / state.zoom;
-        const x = event.clientX - (event.clientX - state.x) * ratio;
-        const y = event.clientY - (event.clientY - state.y) * ratio;
+        const x = event.surfaceX - (event.surfaceX - state.x) * ratio;
+        const y = event.surfaceY - (event.surfaceY - state.y) * ratio;
         if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(zoom)) {
           return failure("VIEWPORT_OVERFLOW");
         }

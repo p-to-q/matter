@@ -78,6 +78,9 @@ Navigation labels remain a local presentation exception: they may name one node
 from its own text, but never use it as model context or affect an inquiry. An
 explicit lasso is still the narrow inquiry context, but it may only address
 active passages; it cannot override a held-aside decision.
+If those passages become held aside between selection and submission, the
+explicit selection stays authoritative but empty. Ask Matter returns the
+no-material outcome rather than widening to the remaining working tree.
 
 The browser sends only the resulting bounded material payload to `/api/inquiry`.
 It sends neither the held-aside ids nor their count, so the server cannot infer

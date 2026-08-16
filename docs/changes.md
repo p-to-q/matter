@@ -17,6 +17,49 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-17 — E2E output has one exact owner
+
+Changed: the browser-proof wrapper now records one canonical process-and-token
+owner and removes a lock only when both its owner record and inode still match.
+A dead owner fails closed for explicit cleanup instead of starting an automatic
+stale-lock transaction. Cleanup errors remain visible without replacing the
+browser process's failure result.
+
+Why: clearing a stale generated directory is safe only when no second runner can
+acquire it at the same time. A PID prefix, automatic stale deletion, or
+unconditional release could make two proofs share one build output; the smaller
+fail-closed rule removes that race without creating another locking subsystem.
+
+Forecloses: permissive lock metadata, automatic recovery of an ambiguous owner,
+concurrent mutation of `.next-e2e`, or a cleanup fault making a failed browser
+run appear to have failed for another reason.
+
+## 2026-08-17 — Canvas ruling shares the material camera
+
+Changed: the leaf-off ruling is now one full-paper render layer whose repeated
+cell origin, span, dash rhythm, and open intersections move and scale with the
+same camera as material. Its cell width remains exactly the existing online
+column width plus gap; the taller vertical rhythm and custom `1.4px` filled
+dashes use softened Bézier ends rather than a native round stroke, adding
+orientation without changing any material box. Direct hover
+or keyboard focus now reveals one frosted field that prefers the passage's
+upper-left edge and falls back to another collision-safe side. Its Branch/Focus
+actions reveal in the same frame, with Show all as the focus-view projection.
+The material index keeps its active/normal/faint hierarchy while raising the
+two quiet text tiers and its selection and drawer controls to readable text
+and non-text contrast. On narrow paper, the index entry and Matter menu now
+share one right-hand instrument axis and one icon scale.
+
+Why: a screen-fixed or separately phased ruling stopped reading as one canvas
+during movement. Balanced complete dashes and a transparent joint at every
+crossing keep the texture quiet and deterministic, while the first vertical
+action capsule exposed icons without the local softened field the interaction
+needed. The earlier quiet index tiers fell below readable small-text contrast.
+
+Forecloses: fitting material to decorative lines, persisting camera/grid state,
+mounting a toolbar per node, or letting the auxiliary field become another tool
+catalog or material mutation path.
+
 ## 2026-08-16 — Leaf-off paper exposes structure and one local action lens
 
 Changed: turning leaf atmosphere off now reveals one low-contrast, solid-line

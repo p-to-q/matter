@@ -39,6 +39,58 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.33
+
+Preview.33 corrects the auxiliary canvas layer without moving material. The
+dashed ruling is now one SVG world texture whose repeated origin, cells, visible
+dash/gap rhythm, and open crossings move and scale with the same Pan/zoom camera
+as material. Each responsive cell width remains exactly the established online
+column width plus gap (`520 + 116`, `280 + 64`, or `236 + 56` px); only the
+non-authoritative vertical reference rhythm is more open. At `1x`, both axes
+show a nominal `6px / 10px` rhythm with `3px` of visible clearance on each side
+of every crossing. Each segment is a custom filled Bézier silhouette with
+softened ends and a screen-space `1.4px` thickness, not a native round stroke.
+The ruling remains pointer-inert and outside material, history,
+persistence, context, and protocol.
+Its single `300ms` opacity breath does not move geometry and becomes a `1ms`
+settle under reduced-motion preference.
+
+Direct hover, keyboard focus, or coarse selection now reveals one frosted field,
+preferring the passage's upper-left edge with collision-safe fallbacks, and all
+of its currently projected actions in the same frame.
+Full view retains Branch and Focus; focus view retains Show all. The presenter
+still revalidates the active node and revision immediately before dispatch and
+yields to lasso, stretch, pan, wheel motion, node drag, pending work, held
+material, overlays, and unsafe geometry.
+
+The same release audit keeps the material index quiet without making actionable
+small text illegible: normal copy uses a `72%` ink tier and faint or held-aside
+copy uses `66%`, active branches remain full ink, and selection and drawer
+controls retain a non-text contrast floor. The narrow index entry shares the
+Matter menu's right-hand axis and `20px` mark. If a lasso selection is
+held aside before submission, its explicit selection scope remains empty and
+returns `NO_MATERIAL`; the request never widens to the remaining tree.
+
+```text
+source proof           npm run check: 1,160 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 57 Chromium cases passed, 2
+                       capability-gated cases skipped; focused 9-case ruling/
+                       field matrix passed at light/dark, laptop/narrow,
+                       keyboard, coarse pointer, held context, Pan and 2,000 nodes
+layout proof           browser receipts freeze the online 520/116 and 280/64
+                       column tokens; Pan/zoom move ruling and material through
+                       one camera while every crossing retains its open joint
+scale proof            one full-paper ruling and at most one delegated field are
+                       mounted at 2,000 nodes; Pan updates placement in O(1),
+                       while zoom rebuilds only two paths bounded to 128 dashes
+                       per axis; no per-node controls or measurements are created
+product boundary       no authored coordinates, snapping, layout refit, local
+                       delete/fold, blank AI nodes, new intents, or new durable/
+                       transmitted state
+```
+
 ## Candidate verification — 0.2.0-preview.32
 
 Preview.32 gives the leaf-off paper a quiet structural rhythm without turning

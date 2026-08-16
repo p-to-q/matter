@@ -227,8 +227,30 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
 
   const paper = page.getByRole("region", { name: "Thought material" });
   const trigger = page.getByRole("button", { name: "打开 Matter 菜单" });
+  const indexTrigger = page.getByRole("button", { name: "Show material files" });
   await expect(page.getByRole("button", { name: "关于", exact: true })).toBeHidden();
   await expect(trigger).toBeVisible();
+  await expect(indexTrigger).toBeVisible();
+
+  const indexTriggerBox = await indexTrigger.boundingBox();
+  const menuTriggerBox = await trigger.boundingBox();
+  const indexIconBox = await indexTrigger.locator("svg").boundingBox();
+  const menuIconBox = await trigger.locator("svg").boundingBox();
+  if (indexTriggerBox === null || menuTriggerBox === null || indexIconBox === null || menuIconBox === null) {
+    throw new Error("narrow instrument geometry is not visible");
+  }
+  expect(indexTriggerBox.width).toBeCloseTo(52, 1);
+  expect(menuTriggerBox.width).toBeCloseTo(52, 1);
+  expect(indexTriggerBox.x + indexTriggerBox.width)
+    .toBeCloseTo(menuTriggerBox.x + menuTriggerBox.width, 1);
+  expect(menuTriggerBox.y - indexTriggerBox.y - indexTriggerBox.height)
+    .toBeGreaterThanOrEqual(5);
+  expect(menuTriggerBox.y - indexTriggerBox.y - indexTriggerBox.height)
+    .toBeLessThanOrEqual(8);
+  expect(indexIconBox.width).toBeCloseTo(20, 1);
+  expect(indexIconBox.height).toBeCloseTo(20, 1);
+  expect(menuIconBox.width).toBeCloseTo(20, 1);
+  expect(menuIconBox.height).toBeCloseTo(20, 1);
 
   await trigger.click();
   const sheet = page.getByRole("dialog", { name: "Matter" });

@@ -1,5 +1,9 @@
+import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  acquireE2eRunLock,
   CANONICAL_NEXT_ROUTE_REFERENCE,
   CANONICAL_NEXT_ROOT_PARAMS_REFERENCE,
   createProcessSignalTarget,
@@ -8,6 +12,95 @@ import {
 } from "./e2e-runner.mjs";
 
 describe("e2e runner cleanup", () => {
+  it("serializes generated output ownership and fails closed on a stale owner", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matter-e2e-lock-"));
+    const lockPath = join(directory, ".next-e2e.lock");
+    try {
+      const release = await acquireE2eRunLock(lockPath);
+      await expect(acquireE2eRunLock(lockPath)).rejects.toThrow(
+        `Matter E2E is already running under process ${process.pid}.`,
+      );
+      await release();
+      await release();
+
+      for (const invalidRecord of [
+        "not-a-process\n",
+        "424242junk\n",
+        "424242:short\n",
+        " 424242:stale_owner_token_123\n",
+        "424242:stale_owner_token_123",
+        "9007199254740992:stale_owner_token_123\n",
+      ]) {
+        await writeFile(lockPath, invalidRecord);
+        await expect(acquireE2eRunLock(lockPath)).rejects.toThrow(
+          "Matter E2E lock exists without valid owner metadata.",
+        );
+        await rm(lockPath, { force: true });
+      }
+
+      const staleRecord = "424242:stale_owner_token_123\n";
+      await writeFile(lockPath, staleRecord);
+      const missingOwner = () => {
+        const error = new Error("missing process");
+        error.code = "ESRCH";
+        throw error;
+      };
+      await expect(acquireE2eRunLock(
+        lockPath,
+        process.pid,
+        missingOwner,
+        () => "replacement_owner_token_123",
+      )).rejects.toThrow(
+        "Matter E2E found a stale lock from process 424242; remove it before retrying.",
+      );
+      await expect(readFile(lockPath, "utf8")).resolves.toBe(staleRecord);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps a same-inode lock whose owner token changed before release", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matter-e2e-lock-token-"));
+    const lockPath = join(directory, ".next-e2e.lock");
+    try {
+      const release = await acquireE2eRunLock(
+        lockPath,
+        111111,
+        () => true,
+        () => "original_owner_token_123",
+      );
+      await writeFile(lockPath, "111111:altered_owner_token_123\n");
+      await release();
+      await expect(readFile(lockPath, "utf8")).resolves.toBe(
+        "111111:altered_owner_token_123\n",
+      );
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps a different-inode lock even when its owner record is identical", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matter-e2e-lock-inode-"));
+    const lockPath = join(directory, ".next-e2e.lock");
+    const replacementPath = join(directory, "replacement.lock");
+    const ownerRecord = "111111:original_owner_token_123\n";
+    try {
+      const release = await acquireE2eRunLock(
+        lockPath,
+        111111,
+        () => true,
+        () => "original_owner_token_123",
+      );
+      await writeFile(replacementPath, ownerRecord);
+      await rm(lockPath);
+      await rename(replacementPath, lockPath);
+      await release();
+      await expect(readFile(lockPath, "utf8")).resolves.toBe(ownerRecord);
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
   it.each([
     'import "./.next-e2e/dev/types/routes.d.ts";',
     'import "./.next-e2e/types/routes.d.ts";',

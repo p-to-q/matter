@@ -83,6 +83,24 @@ describe("inquiry route", () => {
     expect(JSON.stringify(payload)).not.toContain(secret);
   });
 
+  it("keeps an emptied explicit selection narrow instead of rejecting or widening it", async () => {
+    const response = await post(body({
+      context: {
+        ...body().context,
+        scope: "selection",
+        lineage: [],
+      },
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      basis: { scope: "selection" },
+      status: "unavailable",
+      reason: "NO_MATERIAL",
+      receipt: { scope: "selection", lineageNodes: 0, thoughtCount: 7 },
+    });
+  });
+
   it("rejects invalid shape, media type, and declared oversize", async () => {
     await expect(post(body({ question: " " })).then((response) => response.status)).resolves.toBe(400);
     await expect(post(body({ locale: "en-GB" })).then((response) => response.status)).resolves.toBe(400);

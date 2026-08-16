@@ -15,10 +15,14 @@ import type { ToolIntent } from "../tools/model";
 import { ToolRail } from "./ToolRail";
 import { PaperTexture } from "./PaperTexture";
 import {
-  INITIAL_CANVAS_VIEWPORT,
   reduceCanvasViewport,
   type CanvasPointerType,
+  type CanvasViewportState,
 } from "../interaction/canvas-viewport";
+import {
+  createCanvasNavigationSession,
+  reconcileCanvasNavigationSession,
+} from "../interaction/canvas-navigation-session";
 import type { AdmissionController } from "../interaction/use-admission";
 import type { AdmissionAnchor as InteractionAdmissionAnchor } from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
@@ -289,10 +293,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const stretchPresentationDamageRef = useRef<PresentationDamage | null>(null);
   const [admissionFeedbackHeight, setAdmissionFeedbackHeight] = useState(0);
   const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
-  const [viewport, setViewport] = useState(INITIAL_CANVAS_VIEWPORT);
-  const [canvasMode, setCanvasMode] = useState<"material" | "pan">("material");
+  const [canvasNavigationState, setCanvasNavigationState] = useState(
+    () => createCanvasNavigationSession(props.documentEpoch),
+  );
+  const canvasNavigation = reconcileCanvasNavigationSession(
+    canvasNavigationState,
+    props.documentEpoch,
+  );
+  if (canvasNavigation !== canvasNavigationState) {
+    // Reconcile before children can observe a camera from another document.
+    setCanvasNavigationState(canvasNavigation);
+  }
+  const { canvasMode, viewport, wheelMotionActive } = canvasNavigation;
+  const setViewport = useCallback((update: (current: CanvasViewportState) => CanvasViewportState) => {
+    setCanvasNavigationState((current) => {
+      if (current.documentEpoch !== props.documentEpoch) return current;
+      const next = update(current.viewport);
+      return next === current.viewport ? current : Object.freeze({ ...current, viewport: next });
+    });
+  }, [props.documentEpoch]);
+  const setCanvasMode = useCallback((canvasMode: "material" | "pan") => {
+    setCanvasNavigationState((current) => current.documentEpoch !== props.documentEpoch || current.canvasMode === canvasMode
+      ? current
+      : Object.freeze({ ...current, canvasMode }));
+  }, [props.documentEpoch]);
+  const setWheelMotionActive = useCallback((wheelMotionActive: boolean) => {
+    setCanvasNavigationState((current) =>
+      current.documentEpoch !== props.documentEpoch || current.wheelMotionActive === wheelMotionActive
+        ? current
+        : Object.freeze({ ...current, wheelMotionActive }));
+  }, [props.documentEpoch]);
   const voiceReadiness = useVoiceReadiness();
-  const [wheelMotionActive, setWheelMotionActive] = useState(false);
   const wheelMotionTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
   const pointerOriginNodeRef = useRef<string | null>(null);
@@ -918,7 +949,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const retry = measurementRetryRef.current;
     if (retry.frame !== null) cancelAnimationFrame(retry.frame);
     if (wheelMotionTimerRef.current !== null) window.clearTimeout(wheelMotionTimerRef.current);
-  }, []);
+  }, [props.documentEpoch]);
 
   const worldStyle = {
     transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.zoom})`,
@@ -952,6 +983,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
       if (canvasMode !== "pan") return;
       event.preventDefault();
+      const paper = documentRef.current;
+      if (paper === null) return;
+      const paperRect = paper.getBoundingClientRect();
       // Wheel navigation has no persistent gesture state, so give atmosphere
       // one short pulse and let repeated events extend it without polling.
       setWheelMotionActive(true);
@@ -963,8 +997,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       setViewport((current) => {
         const result = reduceCanvasViewport(current, {
           type: "wheel",
-          clientX: event.clientX,
-          clientY: event.clientY,
+          surfaceX: event.clientX - paperRect.left - paper.clientLeft,
+          surfaceY: event.clientY - paperRect.top - paper.clientTop,
           deltaX: event.deltaX,
           deltaY: event.deltaY,
           deltaMode: normalizeDeltaMode(event.deltaMode),
@@ -977,7 +1011,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // field gesture, so this boundary must be explicitly non-passive.
     shell.addEventListener("wheel", handleWheel, { passive: false });
     return () => shell.removeEventListener("wheel", handleWheel);
-  }, [canvasMode, lasso.active]);
+  }, [canvasMode, lasso.active, setViewport, setWheelMotionActive]);
 
   return (
     <main
@@ -1268,7 +1302,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       <ToolRail
         interactionPending={interactionPending}
         lassoActive={lasso.active}
-        lassoAvailable={tree.rootId !== null && (lasso.active || activeLayout !== null)}
+        lassoAvailable={workingContext.activeNodeIds.size > 0 && (lasso.active || activeLayout !== null)}
         onLasso={() => {
           if (lasso.active) {
             lasso.deactivate();
@@ -1351,7 +1385,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           enabled={canvasPreferences.preferences.leafFx}
           navigationActive={wheelMotionActive || viewport.gesture?.dragging === true}
         />
-        <CanvasRuling active={!canvasPreferences.preferences.leafFx} />
+        <CanvasRuling
+          active={!canvasPreferences.preferences.leafFx}
+          viewport={{ x: viewport.x, y: viewport.y, zoom: viewport.zoom }}
+        />
         {lasso.selections.length > 1 ? (
           <div
             aria-live="polite"

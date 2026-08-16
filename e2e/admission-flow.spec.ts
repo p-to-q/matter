@@ -3,6 +3,10 @@ import { expect, test } from "@playwright/test";
 const parentId = "thought_fixture_imagined_lives";
 const heardTranscript = "呃，我觉得我觉得这个方案可以但是它的实现事件比预期长。";
 const repairedTranscript = "我觉得这个方案可以，但是它的实现时间比预期长。";
+// This is a functional boundary, not the performance receipt. Keep it below
+// the 12 s repair lease while allowing a loaded parallel browser to schedule
+// the otherwise immediate fixture round trip.
+const FIXTURE_REPAIR_SETTLE_TIMEOUT_MS = 5_000;
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
@@ -92,7 +96,7 @@ for (const viewport of [
     // the first canonical material for the complete visibility floor.
     await expect(heard).toHaveCount(1);
     const rawSeenAt = await page.evaluate(() => performance.now());
-    await expect(admitted).toHaveCount(1, { timeout: 2_000 });
+    await expect(admitted).toHaveCount(1, { timeout: FIXTURE_REPAIR_SETTLE_TIMEOUT_MS });
     await expect(heard).toHaveCount(0);
     const reveal = admitted.locator(".repair-text");
     await expect(reveal).toHaveAttribute("data-repair-reveal-count", /[1-9]\d*/u);
@@ -223,7 +227,7 @@ test("reduced motion presents repaired text whole without a reveal sequence", as
 
   const admitted = page.locator('[data-thought-id^="thought_"]')
     .filter({ hasText: repairedTranscript });
-  await expect(admitted).toHaveCount(1, { timeout: 2_000 });
+  await expect(admitted).toHaveCount(1, { timeout: FIXTURE_REPAIR_SETTLE_TIMEOUT_MS });
   const changed = admitted.locator('[data-repair-part="changed"]');
   await expect(changed.first()).toBeAttached();
   expect(await changed.evaluateAll((elements) => elements.every((element) => {

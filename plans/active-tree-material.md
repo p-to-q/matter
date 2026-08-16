@@ -188,31 +188,51 @@ Non-goals:  a second durable document visibility model, a hidden-retrieval
 
 ### Active sub-slice — structural paper and local node actions
 
-State: Proven.
+State: Proven after corrected product evidence.
 
 ```text
-Outcome:    turning leaf FX off reveals a quiet right-growing structural ruling;
-            hovering or keyboard-focusing active material reveals one small
-            adjacent lens for Branch and Focus, or Show all in focus view.
-Boundary:   one paper-owned decorative ruling, one render-edge action presenter,
+Outcome:    turning leaf FX off reveals a legible, repeating structural ruling
+            that moves and scales with material through one Pan/zoom camera;
+            hovering or keyboard-focusing
+            active material reveals one frosted action field, preferring the
+            passage's upper-left edge with collision-safe fallbacks, whose
+            Branch and Focus actions arrive with the blur, or Show all in focus.
+Boundary:   one world-derived render-only ruling, one render-edge action presenter,
             the existing pure tool projection, and collision-safe DOM measurement.
 Invariants: tree structure remains the only layout authority; ruling and lens
             never enter material, history, persistence, context, or protocol;
             no per-node action controls mount; precise gestures and pending work win.
-Proof:      pure collision geometry; wide/narrow and light/dark browser receipts;
-            hover, keyboard, coarse-pointer, pan, lasso, drag, modal and focus
-            state matrix; one-lens DOM bound and the existing 2,000-node gate.
-Non-goals:  infinite authored coordinates, snapping, decorative card tiles,
+Proof:      pure ruling and collision geometry; wide/narrow and light/dark browser
+            receipts; shared Pan/zoom phase, open crossings, hover, keyboard,
+            coarse-pointer, lasso,
+            drag, modal and focus state matrix; one-lens DOM bound and the
+            existing 2,000-node gate.
+Non-goals:  authored coordinates, snapping, decorative card tiles,
             local delete/fold, blank AI nodes, or changing the five-slot rail.
 ```
 
-Build receipt, 2026-08-16: one paper-fixed ruling and one delegated action lens
-now cover light/dark, laptop/narrow, fine/coarse pointer, keyboard, canvas chrome
-overlay, pan, lasso, held-context, revision and 2,000-node boundaries. The lens
-measures the first rendered text line and revalidates its intent immediately
-before dispatch. Full repository and Chromium suites pass; the production
-2,000-node diagnostic retains its separately recorded raw-long-task optimization
-gate without adding per-node controls or another state owner.
+Correction evidence, 2026-08-16: the faint and independently phased ruling did
+not read as one canvas with material. The final product evidence establishes a
+single world texture: cell, dash, gap, and open-joint clearance share the
+material camera, while only the quiet `1.4px` filled thickness stays screen-sized.
+The vertical action capsule also omitted the reference's simultaneous local blur
+field. This reopens presentation and camera projection only; tree layout,
+intents, history, working-context authority, and the constant-count DOM boundary
+stay frozen. One protocol parser correction accepts an explicitly selected
+context that becomes empty after hold-aside and returns `NO_MATERIAL`; it adds no
+field, material, or fallback scope.
+
+Build receipt, 2026-08-17: one stateless pure projection derives the SVG pattern
+from responsive layout tokens and the current camera. Each cell balances full
+custom Bézier-softened dashes between deterministic transparent crossings, normalizes phase for
+large Pan values, and preserves the established online column width and gap at
+every breakpoint.
+The collision-safe frosted field and its projected actions reveal together and retain
+the existing revalidation and suppression paths. Full source proof passes with
+1,160 Vitest cases passed, 2 skipped, and 48 Node checks; the 59 Chromium cases
+execute as 57 passed and 2 capability-gated skips, including
+Pan deltas, pointer-local zoom, keyboard, coarse pointer, held context, narrow
+geometry, and the one-field/one-ruling 2,000-node bound.
 
 Execution order is deliberately narrow:
 

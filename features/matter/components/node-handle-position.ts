@@ -26,11 +26,11 @@ type Input = Readonly<{
 export function projectNodeHandlePosition(input: Input): NodeHandlePosition | null {
   if (!Number.isInteger(input.toolCount) || input.toolCount < 1) return null;
   const button = input.largeTargets ? 48 : 44;
-  const gap = 4;
-  // The border-box reserves 4px padding and a 1px border on both sides.
-  const chrome = 10;
-  const width = button + chrome;
-  const height = input.toolCount * button + Math.max(0, input.toolCount - 1) * gap + chrome;
+  const gap = 6;
+  // Horizontal padding is deliberately wider: the field is perceived before
+  // either icon, instead of reading as a tight generic toolbar.
+  const width = input.toolCount * button + Math.max(0, input.toolCount - 1) * gap + 42;
+  const height = button + 34;
   const inset = 12;
   const minimumLeft = input.documentRect.left + inset;
   const maximumLeft = input.documentRect.right - inset - width;
@@ -41,17 +41,18 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
   const maximumTop = guidanceTop - height;
   if (maximumLeft < minimumLeft || maximumTop < minimumTop) return null;
 
-  const sideTop = clamp(
-    input.textRect.top - 10,
-    minimumTop,
-    maximumTop,
-  );
-  const rightAlignedLeft = clamp(input.textRect.right - width, minimumLeft, maximumLeft);
+  const sideTop = clamp(input.textRect.top - 10, minimumTop, maximumTop);
+  const leftAlignedLeft = clamp(input.textRect.left - 18, minimumLeft, maximumLeft);
+  const rightAlignedLeft = clamp(input.textRect.right - width + 18, minimumLeft, maximumLeft);
+  const aboveTop = input.textRect.top - height - 14;
+  const belowTop = input.textRect.bottom + 14;
   const candidates = [
-    { left: input.textRect.right + 12, top: sideTop },
-    { left: rightAlignedLeft, top: input.textRect.top - height - 12 },
-    { left: input.textRect.left - width - 12, top: sideTop },
-    { left: rightAlignedLeft, top: input.textRect.bottom + 12 },
+    { left: leftAlignedLeft, top: aboveTop },
+    { left: rightAlignedLeft, top: aboveTop },
+    { left: leftAlignedLeft, top: belowTop },
+    { left: rightAlignedLeft, top: belowTop },
+    { left: input.textRect.left - width - 14, top: sideTop },
+    { left: input.textRect.right + 14, top: sideTop },
   ];
 
   for (const candidate of candidates) {

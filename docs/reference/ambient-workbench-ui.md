@@ -32,12 +32,22 @@ canvas appearance, or the right-rail editing tools.
 - The paper owns the supplied leaf-shadow media. It is decorative, transient,
   and never part of document state or persistence.
 - When leaf atmosphere is off, the paper exposes one quiet structural ruling
-  from the root material band toward the growth direction. The ruling uses a
-  solid one-pixel line and repeats on the same horizontal step as the derived
-  columns: `636 x 160px` at desk widths, `344 x 128px` below 720 px, and
-  `292 x 120px` below 390 px. It is fixed to the paper, not the transformed
-  material world, and therefore never becomes authored position, snapping,
-  hit testing, or persistence.
+  across the complete visible surface. The ruling uses a quiet dashed
+  line and repeats on the existing derived horizontal column step: `636 x 196px`
+  at desk widths, `344 x 172px` below 720 px, and `292 x 160px` below 390 px.
+  Cell origin, span, dash, gap, and open-joint clearance share the material
+  camera, so Pan and zoom move one coherent world texture rather than two
+  independent phases. The nominal visible rhythm is `6px` dash, about `10px`
+  gap, and `3px` clearance on each side of a crossing at `1x`; each cell balances
+  complete dashes between the two transparent joints. Each dash is one custom
+  filled Bézier silhouette whose flatter shoulders soften into the end without
+  reading as an ordinary capsule. Its `1.4px` thickness is the sole screen-space
+  reading exception. Light and dark
+  canvases settle at `16%` and `13%` opacity after one subtle `300ms` entry
+  breath; reduced-motion preference compresses it to an imperceptible frame. The
+  ruling never changes online material widths, gaps, or derived boxes and remains
+  outside authored position, snapping, hit testing, history, persistence,
+  inquiry context, and protocol.
 - Paper utilities align to a 24 px edge grid. Their hover fill may react to the
   leaf atmosphere, but they never migrate into the material field.
 - The right rail exposes only the current editing vocabulary. Its selected
@@ -47,10 +57,12 @@ canvas appearance, or the right-rail editing tools.
   imprecise approach still lands on the intended tool; narrow screens retain
   `48px`-high targets. Focus follows the visible button, not the invisible
   extension.
-- One measured local action lens may appear beside a hovered or keyboard-focused
-  passage. It reuses the existing Branch and Focus capabilities; focus view
-  offers only Show all. The lens is a single render-edge instance, yields to
-  precise gestures and pending work, and may disappear when no collision-free
+- One measured frosted action field prefers the upper-left clear space of a
+  hovered or keyboard-focused passage, then tries the other above, below, and
+  side positions in a fixed collision-safe order. The field and all available
+  actions reveal together. It reuses the existing Branch and Focus capabilities;
+  focus view offers only Show all. The field is a single render-edge instance,
+  yields to precise gestures and pending work, and disappears when no safe
   adjacent position exists. It never introduces delete, fold, model, or
   coordinate semantics.
 

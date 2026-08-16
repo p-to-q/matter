@@ -101,12 +101,43 @@ setInterval(() => {}, 1_000);
       copyLocalScript("run-e2e.mjs", join(scriptsDirectory, "run-e2e.mjs")),
       copyLocalScript("e2e-runner.mjs", join(scriptsDirectory, "e2e-runner.mjs")),
     ]);
+    const staleOutput = join(directory, ".next-e2e", "dev");
+    await mkdir(staleOutput, { recursive: true });
+    await writeFile(join(staleOutput, "stale-action-manifest.json"), "{}");
     const fakeNpx = join(binDirectory, "npx");
-    await writeFile(fakeNpx, "#!/usr/bin/env node\nprocess.exit(0);\n");
+    await writeFile(
+      fakeNpx,
+      `#!/usr/bin/env node
+import { existsSync } from "node:fs";
+process.exit(existsSync(${JSON.stringify(staleOutput)}) ? 7 : 0);
+`,
+    );
     await chmod(fakeNpx, 0o755);
 
     const result = await runWrapper(directory, binDirectory);
     expect(result).toEqual({ code: 0, signal: null });
+  });
+
+  it("preserves a Playwright failure when next-env cleanup also fails", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matter-e2e-runner-cleanup-failure-"));
+    temporaryDirectories.push(directory);
+    const scriptsDirectory = join(directory, "scripts");
+    const binDirectory = join(directory, "bin");
+    await mkdir(scriptsDirectory);
+    await mkdir(binDirectory);
+    await Promise.all([
+      copyLocalScript("run-e2e.mjs", join(scriptsDirectory, "run-e2e.mjs")),
+      copyLocalScript("e2e-runner.mjs", join(scriptsDirectory, "e2e-runner.mjs")),
+    ]);
+    await mkdir(join(directory, "next-env.d.ts"));
+    const fakeNpx = join(binDirectory, "npx");
+    await writeFile(fakeNpx, "#!/usr/bin/env node\nprocess.exit(7);\n");
+    await chmod(fakeNpx, 0o755);
+
+    const result = await runWrapper(directory, binDirectory);
+    expect(result).toEqual({ code: 7, signal: null });
+    await expect(readFile(join(directory, ".next-e2e.lock"), "utf8"))
+      .rejects.toMatchObject({ code: "ENOENT" });
   });
 });
 
