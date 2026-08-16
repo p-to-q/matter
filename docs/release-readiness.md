@@ -72,7 +72,7 @@ held aside before submission, its explicit selection scope remains empty and
 returns `NO_MATERIAL`; the request never widens to the remaining tree.
 
 ```text
-source proof           npm run check: 1,157 Vitest passed, 2 skipped; 48 Node
+source proof           npm run check: 1,160 Vitest passed, 2 skipped; 48 Node
                        tests passed; doctor, docs, architecture, typegen,
                        typecheck, lint, and production build passed
 browser proof          npm run test:e2e: 57 Chromium cases passed, 2

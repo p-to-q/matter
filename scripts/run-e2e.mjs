@@ -14,6 +14,7 @@ const executable = process.platform === "win32" ? "npx.cmd" : "npx";
 const releaseRunLock = await acquireE2eRunLock(e2eLockPath);
 let terminator = null;
 let terminate = null;
+let executionError = null;
 
 try {
   // A stopped Next development server can leave action and chunk manifests
@@ -40,25 +41,46 @@ try {
     child.once("exit", (code, signal) => resolve(code ?? (signal ? 1 : 0)));
   });
   process.exitCode = terminator.signal() === null ? exitCode : 1;
-} finally {
+} catch (error) {
+  executionError = error;
+  process.exitCode = 1;
+}
+
+let cleanupError = null;
+try {
   terminator?.clear();
   if (terminate !== null) {
     process.off("SIGINT", terminate);
     process.off("SIGTERM", terminate);
   }
-  try {
-    // Next dev writes the generated file for its current distDir; leave a
-    // canonical local copy without making it repository state.
-    try {
-      const currentNextEnvironment = await readFile(nextEnvironmentPath, "utf8");
-      const normalizedNextEnvironment = normalizeNextEnvironment(currentNextEnvironment);
-      if (normalizedNextEnvironment !== currentNextEnvironment) {
-        await writeFile(nextEnvironmentPath, normalizedNextEnvironment);
-      }
-    } catch (error) {
-      if (error?.code !== "ENOENT") throw error;
-    }
-  } finally {
-    await releaseRunLock();
+  // Next dev writes the generated file for its current distDir; leave a
+  // canonical local copy without making it repository state.
+  const currentNextEnvironment = await readFile(nextEnvironmentPath, "utf8");
+  const normalizedNextEnvironment = normalizeNextEnvironment(currentNextEnvironment);
+  if (normalizedNextEnvironment !== currentNextEnvironment) {
+    await writeFile(nextEnvironmentPath, normalizedNextEnvironment);
+  }
+} catch (error) {
+  if (error?.code !== "ENOENT") cleanupError = error;
+}
+try {
+  await releaseRunLock();
+} catch (error) {
+  cleanupError = cleanupError === null
+    ? error
+    : new AggregateError([cleanupError, error], "Matter E2E cleanup failed.");
+}
+
+if (executionError !== null) {
+  if (cleanupError !== null) {
+    console.error("Matter E2E cleanup also failed after an execution error.", cleanupError);
+  }
+  throw executionError;
+}
+if (cleanupError !== null) {
+  if ((process.exitCode ?? 0) === 0) {
+    throw cleanupError;
+  } else {
+    console.error("Matter E2E cleanup also failed after the test process failed.", cleanupError);
   }
 }

@@ -17,6 +17,23 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-17 — E2E output has one exact owner
+
+Changed: the browser-proof wrapper now records one canonical process-and-token
+owner and removes a lock only when both its owner record and inode still match.
+A dead owner fails closed for explicit cleanup instead of starting an automatic
+stale-lock transaction. Cleanup errors remain visible without replacing the
+browser process's failure result.
+
+Why: clearing a stale generated directory is safe only when no second runner can
+acquire it at the same time. A PID prefix, automatic stale deletion, or
+unconditional release could make two proofs share one build output; the smaller
+fail-closed rule removes that race without creating another locking subsystem.
+
+Forecloses: permissive lock metadata, automatic recovery of an ambiguous owner,
+concurrent mutation of `.next-e2e`, or a cleanup fault making a failed browser
+run appear to have failed for another reason.
+
 ## 2026-08-17 — Canvas ruling shares the material camera
 
 Changed: the leaf-off ruling is now one full-paper render layer whose repeated

@@ -229,7 +229,7 @@ large Pan values, and preserves the established online column width and gap at
 every breakpoint.
 The collision-safe frosted field and its projected actions reveal together and retain
 the existing revalidation and suppression paths. Full source proof passes with
-1,157 Vitest cases passed, 2 skipped, and 48 Node checks; the 59 Chromium cases
+1,160 Vitest cases passed, 2 skipped, and 48 Node checks; the 59 Chromium cases
 execute as 57 passed and 2 capability-gated skips, including
 Pan deltas, pointer-local zoom, keyboard, coarse pointer, held context, narrow
 geometry, and the one-field/one-ruling 2,000-node bound.
