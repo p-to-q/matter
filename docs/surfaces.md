@@ -52,8 +52,8 @@ canvas fold state. Search is a flat result view whose rows carry ancestry paths.
 The tree shadow is the supplied decorative asset inside the paper, never document state.
 Turning that atmosphere off reveals the paper's structural ruling rather than a
 blank canvas. The ruling follows the current derived column rhythm only as a
-visual orientation aid: explicit Pan translates the complete paper pattern,
-while material zoom leaves its local cells and dash phase fixed. The actual
+visual orientation aid: Pan and zoom project its cells, custom softened dash
+rhythm, and open intersections through the same transient camera as material. The actual
 material widths, gaps, and derived boxes remain unchanged. It cannot become a
 coordinate, snap target, or second layout authority.
 `app/icon.svg` is explicitly provisional and is not the product mark: it draws
@@ -80,7 +80,8 @@ The right editing island exposes exactly Voice → Lasso → Branch → Move →
 Redo remains available through the platform keyboard conventions
 `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`; it is not a second visible rail tool.
 Focus and fold remain navigation capabilities but have no first-release fixed-rail
-presenter. One upper-left frosted local action field may expose Branch and Focus
+presenter. One frosted local action field prefers the passage's upper-left edge
+and may expose Branch and Focus
 for the precise hovered or keyboard-focused passage, or Show all in focus view.
 Its field and actions arrive in the same reveal. The disclosure control in the
 left material outline remains a separate file-tree affordance. The field is

@@ -690,7 +690,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
           ) : mode === "search" ? (
             <div className="material-files__search">
               <SearchIcon />
-              <span className="visually-hidden">Filter material files</span>
               <input
                 aria-label="Filter material files"
                 autoFocus

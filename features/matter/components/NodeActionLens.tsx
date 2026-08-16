@@ -111,9 +111,11 @@ export function NodeActionLens({
     const canvas = canvasRef.current;
     const paper = documentRef.current;
     if (canvas === null || paper === null) return;
+    const shell = paper.closest<HTMLElement>(".matter-shell");
     const chrome = paper.querySelector<HTMLElement>("[data-canvas-chrome]");
     const chromeIsSuppressed = () => paper.dataset.canvasModalOpen === "true" ||
-      (chrome?.dataset.overlay !== undefined && chrome.dataset.overlay !== "none");
+      (chrome?.dataset.overlay !== undefined && chrome.dataset.overlay !== "none") ||
+      shell?.dataset.nodeDragging === "true";
 
     const materialTarget = (eventTarget: EventTarget | null) => {
       if (!(eventTarget instanceof Element)) return null;
@@ -181,6 +183,7 @@ export function NodeActionLens({
     syncChromeSuppression();
     chromeObserver.observe(paper, { attributes: true, attributeFilter: ["data-canvas-modal-open"] });
     if (chrome !== null) chromeObserver.observe(chrome, { attributes: true, attributeFilter: ["data-overlay"] });
+    if (shell !== null) chromeObserver.observe(shell, { attributes: true, attributeFilter: ["data-node-dragging"] });
     return () => {
       canvas.removeEventListener("pointerover", pointerOver);
       canvas.removeEventListener("pointerout", pointerOut);

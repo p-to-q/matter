@@ -40,12 +40,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 
 /* The index is a slip of paper on the desk, not a second canvas. It carries a
    compact structural outline; spatial geometry stays on the canvas. */
-.material-files-toggle { position: fixed; z-index: 42; top: 21px; right: calc(100% - var(--sidebar-width) + 14px); left: auto; display: grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--faint); cursor: pointer; touch-action: auto; transition: color 140ms ease, background 140ms ease; }
+.material-files-toggle { position: fixed; z-index: 42; top: 21px; right: calc(100% - var(--sidebar-width) + 14px); left: auto; display: grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; touch-action: auto; transition: color 140ms ease, background 140ms ease; }
 .material-files-toggle svg { width: 15px; height: 15px; }
 .material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); }
 .material-files-toggle[aria-expanded="true"] { color: var(--ink); }
 .material-files-toggle[data-persistence-error="true"] { background: rgba(173,74,54,.1); color: var(--active); }
-.material-files { --index-row: 40px; --index-ink: #161d27; --index-muted: rgba(22,29,39,.56); --index-faint: rgba(22,29,39,.36); --index-line: rgba(22,29,39,.09); position: fixed; z-index: 41; top: 62px; bottom: var(--shell-gutter); left: 10px; display: grid; width: calc(var(--sidebar-width) - 24px); grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: 6px 4px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; opacity: 0; overflow: hidden; pointer-events: none; touch-action: pan-y; transform: translateX(-9px); transition: opacity 150ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
+.material-files { --index-row: 40px; --index-ink: #161d27; --index-muted: rgba(22,29,39,.72); --index-faint: rgba(22,29,39,.66); --index-line: rgba(22,29,39,.09); position: fixed; z-index: 41; top: 62px; bottom: var(--shell-gutter); left: 10px; display: grid; width: calc(var(--sidebar-width) - 24px); grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: 6px 4px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; opacity: 0; overflow: hidden; pointer-events: none; touch-action: pan-y; transform: translateX(-9px); transition: opacity 150ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
 .material-files[data-open="true"] { opacity: 1; pointer-events: auto; transform: translateX(0); }
 .material-files[data-mode="search"] { --index-row: 50px; }
 
@@ -125,7 +125,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__context-control--set-aside:focus-visible { opacity: 1; }
 .material-file__context-control--restore { width: var(--material-file-action-width); color: var(--index-muted); opacity: .86; }
 .material-file__context-control:disabled { cursor: default; opacity: .22; }
-.material-file[data-context-excluded="true"] { color: color-mix(in srgb, var(--index-ink) 44%, transparent); }
+.material-file[data-context-excluded="true"] { color: color-mix(in srgb, var(--index-ink) 66%, transparent); }
 .material-file[data-context-excluded="true"] .material-file__title { color: currentcolor; }
 
 /* Each segment names one adjacent sibling relationship. It uses the exact
@@ -147,10 +147,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file[data-has-children="true"]:not([data-context-excluded="true"]) .material-file__title { color: var(--index-ink); }
 .material-file__check { position: relative; display: grid; min-width: 0; height: var(--index-row); grid-template-columns: var(--material-file-action-width) minmax(0,1fr); align-items: center; padding: 0 9px 0 0; grid-column: 1 / -1; cursor: pointer; }
 .material-file__check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.material-file__check-mark { box-sizing: border-box; display: grid; width: 11px; height: 11px; justify-self: center; place-items: center; border: 1px solid rgba(22,29,39,.28); border-radius: 2px; background: transparent; transition: border-color 120ms ease; }
+.material-file__check-mark { box-sizing: border-box; display: grid; width: 11px; height: 11px; justify-self: center; place-items: center; border: 1px solid rgba(22,29,39,.5); border-radius: 2px; background: transparent; transition: border-color 120ms ease; }
 .material-file__check input:checked + .material-file__check-mark { border-color: var(--active); background: transparent; }
 .material-file__check input:checked + .material-file__check-mark::after { width: 5px; height: 2.5px; border-bottom: 1px solid var(--active); border-left: 1px solid var(--active); content: ""; transform: translateY(-.5px) rotate(-45deg); }
-.material-file__check input:focus-visible + .material-file__check-mark { outline: 1px solid var(--ink); outline-offset: 3px; }
+.material-file__check input:focus-visible + .material-file__check-mark { outline: 2px solid var(--ink); outline-offset: 3px; }
 .material-file__rename { width: calc(100% - 12px); min-width: 0; height: calc(var(--index-row) - 10px); margin: 0 2px 0 0; grid-column: 2; padding: 0 5px; border: 1px solid var(--active); border-radius: 5px; background: rgba(255,255,255,.62); color: var(--index-ink); font: 400 12px/1.35 var(--matter-face); unicode-bidi: plaintext; }
 .material-file__rename:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
 .material-files__empty { margin: 16px 8px; color: var(--index-faint); font: 10px/1.7 var(--mono); }
@@ -229,8 +229,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 /* Atmosphere, utilities, and editing instruments belong to the paper only. */
 .matter-document { --matter-column-width: 520px; --matter-column-gap: 116px; --matter-sibling-gap: 42px; --matter-canvas-anchor-x: 0px; --matter-ruling-cell-height: 196px; position: absolute; z-index: 2; top: var(--shell-gutter); right: var(--shell-gutter); bottom: var(--shell-gutter); left: var(--sidebar-width); overflow: hidden; border: 1px solid rgba(22,29,39,.09); border-radius: 18px; background: var(--paper); box-shadow: 0 18px 52px rgba(22,29,39,.075), 0 1px 2px rgba(22,29,39,.06); }
 .matter-shell[data-node-drop-mode="top-level"] .matter-document { border-color: color-mix(in srgb, var(--ink) 24%, transparent); }
-.matter-document[data-canvas-theme="light"] { --canvas-chrome: #161d27; --chrome-hover-bg: #161d27; --chrome-hover-text: #f5f5f2; --canvas-ruling-line: #161d27; --canvas-ruling-opacity: .27; --selection-bg: rgba(22,29,39,.08); --selection-ring: rgba(22,29,39,.13); --selection-shadow: none; color-scheme: light; }
-.matter-document[data-canvas-theme="dark"] { --paper: #202831; --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; --faint: #89929b; --line: rgba(240,242,243,.16); --canvas-chrome: #f0f2f3; --chrome-hover-bg: #f5f5f2; --chrome-hover-text: #161d27; --canvas-ruling-line: #f0f2f3; --canvas-ruling-opacity: .28; --selection-bg: rgba(245,245,242,.15); --selection-ring: rgba(245,245,242,.16); --selection-shadow: 0 1px 12px rgba(0,0,0,.28); color-scheme: dark; }
+.matter-document[data-canvas-theme="light"] { --canvas-chrome: #161d27; --chrome-hover-bg: #161d27; --chrome-hover-text: #f5f5f2; --canvas-ruling-line: #161d27; --canvas-ruling-opacity: .16; --canvas-ruling-peak-opacity: .2; --selection-bg: rgba(22,29,39,.08); --selection-ring: rgba(22,29,39,.13); --selection-shadow: none; color-scheme: light; }
+.matter-document[data-canvas-theme="dark"] { --paper: #202831; --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; --faint: #89929b; --line: rgba(240,242,243,.16); --canvas-chrome: #f0f2f3; --chrome-hover-bg: #f5f5f2; --chrome-hover-text: #161d27; --canvas-ruling-line: #f0f2f3; --canvas-ruling-opacity: .13; --canvas-ruling-peak-opacity: .16; --selection-bg: rgba(245,245,242,.15); --selection-ring: rgba(245,245,242,.16); --selection-shadow: 0 1px 12px rgba(0,0,0,.28); color-scheme: dark; }
 .matter-shell:has(.matter-document[data-canvas-modal-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
 .matter-document__empty { position: absolute; top: 43%; left: 50%; margin: 0; color: var(--muted); transform: translate(-50%, -50%); }
 .matter-guidance,
@@ -246,12 +246,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-guidance:active::before { background: var(--chrome-hover-bg, #161d27); }
 .matter-guidance[data-guidance-kind="progress"] { color: var(--muted); }
 .matter-guidance__next { margin: 0; white-space: nowrap; }
-.canvas-ruling { --canvas-ruling-cell-width: 636px; --canvas-ruling-cell-height: 196px; --canvas-ruling-origin-x: 0px; --canvas-ruling-origin-y: 0px; --canvas-ruling-dash: 7px; --canvas-ruling-dash-period: 24px; position: absolute; z-index: 1; inset: 0; opacity: 0; pointer-events: none; transition: opacity 180ms ease; }
-.canvas-ruling::before,
-.canvas-ruling::after { position: absolute; inset: 0; background-repeat: repeat; content: ""; -webkit-mask-repeat: repeat; mask-repeat: repeat; }
-.canvas-ruling::before { background-image: linear-gradient(to right, var(--canvas-ruling-line) 0, var(--canvas-ruling-line) 1px, transparent 1px, transparent 100%); background-position: var(--canvas-ruling-origin-x) 0; background-size: var(--canvas-ruling-cell-width) 100%; -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 var(--canvas-ruling-dash), transparent var(--canvas-ruling-dash), transparent 100%); -webkit-mask-position: 0 0; -webkit-mask-size: 100% var(--canvas-ruling-dash-period); mask-image: linear-gradient(to bottom, #000 0, #000 var(--canvas-ruling-dash), transparent var(--canvas-ruling-dash), transparent 100%); mask-position: 0 0; mask-size: 100% var(--canvas-ruling-dash-period); }
-.canvas-ruling::after { background-image: linear-gradient(to bottom, var(--canvas-ruling-line) 0, var(--canvas-ruling-line) 1px, transparent 1px, transparent 100%); background-position: 0 var(--canvas-ruling-origin-y); background-size: 100% var(--canvas-ruling-cell-height); -webkit-mask-image: linear-gradient(to right, #000 0, #000 var(--canvas-ruling-dash), transparent var(--canvas-ruling-dash), transparent 100%); -webkit-mask-position: 0 0; -webkit-mask-size: var(--canvas-ruling-dash-period) 100%; mask-image: linear-gradient(to right, #000 0, #000 var(--canvas-ruling-dash), transparent var(--canvas-ruling-dash), transparent 100%); mask-position: 0 0; mask-size: var(--canvas-ruling-dash-period) 100%; }
-.canvas-ruling[data-active="true"] { opacity: var(--canvas-ruling-opacity); }
+.canvas-ruling { --canvas-ruling-cell-width: 636px; --canvas-ruling-cell-height: 196px; --canvas-ruling-origin-x: 0px; --canvas-ruling-origin-y: 0px; position: absolute; z-index: 1; inset: 0; opacity: 0; pointer-events: none; transition: opacity 180ms ease; }
+.canvas-ruling > svg { display: block; overflow: hidden; }
+.canvas-ruling[data-active="true"] { opacity: var(--canvas-ruling-opacity); animation: canvas-ruling-arrive 300ms ease-out both; }
+@keyframes canvas-ruling-arrive {
+  0% { opacity: 0; }
+  62% { opacity: var(--canvas-ruling-peak-opacity); }
+  100% { opacity: var(--canvas-ruling-opacity); }
+}
 .matter-world { position: absolute; z-index: 2; inset: 0; transform-origin: 0 0; will-change: transform; }
 .matter-canvas { position: absolute; top: 43%; left: calc(50% + var(--matter-canvas-anchor-x)); width: max(var(--matter-canvas-width, 520px), 520px); height: max(var(--matter-canvas-height, 160px), 160px); transform: translate(calc(var(--matter-column-width) / -2), -80px); }
 .spatial-thoughts { margin: 0; padding: 0; list-style: none; }
@@ -400,8 +402,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @media (max-width: 720px) {
   :root { --instrument-size: 48px; }
   .matter-header { top: 21px; left: 18px; }
-  .material-files-toggle { top: 13px; right: 12px; left: auto; width: 48px; height: 48px; border-radius: 12px; }
-  .material-files-toggle svg { width: 18px; height: 18px; }
+  /* The index entry and the Matter menu below it share one right-hand axis.
+     Their 52px tracks and 20px marks read as one instrument family. */
+  .material-files-toggle { top: 7px; right: 9px; left: auto; width: 52px; height: 52px; border-radius: 12px; }
+  .material-files-toggle svg { width: 20px; height: 20px; }
   .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
   .material-files { --index-row: 48px; top: 66px; right: auto; bottom: 8px; left: 0; width: min(304px, calc(100vw - 56px)); padding: 8px 10px 6px 8px; border: 0; border-right: 1px solid rgba(22,29,39,.09); border-radius: 0 16px 16px 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(calc(-100% - 8px)); transform-origin: left center; }
   .material-files[data-open="true"] { transform: translateX(0); }
@@ -467,7 +471,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @media (forced-colors: active) {
   .canvas-ruling { display: none; }
   .node-action-lens { color: CanvasText; }
-  .node-action-lens::before { border-color: CanvasText; background: Canvas; box-shadow: none; filter: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .node-action-lens::before { border: 1px solid CanvasText; background: Canvas; box-shadow: none; filter: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .material-files__tree-guide { background: CanvasText; }
   .material-file__check-mark { border-color: ButtonText; }
   .material-file__check input:checked + .material-file__check-mark,

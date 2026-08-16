@@ -101,8 +101,17 @@ setInterval(() => {}, 1_000);
       copyLocalScript("run-e2e.mjs", join(scriptsDirectory, "run-e2e.mjs")),
       copyLocalScript("e2e-runner.mjs", join(scriptsDirectory, "e2e-runner.mjs")),
     ]);
+    const staleOutput = join(directory, ".next-e2e", "dev");
+    await mkdir(staleOutput, { recursive: true });
+    await writeFile(join(staleOutput, "stale-action-manifest.json"), "{}");
     const fakeNpx = join(binDirectory, "npx");
-    await writeFile(fakeNpx, "#!/usr/bin/env node\nprocess.exit(0);\n");
+    await writeFile(
+      fakeNpx,
+      `#!/usr/bin/env node
+import { existsSync } from "node:fs";
+process.exit(existsSync(${JSON.stringify(staleOutput)}) ? 7 : 0);
+`,
+    );
     await chmod(fakeNpx, 0o755);
 
     const result = await runWrapper(directory, binDirectory);

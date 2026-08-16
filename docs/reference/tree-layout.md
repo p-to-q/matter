@@ -94,12 +94,15 @@ right, first-child top alignment and sibling left alignment remain exact, and a
 viewport gesture cannot author a coordinate.
 
 When leaf atmosphere is disabled, one render-only structural ruling may echo the
-existing column step as an orientation aid. Explicit Pan translates that paper
-pattern, while zoom changes material only and leaves the local cells and dash
-phase fixed. The ruling remains outside this layout result: no node reads it, no
-line is a hit target, and camera motion never converts it into authored
-coordinates. Material widths, gaps, packing, and root anchoring stay
-authoritative; the ruling adapts to their rest geometry rather than changing it.
+existing column step as an orientation aid. Its world origin and cell topology
+are projected through the same transient Pan/zoom camera as material; visible
+dash, gap, and transparent crossing clearance scale with that topology, while a
+fixed `1.4px` filled thickness and custom softened Bézier ends preserve quiet
+readability. The ruling remains outside
+this layout result: no node reads it, no line is a hit target, and camera motion
+never converts it into authored coordinates. Material widths, gaps, packing,
+and root anchoring stay authoritative; the ruling derives from their rest
+geometry rather than changing it.
 
 The DOM edge measures fixed-width text boxes in CSS pixels. A pure `layout/`
 function computes subtree heights bottom-up and node positions top-down in

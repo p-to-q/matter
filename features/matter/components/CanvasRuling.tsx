@@ -1,10 +1,10 @@
 "use client";
 
-import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
-  advanceCanvasRulingOffset,
-  projectCanvasRulingGeometry,
-  type CanvasRulingOffset,
+  projectCanvasRulingPaths,
+  projectCanvasRulingPlacement,
+  projectCanvasRulingTopology,
   type CanvasRulingViewport,
 } from "./canvas-ruling-geometry";
 
@@ -23,23 +23,13 @@ type RulingSurface = Readonly<{
 }>;
 
 /**
- * One render-only orientation layer follows the transient canvas camera. The
- * pure projection shares layout tokens, but never authors material coordinates.
+ * One render-only orientation layer shares the material camera. The pure
+ * projection never authors material coordinates.
  */
 export function CanvasRuling({ active, viewport }: CanvasRulingProps) {
+  const patternId = `canvas-ruling-${useId().replaceAll(":", "")}`;
   const rulingRef = useRef<HTMLDivElement>(null);
-  const previousViewportRef = useRef(viewport);
-  const [offset, setOffset] = useState<CanvasRulingOffset>(() => Object.freeze({
-    x: viewport.x,
-    y: viewport.y,
-  }));
   const [surface, setSurface] = useState<RulingSurface | null>(null);
-
-  useLayoutEffect(() => {
-    const previous = previousViewportRef.current;
-    previousViewportRef.current = viewport;
-    setOffset((current) => advanceCanvasRulingOffset(current, previous, viewport));
-  }, [viewport]);
 
   useLayoutEffect(() => {
     const ruling = rulingRef.current;
@@ -64,33 +54,79 @@ export function CanvasRuling({ active, viewport }: CanvasRulingProps) {
     return () => observer.disconnect();
   }, []);
 
-  const geometry = useMemo(() => surface === null
+  const topology = useMemo(() => surface === null
     ? null
-    : projectCanvasRulingGeometry({
+    : projectCanvasRulingTopology({
         anchorX: surface.anchorX,
         cellHeight: surface.cellHeight,
         columnGap: surface.columnGap,
         columnWidth: surface.columnWidth,
-        offset,
         surfaceHeight: surface.height,
         surfaceWidth: surface.width,
-      }), [offset, surface]);
-  const style = geometry === null ? undefined : {
-    "--canvas-ruling-cell-height": `${geometry.cellHeight}px`,
-    "--canvas-ruling-cell-width": `${geometry.cellWidth}px`,
-    "--canvas-ruling-origin-x": `${geometry.originX}px`,
-    "--canvas-ruling-origin-y": `${geometry.originY}px`,
+        zoom: viewport.zoom,
+      }), [surface, viewport.zoom]);
+  const placement = useMemo(() => topology === null
+    ? null
+    : projectCanvasRulingPlacement(topology, { x: viewport.x, y: viewport.y }),
+  [topology, viewport.x, viewport.y]);
+  const paths = useMemo(() => topology === null
+    ? null
+    : projectCanvasRulingPaths(topology), [topology]);
+  const style = topology === null || placement === null ? undefined : {
+    "--canvas-ruling-cell-height": `${topology.cellHeight}px`,
+    "--canvas-ruling-cell-width": `${topology.cellWidth}px`,
+    "--canvas-ruling-curve-tension": topology.curveTension,
+    "--canvas-ruling-dash": `${topology.dashLength}px`,
+    "--canvas-ruling-horizontal-gap": `${topology.horizontalGap}px`,
+    "--canvas-ruling-intersection-clearance": `${topology.intersectionClearance}px`,
+    "--canvas-ruling-origin-x": `${placement.originX}px`,
+    "--canvas-ruling-origin-y": `${placement.originY}px`,
+    "--canvas-ruling-line-width": `${topology.lineWidth}px`,
+    "--canvas-ruling-vertical-gap": `${topology.verticalGap}px`,
   } as CSSProperties;
+  const halfLine = topology === null ? 0 : topology.lineWidth / 2;
+  const ready = topology !== null && placement !== null && paths !== null;
 
   return (
     <div
       aria-hidden="true"
       className="canvas-ruling"
-      data-active={active && geometry !== null || undefined}
+      data-active={active && ready || undefined}
       data-canvas-ruling="structural"
       ref={rulingRef}
       style={style}
-    />
+    >
+      {!ready ? null : (
+        <svg focusable="false" height="100%" width="100%">
+          <defs>
+            <pattern
+              height={topology.cellHeight}
+              id={patternId}
+              patternUnits="userSpaceOnUse"
+              width={topology.cellWidth}
+              x={placement.phaseX - halfLine}
+              y={placement.phaseY - halfLine}
+            >
+              <path
+                d={paths.verticalPath}
+                data-curve-tension={topology.curveTension}
+                data-dash-count={topology.verticalDashCount}
+                data-ruling-axis="vertical"
+                fill="var(--canvas-ruling-line)"
+              />
+              <path
+                d={paths.horizontalPath}
+                data-curve-tension={topology.curveTension}
+                data-dash-count={topology.horizontalDashCount}
+                data-ruling-axis="horizontal"
+                fill="var(--canvas-ruling-line)"
+              />
+            </pattern>
+          </defs>
+          <rect fill={`url(#${patternId})`} height="100%" width="100%" />
+        </svg>
+      )}
+    </div>
   );
 }
 

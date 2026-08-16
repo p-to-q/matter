@@ -1,3 +1,5 @@
+import { open, readFile, rm } from "node:fs/promises";
+
 export const CANONICAL_NEXT_ROUTE_REFERENCE = 'import "./.next/types/routes.d.ts";';
 export const CANONICAL_NEXT_ROOT_PARAMS_REFERENCE = 'import "./.next/types/root-params.d.ts";';
 
@@ -11,6 +13,50 @@ export function normalizeNextEnvironment(source) {
       /^import "\.\/\.next(?:-e2e)?(?:\/dev)?\/types\/root-params\.d\.ts";$/m,
       CANONICAL_NEXT_ROOT_PARAMS_REFERENCE,
     );
+}
+
+export async function acquireE2eRunLock(
+  lockPath,
+  currentPid = process.pid,
+  signalProcess = process.kill,
+) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const handle = await open(lockPath, "wx");
+      try {
+        await handle.writeFile(`${currentPid}\n`);
+      } catch (error) {
+        await handle.close();
+        await rm(lockPath, { force: true });
+        throw error;
+      }
+      let released = false;
+      return async () => {
+        if (released) return;
+        released = true;
+        await handle.close();
+        await rm(lockPath, { force: true });
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const owner = Number.parseInt(await readFile(lockPath, "utf8").catch(() => ""), 10);
+      if (!Number.isSafeInteger(owner) || owner <= 0) {
+        throw new Error("Matter E2E lock exists without valid owner metadata.");
+      }
+      let ownerIsLive = false;
+      try {
+        signalProcess(owner, 0);
+        ownerIsLive = true;
+      } catch (signalError) {
+        if (signalError?.code !== "ESRCH") throw signalError;
+      }
+      if (ownerIsLive) {
+        throw new Error(`Matter E2E is already running under process ${owner}.`);
+      }
+      await rm(lockPath, { force: true });
+    }
+  }
+  throw new Error("Matter E2E could not acquire its run lock.");
 }
 
 export function createSignalTerminator(child, schedule = setTimeout, cancel = clearTimeout) {

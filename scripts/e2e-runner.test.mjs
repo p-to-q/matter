@@ -1,5 +1,9 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  acquireE2eRunLock,
   CANONICAL_NEXT_ROUTE_REFERENCE,
   CANONICAL_NEXT_ROOT_PARAMS_REFERENCE,
   createProcessSignalTarget,
@@ -8,6 +12,36 @@ import {
 } from "./e2e-runner.mjs";
 
 describe("e2e runner cleanup", () => {
+  it("serializes generated output ownership and only recovers a proven stale owner", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "matter-e2e-lock-"));
+    const lockPath = join(directory, ".next-e2e.lock");
+    try {
+      const release = await acquireE2eRunLock(lockPath);
+      await expect(acquireE2eRunLock(lockPath)).rejects.toThrow(
+        `Matter E2E is already running under process ${process.pid}.`,
+      );
+      await release();
+      await release();
+
+      await writeFile(lockPath, "not-a-process\n");
+      await expect(acquireE2eRunLock(lockPath)).rejects.toThrow(
+        "Matter E2E lock exists without valid owner metadata.",
+      );
+      await rm(lockPath, { force: true });
+
+      await writeFile(lockPath, "424242\n");
+      const missingOwner = () => {
+        const error = new Error("missing process");
+        error.code = "ESRCH";
+        throw error;
+      };
+      const releaseRecovered = await acquireE2eRunLock(lockPath, process.pid, missingOwner);
+      await releaseRecovered();
+    } finally {
+      await rm(directory, { force: true, recursive: true });
+    }
+  });
+
   it.each([
     'import "./.next-e2e/dev/types/routes.d.ts";',
     'import "./.next-e2e/types/routes.d.ts";',

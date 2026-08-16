@@ -353,6 +353,13 @@ working projection. `tree` names the resulting material shape, not every node
 in the durable tree: held-aside branches are omitted before this envelope is
 constructed and their ids are never sent.
 
+An explicit lasso never widens silently. If its selected passages are held
+aside after selection but before submission, the browser keeps
+`scope: "selection"`, sends an empty `lineage`, and leaves `thoughtCount` as the
+count of the active working tree. That exact request is valid and returns
+`NO_MATERIAL`; it never falls back to tree scope. Only tree scope requires an
+empty lineage and zero thought count to occur together.
+
 ```ts
 export type InquiryContextNodePayload = {
   nodeId: string;

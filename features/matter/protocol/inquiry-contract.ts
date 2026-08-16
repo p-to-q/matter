@@ -305,7 +305,12 @@ function parseContext(value: unknown): InquiryContextPayload | null {
     }));
   }
   if (lineage.length > 0 && lineage[0]!.depth !== 0) return null;
-  if (lineage.length === 0 && value.thoughtCount !== 0) return null;
+  // A selected passage may be held aside after the lasso gesture but before
+  // submission. Selection authority must stay narrow, so the client sends an
+  // empty selection instead of widening back to the active tree. `thoughtCount`
+  // still describes that active tree; only tree scope requires the two to
+  // become empty together.
+  if (value.scope === "tree" && lineage.length === 0 && value.thoughtCount !== 0) return null;
   return Object.freeze({
     treeId: value.treeId,
     revision: value.revision as number,

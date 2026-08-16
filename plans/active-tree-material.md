@@ -192,17 +192,18 @@ State: Proven after corrected product evidence.
 
 ```text
 Outcome:    turning leaf FX off reveals a legible, repeating structural ruling
-            that follows explicit Pan but stays locally fixed through zoom;
+            that moves and scales with material through one Pan/zoom camera;
             hovering or keyboard-focusing
-            active material reveals one upper-left frosted action field whose
+            active material reveals one frosted action field, preferring the
+            passage's upper-left edge with collision-safe fallbacks, whose
             Branch and Focus actions arrive with the blur, or Show all in focus.
-Boundary:   one paper-space render-only ruling, one render-edge action presenter,
+Boundary:   one world-derived render-only ruling, one render-edge action presenter,
             the existing pure tool projection, and collision-safe DOM measurement.
 Invariants: tree structure remains the only layout authority; ruling and lens
             never enter material, history, persistence, context, or protocol;
             no per-node action controls mount; precise gestures and pending work win.
 Proof:      pure ruling and collision geometry; wide/narrow and light/dark browser
-            receipts; Pan translation and zoom stability, hover, keyboard,
+            receipts; shared Pan/zoom phase, open crossings, hover, keyboard,
             coarse-pointer, lasso,
             drag, modal and focus state matrix; one-lens DOM bound and the
             existing 2,000-node gate.
@@ -210,20 +211,27 @@ Non-goals:  authored coordinates, snapping, decorative card tiles,
             local delete/fold, blank AI nodes, or changing the five-slot rail.
 ```
 
-Correction evidence, 2026-08-16: the shipped paper-fixed ruling did not move with
-Pan and was too faint to orient the material. The vertical action capsule exposed
-the intents but omitted the reference's simultaneous local blur field. This
-reopens presentation and camera projection only; tree layout, intents, history,
-working context, protocol, and the constant-count DOM boundary stay frozen.
+Correction evidence, 2026-08-16: the faint and independently phased ruling did
+not read as one canvas with material. The final product evidence establishes a
+single world texture: cell, dash, gap, and open-joint clearance share the
+material camera, while only the quiet `1.4px` filled thickness stays screen-sized.
+The vertical action capsule also omitted the reference's simultaneous local blur
+field. This reopens presentation and camera projection only; tree layout,
+intents, history, working-context authority, and the constant-count DOM boundary
+stay frozen. One protocol parser correction accepts an explicitly selected
+context that becomes empty after hold-aside and returns `NO_MATERIAL`; it adds no
+field, material, or fallback scope.
 
-Build receipt, 2026-08-17: one pure render projection translates the ruling only
-for Pan and ignores the focal x/y rewrite produced by zoom, so its local cells,
-one-pixel weight, `7px / 17px` cadence, and dash phase remain fixed. Browser proof
-also freezes the established online column width and gap at every breakpoint.
-The upper-left frosted field and its projected actions reveal together and retain
-the existing revalidation and suppression paths. Full source proof passes; the
-58 Chromium cases execute as 56 passed and 2 capability-gated skips, including
-Pan deltas, zoom stability, keyboard, coarse pointer, held context, narrow
+Build receipt, 2026-08-17: one stateless pure projection derives the SVG pattern
+from responsive layout tokens and the current camera. Each cell balances full
+custom Bézier-softened dashes between deterministic transparent crossings, normalizes phase for
+large Pan values, and preserves the established online column width and gap at
+every breakpoint.
+The collision-safe frosted field and its projected actions reveal together and retain
+the existing revalidation and suppression paths. Full source proof passes with
+1,157 Vitest cases passed, 2 skipped, and 48 Node checks; the 59 Chromium cases
+execute as 57 passed and 2 capability-gated skips, including
+Pan deltas, pointer-local zoom, keyboard, coarse pointer, held context, narrow
 geometry, and the one-field/one-ruling 2,000-node bound.
 
 Execution order is deliberately narrow:

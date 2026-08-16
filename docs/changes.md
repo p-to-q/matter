@@ -17,24 +17,36 @@ Forecloses: what this makes harder or impossible
 
 ---
 
-## 2026-08-17 — Canvas ruling follows the camera without moving material
+## 2026-08-17 — Canvas ruling shares the material camera
 
 Changed: the leaf-off ruling is now one full-paper render layer whose repeated
-cell origin follows explicit Pan while its paper-space span remains fixed through
-material zoom. Its cell width remains exactly the existing online column width
-plus gap; the taller vertical rhythm and stronger dashed one-pixel line add
-orientation without changing any material box. Dash weight, spacing, and screen
-phase remain stable through pan and zoom. Direct hover
-or keyboard focus now reveals one upper-left frosted field and its Branch/Focus
-actions in the same frame, with Show all as the focus-view projection.
+cell origin, span, dash rhythm, and open intersections move and scale with the
+same camera as material. Its cell width remains exactly the existing online
+column width plus gap; the taller vertical rhythm and custom `1.4px` filled
+dashes use softened Bézier ends rather than a native round stroke, adding
+orientation without changing any material box. Direct hover
+or keyboard focus now reveals one frosted field that prefers the passage's
+upper-left edge and falls back to another collision-safe side. Its Branch/Focus
+actions reveal in the same frame, with Show all as the focus-view projection.
+The material index keeps its active/normal/faint hierarchy while raising the
+two quiet text tiers and its selection and drawer controls to readable text
+and non-text contrast. On narrow paper, the index entry and Matter menu now
+share one right-hand instrument axis and one icon scale. An explicit inquiry selection that
+becomes empty after hold-aside now reaches the existing `NO_MATERIAL` outcome
+without widening to tree scope.
 
-Why: a paper-fixed, faint ruling stopped reading as a canvas reference during
-movement, while the first vertical action capsule exposed icons without the
-local softened field the interaction needed.
+Why: a screen-fixed or separately phased ruling stopped reading as one canvas
+during movement. Balanced complete dashes and a transparent joint at every
+crossing keep the texture quiet and deterministic, while the first vertical
+action capsule exposed icons without the local softened field the interaction
+needed. The earlier quiet index tiers fell below readable small-text contrast,
+and rejecting an explicitly selected context after all of its passages became
+held aside made the privacy-preserving fail-narrow request unusable.
 
 Forecloses: fitting material to decorative lines, persisting camera/grid state,
 mounting a toolbar per node, or letting the auxiliary field become another tool
-catalog or material mutation path.
+catalog or material mutation path. It also forecloses silently widening an
+emptied explicit selection to the remaining working tree.
 
 ## 2026-08-16 — Leaf-off paper exposes structure and one local action lens
 

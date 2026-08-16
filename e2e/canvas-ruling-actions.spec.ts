@@ -31,35 +31,73 @@ for (const viewport of [
     await expect(ruling).toHaveCount(1);
     await expect(ruling).toHaveAttribute("data-active", "true");
     await expect(ruling).toHaveCSS("pointer-events", "none");
-    await expect(ruling).toHaveCSS("opacity", "0.27");
-    expect(await ruling.evaluate((element) => {
+    await expect(ruling).toHaveCSS("opacity", "0.16");
+    const rulingStyle = await ruling.evaluate((element) => {
       const style = getComputedStyle(element);
-      const vertical = getComputedStyle(element, "::before");
-      const horizontal = getComputedStyle(element, "::after");
-      return {
-        cellHeight: style.getPropertyValue("--canvas-ruling-cell-height").trim(),
-        cellWidth: style.getPropertyValue("--canvas-ruling-cell-width").trim(),
-        dash: style.getPropertyValue("--canvas-ruling-dash").trim(),
-        dashPeriod: style.getPropertyValue("--canvas-ruling-dash-period").trim(),
-        horizontalBackgroundSize: horizontal.backgroundSize,
-        horizontalMaskPosition: horizontal.maskPosition || horizontal.webkitMaskPosition,
-        horizontalMaskSize: horizontal.maskSize || horizontal.webkitMaskSize,
-        verticalBackgroundSize: vertical.backgroundSize,
-        verticalMaskPosition: vertical.maskPosition || vertical.webkitMaskPosition,
-        verticalMaskSize: vertical.maskSize || vertical.webkitMaskSize,
+      const pattern = element.querySelector("pattern");
+      const paths = Array.from(element.querySelectorAll<SVGPathElement>("path"));
+      if (pattern === null || paths.length !== 2) return null;
+      const [vertical, horizontal] = paths;
+      const box = (path: SVGPathElement) => {
+        const bounds = path.getBBox();
+        return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
       };
-    })).toEqual({
-      cellHeight: viewport.cell.height,
-      cellWidth: viewport.cell.width,
-      dash: "7px",
-      dashPeriod: "24px",
-      horizontalBackgroundSize: `100% ${viewport.cell.height}`,
-      horizontalMaskPosition: "0px 0px",
-      horizontalMaskSize: "24px 100%",
-      verticalBackgroundSize: `${viewport.cell.width} 100%`,
-      verticalMaskPosition: "0px 0px",
-      verticalMaskSize: "100% 24px",
+      const count = (path: SVGPathElement, command: string) =>
+        (path.getAttribute("d") ?? "").split(" ").filter((token) => token === command).length;
+      return {
+        animationDuration: style.animationDuration,
+        animationName: style.animationName,
+        cellHeight: Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-height")),
+        cellWidth: Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-width")),
+        curveTensions: paths.map((path) => Number(path.dataset.curveTension)),
+        dash: Number.parseFloat(style.getPropertyValue("--canvas-ruling-dash")),
+        fills: paths.map((path) => path.getAttribute("fill")),
+        horizontalBox: box(horizontal),
+        horizontalCloseCount: count(horizontal, "Z"),
+        horizontalDashCount: Number(horizontal.dataset.dashCount),
+        horizontalGap: Number.parseFloat(style.getPropertyValue("--canvas-ruling-horizontal-gap")),
+        intersectionClearance: Number.parseFloat(style.getPropertyValue("--canvas-ruling-intersection-clearance")),
+        lineWidth: Number.parseFloat(style.getPropertyValue("--canvas-ruling-line-width")),
+        patternHeight: Number(pattern.getAttribute("height")),
+        patternWidth: Number(pattern.getAttribute("width")),
+        strokes: paths.map((path) => path.getAttribute("stroke")),
+        strokeDasharrays: paths.map((path) => path.getAttribute("stroke-dasharray")),
+        strokeLinecaps: paths.map((path) => path.getAttribute("stroke-linecap")),
+        verticalBox: box(vertical),
+        verticalCloseCount: count(vertical, "Z"),
+        verticalDashCount: Number(vertical.dataset.dashCount),
+        verticalGap: Number.parseFloat(style.getPropertyValue("--canvas-ruling-vertical-gap")),
+      };
     });
+    expect(rulingStyle).not.toBeNull();
+    expect(rulingStyle!.cellHeight).toBe(Number.parseFloat(viewport.cell.height));
+    expect(rulingStyle!.cellWidth).toBe(Number.parseFloat(viewport.cell.width));
+    expect(rulingStyle!.patternHeight).toBe(rulingStyle!.cellHeight);
+    expect(rulingStyle!.patternWidth).toBe(rulingStyle!.cellWidth);
+    expect(rulingStyle!.dash).toBe(6);
+    expect(rulingStyle!.lineWidth).toBe(1.4);
+    expect(rulingStyle!.curveTensions).toEqual([0.72, 0.72]);
+    expect(rulingStyle!.fills).toEqual([
+      "var(--canvas-ruling-line)",
+      "var(--canvas-ruling-line)",
+    ]);
+    expect(rulingStyle!.strokes).toEqual([null, null]);
+    expect(rulingStyle!.strokeDasharrays).toEqual([null, null]);
+    expect(rulingStyle!.strokeLinecaps).toEqual([null, null]);
+    expect(rulingStyle!.horizontalCloseCount).toBe(rulingStyle!.horizontalDashCount);
+    expect(rulingStyle!.verticalCloseCount).toBe(rulingStyle!.verticalDashCount);
+    expect(rulingStyle!.horizontalBox.height).toBeCloseTo(rulingStyle!.lineWidth, 3);
+    expect(rulingStyle!.verticalBox.width).toBeCloseTo(rulingStyle!.lineWidth, 3);
+    expect(rulingStyle!.horizontalBox.x - rulingStyle!.lineWidth / 2)
+      .toBeCloseTo(rulingStyle!.intersectionClearance, 1);
+    expect(rulingStyle!.cellWidth - rulingStyle!.horizontalBox.x - rulingStyle!.horizontalBox.width + rulingStyle!.lineWidth / 2)
+      .toBeCloseTo(rulingStyle!.intersectionClearance, 1);
+    expect(rulingStyle!.verticalBox.y - rulingStyle!.lineWidth / 2)
+      .toBeCloseTo(rulingStyle!.intersectionClearance, 1);
+    expect(rulingStyle!.cellHeight - rulingStyle!.verticalBox.y - rulingStyle!.verticalBox.height + rulingStyle!.lineWidth / 2)
+      .toBeCloseTo(rulingStyle!.intersectionClearance, 1);
+    expect(rulingStyle!.animationName).toBe("canvas-ruling-arrive");
+    expect(rulingStyle!.animationDuration).toBe("0.3s");
     expect(await page.locator(".matter-canvas").evaluate((element) => {
       const style = getComputedStyle(element);
       return {
@@ -167,7 +205,7 @@ for (const viewport of [
     if (viewport.name === "laptop") {
       await page.locator('[data-chrome-control="appearance"]').click();
       await expect(page.locator(".matter-document")).toHaveAttribute("data-canvas-theme", "dark");
-      await expect(ruling).toHaveCSS("opacity", "0.28");
+      await expect(ruling).toHaveCSS("opacity", "0.13");
       await rootText.hover();
       await expect(lens).toBeVisible();
       await expect(lens).toHaveCSS("color", "rgb(243, 244, 241)");
@@ -182,6 +220,25 @@ for (const viewport of [
     expect(browserErrors).toEqual([]);
   });
 }
+
+test("the ruling entry breath yields to reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(({ key }) => {
+    localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      language: "zh-CN",
+      leafFx: false,
+      appearance: "light",
+    }));
+  }, { key: PREFERENCES_KEY });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  const ruling = page.locator("[data-canvas-ruling='structural']");
+  await expect(ruling).toHaveAttribute("data-active", "true");
+  await expect(ruling).toHaveCSS("animation-duration", "0.001s");
+  await expect(ruling).toHaveCSS("animation-iteration-count", "1");
+  await expect(ruling).toHaveCSS("opacity", "0.16");
+});
 
 test("the action lens is hoverable across its clear gap and yields to pan and chrome overlays", async ({ page }) => {
   await page.addInitScript(({ key }) => {
@@ -218,9 +275,16 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   const afterPan = await rulingCameraReceipt(page);
   expect(afterPan.viewportX - beforePan.viewportX).toBeCloseTo(64, 0);
   expect(afterPan.viewportY - beforePan.viewportY).toBeCloseTo(38, 0);
-  expect(afterPan.originX - beforePan.originX).toBeCloseTo(afterPan.viewportX - beforePan.viewportX, 1);
-  expect(afterPan.originY - beforePan.originY).toBeCloseTo(afterPan.viewportY - beforePan.viewportY, 1);
+  expect(afterPan.originX - beforePan.originX)
+    .toBeCloseTo(afterPan.viewportX - beforePan.viewportX, 1);
+  expect(afterPan.originY - beforePan.originY)
+    .toBeCloseTo(afterPan.viewportY - beforePan.viewportY, 1);
+  expect(afterPan.patternOriginX)
+    .toBeCloseTo(positiveModulo(afterPan.originX, afterPan.cellWidth), 1);
+  expect(afterPan.patternOriginY)
+    .toBeCloseTo(positiveModulo(afterPan.originY, afterPan.cellHeight), 1);
   expect(afterPan.screenCadence).toEqual(beforePan.screenCadence);
+  expect(afterPan.paths).toEqual(beforePan.paths);
   expect(afterPan.cellWidth).toBeCloseTo(beforePan.cellWidth, 4);
   expect(afterPan.cellHeight).toBeCloseTo(beforePan.cellHeight, 4);
 
@@ -241,7 +305,7 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   await expect(lens).toBeVisible();
 });
 
-test("zoom changes material scale without moving the paper-space ruling", async ({ page }) => {
+test("zoom scales one world ruling around the paper-local pointer pivot", async ({ page }) => {
   await page.addInitScript(({ key }) => {
     localStorage.setItem(key, JSON.stringify({ version: 1, language: "zh-CN", leafFx: false, appearance: "light" }));
   }, { key: PREFERENCES_KEY });
@@ -252,6 +316,13 @@ test("zoom changes material scale without moving the paper-space ruling", async 
     .getByRole("button", { name: "Canvas pan" }).click();
 
   const beforeZoom = await rulingCameraReceipt(page);
+  const surfacePivot = await page.locator(".matter-document").evaluate((paper) => {
+    const bounds = paper.getBoundingClientRect();
+    return {
+      x: 640 - bounds.left - paper.clientLeft,
+      y: 400 - bounds.top - paper.clientTop,
+    };
+  });
   await page.locator("main.matter-shell").dispatchEvent("wheel", {
     clientX: 640,
     clientY: 400,
@@ -262,11 +333,21 @@ test("zoom changes material scale without moving the paper-space ruling", async 
   await expect.poll(async () => (await rulingCameraReceipt(page)).viewportZoom)
     .toBeGreaterThan(beforeZoom.viewportZoom);
   const afterZoom = await rulingCameraReceipt(page);
-  expect(afterZoom.cellWidth).toBeCloseTo(beforeZoom.cellWidth, 4);
-  expect(afterZoom.cellHeight).toBeCloseTo(beforeZoom.cellHeight, 4);
-  expect(afterZoom.originX).toBeCloseTo(beforeZoom.originX, 4);
-  expect(afterZoom.originY).toBeCloseTo(beforeZoom.originY, 4);
-  expect(afterZoom.screenCadence).toEqual(beforeZoom.screenCadence);
+  const zoomRatio = afterZoom.viewportZoom / beforeZoom.viewportZoom;
+  expect(afterZoom.cellWidth / beforeZoom.cellWidth).toBeCloseTo(zoomRatio, 3);
+  expect(afterZoom.cellHeight / beforeZoom.cellHeight).toBeCloseTo(zoomRatio, 3);
+  expect(afterZoom.worldRhythm.dash / beforeZoom.worldRhythm.dash).toBeCloseTo(zoomRatio, 3);
+  expect(afterZoom.worldRhythm.clearance / beforeZoom.worldRhythm.clearance).toBeCloseTo(zoomRatio, 3);
+  expect(afterZoom.screenThickness).toBe(beforeZoom.screenThickness);
+  expect(afterZoom.paths).not.toEqual(beforeZoom.paths);
+  expect(afterZoom.patternOriginX)
+    .toBeCloseTo(positiveModulo(afterZoom.originX, afterZoom.cellWidth), 3);
+  expect(afterZoom.patternOriginY)
+    .toBeCloseTo(positiveModulo(afterZoom.originY, afterZoom.cellHeight), 3);
+  expect((surfacePivot.x - afterZoom.viewportX) / afterZoom.viewportZoom)
+    .toBeCloseTo((surfacePivot.x - beforeZoom.viewportX) / beforeZoom.viewportZoom, 3);
+  expect((surfacePivot.y - afterZoom.viewportY) / afterZoom.viewportZoom)
+    .toBeCloseTo((surfacePivot.y - beforeZoom.viewportY) / beforeZoom.viewportZoom, 3);
 });
 
 test("the action lens has one direct keyboard path and restores the thought focus", async ({ page }) => {
@@ -381,26 +462,36 @@ async function rulingCameraReceipt(page: Page) {
     const ruling = document.querySelector<HTMLElement>("[data-canvas-ruling]");
     if (shell === null || ruling === null) throw new Error("camera receipt requires shell and ruling");
     const style = getComputedStyle(ruling);
-    const vertical = getComputedStyle(ruling, "::before");
-    const horizontal = getComputedStyle(ruling, "::after");
+    const pattern = ruling.querySelector("pattern");
+    const paths = Array.from(ruling.querySelectorAll<SVGPathElement>("path"));
+    if (pattern === null || paths.length !== 2) throw new Error("ruling pattern must be measurable");
+    const lineWidth = Number.parseFloat(style.getPropertyValue("--canvas-ruling-line-width"));
     return {
       cellHeight: Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-height")),
       cellWidth: Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-width")),
       originX: Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-x")),
       originY: Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-y")),
+      patternOriginX: Number(pattern.getAttribute("x")) + lineWidth / 2,
+      patternOriginY: Number(pattern.getAttribute("y")) + lineWidth / 2,
+      paths: paths.map((path) => path.getAttribute("d")),
+      screenThickness: lineWidth,
       screenCadence: {
-        dash: style.getPropertyValue("--canvas-ruling-dash").trim(),
-        dashPeriod: style.getPropertyValue("--canvas-ruling-dash-period").trim(),
-        horizontalMaskPosition: horizontal.maskPosition || horizontal.webkitMaskPosition,
-        horizontalMaskSize: horizontal.maskSize || horizontal.webkitMaskSize,
-        verticalMaskPosition: vertical.maskPosition || vertical.webkitMaskPosition,
-        verticalMaskSize: vertical.maskSize || vertical.webkitMaskSize,
+        curveTension: paths.map((path) => Number(path.dataset.curveTension)),
+        lineWidth,
+      },
+      worldRhythm: {
+        clearance: Number.parseFloat(style.getPropertyValue("--canvas-ruling-intersection-clearance")),
+        dash: Number.parseFloat(style.getPropertyValue("--canvas-ruling-dash")),
       },
       viewportX: Number.parseFloat(shell.dataset.viewportX ?? "NaN"),
       viewportY: Number.parseFloat(shell.dataset.viewportY ?? "NaN"),
       viewportZoom: Number.parseFloat(shell.dataset.viewportZoom ?? "NaN"),
     };
   });
+}
+
+function positiveModulo(value: number, step: number): number {
+  return ((value % step) + step) % step;
 }
 
 function nearestGapPoint(

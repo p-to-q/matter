@@ -126,8 +126,8 @@ describe("reduceCanvasViewport", () => {
   it("normalizes wheel delta modes and pans opposite the scroll delta", () => {
     const pixels = apply(INITIAL_CANVAS_VIEWPORT, {
       type: "wheel",
-      clientX: 0,
-      clientY: 0,
+      surfaceX: 0,
+      surfaceY: 0,
       deltaX: 5,
       deltaY: -3,
       deltaMode: 0,
@@ -137,8 +137,8 @@ describe("reduceCanvasViewport", () => {
 
     const lines = apply(INITIAL_CANVAS_VIEWPORT, {
       type: "wheel",
-      clientX: 0,
-      clientY: 0,
+      surfaceX: 0,
+      surfaceY: 0,
       deltaX: 1,
       deltaY: 2,
       deltaMode: 1,
@@ -148,8 +148,8 @@ describe("reduceCanvasViewport", () => {
 
     const pages = apply(INITIAL_CANVAS_VIEWPORT, {
       type: "wheel",
-      clientX: 0,
-      clientY: 0,
+      surfaceX: 0,
+      surfaceY: 0,
       deltaX: 0,
       deltaY: 1,
       deltaMode: 2,
@@ -166,8 +166,8 @@ describe("reduceCanvasViewport", () => {
     };
     const after = apply(before, {
       type: "wheel",
-      clientX: 120,
-      clientY: 60,
+      surfaceX: 120,
+      surfaceY: 60,
       deltaX: 0,
       deltaY: -100,
       deltaMode: 0,
@@ -186,8 +186,8 @@ describe("reduceCanvasViewport", () => {
     };
     const stillMaximum = apply(maximum, {
       type: "wheel",
-      clientX: 10,
-      clientY: 10,
+      surfaceX: 10,
+      surfaceY: 10,
       deltaX: 0,
       deltaY: -100,
       deltaMode: 0,
@@ -197,8 +197,8 @@ describe("reduceCanvasViewport", () => {
 
     const minimum = apply(INITIAL_CANVAS_VIEWPORT, {
       type: "wheel",
-      clientX: 10,
-      clientY: 10,
+      surfaceX: 10,
+      surfaceY: 10,
       deltaX: 0,
       deltaY: 1e6,
       deltaMode: 0,
@@ -215,6 +215,16 @@ describe("reduceCanvasViewport", () => {
       clientX: 130,
       clientY: 90,
     });
+    state = apply(state, {
+      type: "wheel",
+      surfaceX: 120,
+      surfaceY: 80,
+      deltaX: 0,
+      deltaY: -100,
+      deltaMode: 0,
+      ctrlKey: true,
+    });
+    expect(state.zoom).toBeGreaterThan(1);
     expect(apply(state, { type: "reset" })).toEqual(INITIAL_CANVAS_VIEWPORT);
   });
 
@@ -241,8 +251,8 @@ describe("reduceCanvasViewport", () => {
 
     const invalidMode = reduceCanvasViewport(INITIAL_CANVAS_VIEWPORT, {
       type: "wheel",
-      clientX: 0,
-      clientY: 0,
+      surfaceX: 0,
+      surfaceY: 0,
       deltaX: 0,
       deltaY: 1,
       deltaMode: 9 as 0,
