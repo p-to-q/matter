@@ -44,103 +44,80 @@ unbounded overlap onto material, and tuning the field's box in CSS without
 moving the geometry that reserves it.
 ## 2026-08-17 — Proof measures the thing it is named for
 
-Changed: the 2,000-node receipt asserts `longTasks.cold`, the population its own
-`attributeColdCanvasTasks` already computed and then discarded, instead of a max
-over every long task in the session; the interaction population keeps a separate
-bound on p95. The performance harness passes a stable presentation snapshot and
-a stable select callback, as the product does. The browser-proof wrapper now
-reaps its detached process group after the child exits, not only on a signal,
-and the web server is asked to stop with SIGTERM rather than being killed behind
-its wrapper. The architecture checker resolves `@/` specifiers through the
-tsconfig path mapping.
+Changed: the 2,000-node receipt asserts `longTasks.cold` — the population it
+already computed and discarded — and bounds interaction p95 separately. The
+performance harness passes the stable snapshot and select callback the product
+passes. The browser-proof wrapper reaps its process group after the child exits
+and stops the web server with SIGTERM. The architecture checker resolves `@/`
+specifiers.
 
-Why: each of these reported a number that did not mean what it said. The session
-max mixed one cold mount with 126 fold/focus rebuilds and ranged 138-238ms
-across four consecutive runs with no renderer change, so it could neither
-confirm nor refute a cold-start change. The harness rebuilt two props per render
-and broke the memo the shipped renderer relies on, so the receipt measured 2,000
-row reconciles production never performs. A finished run left the server holding
-the port, so the next run failed to start and read as a failed proof. The
-checker dropped all 21 alias edges while printing "no provider leak, no cycle" —
-a check that is silently partial is worse than one that does not exist.
+Why: each reported a number that did not mean what it said. The session max
+mixed one cold mount with 126 fold/focus rebuilds and swung 138–238ms across
+four runs with no renderer change; the harness rebuilt two props per render and
+broke the memo the shipped renderer relies on; a finished run held the port so
+the next read as a failed proof; the checker dropped all 21 alias edges while
+printing "no provider leak, no cycle".
 
-Forecloses: asserting cold start on an interaction statistic, a fixture whose
-identity churn is mistaken for renderer cost, a port sweep standing in for
-process ownership, and an import shape that is exempt from layering by being
-invisible to the graph.
+Forecloses: asserting cold start on an interaction statistic, mistaking fixture
+identity churn for renderer cost, a port sweep standing in for process
+ownership, and an import shape exempt from layering by being invisible.
 
 ## 2026-08-17 — A settled fallback is a deployment fact
 
-Changed: `runScenario` records each settled fallback — surface, reason, and
-elapsed time — through an injectable observer whose default writes one stdout
-line. No material, prompt, provider identity, or credential is included. A
-surface with no adapter and a caller that walked away stay unrecorded.
+Changed: `runScenario` records each settled fallback — surface, reason, elapsed
+— through an injectable observer defaulting to one stdout line. No material,
+prompt, provider identity, or credential. An unconfigured surface and an
+abandoned caller stay unrecorded.
 
-Why: `ScenarioFallback` exists so a deployment can tell a cold provider from a
-rejected answer, and that was only true for whoever held one response. When
-every surface degrades to its floor at once, each request still looks locally
-successful and the outage is visible only in aggregate; this is why the hkg1
-timeouts were diagnosed as inquiry-specific. Configuration facts are excluded
-because a line per request for a deliberately unconfigured surface would bury
-the outage it surrounds.
+Why: `ScenarioFallback` existed so a deployment could tell a cold provider from
+a rejected answer, but only for whoever held one response. When every surface
+degrades at once each request still looks locally successful — which is why the
+hkg1 timeouts were misdiagnosed as inquiry-specific.
 
-Forecloses: treating a single response as evidence about pool health, and
-diagnosing a degraded provider from the browser alone. If volume becomes a cost,
-aggregate — never sample, because a sampled outage signal is the thing that
-misled the first diagnosis.
+Forecloses: treating one response as evidence about pool health. If volume
+becomes a cost, aggregate — never sample, since a sampled signal caused the
+original misdiagnosis.
 
 ## 2026-08-17 — A deadline reached during model work is reported as one
 
 Changed: `withBoundedJsonRequest` attributes a boundary timeout raised while its
-handler is running, so the `timed-out` branch every route already declared is
-reachable and returns 504 rather than an opaque 500. A caller disconnect keeps
-propagating as a throw.
+handler runs, so the `timed-out` branch every route declares is reachable and
+returns 504 rather than an opaque 500. A caller disconnect still propagates.
 
-Why: only the body read raised the policy's own error; work that observes the
-signal rejects with a bare `AbortError`, which no route recognises. The margin
-is real — repair's request boundary is 8,800ms against a scenario budget of
-8,000ms that starts only after the body is read — so a browser that knows how to
-read a 504 was told 500 instead. The disconnect case is deliberately untouched:
-nobody is waiting, and manufacturing a reply for a closed socket is not an
-improvement.
+Why: only the body read raised the policy's own error; work observing the signal
+rejects with a bare `AbortError` no route recognises. The margin is real —
+repair's boundary is 8,800ms against an 8,000ms scenario budget that starts
+after the body is read.
 
-Forecloses: routes attributing the same failure separately, and a declared error
-branch that no path can reach.
+Forecloses: routes attributing one failure separately, and a declared error
+branch no path can reach.
 
 ## 2026-08-17 — The inquiry record survives the material changing under it
 
 Changed: the visible Ask Matter record is discarded only on a move to different
-material — another document, scope, or lineage — rather than on any revision.
-A revision change ends the request in flight and settles the one turn that can
-no longer be answered, keeping every completed exchange. A late failure no
-longer appends a completed exchange to the durable record for a document that
-has moved. The chrome root carries `data-canvas-interactive`.
+material — another document, scope, or lineage — not on any revision. A revision
+change settles the one turn that can no longer be answered and keeps every
+completed exchange; a late failure no longer appends to a document that moved.
+The chrome root carries `data-canvas-interactive`.
 
 Why: admission, repair, a derived label, undo and redo all raise the revision
-while the person is still reading the passage they asked about, so the record
-emptied under them for reasons they did not cause — and looking back over
-earlier questions is the whole purpose of the surface. The reference boundary
-already stated that a changed revision preserves an old record; the transient
-surface did not honour it. Settling the stranded turn also unblocks the
-composer, which a pending turn otherwise holds shut. The chrome's React
-`onWheel` cannot stop the shell's native wheel listener attached lower in the
-tree, so under a lasso or a panning canvas the record could not be scrolled by
-pointer at all.
+while the person is still reading the passage they asked about, and looking back
+is the purpose of the surface. A stranded pending turn also holds the composer
+shut. The chrome's React `onWheel` cannot stop the shell's native listener, so
+under a lasso or pan the record could not be scrolled at all.
 
-Forecloses: reading a revision bump as a change of subject, a turn that animates
-without a terminal outcome, and a durable record that gains exchanges belonging
-to material it no longer describes.
+Forecloses: reading a revision bump as a change of subject, a turn without a
+terminal outcome, and a durable record gaining exchanges it no longer describes.
 
 ## 2026-08-17 — An allow-list table is read as a table
 
 Changed: `audioFileExtension` resolves the accepted-container table with
 `Object.hasOwn` rather than a bare index.
 
-Why: the table is a frozen object literal, so it inherits from
-`Object.prototype` and `isAcceptedAudioType("constructor")` returned true at the
-HTTP boundary of the one route that accepts a binary body. The browser twin
-already guarded this and proved it; the wire contract was the looser copy of the
-same rule.
+Why: the table inherits from `Object.prototype`, so
+`isAcceptedAudioType("constructor")` returned true at the HTTP boundary of the
+one route accepting a binary body. The browser twin already guarded this; the
+wire contract was the looser copy.
 
 Forecloses: an inherited member passing a boundary the repository requires to
 reject whole.
