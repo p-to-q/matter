@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { CORNER_GLYPH_DESCENT } from "../features/matter/components/node-handle-position";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 const ROOT_ID = "thought_fixture_root";
 
 for (const viewport of [
-  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 134, height: 76 } },
-  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 142, height: 80 } },
+  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 118, height: 66 } },
+  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 126, height: 70 } },
 ]) {
   test(`structural paper and one local action lens remain bounded at ${viewport.name}`, async ({ page }) => {
     const browserErrors: string[] = [];
@@ -162,19 +163,19 @@ for (const viewport of [
     })).toEqual({
       ...viewport.lens,
       centers: viewport.name === "narrow"
-        ? [{ x: 44, y: 40 }, { x: 98, y: 40 }]
-        : [{ x: 42, y: 38 }, { x: 92, y: 38 }],
+        ? [{ x: 36, y: 35 }, { x: 90, y: 35 }]
+        : [{ x: 34, y: 33 }, { x: 84, y: 33 }],
     });
-    expect(await noLensCollision(page)).toBe(true);
+    expect(await lensBoundsAreLawful(page)).toBe(true);
     expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
-      .toContain("blur(36px)");
+      .toContain("blur(28px)");
+    // How far the field may descend is owned by lensBoundsAreLawful above;
+    // restating it here would give one rule two definitions to drift between.
     expect(await page.evaluate((rootId) => {
       const text = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
       const field = document.querySelector<HTMLElement>("[data-node-action-lens]");
       if (text === null || field === null) return false;
-      const textRect = text.getBoundingClientRect();
-      const fieldRect = field.getBoundingClientRect();
-      return fieldRect.left <= textRect.left && fieldRect.bottom <= textRect.top + 1;
+      return field.getBoundingClientRect().left <= text.getBoundingClientRect().left;
     }, ROOT_ID)).toBe(true);
 
     const beforeBranch = await page.locator("[data-thought-id]").count();
@@ -210,7 +211,7 @@ for (const viewport of [
       await expect(lens).toBeVisible();
       await expect(lens).toHaveCSS("color", "rgb(243, 244, 241)");
       expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
-        .toContain("blur(36px)");
+        .toContain("blur(28px)");
       await page.locator('[data-chrome-control="fx"]').click();
       await expect(ruling).not.toHaveAttribute("data-active", "true");
       await expect(ruling).toHaveCSS("opacity", "0");
@@ -410,7 +411,7 @@ test.describe("coarse pointer action lens", () => {
     expect(await lens.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
-    })).toEqual({ width: 142, height: 80 });
+    })).toEqual({ width: 126, height: 70 });
     expect(await lens.locator("button").evaluateAll((buttons) => buttons.every((button) => {
       const rect = button.getBoundingClientRect();
       return Math.round(rect.width) === 48 && Math.round(rect.height) === 48;
@@ -435,8 +436,13 @@ test("the 2,000-node canvas still mounts one ruling and one delegated action len
   await expect(page.locator("[data-node-action-lens]")).toHaveAttribute("data-node-id", "perf_thought_0001");
 });
 
-async function noLensCollision(page: Page): Promise<boolean> {
-  return page.evaluate((rootId) => {
+/**
+ * The glyphs rest on the first line by at most CORNER_GLYPH_DESCENT and the fog
+ * reaches it too, while the field clears the paper inset, the rail and the
+ * guidance line entirely.
+ */
+async function lensBoundsAreLawful(page: Page): Promise<boolean> {
+  return page.evaluate(({ rootId, descent }) => {
     const lens = document.querySelector<HTMLElement>("[data-node-action-lens]");
     const text = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
     const paper = document.querySelector<HTMLElement>(".matter-document");
@@ -445,15 +451,32 @@ async function noLensCollision(page: Page): Promise<boolean> {
     if (lens === null || text === null || paper === null || rail === null || guidance === null) return false;
     const lensRect = lens.getBoundingClientRect();
     const paperRect = paper.getBoundingClientRect();
+    // The placement rule measures the first line's ink, not the element box:
+    // comparing against the box would add the line's leading to the descent.
+    const range = document.createRange();
+    range.selectNodeContents(text);
+    const fragments = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+    const inkTop = fragments.length === 0
+      ? text.getBoundingClientRect().top
+      : Math.min(...fragments.map((rect) => rect.top));
     const overlaps = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect();
       return lensRect.left < rect.right && lensRect.right > rect.left &&
         lensRect.top < rect.bottom && lensRect.bottom > rect.top;
     };
+    // The bound belongs to the glyphs. The fog descends further by design; it
+    // is translucent and the text stays exact underneath.
+    const glyphBottom = Math.max(...Array.from(lens.querySelectorAll("button"))
+      .map((button) => button.getBoundingClientRect().bottom));
+    const descentOntoMaterial = glyphBottom - inkTop;
     return lensRect.left >= paperRect.left + 12 && lensRect.right <= paperRect.right - 12 &&
       lensRect.top >= paperRect.top + 12 && lensRect.bottom <= paperRect.bottom - 12 &&
-      !overlaps(text) && !overlaps(rail) && !overlaps(guidance);
-  }, ROOT_ID);
+      // Rounded: the ink measurement is sub-pixel and the bound is a design
+      // limit, not a rasteriser guarantee.
+      Math.round(descentOntoMaterial) > 0 && Math.round(descentOntoMaterial) <= descent + 1 &&
+      lensRect.bottom > inkTop &&
+      !overlaps(rail) && !overlaps(guidance);
+  }, { rootId: ROOT_ID, descent: CORNER_GLYPH_DESCENT });
 }
 
 async function rulingCameraReceipt(page: Page) {

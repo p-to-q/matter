@@ -1,76 +1,119 @@
 import { describe, expect, it } from "vitest";
-import { projectNodeHandlePosition } from "./node-handle-position";
+import { CORNER_GLYPH_DESCENT, projectNodeHandleMetrics, projectNodeHandlePosition } from "./node-handle-position";
 
 const rect = (left: number, top: number, width: number, height: number) => ({
   left, top, width, height, right: left + width, bottom: top + height,
 });
+const metricsFor = (inkHeight: number, coarse: boolean) => projectNodeHandleMetrics({ inkHeight, coarse });
+
+describe("projectNodeHandleMetrics", () => {
+  it("keeps root-sized material at the base control size", () => {
+    expect(metricsFor(26, false)).toEqual({ button: 44, gap: 6, paddingX: 12, paddingY: 11 });
+  });
+
+  it("shrinks the field for smaller material", () => {
+    expect(metricsFor(20, false)).toEqual({ button: 34, gap: 5, paddingX: 9, paddingY: 8 });
+  });
+
+  it("never grows past the base size for larger material", () => {
+    expect(metricsFor(64, false).button).toBe(44);
+  });
+
+  it("holds the coarse-pointer target floor however small the material is", () => {
+    expect(metricsFor(8, true).button).toBe(48);
+  });
+
+  it("holds the fine-pointer target floor however small the material is", () => {
+    expect(metricsFor(8, false).button).toBe(32);
+  });
+
+  it("treats an unmeasurable line as base sized rather than collapsing", () => {
+    expect(metricsFor(0, false).button).toBe(44);
+    expect(metricsFor(Number.NaN, false).button).toBe(44);
+  });
+});
 
 describe("projectNodeHandlePosition", () => {
   const documentRect = rect(8, 66, 304, 646);
+  const coarseBase = metricsFor(26, true);
 
-  it("places the compact action field above the material's left edge", () => {
+  it("sets the field at the material's upper-left corner", () => {
     expect(projectNodeHandlePosition({
-      largeTargets: true,
       documentRect,
       guidanceRect: rect(24, 676, 180, 14),
       railRect: rect(270, 312, 34, 300),
       textRect: rect(72, 264, 120, 62),
       toolCount: 2,
-    })).toEqual({ left: 54, top: 168 });
+      metrics: coarseBase,
+    })).toEqual({ left: 30, top: 211 });
   });
 
   it("keeps a full-width passage's field inside the paper inset", () => {
     expect(projectNodeHandlePosition({
-      largeTargets: true,
       documentRect,
       guidanceRect: rect(24, 676, 180, 14),
       railRect: rect(242, 312, 62, 300),
       textRect: rect(20, 264, 272, 62),
       toolCount: 2,
-    })).toEqual({ left: 20, top: 168 });
+      metrics: coarseBase,
+    })).toEqual({ left: 20, top: 211 });
+  });
+
+  it("lets the glyphs rest on the first line by exactly the authorised descent", () => {
+    const placement = projectNodeHandlePosition({
+      documentRect,
+      guidanceRect: rect(24, 676, 180, 14),
+      railRect: rect(270, 312, 34, 300),
+      textRect: rect(72, 264, 120, 62),
+      toolCount: 2,
+      metrics: coarseBase,
+    });
+    const height = coarseBase.button + coarseBase.paddingY * 2;
+    const glyphBottom = placement!.top + height - coarseBase.paddingY;
+    expect(glyphBottom - 264).toBe(CORNER_GLYPH_DESCENT);
   });
 
   it("returns null when no side or third position avoids material and guidance", () => {
     expect(projectNodeHandlePosition({
-      largeTargets: true,
       documentRect,
       guidanceRect: rect(24, 676, 180, 14),
       railRect: null,
       textRect: rect(20, 78, 272, 588),
       toolCount: 2,
+      metrics: coarseBase,
     })).toBeNull();
   });
 
-  it("keeps the field above-left of a short ink line", () => {
+  it("keeps the field at the corner of a short ink line", () => {
     expect(projectNodeHandlePosition({
-      largeTargets: false,
       documentRect: rect(0, 0, 900, 700),
       guidanceRect: rect(28, 650, 200, 20),
       railRect: rect(820, 200, 60, 300),
       textRect: rect(300, 240, 156, 32),
       toolCount: 2,
-    })).toEqual({ left: 282, top: 148 });
+      metrics: metricsFor(32, false),
+    })).toEqual({ left: 261, top: 191 });
   });
 
-  it("rejects an above placement inside the paper inset and falls below", () => {
+  it("fits beside material near the paper inset once the field is sized to it", () => {
     expect(projectNodeHandlePosition({
-      largeTargets: false,
       documentRect: rect(0, 0, 500, 500),
       guidanceRect: null,
       railRect: null,
       textRect: rect(20, 90, 460, 20),
       toolCount: 2,
-    })).toEqual({ left: 12, top: 124 });
+      metrics: metricsFor(20, false),
+    })).toEqual({ left: 12, top: 54 });
   });
 
-  it("uses the safe above placement when a wide line is near the bottom edge", () => {
+  it("uses the corner placement when a wide line is near the bottom edge", () => {
     expect(projectNodeHandlePosition({
-      largeTargets: false,
       documentRect: rect(0, 0, 500, 500),
       guidanceRect: null,
       railRect: null,
       textRect: rect(20, 440, 460, 20),
       toolCount: 2,
-    })).toEqual({ left: 12, top: 348 });
+      metrics: metricsFor(20, false),
+    })).toEqual({ left: 12, top: 404 });
   });
 });

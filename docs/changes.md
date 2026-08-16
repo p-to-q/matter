@@ -17,6 +17,32 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-17 — The node action field is control fog, sized by its material
+
+Changed: the passage-local action field now renders as control fog — a blurred
+backdrop faded out by a mask, with a grey-cast translucent tint. It no longer
+carries `filter`, which had made it a backdrop root so its own `backdrop-filter`
+sampled nothing and the field rendered as an invisible smear. Its box is sized
+from the measured ink height of the passage's first line and clamped to the
+pointer target floor, so a leaf gets a smaller control than a root. Those
+metrics are one value passed into the placement rule and published as CSS
+custom properties, replacing two hardcoded copies that disagreed by 2px. The
+field sits at the material's upper-left corner, where the fog and a bounded
+10px of the glyphs rest on the first line; every fallback placement stays clear
+of material. The two glyphs are `+` and `−`, and hover renders as a radial ink
+wash centred on the glyph rather than a solid tile, so the field keeps no
+straight edge where it meets material. Keyboard focus keeps its complete fill
+and ring.
+
+Why: the field was unreadable over dark material because of the `filter`
+pairing, and one fixed control size read as heavy on small material. Naming it
+control fog keeps it from drifting back into a card: a definite edge would make
+it chrome, and chrome is what this must not become.
+
+Forecloses: a single global control size, a hard-edged card surface, an
+unbounded overlap onto material, and tuning the field's box in CSS without
+moving the geometry that reserves it.
+
 ## 2026-08-17 — E2E output has one exact owner
 
 Changed: the browser-proof wrapper now records one canonical process-and-token

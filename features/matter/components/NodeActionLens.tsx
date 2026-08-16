@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type RefObject,
@@ -15,8 +16,8 @@ import type { NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { ProjectedTool, ToolIntent } from "../tools/model";
 import { projectNodeActions } from "../tools/project-node-actions";
-import { BranchIcon, FocusIcon, ShowAllIcon } from "./icons";
-import { projectNodeHandlePosition } from "./node-handle-position";
+import { MinusIcon, PlusIcon, ShowAllIcon } from "./icons";
+import { projectNodeHandleMetrics, projectNodeHandlePosition, type NodeHandleMetrics } from "./node-handle-position";
 
 type LensTarget = Readonly<{
   nodeId: string;
@@ -56,7 +57,7 @@ export function NodeActionLens({
   const [compact, setCompact] = useState(false);
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
   const [target, setTarget] = useState<LensTarget | null>(null);
-  const [position, setPosition] = useState<Readonly<{ left: number; top: number }> | null>(null);
+  const [placement, setPlacement] = useState<Readonly<{ left: number; top: number; metrics: NodeHandleMetrics }> | null>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const targetElementRef = useRef<HTMLElement | null>(null);
   const pendingKeyboardEntryRef = useRef<string | null>(null);
@@ -73,7 +74,7 @@ export function NodeActionLens({
     targetElementRef.current = null;
     pendingKeyboardEntryRef.current = null;
     setTarget(null);
-    setPosition(null);
+    setPlacement(null);
   }, [clearCloseTimer]);
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
@@ -224,7 +225,7 @@ export function NodeActionLens({
     const paper = documentRef.current;
     const canvas = canvasRef.current;
     if (!enabled || activeTarget === null || paper === null || canvas === null || tools.length === 0) {
-      setPosition(null);
+      setPlacement(null);
       return;
     }
     const retainedElement = targetElementRef.current;
@@ -240,19 +241,31 @@ export function NodeActionLens({
 
     const update = () => {
       const paperRect = paper.getBoundingClientRect();
+      const textRect = measureFirstLineInkRect(text);
+      // The field belongs to this passage, so it is sized from this passage's
+      // own type rather than one fixed control size for the whole tree.
+      const metrics = projectNodeHandleMetrics({
+        inkHeight: textRect.height,
+        coarse: coarse || compact,
+      });
       const result = projectNodeHandlePosition({
-        largeTargets: coarse || compact,
         documentRect: paperRect,
         guidanceRect: paper.querySelector<HTMLElement>(".matter-guidance")?.getBoundingClientRect() ?? null,
         railRect: paper.closest<HTMLElement>(".matter-shell")
           ?.querySelector<HTMLElement>(".tool-rail")?.getBoundingClientRect() ?? null,
-        textRect: measureFirstLineInkRect(text),
+        textRect,
         toolCount: tools.length,
+        metrics,
       });
       const next = result === null
         ? null
-        : { left: result.left - paperRect.left, top: result.top - paperRect.top };
-      setPosition((current) => current?.left === next?.left && current?.top === next?.top ? current : next);
+        : { left: result.left - paperRect.left, top: result.top - paperRect.top, metrics };
+      setPlacement((current) => current !== null && next !== null &&
+        current.left === next.left && current.top === next.top &&
+        current.metrics.button === next.metrics.button && current.metrics.gap === next.metrics.gap &&
+        current.metrics.paddingX === next.metrics.paddingX && current.metrics.paddingY === next.metrics.paddingY
+        ? current
+        : next);
     };
     update();
     const resizeObserver = new ResizeObserver(update);
@@ -266,11 +279,11 @@ export function NodeActionLens({
   }, [activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, tools.length]);
 
   useLayoutEffect(() => {
-    if (position === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
+    if (placement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
     focusPendingKeyboardEntry(activeTarget.nodeId);
-  }, [activeTarget, focusPendingKeyboardEntry, position]);
+  }, [activeTarget, focusPendingKeyboardEntry, placement]);
 
-  if (activeTarget === null || position === null || tools.length === 0) return null;
+  if (activeTarget === null || placement === null || tools.length === 0) return null;
 
   const restoreTargetFocus = () => {
     canvasRef.current?.querySelector<HTMLElement>(
@@ -323,7 +336,14 @@ export function NodeActionLens({
       ref={lensRef}
       role="toolbar"
       aria-orientation="horizontal"
-      style={{ left: position.left, top: position.top }}
+      style={{
+        left: placement.left,
+        top: placement.top,
+        "--lens-button": `${placement.metrics.button}px`,
+        "--lens-gap": `${placement.metrics.gap}px`,
+        "--lens-pad-x": `${placement.metrics.paddingX}px`,
+        "--lens-pad-y": `${placement.metrics.paddingY}px`,
+      } as CSSProperties}
     >
       {tools.map((tool, index) => (
         <NodeActionButton
@@ -354,10 +374,11 @@ function NodeActionButton({
     : tool.id === "focus"
       ? "Focus this thought"
       : "Show all material";
+  // The pair reads as one degree control: + grows a branch, − narrows to this one.
   const icon = tool.id === "add-child"
-    ? <BranchIcon />
+    ? <PlusIcon />
     : tool.id === "focus"
-      ? <FocusIcon />
+      ? <MinusIcon />
       : <ShowAllIcon />;
   return (
     <button
