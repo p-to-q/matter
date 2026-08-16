@@ -578,7 +578,7 @@ Initial bounds:
 | children per node | 64 |
 | nodes per tree | 2,000 |
 | audio | 60 seconds |
-| planning request | 20 seconds |
+| planning request | 16 seconds |
 
 Bounds reject rather than truncate. Stable error codes cover microphone,
 transcription, timeout, invalid interaction or plan, revision conflict, tree

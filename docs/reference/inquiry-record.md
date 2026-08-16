@@ -50,7 +50,10 @@ they never infer a record from a current transient composer.
 - completed record reloads only for its own document, while the inquiry itself
   still opens without an exchange and draft and pending work do not reload;
 - a changed material revision preserves an old record but never gives it
-  authority over a new request;
+  authority over a new request; the transient visible record follows the same
+  rule, and is discarded only on a move to different material — another
+  document, scope, or lineage — while a revision change settles the one turn
+  that can no longer be answered and keeps the completed exchanges;
 - internal clear, quota, malformed data, and cross-tab generation conflict
   cannot modify material or command history;
 - only bounded, terminal outcomes are encoded; provider content and material

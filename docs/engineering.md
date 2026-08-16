@@ -183,10 +183,15 @@ directory. Its canonical process-and-token record is removed only by the same
 inode and owner. Malformed metadata and a lock whose recorded process no longer
 exists fail closed rather than attempting an unsafe automatic recovery; after
 confirming no runner is active, a person may remove that one stale generated
-lock and retry. The wrapper owns the spawned process group on POSIX, restores
-generated references after every exit path, preserves the test process's
-failure when cleanup also fails, and treats a file that was never generated as
-normal cleanup.
+lock and retry. The wrapper owns the spawned process group on POSIX and
+signals it on every exit path, not only on an interrupt: the browser runner
+reaches its web server through a wrapper process, and killing that wrapper
+outright orphans the server, which then holds the port and makes the next run
+fail to start rather than fail a test. Reaping the group the wrapper created is
+exact, where sweeping a port would be a guess about someone else's process. The
+wrapper also restores generated references after every exit path, preserves the
+test process's failure when cleanup also fails, and treats a file that was never
+generated as normal cleanup.
 
 Run the narrowest test first. Changes to commands prove forward result, exact
 inverse, invalid atomic rejection, and revision behavior. Protocol changes prove
