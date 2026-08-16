@@ -15,7 +15,7 @@ The current online-safe claim is narrow:
   file outline, focus/fold, copy, lasso, stretch projection
   transient working-context subtraction without hiding or rewriting material
   explicit canvas-pan mode and undoable cross-branch structural reparenting
-  FX-off structural paper ruling and one passage-local Branch/Focus lens
+  FX-off structural paper ruling and one passage-local control fog carrying + and −
   browser-native live voice admission (no fixture voice on the public origin)
   deterministic navigation labels, with an independently gated managed proposal
   immediate transcript admission, with local repair rules and an independently gated managed proposal
@@ -38,6 +38,63 @@ proof uses the inverse capability pair and never contacts browser speech.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.34
+
+Preview.34 is the first release since Preview.32; Preview.33 was prepared but
+never tagged, so this candidate carries both the canvas work recorded under
+Preview.33 and everything since.
+
+The passage-local action field is now control fog. It had carried `filter` and
+`backdrop-filter` on the same element, which makes that element a backdrop root,
+so its own blur sampled nothing and the field rendered as an invisible smear
+over dark material — the effect had not been reaching the screen. Its box is
+derived from the measured ink height of the passage's first line and clamped to
+the pointer target floors, so a leaf gets a smaller control than a root, and
+those metrics are one value shared by the placement rule and the CSS in place of
+two hardcoded copies that disagreed by 2px. Proportions are the tool rail's: a
+40px core around a 20px glyph inside a 44px target. The field sits at the
+material's upper-left corner, where the fog and a bounded `CORNER_GLYPH_DESCENT`
+of the glyphs rest on the first line; every fallback placement stays clear of
+material and the browser receipt states that bound once, measured against ink
+rather than the element box. The glyphs are `+` and `−`. Pressing compresses in
+place and never travels downward onto material.
+
+Four robustness corrections land with it. `audioFileExtension` resolves the
+accepted-container table with `Object.hasOwn`: the table inherits from
+`Object.prototype`, so `isAcceptedAudioType("constructor")` returned true at the
+HTTP boundary of the one route that accepts a binary body.
+`withBoundedJsonRequest` attributes a deadline reached while its handler runs, so
+the `timed-out` branch every route declares is reachable and returns 504 rather
+than an opaque 500. The architecture checker resolves `@/` specifiers, which it
+had been dropping — 21 alias edges were invisible to the layering and provider
+rules while the check still printed no leak and no cycle. The browser-proof
+wrapper reaps its process group and stops the web server with SIGTERM instead of
+killing it behind its wrapper, which had left the port held so the next run read
+as a failed proof.
+
+The visible Ask Matter record is now discarded only on a move to different
+material — another document, scope, or lineage — rather than on any revision.
+Admission, repair, a derived label, undo and redo all raise the revision while
+the person is still reading the passage they asked about, and looking back over
+earlier questions is the purpose of the surface. A settled fallback is also
+recorded once per scenario through an injectable observer, carrying surface,
+reason and elapsed time and no material, prompt, provider identity or credential.
+
+```text
+source proof           npm run check: 1,179 Vitest passed, 1 skipped; Node tests
+                       passed; doctor, docs, architecture (310 files, 7 layers,
+                       no outward dependency, no provider leak, no cycle),
+                       typegen, typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 57 Chromium cases passed, 2
+                       capability-gated cases skipped
+known flake            `lasso addresses wrapped language at laptop width` failed
+                       once in a full run and passed on an isolated run and on a
+                       repeat of the full suite. Not reproduced; recorded rather
+                       than dismissed
+product boundary       no new durable state, no new intent, no live transform
+                       promotion, and no change to the performance gates
+```
 
 ## Candidate verification — 0.2.0-preview.33
 
