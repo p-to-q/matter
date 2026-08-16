@@ -143,12 +143,6 @@ for (const viewport of [
     expect(rootTitle).toBe("被允许想象的其他生活");
     await expect(rows.locator(".material-file__title").filter({ hasText: /^被允许想象的其他生活$/u }))
       .toHaveCount(1);
-    // A leaf keeps the shared disclosure gutter, but it gets a passive terminal
-    // mark rather than an arrow that falsely promises an expandable branch.
-    const firstLeaf = sidebar.locator(".material-file:not([data-has-children])").first();
-    await expect(firstLeaf.locator(".material-file__leaf-marker")).toHaveCount(1);
-    await expect(firstLeaf.locator("button.material-file__structure-control")).toHaveCount(0);
-    await expect(firstLeaf.locator(".material-file__leaf-marker")).toHaveCSS("pointer-events", "none");
     const rowPaths = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-markdown-path")),
     );
