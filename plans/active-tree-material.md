@@ -221,10 +221,10 @@ for Pan and ignores the focal x/y rewrite produced by zoom, so its local cells,
 one-pixel weight, `7px / 17px` cadence, and dash phase remain fixed. Browser proof
 also freezes the established online column width and gap at every breakpoint.
 The upper-left frosted field and its projected actions reveal together and retain
-the existing revalidation and suppression paths. Full source proof and all 58
-Chromium cases pass (56 passed, 2 capability-gated skips), including Pan deltas,
-zoom stability, keyboard, coarse pointer, held context, narrow geometry, and the
-one-field/one-ruling 2,000-node bound.
+the existing revalidation and suppression paths. Full source proof passes; the
+58 Chromium cases execute as 56 passed and 2 capability-gated skips, including
+Pan deltas, zoom stability, keyboard, coarse pointer, held context, narrow
+geometry, and the one-field/one-ruling 2,000-node bound.
 
 Execution order is deliberately narrow:
 
