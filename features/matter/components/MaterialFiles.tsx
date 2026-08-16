@@ -855,7 +855,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   >
                     {mode === "browse" ? (
                       (heldAside && !heldAsideRoot) || (!heldAsideRoot && !file.hasChildren) ? (
-                        <span aria-hidden="true" className="material-file__context-space" />
+                        <span
+                          aria-hidden="true"
+                          className={!heldAsideRoot && !file.hasChildren
+                            ? "material-file__context-space material-file__leaf-marker"
+                            : "material-file__context-space"}
+                        />
                       ) : (
                         <button
                           aria-label={heldAsideRoot
