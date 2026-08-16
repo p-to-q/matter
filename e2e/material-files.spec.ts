@@ -143,6 +143,9 @@ for (const viewport of [
     expect(rootTitle).toBe("被允许想象的其他生活");
     await expect(rows.locator(".material-file__title").filter({ hasText: /^被允许想象的其他生活$/u }))
       .toHaveCount(1);
+    // The seeded outline finishes every leaf at its deepest level; it therefore
+    // stays quiet rather than looking like a collection of false disclosures.
+    await expect(sidebar.locator(".material-file__terminal-marker")).toHaveCount(0);
     const rowPaths = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-markdown-path")),
     );
