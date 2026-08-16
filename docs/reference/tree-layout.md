@@ -94,11 +94,12 @@ right, first-child top alignment and sibling left alignment remain exact, and a
 viewport gesture cannot author a coordinate.
 
 When leaf atmosphere is disabled, one render-only structural ruling may echo the
-existing column step as an orientation aid. Its visual phase follows the transient
-pan/zoom camera, but it remains outside this layout result: no node reads it, no
+existing column step as an orientation aid. Explicit Pan translates that paper
+pattern, while zoom changes material only and leaves the local cells and dash
+phase fixed. The ruling remains outside this layout result: no node reads it, no
 line is a hit target, and camera motion never converts it into authored
-coordinates. Material widths, gaps, packing, and root anchoring stay authoritative;
-the ruling adapts to them rather than changing them.
+coordinates. Material widths, gaps, packing, and root anchoring stay
+authoritative; the ruling adapts to their rest geometry rather than changing it.
 
 The DOM edge measures fixed-width text boxes in CSS pixels. A pure `layout/`
 function computes subtree heights bottom-up and node positions top-down in

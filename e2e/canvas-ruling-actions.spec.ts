@@ -4,8 +4,8 @@ const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 const ROOT_ID = "thought_fixture_root";
 
 for (const viewport of [
-  { name: "laptop", width: 1280, height: 800, cell: "636px 196px", column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 136, height: 78 } },
-  { name: "narrow", width: 390, height: 844, cell: "344px 172px", column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 144, height: 82 } },
+  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 134, height: 76 } },
+  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 142, height: 80 } },
 ]) {
   test(`structural paper and one local action lens remain bounded at ${viewport.name}`, async ({ page }) => {
     const browserErrors: string[] = [];
@@ -31,16 +31,35 @@ for (const viewport of [
     await expect(ruling).toHaveCount(1);
     await expect(ruling).toHaveAttribute("data-active", "true");
     await expect(ruling).toHaveCSS("pointer-events", "none");
-    await expect(ruling).toHaveCSS("opacity", "1");
-    expect(await ruling.evaluate((element) => {
-      const color = getComputedStyle(element).backgroundColor;
-      const alpha = Number.parseFloat(color.match(/([\d.]+)\)$/)?.[1] ?? "1");
-      return alpha;
-    })).toBeGreaterThanOrEqual(.11);
+    await expect(ruling).toHaveCSS("opacity", "0.27");
     expect(await ruling.evaluate((element) => {
       const style = getComputedStyle(element);
-      return style.maskSize || style.webkitMaskSize;
-    })).toBe(viewport.cell);
+      const vertical = getComputedStyle(element, "::before");
+      const horizontal = getComputedStyle(element, "::after");
+      return {
+        cellHeight: style.getPropertyValue("--canvas-ruling-cell-height").trim(),
+        cellWidth: style.getPropertyValue("--canvas-ruling-cell-width").trim(),
+        dash: style.getPropertyValue("--canvas-ruling-dash").trim(),
+        dashPeriod: style.getPropertyValue("--canvas-ruling-dash-period").trim(),
+        horizontalBackgroundSize: horizontal.backgroundSize,
+        horizontalMaskPosition: horizontal.maskPosition || horizontal.webkitMaskPosition,
+        horizontalMaskSize: horizontal.maskSize || horizontal.webkitMaskSize,
+        verticalBackgroundSize: vertical.backgroundSize,
+        verticalMaskPosition: vertical.maskPosition || vertical.webkitMaskPosition,
+        verticalMaskSize: vertical.maskSize || vertical.webkitMaskSize,
+      };
+    })).toEqual({
+      cellHeight: viewport.cell.height,
+      cellWidth: viewport.cell.width,
+      dash: "7px",
+      dashPeriod: "24px",
+      horizontalBackgroundSize: `100% ${viewport.cell.height}`,
+      horizontalMaskPosition: "0px 0px",
+      horizontalMaskSize: "24px 100%",
+      verticalBackgroundSize: `${viewport.cell.width} 100%`,
+      verticalMaskPosition: "0px 0px",
+      verticalMaskSize: "100% 24px",
+    });
     expect(await page.locator(".matter-canvas").evaluate((element) => {
       const style = getComputedStyle(element);
       return {
@@ -105,11 +124,12 @@ for (const viewport of [
     })).toEqual({
       ...viewport.lens,
       centers: viewport.name === "narrow"
-        ? [{ x: 45, y: 41 }, { x: 99, y: 41 }]
-        : [{ x: 43, y: 39 }, { x: 93, y: 39 }],
+        ? [{ x: 44, y: 40 }, { x: 98, y: 40 }]
+        : [{ x: 42, y: 38 }, { x: 92, y: 38 }],
     });
     expect(await noLensCollision(page)).toBe(true);
-    expect(await lens.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(20px)");
+    expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
+      .toContain("blur(36px)");
     expect(await page.evaluate((rootId) => {
       const text = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
       const field = document.querySelector<HTMLElement>("[data-node-action-lens]");
@@ -147,11 +167,12 @@ for (const viewport of [
     if (viewport.name === "laptop") {
       await page.locator('[data-chrome-control="appearance"]').click();
       await expect(page.locator(".matter-document")).toHaveAttribute("data-canvas-theme", "dark");
-      await expect(ruling).toHaveCSS("background-color", "rgba(240, 242, 243, 0.14)");
+      await expect(ruling).toHaveCSS("opacity", "0.28");
       await rootText.hover();
       await expect(lens).toBeVisible();
       await expect(lens).toHaveCSS("color", "rgb(243, 244, 241)");
-      expect(await lens.evaluate((element) => getComputedStyle(element).backdropFilter)).toContain("blur(20px)");
+      expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
+        .toContain("blur(36px)");
       await page.locator('[data-chrome-control="fx"]').click();
       await expect(ruling).not.toHaveAttribute("data-active", "true");
       await expect(ruling).toHaveCSS("opacity", "0");
@@ -199,6 +220,10 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   expect(afterPan.viewportY - beforePan.viewportY).toBeCloseTo(38, 0);
   expect(afterPan.originX - beforePan.originX).toBeCloseTo(afterPan.viewportX - beforePan.viewportX, 1);
   expect(afterPan.originY - beforePan.originY).toBeCloseTo(afterPan.viewportY - beforePan.viewportY, 1);
+  expect(afterPan.screenCadence).toEqual(beforePan.screenCadence);
+  expect(afterPan.cellWidth).toBeCloseTo(beforePan.cellWidth, 4);
+  expect(afterPan.cellHeight).toBeCloseTo(beforePan.cellHeight, 4);
+
   await page.getByRole("button", { name: "Exit canvas pan" }).click();
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
   await rootText.hover();
@@ -214,6 +239,34 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   await page.mouse.move(0, 0);
   await rootText.focus();
   await expect(lens).toBeVisible();
+});
+
+test("zoom changes material scale without moving the paper-space ruling", async ({ page }) => {
+  await page.addInitScript(({ key }) => {
+    localStorage.setItem(key, JSON.stringify({ version: 1, language: "zh-CN", leafFx: false, appearance: "light" }));
+  }, { key: PREFERENCES_KEY });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("navigation", { name: "Editing tools" })
+    .getByRole("button", { name: "Canvas pan" }).click();
+
+  const beforeZoom = await rulingCameraReceipt(page);
+  await page.locator("main.matter-shell").dispatchEvent("wheel", {
+    clientX: 640,
+    clientY: 400,
+    ctrlKey: true,
+    deltaMode: 0,
+    deltaY: -120,
+  });
+  await expect.poll(async () => (await rulingCameraReceipt(page)).viewportZoom)
+    .toBeGreaterThan(beforeZoom.viewportZoom);
+  const afterZoom = await rulingCameraReceipt(page);
+  expect(afterZoom.cellWidth).toBeCloseTo(beforeZoom.cellWidth, 4);
+  expect(afterZoom.cellHeight).toBeCloseTo(beforeZoom.cellHeight, 4);
+  expect(afterZoom.originX).toBeCloseTo(beforeZoom.originX, 4);
+  expect(afterZoom.originY).toBeCloseTo(beforeZoom.originY, 4);
+  expect(afterZoom.screenCadence).toEqual(beforeZoom.screenCadence);
 });
 
 test("the action lens has one direct keyboard path and restores the thought focus", async ({ page }) => {
@@ -276,7 +329,7 @@ test.describe("coarse pointer action lens", () => {
     expect(await lens.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
-    })).toEqual({ width: 144, height: 82 });
+    })).toEqual({ width: 142, height: 80 });
     expect(await lens.locator("button").evaluateAll((buttons) => buttons.every((button) => {
       const rect = button.getBoundingClientRect();
       return Math.round(rect.width) === 48 && Math.round(rect.height) === 48;
@@ -328,11 +381,24 @@ async function rulingCameraReceipt(page: Page) {
     const ruling = document.querySelector<HTMLElement>("[data-canvas-ruling]");
     if (shell === null || ruling === null) throw new Error("camera receipt requires shell and ruling");
     const style = getComputedStyle(ruling);
+    const vertical = getComputedStyle(ruling, "::before");
+    const horizontal = getComputedStyle(ruling, "::after");
     return {
+      cellHeight: Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-height")),
+      cellWidth: Number.parseFloat(style.getPropertyValue("--canvas-ruling-cell-width")),
       originX: Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-x")),
       originY: Number.parseFloat(style.getPropertyValue("--canvas-ruling-origin-y")),
+      screenCadence: {
+        dash: style.getPropertyValue("--canvas-ruling-dash").trim(),
+        dashPeriod: style.getPropertyValue("--canvas-ruling-dash-period").trim(),
+        horizontalMaskPosition: horizontal.maskPosition || horizontal.webkitMaskPosition,
+        horizontalMaskSize: horizontal.maskSize || horizontal.webkitMaskSize,
+        verticalMaskPosition: vertical.maskPosition || vertical.webkitMaskPosition,
+        verticalMaskSize: vertical.maskSize || vertical.webkitMaskSize,
+      },
       viewportX: Number.parseFloat(shell.dataset.viewportX ?? "NaN"),
       viewportY: Number.parseFloat(shell.dataset.viewportY ?? "NaN"),
+      viewportZoom: Number.parseFloat(shell.dataset.viewportZoom ?? "NaN"),
     };
   });
 }

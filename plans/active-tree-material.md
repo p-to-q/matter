@@ -192,16 +192,18 @@ State: Proven after corrected product evidence.
 
 ```text
 Outcome:    turning leaf FX off reveals a legible, repeating structural ruling
-            that moves with the canvas camera; hovering or keyboard-focusing
+            that follows explicit Pan but stays locally fixed through zoom;
+            hovering or keyboard-focusing
             active material reveals one upper-left frosted action field whose
             Branch and Focus actions arrive with the blur, or Show all in focus.
-Boundary:   one camera-bound render-only ruling, one render-edge action presenter,
+Boundary:   one paper-space render-only ruling, one render-edge action presenter,
             the existing pure tool projection, and collision-safe DOM measurement.
 Invariants: tree structure remains the only layout authority; ruling and lens
             never enter material, history, persistence, context, or protocol;
             no per-node action controls mount; precise gestures and pending work win.
 Proof:      pure ruling and collision geometry; wide/narrow and light/dark browser
-            receipts; pan/zoom phase, hover, keyboard, coarse-pointer, lasso,
+            receipts; Pan translation and zoom stability, hover, keyboard,
+            coarse-pointer, lasso,
             drag, modal and focus state matrix; one-lens DOM bound and the
             existing 2,000-node gate.
 Non-goals:  authored coordinates, snapping, decorative card tiles,
@@ -214,13 +216,15 @@ the intents but omitted the reference's simultaneous local blur field. This
 reopens presentation and camera projection only; tree layout, intents, history,
 working context, protocol, and the constant-count DOM boundary stay frozen.
 
-Build receipt, 2026-08-17: the ruling now follows the transient camera through a
-pure render projection while the browser proof freezes the established online
-column width and gap at every tested breakpoint. The upper-left frosted field and
-its projected actions reveal together and retain the existing revalidation and
-suppression paths. Full source proof and all 57 Chromium cases pass (55 passed,
-2 capability-gated skips), including Pan deltas, keyboard, coarse pointer, held
-context, narrow geometry, and the one-field/one-ruling 2,000-node bound.
+Build receipt, 2026-08-17: one pure render projection translates the ruling only
+for Pan and ignores the focal x/y rewrite produced by zoom, so its local cells,
+one-pixel weight, `7px / 17px` cadence, and dash phase remain fixed. Browser proof
+also freezes the established online column width and gap at every breakpoint.
+The upper-left frosted field and its projected actions reveal together and retain
+the existing revalidation and suppression paths. Full source proof and all 58
+Chromium cases pass (56 passed, 2 capability-gated skips), including Pan deltas,
+zoom stability, keyboard, coarse pointer, held context, narrow geometry, and the
+one-field/one-ruling 2,000-node bound.
 
 Execution order is deliberately narrow:
 

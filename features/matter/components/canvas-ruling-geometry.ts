@@ -4,6 +4,11 @@ export type CanvasRulingViewport = Readonly<{
   zoom: number;
 }>;
 
+export type CanvasRulingOffset = Readonly<{
+  x: number;
+  y: number;
+}>;
+
 type Input = Readonly<{
   anchorX: number;
   cellHeight: number;
@@ -11,7 +16,7 @@ type Input = Readonly<{
   columnWidth: number;
   surfaceHeight: number;
   surfaceWidth: number;
-  viewport: CanvasRulingViewport;
+  offset: CanvasRulingOffset;
 }>;
 
 export type CanvasRulingGeometry = Readonly<{
@@ -22,9 +27,9 @@ export type CanvasRulingGeometry = Readonly<{
 }>;
 
 /**
- * Projects a repeating camera-space ruling without storing authored positions.
- * Layout metrics come from the same CSS tokens as material; the first material
- * lane starts eight world pixels below the cell's top edge.
+ * Projects a repeating paper-space ruling without storing authored positions.
+ * Layout metrics come from the same CSS tokens as material at rest. Pan may
+ * translate this auxiliary paper; material zoom never rescales it.
  */
 export function projectCanvasRulingGeometry(input: Input): CanvasRulingGeometry | null {
   if (
@@ -41,19 +46,42 @@ export function projectCanvasRulingGeometry(input: Input): CanvasRulingGeometry 
     input.columnWidth <= 0 ||
     input.surfaceHeight <= 0 ||
     input.surfaceWidth <= 0 ||
-    ![input.viewport.x, input.viewport.y, input.viewport.zoom].every(Number.isFinite) ||
-    input.viewport.zoom <= 0
+    ![input.offset.x, input.offset.y].every(Number.isFinite)
   ) return null;
 
   const cellWidth = input.columnWidth + input.columnGap;
   const rootWorldLeft = input.surfaceWidth / 2 + input.anchorX - cellWidth / 2;
   const rootWorldTop = input.surfaceHeight * 0.43 - 88;
   return Object.freeze({
-    cellHeight: round(input.cellHeight * input.viewport.zoom),
-    cellWidth: round(cellWidth * input.viewport.zoom),
-    originX: round(input.viewport.x + rootWorldLeft * input.viewport.zoom),
-    originY: round(input.viewport.y + rootWorldTop * input.viewport.zoom),
+    cellHeight: round(input.cellHeight),
+    cellWidth: round(cellWidth),
+    originX: round(input.offset.x + rootWorldLeft),
+    originY: round(input.offset.y + rootWorldTop),
   });
+}
+
+/**
+ * Advances the paper only for a translation-only camera update. Zoom reducers
+ * also rewrite x/y around their focal point; those deltas must not make the
+ * local ruling crawl under a stationary observer.
+ */
+export function advanceCanvasRulingOffset(
+  current: CanvasRulingOffset,
+  previous: CanvasRulingViewport,
+  next: CanvasRulingViewport,
+): CanvasRulingOffset {
+  if (
+    ![current.x, current.y, previous.x, previous.y, previous.zoom, next.x, next.y, next.zoom]
+      .every(Number.isFinite) ||
+    previous.zoom <= 0 ||
+    next.zoom <= 0 ||
+    previous.zoom !== next.zoom
+  ) return current;
+  const x = round(current.x + next.x - previous.x);
+  const y = round(current.y + next.y - previous.y);
+  return x === current.x && y === current.y
+    ? current
+    : Object.freeze({ x, y });
 }
 
 function round(value: number): number {

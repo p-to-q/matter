@@ -42,11 +42,14 @@ dependency monitor.
 ## Candidate verification — 0.2.0-preview.33
 
 Preview.33 corrects the auxiliary canvas layer without moving material. The
-solid one-pixel ruling is now legible across the full paper and its repeated
-phase and scale follow transient pan/zoom. Each responsive cell width remains
-exactly the established online column width plus gap (`520 + 116`, `280 + 64`,
-or `236 + 56` px); only the non-authoritative vertical reference rhythm is more
-open. The ruling remains pointer-inert and outside material, history,
+dashed one-pixel ruling is now legible across the full paper and its repeated
+cell origin follows explicit Pan while its paper-space span stays fixed through
+material zoom. Each responsive cell width remains exactly the established online
+column width plus gap (`520 + 116`, `280 + 64`, or `236 + 56` px); only the
+non-authoritative vertical reference rhythm is more open. Both axes retain one
+screen-space `7px / 17px` dash rhythm and a fixed screen phase through pan and
+zoom.
+The ruling remains pointer-inert and outside material, history,
 persistence, context, and protocol.
 
 Direct hover, keyboard focus, or coarse selection now reveals one upper-left
@@ -57,16 +60,16 @@ yields to lasso, stretch, pan, wheel motion, node drag, pending work, held
 material, overlays, and unsafe geometry.
 
 ```text
-source proof           npm run check: 1,150 Vitest passed, 2 skipped; 48 Node
+source proof           npm run check: 1,151 Vitest passed, 2 skipped; 48 Node
                        tests passed; doctor, docs, architecture, typegen,
                        typecheck, lint, and production build passed
-browser proof          npm run test:e2e: 55 Chromium cases passed, 2
-                       capability-gated cases skipped; focused 7-case ruling/
+browser proof          npm run test:e2e: 56 Chromium cases passed, 2
+                       capability-gated cases skipped; focused 8-case ruling/
                        field matrix passed at light/dark, laptop/narrow,
                        keyboard, coarse pointer, held context, Pan and 2,000 nodes
 layout proof           browser receipts freeze the online 520/116 and 280/64
-                       column tokens; the ruling adapts to those values and Pan
-                       deltas without changing a thought box
+                       column tokens; Pan translates the ruling, while material
+                       zoom leaves its cells and phase unchanged
 scale proof            one full-paper ruling and at most one delegated field are
                        mounted at 2,000 nodes; geometry is pure O(1) per camera
                        update and creates no per-node controls or measurements

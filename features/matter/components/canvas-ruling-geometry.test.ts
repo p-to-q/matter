@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { projectCanvasRulingGeometry } from "./canvas-ruling-geometry";
+import {
+  advanceCanvasRulingOffset,
+  projectCanvasRulingGeometry,
+} from "./canvas-ruling-geometry";
 
 describe("projectCanvasRulingGeometry", () => {
   it("shares the desktop material column step and follows camera translation", () => {
@@ -10,11 +13,11 @@ describe("projectCanvasRulingGeometry", () => {
       columnWidth: 520,
       surfaceHeight: 700,
       surfaceWidth: 960,
-      viewport: { x: 42, y: -18, zoom: 1 },
+      offset: { x: 42, y: -18 },
     })).toEqual({ cellHeight: 196, cellWidth: 636, originX: 204, originY: 195 });
   });
 
-  it("scales both the repeating step and its camera origin", () => {
+  it("keeps the paper step fixed when material zoom is projected elsewhere", () => {
     expect(projectCanvasRulingGeometry({
       anchorX: 0,
       cellHeight: 196,
@@ -22,8 +25,8 @@ describe("projectCanvasRulingGeometry", () => {
       columnWidth: 520,
       surfaceHeight: 700,
       surfaceWidth: 960,
-      viewport: { x: -25, y: 31, zoom: 1.5 },
-    })).toEqual({ cellHeight: 294, cellWidth: 954, originX: 218, originY: 350.5 });
+      offset: { x: -25, y: 31 },
+    })).toEqual({ cellHeight: 196, cellWidth: 636, originX: 137, originY: 244 });
   });
 
   it("keeps narrow and compact lanes aligned to their responsive canvas anchors", () => {
@@ -34,7 +37,7 @@ describe("projectCanvasRulingGeometry", () => {
       columnWidth: 280,
       surfaceHeight: 760,
       surfaceWidth: 374,
-      viewport: { x: 0, y: 0, zoom: 1 },
+      offset: { x: 0, y: 0 },
     })).toEqual({ cellHeight: 172, cellWidth: 344, originX: -13, originY: 238.8 });
     expect(projectCanvasRulingGeometry({
       anchorX: -34,
@@ -43,7 +46,7 @@ describe("projectCanvasRulingGeometry", () => {
       columnWidth: 236,
       surfaceHeight: 640,
       surfaceWidth: 304,
-      viewport: { x: 0, y: 0, zoom: 1 },
+      offset: { x: 0, y: 0 },
     })).toEqual({ cellHeight: 160, cellWidth: 292, originX: -28, originY: 187.2 });
   });
 
@@ -55,7 +58,7 @@ describe("projectCanvasRulingGeometry", () => {
       columnWidth: 520,
       surfaceHeight: 0,
       surfaceWidth: 960,
-      viewport: { x: 0, y: 0, zoom: 1 },
+      offset: { x: 0, y: 0 },
     })).toBeNull();
     expect(projectCanvasRulingGeometry({
       anchorX: 0,
@@ -64,7 +67,21 @@ describe("projectCanvasRulingGeometry", () => {
       columnWidth: 520,
       surfaceHeight: 700,
       surfaceWidth: 960,
-      viewport: { x: 0, y: 0, zoom: Number.NaN },
+      offset: { x: 0, y: Number.NaN },
     })).toBeNull();
+  });
+
+  it("advances only for pan and ignores the focal translation produced by zoom", () => {
+    const initial = Object.freeze({ x: 18, y: -7 });
+    expect(advanceCanvasRulingOffset(
+      initial,
+      { x: 0, y: 0, zoom: 1 },
+      { x: 64, y: 38, zoom: 1 },
+    )).toEqual({ x: 82, y: 31 });
+    expect(advanceCanvasRulingOffset(
+      initial,
+      { x: 64, y: 38, zoom: 1 },
+      { x: -4, y: -19, zoom: 1.2 },
+    )).toBe(initial);
   });
 });

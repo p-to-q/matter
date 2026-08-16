@@ -52,9 +52,10 @@ canvas fold state. Search is a flat result view whose rows carry ancestry paths.
 The tree shadow is the supplied decorative asset inside the paper, never document state.
 Turning that atmosphere off reveals the paper's structural ruling rather than a
 blank canvas. The ruling follows the current derived column rhythm only as a
-visual orientation aid: its repeated phase follows the transient pan/zoom camera
-while the actual material widths, gaps, and derived boxes remain unchanged. It
-cannot become a coordinate, snap target, or second layout authority.
+visual orientation aid: explicit Pan translates the complete paper pattern,
+while material zoom leaves its local cells and dash phase fixed. The actual
+material widths, gaps, and derived boxes remain unchanged. It cannot become a
+coordinate, snap target, or second layout authority.
 `app/icon.svg` is explicitly provisional and is not the product mark: it draws
 the same rooted figure the material index draws, on ink and paper only, sized so
 it survives 16 px. `app/apple-icon.tsx` renders that same figure full-bleed at

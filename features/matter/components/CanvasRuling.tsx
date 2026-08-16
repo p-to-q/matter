@@ -2,7 +2,9 @@
 
 import { useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
+  advanceCanvasRulingOffset,
   projectCanvasRulingGeometry,
+  type CanvasRulingOffset,
   type CanvasRulingViewport,
 } from "./canvas-ruling-geometry";
 
@@ -26,7 +28,18 @@ type RulingSurface = Readonly<{
  */
 export function CanvasRuling({ active, viewport }: CanvasRulingProps) {
   const rulingRef = useRef<HTMLDivElement>(null);
+  const previousViewportRef = useRef(viewport);
+  const [offset, setOffset] = useState<CanvasRulingOffset>(() => Object.freeze({
+    x: viewport.x,
+    y: viewport.y,
+  }));
   const [surface, setSurface] = useState<RulingSurface | null>(null);
+
+  useLayoutEffect(() => {
+    const previous = previousViewportRef.current;
+    previousViewportRef.current = viewport;
+    setOffset((current) => advanceCanvasRulingOffset(current, previous, viewport));
+  }, [viewport]);
 
   useLayoutEffect(() => {
     const ruling = rulingRef.current;
@@ -58,10 +71,10 @@ export function CanvasRuling({ active, viewport }: CanvasRulingProps) {
         cellHeight: surface.cellHeight,
         columnGap: surface.columnGap,
         columnWidth: surface.columnWidth,
+        offset,
         surfaceHeight: surface.height,
         surfaceWidth: surface.width,
-        viewport,
-      }), [surface, viewport]);
+      }), [offset, surface]);
   const style = geometry === null ? undefined : {
     "--canvas-ruling-cell-height": `${geometry.cellHeight}px`,
     "--canvas-ruling-cell-width": `${geometry.cellWidth}px`,

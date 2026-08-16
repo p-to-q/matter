@@ -32,12 +32,17 @@ canvas appearance, or the right-rail editing tools.
 - The paper owns the supplied leaf-shadow media. It is decorative, transient,
   and never part of document state or persistence.
 - When leaf atmosphere is off, the paper exposes one quiet structural ruling
-  across the complete visible surface. The ruling uses a legible solid one-pixel
+  across the complete visible surface. The ruling uses a legible dashed one-pixel
   line and repeats on the existing derived horizontal column step: `636 x 196px`
   at desk widths, `344 x 172px` below 720 px, and `292 x 160px` below 390 px.
-  Its phase and scale follow the transient canvas camera, but it never changes
-  the online material widths, gaps, or derived boxes. It remains outside authored
-  position, snapping, hit testing, persistence, and protocol.
+  Its cell origin follows explicit canvas translation, while its paper-space span
+  stays fixed through material zoom. It never changes the online material widths,
+  gaps, or derived boxes and remains outside authored position, snapping, hit
+  testing, persistence, and protocol.
+  Horizontal and vertical guides share one screen-space rhythm: `1px` weight,
+  `7px` dash, and `17px` clear gap. Their dash phase is screen-fixed: Pan moves
+  the complete reference paper, while zoom changes material only and never moves
+  a guide, its cadence, or its reading weight.
 - Paper utilities align to a 24 px edge grid. Their hover fill may react to the
   leaf atmosphere, but they never migrate into the material field.
 - The right rail exposes only the current editing vocabulary. Its selected

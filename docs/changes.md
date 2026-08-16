@@ -20,9 +20,11 @@ Forecloses: what this makes harder or impossible
 ## 2026-08-17 — Canvas ruling follows the camera without moving material
 
 Changed: the leaf-off ruling is now one full-paper render layer whose repeated
-phase and scale follow transient pan and zoom. Its cell width remains exactly the
-existing online column width plus gap; the taller vertical rhythm and stronger
-one-pixel line add orientation without changing any material box. Direct hover
+cell origin follows explicit Pan while its paper-space span remains fixed through
+material zoom. Its cell width remains exactly the existing online column width
+plus gap; the taller vertical rhythm and stronger dashed one-pixel line add
+orientation without changing any material box. Dash weight, spacing, and screen
+phase remain stable through pan and zoom. Direct hover
 or keyboard focus now reveals one upper-left frosted field and its Branch/Focus
 actions in the same frame, with Show all as the focus-view projection.
 
