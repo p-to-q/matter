@@ -33,13 +33,14 @@ An overlong local Elastic basis that cannot form a strict envelope now returns
 to the existing recoverable error/adjustment state instead of leaving a
 committed degree with a false submit affordance. A new 834×1112 coarse-pointer
 browser receipt proves Elastic and Text Swap coexist through real touch lasso,
-local controls, one atomic result, and pointer Undo.
+local controls, atomic results, and pointer Undo. Before an operation begins the
+selection offers both paths; once a person chooses a non-zero Elastic degree,
+Elastic owns that local interaction until the lasso is reset, so Text Swap
+cannot start over an adjusted or pending expansion.
 Elastic now carries its request-start document epoch through the private browser
 commit path and atomically rejects a late result after same-id, same-revision
-hydration. Voice and the typed carrier remain explicit ownership transfers from
-an adjusted Elastic selection, so changing operation never requires discarding
-and redrawing the lasso. Both selected-language protocols now reject a visible
-lineage beyond the tree's 32-node depth bound.
+hydration. Both selected-language protocols now reject a visible lineage beyond
+the tree's 32-node depth bound.
 
 Why: Preview.35 proved both fixture loops but exposed only Elastic in health and
 had no tablet-breakpoint receipt. One green deployment check could therefore
@@ -49,9 +50,9 @@ gesture the server will never receive. Evaluation and deployed-origin evidence
 have different jobs, so neither a configured health surface nor a reachable
 provider may stand in for quality, latency, and atomic browser proof.
 An asynchronous result needs both the tree memento and the browser document
-epoch: id and revision can survive hydration while ownership does not. Voice is
-the existing product-level mode switch, not a disabled control that reappears
-only after reconstructing the selection.
+epoch: id and revision can survive hydration while ownership does not. The
+initial lasso is the shared reference, but an adjusted degree is already an
+explicit operation choice and must not leave a competing generator visible.
 
 Forecloses: treating one material gate as authority for the other, calling a
 configured health surface a successful provider receipt, silently promoting a
@@ -59,8 +60,8 @@ browser preview to live material generation, or presenting an impossible local
 request as still submittable. It also forecloses an eval that silently retries,
 prints material, selects several candidates, or spends money without the exact
 planned-call confirmation. It also forecloses accepting a late Elastic plan
-after document replacement or forcing a person to redraw the same reference to
-move between the two selected-language grammars.
+after document replacement or allowing two selected-language grammars to claim
+the same adjusted or pending interaction.
 
 ## 2026-08-20 — Text Swap gives selected language one bounded human direction
 

@@ -66,7 +66,8 @@ Invariants: Elastic and Text Swap keep independent gates and protocols; health
             rollback, and successful-origin proof.
 Proof:      exact health envelope and profile tests; over-capacity lineage
             start refusal with zero request/history; 834×1112 touch lasso,
-            Voice mode switch, Elastic/Text Swap commit and pointer Undo; full
+            selection-time operation choice, symmetric local ownership,
+            Elastic/Text Swap commit and pointer Undo; full
             source and Chromium release suites before promotion; 5 locales ×
             12 classes × 3 axes, two no-retry repeats, zero-network defaults,
             private review artifacts, strict origin authorization, shared
@@ -79,15 +80,15 @@ Non-goals:  enabling either live adapter, inventing a spend amount, copying an
 
 Receipt, 2026-08-20: the final browser-preview candidate carries the
 request-start document epoch through Elastic's private commit boundary and
-rejects same-id/same-revision hydration races without changing state. Voice and
-the typed fallback transfer ownership directly from an adjusted Elastic
-selection; the tablet receipt no longer exits and redraws its lasso. Both wire
-contracts accept 32 visible lineage nodes and reject 33. `npm run check` passed
-51 Node checks, 1,355 Vitest cases with 3 capability skips, type generation,
-typecheck, lint and the production build. The controlled Chromium release suite
-passed 65 cases with 2 capability skips. The language harness remained
-zero-network by default (8 passed, 1 live skip), and the origin smoke command
-planned exactly 1+1 synthetic calls without executing them.
+rejects same-id/same-revision hydration races without changing state. The same
+fresh lasso exposes either Elastic or Text Swap; after a non-zero degree is
+chosen, Elastic alone owns the local interaction until lasso reset. Both wire
+contracts accept 32 visible lineage nodes and reject 33. The controlled
+Chromium release suite passed 65 cases with 2 capability skips at the measured
+three-worker boundary. The language harness remained zero-network by default
+(9 passed, 1 live skip), and the origin smoke command planned exactly 1+1
+synthetic calls without executing them. Exact source-suite counts are recorded
+in release readiness.
 
 ## Active freeze — Text Swap / text-swap/1
 

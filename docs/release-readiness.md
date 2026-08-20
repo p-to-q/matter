@@ -64,10 +64,11 @@ state instead of presenting a false submit affordance. The request-start
 document epoch now reaches the final Elastic store commit, so a late plan loses
 authority even after a same-id, same-revision hydrate; stale receipts leave
 history, material, presentation and `lastError` untouched. On an 834×1112
-coarse-pointer canvas, a chosen Elastic amount no longer traps the person in
-that lane: Voice or the typed carrier explicitly transfers ownership to Text
-Swap without requiring Exit and a new lasso. Both strict lineage parsers now
-share the tree's 32-visible-node maximum and reject one node beyond it.
+coarse-pointer canvas, the fresh selection offers Elastic and Text Swap without
+local-control collisions. Choosing a non-zero Elastic degree makes expansion
+the sole local operation until lasso reset, rather than leaving a second model
+action visible over adjusted or pending material. Both strict lineage parsers
+now share the tree's 32-visible-node maximum and reject one node beyond it.
 
 ```text
 source proof           npm run check: doctor and 38 Markdown files passed;
@@ -77,15 +78,18 @@ source proof           npm run check: doctor and 38 Markdown files passed;
                        cases skipped; typegen, typecheck, lint, and the Next
                        16.3.0 production build passed
 browser proof          controlled full Chromium suite: 65 passed, 2
-                       capability-gated cases skipped, 0 failed; the 834×1112
-                       touch receipt proves lasso, direct Elastic→Text Swap
-                       ownership transfer, both atomic commits and pointer Undo
-evaluation proof       default evaluation: 8 passed, 1 live run skipped; origin
+                       capability-gated cases skipped, 0 failed at the measured
+                       three-worker shared-server boundary; the 834×1112
+                       touch receipt proves lasso, selection-time operation
+                       choice, symmetric ownership, both atomic commits and
+                       pointer Undo
+evaluation proof       default evaluation: 9 passed, 1 live run skipped; origin
                        smoke dry-run planned exactly 1+1 calls at eight-second
                        spacing and reported that no network was used
 independent review      product/interaction, implementation boundary, and
-                       release audits identified the epoch and mode-switch
-                       defects; both were corrected before the final suites
+                       release audits identified the epoch, operation-
+                       ownership, and paid-evaluation artifact defects; all
+                       were corrected before the final suites
 production boundary    release only as browser-preview; neither paid 360-call
                        corpus, two-person review, distributed rate/spend
                        controls, nor an executed origin promotion is claimed

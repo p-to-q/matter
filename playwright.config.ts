@@ -3,6 +3,10 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
+  // Every project shares one fixture-backed Next server. Keep enough browser
+  // concurrency to expose cross-feature interference without starving that
+  // single server and turning five-second interaction receipts into load tests.
+  workers: 3,
   retries: process.env.CI ? 2 : 0,
   reporter: "line",
   use: {

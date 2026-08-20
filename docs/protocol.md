@@ -417,6 +417,14 @@ material admission. Leaving the mode, changing selection or document basis,
 tree mutation, Undo/Redo, import, document switch, unmount, page hide, or Escape
 aborts recording or request work and revokes every late result.
 
+Before either local operation begins, the same eligible selection may expose
+both Elastic and Text Swap. A non-zero Elastic degree, active drag, request, or
+recoverable Elastic failure then owns that selection: the Text Swap carrier is
+absent and Voice cannot begin a second generative operation. Resetting and
+redrawing the lasso returns to the two-operation choice point. This ownership is
+symmetric with Text Swap entry hiding and inerting Elastic; the two grammars
+never hand an in-flight basis directly to one another.
+
 One valid Voice finalization, or one local submit from the optional typed path,
 creates one immutable request. There is no automatic retry, candidate carousel,
 streaming mutation, or multi-step plan. A retryable provider failure leaves
