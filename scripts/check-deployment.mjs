@@ -10,9 +10,11 @@ const HEALTH_SURFACES = [
   "transcriptRepair",
   "inquiry",
   "transformTurn",
+  "textSwap",
   "archiveExportImport",
 ];
 const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
+const DEPLOYMENT_PROFILES = new Set(["browser-preview", "material-live"]);
 
 export function normalizeDeploymentOrigin(value) {
   const url = new URL(value);
@@ -25,8 +27,9 @@ export function normalizeDeploymentOrigin(value) {
   return url.origin;
 }
 
-export function inspectDeploymentHealth(value, expectedVersion) {
+export function inspectDeploymentHealth(value, expectedVersion, profile = "browser-preview") {
   const failures = [];
+  if (!DEPLOYMENT_PROFILES.has(profile)) return [`Unknown deployment profile ${String(profile)}.`];
   if (!isRecord(value)) return ["Health response is not an object."];
   if (value.status !== "ok") failures.push("Health status is not ok.");
   if (value.protocolVersion !== "0.2") failures.push("Health protocolVersion is not 0.2.");
@@ -50,8 +53,13 @@ export function inspectDeploymentHealth(value, expectedVersion) {
   if (value.surfaces.voiceAdmission !== "available") {
     failures.push("Public voice admission is not available.");
   }
-  if (value.surfaces.transformTurn !== "unavailable") {
-    failures.push("Transform health claim changed; update the release boundary before deploying.");
+  const expectedMaterialState = profile === "material-live" ? "available" : "unavailable";
+  for (const name of ["transformTurn", "textSwap"]) {
+    if (value.surfaces[name] !== expectedMaterialState) {
+      failures.push(
+        `Material model surface ${name} must be ${expectedMaterialState} for ${profile}.`,
+      );
+    }
   }
   return failures;
 }
@@ -68,7 +76,12 @@ export function inspectDeploymentHeaders(headers) {
   return failures;
 }
 
-export async function checkDeployment({ origin, expectedVersion, fetchImpl = fetch }) {
+export async function checkDeployment({
+  origin,
+  expectedVersion,
+  profile = "browser-preview",
+  fetchImpl = fetch,
+}) {
   const normalized = normalizeDeploymentOrigin(origin);
   const request = (path, init = {}) => fetchImpl(`${normalized}${path}`, {
     cache: "no-store",
@@ -93,7 +106,9 @@ export async function checkDeployment({ origin, expectedVersion, fetchImpl = fet
     } catch {
       failures.push("Health probe did not return JSON.");
     }
-    if (payload !== undefined) failures.push(...inspectDeploymentHealth(payload, expectedVersion));
+    if (payload !== undefined) {
+      failures.push(...inspectDeploymentHealth(payload, expectedVersion, profile));
+    }
   }
   failures.push(...inspectDeploymentHeaders(root.headers));
   return Object.freeze({ origin: normalized, failures: Object.freeze(failures) });
@@ -107,6 +122,7 @@ export async function checkDeployment({ origin, expectedVersion, fetchImpl = fet
 export async function waitForDeployment({
   origin,
   expectedVersion,
+  profile = "browser-preview",
   waitMs = 0,
   intervalMs = 5_000,
   check = checkDeployment,
@@ -130,7 +146,7 @@ export async function waitForDeployment({
   do {
     attempts += 1;
     try {
-      result = await check({ origin: normalizedOrigin, expectedVersion });
+      result = await check({ origin: normalizedOrigin, expectedVersion, profile });
     } catch {
       result = Object.freeze({
         origin: normalizedOrigin,
@@ -150,10 +166,11 @@ function isRecord(value) {
 
 async function main() {
   const packageMetadata = JSON.parse(await readFile("package.json", "utf8"));
-  const { origin, waitMs } = parseArguments(process.argv.slice(2));
+  const { origin, profile, waitMs } = parseArguments(process.argv.slice(2));
   const result = await waitForDeployment({
     origin: origin ?? process.env.MATTER_DEPLOYMENT_ORIGIN ?? "https://matter.ptoq.io",
     expectedVersion: packageMetadata.version,
+    profile,
     waitMs,
   });
   if (result.failures.length > 0) {
@@ -166,6 +183,7 @@ async function main() {
 
 function parseArguments(args) {
   let origin;
+  let profile = "browser-preview";
   let waitMs = 0;
   for (const value of args) {
     if (value.startsWith("--wait=")) {
@@ -176,10 +194,21 @@ function parseArguments(args) {
       waitMs = seconds * 1_000;
       continue;
     }
-    if (origin !== undefined) throw new Error("Deployment check accepts one origin and an optional --wait=<seconds>.");
+    if (value.startsWith("--profile=")) {
+      profile = value.slice("--profile=".length);
+      if (!DEPLOYMENT_PROFILES.has(profile)) {
+        throw new Error("--profile must be browser-preview or material-live.");
+      }
+      continue;
+    }
+    if (origin !== undefined) {
+      throw new Error(
+        "Deployment check accepts one origin, --profile=<name>, and --wait=<seconds>.",
+      );
+    }
     origin = value;
   }
-  return Object.freeze({ origin, waitMs });
+  return Object.freeze({ origin, profile, waitMs });
 }
 
 function delay(milliseconds) {

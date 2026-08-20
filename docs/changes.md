@@ -17,6 +17,51 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-20 — Deployment health names both material grammars
+
+Changed: the no-store health envelope now reports Text Swap separately from
+Elastic Language. The deployment checker has explicit `browser-preview` and
+`material-live` profiles: the former requires both material-model surfaces to
+be unavailable, and the latter requires both to be configured as available.
+Two default-off release tools now own the next evidence: independent 180-case,
+two-repeat candidate corpora for Elastic and Text Swap, and a separately
+authorized deployed-origin sampler that sends only frozen synthetic material,
+paces both routes through their shared admission boundary, and accepts only
+strict production plans. Both require explicit call-count/origin authority and
+keep material and responses out of routine output.
+An overlong local Elastic basis that cannot form a strict envelope now returns
+to the existing recoverable error/adjustment state instead of leaving a
+committed degree with a false submit affordance. A new 834×1112 coarse-pointer
+browser receipt proves Elastic and Text Swap coexist through real touch lasso,
+local controls, one atomic result, and pointer Undo.
+Elastic now carries its request-start document epoch through the private browser
+commit path and atomically rejects a late result after same-id, same-revision
+hydration. Voice and the typed carrier remain explicit ownership transfers from
+an adjusted Elastic selection, so changing operation never requires discarding
+and redrawing the lasso. Both selected-language protocols now reject a visible
+lineage beyond the tree's 32-node depth bound.
+
+Why: Preview.35 proved both fixture loops but exposed only Elastic in health and
+had no tablet-breakpoint receipt. One green deployment check could therefore
+say nothing about Text Swap or be reused after an unreviewed live promotion.
+Strict local refusal must also remain visibly recoverable rather than strand a
+gesture the server will never receive. Evaluation and deployed-origin evidence
+have different jobs, so neither a configured health surface nor a reachable
+provider may stand in for quality, latency, and atomic browser proof.
+An asynchronous result needs both the tree memento and the browser document
+epoch: id and revision can survive hydration while ownership does not. Voice is
+the existing product-level mode switch, not a disabled control that reappears
+only after reconstructing the selection.
+
+Forecloses: treating one material gate as authority for the other, calling a
+configured health surface a successful provider receipt, silently promoting a
+browser preview to live material generation, or presenting an impossible local
+request as still submittable. It also forecloses an eval that silently retries,
+prints material, selects several candidates, or spends money without the exact
+planned-call confirmation. It also forecloses accepting a late Elastic plan
+after document replacement or forcing a person to redraw the same reference to
+move between the two selected-language grammars.
+
 ## 2026-08-20 — Text Swap gives selected language one bounded human direction
 
 Changed: the user explicitly promoted Text Swap into the current first-release

@@ -34,7 +34,11 @@ type FixedExpandInput = Readonly<{
   locale: CanvasLanguage;
   enabled: boolean;
   interactionScopeKey: string;
-  commit: (envelope: TransformEnvelope, plan: TransformPlan) => TransformCommittedChange | null;
+  commit: (
+    envelope: TransformEnvelope,
+    plan: TransformPlan,
+    expectedDocumentEpoch: number,
+  ) => TransformCommittedChange | null;
   onCommitted: (change: TransformCommittedChange) => void;
 }>;
 
@@ -73,10 +77,18 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
           basis,
         })
       : null;
-    if (envelope === null) return false;
-
     generationRef.current += 1;
     requestRef.current?.abort(new DOMException("Superseded", "AbortError"));
+    requestRef.current = null;
+    if (envelope === null) {
+      // A release can race a bounded-context or scope refusal after the
+      // stretch reducer has committed its degree. Surface the same local,
+      // retryable recovery state as a transport refusal so the rail reopens;
+      // no request or tree command exists for this failed start.
+      setState(Object.freeze({ phase: "error", basis }));
+      return false;
+    }
+
     const generation = generationRef.current;
     const controller = new AbortController();
     requestRef.current = controller;
@@ -84,7 +96,7 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
     void requestTransform(envelope, controller.signal).then((plan) => {
       if (generation !== generationRef.current || controller.signal.aborted) return;
       requestRef.current = null;
-      const change = inputRef.current.commit(envelope, plan);
+      const change = inputRef.current.commit(envelope, plan, basis.documentEpoch);
       if (change === null) {
         // A stale response has no recovery action: current material wins.
         setState(IDLE);

@@ -175,6 +175,8 @@ export type TextSwapStaleReceipt = Readonly<{
   revision: number;
 }>;
 
+export type TransformStaleReceipt = TextSwapStaleReceipt;
+
 export type AdmissionRepairSettlement =
   | Readonly<{ repairLeaseId: string; outcome: "discarded" }>
   | Readonly<{
@@ -205,13 +207,14 @@ export type ObservableMatterStoreReceipt =
 
 export type AdmissionStoreReceipt = RuntimeReceipt | AdmissionCommitReceipt;
 export type AdmissionRepairStoreReceipt = RuntimeReceipt | AdmissionRepairCommitReceipt;
-export type TransformStoreReceipt = RuntimeReceipt | TransformCommitReceipt;
+export type TransformStoreReceipt = RuntimeReceipt | TransformCommitReceipt | TransformStaleReceipt;
 export type TextSwapStoreReceipt = RuntimeReceipt | TextSwapCommitReceipt | TextSwapStaleReceipt;
 export type MatterStoreReceipt =
   | ObservableMatterStoreReceipt
   | AdmissionCommitReceipt
   | AdmissionRepairCommitReceipt
   | TransformCommitReceipt
+  | TransformStaleReceipt
   | TextSwapCommitReceipt
   | TextSwapStaleReceipt;
 
@@ -227,7 +230,12 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   redo: () => MatterStoreReceipt;
-  commitTransform: (envelope: TransformEnvelope, plan: TransformPlan, nowMs: number) => TransformStoreReceipt;
+  commitTransform: (
+    envelope: TransformEnvelope,
+    plan: TransformPlan,
+    expectedDocumentEpoch: number,
+    nowMs: number,
+  ) => TransformStoreReceipt;
   commitTextSwap: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -592,9 +600,21 @@ export function createMatterStore(
       return requireSynchronousReceipt(receipt);
     },
 
-    commitTransform: (envelope, plan, nowMs) => {
+    commitTransform: (envelope, plan, expectedDocumentEpoch, nowMs) => {
       let receipt: TransformStoreReceipt | undefined;
       set((current) => {
+        if (
+          !Number.isSafeInteger(expectedDocumentEpoch) ||
+          expectedDocumentEpoch < 0 ||
+          expectedDocumentEpoch !== current.documentEpoch
+        ) {
+          receipt = Object.freeze({
+            operation: "commit",
+            status: "stale",
+            revision: current.tree.revision,
+          });
+          return current;
+        }
         const beforeNode = current.tree.nodes[envelope.selection.nodeId];
         const translated = Number.isFinite(nowMs) && nowMs >= 0
           ? planToTreeCommand(current.tree, envelope, plan, {
@@ -602,6 +622,14 @@ export function createMatterStore(
               now: () => nowMs,
             })
           : null;
+        if (translated !== null && !translated.ok && translated.reason === "STALE") {
+          receipt = Object.freeze({
+            operation: "commit",
+            status: "stale",
+            revision: current.tree.revision,
+          });
+          return current;
+        }
         if (translated === null || !translated.ok) {
           receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
           return freezeState({

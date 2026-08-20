@@ -526,13 +526,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (pointer: coarse) {
-  .stretch-handle { min-width: 48px; height: 48px; }
+  .tool-rail__button { height: var(--instrument-size); }
+  .stretch-handle { min-width: var(--instrument-size); height: var(--instrument-size); }
   .stretch-handle__ratio { top: -52px; }
   .stretch-amount-rail { opacity: .58; }
-  .text-swap-feedback__action { min-height: 48px; }
-  .text-swap-type-entry { min-width: 48px; min-height: 48px; }
+  .text-swap-feedback__action { min-height: var(--instrument-size); }
+  .text-swap-type-entry { min-width: var(--instrument-size); min-height: var(--instrument-size); }
   .text-swap-composer { min-height: 52px; }
-  .text-swap-composer button { min-width: 48px; min-height: 48px; }
+  .text-swap-composer button { min-width: var(--instrument-size); min-height: var(--instrument-size); }
 }
 
 @media (forced-colors: active) {

@@ -1,6 +1,6 @@
 {
   "name": "ptoq-matter",
-  "version": "0.2.0-preview.35",
+  "version": "0.2.0-preview.36",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -20,7 +20,9 @@
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:receipt": "env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true npm run build && env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true MATTER_RUN_PERFORMANCE_RECEIPT=true node scripts/run-e2e.mjs e2e/rooted-performance.spec.ts --config=playwright.production.config.ts",
     "check:architecture": "node --test scripts/check-architecture.test.mjs && node scripts/check-architecture.mjs",
-    "probe:pool": "node scripts/probe-model-pool.mjs"
+    "probe:pool": "node scripts/probe-model-pool.mjs",
+    "probe:material-origin": "node scripts/probe-material-origin.mjs",
+    "eval:language": "vitest run scripts/material-language-eval.test.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

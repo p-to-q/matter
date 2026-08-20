@@ -155,8 +155,8 @@ The four units do not substitute for one another:
 - selection offsets, replacement capacity, and final-node capacity are UTF-16
   code units;
 - request and response bounds are measured from actual UTF-8 bytes;
-- stretch degree targets Unicode extended grapheme clusters from
-  `Intl.Segmenter("en", { granularity: "grapheme" })`;
+- stretch degree targets Unicode extended grapheme clusters from the
+  locale-independent `Intl.Segmenter("und", { granularity: "grapheme" })`;
 - provider tokens are only a transport and spend ceiling, never product length.
 
 The server derives the target; the client does not send it. Let:
@@ -217,7 +217,7 @@ export type ReplaceTextRangeAction = {
 export type ActionPlan = {
   protocolVersion: typeof PROTOCOL_VERSION;
   requestVersion: "transform/2";
-  interactionId: string;
+  id: string;
   treeId: string;
   treeRevision: number;
   action: ReplaceTextRangeAction;

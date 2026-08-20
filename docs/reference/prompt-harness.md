@@ -2,7 +2,7 @@
 
 Modules: `features/matter/server/harness.ts`, `prompt-spine.ts`,
 `repair-harness.ts`, `label-harness.ts`, `inquiry-harness.ts`,
-`transform-harness.ts`, future `text-swap-harness.ts`, `model-pool.ts`
+`transform-harness.ts`, `text-swap-harness.ts`, `model-pool.ts`
 
 ## Problem
 
@@ -286,9 +286,9 @@ MATERIAL  fenced passage, surrounding, and visible root-to-focus lineage;
           all are reference, never instruction
 ```
 
-The browser rejects a direction that is blank, untrimmed, multi-line,
-control-bearing, or longer than 240 Unicode code points before a provider can be
-called. The scenario never receives audio, partial hypotheses, transcript
+The browser trims surrounding whitespace, then rejects a direction that is
+blank, multi-line, control-bearing, or longer than 240 Unicode code points
+before a provider can be called. The scenario never receives audio, partial hypotheses, transcript
 metadata, carrier, hidden retrieval, held-aside passages, siblings, descendants,
 or a previous exchange. The selected node occurs once as `before / passage /
 after`; ancestors occur once in lineage.
@@ -328,6 +328,19 @@ credential, hard spend cap and alerts, and a tested gate-off rollback all pass.
 Routine logs contain only low-cardinality outcome, rejection reason, locale,
 length/byte buckets, and latency. Direction, passage, lineage, prompt, response,
 audio, tree/node/request identity, and IP are never logged.
+
+The repository now holds two separate evidence tools for this gate. The
+default-off `eval:language` command expands each scenario-owned synthetic corpus
+to 180 cases and executes exactly two no-retry temperature-zero samples against
+one explicitly selected pool candidate; an exact `360` call confirmation is
+required before the first paid request. Raw synthetic inputs and answers are
+written only to gitignored private artifacts, while routine output contains
+low-cardinality counts and latency buckets. The independent
+`probe:material-origin` command is dry-run by default and, only after exact
+remote/production authorization, measures strict plans through the deployed
+HTTP routes at their shared rate boundary. Neither tool replaces the other, the
+two-person review, the distributed rule, the owner-approved spend ceiling, or
+the final browser/Voice receipt.
 
 ## Rejected
 

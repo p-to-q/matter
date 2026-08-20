@@ -21,6 +21,7 @@ const HEALTH = {
     transcriptRepair: "available",
     inquiry: "available",
     transformTurn: "unavailable",
+    textSwap: "unavailable",
     archiveExportImport: "available",
   },
 };
@@ -55,7 +56,23 @@ test("requires truthful release surfaces", () => {
   overstated.surfaces.transformTurn = "available";
   assert.deepEqual(inspectDeploymentHealth(overstated, HEALTH.appVersion), [
     "Public voice admission is not available.",
-    "Transform health claim changed; update the release boundary before deploying.",
+    "Material model surface transformTurn must be unavailable for browser-preview.",
+  ]);
+});
+
+test("requires both independent material model surfaces for a live promotion", () => {
+  const live = structuredClone(HEALTH);
+  live.surfaces.transformTurn = "available";
+  assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "material-live"), [
+    "Material model surface textSwap must be available for material-live.",
+  ]);
+  live.surfaces.textSwap = "available";
+  assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "material-live"), []);
+});
+
+test("rejects an unknown deployment profile before trusting health", () => {
+  assert.deepEqual(inspectDeploymentHealth(HEALTH, HEALTH.appVersion, "fixture"), [
+    "Unknown deployment profile fixture.",
   ]);
 });
 

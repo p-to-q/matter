@@ -129,8 +129,12 @@ export function MatterApp() {
     title,
     createdAt: new Date().toISOString(),
   }), [renameDocument]);
-  const commitTransformTurn = useCallback((envelope: TransformEnvelope, plan: TransformPlan): TransformCommittedChange | null => {
-    const receipt = commitTransform(envelope, plan, Date.now());
+  const commitTransformTurn = useCallback((
+    envelope: TransformEnvelope,
+    plan: TransformPlan,
+    expectedDocumentEpoch: number,
+  ): TransformCommittedChange | null => {
+    const receipt = commitTransform(envelope, plan, expectedDocumentEpoch, Date.now());
     return receipt.operation === "commit" && receipt.status === "committed" && "transformChange" in receipt
       ? receipt.transformChange
       : null;

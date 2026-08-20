@@ -145,6 +145,7 @@ export type RootedMaterialProps = {
   onTransformCommit: (
     envelope: TransformEnvelope,
     plan: TransformPlan,
+    expectedDocumentEpoch: number,
   ) => TransformCommittedChange | null;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
@@ -506,12 +507,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const preview = elasticPreviewSource === null
       ? null
       : projectElasticPreview(
-      elasticPreviewSource,
-      signal.amount,
-      clientViewport(),
-      signal.handle,
-      signal.handle,
-    );
+          elasticPreviewSource,
+          signal.amount,
+          clientViewport(),
+          signal.handle,
+          signal.handle,
+          hasCoarsePointer(),
+        );
     if (element === null) return;
     if (preview === null) {
       element.removeAttribute("data-preview-mode");
@@ -533,8 +535,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
       ? preview.bottomHandle.y
       : receipt.afterTopClient + preview.pocketDepth;
     const visible = clientViewport();
-    const topY = clampClient(rawTopY, visible?.top, visible?.bottom, 44);
-    const bottomY = clampClient(rawBottomY, visible?.top, visible?.bottom, 44);
+    const topY = clampClient(
+      rawTopY,
+      visible?.top,
+      visible?.bottom,
+      preview.handleViewportInset,
+    );
+    const bottomY = clampClient(
+      rawBottomY,
+      visible?.top,
+      visible?.bottom,
+      preview.handleViewportInset,
+    );
     const rawTopCenter = receipt?.centerX ?? (preview.topHandle.x1 + preview.topHandle.x2) / 2;
     const rawBottomCenter = receipt?.centerX ?? (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2;
     const topCenter = clampClient(rawTopCenter, visible?.left, visible?.right, 26);
@@ -636,6 +648,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const textSwapPhase = textSwap.state.phase;
   const textSwapActive = textSwapPhase !== "idle" &&
     textSwapPhase !== "success" && textSwapPhase !== "stale";
+  const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
+    transformState.phase !== "idle";
   useEffect(() => {
     if (textSwapPhase === "success" || textSwapPhase === "stale") textSwap.dismiss();
   }, [textSwap, textSwapPhase]);
@@ -888,7 +902,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     textSwap.state.phase === "recording" || textSwap.state.phase === "transcribing" ||
     textSwap.state.phase === "pending";
   const textSwapVoiceAvailable = textSwapVoiceCanCancel || (
-    textSwapSelection !== null && (
+    !elasticLanguageActive && textSwapSelection !== null && (
       textSwapRetryAvailable || (
         voiceAdmissionIsEnabled() && voiceReadiness.status === "ready"
       )
@@ -1792,7 +1806,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         status={transformState.phase}
         stretchVisible={stretchSelection !== null && !textSwapActive}
         textSwapState={textSwap.state}
-        textSwapEligible={textSwapSelection !== null}
+        textSwapEligible={textSwapSelection !== null && !elasticLanguageActive}
         onTextSwapRetry={textSwap.retry}
         typedTextSwap={currentTypedTextSwap}
         onStartTypedTextSwap={startTypedTextSwap}
@@ -2062,6 +2076,7 @@ function LassoOverlay({
     textColumn ?? undefined,
     stretch.activeHandle,
     stretch.lastHandle,
+    hasCoarsePointer(),
   );
   return (
     <div
@@ -2792,6 +2807,10 @@ function clientViewport() {
         right: visual.offsetLeft + visual.width,
         bottom: visual.offsetTop + visual.height,
       };
+}
+
+function hasCoarsePointer(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 }
 
 function clampStretchRailTop(

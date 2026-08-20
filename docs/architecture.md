@@ -417,6 +417,13 @@ first-release gates are available, fixture-only, unavailable, or not yet
 implemented. It never returns provider names, raw environment values, stored
 material, transcripts, or lineage.
 
+Elastic Language and Text Swap are independent health surfaces. The deployment
+receipt has two explicit profiles: `browser-preview` requires both material
+model gates to remain unavailable, while `material-live` requires both to be
+configured. Health proves configuration only; a successful strict synthetic
+turn and the external rate/spend receipts are still required before a live
+claim.
+
 The complete dependency choice and rejected foundations are in
 [`reference/foundation.md`](reference/foundation.md). The short version: Matter
 owns its tree and interaction semantics; generic IndexedDB and ZIP mechanics may

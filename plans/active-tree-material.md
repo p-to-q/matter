@@ -44,6 +44,51 @@ language. System files, accounts, sync, collaboration, and native shells may
 arrive only after this loop has a live deployed receipt and a separate ownership
 contract.
 
+## Active sub-slice — promotion truth before provider promotion
+
+State: implemented for health/profile separation, tablet/strict-local recovery,
+two independent 180-case candidate corpora, and a default-dry-run strict origin
+sampler. Paid corpus runs, independent human review, distributed control,
+owner-approved spend, and successful origin/browser receipts remain open.
+
+```text
+Outcome:    a release receipt distinguishes a safe browser preview from a live
+            Elastic + Text Swap deployment, and neither one grammar nor a
+            configured pool can impersonate a proven material turn.
+Boundary:   no-store health projection, deployment receipt profiles, strict
+            local Elastic refusal recovery, one tablet/coarse browser proof,
+            a pure shared evaluation core with scenario-owned synthetic corpora,
+            and an explicitly authorized deployed-origin API sampler.
+Invariants: Elastic and Text Swap keep independent gates and protocols; health
+            exposes no provider or material; browser-preview requires both
+            material model surfaces unavailable; material-live requires both
+            configured but still cannot replace corpus, rate/spend, latency,
+            rollback, and successful-origin proof.
+Proof:      exact health envelope and profile tests; over-capacity lineage
+            start refusal with zero request/history; 834×1112 touch lasso,
+            Voice mode switch, Elastic/Text Swap commit and pointer Undo; full
+            source and Chromium release suites before promotion; 5 locales ×
+            12 classes × 3 axes, two no-retry repeats, zero-network defaults,
+            private review artifacts, strict origin authorization, shared
+            8-second pacing, bounded response parsing, and low-cardinality
+            aggregate tests.
+Non-goals:  enabling either live adapter, inventing a spend amount, copying an
+            external asset into the repository, changing tree/history, or
+            weakening either adjudicator to improve acceptance.
+```
+
+Receipt, 2026-08-20: the final browser-preview candidate carries the
+request-start document epoch through Elastic's private commit boundary and
+rejects same-id/same-revision hydration races without changing state. Voice and
+the typed fallback transfer ownership directly from an adjusted Elastic
+selection; the tablet receipt no longer exits and redraws its lasso. Both wire
+contracts accept 32 visible lineage nodes and reject 33. `npm run check` passed
+51 Node checks, 1,355 Vitest cases with 3 capability skips, type generation,
+typecheck, lint and the production build. The controlled Chromium release suite
+passed 65 cases with 2 capability skips. The language harness remained
+zero-network by default (8 passed, 1 live skip), and the origin smoke command
+planned exactly 1+1 synthetic calls without executing them.
+
 ## Active freeze — Text Swap / text-swap/1
 
 This is a user-directed promotion of the next material capability into the

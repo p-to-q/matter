@@ -149,6 +149,26 @@ describe("canvas guidance projection", () => {
     });
   });
 
+  it.each([
+    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull the lower handle to expand."],
+    [{ kind: "pending", amount: 0.6 }, "wait-expansion", "progress", "Expanding."],
+    [{ kind: "error", amount: 0.6 }, "reset-expansion", "recovery", "No change—text kept. Pull again."],
+  ] satisfies readonly [
+    Extract<CanvasLanguageGuidanceState, { kind: "selected" }>["stretch"],
+    string,
+    string,
+    string,
+  ][])(
+    "lets current Elastic state %s outrank a dismissed admission error",
+    (stretch, id, kind, text) => {
+      expect(projectCanvasGuidance(input({
+        admission: attempt({ phase: "error", errorCode: "NO_AUDIO" }),
+        language: { kind: "selected", stretch },
+        material: { kind: "focus" },
+      }))).toEqual({ id, kind, text });
+    },
+  );
+
   it("returns an immutable disposable projection", () => {
     expect(Object.isFrozen(projectCanvasGuidance(input()))).toBe(true);
   });

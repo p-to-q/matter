@@ -34,6 +34,7 @@ export type MatterHealth = Readonly<{
      */
     inquiry: MatterHealthSurface;
     transformTurn: MatterHealthSurface;
+    textSwap: MatterHealthSurface;
     archiveExportImport: "available";
   }>;
 }>;
@@ -60,6 +61,7 @@ export function healthSnapshot(): MatterHealth {
       transcriptRepair: transcriptRepairSurface(),
       inquiry: inquirySurface(),
       transformTurn: transformTurnSurface(),
+      textSwap: textSwapSurface(),
       archiveExportImport: "available",
     }),
   });
@@ -96,10 +98,14 @@ function transformTurnSurface(): MatterHealthSurface {
   return adapterSurface(process.env.MATTER_TRANSFORM_ADAPTER);
 }
 
+function textSwapSurface(): MatterHealthSurface {
+  return adapterSurface(process.env.MATTER_TEXT_SWAP_ADAPTER);
+}
+
 /**
- * The shape shared by the two pool-backed scenarios that keep a deterministic
- * floor. `available` reports only that a pool is configured; it is never a
- * claim about a relay being reachable, and the surface works either way.
+ * The shape shared by independently gated pool-backed scenarios. `available`
+ * reports only that a pool is configured; it is never a claim that a relay is
+ * reachable or that the scenario has passed its promotion receipt.
  */
 function adapterSurface(configured: string | undefined): MatterHealthSurface {
   if (configured === "live") return readModelPool().length > 0 ? "available" : "unavailable";

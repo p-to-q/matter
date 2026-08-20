@@ -45,6 +45,55 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.36
+
+Preview.36 makes the difference between a safe browser preview and a live
+material-model promotion explicit. Health reports Elastic and Text Swap as
+independent surfaces. The deployment checker now has a `browser-preview`
+profile that requires both to remain unavailable and a `material-live` profile
+that requires both to be configured without treating configuration as proof of
+quality. The default-off evaluation harness freezes two independent
+five-locale, 180-case corpora with two no-retry repeats, while the separately
+authorized origin sampler plans either a 1+1 smoke receipt or a paced 50+50
+promotion receipt using synthetic material only. Their default invocations use
+no network and spend nothing.
+
+The browser slice also closes three interaction and commit boundaries. A local
+Elastic basis that cannot form a bounded envelope reopens its existing recovery
+state instead of presenting a false submit affordance. The request-start
+document epoch now reaches the final Elastic store commit, so a late plan loses
+authority even after a same-id, same-revision hydrate; stale receipts leave
+history, material, presentation and `lastError` untouched. On an 834×1112
+coarse-pointer canvas, a chosen Elastic amount no longer traps the person in
+that lane: Voice or the typed carrier explicitly transfers ownership to Text
+Swap without requiring Exit and a new lasso. Both strict lineage parsers now
+share the tree's 32-visible-node maximum and reject one node beyond it.
+
+```text
+source proof           npm run check: doctor and 38 Markdown files passed;
+                       51 Node checks passed; architecture covered 350 files
+                       across 7 layers with no outward dependency, provider
+                       leak, or cycle; 1,355 Vitest passed and 3 capability
+                       cases skipped; typegen, typecheck, lint, and the Next
+                       16.3.0 production build passed
+browser proof          controlled full Chromium suite: 65 passed, 2
+                       capability-gated cases skipped, 0 failed; the 834×1112
+                       touch receipt proves lasso, direct Elastic→Text Swap
+                       ownership transfer, both atomic commits and pointer Undo
+evaluation proof       default evaluation: 8 passed, 1 live run skipped; origin
+                       smoke dry-run planned exactly 1+1 calls at eight-second
+                       spacing and reported that no network was used
+independent review      product/interaction, implementation boundary, and
+                       release audits identified the epoch and mode-switch
+                       defects; both were corrected before the final suites
+production boundary    release only as browser-preview; neither paid 360-call
+                       corpus, two-person review, distributed rate/spend
+                       controls, nor an executed origin promotion is claimed
+known product gap       a foreign-id archive can be imported and saved, but a
+                       strict active-document pointer is still required before
+                       reload can promise to return to that imported document
+```
+
 ## Candidate verification — 0.2.0-preview.35
 
 Preview.35 turns the existing elastic language demonstration into two strict,

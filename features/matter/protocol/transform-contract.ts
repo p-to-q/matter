@@ -283,7 +283,7 @@ function parseGesture(value: unknown): TransformEnvelope["gesture"] | null {
 
 function parseLineage(value: unknown): readonly TransformLineageNode[] | null {
   if (!isRecord(value) || !hasExactKeys(value, ["lineage"]) || !Array.isArray(value.lineage)) return null;
-  if (value.lineage.length === 0 || value.lineage.length > MAX_TREE_DEPTH + 1) return null;
+  if (value.lineage.length === 0 || value.lineage.length > MAX_TREE_DEPTH) return null;
   const lineage: TransformLineageNode[] = [];
   let codePoints = 0;
   for (let index = 0; index < value.lineage.length; index += 1) {

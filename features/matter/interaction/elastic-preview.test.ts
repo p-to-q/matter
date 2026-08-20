@@ -55,6 +55,22 @@ describe("elastic preview geometry", () => {
     expect(bottom.topHandle.x1).toBeGreaterThanOrEqual(ELASTIC_PREVIEW_METRICS.handleHalfWidth - 11);
   });
 
+  it("keeps the full coarse lower-grip target inside the viewport", () => {
+    const viewport = { left: 0, top: 160, right: 300, bottom: 270 };
+    const preview = elasticPreviewGeometry(
+      stepped,
+      1,
+      viewport,
+      undefined,
+      "bottom",
+      "bottom",
+      true,
+    )!;
+    expect(preview.handleViewportInset).toBe(ELASTIC_PREVIEW_METRICS.coarseHandleOutwardExtent);
+    expect(preview.bottomHandle.y).toBe(222);
+    expect(preview.bottomHandle.y + preview.handleViewportInset).toBe(viewport.bottom);
+  });
+
   it("clamps negative input to zero and overshoot to one", () => {
     expect(elasticPreviewGeometry(stepped, -1)!.amount).toBe(0);
     expect(elasticPreviewGeometry(stepped, 4)!.amount).toBe(1);

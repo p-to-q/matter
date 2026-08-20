@@ -146,7 +146,10 @@ export type CanvasGuidance = Readonly<{
 export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidance {
   if (
     input.admission.phase !== "idle" &&
-    !(input.admission.phase === "error" && input.language.kind === "text-swap")
+    !(
+      input.admission.phase === "error" &&
+      (input.language.kind === "text-swap" || input.language.kind === "selected")
+    )
   ) {
     return projectAdmissionGuidance(input.admission);
   }

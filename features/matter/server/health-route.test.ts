@@ -18,6 +18,7 @@ describe("Matter health route", () => {
     process.env.MATTER_REPAIR_ADAPTER = "fixture";
     process.env.MATTER_INQUIRY_ADAPTER = "off";
     process.env.MATTER_TRANSFORM_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_ADAPTER = "fixture";
     delete process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED;
     process.env.MATTER_BASE_PATH = "/matter";
     const response = GET();
@@ -37,6 +38,7 @@ describe("Matter health route", () => {
         transcriptRepair: "fixture",
         inquiry: "unavailable",
         transformTurn: "fixture",
+        textSwap: "fixture",
         archiveExportImport: "available",
       },
     });
@@ -77,6 +79,14 @@ describe("Matter health route", () => {
     process.env.MATTER_TRANSFORM_ADAPTER = "off";
 
     expect(healthSnapshot().surfaces.transformTurn).toBe("unavailable");
+  });
+
+  it("reports Text Swap independently from the Elastic adapter", () => {
+    process.env.MATTER_TRANSFORM_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_ADAPTER = "off";
+
+    expect(healthSnapshot().surfaces.transformTurn).toBe("fixture");
+    expect(healthSnapshot().surfaces.textSwap).toBe("unavailable");
   });
 
   it("falls back to the canonical Matter base path for unsafe deployment values", () => {

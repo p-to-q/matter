@@ -153,12 +153,62 @@ does not relax a failing version or surface check.
 npm run check:deployment -- https://matter.ptoq.io --wait=120
 ```
 
+That command defaults to `--profile=browser-preview`: it requires both
+`transformTurn` and `textSwap` to report `unavailable`. A reviewed promotion
+uses the explicit profile below only after the corpus, distributed rate rule,
+owner-approved spend cap/alerts, isolated credential, and rollback receipts
+exist:
+
+```bash
+npm run check:deployment -- https://matter.ptoq.io --profile=material-live --wait=120
+```
+
+The live profile proves that both independent adapters are configured; it does
+not call the provider and is never a substitute for one successful strict
+synthetic turn through each deployed route.
+
+Candidate quality and origin operation are deliberately separate. The language
+evaluation defaults to an ordinary skipped test; a paid run requires one
+scenario, one candidate ordinal, and the exact `360` planned-call confirmation:
+
+```bash
+MATTER_LANGUAGE_EVAL=1 \
+MATTER_LANGUAGE_EVAL_SCENARIO=transform \
+MATTER_LANGUAGE_EVAL_CANDIDATE_INDEX=1 \
+MATTER_LANGUAGE_EVAL_CONFIRM_CALLS=360 \
+npm run eval:language
+```
+
+Run Text Swap separately with `MATTER_LANGUAGE_EVAL_SCENARIO=text-swap`. Raw
+synthetic inputs/answers and the two blinded review packets stay only below the
+gitignored `tmp/material-language-eval/` directory. A missing or incomplete
+second review can never pass; Text Swap remains calibration-only until its
+numeric promotion thresholds are re-frozen from evidence.
+
+The deployed-origin sampler is also dry-run by default. It requires an explicit
+origin and expected version; remote execution additionally requires an exact
+`MATTER_SYNTHETIC_PROBE_ORIGIN`, `--execute`, and `--allow-remote`, while the
+production domain requires its literal `--allow-production` confirmation. It
+uses no browser material, cookies, recording, retry, trace, screenshot, or
+video:
+
+```bash
+npm run probe:material-origin -- https://matter.ptoq.io \
+  --expected-version=0.2.0-preview.36
+```
+
+That command only prints the planned 1+1 smoke receipt. Do not add the execution
+flags until both health surfaces are live and the external controls are already
+proved. The promotion profile schedules 50+50 strict synthetic turns with one
+shared eight-second starting interval; any model rejection fails promotion,
+and timeout/unavailability may occupy at most one of fifty per surface.
+
 Manually verify, with a normal browser and no repository secrets:
 
 - `https://matter.ptoq.io/` returns the root-seeded canvas and
   `https://matter.ptoq.io/matter` is 404;
-- `/api/health` reports the deployed version, empty base path, and only truthful
-  capability states;
+- `/api/health` reports the deployed version, empty base path, and separate
+  truthful `transformTurn` and `textSwap` capability states;
 - browser speech works where the browser provides it; unsupported speech stays
   on-device or reports a truthful limitation;
 - labels retain their deterministic floor, transcript repair falls back
@@ -187,10 +237,11 @@ or to bypass the scenario adjudicator.
   promising multi-document persistence beyond the current local home document.
 
 Validation: local `npm run check` and full Chromium E2E must pass before every
-source preview; after a Vercel promotion, add `npm run check:deployment` and the
-manual real-origin receipt above. With the gates open, `/api/health` reports
-`thoughtLabel`, `transcriptRepair`, and `inquiry` as `available`; that word means
-a pool is configured, never that a relay answered.
+source preview; after a Vercel promotion, add the explicit
+`--profile=material-live` deployment check and the manual real-origin receipt
+above. With the gates open, `/api/health` reports `thoughtLabel`,
+`transcriptRepair`, `inquiry`, `transformTurn`, and `textSwap` as `available`;
+that word means a pool is configured, never that a relay answered.
 
 Risks: browser speech availability varies by browser/vendor; serverless
 in-memory governors do not replace edge rate limits; archive imports intentionally

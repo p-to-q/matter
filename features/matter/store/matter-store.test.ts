@@ -750,9 +750,29 @@ describe("Matter store", () => {
     const expanded = "被允许沿着眼前松动的边界缓慢想象的、仍然保留清晰细节和余地的其他生活";
     const plan = buildTransformPlan(parsed.envelope, expanded);
 
+    const oldDocumentEpoch = store.getState().documentEpoch;
+    expect(store.getState().hydrateSnapshot(tree)).toMatchObject({
+      operation: "hydrate",
+      status: "hydrated",
+      revision: tree.revision,
+    });
+    expect(store.getState().commitTransform(
+      parsed.envelope,
+      plan,
+      oldDocumentEpoch,
+      Date.parse("2026-08-11T00:00:00.000Z"),
+    )).toEqual({
+      operation: "commit",
+      status: "stale",
+      revision: tree.revision,
+    });
+    expect(store.getState().lastError).toBeNull();
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(node.text);
+
     const receipt = store.getState().commitTransform(
       parsed.envelope,
       plan,
+      store.getState().documentEpoch,
       Date.parse("2026-08-11T00:00:00.000Z"),
     );
     expect(receipt).toMatchObject({

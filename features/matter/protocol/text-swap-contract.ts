@@ -271,7 +271,7 @@ function parseDirection(value: unknown): TextSwapEnvelope["direction"] | null {
 
 function parseLineage(value: unknown): readonly TextSwapLineageNode[] | null {
   if (!isRecord(value) || !hasExactKeys(value, ["lineage"]) || !Array.isArray(value.lineage)) return null;
-  if (value.lineage.length === 0 || value.lineage.length > MAX_TREE_DEPTH + 1) return null;
+  if (value.lineage.length === 0 || value.lineage.length > MAX_TREE_DEPTH) return null;
   const lineage: TextSwapLineageNode[] = [];
   let codePoints = 0;
   for (let index = 0; index < value.lineage.length; index += 1) {

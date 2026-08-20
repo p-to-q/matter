@@ -29,6 +29,7 @@ export type ElasticPreview = Readonly<{
   /** The upper cue is geometry only; the sole interactive grip is below. */
   topCue: ElasticPreviewLine;
   bottomHandle: ElasticPreviewLine;
+  handleViewportInset: number;
   pocketDepth: number;
   maximumDepth: number;
   opacity: number;
@@ -43,6 +44,7 @@ export const ELASTIC_PREVIEW_METRICS = Object.freeze({
   viewportEdgeInset: 8,
   handleHalfWidth: 26,
   handleOutwardExtent: 44,
+  coarseHandleOutwardExtent: 48,
   lineTopTolerance: 1,
   minimumCueWidth: 32,
   maximumCueWidth: 96,
@@ -61,6 +63,7 @@ export function elasticPreviewGeometry(
   textColumn?: ElasticPreviewBounds,
   activeHandle: StretchHandle | null = null,
   lastHandle: StretchHandle | null = null,
+  coarsePointer = false,
 ): ElasticPreview | null {
   if (
     !Array.isArray(rects) || rects.length === 0 || !Number.isFinite(amount) ||
@@ -73,7 +76,7 @@ export function elasticPreviewGeometry(
   const source = prepareElasticPreviewSource(rects, textColumn);
   return source === null
     ? null
-    : projectElasticPreview(source, amount, viewport, activeHandle, lastHandle);
+    : projectElasticPreview(source, amount, viewport, activeHandle, lastHandle, coarsePointer);
 }
 
 /** Prepares selection-dependent geometry once per DOM measurement epoch. */
@@ -106,6 +109,7 @@ export function projectElasticPreview(
   viewport?: ElasticPreviewViewport,
   activeHandle: StretchHandle | null = null,
   lastHandle: StretchHandle | null = null,
+  coarsePointer = false,
 ): ElasticPreview | null {
   if (
     !Number.isFinite(amount) ||
@@ -119,6 +123,9 @@ export function projectElasticPreview(
   const bottomLine = visualLines.at(-1)!;
   const topBase = topLine.top - ELASTIC_PREVIEW_METRICS.boundaryOutset;
   const bottomBase = bottomLine.bottom + ELASTIC_PREVIEW_METRICS.boundaryOutset;
+  const handleViewportInset = coarsePointer
+    ? ELASTIC_PREVIEW_METRICS.coarseHandleOutwardExtent
+    : ELASTIC_PREVIEW_METRICS.handleOutwardExtent;
   // The person's degree is material intent, not available screen space. A
   // viewport edge may clamp the fixed control, but it must never shorten the
   // language slot that is later sent to the agent.
@@ -127,10 +134,11 @@ export function projectElasticPreview(
 
   const topCenter = clampHandleX((topLine.left + topLine.right) / 2, viewport);
   const bottomCenter = clampHandleX((bottomLine.left + bottomLine.right) / 2, viewport);
-  const topY = clampHandleY(topBase, viewport);
+  const topY = clampHandleY(topBase, viewport, handleViewportInset);
   const bottomY = clampHandleY(
     bottomBase + pocketDepth,
     viewport,
+    handleViewportInset,
   );
   const topHandle = cueAt(topCenter, topY);
   const bottomHandle = cueAt(bottomCenter, bottomY);
@@ -159,6 +167,7 @@ export function projectElasticPreview(
     topHandle,
     topCue: topHandle,
     bottomHandle,
+    handleViewportInset,
     pocketDepth,
     maximumDepth,
     opacity,
@@ -207,12 +216,16 @@ function clampHandleX(x: number, viewport: ElasticPreviewViewport | undefined): 
   ));
 }
 
-function clampHandleY(y: number, viewport: ElasticPreviewViewport | undefined): number {
+function clampHandleY(
+  y: number,
+  viewport: ElasticPreviewViewport | undefined,
+  handleViewportInset: number,
+): number {
   if (viewport === undefined) return roundClientValue(y);
   return roundClientValue(clamp(
     y,
-    viewport.top + ELASTIC_PREVIEW_METRICS.handleOutwardExtent,
-    viewport.bottom - ELASTIC_PREVIEW_METRICS.handleOutwardExtent,
+    viewport.top + handleViewportInset,
+    viewport.bottom - handleViewportInset,
   ));
 }
 

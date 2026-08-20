@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyTreeCommand } from "../tree/engine";
+import { MAX_TREE_DEPTH } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import {
   TEXT_SWAP_REQUEST_VERSION,
@@ -48,6 +49,16 @@ function tree(): ThoughtTree {
   };
 }
 
+function boundedLineage(length: number) {
+  return Array.from({ length }, (_, index) => ({
+    id: index === length - 1 ? "thought" : `context_${index}`,
+    text: index === length - 1 ? TEXT : "x",
+    parentId: index === 0 ? null : `context_${index - 1}`,
+    createdAt: TIME,
+    updatedAt: TIME,
+  }));
+}
+
 describe("text-swap/1 contract", () => {
   it("accepts only the exact contract and canonicalizes the bounded direction", () => {
     const parsed = parseTextSwapEnvelope(envelope());
@@ -66,6 +77,15 @@ describe("text-swap/1 contract", () => {
   it("requires exactly one current punctuation segment", () => {
     expect(parseTextSwapEnvelope(envelope({
       selection: { type: "segment-range", nodeId: "thought", start: 0, end: TEXT.length, selectedText: TEXT },
+    })).ok).toBe(false);
+  });
+
+  it("accepts the tree depth bound and rejects one extra visible lineage node", () => {
+    expect(parseTextSwapEnvelope(envelope({
+      context: { lineage: boundedLineage(MAX_TREE_DEPTH) },
+    })).ok).toBe(true);
+    expect(parseTextSwapEnvelope(envelope({
+      context: { lineage: boundedLineage(MAX_TREE_DEPTH + 1) },
     })).ok).toBe(false);
   });
 

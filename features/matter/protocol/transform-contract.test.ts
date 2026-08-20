@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { applyTreeCommand } from "../tree/engine";
 import { MATTER_LOCALES } from "../config/locales";
+import { MAX_TREE_DEPTH } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import {
   TRANSFORM_REQUEST_VERSION,
@@ -47,6 +48,19 @@ function tree(): ThoughtTree {
   };
 }
 
+function boundedLineage(length: number) {
+  return Array.from({ length }, (_, index) => {
+    const final = index === length - 1;
+    return {
+      id: final ? "thought" : `context_${index}`,
+      text: final ? TEXT : "x",
+      parentId: index === 0 ? null : `context_${index - 1}`,
+      createdAt: TIME,
+      updatedAt: TIME,
+    };
+  });
+}
+
 describe("transform/2 contract", () => {
   it("accepts one exact fixed-expand envelope and rejects voice, legacy, and unknown fields", () => {
     expect(parseTransformEnvelope(envelope()).ok).toBe(true);
@@ -62,6 +76,15 @@ describe("transform/2 contract", () => {
       expect(parsed.ok).toBe(true);
       if (parsed.ok) expect(parsed.envelope.selection.selectedText).toBe(PASSAGE);
     }
+  });
+
+  it("accepts the tree depth bound and rejects one extra visible lineage node", () => {
+    expect(parseTransformEnvelope(envelope({
+      context: { lineage: boundedLineage(MAX_TREE_DEPTH) },
+    })).ok).toBe(true);
+    expect(parseTransformEnvelope(envelope({
+      context: { lineage: boundedLineage(MAX_TREE_DEPTH + 1) },
+    })).ok).toBe(false);
   });
 
   it("requires an exact echo, fixed grow presentation, and a policy-valid expansion", () => {
