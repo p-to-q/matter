@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { MAX_TRANSFORM_REQUEST_BYTES, parseTransformEnvelope, parseTransformPlan } from "../protocol/transform-contract";
 import type { ScenarioAdapter, ScenarioCall } from "./harness";
+import type { MaterialTurnObservationOptions } from "./material-turn-observation";
 import { resetTransformAdmissionForTests } from "./transform-admission";
 import { fixtureTransformAdapter } from "./transform-provider";
 import { TRANSFORM_ROUTE_TIMEOUT_MS, handleTransformRequest, resetTransformGovernor, transformErrorResponse } from "./transform-route";
@@ -17,7 +18,8 @@ beforeEach(() => {
 
 describe("transform route", () => {
   it("runs a fixture through the strict envelope, model-text-only scenario, and server-owned plan", async () => {
-    const response = await post(body(), fixtureTransformAdapter);
+    const observe = vi.fn();
+    const response = await post(body(), fixtureTransformAdapter, {}, { observe });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const plan = await response.json();
@@ -33,6 +35,20 @@ describe("transform route", () => {
       intent: "expand",
     });
     expect(parsed?.action.text).not.toBe(PASSAGE);
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "expand-in-place",
+      outcome: "success",
+      reason: "NONE",
+      locale: "zh-CN",
+      amountBucket: "0.40-0.74",
+      requestBytesBucket: expect.not.stringMatching("unknown"),
+      responseBytesBucket: expect.not.stringMatching("none|unknown"),
+    }));
+    const routineReceipt = JSON.stringify(observe.mock.calls[0]?.[0]);
+    expect(routineReceipt).not.toContain(PASSAGE);
+    expect(routineReceipt).not.toContain("turn_route");
+    expect(routineReceipt).not.toContain("tree_route");
   });
 
   it("gives the prompt ancestors only: selected material appears once as surrounding plus passage", async () => {
@@ -82,28 +98,64 @@ describe("transform route", () => {
   it("maps provider rejection and unavailability without changing material", async () => {
     const rejected: ScenarioAdapter = async () => ({ text: PASSAGE });
     const unavailable: ScenarioAdapter = async () => { throw new Error("provider unavailable"); };
-    await expect(post(body(), rejected).then(async (response) => ({ status: response.status, body: await response.json() })))
+    const observations = vi.fn();
+    const fallbackLog = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await expect(post(body(), rejected, {}, { observe: observations }).then(async (response) => ({ status: response.status, body: await response.json() })))
       .resolves.toEqual({
         status: 422,
         body: expect.objectContaining({ error: expect.objectContaining({ code: "TURN_REJECTED", fallbackReason: "MODEL_REJECTED" }) }),
       });
-    await expect(post(body(), unavailable).then(async (response) => ({ status: response.status, body: await response.json() })))
+    await expect(post(body(), unavailable, {}, { observe: observations }).then(async (response) => ({ status: response.status, body: await response.json() })))
       .resolves.toEqual({
         status: 503,
         body: expect.objectContaining({ error: expect.objectContaining({ code: "TURN_UNAVAILABLE", fallbackReason: "MODEL_UNAVAILABLE" }) }),
       });
+    expect(observations).toHaveBeenCalledTimes(2);
+    expect(observations.mock.calls.map(([receipt]) => [receipt.outcome, receipt.reason])).toEqual([
+      ["rejected", "NO_CHANGE"],
+      ["unavailable", "MODEL_UNAVAILABLE"],
+    ]);
+    expect(fallbackLog).not.toHaveBeenCalled();
+    fallbackLog.mockRestore();
+  });
+
+  it("records invalid and admission terminals once without parsing identity fields", async () => {
+    const observations = vi.fn();
+    expect((await post({ ...body(), extra: true }, fixtureTransformAdapter, {}, { observe: observations })).status)
+      .toBe(400);
+    expect(observations).toHaveBeenCalledOnce();
+    expect(observations).toHaveBeenLastCalledWith(expect.objectContaining({
+      outcome: "invalid",
+      reason: "INVALID_REQUEST",
+      locale: "unknown",
+    }));
+
+    for (let index = 0; index < 8; index += 1) {
+      await post(body({ id: `turn_rate_${index}` }), fixtureTransformAdapter, {}, { observe: observations });
+    }
+    expect((await post(body({ id: "turn_rate_blocked" }), fixtureTransformAdapter, {}, { observe: observations })).status)
+      .toBe(429);
+    expect(observations).toHaveBeenCalledTimes(10);
+    expect(observations).toHaveBeenLastCalledWith(expect.objectContaining({
+      outcome: "admission",
+      reason: "RATE",
+      locale: "unknown",
+      requestBytesBucket: "unknown",
+      responseBytesBucket: expect.not.stringMatching("none|unknown"),
+    }));
   });
 
   it("uses the 12s scenario deadline inside the 14s route boundary", async () => {
     vi.useFakeTimers();
     try {
+      const observe = vi.fn();
       let started!: () => void;
       const startedPromise = new Promise<void>((resolve) => { started = resolve; });
       const slow: ScenarioAdapter = async (_call, signal) => new Promise((_, reject) => {
         started();
         signal.addEventListener("abort", () => reject(signal.reason), { once: true });
       });
-      const responsePromise = post(body(), slow);
+      const responsePromise = post(body(), slow, {}, { observe });
       await startedPromise;
       await vi.advanceTimersByTimeAsync(11_999);
       await vi.advanceTimersByTimeAsync(1);
@@ -113,9 +165,47 @@ describe("transform route", () => {
       await expect(response.json()).resolves.toEqual(expect.objectContaining({
         error: expect.objectContaining({ code: "TURN_UNAVAILABLE", fallbackReason: "MODEL_TIMEOUT" }),
       }));
+      expect(observe).toHaveBeenCalledOnce();
+      expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: "timeout",
+        reason: "MODEL_TIMEOUT",
+      }));
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("records governor shedding as one busy terminal while admitted calls finish normally", async () => {
+    const observe = vi.fn();
+    let bothStarted!: () => void;
+    const started = new Promise<void>((resolve) => { bothStarted = resolve; });
+    const releases: Array<() => void> = [];
+    const slow: ScenarioAdapter = async () => {
+      await new Promise<void>((resolve) => {
+        releases.push(resolve);
+        if (releases.length === 2) bothStarted();
+      });
+      return { text: "这件事在眼下这个时刻可能没那么显得重要" };
+    };
+    const first = post(body({ id: "turn_busy_1" }), slow, {}, { observe });
+    const second = post(body({ id: "turn_busy_2" }), slow, {}, { observe });
+    await started;
+    const shed = await post(body({ id: "turn_busy_3" }), slow, {}, { observe });
+    expect(shed.status).toBe(503);
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenLastCalledWith(expect.objectContaining({
+      outcome: "busy",
+      reason: "MODEL_BUSY",
+    }));
+
+    for (const release of releases) release();
+    await Promise.all([first, second]);
+    expect(observe).toHaveBeenCalledTimes(3);
+    expect(observe.mock.calls.map(([receipt]) => receipt.outcome).sort()).toEqual([
+      "busy",
+      "success",
+      "success",
+    ]);
   });
 
   it("propagates a disconnected caller's abort while aborting the provider flight", async () => {
@@ -130,17 +220,24 @@ describe("transform route", () => {
       }, { once: true });
     });
     const controller = new AbortController();
+    const observe = vi.fn();
     const request = new Request("https://matter.test/api/turn", {
       method: "POST",
       signal: controller.signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body()),
     });
-    const pending = handleTransformRequest(request, adapter);
+    const pending = handleTransformRequest(request, adapter, { observe });
     await startedPromise;
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(observedAbort).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "cancelled",
+      reason: "CLIENT_CANCELLED",
+      responseBytesBucket: "none",
+    }));
   });
 });
 
@@ -172,13 +269,14 @@ async function post(
   payload: unknown,
   adapter: Parameters<typeof handleTransformRequest>[1] = fixtureTransformAdapter,
   headers: Record<string, string> = {},
+  observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
   try {
     return await handleTransformRequest(new Request("https://matter.test/api/turn", {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(payload),
-    }), adapter);
+    }), adapter, observationOptions);
   } catch (error) {
     return transformErrorResponse(error);
   }

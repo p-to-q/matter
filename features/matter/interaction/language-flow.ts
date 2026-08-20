@@ -9,6 +9,55 @@ export type LanguageFlowProjection = Readonly<{
   presentationHeight: number;
 }>;
 
+export type SelectionLocalLaneProjection = Readonly<{
+  controlTop: number;
+  travelingControlTop: number;
+  laneBottom: number;
+  afterTop: number;
+  slotDepth: number;
+}>;
+
+/**
+ * Reserves one transient lane between an addressed passage and its suffix.
+ * Fixed controls (the amount rail or one rewrite surface) and controls that
+ * travel with a degree share this projection instead of covering material.
+ * All values use the same client-space coordinate system.
+ */
+export function projectSelectionLocalLane(input: Readonly<{
+  selectedBottom: number;
+  afterNaturalTop: number;
+  beforeGap: number;
+  afterGap: number;
+  contentDepth: number;
+  fixedControlDepth: number;
+  travelingControlDepth: number;
+}>): SelectionLocalLaneProjection | null {
+  if (
+    !isNonNegative(input.selectedBottom) ||
+    !isNonNegative(input.afterNaturalTop) ||
+    !isNonNegative(input.beforeGap) ||
+    !isNonNegative(input.afterGap) ||
+    !isNonNegative(input.contentDepth) ||
+    !isNonNegative(input.fixedControlDepth) ||
+    !isNonNegative(input.travelingControlDepth)
+  ) return null;
+
+  const controlTop = input.selectedBottom + input.beforeGap;
+  const travelingControlTop = controlTop + input.contentDepth;
+  const laneBottom = Math.max(
+    controlTop + input.fixedControlDepth,
+    travelingControlTop + input.travelingControlDepth,
+  );
+  const afterTop = Math.max(input.afterNaturalTop, laneBottom + input.afterGap);
+  return ownLane({
+    controlTop,
+    travelingControlTop,
+    laneBottom,
+    afterTop,
+    slotDepth: afterTop - input.afterNaturalTop,
+  });
+}
+
 /**
  * Moves only the suffix from its measured source-line origin. The sole lower
  * grip owns the downward slot. All values are node-local world pixels.
@@ -61,6 +110,12 @@ function own(value: LanguageFlowProjection): LanguageFlowProjection {
   return Object.freeze(Object.fromEntries(
     Object.entries(value).map(([key, number]) => [key, round(number)]),
   ) as unknown as LanguageFlowProjection);
+}
+
+function ownLane(value: SelectionLocalLaneProjection): SelectionLocalLaneProjection {
+  return Object.freeze(Object.fromEntries(
+    Object.entries(value).map(([key, number]) => [key, round(number)]),
+  ) as unknown as SelectionLocalLaneProjection);
 }
 
 function round(value: number): number {

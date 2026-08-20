@@ -43,6 +43,9 @@ test("Text Swap keeps Full-view admission, then Voice rewrites one Focus segment
   await expect(page.locator('.text-swap-feedback[data-phase="recording"]')).toContainText(
     "正在听你想怎样换一种说法",
   );
+  await expectLaneBeforeSuffix(page, [
+    page.locator('.text-swap-feedback[data-phase="recording"]'),
+  ]);
   await page.waitForTimeout(350);
   await stop.click();
 
@@ -54,6 +57,7 @@ test("Text Swap keeps Full-view admission, then Voice rewrites one Focus segment
     "requesting",
   );
   await expectFeedbackToFollowSelection(page, pending);
+  await expectLaneBeforeSuffix(page, [pending]);
 
   await expect(text).toHaveText(REWRITTEN_TEXT);
   expect(swapRequests).toBe(1);
@@ -115,8 +119,11 @@ test.describe("coarse pointer and reduced motion", () => {
     const direction = page.getByRole("textbox", { name: "输入所选文字的改写方向", exact: true });
     await expect(direction).toBeFocused();
     await direction.fill(DIRECTION);
-    await page.getByRole("button", { name: "改写", exact: true }).click();
+    const submit = page.getByRole("button", { name: "改写", exact: true });
+    await expectLaneBeforeSuffix(page, [direction, submit]);
+    await submit.click();
     await expect(page.locator('.text-swap-feedback[data-phase="pending"]')).toContainText("正在换个说法");
+    await expectLaneBeforeSuffix(page, [page.locator('.text-swap-feedback[data-phase="pending"]')]);
     await expect(text).toHaveText(SOURCE_TEXT);
     await expect(text).toHaveText(REWRITTEN_TEXT);
     expect(swapRequests).toBe(1);
@@ -188,6 +195,41 @@ test("Text Swap cancel revokes a late response without changing material", async
   expect(swapRequests).toBe(1);
 });
 
+test("Text Swap retryable failure keeps its local lane and original material", async ({ page }) => {
+  let swapRequests = 0;
+  await page.route("**/api/text-swap", async (route) => {
+    swapRequests += 1;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "TURN_UNAVAILABLE",
+          message: "Synthetic model unavailable.",
+          retryable: true,
+          fallbackReason: "MODEL_UNAVAILABLE",
+        },
+      }),
+    });
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await focusRoot(page, false);
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await selectFirstSegment(page, text);
+  await page.getByRole("button", { name: "输入所选文字的改写方向", exact: true }).click();
+  await page.getByRole("textbox", { name: "输入所选文字的改写方向", exact: true }).fill(DIRECTION);
+  await page.getByRole("button", { name: "改写", exact: true }).click();
+
+  const failure = page.locator('.text-swap-feedback[data-phase="error"]');
+  await expect(failure).toContainText("没有改写，原文保留");
+  await expectLaneBeforeSuffix(page, [failure]);
+  await expect(text).toHaveText(SOURCE_TEXT);
+  expect(swapRequests).toBe(1);
+});
+
 async function focusRoot(page: Page, narrow: boolean): Promise<void> {
   const rootText = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
   if (narrow) await rootText.click();
@@ -238,6 +280,31 @@ async function expectFeedbackToFollowSelection(
   expect(feedbackCenter).toBeGreaterThanOrEqual(left - 1);
   expect(feedbackCenter).toBeLessThanOrEqual(right + 1);
   expect(feedbackBox!.y).toBeGreaterThanOrEqual(bottom);
+}
+
+async function expectLaneBeforeSuffix(
+  page: Page,
+  controls: readonly ReturnType<Page["locator"]>[],
+): Promise<void> {
+  const suffix = page.locator(".language-split-block--after");
+  const selection = page.locator(".language-split-block--selected");
+  await expect(page.locator(".language-split-projection")).toHaveAttribute(
+    "data-preview-mode",
+    /^(lane|expand)$/,
+  );
+  const [selectionBox, suffixBox] = await Promise.all([
+    selection.boundingBox(),
+    suffix.boundingBox(),
+  ]);
+  expect(selectionBox).not.toBeNull();
+  expect(suffixBox).not.toBeNull();
+  for (const control of controls) {
+    await expect(control).toBeVisible();
+    const controlBox = await control.boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect(controlBox!.y).toBeGreaterThanOrEqual(selectionBox!.y + selectionBox!.height - 1);
+    expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(suffixBox!.y + 1);
+  }
 }
 
 async function segmentProbeRect(

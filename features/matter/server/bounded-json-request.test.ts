@@ -42,6 +42,14 @@ function stallUntilAborted(signal: AbortSignal): Promise<never> {
 }
 
 describe("withBoundedJsonRequest", () => {
+  it("reports actual request bytes only after a bounded UTF-8 body is read", async () => {
+    let requestBytes = -1;
+    await withBoundedJsonRequest(post(), policy(10_000), async (_payload, _signal, metadata) => {
+      requestBytes = metadata.requestBytes;
+    });
+    expect(requestBytes).toBe(new TextEncoder().encode(JSON.stringify({ ok: true })).byteLength);
+  });
+
   it("attributes a deadline reached while the handler is running", async () => {
     const failure = await withBoundedJsonRequest(post(), policy(10), (_payload, signal) =>
       stallUntilAborted(signal),

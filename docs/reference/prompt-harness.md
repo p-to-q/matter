@@ -231,6 +231,20 @@ ordinary claims, unfinished fragments, questions, negation,
 uncertainty/modality, quantifiers, condition/causality/order,
 number/unit/date/version/currency, quotation/name/pronoun, prompt injection,
 mixed script/URL/identifier, and a surrounding/lineage conflict at the seam.
+Every base case reconstructs one node as `before + passage + after`, and the
+production `segmentText` policy must derive `passage` as exactly one current
+punctuation segment before any candidate can be called. Delimiter-bearing URLs
+and dotted version or decimal forms therefore stay in the surrounding seam;
+the selected segment carries the mixed-script identifier plus delimiter-free
+version, date, unit, percentage, and currency anchors. This preserves the real
+lasso contract while still testing that surrounding URLs remain context rather
+than mutable scope.
+Each corpus records the actual extended-grapheme count of every selected
+passage. Within each locale, the four shortest sources, middle four, and four
+longest sources freeze the `short` / `medium` / `long` strata, with case id as a
+deterministic tie-break. Coverage recomputes both the count and rank before a
+candidate is available, so a hand-written bucket label cannot manufacture
+length evidence across scripts with very different grapheme distributions.
 
 Promotion requires all of the following:
 
@@ -251,11 +265,23 @@ The spend ceiling is an owner-approved currency amount, not a number invented by
 source code. Before promotion, the most expensive configured candidate and the
 maximum relay attempts must be used to turn that amount into a hard global call
 ceiling. Missing deployment ownership or a hard cap blocks live promotion.
-Routine production metrics contain only low-cardinality outcome, rejection,
-locale, amount/length/byte buckets, and latency. They never contain prompt,
-passage, lineage, tree/node/interaction identity, IP, provider identity,
-endpoint, credential, or response text. Synthetic eval text may be written only
-to a git-ignored local report.
+The Transform and Text Swap route boundaries each own exactly one routine
+terminal observation per request. The closed record contains only operation,
+outcome, an allow-listed reason, locale, stretch-amount or `tool-owned` degree,
+replacement-length and request/response-byte buckets, and elapsed milliseconds.
+An adjudicator rejection keeps its exact scenario policy code only after the
+route owner checks that code against the operation's closed policy set. A body
+that never reaches bounded JSON parsing keeps unknown request, locale, degree,
+and length buckets; a disconnected caller has no response-byte bucket. The
+route-supplied harness observer captures the safe rejection code and suppresses
+the harness's fallback log, so success, rejection, provider failure, route
+timeout, invalid input, and admission refusal still settle as one observation,
+not two partial records.
+
+Routine production observations never contain direction, prompt, passage,
+lineage, tree/node/request/interaction identity, IP, provider identity,
+endpoint, credential, response text, or serialized errors. Synthetic eval text
+may be written only to a git-ignored local report.
 
 ## Text Swap text-swap/1 freeze
 
@@ -314,6 +340,11 @@ fragments, questions, negation, uncertainty/modality, quantifiers,
 condition/causality/order, numbers/units/dates/versions/currency,
 names/quotations/pronouns, URLs/identifiers/mixed script, material prompt
 injection, and an adversarial direction that asks to violate scope or facts.
+The same exact-current-segment preflight applies here. A URL containing `:` or
+`.` belongs to `after` or lineage because those characters are material
+delimiters; its paired identifier remains inside the selected passage. The
+corpus tests URL scope at the seam without pretending that a multi-segment URL
+can expose the one-segment Text Swap control.
 
 Promotion requires zero accepted critical drift, per-locale and per-direction
 coverage, independent human confirmation that an accepted result follows the
@@ -321,26 +352,70 @@ direction while preserving voice and seam, and repeatable temperature-zero
 adjudication. The corpus must report useful-acceptance and failure rates by
 source-length bucket so a later recorded freeze may narrow the seed band. It may
 not turn degree into a prompt, slider, or model choice.
+Each blinded Text Swap decision therefore records `followsDirection` separately
+from usefulness and the preservation checks. The two-reviewer consensus reports
+both useful and follows-direction rates by locale, direction family, and frozen
+source-length bucket. Elastic review has no human direction and does not acquire
+or require this field. These Text Swap summaries are calibration evidence only;
+they do not create a numeric promotion threshold.
 
 The Text Swap production gate remains off until this corpus, a deployed-origin
 latency/error receipt, distributed rate control, an approved isolated
 credential, hard spend cap and alerts, and a tested gate-off rollback all pass.
-Routine logs contain only low-cardinality outcome, rejection reason, locale,
-length/byte buckets, and latency. Direction, passage, lineage, prompt, response,
-audio, tree/node/request identity, and IP are never logged.
+Text Swap uses the same route-owned terminal observation contract above, with
+`tool-owned` in place of a stretch amount. Direction, passage, lineage, prompt,
+response, audio, tree/node/request identity, and IP never enter that record.
 
 The repository now holds two separate evidence tools for this gate. The
 default-off `eval:language` command expands each scenario-owned synthetic corpus
 to 180 cases and executes exactly two no-retry temperature-zero samples against
-one explicitly selected pool candidate; an exact `360` call confirmation is
-required before the first paid request. Raw synthetic inputs and answers are
-written only to gitignored private artifacts, while routine output contains
-low-cardinality counts and latency buckets. The independent
+one explicitly selected pool candidate. Its default `plan` mode writes a private
+gitignored authorization artifact before any paid run. The plan digest binds
+scenario, candidate station and model, prompt and corpus versions, complete
+synthetic corpus content, axes, repeats, and the aggregate call and output-token
+ceilings. `run` mode must load that artifact, receive its exact digest, and
+reconstruct the same digest locally; changing any bound input stops before the
+adapter exists. Station, model, and material never appear in routine output.
+The exact `360` call confirmation remains a second explicit ceiling rather than
+the authority by itself. The run directory, running manifest,
+and empty safe/private journals are created before the adapter. After every
+paid call, its low-cardinality sample receipt and private synthetic record are
+appended and awaited before the next call; a journal failure stops the run.
+Only all 360 unique case/repeat receipts may become `completed`, and scoring
+recomputes metrics from that safe journal rather than trusting the summary.
+It rebuilds the blinded review set from the paired private journal and binds
+that set's digest to the paid plan, candidate ordinal, prompt version, and
+corpus version. A review key and both reviewer packets cannot be substituted
+from another run merely because its accepted count matches.
+Raw synthetic inputs and answers are written only to gitignored private
+artifacts, while routine output contains low-cardinality counts and latency
+buckets. The independent
 `probe:material-origin` command is dry-run by default and, only after exact
 remote/production authorization, measures strict plans through the deployed
-HTTP routes at their shared rate boundary. Neither tool replaces the other, the
-two-person review, the distributed rule, the owner-approved spend ceiling, or
-the final browser/Voice receipt.
+HTTP routes at their shared rate boundary. Smoke remains exactly one call per
+surface. Promotion is exactly fifty per surface from the frozen
+`material-origin-synthetic/1` suite: ten inputs in each supported locale cover
+all twelve semantic strata, Transform amounts `0.2` / `0.6` / `1.0`, and three
+bounded Text Swap direction families. Every envelope passes the production
+protocol and addresses one exact current punctuation segment; dotted URLs stay
+in surrounding material. The complete synthetic inputs and axes produce one
+stable SHA-256 digest recorded with every run.
+
+An authorized execution creates a gitignored `tmp/material-origin-probe/`
+running manifest and empty safe JSONL journal before even the health request.
+Each HTTP sample is awaited into that journal before another call may start; a
+write failure leaves the run without a completed receipt and prevents the next
+POST. Journal rows contain only surface, locale, semantic strata, axis family,
+outcome, HTTP class, and latency bucket. Only a normally finalized run writes a
+completed summary containing origin, expected and observed health version,
+suite version/digest, timestamps, sample counts, and the aggregate. Neither
+artifact contains passage, direction text, lineage, plan, tree/node/request id,
+IP, cookie, provider, or response text. Admission or an invalid response writes
+an explicit partial `stopped` receipt instead of a false `completed` marker;
+preflight, process, or journal interruption leaves only the running evidence.
+Neither evidence tool replaces the
+other, the two-person review, the distributed rule, the owner-approved spend
+ceiling, or the final browser/Voice receipt.
 
 ## Rejected
 

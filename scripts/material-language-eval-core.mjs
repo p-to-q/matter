@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export const SUPPORTED_LOCALES = Object.freeze([
   "zh-CN",
   "zh-TW",
@@ -8,6 +10,8 @@ export const SUPPORTED_LOCALES = Object.freeze([
 
 export const SOURCE_LENGTH_BUCKETS = Object.freeze(["short", "medium", "long"]);
 export const EVAL_REPEATS = 2;
+
+const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 /**
  * Expands a committed base corpus across one scenario-owned interaction axis.
@@ -53,6 +57,10 @@ export function inspectCorpusCoverage({ baseCases, axes, classes }) {
     if (!SUPPORTED_LOCALES.includes(item.locale)) failures.push(`locale:${item.id}`);
     if (!classes.includes(item.classId)) failures.push(`class:${item.id}`);
     if (!SOURCE_LENGTH_BUCKETS.includes(item.lengthBucket)) failures.push(`length:${item.id}`);
+    const graphemes = countExtendedGraphemes(item.passage);
+    if (item.sourceGraphemes !== graphemes) {
+      failures.push(`graphemes:${item.id}:${String(item.sourceGraphemes)}/${graphemes}`);
+    }
     const pair = `${item.locale}/${item.classId}`;
     if (pairs.has(pair)) failures.push(`duplicate-pair:${pair}`);
     pairs.add(pair);
@@ -68,6 +76,16 @@ export function inspectCorpusCoverage({ baseCases, axes, classes }) {
       ).length;
       if (count !== 4) failures.push(`length-balance:${locale}/${bucket}:${count}/4`);
     }
+    const ranked = baseCases
+      .filter((item) => item.locale === locale)
+      .map((item) => Object.freeze({ item, graphemes: countExtendedGraphemes(item.passage) }))
+      .sort((left, right) => left.graphemes - right.graphemes || left.item.id.localeCompare(right.item.id));
+    for (const [index, entry] of ranked.entries()) {
+      const expectedBucket = SOURCE_LENGTH_BUCKETS[Math.floor(index / 4)];
+      if (entry.item.lengthBucket !== expectedBucket) {
+        failures.push(`length-rank:${entry.item.id}:${entry.item.lengthBucket}/${expectedBucket}`);
+      }
+    }
   }
 
   const matrix = buildEvaluationMatrix(baseCases, axes);
@@ -78,6 +96,58 @@ export function inspectCorpusCoverage({ baseCases, axes, classes }) {
     baseCount: baseCases.length,
     matrixCount: matrix.length,
   });
+}
+
+export function countExtendedGraphemes(value) {
+  return typeof value === "string" ? [...GRAPHEME_SEGMENTER.segment(value)].length : 0;
+}
+
+/**
+ * Freezes three equally sized, locale-relative source-length strata from the
+ * corpus text itself. Case id is the deterministic tie-break for equal lengths.
+ */
+export function freezeSourceLengthBuckets(baseCases) {
+  const bucketById = new Map();
+  for (const locale of SUPPORTED_LOCALES) {
+    const ranked = baseCases
+      .filter((item) => item.locale === locale)
+      .map((item) => Object.freeze({ item, graphemes: countExtendedGraphemes(item.passage) }))
+      .sort((left, right) => left.graphemes - right.graphemes || left.item.id.localeCompare(right.item.id));
+    if (ranked.length !== 12) {
+      throw new Error(`Source-length freeze requires 12 cases for locale ${locale}.`);
+    }
+    for (const [index, entry] of ranked.entries()) {
+      bucketById.set(entry.item.id, SOURCE_LENGTH_BUCKETS[Math.floor(index / 4)]);
+    }
+  }
+  return Object.freeze(baseCases.map((item) => Object.freeze({
+    ...item,
+    sourceGraphemes: countExtendedGraphemes(item.passage),
+    lengthBucket: bucketById.get(item.id),
+  })));
+}
+
+export function evaluationPlanDigest(plan) {
+  return createHash("sha256").update(stableJson(plan)).digest("hex");
+}
+
+/**
+ * A paid run must be authorized by a previously written private plan artifact,
+ * and the artifact must still describe the locally reconstructed plan exactly.
+ */
+export function requireEvaluationPlanAuthorization({ localPlan, artifact, suppliedDigest }) {
+  const localDigest = evaluationPlanDigest(localPlan);
+  if (
+    artifact?.schemaVersion !== "material-language-eval-plan/1" ||
+    typeof suppliedDigest !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(suppliedDigest) ||
+    artifact.digest !== suppliedDigest ||
+    localDigest !== suppliedDigest ||
+    stableJson(artifact.plan) !== stableJson(localPlan)
+  ) {
+    throw new Error("The paid evaluation does not match its pre-generated private plan digest.");
+  }
+  return localDigest;
 }
 
 export function expectedEvaluationCalls(matrix, repeats = EVAL_REPEATS) {
@@ -141,12 +211,15 @@ export async function executeEvaluationMatrix({
         latencyMs: result.latencyMs,
       });
       samples.push(sample);
-      privateRecords.push(Object.freeze({
+      const privateRecord = Object.freeze({
         sample,
         material: result.privateData,
-      }));
+      });
+      privateRecords.push(privateRecord);
       completed += 1;
-      onProgress(Object.freeze({ completed, callCount, sample }));
+      // Progress ownership may include a durable receipt. Await it before the
+      // next paid call so a failed journal write stops the run immediately.
+      await onProgress(Object.freeze({ completed, callCount, sample, privateRecord }));
       if (paceMs > 0 && completed < callCount) await sleep(paceMs);
     }
   }
@@ -221,7 +294,7 @@ export function createReviewerPackets(privateRecords) {
     direction: reviewOptional(record.material, "direction"),
     amount: reviewNumber(record.material, "amount"),
     response: reviewValue(record.material, "response"),
-    decision: emptyDecision(),
+    decision: emptyDecision(reviewValue(record.material, "scenario")),
   }));
   return Object.freeze({
     expectedReviewIds: Object.freeze(rows.map((row) => row.reviewId)),
@@ -258,18 +331,43 @@ export function summarizeHumanReviews(reviewerA, reviewerB, expectedReviewIds) {
 
   let criticalDrift = 0;
   let useful = 0;
+  let followsDirection = 0;
+  let textSwapOutputs = 0;
+  const reviewed = [];
   for (const id of expected) {
-    const a = left.rows.get(id)?.decision;
-    const b = right.rows.get(id)?.decision;
-    if (!completeDecision(a) || !completeDecision(b)) return pendingReview(expected.size);
-    if (a.criticalDrift || b.criticalDrift) criticalDrift += 1;
+    const leftRow = left.rows.get(id);
+    const rightRow = right.rows.get(id);
+    const scenario = leftRow?.scenario;
     if (
+      scenario !== rightRow?.scenario ||
+      stableJson(reviewContent(leftRow ?? {})) !== stableJson(reviewContent(rightRow ?? {}))
+    ) return pendingReview(expected.size);
+    const a = leftRow?.decision;
+    const b = rightRow?.decision;
+    if (!completeDecision(a, scenario) || !completeDecision(b, scenario)) {
+      return pendingReview(expected.size);
+    }
+    if (a.criticalDrift || b.criticalDrift) criticalDrift += 1;
+    const isUseful = (
       !a.criticalDrift && !b.criticalDrift &&
       a.useful && b.useful &&
       a.preservesVoice && b.preservesVoice &&
       a.preservesUnfinishedness && b.preservesUnfinishedness &&
       a.preservesSeam && b.preservesSeam
-    ) useful += 1;
+    );
+    if (isUseful) useful += 1;
+    const isTextSwap = scenario === "text-swap";
+    const follows = isTextSwap && !a.criticalDrift && !b.criticalDrift &&
+      a.followsDirection && b.followsDirection;
+    if (isTextSwap) textSwapOutputs += 1;
+    if (follows) followsDirection += 1;
+    reviewed.push(Object.freeze({
+      locale: leftRow.locale,
+      direction: isTextSwap ? leftRow.axisId : null,
+      lengthBucket: leftRow.lengthBucket,
+      useful: isUseful,
+      followsDirection: isTextSwap ? follows : null,
+    }));
   }
   return Object.freeze({
     complete: true,
@@ -277,6 +375,15 @@ export function summarizeHumanReviews(reviewerA, reviewerB, expectedReviewIds) {
     criticalDrift,
     useful,
     usefulRate: ratio(useful, expected.size),
+    followsDirection: textSwapOutputs > 0 ? followsDirection : null,
+    followsDirectionRate: textSwapOutputs > 0
+      ? ratio(followsDirection, textSwapOutputs)
+      : null,
+    byLocale: reviewGroups(reviewed, (entry) => entry.locale),
+    byDirection: textSwapOutputs > 0
+      ? reviewGroups(reviewed, (entry) => entry.direction)
+      : Object.freeze({}),
+    bySourceLengthBucket: reviewGroups(reviewed, (entry) => entry.lengthBucket),
   });
 }
 
@@ -397,22 +504,24 @@ function reviewMap(rows, expected) {
   return { ok: mapped.size === expected.size, rows: mapped };
 }
 
-function completeDecision(value) {
+function completeDecision(value, scenario) {
   return isRecord(value) &&
     typeof value.criticalDrift === "boolean" &&
     typeof value.useful === "boolean" &&
     typeof value.preservesVoice === "boolean" &&
     typeof value.preservesUnfinishedness === "boolean" &&
-    typeof value.preservesSeam === "boolean";
+    typeof value.preservesSeam === "boolean" &&
+    (scenario !== "text-swap" || typeof value.followsDirection === "boolean");
 }
 
-function emptyDecision() {
+function emptyDecision(scenario) {
   return Object.freeze({
     criticalDrift: null,
     useful: null,
     preservesVoice: null,
     preservesUnfinishedness: null,
     preservesSeam: null,
+    ...(scenario === "text-swap" ? { followsDirection: null } : {}),
     notes: "",
   });
 }
@@ -425,7 +534,39 @@ function pendingReview(expectedOutputs) {
     criticalDrift: null,
     useful: null,
     usefulRate: null,
+    followsDirection: null,
+    followsDirectionRate: null,
+    byLocale: Object.freeze({}),
+    byDirection: Object.freeze({}),
+    bySourceLengthBucket: Object.freeze({}),
   });
+}
+
+function reviewGroups(rows, keyOf) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = keyOf(row);
+    if (typeof key !== "string" || key === "") continue;
+    const own = grouped.get(key) ?? [];
+    own.push(row);
+    grouped.set(key, own);
+  }
+  return Object.freeze(Object.fromEntries([...grouped.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([key, own]) => {
+      const useful = own.filter((entry) => entry.useful).length;
+      const directionRows = own.filter((entry) => entry.followsDirection !== null);
+      const follows = directionRows.filter((entry) => entry.followsDirection).length;
+      return [key, Object.freeze({
+        reviewedOutputs: own.length,
+        useful,
+        usefulRate: ratio(useful, own.length),
+        followsDirection: directionRows.length > 0 ? follows : null,
+        followsDirectionRate: directionRows.length > 0
+          ? ratio(follows, directionRows.length)
+          : null,
+      })];
+    })));
 }
 
 function adjudicationState(sample) {
@@ -489,6 +630,15 @@ function reviewArray(material, key) {
 
 function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (isRecord(value)) {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${stableJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function defaultSleep(milliseconds) {

@@ -76,6 +76,19 @@ export function inspectDeploymentHeaders(headers) {
   return failures;
 }
 
+export function inspectDeploymentHealthHeaders(headers) {
+  const failures = [];
+  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
+  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) {
+    failures.push("Health probe did not declare JSON.");
+  }
+  const cacheControl = headers.get("cache-control")?.toLowerCase() ?? "";
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "no-store")) {
+    failures.push("Health probe is not marked no-store.");
+  }
+  return failures;
+}
+
 export async function checkDeployment({
   origin,
   expectedVersion,
@@ -100,6 +113,7 @@ export async function checkDeployment({
   if (health.status !== 200) {
     failures.push(`Health probe returned HTTP ${health.status}.`);
   } else {
+    failures.push(...inspectDeploymentHealthHeaders(health.headers));
     let payload;
     try {
       payload = await health.json();

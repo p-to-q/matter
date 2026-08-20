@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   inspectDeploymentHeaders,
+  inspectDeploymentHealthHeaders,
   inspectDeploymentHealth,
   normalizeDeploymentOrigin,
   waitForDeployment,
@@ -87,6 +88,24 @@ test("requires the security headers owned by the public edge", () => {
   assert.deepEqual(inspectDeploymentHeaders(complete), []);
   complete.delete("strict-transport-security");
   assert.deepEqual(inspectDeploymentHeaders(complete), ["Missing HSTS header."]);
+});
+
+test("requires a JSON no-store health receipt", () => {
+  const complete = new Headers({
+    "cache-control": "no-store, max-age=0",
+    "content-type": "application/json; charset=utf-8",
+  });
+  assert.deepEqual(inspectDeploymentHealthHeaders(complete), []);
+  complete.set("content-type", "application/jsonp");
+  assert.deepEqual(inspectDeploymentHealthHeaders(complete), [
+    "Health probe did not declare JSON.",
+  ]);
+  complete.set("cache-control", "public, max-age=60");
+  complete.set("content-type", "text/html");
+  assert.deepEqual(inspectDeploymentHealthHeaders(complete), [
+    "Health probe did not declare JSON.",
+    "Health probe is not marked no-store.",
+  ]);
 });
 
 test("waits through one stale edge receipt without widening the probe", async () => {

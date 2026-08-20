@@ -168,22 +168,60 @@ not call the provider and is never a substitute for one successful strict
 synthetic turn through each deployed route.
 
 Candidate quality and origin operation are deliberately separate. The language
-evaluation defaults to an ordinary skipped test; a paid run requires one
-scenario, one candidate ordinal, and the exact `360` planned-call confirmation:
+evaluation defaults to an ordinary skipped test. First use its zero-call `plan`
+mode for one scenario and one candidate ordinal:
 
 ```bash
 MATTER_LANGUAGE_EVAL=1 \
+MATTER_LANGUAGE_EVAL_MODE=plan \
 MATTER_LANGUAGE_EVAL_SCENARIO=transform \
 MATTER_LANGUAGE_EVAL_CANDIDATE_INDEX=1 \
+npm run eval:language
+```
+
+This writes a private gitignored plan and prints only its path, digest, call
+ceiling, and output-token ceiling. It does not print candidate station/model or
+synthetic material. Inspect that private artifact and the external spend
+controls, then run only with both values printed by that exact plan plus the
+independent call confirmation:
+
+```bash
+MATTER_LANGUAGE_EVAL=1 \
+MATTER_LANGUAGE_EVAL_MODE=run \
+MATTER_LANGUAGE_EVAL_SCENARIO=transform \
+MATTER_LANGUAGE_EVAL_CANDIDATE_INDEX=1 \
+MATTER_LANGUAGE_EVAL_PLAN_FILE=tmp/material-language-eval/<plan>/plan.private.json \
+MATTER_LANGUAGE_EVAL_PLAN_DIGEST=<exact-64-character-digest> \
 MATTER_LANGUAGE_EVAL_CONFIRM_CALLS=360 \
 npm run eval:language
 ```
 
-Run Text Swap separately with `MATTER_LANGUAGE_EVAL_SCENARIO=text-swap`. Raw
-synthetic inputs/answers and the two blinded review packets stay only below the
-gitignored `tmp/material-language-eval/` directory. A missing or incomplete
-second review can never pass; Text Swap remains calibration-only until its
-numeric promotion thresholds are re-frozen from evidence.
+The run reloads the plan and recomputes its digest from the current scenario,
+candidate station/model, prompt and corpus versions, complete corpus content,
+axes, repeats, and aggregate call/output-token ceilings. Any mismatch stops
+before an adapter exists. Run Text Swap separately with
+`MATTER_LANGUAGE_EVAL_SCENARIO=text-swap`. Raw synthetic inputs/answers, the
+private plan, and the two blinded review packets stay only below the gitignored
+`tmp/material-language-eval/` directory. A missing or incomplete second review
+can never pass; Text Swap remains calibration-only until its numeric promotion
+thresholds are re-frozen from evidence.
+
+The evaluator proves every selected passage is one exact production punctuation
+segment and creates a running manifest plus empty safe/private journals before
+the first provider call. Each paid result is durably appended before the next
+call. An interrupted or unwritable run therefore remains `running` with its
+completed samples. Scoring accepts only all 360 unique case/repeat receipts,
+recomputes the metrics from that journal, and refuses a conflicting summary. It
+also reconstructs the blinded review material from that same run's private
+journal and verifies its source digest against the paid-plan digest, candidate,
+prompt, and corpus metadata. A review key plus two packets copied together from
+another run is therefore rejected even when both runs accepted the same number
+of samples.
+Corpus coverage also recomputes each selected passage's extended-grapheme count
+and its locale-relative short/medium/long rank. Text Swap reviewers record
+direction following separately, and the scored human summary reports useful and
+follows-direction consensus by locale, direction family, and source-length
+bucket. Elastic review does not require a direction judgement.
 
 The deployed-origin sampler is also dry-run by default. It requires an explicit
 origin and expected version; remote execution additionally requires an exact
@@ -194,14 +232,29 @@ video:
 
 ```bash
 npm run probe:material-origin -- https://matter.ptoq.io \
-  --expected-version=0.2.0-preview.36
+  --expected-version=0.2.0-preview.37
 ```
 
 That command only prints the planned 1+1 smoke receipt. Do not add the execution
 flags until both health surfaces are live and the external controls are already
-proved. The promotion profile schedules 50+50 strict synthetic turns with one
-shared eight-second starting interval; any model rejection fails promotion,
-and timeout/unavailability may occupy at most one of fifty per surface.
+proved. The promotion profile cannot be resized: it schedules 50+50 distinct
+strict synthetic turns with one shared eight-second starting interval. Its
+versioned digest binds ten exact-segment inputs per locale, all twelve semantic
+strata, three Transform amounts, and three Text Swap direction families. Any
+model rejection fails promotion, and timeout/unavailability may occupy at most
+one of fifty per surface.
+
+Execution creates a running manifest and empty safe journal under the
+gitignored `tmp/material-origin-probe/` directory before the health request.
+Every sample receipt is durably appended before the following POST; a failed
+append stops the run and no completed summary is written. A successful finish
+adds a summary with origin, expected/observed deployed version, suite
+version/digest, start/end time, expected/completed counts, and aggregate only.
+These files contain no synthetic text or direction, lineage, returned plan,
+tree/node/request id, IP, cookie, provider, or response text. An interrupted
+`running` directory is evidence of an incomplete attempt, never promotion.
+Admission or malformed-response fail-fast writes a partial `stopped` receipt;
+only all planned calls can produce the `completed` summary.
 
 Manually verify, with a normal browser and no repository secrets:
 

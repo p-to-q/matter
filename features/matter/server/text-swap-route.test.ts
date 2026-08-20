@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_TEXT_SWAP_REQUEST_BYTES, parseTextSwapEnvelope, parseTextSwapPlan } from "../protocol/text-swap-contract";
 import type { ScenarioAdapter, ScenarioCall } from "./harness";
+import type { MaterialTurnObservationOptions } from "./material-turn-observation";
 import { resetTransformAdmissionForTests } from "./transform-admission";
 import { fixtureTextSwapAdapter } from "./text-swap-provider";
 import {
@@ -22,7 +23,8 @@ beforeEach(() => {
 
 describe("text swap route", () => {
   it("runs exact fixture input through text-only model output and a server-built plan", async () => {
-    const response = await post(body(), fixtureTextSwapAdapter);
+    const observe = vi.fn();
+    const response = await post(body(), fixtureTextSwapAdapter, {}, { observe });
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const parsedRequest = parseTextSwapEnvelope(body());
@@ -35,6 +37,18 @@ describe("text swap route", () => {
       intent: "paraphrase",
     });
     expect(plan?.presentation).toEqual({ motionHint: "settle" });
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "paraphrase-in-place",
+      outcome: "success",
+      reason: "NONE",
+      locale: "zh-CN",
+      amountBucket: "tool-owned",
+    }));
+    const routineReceipt = JSON.stringify(observe.mock.calls[0]?.[0]);
+    expect(routineReceipt).not.toContain(PASSAGE);
+    expect(routineReceipt).not.toContain(DIRECTION);
+    expect(routineReceipt).not.toContain("swap_route");
   });
 
   it("gives the provider ancestors only and represents the selected passage once", async () => {
@@ -51,36 +65,54 @@ describe("text swap route", () => {
 
   it("rejects unknown, legacy, and oversized request shapes before model work", async () => {
     const adapter = vi.fn(fixtureTextSwapAdapter);
-    expect((await post({ ...body(), voice: { transcript: DIRECTION } }, adapter)).status).toBe(400);
+    const observe = vi.fn();
+    expect((await post({ ...body(), voice: { transcript: DIRECTION } }, adapter, {}, { observe })).status).toBe(400);
     expect((await post({ ...body(), gesture: { type: "stretch" } }, adapter)).status).toBe(400);
     expect((await post({ ...body(), requestVersion: "transform/2" }, adapter)).status).toBe(400);
     expect((await post(body(), adapter, { "content-length": String(MAX_TEXT_SWAP_REQUEST_BYTES + 1) })).status).toBe(413);
     expect(adapter).not.toHaveBeenCalled();
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      operation: "paraphrase-in-place",
+      outcome: "invalid",
+      reason: "INVALID_REQUEST",
+      locale: "unknown",
+    }));
   });
 
   it("maps no provider and rejected output without constructing a plan", async () => {
-    const unavailable = await post(body(), null);
+    const observe = vi.fn();
+    const fallbackLog = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const unavailable = await post(body(), null, {}, { observe });
     expect(unavailable.status).toBe(503);
     await expect(unavailable.json()).resolves.toMatchObject({
       error: { code: "TURN_UNAVAILABLE", retryable: true, fallbackReason: "MODEL_UNAVAILABLE" },
     });
-    const rejected = await post(body(), async () => ({ text: PASSAGE }));
+    const rejected = await post(body(), async () => ({ text: PASSAGE }), {}, { observe });
     expect(rejected.status).toBe(422);
     await expect(rejected.json()).resolves.toMatchObject({
       error: { code: "TURN_REJECTED", retryable: true, fallbackReason: "MODEL_REJECTED" },
     });
+    expect(observe).toHaveBeenCalledTimes(2);
+    expect(observe.mock.calls.map(([receipt]) => [receipt.outcome, receipt.reason])).toEqual([
+      ["unavailable", "MODEL_UNAVAILABLE"],
+      ["rejected", "NO_CHANGE"],
+    ]);
+    expect(fallbackLog).not.toHaveBeenCalled();
+    fallbackLog.mockRestore();
   });
 
   it("uses the 12s scenario deadline inside the 14s route boundary", async () => {
     vi.useFakeTimers();
     try {
+      const observe = vi.fn();
       let started!: () => void;
       const startedPromise = new Promise<void>((resolve) => { started = resolve; });
       const slow: ScenarioAdapter = async (_call, signal) => new Promise((_, reject) => {
         started();
         signal.addEventListener("abort", () => reject(signal.reason), { once: true });
       });
-      const responsePromise = post(body(), slow);
+      const responsePromise = post(body(), slow, {}, { observe });
       await startedPromise;
       await vi.advanceTimersByTimeAsync(12_000);
       const response = await responsePromise;
@@ -89,6 +121,11 @@ describe("text swap route", () => {
       await expect(response.json()).resolves.toMatchObject({
         error: { fallbackReason: "MODEL_TIMEOUT" },
       });
+      expect(observe).toHaveBeenCalledOnce();
+      expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+        outcome: "timeout",
+        reason: "MODEL_TIMEOUT",
+      }));
     } finally {
       vi.useRealTimers();
     }
@@ -106,17 +143,24 @@ describe("text swap route", () => {
       }, { once: true });
     });
     const controller = new AbortController();
+    const observe = vi.fn();
     const request = new Request("https://matter.test/api/text-swap", {
       method: "POST",
       signal: controller.signal,
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body()),
     });
-    const pending = handleTextSwapRequest(request, adapter);
+    const pending = handleTextSwapRequest(request, adapter, { observe });
     await startedPromise;
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(observedAbort).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledOnce();
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "cancelled",
+      reason: "CLIENT_CANCELLED",
+      responseBytesBucket: "none",
+    }));
   });
 });
 
@@ -144,13 +188,14 @@ async function post(
   payload: unknown,
   adapter: Parameters<typeof handleTextSwapRequest>[1] = fixtureTextSwapAdapter,
   headers: Record<string, string> = {},
+  observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
   try {
     return await handleTextSwapRequest(new Request("https://matter.test/api/text-swap", {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(payload),
-    }), adapter);
+    }), adapter, observationOptions);
   } catch (error) {
     return textSwapErrorResponse(error);
   }

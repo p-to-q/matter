@@ -102,7 +102,7 @@ describe("canvas guidance projection", () => {
   it.each([
     [{ kind: "lasso-ready" }, "circle-reference", "action", "Circle one phrase as reference."],
     [{ kind: "lasso-drawing" }, "close-lasso", "action", "Close the loop around a phrase."],
-    [{ kind: "selected", stretch: { kind: "armed", amount: 0 } }, "set-degree", "action", "Pull the lower handle to expand."],
+    [{ kind: "selected", stretch: { kind: "armed", amount: 0 } }, "set-degree", "action", "Pull expands; Voice/Type rewrites."],
     [{ kind: "selected", stretch: { kind: "dragging", amount: 0 } }, "reach-stretch-threshold", "action", "Pull to 15%, then release."],
     [{ kind: "selected", stretch: { kind: "dragging", amount: 0.8 } }, "release-stretch", "action", "Release to expand at this degree."],
     [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.1 } }, "reach-stretch-threshold", "action", "Pull to 15%, then release."],
@@ -150,7 +150,7 @@ describe("canvas guidance projection", () => {
   });
 
   it.each([
-    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull the lower handle to expand."],
+    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull expands; Voice/Type rewrites."],
     [{ kind: "pending", amount: 0.6 }, "wait-expansion", "progress", "Expanding."],
     [{ kind: "error", amount: 0.6 }, "reset-expansion", "recovery", "No change—text kept. Pull again."],
   ] satisfies readonly [

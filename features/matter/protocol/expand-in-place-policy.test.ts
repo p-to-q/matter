@@ -167,6 +167,13 @@ describe("expand-in-place policy", () => {
 
   it.each([
     ["ship 17 kg", "ship 18 kg with more detail"],
+    ["budget $10", "budget €10 with more detail"],
+    ["budget 10 USD", "budget 10 EUR with more detail"],
+    ["budget US$10", "budget CA$10 with more detail"],
+    ["budget 10 CAD", "budget 10 AUD with more detail"],
+    ["预算 500 元", "预算 500 欧元并补充更多细节"],
+    ["予算 7000円", "予算 7000元について詳しく説明する"],
+    ["Budget 900 Euro", "Budget 900 Dollar with more context"],
     ["ship 2026-08-20", "ship 2026-08-21 with exact dated detail"],
     ["open https://example.com", "open https://example.org with more exact surrounding detail visible here"],
     ["use item_id", "use item-id with more exact context"],

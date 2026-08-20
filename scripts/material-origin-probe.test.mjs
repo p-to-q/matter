@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   buildTransformPlan,
@@ -9,19 +12,25 @@ import {
   parseTextSwapEnvelope,
 } from "../features/matter/protocol/text-swap-contract";
 import {
+  MATERIAL_PROBE_MAX_CALLS_PER_SURFACE,
   MATERIAL_PROBE_MINIMUM_PACE_MS,
   MATERIAL_PROBE_PRODUCTION_ORIGIN,
+  MATERIAL_PROBE_SUITE_DIGEST,
+  MATERIAL_PROBE_SUITE_VERSION,
   assertMaterialProbeAuthorization,
   buildSyntheticEnvelope,
+  createFileMaterialProbeReceiptStore,
   formatMaterialProbeReport,
+  materialProbeSuiteMetadata,
   runMaterialOriginProbe,
   summarizeMaterialProbe,
 } from "./material-origin-probe";
+import { segmentText } from "../features/matter/material/text-segments";
 
 const VERSION = "0.2.0-preview.36";
 const REMOTE_ORIGIN = "https://preview.example.test";
-const EXPANDED = "我们怀念的也许不是一个真实存在过的、拥有非常清楚边界和十分完整形状的过去";
-const SWAPPED = "我们也许怀念的，并不是一个曾经真实存在的过去";
+const EXPANDED = "我们仍在认真而缓慢地学习如何让这个想法落到纸上";
+const SWAPPED = "我们还在探索怎样让这个想法真正落到纸上";
 
 describe("deployed material origin probe", () => {
   it("builds only strict synthetic envelopes accepted by the production parsers", () => {
@@ -37,6 +46,43 @@ describe("deployed material origin probe", () => {
       "context", "direction", "id", "locale", "mode", "operation", "protocolVersion",
       "requestVersion", "selection", "treeId", "treeRevision",
     ].sort());
+  });
+
+  it("freezes fifty distinct exact-segment inputs per surface across every locale, class, and axis", () => {
+    expect(MATERIAL_PROBE_SUITE_VERSION).toBe("material-origin-synthetic/1");
+    expect(MATERIAL_PROBE_SUITE_DIGEST).toMatch(/^[0-9a-f]{64}$/u);
+    expect(MATERIAL_PROBE_SUITE_DIGEST).toBe(
+      "d313d016ca1f3f698f363edfbdcb547e3f57abaf97f845d9cadff5657fe0bd91",
+    );
+    for (const surface of ["turn", "text-swap"]) {
+      const locales = new Set();
+      const semanticClasses = new Set();
+      const axes = new Set();
+      const inputs = new Set();
+      for (let sampleNumber = 1; sampleNumber <= MATERIAL_PROBE_MAX_CALLS_PER_SURFACE; sampleNumber += 1) {
+        const envelope = buildSyntheticEnvelope(surface, sampleNumber);
+        const node = envelope.context.lineage.at(-1);
+        expect(segmentText(node.text)).toContainEqual(expect.objectContaining({
+          start: envelope.selection.start,
+          end: envelope.selection.end,
+        }));
+        const metadata = materialProbeSuiteMetadata(surface, sampleNumber);
+        locales.add(metadata.locale);
+        metadata.semanticClasses.forEach((semanticClass) => semanticClasses.add(semanticClass));
+        axes.add(metadata.axis);
+        inputs.add(JSON.stringify({
+          locale: envelope.locale,
+          selectedText: envelope.selection.selectedText,
+          nodeText: node.text,
+          gesture: "gesture" in envelope ? envelope.gesture : undefined,
+          direction: "direction" in envelope ? envelope.direction : undefined,
+        }));
+      }
+      expect(inputs.size).toBe(50);
+      expect([...locales].sort()).toEqual(["de-DE", "en-US", "ja-JP", "zh-CN", "zh-TW"]);
+      expect(semanticClasses.size).toBe(12);
+      expect(axes.size).toBe(3);
+    }
   });
 
   it("performs zero network work before every execution capability is present", async () => {
@@ -64,6 +110,8 @@ describe("deployed material origin probe", () => {
       .toThrow(/path, query, or fragment/);
     expect(() => assertMaterialProbeAuthorization(config({ callsPerSurface: 51, profile: "promotion" })))
       .toThrow(/call count/);
+    expect(() => assertMaterialProbeAuthorization(config({ callsPerSurface: 49, profile: "promotion" })))
+      .toThrow(/exactly fifty/);
     expect(() => assertMaterialProbeAuthorization(config({ paceMs: 7_999 })))
       .toThrow(/pace/);
   });
@@ -77,8 +125,114 @@ describe("deployed material origin probe", () => {
         throw new Error("POST must not happen");
       },
     });
-    await expect(runMaterialOriginProbe(config(), { fetchImpl })).rejects.toThrow(/material-live/);
+    await expect(runProbe(config(), { fetchImpl })).rejects.toThrow(/material-live/);
     expect(posts).toBe(0);
+  });
+
+  it("creates a running receipt before health and appends safe samples before completion", async () => {
+    const receipt = receiptRecorder();
+    let clock = 0;
+    const fetchImpl = deploymentFetch({
+      post: async (url, init) => successResponse(url, init),
+    });
+    let fetches = 0;
+    const guardedFetch = async (...args) => {
+      if (fetches === 0) {
+        expect(receipt.manifest?.status).toBe("running");
+        expect(receipt.journal).toEqual([]);
+      }
+      fetches += 1;
+      return fetchImpl(...args);
+    };
+    const times = [
+      new Date("2026-08-20T12:00:00.000Z"),
+      new Date("2026-08-20T12:00:20.000Z"),
+    ];
+    const summary = await runMaterialOriginProbe(config(), {
+      fetchImpl: guardedFetch,
+      now: () => clock,
+      sleep: async (milliseconds) => { clock += milliseconds; },
+      wallNow: () => times.shift(),
+      receiptStore: receipt.store,
+    });
+
+    expect(summary.runOk).toBe(true);
+    expect(receipt.journal).toHaveLength(2);
+    expect(receipt.completed).toMatchObject({
+      status: "completed",
+      origin: REMOTE_ORIGIN,
+      expectedVersion: VERSION,
+      healthVersion: VERSION,
+      expectedSamples: 2,
+      completedSamples: 2,
+      suiteVersion: MATERIAL_PROBE_SUITE_VERSION,
+      suiteDigest: MATERIAL_PROBE_SUITE_DIGEST,
+      startedAt: "2026-08-20T12:00:00.000Z",
+      completedAt: "2026-08-20T12:00:20.000Z",
+    });
+    const artifact = JSON.stringify({
+      manifest: receipt.manifest,
+      journal: receipt.journal,
+      stopped: receipt.stopped,
+      completed: receipt.completed,
+    });
+    for (const forbidden of [
+      "selectedText", "direction", "lineage", "passage", "nodeId", "treeId",
+      "probe_transform_", "probe_text_swap_", "cookie", "127.0.0.1",
+      "我们仍在学习如何让这个想法落到纸上",
+    ]) expect(artifact).not.toContain(forbidden);
+  });
+
+  it("stops before the next POST when the awaited sample journal fails", async () => {
+    const receipt = receiptRecorder({ failAppend: true });
+    let posts = 0;
+    const fetchImpl = deploymentFetch({
+      post: async (url, init) => {
+        posts += 1;
+        return successResponse(url, init);
+      },
+    });
+    await expect(runMaterialOriginProbe(config(), {
+      fetchImpl,
+      receiptStore: receipt.store,
+    })).rejects.toThrow(/synthetic journal write failed/);
+    expect(posts).toBe(1);
+    expect(receipt.journal).toHaveLength(1);
+    expect(receipt.completed).toBeUndefined();
+  });
+
+  it("persists only manifest, safe journal, and completed summary in the gitignored receipt shape", async () => {
+    const root = await mkdtemp(join(tmpdir(), "matter-origin-receipt-"));
+    try {
+      let clock = 0;
+      await runMaterialOriginProbe(config(), {
+        fetchImpl: deploymentFetch({
+          post: async (url, init) => successResponse(url, init),
+        }),
+        now: () => clock,
+        sleep: async (milliseconds) => { clock += milliseconds; },
+        receiptStore: createFileMaterialProbeReceiptStore(root),
+      });
+      const directories = await readdir(root);
+      expect(directories).toHaveLength(1);
+      const runDirectory = join(root, directories[0]);
+      expect((await readdir(runDirectory)).sort()).toEqual([
+        "manifest.json",
+        "samples.jsonl",
+        "summary.json",
+      ]);
+      const journal = await readFile(join(runDirectory, "samples.jsonl"), "utf8");
+      expect(journal.trim().split("\n")).toHaveLength(2);
+      const completed = JSON.parse(await readFile(join(runDirectory, "summary.json"), "utf8"));
+      expect(completed).toMatchObject({
+        status: "completed",
+        suiteVersion: MATERIAL_PROBE_SUITE_VERSION,
+        suiteDigest: MATERIAL_PROBE_SUITE_DIGEST,
+        completedSamples: 2,
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   it("sends one strict request per surface with same-origin headers and one global pace", async () => {
@@ -93,7 +247,7 @@ describe("deployed material origin probe", () => {
         return successResponse(url, init);
       },
     });
-    const summary = await runMaterialOriginProbe(config(), {
+    const summary = await runProbe(config(), {
       fetchImpl,
       now: () => clock,
       sleep: async (milliseconds) => { clock += milliseconds; },
@@ -145,7 +299,7 @@ describe("deployed material origin probe", () => {
       },
     });
     let clock = 0;
-    const summary = await runMaterialOriginProbe(config(), {
+    const summary = await runProbe(config(), {
       fetchImpl,
       now: () => clock,
       sleep: async (milliseconds) => { clock += milliseconds; },
@@ -158,7 +312,7 @@ describe("deployed material origin probe", () => {
 
   it("keeps timeout, busy, route, and transport failures distinct", async () => {
     let clock = 0;
-    const providerFailures = await runMaterialOriginProbe(config(), {
+    const providerFailures = await runProbe(config(), {
       fetchImpl: deploymentFetch({
         post: async (url) => url.endsWith("/api/turn")
           ? jsonResponse(url, 503, {
@@ -185,7 +339,7 @@ describe("deployed material origin probe", () => {
     expect(providerFailures.bySurface["text-swap"].busy).toBe(1);
 
     clock = 0;
-    const boundaryFailures = await runMaterialOriginProbe(config(), {
+    const boundaryFailures = await runProbe(config(), {
       fetchImpl: deploymentFetch({
         post: async (url) => {
           if (url.endsWith("/api/turn")) {
@@ -208,6 +362,7 @@ describe("deployed material origin probe", () => {
   });
 
   it("stops immediately when the probe itself reaches admission", async () => {
+    const receipt = receiptRecorder();
     let posts = 0;
     const fetchImpl = deploymentFetch({
       post: async (url) => {
@@ -222,13 +377,24 @@ describe("deployed material origin probe", () => {
         });
       },
     });
-    const summary = await runMaterialOriginProbe(config(), { fetchImpl });
+    const summary = await runMaterialOriginProbe(config(), {
+      fetchImpl,
+      receiptStore: receipt.store,
+    });
     expect(posts).toBe(1);
     expect(summary.bySurface.turn.admissionFailed).toBe(1);
     expect(summary.bySurface["text-swap"].calls).toBe(0);
+    expect(receipt.stopped).toMatchObject({
+      status: "stopped",
+      stoppedBecause: "admission-failed",
+      completedSamples: 1,
+      expectedSamples: 2,
+    });
+    expect(receipt.completed).toBeUndefined();
   });
 
   it("stops on malformed success instead of accepting or retrying it", async () => {
+    const receipt = receiptRecorder();
     let posts = 0;
     const fetchImpl = deploymentFetch({
       post: async (url) => {
@@ -240,11 +406,21 @@ describe("deployed material origin probe", () => {
         });
       },
     });
-    const summary = await runMaterialOriginProbe(config(), { fetchImpl });
+    const summary = await runMaterialOriginProbe(config(), {
+      fetchImpl,
+      receiptStore: receipt.store,
+    });
     expect(posts).toBe(1);
     expect(summary.bySurface.turn.invalidResponse).toBe(1);
     expect(summary.bySurface["text-swap"].calls).toBe(0);
     expect(summary.runOk).toBe(false);
+    expect(receipt.stopped).toMatchObject({
+      status: "stopped",
+      stoppedBecause: "invalid-response",
+      completedSamples: 1,
+      expectedSamples: 2,
+    });
+    expect(receipt.completed).toBeUndefined();
   });
 
   it("lets the production candidate policy reject a shape-correct no-op plan", async () => {
@@ -272,7 +448,7 @@ describe("deployed material origin probe", () => {
         });
       },
     });
-    const summary = await runMaterialOriginProbe(config(), { fetchImpl });
+    const summary = await runProbe(config(), { fetchImpl });
     expect(posts).toBe(1);
     expect(summary.bySurface.turn.invalidResponse).toBe(1);
   });
@@ -284,18 +460,28 @@ describe("deployed material origin probe", () => {
       post: async (url, init) => {
         starts.push(clock);
         clock += 9_100;
-        return successResponse(url, init);
+        const envelope = JSON.parse(init.body);
+        return envelope.treeRevision === 0
+          ? successResponse(url, init)
+          : jsonResponse(url, 503, {
+              error: {
+                code: "TURN_UNAVAILABLE",
+                message: "Synthetic provider unavailable.",
+                retryable: true,
+                fallbackReason: "MODEL_UNAVAILABLE",
+              },
+            });
       },
     });
-    const summary = await runMaterialOriginProbe(config({
+    const summary = await runProbe(config({
       profile: "promotion",
-      callsPerSurface: 3,
+      callsPerSurface: 50,
     }), {
       fetchImpl,
       now: () => clock,
       sleep: async (milliseconds) => { clock += milliseconds; },
     });
-    expect(starts).toHaveLength(6);
+    expect(starts).toHaveLength(100);
     expect(starts.slice(1).every((start, index) => start - starts[index] >= 8_000)).toBe(true);
     expect(summary.runOk).toBe(true);
     expect(summary.promotionReady).toBe(false);
@@ -375,6 +561,41 @@ function config(overrides = {}) {
     confirmationOrigin: REMOTE_ORIGIN,
     ...overrides,
   };
+}
+
+function runProbe(probeConfig, options = {}) {
+  const receipt = receiptRecorder();
+  return runMaterialOriginProbe(probeConfig, {
+    receiptStore: receipt.store,
+    ...options,
+  });
+}
+
+function receiptRecorder({ failAppend = false } = {}) {
+  const state = {
+    manifest: undefined,
+    journal: [],
+    stopped: undefined,
+    completed: undefined,
+  };
+  state.store = {
+    begin: async (manifest) => {
+      state.manifest = manifest;
+      return {
+        append: async (receipt) => {
+          state.journal.push(receipt);
+          if (failAppend) throw new Error("synthetic journal write failed");
+        },
+        stop: async (receipt) => {
+          state.stopped = receipt;
+        },
+        complete: async (receipt) => {
+          state.completed = receipt;
+        },
+      };
+    },
+  };
+  return state;
 }
 
 function deploymentFetch({ materialState = "available", post }) {

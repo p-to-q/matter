@@ -62,6 +62,7 @@ const SCRIPT_TESTS: readonly RegExp[] = [
   /\p{Script=Thai}/u,
 ];
 const PROTECTED_LANGUAGE_MARKERS = /(?<!\p{L})(?:not|no|never|without|none|neither|nor|cannot|can't|won't|must|mustn't|should|shouldn't|may|might|could|would|if|unless|because|since|therefore|thus|hence|so|all|every|each|any|some|many|much|few|several|most|only|nicht|kein(?:e|er|en|em|es)?|nie|ohne|muss|müssen|soll|sollte|kann|könnte|darf|dürfte|vielleicht|möglich|wenn|falls|sofern|weil|deshalb|daher|somit|alle|jeder|jede|jedes|manche|viele|wenige|einige|mehrere|meiste|nur)(?!\p{L})|(?:没有|沒有|不能|不会|不會|必须|必須|应该|應該|可能|或许|或許|除非|如果|因为|因為|由于|由於|所以|因此|导致|導致|从而|從而|不是|不|没|沒|无|無|未|勿|别|別|应|應|可以|若|只要|所有|全部|每个|每個|任何|一些|许多|許多|少数|少數|大多数|大多數|只有|仅|僅|ではない|じゃない|ません|かもしれない|なければならない|おそらく|たぶん|べき|可能性|もし|なら|場合|ので|から|ため|従って|だから|そのため|すべて|全て|各|いくつか|多く|少し|ほとんど|必ず|決して|ない|ず|ぬ)/giu;
+const PROTECTED_CURRENCY_AMOUNT = /(?:\p{Lu}{1,3}\$|\p{Sc}|\p{Lu}{3}|Euro|Euros|Dollar|Dollars|Yen|euro|euros|dollar|dollars|yen|元|円|日元|人民币|人民幣|欧元|歐元)\s*-?\d[\d,]*(?:\.\d+)?|-?\d[\d,]*(?:\.\d+)?\s*(?:\p{Lu}{1,3}\$|\p{Sc}|\p{Lu}{3}|Euro|Euros|Dollar|Dollars|Yen|euro|euros|dollar|dollars|yen|元|円|日元|人民币|人民幣|欧元|歐元)/gu;
 
 /**
  * Uses UTF-16 only for storage limits and extended graphemes only for the
@@ -222,6 +223,7 @@ function protectedAnchors(text: string): readonly string[] {
     }
   };
   capture(/https?:\/\/[^\s<>]+|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/gu);
+  capture(PROTECTED_CURRENCY_AMOUNT);
   capture(/\b\d{4}[-/]\d{1,2}[-/]\d{1,2}\b/gu);
   capture(/\b(?:v?\d+(?:\.\d+){1,}|[A-Za-z]+[A-Za-z0-9_]*[-_][A-Za-z0-9_-]+|[A-Za-z]+\d[A-Za-z0-9_-]*)\b/gu);
   capture(/(?<![\p{L}\p{N}_])-?\d[\d,]*(?:\.\d+)?(?:\s*(?:%|°[CF]|(?:ms|s|min|h|day|days|kg|g|mg|km|m|cm|mm|mb|gb|tb|万|亿|年|月|日|小时|分钟|秒)))?/giu);

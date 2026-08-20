@@ -191,11 +191,13 @@ export type RunScenarioOptions = Readonly<{
 /**
  * One settled fallback, as the deployment sees it. It carries no material, no
  * prompt, no provider identity, and no credential — only which surface fell
- * back, why, and how long it waited first.
+ * back, why, how long it waited, and an optional scenario-owned rejection code.
  */
 export type ScenarioObservation = Readonly<{
   scenario: MatterScenarioId;
   reason: ScenarioFallback;
+  /** Exact scenario-owned policy code; present only for an adjudicator rejection. */
+  rejectionReason?: string;
   elapsedMs: number;
 }>;
 
@@ -227,8 +229,13 @@ export async function runScenario<Input, Value>(
   // recorded. A surface with no adapter is a configuration fact and would
   // otherwise log once per request forever; a caller that walked away is a fact
   // about the caller. Logging either would bury the outage they surround.
-  const settle = <T,>(reason: ScenarioFallback): ScenarioOutcome<T> => {
-    observe({ scenario: scenario.id, reason, elapsedMs: now() - startedAtMs });
+  const settle = <T,>(reason: ScenarioFallback, rejectionReason?: string): ScenarioOutcome<T> => {
+    observe({
+      scenario: scenario.id,
+      reason,
+      ...(reason === "MODEL_REJECTED" && rejectionReason !== undefined ? { rejectionReason } : {}),
+      elapsedMs: now() - startedAtMs,
+    });
     return fallback(reason);
   };
   if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
@@ -292,7 +299,7 @@ export async function runScenario<Input, Value>(
       // take the whole surface off a live provider for the cooldown, for every
       // person on that instance, while the provider was answering all along.
       governor.succeeded();
-      return settle("MODEL_REJECTED");
+      return settle("MODEL_REJECTED", verdict.reason);
     }
     governor.succeeded();
     return Object.freeze({ ok: true, value: verdict.value });

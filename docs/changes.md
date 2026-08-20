@@ -17,6 +17,93 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-20 — Promotion evidence is protocol-valid and recoverable
+
+Changed: both 180-case language corpora now prove every selected passage is one
+exact production punctuation segment before a provider call. Each paid result
+is appended to separate safe/private journals before the next call; only all
+360 unique case/repeat receipts can complete a run, and scoring recomputes the
+metrics from that journal. The deployed-origin promotion suite is versioned and
+digest-bound to 50 distinct inputs per material grammar across five locales,
+twelve semantic classes, and each grammar's three axes. It creates a running
+manifest before health, journals every sample, marks fail-fast runs `stopped`,
+and marks only all 100 calls `completed`. Currency amounts including 元, 円,
+Euro, ISO codes, regional dollar prefixes such as `US$`, and currency symbols
+are protected by both language policies.
+The deployment check now verifies that health is JSON and `no-store`.
+
+Why: pseudo-passages the real lasso would reject, fifty copies of one cached
+prompt, an end-only report, and unchanged digits paired with a changed currency
+could each produce confident but false promotion evidence.
+
+Forecloses: spending calls on non-selectable corpus rows, continuing after a
+receipt write fails, scoring an incomplete or conflicting summary, calling a
+partial origin attempt complete, or treating `$10` and `€10` as equivalent.
+
+## 2026-08-20 — Paid language evidence names its exact authority
+
+Changed: a live language evaluation now requires a prior private plan artifact
+and its exact locally reproduced digest in addition to the 360-call
+confirmation. The digest binds scenario, candidate station/model, prompt and
+corpus versions, complete synthetic corpus, axes, repeats, and aggregate call
+and output-token ceilings. Corpus source-length strata are derived and checked
+from actual extended-grapheme counts within each locale. Text Swap's blinded
+review separately records direction following and reports useful and
+follows-direction consensus by locale, direction family, and source-length
+stratum; Elastic review does not acquire that judgement. Scoring reconstructs
+the blinded review set from that run's private append-only journal and requires
+its source digest, paid-plan digest, candidate ordinal, prompt version, and
+corpus version to agree before producing a promotion receipt.
+
+Why: confirming a call count did not authorize which private candidate and
+frozen evidence would consume it, a hand-written length label was not length
+evidence, and general usefulness could hide whether a restatement followed the
+person's direction.
+
+Forecloses: reusing a paid confirmation after changing model, prompt, corpus,
+axis, repeat, or token exposure; inventing cross-script length buckets by label;
+or promoting Text Swap from an aggregate review that cannot show direction
+adherence; copying a review key and two reviewer packets from another run with
+the same accepted count. It does not set Text Swap's still-unfrozen numeric
+threshold.
+
+## 2026-08-20 — Selected language opens one real local lane
+
+Changed: an eligible one-segment lasso now lets the existing split projection
+reserve transient space between the selected passage and its suffix. Elastic's
+grip, amount rail, ratio, requesting and failure copy, plus Text Swap's typed,
+listening, pending and failure surfaces all occupy that lane. The eligible
+guidance visibly names both pull-to-expand and Voice/type-to-rewrite paths.
+
+Why: public Preview.36 correctly anchored controls to the selection but left
+their fixed hit regions over the following words. A spatial language operation
+must move the material around its instrument, not merely paint the instrument
+above the material.
+
+Forecloses: fixed selection-local controls that cover canonical or projected
+suffix text, a second presentation state source, or solving collision by adding
+a permanent toolbar, prompt surface, document field, or history entry.
+
+## 2026-08-20 — Material turns have one private terminal observation
+
+Changed: each Elastic and Text Swap request now settles exactly one server-only
+routine observation at its route boundary. Its schema is closed to operation,
+terminal outcome, an allow-listed reason, locale, stretch or tool-owned degree,
+length and byte buckets, and elapsed time. Exact adjudicator rejection codes are
+accepted only from the matching policy allow-list. The route consumes the
+harness fallback callback so one failed turn cannot emit a second partial log;
+an observation sink failure cannot change the response.
+
+Why: a live material turn needs success, rejection, provider, timeout, invalid,
+and admission facts in aggregate without making a person's material or identity
+diagnostic data. The route is the only owner that sees the whole terminal path,
+including request admission and the final strict plan or error envelope.
+
+Forecloses: logging direction, passage, lineage, prompt, response text,
+serialized errors, tree/node/request identity, IP, provider or endpoint data;
+counting one harness fallback and one route error as two requests; or letting
+telemetry availability affect a material mutation.
+
 ## 2026-08-20 — Deployment health names both material grammars
 
 Changed: the no-store health envelope now reports Text Swap separately from

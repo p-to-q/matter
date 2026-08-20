@@ -81,6 +81,12 @@ describe("material origin probe launcher", () => {
     expect(() => parseArguments([`${ORIGIN}/matter`, VERSION_FLAG])).toThrow(/path, query, or fragment/);
     expect(() => parseArguments([ORIGIN, VERSION_FLAG, "--unknown"])).toThrow(/Unknown/);
     expect(() => parseArguments([ORIGIN, VERSION_FLAG, "--calls-per-surface=2"])).toThrow(/exactly one/);
+    expect(() => parseArguments([
+      ORIGIN,
+      VERSION_FLAG,
+      "--profile=promotion",
+      "--calls-per-surface=49",
+    ])).toThrow(/exactly fifty/);
     expect(() => parseArguments([ORIGIN, VERSION_FLAG, "--pace-seconds=7"])).toThrow(/whole number/);
   });
 });

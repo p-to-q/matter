@@ -78,7 +78,7 @@ for (const viewport of [
     await expect(page.locator(".lasso-selection-count")).toHaveCount(0);
     await expect(page.getByRole("status")).toContainText("Selected language:");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("下拉底部把手展开这段文字。");
+      .toHaveText("下拉展开，或用 Voice/输入改写。");
     const gripSkin = await page.locator(".stretch-handle").evaluateAll((grips) =>
       grips.map((grip) => {
         const style = getComputedStyle(grip, "::after");
@@ -348,7 +348,7 @@ for (const viewport of [
     await drawEarlyReleaseLoop(page, selectedSegment);
     await expect(page.getByRole("status")).toContainText("我们怀念的也许不是一个真实存在过的过去");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("下拉底部把手展开这段文字。");
+      .toHaveText("下拉展开，或用 Voice/输入改写。");
     await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.getByRole("slider", { name: "Set selected language expansion with the lower handle" }))
@@ -363,7 +363,8 @@ for (const viewport of [
     const sourceBefore = await sourceLayoutReceipt(page, text);
     const natural = await projectionReceipt(page);
     const sourceSuffixTop = await sourceRangeTop(text, "而是那个过去");
-    expect(natural.afterGlyphTop).toBeCloseTo(sourceSuffixTop, 1);
+    expect(natural.afterGlyphTop - sourceSuffixTop).toBeCloseTo(natural.slot.height, 1);
+    expect(natural.slot.height).toBeGreaterThan(100);
     const sourceGlyphsBefore = await sourceGlyphReceipt(text, 0, "，");
 
     const bottom = page.getByRole("slider", { name: "Set selected language expansion with the lower handle" });
@@ -379,8 +380,9 @@ for (const viewport of [
     expect(Math.abs(expanded.after.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
     expect(expanded.before.top).toBeCloseTo(natural.before.top, 1);
     expect(expanded.selected.top).toBeCloseTo(natural.selected.top, 1);
-    expect(expanded.afterGlyphTop - natural.afterGlyphTop).toBeCloseTo(expanded.slot.height, 1);
-    expect(expanded.slot.height).toBeGreaterThan(100);
+    expect(expanded.afterGlyphTop - natural.afterGlyphTop)
+      .toBeCloseTo(expanded.slot.height - natural.slot.height, 1);
+    expect(expanded.slot.height).toBeGreaterThan(natural.slot.height);
     expect(sourceGlyphsExpanded).toEqual(sourceGlyphsBefore);
     const sourceAfter = await sourceLayoutReceipt(page, text);
     expect(sourceTextReceipt(sourceAfter)).toEqual(sourceTextReceipt(sourceBefore));
@@ -390,7 +392,7 @@ for (const viewport of [
     await bottom.press("Home");
     const neutralAgain = await projectionReceipt(page);
     expect(neutralAgain.afterGlyphTop).toBeCloseTo(natural.afterGlyphTop, 1);
-    expect(neutralAgain.slot.height).toBeCloseTo(0, 1);
+    expect(neutralAgain.slot.height).toBeCloseTo(natural.slot.height, 1);
   });
 }
 

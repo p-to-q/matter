@@ -81,6 +81,34 @@ describe("text swap policy", () => {
       sourceText: "A quiet room",
       candidateText: "这里是一个安静房间",
     }))).toMatchObject({ ok: false, code: "SCRIPT_DRIFT" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "Price is $10",
+      candidateText: "Price is €10",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "Cost is 10 USD",
+      candidateText: "Cost is 10 EUR",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "Price is US$10",
+      candidateText: "Price is CA$10",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "Cost is 10 CAD",
+      candidateText: "Cost is 10 AUD",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "预算是 500 元",
+      candidateText: "预算为 500 欧元",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "予算は7000円",
+      candidateText: "予算は7000元",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "Budget 900 Euro",
+      candidateText: "Budget 900 Dollar",
+    }))).toMatchObject({ ok: false, code: "PROTECTED_MEANING_CHANGED" });
   });
 
   it("preserves literal prompt artifacts and source-owned punctuation", () => {

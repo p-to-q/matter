@@ -47,9 +47,11 @@ contract.
 ## Active sub-slice — promotion truth before provider promotion
 
 State: implemented for health/profile separation, tablet/strict-local recovery,
-two independent 180-case candidate corpora, and a default-dry-run strict origin
-sampler. Paid corpus runs, independent human review, distributed control,
-owner-approved spend, and successful origin/browser receipts remain open.
+two independent 180-case candidate corpora, a default-dry-run strict origin
+sampler, and one route-owned privacy-safe terminal observation for every Elastic
+or Text Swap request. Paid corpus runs, independent human review, distributed
+control, owner-approved spend, and successful origin/browser receipts remain
+open.
 
 ```text
 Outcome:    a release receipt distinguishes a safe browser preview from a live
@@ -58,7 +60,9 @@ Outcome:    a release receipt distinguishes a safe browser preview from a live
 Boundary:   no-store health projection, deployment receipt profiles, strict
             local Elastic refusal recovery, one tablet/coarse browser proof,
             a pure shared evaluation core with scenario-owned synthetic corpora,
-            and an explicitly authorized deployed-origin API sampler.
+            an explicitly authorized deployed-origin API sampler, and one
+            server-only allow-listed terminal observation owner shared in shape
+            but not lifecycle by the two material routes.
 Invariants: Elastic and Text Swap keep independent gates and protocols; health
             exposes no provider or material; browser-preview requires both
             material model surfaces unavailable; material-live requires both
@@ -69,14 +73,49 @@ Proof:      exact health envelope and profile tests; over-capacity lineage
             selection-time operation choice, symmetric local ownership,
             Elastic/Text Swap commit and pointer Undo; full
             source and Chromium release suites before promotion; 5 locales ×
-            12 classes × 3 axes, two no-retry repeats, zero-network defaults,
-            private review artifacts, strict origin authorization, shared
+            12 classes × 3 axes whose reconstructed passage is one exact
+            current punctuation segment and whose source-length stratum is
+            recomputed from real graphemes; two no-retry repeats, zero-network
+            defaults, digest-bound private plan/review artifacts, strict origin
+            authorization, a versioned/digest-bound 50+50 origin suite with
+            pre-health running manifest and awaited safe journal, shared
             8-second pacing, bounded response parsing, and low-cardinality
-            aggregate tests.
+            aggregate tests; hostile-sentinel, exact policy-rejection, admission,
+            invalid, unavailable, busy, timeout, cancellation, and one-terminal
+            route tests for routine production observations.
 Non-goals:  enabling either live adapter, inventing a spend amount, copying an
             external asset into the repository, changing tree/history, or
             weakening either adjudicator to improve acceptance.
 ```
+
+## Active sub-slice — selected language owns one interstitial lane
+
+```text
+Outcome:    after one eligible lasso, Elastic and Text Swap controls occupy real
+            space between the selected passage and its suffix instead of
+            covering material, while the eligible guidance names both choices.
+Boundary:   the existing split projection, its render-edge geometry receipt,
+            transient presentation damage, local control placement, and focused
+            browser geometry assertions only.
+Invariants: canonical text, tree, history, protocol, the five-slot rail, and the
+            mutually exclusive operation lifecycles do not change; no new
+            persistent entity, chrome, or state authority is introduced.
+Proof:      pure lane geometry; zero intersection between the projected suffix
+            and Elastic grip/rail/ratio/status or Text Swap composer/feedback at
+            laptop, 390px coarse/reduced-motion, and 834px tablet breakpoints.
+Non-goals:  production gate changes, provider work, a new operation chooser,
+            animation redesign, or changes to Voice admission and material.
+```
+
+Receipt, 2026-08-21: Preview.37 closes the active browser-preview slice. The
+selection-local lane passed laptop, 390px coarse/reduced-motion, and 834px
+real-touch proof; the full controlled Chromium suite passed 67 cases with 2
+capability skips. The full source gate passed 52 Node checks, 1,382 Vitest with
+3 capability skips, architecture across 352 files, type generation, TypeScript,
+lint, docs, and production build. The default language evaluator passed 17
+checks with its live block skipped and zero network. Independent final review
+found no open P0/P1. Both production material-model gates remain off pending
+the external controls and paid/human/origin receipts below.
 
 Receipt, 2026-08-20: the final browser-preview candidate carries the
 request-start document epoch through Elastic's private commit boundary and
@@ -89,6 +128,43 @@ three-worker boundary. The language harness remained zero-network by default
 (9 passed, 1 live skip), and the origin smoke command planned exactly 1+1
 synthetic calls without executing them. Exact source-suite counts are recorded
 in release readiness.
+
+Receipt, 2026-08-20: `/api/turn` and `/api/text-swap` now settle one routine
+server-only observation at their complete request boundary. Success and every
+error class share one closed scalar schema; exact rejection codes pass a
+scenario-specific allow-list, invalid/admission requests retain unknown material
+buckets, and caller cancellation records no response bytes. The routes consume
+the harness fallback callback, preventing a second partial log. Hostile material,
+direction, lineage, prompt, response text, tree/node/request identity, and IP
+have no field through which to enter the record. Focused server tests and
+TypeScript validation pass; live gates and external promotion receipts remain
+unchanged and off.
+
+Receipt, 2026-08-20: paid language evaluation now begins with a separate
+zero-call private plan. Its digest binds the chosen candidate, frozen prompt and
+corpus, every synthetic input and axis, repeats, and total call/output-token
+ceilings; run mode reloads that artifact and locally reproduces the digest
+before constructing the adapter. Corpus coverage derives three balanced
+locale-relative source-length strata from real extended-grapheme counts and
+revalidates both count and rank. Text Swap's blinded decision adds direction
+following and reports two-reviewer useful/follows-direction consensus by locale,
+direction, and source-length bucket without imposing an unevidenced threshold;
+Elastic review remains unchanged. Scoring rebuilds those packets from the
+run's private append-only journal and binds their source digest to the paid
+plan, candidate, prompt, and corpus, so a complete review set from a sibling
+run cannot be substituted. Focused proof stays entirely zero-network.
+
+Receipt, 2026-08-20: both corpora pass the public exact-current-segment parser
+before provider authority. Every paid result is awaited into separate safe and
+private append-only journals; only 360 unique case/repeat receipts can complete
+the run, and scoring recomputes its metrics from those receipts. The origin
+promotion suite now supplies 50 distinct inputs per grammar across five locales,
+all twelve semantic classes, and three operation axes under one version/digest.
+It creates evidence before health, journals before the next POST, records early
+fail-fast termination as `stopped`, and reserves `completed` for all 100 calls.
+Both language policies protect locale-written currency amounts, and deployment
+health proof now requires JSON plus `Cache-Control: no-store`. All focused proof
+was zero-network; live gates remain unchanged and off.
 
 ## Active freeze — Text Swap / text-swap/1
 

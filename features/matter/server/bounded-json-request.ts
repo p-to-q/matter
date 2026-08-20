@@ -27,6 +27,11 @@ export type BoundedRequestPolicy = Readonly<{
   fail: (reason: BoundedRequestFailure) => Error;
 }>;
 
+export type BoundedJsonRequestMetadata = Readonly<{
+  /** Actual UTF-8 bytes read from the request stream, never a declared length. */
+  requestBytes: number;
+}>;
+
 /**
  * Reads and parses one bounded JSON body, then runs `handle` inside the same
  * deadline. The boundary is disposed however `handle` settles, so a route
@@ -35,7 +40,11 @@ export type BoundedRequestPolicy = Readonly<{
 export async function withBoundedJsonRequest<T>(
   request: Request,
   policy: BoundedRequestPolicy,
-  handle: (payload: unknown, signal: AbortSignal) => Promise<T>,
+  handle: (
+    payload: unknown,
+    signal: AbortSignal,
+    metadata: BoundedJsonRequestMetadata,
+  ) => Promise<T>,
 ): Promise<T> {
   const declaredLength = parseOptionalContentLength(request.headers.get("content-length"), policy);
   if (declaredLength !== null && declaredLength > policy.maxBytes) throw policy.fail("too-large");
@@ -53,7 +62,9 @@ export async function withBoundedJsonRequest<T>(
       throw policy.fail("not-json");
     }
     try {
-      return await handle(payload, boundary.signal);
+      return await handle(payload, boundary.signal, Object.freeze({
+        requestBytes: new TextEncoder().encode(body).byteLength,
+      }));
     } catch (error) {
       // The boundary covers `handle` too, but only the body read raises the
       // policy's own error. Work that observes the signal rejects with a bare

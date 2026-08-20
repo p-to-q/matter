@@ -63,6 +63,7 @@ test.describe("tablet touch material language", () => {
     await expectNoOverlap(typeDirection, toolRail);
     await expectNoOverlap(grip, toolRail);
     await expectNoOverlap(typeDirection, grip);
+    await expectLaneBeforeSuffix(page, [grip, rail]);
     const toolTargets = await toolRail.locator("button").evaluateAll((buttons) =>
       buttons.map((button) => {
         const box = button.getBoundingClientRect();
@@ -78,11 +79,14 @@ test.describe("tablet touch material language", () => {
     const recording = page.locator('.text-swap-feedback[data-phase="recording"]');
     await expect(recording).toContainText("正在听你想怎样换一种说法");
     await expectNoOverlap(recording, toolRail);
+    await expectLaneBeforeSuffix(page, [recording]);
     await page.waitForTimeout(350);
     await stop.tap();
 
     await expect.poll(() => swapRequests).toBe(1);
-    await expect(page.locator('.text-swap-feedback[data-phase="pending"]')).toContainText("正在换个说法");
+    const swapPending = page.locator('.text-swap-feedback[data-phase="pending"]');
+    await expect(swapPending).toContainText("正在换个说法");
+    await expectLaneBeforeSuffix(page, [swapPending]);
     await expect(text).toHaveText(SOURCE_TEXT);
     releaseSwapResponses.shift()?.();
     await expect(text).toContainText(REWRITTEN_SEGMENT);
@@ -115,24 +119,20 @@ test.describe("tablet touch material language", () => {
     await selectFirstSegmentByTouch(page, text);
     await expect(typeDirection).toBeVisible();
     await expect(voice).toBeEnabled();
-    const resetRailBox = await rail.boundingBox();
-    if (resetRailBox === null) throw new Error("tablet Elastic amount rail missing after lasso reset");
-    await page.touchscreen.tap(
-      resetRailBox.x + resetRailBox.width / 2,
-      resetRailBox.y + resetRailBox.height / 2,
-    );
-    await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
-    await expect(typeDirection).toHaveCount(0);
-    await expect(voice).toBeDisabled();
+    await expect(grip).toHaveAttribute("aria-valuenow", "0");
+    await expectLaneBeforeSuffix(page, [grip, rail]);
 
     const gripBox = await grip.boundingBox();
     if (gripBox === null) throw new Error("tablet lower Elastic grip missing");
     expect(gripBox.width).toBeGreaterThanOrEqual(48);
     expect(gripBox.height).toBeGreaterThanOrEqual(48);
     await expectContainedByVisualViewport(page, grip);
-    await page.touchscreen.tap(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+    await dragByTouch(page, grip, 60);
     await expect.poll(() => turnRequests).toBe(1);
-    await expect(page.locator('.stretch-status-marker[data-phase="requesting"]')).toHaveText("正在展开");
+    const turnPending = page.locator('.stretch-status-marker[data-phase="requesting"]');
+    await expect(turnPending).toHaveText("正在展开");
+    await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
+    await expectLaneBeforeSuffix(page, [grip, rail, page.locator(".stretch-handle__ratio"), turnPending]);
     await expectContainedByVisualViewport(page, grip);
     await expect(typeDirection).toHaveCount(0);
     await expect(voice).toBeDisabled();
@@ -190,6 +190,29 @@ async function drawTouchLoop(
   }
 }
 
+async function dragByTouch(page: Page, target: Locator, deltaY: number): Promise<void> {
+  const box = await target.boundingBox();
+  if (box === null) throw new Error("touch drag target missing");
+  const session = await page.context().newCDPSession(page);
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  try {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x, y, id: 1, radiusX: 1, radiusY: 1 }],
+    });
+    for (const step of [0.25, 0.5, 0.75, 1]) {
+      await session.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ x, y: y + deltaY * step, id: 1, radiusX: 1, radiusY: 1 }],
+      });
+    }
+    await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  } finally {
+    await session.detach();
+  }
+}
+
 async function expectNoOverlap(first: Locator, second: Locator): Promise<void> {
   const [firstBox, secondBox] = await Promise.all([first.boundingBox(), second.boundingBox()]);
   expect(firstBox).not.toBeNull();
@@ -205,6 +228,28 @@ async function expectNoOverlap(first: Locator, second: Locator): Promise<void> {
       Math.max(firstBox!.y, secondBox!.y),
   );
   expect(overlapWidth * overlapHeight).toBe(0);
+}
+
+async function expectLaneBeforeSuffix(page: Page, controls: readonly Locator[]): Promise<void> {
+  const suffix = page.locator(".language-split-block--after");
+  const selection = page.locator(".language-split-block--selected");
+  await expect(page.locator(".language-split-projection")).toHaveAttribute(
+    "data-preview-mode",
+    /^(lane|expand)$/,
+  );
+  const [selectionBox, suffixBox] = await Promise.all([
+    selection.boundingBox(),
+    suffix.boundingBox(),
+  ]);
+  expect(selectionBox).not.toBeNull();
+  expect(suffixBox).not.toBeNull();
+  for (const control of controls) {
+    await expect(control).toBeVisible();
+    const controlBox = await control.boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect(controlBox!.y).toBeGreaterThanOrEqual(selectionBox!.y + selectionBox!.height - 1);
+    expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(suffixBox!.y + 1);
+  }
 }
 
 async function expectContainedByVisualViewport(page: Page, target: Locator): Promise<void> {

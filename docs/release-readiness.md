@@ -45,6 +45,58 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.37
+
+Preview.37 makes selected language feel like one place rather than a stack of
+overlays. An exact one-segment lasso now opens a transient lane between the
+selected passage and its suffix. The same lane offers the two bounded paths:
+pull downward for Elastic expansion, or use Voice/the local typed alternative
+for Text Swap. The suffix moves out of the instrument's way, the selected words
+remain the visible reference, and choosing one operation makes it the sole
+local owner. No panel, prompt surface, durable UI entity, tree field, or second
+history path was added. The 834px tablet receipt now uses a real touch
+down/move/up drag for Elastic rather than only a tap alternative.
+
+The release also closes the evidence boundary needed before these operations
+can ever become live. Every material-model terminal outcome has one private,
+allow-listed aggregate observation with no material or identity field. Both
+five-locale corpora consist only of passages the production segment parser can
+actually select, protect regional and ISO currency designators, and write each
+paid result before proceeding. Paid authority is bound to the exact candidate,
+prompt, corpus, axes, call count, and output-token ceiling. Scoring rebuilds the
+blinded review set from that run's private journal, so review packets from a
+sibling run cannot be substituted. The origin promotion suite is a versioned,
+digest-bound 50+50 set of distinct strict inputs with a running journal and
+truthful `running` / `stopped` / `completed` receipts. Health verification now
+requires both a strict JSON MIME and `no-store`.
+
+```text
+source proof           npm run check: doctor and 38 Markdown files passed;
+                       52 Node checks passed; architecture covered 352 files
+                       across 7 layers with no outward dependency, provider
+                       leak, or cycle; 1,382 Vitest passed and 3 capability
+                       cases skipped; typegen, typecheck, lint, and the Next
+                       16.3.0 production build passed
+browser proof          controlled full Chromium suite: 67 passed, 2
+                       capability-gated cases skipped, 0 failed; laptop,
+                       390px/coarse/reduced-motion, and 834px real-touch paths
+                       prove local-lane geometry, both atomic operations,
+                       cancellation, late-response loss of authority,
+                       pointer Undo/Redo, and reload
+evaluation proof       default evaluation: 17 passed, 1 live run skipped;
+                       origin tooling and all focused proof used zero network
+                       and no provider call
+independent review     final diff audit found no open P0/P1 after the cross-run
+                       review binding, currency, and health-MIME corrections
+production boundary    release only as browser-preview; both material-model
+                       gates remain off. No paid 360-call corpus, two-person
+                       review, distributed rate/spend controls, or executed
+                       origin promotion is claimed
+known product gap      a foreign-id archive can be imported and saved, but a
+                       strict active-document pointer is still required before
+                       reload can promise to return to that imported document
+```
+
 ## Candidate verification — 0.2.0-preview.36
 
 Preview.36 makes the difference between a safe browser preview and a live

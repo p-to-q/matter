@@ -82,6 +82,46 @@ test("Elastic Language cancels below-threshold and late turns without changing m
   expect(turnRequests).toBe(1);
 });
 
+test("Elastic Language retryable failure stays in the local lane without changing material", async ({ page }) => {
+  let turnRequests = 0;
+  await page.route("**/api/turn", async (route) => {
+    turnRequests += 1;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: {
+          code: "TURN_UNAVAILABLE",
+          message: "Synthetic model unavailable.",
+          retryable: true,
+          fallbackReason: "MODEL_UNAVAILABLE",
+        },
+      }),
+    });
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await focusRoot(page, false);
+  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
+  const grip = page.getByRole("slider", {
+    name: "Set selected language expansion with the lower handle",
+  });
+  await grip.focus();
+  await page.keyboard.press("PageUp");
+  await page.keyboard.press("Enter");
+
+  const failure = page.locator('.stretch-status-marker[data-phase="error"]');
+  await expect(failure).toContainText("未展开");
+  await expectLaneBeforeSuffix(page, [grip, failure]);
+  await expect(text).toContainText(SOURCE);
+  await expect(text).not.toContainText(EXPANDED);
+  expect(turnRequests).toBe(1);
+});
+
 test.describe("coarse pointer", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
 
@@ -123,6 +163,7 @@ async function runElasticReceipt(
   });
   await expect(grip).toHaveAttribute("aria-valuenow", "0");
   await expect(rail).toHaveAttribute("aria-valuenow", "0");
+  await expectLaneBeforeSuffix(page, [grip, rail]);
 
   if (input === "drag") {
     const box = await grip.boundingBox();
@@ -159,6 +200,12 @@ async function runElasticReceipt(
   }
 
   await expect(page.locator(".stretch-status-marker[data-phase=requesting]")).toHaveText("正在展开");
+  await expectLaneBeforeSuffix(page, [
+    grip,
+    rail,
+    page.locator(".stretch-handle__ratio"),
+    page.locator(".stretch-status-marker[data-phase=requesting]"),
+  ]);
   await page.evaluate(() => {
     window.dispatchEvent(new Event("scroll"));
     window.dispatchEvent(new Event("resize"));
@@ -194,6 +241,31 @@ async function runElasticReceipt(
   await expect(page.locator(".transform-text")).toHaveCount(0);
   expect(turnRequests).toBe(1);
   expect(browserErrors).toEqual([]);
+}
+
+async function expectLaneBeforeSuffix(
+  page: Page,
+  controls: readonly ReturnType<Page["locator"]>[],
+): Promise<void> {
+  const suffix = page.locator(".language-split-block--after");
+  const selection = page.locator(".language-split-block--selected");
+  await expect(page.locator(".language-split-projection")).toHaveAttribute(
+    "data-preview-mode",
+    /^(lane|expand)$/,
+  );
+  const [selectionBox, suffixBox] = await Promise.all([
+    selection.boundingBox(),
+    suffix.boundingBox(),
+  ]);
+  expect(selectionBox).not.toBeNull();
+  expect(suffixBox).not.toBeNull();
+  for (const control of controls) {
+    await expect(control).toBeVisible();
+    const controlBox = await control.boundingBox();
+    expect(controlBox).not.toBeNull();
+    expect(controlBox!.y).toBeGreaterThanOrEqual(selectionBox!.y + selectionBox!.height - 1);
+    expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(suffixBox!.y + 1);
+  }
 }
 
 async function focusRoot(page: Page, narrow: boolean): Promise<void> {

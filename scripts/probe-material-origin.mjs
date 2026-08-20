@@ -66,6 +66,9 @@ export function parseArguments(args) {
   if (profile === "smoke" && resolvedCalls !== 1) {
     throw new Error("The smoke profile makes exactly one call per surface.");
   }
+  if (profile === "promotion" && resolvedCalls !== MAX_CALLS_PER_SURFACE) {
+    throw new Error("The promotion profile makes exactly fifty calls per surface.");
+  }
   if (!/^[0-9A-Za-z][0-9A-Za-z._+-]{0,79}$/u.test(expectedVersion)) {
     throw new Error("--expected-version must be one bounded version identifier.");
   }

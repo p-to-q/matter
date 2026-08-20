@@ -11,7 +11,19 @@ import {
   type BoundedRequestFailure,
   type BoundedRequestPolicy,
 } from "./bounded-json-request";
-import { ScenarioGovernor, runScenario, withRequestSignal, type ScenarioAdapter } from "./harness";
+import {
+  ScenarioGovernor,
+  runScenario,
+  withRequestSignal,
+  type ScenarioAdapter,
+  type ScenarioObservation,
+} from "./harness";
+import {
+  classifyMaterialTurnFailure,
+  createMaterialTurnObservationOwner,
+  jsonByteLength,
+  type MaterialTurnObservationOptions,
+} from "./material-turn-observation";
 import { admitTransformRequest } from "./transform-admission";
 import { TransformServerError, invalidTransformRequest } from "./transform-errors";
 import { TRANSFORM_SCENARIO, type TransformScenarioInput } from "./transform-harness";
@@ -33,18 +45,55 @@ export const TRANSFORM_ROUTE_TIMEOUT_MS = 14_000;
 export async function handleTransformRequest(
   request: Request,
   adapter: ScenarioAdapter | null = resolveTransformAdapter(),
+  observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
-  const admission = admitTransformRequest(request);
-  if (!admission.ok) throw transformAdmissionError(admission.reason);
+  const observation = createMaterialTurnObservationOwner("expand-in-place", observationOptions);
+  let admissionReason: "ORIGIN" | "RATE" | "BUSY" | undefined;
   try {
-    return await withBoundedJsonRequest(request, TURN_REQUEST_POLICY, async (payload, signal) => {
-      const parsed = parseTransformEnvelope(payload);
-      if (!parsed.ok) throw invalidTransformRequest(parsed.message);
-      const plan = await createTransformPlan(parsed.envelope, adapter, signal);
-      return Response.json(plan, { headers: { "Cache-Control": "no-store" } });
+    const admission = admitTransformRequest(request);
+    if (!admission.ok) {
+      admissionReason = admission.reason;
+      throw transformAdmissionError(admission.reason);
+    }
+    try {
+      return await withBoundedJsonRequest(request, TURN_REQUEST_POLICY, async (payload, signal, metadata) => {
+        observation.noteRequestBytes(metadata.requestBytes);
+        const parsed = parseTransformEnvelope(payload);
+        if (!parsed.ok) throw invalidTransformRequest(parsed.message);
+        const input = scenarioInput(parsed.envelope);
+        if (input === null) {
+          throw invalidTransformRequest("The transform degree cannot produce a bounded target.");
+        }
+        observation.noteBasis({
+          locale: input.locale,
+          amount: input.amount,
+          targetGraphemes: input.length.targetGraphemes,
+        });
+        const plan = await createTransformPlanFromInput(
+          parsed.envelope,
+          input,
+          adapter,
+          signal,
+          observation.noteScenario,
+        );
+        const response = Response.json(plan, { headers: { "Cache-Control": "no-store" } });
+        observation.settle({ outcome: "success", reason: "NONE", responseBytes: jsonByteLength(plan) });
+        return response;
+      });
+    } finally {
+      admission.release();
+    }
+  } catch (error) {
+    const terminal = classifyMaterialTurnFailure({
+      ...(admissionReason === undefined ? {} : { admissionReason }),
+      cancelled: error instanceof DOMException && error.name === "AbortError",
+      ...(error instanceof TransformServerError ? { serverError: error } : {}),
     });
-  } finally {
-    admission.release();
+    observation.settle({
+      ...terminal,
+      ...(terminal.outcome === "cancelled" ? {} : { responseBytes: transformErrorByteLength(error) }),
+    });
+    throw error;
   }
 }
 
@@ -55,8 +104,22 @@ export async function createTransformPlan(
 ): Promise<TransformPlan> {
   const input = scenarioInput(envelope);
   if (input === null) throw invalidTransformRequest("The transform degree cannot produce a bounded target.");
+  return createTransformPlanFromInput(envelope, input, adapter, signal);
+}
+
+async function createTransformPlanFromInput(
+  envelope: TransformEnvelope,
+  input: TransformScenarioInput,
+  adapter: ScenarioAdapter | null,
+  signal: AbortSignal,
+  observe?: (observation: ScenarioObservation) => void,
+): Promise<TransformPlan> {
   const outcome = await withRequestSignal(
-    runScenario(TRANSFORM_SCENARIO, input, adapter, governor, { limits: TURN_LIMITS, signal }),
+    runScenario(TRANSFORM_SCENARIO, input, adapter, governor, {
+      limits: TURN_LIMITS,
+      signal,
+      ...(observe === undefined ? {} : { observe }),
+    }),
     signal,
   );
   if (!outcome.ok) throw transformOutcomeError(outcome.fallback);
@@ -68,13 +131,21 @@ export function resetTransformGovernor(): void {
 }
 
 export function transformErrorResponse(error: unknown): Response {
-  const known = error instanceof TransformServerError
-    ? error
-    : new TransformServerError("TURN_FAILED", "Matter could not change this passage just now.", true, 500);
+  const known = normalizeTransformError(error);
   return Response.json(known.envelope(), {
     status: known.status,
     headers: { "Cache-Control": "no-store" },
   });
+}
+
+function normalizeTransformError(error: unknown): TransformServerError {
+  return error instanceof TransformServerError
+    ? error
+    : new TransformServerError("TURN_FAILED", "Matter could not change this passage just now.", true, 500);
+}
+
+function transformErrorByteLength(error: unknown): number {
+  return jsonByteLength(normalizeTransformError(error).envelope());
 }
 
 function scenarioInput(envelope: TransformEnvelope): TransformScenarioInput | null {

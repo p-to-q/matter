@@ -11,7 +11,19 @@ import {
   type BoundedRequestFailure,
   type BoundedRequestPolicy,
 } from "./bounded-json-request";
-import { ScenarioGovernor, runScenario, withRequestSignal, type ScenarioAdapter } from "./harness";
+import {
+  ScenarioGovernor,
+  runScenario,
+  withRequestSignal,
+  type ScenarioAdapter,
+  type ScenarioObservation,
+} from "./harness";
+import {
+  classifyMaterialTurnFailure,
+  createMaterialTurnObservationOwner,
+  jsonByteLength,
+  type MaterialTurnObservationOptions,
+} from "./material-turn-observation";
 import { admitTransformRequest } from "./transform-admission";
 import { TextSwapServerError, invalidTextSwapRequest } from "./text-swap-errors";
 import { TEXT_SWAP_SCENARIO, type TextSwapScenarioInput } from "./text-swap-harness";
@@ -28,20 +40,57 @@ export const TEXT_SWAP_ROUTE_TIMEOUT_MS = 14_000;
 export async function handleTextSwapRequest(
   request: Request,
   adapter: ScenarioAdapter | null = resolveTextSwapAdapter(),
+  observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
   // Swap and fixed expand share one public generative-mutation perimeter while
   // keeping separate protocol, provider switch, scenario health, and prompt.
-  const admission = admitTransformRequest(request);
-  if (!admission.ok) throw admissionError(admission.reason);
+  const observation = createMaterialTurnObservationOwner("paraphrase-in-place", observationOptions);
+  let admissionReason: "ORIGIN" | "RATE" | "BUSY" | undefined;
   try {
-    return await withBoundedJsonRequest(request, REQUEST_POLICY, async (payload, signal) => {
-      const parsed = parseTextSwapEnvelope(payload);
-      if (!parsed.ok) throw invalidTextSwapRequest(parsed.message);
-      const plan = await createTextSwapPlan(parsed.envelope, adapter, signal);
-      return Response.json(plan, { headers: { "Cache-Control": "no-store" } });
+    const admission = admitTransformRequest(request);
+    if (!admission.ok) {
+      admissionReason = admission.reason;
+      throw admissionError(admission.reason);
+    }
+    try {
+      return await withBoundedJsonRequest(request, REQUEST_POLICY, async (payload, signal, metadata) => {
+        observation.noteRequestBytes(metadata.requestBytes);
+        const parsed = parseTextSwapEnvelope(payload);
+        if (!parsed.ok) throw invalidTextSwapRequest(parsed.message);
+        const input = scenarioInput(parsed.envelope);
+        if (input === null) {
+          throw invalidTextSwapRequest("The text swap cannot fit inside the material bounds.");
+        }
+        observation.noteBasis({
+          locale: input.locale,
+          amount: "tool-owned",
+          targetGraphemes: input.length.maximumAcceptedGraphemes,
+        });
+        const plan = await createTextSwapPlanFromInput(
+          parsed.envelope,
+          input,
+          adapter,
+          signal,
+          observation.noteScenario,
+        );
+        const response = Response.json(plan, { headers: { "Cache-Control": "no-store" } });
+        observation.settle({ outcome: "success", reason: "NONE", responseBytes: jsonByteLength(plan) });
+        return response;
+      });
+    } finally {
+      admission.release();
+    }
+  } catch (error) {
+    const terminal = classifyMaterialTurnFailure({
+      ...(admissionReason === undefined ? {} : { admissionReason }),
+      cancelled: error instanceof DOMException && error.name === "AbortError",
+      ...(error instanceof TextSwapServerError ? { serverError: error } : {}),
     });
-  } finally {
-    admission.release();
+    observation.settle({
+      ...terminal,
+      ...(terminal.outcome === "cancelled" ? {} : { responseBytes: textSwapErrorByteLength(error) }),
+    });
+    throw error;
   }
 }
 
@@ -52,8 +101,22 @@ export async function createTextSwapPlan(
 ): Promise<TextSwapPlan> {
   const input = scenarioInput(envelope);
   if (input === null) throw invalidTextSwapRequest("The text swap cannot fit inside the material bounds.");
+  return createTextSwapPlanFromInput(envelope, input, adapter, signal);
+}
+
+async function createTextSwapPlanFromInput(
+  envelope: TextSwapEnvelope,
+  input: TextSwapScenarioInput,
+  adapter: ScenarioAdapter | null,
+  signal: AbortSignal,
+  observe?: (observation: ScenarioObservation) => void,
+): Promise<TextSwapPlan> {
   const outcome = await withRequestSignal(
-    runScenario(TEXT_SWAP_SCENARIO, input, adapter, governor, { limits: TURN_LIMITS, signal }),
+    runScenario(TEXT_SWAP_SCENARIO, input, adapter, governor, {
+      limits: TURN_LIMITS,
+      signal,
+      ...(observe === undefined ? {} : { observe }),
+    }),
     signal,
   );
   if (!outcome.ok) throw outcomeError(outcome.fallback);
@@ -65,13 +128,21 @@ export function resetTextSwapGovernor(): void {
 }
 
 export function textSwapErrorResponse(error: unknown): Response {
-  const known = error instanceof TextSwapServerError
-    ? error
-    : new TextSwapServerError("TURN_FAILED", "Matter could not swap this passage just now.", true, 500);
+  const known = normalizeTextSwapError(error);
   return Response.json(known.envelope(), {
     status: known.status,
     headers: { "Cache-Control": "no-store" },
   });
+}
+
+function normalizeTextSwapError(error: unknown): TextSwapServerError {
+  return error instanceof TextSwapServerError
+    ? error
+    : new TextSwapServerError("TURN_FAILED", "Matter could not swap this passage just now.", true, 500);
+}
+
+function textSwapErrorByteLength(error: unknown): number {
+  return jsonByteLength(normalizeTextSwapError(error).envelope());
 }
 
 function scenarioInput(envelope: TextSwapEnvelope): TextSwapScenarioInput | null {

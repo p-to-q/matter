@@ -46,7 +46,11 @@ import type { LanguageProjection } from "../material/language-projection";
 import { segmentText, type SegmentSelection } from "../material/text-segments";
 import { deriveExpandInPlaceLength } from "../protocol/expand-in-place-policy";
 import { deriveTextSwapLength } from "../protocol/text-swap-policy";
-import { clientDepthToWorld, projectLanguageFlow } from "../interaction/language-flow";
+import {
+  clientDepthToWorld,
+  projectLanguageFlow,
+  projectSelectionLocalLane,
+} from "../interaction/language-flow";
 import { MaterialFiles, type MaterialArchiveActions } from "./MaterialFiles";
 import { useThoughtLabels } from "../interaction/use-thought-labels";
 import { AmbientWorkbench } from "./AmbientWorkbench";
@@ -178,10 +182,21 @@ type PresentationDamage = Readonly<{
 type ProjectionHandleReceipt = Readonly<{
   centerX: number;
   selectedTopClient: number;
+  selectedBottomClient: number;
   afterTopClient: number;
   selectedTopWorld: number;
+  selectedBottomWorld: number;
   afterTopWorld: number;
 }>;
+
+type SelectionLaneMode = "none" | "elastic" | "text-swap";
+
+const SELECTION_LANE_BEFORE_GAP_PX = 8;
+const SELECTION_LANE_AFTER_GAP_PX = 8;
+const ELASTIC_TRAVELING_CONTROL_DEPTH_PX = 52;
+const TEXT_SWAP_LANE_BEFORE_GAP_PX = 14;
+const TEXT_SWAP_CONTROL_DEPTH_PX = 60;
+const TEXT_SWAP_COARSE_CONTROL_DEPTH_PX = 68;
 
 type NodeDragGesture = {
   pointerId: number;
@@ -321,8 +336,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }>({ key: null, attempts: 0, frame: null });
   const [measureRevision, requestMeasurement] = useReducer((value) => value + 1, 0);
   const [published, setPublished] = useState<PublishedGeometry | null>(null);
-  const [stretchPresentationDamage, setStretchPresentationDamage] = useState<PresentationDamage | null>(null);
-  const stretchPresentationDamageRef = useRef<PresentationDamage | null>(null);
+  const [languagePresentationDamage, setLanguagePresentationDamage] = useState<PresentationDamage | null>(null);
+  const languagePresentationDamageRef = useRef<PresentationDamage | null>(null);
   const [admissionFeedbackHeight, setAdmissionFeedbackHeight] = useState(0);
   const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
   const [canvasNavigationState, setCanvasNavigationState] = useState(
@@ -433,10 +448,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     ),
     [admissionFeedbackHeight, admissionParentBox?.nodeId],
   );
-  // Voice admission and stretch are mutually exclusive interactions. Giving
+  // Voice admission and selected-language work are mutually exclusive. Giving
   // admission precedence still makes the rendering boundary deterministic if
-  // a stale stretch receipt survives until the next layout publication.
-  const presentationDamage = admissionPresentationDamage ?? stretchPresentationDamage;
+  // a stale local-lane receipt survives until the next layout publication.
+  const presentationDamage = admissionPresentationDamage ?? languagePresentationDamage;
   const stretchInvalidationRef = useRef<() => void>(() => undefined);
   const invalidateStretchGeometry = useCallback(() => {
     stretchInvalidationRef.current();
@@ -522,18 +537,40 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     element.dataset.previewMode = preview.mode;
     element.dataset.stretchHandle = signal.handle ?? "bottom";
+    const receipt = projectionHandleReceiptRef.current;
+    const selectedBottom = receipt?.selectedBottomClient ?? preview.sourceBounds.bottom;
+    const afterNaturalTop = receipt?.afterTopClient ?? selectedBottom;
+    const lane = projectSelectionLocalLane({
+      selectedBottom,
+      afterNaturalTop,
+      beforeGap: SELECTION_LANE_BEFORE_GAP_PX,
+      afterGap: SELECTION_LANE_AFTER_GAP_PX,
+      contentDepth: preview.pocketDepth,
+      fixedControlDepth: STRETCH_TRAVEL_PX,
+      travelingControlDepth: ELASTIC_TRAVELING_CONTROL_DEPTH_PX,
+    });
+    if (lane === null) {
+      element.removeAttribute("data-preview-mode");
+      split?.removeAttribute("data-preview-mode");
+      return;
+    }
     if (split !== null) {
-      split.dataset.previewMode = preview.mode;
+      split.dataset.previewMode = preview.mode === "expand" ? "expand" : "lane";
       split.dataset.stretchHandle = signal.handle ?? "bottom";
-      const worldDepth = clientDepthToWorld(preview.pocketDepth, viewport.zoom);
+      delete split.dataset.textSwapPhase;
+      const worldDepth = clientDepthToWorld(lane.slotDepth, viewport.zoom);
+      const pocketTop = receipt?.selectedBottomWorld ?? 0;
+      const pocketDepth = clientDepthToWorld(
+        lane.travelingControlTop - selectedBottom,
+        viewport.zoom,
+      );
       split.style.setProperty("--split-depth", `${worldDepth ?? 0}px`);
+      split.style.setProperty("--split-pocket-top", `${pocketTop}px`);
+      split.style.setProperty("--split-pocket-depth", `${pocketDepth ?? 0}px`);
       split.style.setProperty("--elastic-opacity", String(preview.opacity));
     }
-    const receipt = preview.mode === "expand" ? projectionHandleReceiptRef.current : null;
-    const rawTopY = receipt?.selectedTopClient ?? preview.topCue.y;
-    const rawBottomY = receipt === null
-      ? preview.bottomHandle.y
-      : receipt.afterTopClient + preview.pocketDepth;
+    const rawTopY = selectedBottom;
+    const rawBottomY = lane.travelingControlTop;
     const visible = clientViewport();
     const topY = clampClient(
       rawTopY,
@@ -547,14 +584,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       visible?.bottom,
       preview.handleViewportInset,
     );
-    const rawTopCenter = receipt?.centerX ?? (preview.topHandle.x1 + preview.topHandle.x2) / 2;
-    const rawBottomCenter = receipt?.centerX ?? (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2;
+    const projectionCenter = preview.mode === "expand" ? receipt?.centerX : undefined;
+    const rawTopCenter = projectionCenter ?? (preview.topHandle.x1 + preview.topHandle.x2) / 2;
+    const rawBottomCenter = projectionCenter ?? (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2;
     const topCenter = clampClient(rawTopCenter, visible?.left, visible?.right, 26);
     const bottomCenter = clampClient(rawBottomCenter, visible?.left, visible?.right, 26);
     element.style.setProperty("--elastic-anchor-top", `${topY}px`);
     element.style.setProperty("--elastic-handle-top", `${bottomY}px`);
     element.style.setProperty("--elastic-rail-top", `${clampStretchRailTop(
-      receipt?.afterTopClient ?? preview.bottomHandle.y - preview.pocketDepth,
+      lane.controlTop,
       visible,
     )}px`);
     element.style.setProperty("--elastic-top-center", `${topCenter}px`);
@@ -684,6 +722,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const currentTypedTextSwap = typedTextSwap?.selectionKey === textSwapSelectionKey
     ? typedTextSwap
     : null;
+  const selectionLaneMode: SelectionLaneMode = textSwapActive ||
+    (stretchSelection === null && textSwapSelection !== null)
+    ? "text-swap"
+    : stretchSelection !== null
+      ? "elastic"
+      : "none";
   const startTypedTextSwap = useCallback(() => {
     if (textSwapSelection === null) return;
     abortElasticExpansion();
@@ -806,45 +850,28 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     stretchInvalidationRef.current = stretch.layoutInvalidated;
   }, [stretch.layoutInvalidated]);
-  useLayoutEffect(() => {
+  const publishTextSwapLane = useCallback(() => {
     const projectionElement = splitProjectionRef.current;
-    const owner = projectionElement?.closest<HTMLElement>(".spatial-thought");
-    // Hot pointer movement owns visual transforms only. Publishing a layout
-    // receipt while dragging would invalidate and cancel that same gesture.
-    if (stretch.dragging || projectionElement == null || owner == null) return;
-    let nextDamage: PresentationDamage | null = null;
-    if (stretch.amount === 0) {
-      nextDamage = null;
-    } else {
-      const source = owner.querySelector<HTMLElement>(".spatial-thought__text");
-      const slot = projectionElement.querySelector<HTMLElement>(".language-split-slot");
-      const receipt = projectionHandleReceiptRef.current;
-      if (source === null || slot === null || receipt === null) return;
-      const slotDepth = slot.offsetHeight;
-      const projectedAfter = projectionElement.querySelector<HTMLElement>(".language-split-block--after");
-      const flow = projectLanguageFlow({
-        sourceHeight: source.offsetHeight,
-        selectedTop: receipt.selectedTopWorld,
-        afterNaturalTop: receipt.afterTopWorld,
-        afterHeight: projectedAfter?.offsetHeight ?? 0,
-        slotDepth,
-        handle: stretch.lastHandle ?? "bottom",
-      });
-      if (flow === null) return;
-      nextDamage = Object.freeze({
-        nodeId: lasso.selection?.nodeId ?? "",
-        topExtent: flow.topExtent,
-        bottomExtent: flow.bottomExtent,
-      });
-    }
-    const frame = requestAnimationFrame(() => {
-      if (samePresentationDamage(stretchPresentationDamageRef.current, nextDamage)) return;
-      stretchPresentationDamageRef.current = nextDamage;
-      setStretchPresentationDamage(nextDamage);
-      requestMeasurement();
+    const receipt = projectionHandleReceiptRef.current;
+    if (projectionElement === null || receipt === null) return;
+    const lane = projectSelectionLocalLane({
+      selectedBottom: receipt.selectedBottomClient,
+      afterNaturalTop: receipt.afterTopClient,
+      beforeGap: TEXT_SWAP_LANE_BEFORE_GAP_PX,
+      afterGap: SELECTION_LANE_AFTER_GAP_PX,
+      contentDepth: 0,
+      fixedControlDepth: hasCoarsePointer()
+        ? TEXT_SWAP_COARSE_CONTROL_DEPTH_PX
+        : TEXT_SWAP_CONTROL_DEPTH_PX,
+      travelingControlDepth: 0,
     });
-    return () => cancelAnimationFrame(frame);
-  }, [lasso.selection?.nodeId, stretch.amount, stretch.dragging, stretch.lastHandle]);
+    if (lane === null) return;
+    const worldDepth = clientDepthToWorld(lane.slotDepth, viewport.zoom);
+    projectionElement.dataset.previewMode = "lane";
+    projectionElement.style.setProperty("--split-depth", `${worldDepth ?? 0}px`);
+    projectionElement.style.setProperty("--split-pocket-top", `${receipt.selectedBottomWorld}px`);
+    projectionElement.style.setProperty("--split-pocket-depth", "0px");
+  }, [viewport.zoom]);
   useLayoutEffect(() => {
     const projectionElement = splitProjectionRef.current;
     const selected = projectionElement?.querySelector<HTMLElement>(".language-split-block--selected");
@@ -856,11 +883,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       return;
     }
     const projectionRect = projectionElement.getBoundingClientRect();
-    const selectedRange = rangeAroundContents(selected);
+    const selectedRange = rangeBoundsAroundContents(selected);
     const afterRange = afterGhost == null ? null : rangeAroundContents(afterGhost);
     const projectedAfterRange = projectedAfter == null ? null : rangeAroundContents(projectedAfter);
     const sourceRect = source.getBoundingClientRect();
     const selectedTopClient = selectedRange?.top ?? sourceRect.top;
+    const selectedBottomClient = selectedRange?.bottom ?? sourceRect.bottom;
     const afterTopClient = afterRange?.top ?? sourceRect.bottom;
     const selectedTop = clientDepthToWorld(
       Math.max(0, selectedTopClient - projectionRect.top),
@@ -870,6 +898,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       Math.max(0, afterTopClient - projectionRect.top),
       viewport.zoom,
     ) ?? 0;
+    const selectedBottom = clientDepthToWorld(
+      Math.max(0, selectedBottomClient - projectionRect.top),
+      viewport.zoom,
+    ) ?? selectedTop;
     const projectedAfterTopClient = projectedAfter?.getBoundingClientRect().top ?? 0;
     const afterLeading = projectedAfterRange == null
       ? 0
@@ -883,16 +915,66 @@ export function RootedMaterial(props: RootedMaterialProps) {
     projectionHandleReceiptRef.current = Object.freeze({
       centerX: projectionRect.left + projectionRect.width / 2,
       selectedTopClient,
+      selectedBottomClient,
       afterTopClient,
       selectedTopWorld: selectedTop,
+      selectedBottomWorld: selectedBottom,
       afterTopWorld: afterTop,
     });
-    updateElasticPreview({
-      amount: stretch.amount,
-      handle: stretch.activeHandle ?? stretch.lastHandle,
-      dragging: stretch.dragging,
+    if (selectionLaneMode === "text-swap") {
+      publishTextSwapLane();
+    } else if (selectionLaneMode === "elastic") {
+      updateElasticPreview({
+        amount: stretch.amount,
+        handle: stretch.activeHandle ?? stretch.lastHandle,
+        dragging: stretch.dragging,
+      });
+    }
+  }, [activeLayout?.layoutEpoch, lasso.selection, publishTextSwapLane, selectionLaneMode, stretch.activeHandle, stretch.amount, stretch.dragging, stretch.lastHandle, textSwapPhase, updateElasticPreview, viewport.x, viewport.y, viewport.zoom]);
+  useLayoutEffect(() => {
+    const projectionElement = splitProjectionRef.current;
+    const owner = projectionElement?.closest<HTMLElement>(".spatial-thought");
+    // Hot pointer movement owns visual transforms only. Publishing a layout
+    // receipt while dragging would invalidate and cancel that same gesture.
+    if (selectionLaneMode === "elastic" && stretch.dragging) return;
+    let nextDamage: PresentationDamage | null = null;
+    if (selectionLaneMode !== "none") {
+      if (projectionElement == null || owner == null) return;
+      const source = owner.querySelector<HTMLElement>(".spatial-thought__text");
+      const slot = projectionElement.querySelector<HTMLElement>(".language-split-slot");
+      const receipt = projectionHandleReceiptRef.current;
+      if (source === null || slot === null || receipt === null) return;
+      const projectedAfter = projectionElement.querySelector<HTMLElement>(".language-split-block--after");
+      const flow = projectLanguageFlow({
+        sourceHeight: source.offsetHeight,
+        selectedTop: receipt.selectedTopWorld,
+        afterNaturalTop: receipt.afterTopWorld,
+        afterHeight: projectedAfter?.offsetHeight ?? 0,
+        slotDepth: slot.offsetHeight,
+        handle: "bottom",
+      });
+      if (flow === null) return;
+      nextDamage = Object.freeze({
+        nodeId: lasso.selection?.nodeId ?? "",
+        topExtent: flow.topExtent,
+        bottomExtent: flow.bottomExtent,
+      });
+    }
+    const frame = requestAnimationFrame(() => {
+      if (samePresentationDamage(languagePresentationDamageRef.current, nextDamage)) return;
+      languagePresentationDamageRef.current = nextDamage;
+      setLanguagePresentationDamage(nextDamage);
+      requestMeasurement();
     });
-  }, [activeLayout?.layoutEpoch, lasso.selection, stretch.activeHandle, stretch.amount, stretch.dragging, stretch.lastHandle, updateElasticPreview, viewport.x, viewport.y, viewport.zoom]);
+    return () => cancelAnimationFrame(frame);
+  }, [
+    lasso.selection?.nodeId,
+    selectionLaneMode,
+    stretch.amount,
+    stretch.dragging,
+    textSwapPhase,
+    viewport.zoom,
+  ]);
   const selectedNode =
     navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
   const toolTargetNode = resolveToolTargetNode(navigation, tree);
@@ -1721,6 +1803,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSelection={stretchSelection}
               lassoSelections={lasso.selections}
               lassoSourceText={lasso.sourceText}
+              languageLaneMode={selectionLaneMode}
               navigation={navigation}
               onSelectNode={selectNodeAfterAbort}
               activeNodeIds={workingContext.activeNodeIds}
@@ -1745,6 +1828,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
                       announce: !lassoHasSelectionGeometry,
                     }
                   : null}
+              textSwapPhase={selectionLaneMode === "text-swap" ? textSwapPhase : undefined}
               tree={tree}
             />
             <AdmissionFeedback
@@ -1834,6 +1918,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSelection,
   lassoSelections,
   lassoSourceText,
+  languageLaneMode,
   navigation,
   onSelectNode,
   activeNodeIds,
@@ -1843,6 +1928,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   splitProjectionRef,
   transformChange,
   transformStatus,
+  textSwapPhase,
   tree,
 }: {
   documentEpoch: number;
@@ -1850,6 +1936,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSelection: ReturnType<typeof useLasso>["selection"];
   lassoSelections: ReturnType<typeof useLasso>["selections"];
   lassoSourceText: string | null;
+  languageLaneMode: SelectionLaneMode;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
   activeNodeIds: ReadonlySet<string>;
@@ -1864,6 +1951,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
     text: string;
     announce: boolean;
   }> | null;
+  textSwapPhase: TextSwapController["state"]["phase"] | undefined;
   tree: ThoughtTree;
 }) {
   const lassoSelectedNodeIds = useMemo(
@@ -1941,8 +2029,10 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             ) : null}
             {languageProjection?.ok ? (
               <LanguageSplitProjection
+                laneMode={languageLaneMode}
                 projection={languageProjection.projection}
                 projectionRef={splitProjectionRef}
+                textSwapPhase={textSwapPhase}
               />
             ) : null}
           </li>
@@ -2067,6 +2157,13 @@ function LassoOverlay({
   stretch: ReturnType<typeof useStretch>;
 }) {
   const bounds = selectionBounds(rects);
+  const selectionLaneActive = bounds !== null && (
+    stretchVisible || textSwapEligible || (
+      textSwapState.phase !== "idle" &&
+      textSwapState.phase !== "success" &&
+      textSwapState.phase !== "stale"
+    )
+  );
   const descriptionId = useId();
   const textSwapInputId = useId();
   const preview = elasticPreviewGeometry(
@@ -2084,6 +2181,7 @@ function LassoOverlay({
       data-active={active || undefined}
       data-drawing={drawing || undefined}
       data-selected={selectedText !== null || undefined}
+      data-selection-lane={selectionLaneActive || undefined}
       data-text-swap-phase={textSwapState.phase === "idle" ? undefined : textSwapState.phase}
     >
       {selectedText === null ? null : (
@@ -2414,18 +2512,23 @@ function StretchAmountRail({
 }
 
 function LanguageSplitProjection({
+  laneMode,
   projection,
   projectionRef,
+  textSwapPhase,
 }: {
+  laneMode: SelectionLaneMode;
   projection: LanguageProjection;
   projectionRef: React.RefObject<HTMLDivElement | null>;
+  textSwapPhase: TextSwapController["state"]["phase"] | undefined;
 }) {
   return (
     <div
       aria-hidden="true"
       className="language-split-projection"
-      data-preview-mode="neutral"
+      data-preview-mode={laneMode === "none" ? "neutral" : "lane"}
       data-stretch-handle="bottom"
+      data-text-swap-phase={textSwapPhase === "idle" ? undefined : textSwapPhase}
       inert
       ref={projectionRef}
     >
@@ -2836,6 +2939,22 @@ function selectionLocalOverlayTop(
   if (below <= maximum) return below;
   const above = bounds.top - height - gap;
   return Math.max(minimum, Math.min(maximum, above));
+}
+
+function rangeBoundsAroundContents(
+  element: HTMLElement,
+): Readonly<{ top: number; bottom: number }> | null {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const rects = Array.from(range.getClientRects()).filter(
+    (candidate) => candidate.width > 0 && candidate.height > 0,
+  );
+  range.detach();
+  if (rects.length === 0) return null;
+  return Object.freeze({
+    top: Math.min(...rects.map((rect) => rect.top)),
+    bottom: Math.max(...rects.map((rect) => rect.bottom)),
+  });
 }
 
 /** Uses the same glyph geometry primitive as lasso addressing. */
