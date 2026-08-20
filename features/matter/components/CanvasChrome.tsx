@@ -54,6 +54,7 @@ import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
   inquiryRecord?: InquiryRecordBinding;
+  onInquiryOpen?: () => void;
 }>;
 
 export type CanvasChromeOverlay =
@@ -499,6 +500,7 @@ const FOCUSABLE_SELECTOR = [
 export function CanvasChrome({
   inquiryContext,
   inquiryRecord,
+  onInquiryOpen,
   preferences,
   resolvedAppearance,
   setAppearance,
@@ -537,14 +539,16 @@ export function CanvasChrome({
     next: Exclude<CanvasChromeOverlay, null>,
     trigger: HTMLElement | null,
   ) => {
+    if (next === "inquiry") onInquiryOpen?.();
     returnFocusRef.current = trigger;
     setOverlay(next);
-  }, []);
+  }, [onInquiryOpen]);
 
   const toggleMenu = useCallback((
     next: "settings" | "language" | "inquiry",
     trigger: HTMLElement | null,
   ) => {
+    if (next === "inquiry" && overlay !== "inquiry") onInquiryOpen?.();
     setOverlay((current) => {
       if (current === next) {
         returnFocusRef.current = null;
@@ -553,7 +557,7 @@ export function CanvasChrome({
       returnFocusRef.current = trigger;
       return next;
     });
-  }, []);
+  }, [onInquiryOpen, overlay]);
 
   useEffect(() => {
     if (overlay === null) return;
@@ -1029,6 +1033,7 @@ function InquiryBubble({
     requestRef.current?.abort();
     requestRef.current = null;
     submittingRef.current = false;
+    cancelDictation();
     if (inquiryContextScopeChanged(previousContext, nextContext)) {
       dispatch({ type: "scope-changed" });
       return;
@@ -1036,7 +1041,7 @@ function InquiryBubble({
     // Same material, new revision. The record is kept; only the unanswerable
     // turn settles.
     dispatch({ type: "settle-pending", outcome: UNREACHABLE });
-  }, [context]);
+  }, [cancelDictation, context]);
 
   useEffect(() => {
     if (hidden) {

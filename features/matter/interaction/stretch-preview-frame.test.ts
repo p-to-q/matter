@@ -37,8 +37,8 @@ describe("stretch preview frame", () => {
       cancel: (handle) => cancelled.push(handle),
     }, (signal) => published.push(signal.amount));
 
-    frame.schedule({ amount: 0.4, handle: "top", dragging: true });
-    frame.flush({ amount: 0.5, handle: "top", dragging: false });
+    frame.schedule({ amount: 0.4, handle: "bottom", dragging: true });
+    frame.flush({ amount: 0.5, handle: "bottom", dragging: false });
 
     expect(cancelled).toEqual([8]);
     expect(published).toEqual([0.5]);

@@ -62,4 +62,6 @@ export type VoiceCallbacks = Readonly<{
   onDurationLimit?: (operation: VoiceOperation) => void;
   onRecording?: (recording: VoiceRecording) => void;
   onError?: (error: VoiceError) => void;
+  /** A different Matter voice lifecycle acquired the shared browser lease. */
+  onOwnershipRevoked?: (operation: VoiceOperation) => void;
 }>;

@@ -60,6 +60,11 @@ import {
   type TransformEnvelope,
   type TransformPlan,
 } from "../protocol/transform-contract";
+import {
+  planToTextSwapCommand,
+  type TextSwapEnvelope,
+  type TextSwapPlan,
+} from "../protocol/text-swap-contract";
 import { isMatterLocale, type MatterLocale } from "../config/locales";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
@@ -121,6 +126,30 @@ export type AdmissionRepairCommittedChange = Readonly<{
   after: Readonly<{ text: string; updatedAt: string }>;
 }>;
 
+export type TransformCommittedChange = Readonly<{
+  id: string;
+  treeId: string;
+  documentEpoch: number;
+  nodeId: string;
+  committedRevision: number;
+  motionHint: "grow";
+  before: Readonly<{ text: string; updatedAt: string }>;
+  after: Readonly<{ text: string; updatedAt: string }>;
+}>;
+
+export type TextSwapCommittedChange = Readonly<{
+  id: string;
+  treeId: string;
+  documentEpoch: number;
+  nodeId: string;
+  committedRevision: number;
+  motionHint: "settle";
+  before: Readonly<{ text: string; updatedAt: string }>;
+  after: Readonly<{ text: string; updatedAt: string }>;
+}>;
+
+export type MaterialTextCommittedChange = TransformCommittedChange | TextSwapCommittedChange;
+
 /**
  * Returned only to the synchronous repair owner. The material store keeps the
  * base runtime receipt in observable state so ephemeral presentation data can
@@ -128,6 +157,23 @@ export type AdmissionRepairCommittedChange = Readonly<{
  */
 export type AdmissionRepairCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
   Readonly<{ repairChange: AdmissionRepairCommittedChange }>;
+
+/**
+ * A transform presentation receipt is returned only to the synchronous turn
+ * owner. The observable store keeps the ordinary runtime receipt, so arrival
+ * motion can never be restored, exported, or mistaken for command history.
+ */
+export type TransformCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
+  Readonly<{ transformChange: TransformCommittedChange }>;
+
+export type TextSwapCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
+  Readonly<{ textSwapChange: TextSwapCommittedChange }>;
+
+export type TextSwapStaleReceipt = Readonly<{
+  operation: "commit";
+  status: "stale";
+  revision: number;
+}>;
 
 export type AdmissionRepairSettlement =
   | Readonly<{ repairLeaseId: string; outcome: "discarded" }>
@@ -159,10 +205,15 @@ export type ObservableMatterStoreReceipt =
 
 export type AdmissionStoreReceipt = RuntimeReceipt | AdmissionCommitReceipt;
 export type AdmissionRepairStoreReceipt = RuntimeReceipt | AdmissionRepairCommitReceipt;
+export type TransformStoreReceipt = RuntimeReceipt | TransformCommitReceipt;
+export type TextSwapStoreReceipt = RuntimeReceipt | TextSwapCommitReceipt | TextSwapStaleReceipt;
 export type MatterStoreReceipt =
   | ObservableMatterStoreReceipt
   | AdmissionCommitReceipt
-  | AdmissionRepairCommitReceipt;
+  | AdmissionRepairCommitReceipt
+  | TransformCommitReceipt
+  | TextSwapCommitReceipt
+  | TextSwapStaleReceipt;
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
@@ -176,7 +227,13 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
   redo: () => MatterStoreReceipt;
-  commitTransform: (envelope: TransformEnvelope, plan: TransformPlan, nowMs: number) => MatterStoreReceipt;
+  commitTransform: (envelope: TransformEnvelope, plan: TransformPlan, nowMs: number) => TransformStoreReceipt;
+  commitTextSwap: (
+    envelope: TextSwapEnvelope,
+    plan: TextSwapPlan,
+    expectedDocumentEpoch: number,
+    nowMs: number,
+  ) => TextSwapStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   clearSelection: () => MatterStoreReceipt;
   focus: (nodeId: string) => MatterStoreReceipt;
@@ -536,8 +593,9 @@ export function createMatterStore(
     },
 
     commitTransform: (envelope, plan, nowMs) => {
-      let receipt: MatterStoreReceipt | undefined;
+      let receipt: TransformStoreReceipt | undefined;
       set((current) => {
+        const beforeNode = current.tree.nodes[envelope.selection.nodeId];
         const translated = Number.isFinite(nowMs) && nowMs >= 0
           ? planToTreeCommand(current.tree, envelope, plan, {
               source: "agent",
@@ -553,9 +611,115 @@ export function createMatterStore(
           });
         }
         const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
-        receipt = result.receipt;
+        const baseReceipt = result.receipt;
+        if (!result.ok || beforeNode === undefined) {
+          receipt = baseReceipt;
+          const domain = protectDomain(result.state);
+          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        }
+        const afterNode = result.state.tree.nodes[envelope.selection.nodeId];
+        if (afterNode === undefined) {
+          receipt = baseReceipt;
+          const domain = protectDomain(result.state);
+          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        }
+        receipt = Object.freeze({
+          ...baseReceipt,
+          transformChange: Object.freeze({
+            id: plan.action.id,
+            treeId: envelope.treeId,
+            documentEpoch: current.documentEpoch,
+            nodeId: envelope.selection.nodeId,
+            committedRevision: result.state.tree.revision,
+            motionHint: "grow" as const,
+            before: Object.freeze({
+              text: beforeNode.text,
+              updatedAt: beforeNode.updatedAt,
+            }),
+            after: Object.freeze({
+              text: afterNode.text,
+              updatedAt: afterNode.updatedAt,
+            }),
+          }),
+        });
         const domain = protectDomain(result.state);
-        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(receipt) });
+        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    commitTextSwap: (envelope, plan, expectedDocumentEpoch, nowMs) => {
+      let receipt: TextSwapStoreReceipt | undefined;
+      set((current) => {
+        if (
+          !Number.isSafeInteger(expectedDocumentEpoch) ||
+          expectedDocumentEpoch < 0 ||
+          expectedDocumentEpoch !== current.documentEpoch
+        ) {
+          receipt = Object.freeze({
+            operation: "commit",
+            status: "stale",
+            revision: current.tree.revision,
+          });
+          return current;
+        }
+        const beforeNode = current.tree.nodes[envelope.selection.nodeId];
+        const translated = Number.isFinite(nowMs) && nowMs >= 0
+          ? planToTextSwapCommand(current.tree, envelope, plan, {
+              source: "agent",
+              now: () => nowMs,
+            })
+          : null;
+        if (translated !== null && !translated.ok && translated.reason === "STALE") {
+          receipt = Object.freeze({
+            operation: "commit",
+            status: "stale",
+            revision: current.tree.revision,
+          });
+          return current;
+        }
+        if (translated === null || !translated.ok) {
+          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
+          return freezeState({
+            ...current,
+            lastError: { code: "INVALID_COMMAND", message: "The material changed before this wording change could commit." },
+            lastReceipt: receipt,
+          });
+        }
+        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
+        const baseReceipt = result.receipt;
+        if (!result.ok || beforeNode === undefined) {
+          receipt = baseReceipt;
+          const domain = protectDomain(result.state);
+          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        }
+        const afterNode = result.state.tree.nodes[envelope.selection.nodeId];
+        if (afterNode === undefined) {
+          receipt = baseReceipt;
+          const domain = protectDomain(result.state);
+          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        }
+        receipt = Object.freeze({
+          ...baseReceipt,
+          textSwapChange: Object.freeze({
+            id: plan.action.id,
+            treeId: envelope.treeId,
+            documentEpoch: current.documentEpoch,
+            nodeId: envelope.selection.nodeId,
+            committedRevision: result.state.tree.revision,
+            motionHint: "settle" as const,
+            before: Object.freeze({
+              text: beforeNode.text,
+              updatedAt: beforeNode.updatedAt,
+            }),
+            after: Object.freeze({
+              text: afterNode.text,
+              updatedAt: afterNode.updatedAt,
+            }),
+          }),
+        });
+        const domain = protectDomain(result.state);
+        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
       });
       return requireSynchronousReceipt(receipt);
     },

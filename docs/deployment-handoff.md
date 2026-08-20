@@ -31,9 +31,11 @@ shared outside the deployment secret store must be rotated before use.
   and load shedding stay in the existing harness — do not duplicate them in a
   route or Vercel Function.
 - `POST /api/turn` now exists as a fixture-gated material-transform vertical
-  slice. It remains unavailable for a live provider until the same distributed
-  rate/spend controls and deployed-origin proof required by other model routes
-  are in place.
+  slice with a browser receipt through atomic replacement, Undo/Redo, and
+  reload. `POST /api/text-swap` has the same proof behind its own independent
+  gate. Both remain unavailable for a live provider until their separate
+  multilingual acceptance corpora, the same distributed rate/spend controls,
+  and deployed-origin proof required by other model routes are in place.
 
 The relevant boundaries are [`reference/prompt-harness.md`](reference/prompt-harness.md),
 [`reference/voice-input.md`](reference/voice-input.md),
@@ -134,7 +136,9 @@ The current `main` build may deploy the root-seeded browser experience without a
 model credential. This is an intentional safe mode, not a fixture: browser
 speech and local material work, labels retain their deterministic floor,
 transcript repair falls back to heard text, and Ask Matter reports an unavailable
-answer model. The public UI must not imply that an answer model is live.
+answer model. Elastic and Text Swap likewise fail closed without fixture prose;
+their successful local browser receipts do not imply that either live model gate
+is open. The public UI must not imply that an answer model is live.
 
 ## Live-model promotion procedure
 
@@ -175,8 +179,10 @@ or to bypass the scenario adjudicator.
 ## Next development work
 
 - Issue #34: deployment controls and a real-origin receipt.
-- Issue #12: prove the fixture `/api/turn` loop through browser reload, then
-  enable its already-frozen translator only after the live controls exist.
+- Issue #12: the fixture `/api/turn` and `/api/text-swap` browser loops are now
+  proven; run their independent multilingual live evaluations, then enable each
+  only after the shared distributed controls and its own real-origin receipt
+  exist.
 - Issue #8: complete the active-document pointer/recovery boundary before
   promising multi-document persistence beyond the current local home document.
 

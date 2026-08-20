@@ -5,7 +5,8 @@ Matter does not add a separate memory or session system beside it.
 
 A lightweight inquiry may read either the transient lasso selection or a bounded
 projection of the active working material when no lasso selection exists.
-Drafts, pending state, and voice partials are transient chrome. Completed
+Drafts, pending state, voice partials, and a Text Swap direction are transient
+chrome. Completed
 question/answer exchanges may live in the separate, bounded local Ask Matter
 record, but never in the tree, material command history, or material archive.
 They are not replayed when the inquiry is opened again and never become model
@@ -86,9 +87,10 @@ Other   newline, start of text, end of text
 - adjacent hit segments merge into one range;
 - a lasso may address several passages at once; each contiguous run becomes a
   separate transient selection, and non-adjacent hits never merge across a
-  gap; one passage may expose the stretch handle, while two or more passages
-  form a selection set only, mark their source nodes in the material index,
-  and report only a compact count on the canvas;
+  gap; exactly one current derived punctuation segment may expose either the
+  Elastic Language stretch handle or Text Swap, while an adjacent multi-segment
+  run or two or more passages form a selection set only, mark their source nodes
+  in the material index, and report only a compact count on the canvas;
 - offsets are UTF-16 code-unit offsets and must land on grapheme boundaries;
 - text changes, resize, or zoom invalidate selection geometry.
 
@@ -164,9 +166,22 @@ action; selecting language does not imply deletion.
 
 The full view is depth-first order minus folded descendants. The focus view is
 the exact root-to-focus path and ignores folds along that path. A generative
-transformation can begin only in focus view; human admission may still attach a
-child from the full view. The active working projection — rather than every
-faintly visible held-aside passage — is the exact context boundary for a model
+transformation can begin only in focus view, from exactly one current derived
+punctuation segment. Elastic Language requires a positive settled stretch;
+releasing it starts the fixed `expand-in-place` turn without recording, audio,
+or transcript. Text Swap is a mutually exclusive local mode: entering it hides
+and disables the Elastic grip, and the same Voice control records one bounded
+direction for the selected segment rather than admitting material. Full-view
+Voice admission is unchanged.
+
+Text Swap audio, partial transcript, final direction, carrier choice, pending
+state, and presentation receipt are transient interaction state. None enters the
+tree, command history, persistence, archive, routine logs, or later model
+context. An optional selection-local typed fallback feeds the same direction
+port and has the same lifetime. A successful swap contributes only the complete
+replacement text through one tree command; its exact inverse remains available
+to pointer Undo. The active working projection — rather than every faintly
+visible held-aside passage — is the exact context boundary for either model
 turn.
 
 ## Persistence and export

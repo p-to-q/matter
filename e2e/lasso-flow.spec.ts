@@ -2,6 +2,16 @@ import { expect, test, type Page } from "@playwright/test";
 
 const rootId = "thought_fixture_root";
 
+async function focusRoot(page: Page, narrow: boolean): Promise<void> {
+  const rootText = page.locator(`[data-thought-text-id="${rootId}"]`);
+  if (narrow) await rootText.click();
+  else await rootText.hover();
+  await page.getByRole("toolbar", { name: "Thought actions" })
+    .getByRole("button", { name: "Focus this thought" })
+    .click();
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
+}
+
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
   { name: "narrow", width: 390, height: 844 },
@@ -39,6 +49,7 @@ for (const viewport of [
     }))).toEqual({ x: cameraBeforeMovePan.x + 24, y: cameraBeforeMovePan.y + 18 });
     await page.getByRole("button", { name: "Exit canvas pan", exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
+    await focusRoot(page, viewport.name === "narrow");
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     const cameraBeforeWheel = await page.locator("main.matter-shell").evaluate((main) => ({
@@ -59,47 +70,34 @@ for (const viewport of [
       zoom: main.getAttribute("data-viewport-zoom"),
     }))).toEqual(cameraBeforeWheel);
 
-    const text = page.locator(`[data-thought-text-id="${rootId}"]`);
-    const fragment = await firstSegmentRect(page, text);
-    await drawClosedLoop(page, fragment);
+    const text = page.locator(`[data-thought-text-id="${rootId}"] .spatial-thought__label`);
+    const fragment = await segmentProbeRect(text, 0);
+    await drawEarlyReleaseLoop(page, fragment);
     await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
     await expect(page.locator(".lasso-selection-count")).toHaveCount(0);
     await expect(page.getByRole("status")).toContainText("Selected language:");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("拖动把手设定变化程度。");
+      .toHaveText("下拉底部把手展开这段文字。");
     const gripSkin = await page.locator(".stretch-handle").evaluateAll((grips) =>
       grips.map((grip) => {
         const style = getComputedStyle(grip, "::after");
         return { width: style.width, height: style.height, color: style.backgroundColor };
       }),
     );
-    expect(gripSkin).toHaveLength(2);
+    expect(gripSkin).toHaveLength(1);
     expect(gripSkin.every((grip) => grip.width === "22px" && grip.height === "2px")).toBe(true);
     expect(new Set(gripSkin.map((grip) => grip.color)).size).toBe(1);
     expect(gripSkin[0]?.color).not.toBe("rgba(0, 0, 0, 0)");
     const sourceLayout = await sourceLayoutReceipt(page, text);
-    const topHandle = page.getByRole("slider", { name: "Set selected language expansion from the top re-grab edge" });
-    const handle = page.getByRole("slider", { name: "Set selected language expansion from the bottom re-grab edge" });
-    await expect(topHandle).toHaveAttribute("aria-valuenow", "0");
+    const handle = page.getByRole("slider", { name: "Set selected language expansion with the lower handle" });
     await expect(handle).toHaveAttribute("aria-valuenow", "0");
-    const firstPink = await page.locator(".lasso-selection-fragment").first().boundingBox();
     const lastPink = await page.locator(".lasso-selection-fragment").last().boundingBox();
-    const topHandleInitial = await topHandle.boundingBox();
     const bottomHandleInitial = await handle.boundingBox();
-    if (firstPink === null || lastPink === null || topHandleInitial === null || bottomHandleInitial === null) {
-      throw new Error("selection-aligned handles missing");
-    }
-    expect(Math.abs(
-      topHandleInitial.x + topHandleInitial.width / 2 - (firstPink.x + firstPink.width / 2),
-    )).toBeLessThanOrEqual(3.1);
+    if (lastPink === null || bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
     expect(Math.abs(
       bottomHandleInitial.x + bottomHandleInitial.width / 2 - (lastPink.x + lastPink.width / 2),
     )).toBeLessThanOrEqual(3.1);
-    // Both controls extend away from the selected language, so even a
-    // single-line selection has deterministic pointer ownership.
-    expect(topHandleInitial.y + topHandleInitial.height)
-      .toBeLessThanOrEqual(bottomHandleInitial.y);
     await page.evaluate(() => {
       const original = Element.prototype.setPointerCapture;
       Element.prototype.setPointerCapture = function failCaptureOnce(pointerId) {
@@ -109,39 +107,13 @@ for (const viewport of [
       };
     });
     await page.mouse.move(
-      topHandleInitial.x + topHandleInitial.width / 2,
-      topHandleInitial.y + topHandleInitial.height / 2,
+      bottomHandleInitial.x + bottomHandleInitial.width / 2,
+      bottomHandleInitial.y + bottomHandleInitial.height / 2,
     );
     await page.mouse.down();
     await page.mouse.up();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-stretching", "true");
-    await expect(topHandle).toHaveAttribute("aria-valuenow", "0");
-    const topHandleAfterRecovery = await topHandle.boundingBox();
-    if (topHandleAfterRecovery === null) throw new Error("recovered top handle missing");
-    await page.mouse.move(
-      topHandleAfterRecovery.x + topHandleAfterRecovery.width / 2,
-      topHandleAfterRecovery.y + topHandleAfterRecovery.height / 2,
-    );
-    await page.mouse.down();
-    await page.mouse.move(
-      topHandleAfterRecovery.x + topHandleAfterRecovery.width / 2,
-      topHandleAfterRecovery.y + topHandleAfterRecovery.height / 2 - 60,
-      { steps: 5 },
-    );
-    await expect(page.locator(".elastic-preview")).toHaveAttribute("data-stretch-handle", "top");
-    await expect(page.locator(".lasso-selection-fragment").first()).toHaveCSS("opacity", "0");
-    await expect(page.locator(".lasso-selection-fragment").last()).toHaveCSS("opacity", "0");
-    await expect(page.locator(".language-split-projection")).toHaveAttribute("data-preview-mode", "expand");
-    await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("在合适的程度松开。");
-    await page.mouse.up();
-    await expect(topHandle).toHaveAttribute("aria-valuenow", "0.5");
-    await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("调整把手细化变化程度。");
-    await topHandle.press("Home");
-    await expect(topHandle).toHaveAttribute("aria-valuenow", "0");
-    await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("拖动把手设定变化程度。");
+    await expect(handle).toHaveAttribute("aria-valuenow", "0");
     const handleBox = await handle.boundingBox();
     if (handleBox === null) throw new Error("stretch handle missing");
     const start = { x: handleBox.x + handleBox.width / 2, y: handleBox.y + handleBox.height / 2 };
@@ -170,7 +142,7 @@ for (const viewport of [
     await page.mouse.move(secondStart.x, secondStart.y + 60, { steps: 5 });
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-stretching", "true");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("在合适的程度松开。");
+      .toHaveText("下拉到至少 15% 后松开。");
     await expect(page.locator(".elastic-preview")).toHaveAttribute("data-preview-mode", "expand");
     await expect(page.locator(".language-split-slot")).toBeVisible();
     const surface = await page.locator(".language-split-slot").boundingBox();
@@ -182,10 +154,17 @@ for (const viewport of [
     expect(surface.height).toBeGreaterThan(0);
     expect(movingHandle.y).toBeGreaterThan(lastFragment.y);
     expect(await sourceLayoutReceipt(page, text)).toEqual(sourceLayout);
+    await handle.dispatchEvent("pointercancel", {
+      pointerId: 1,
+      pointerType: "mouse",
+      isPrimary: true,
+    });
     await page.mouse.up();
+    await expect(handle).toHaveAttribute("aria-valuenow", "0");
+    await handle.press("PageUp");
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("调整把手细化变化程度。");
+      .toHaveText("按回车键按当前程度展开。");
     const settledLayout = await sourceLayoutReceipt(page, text);
     expect(sourceTextReceipt(settledLayout)).toEqual(sourceTextReceipt(sourceLayout));
     expect(settledLayout.node).toEqual(sourceLayout.node);
@@ -226,16 +205,11 @@ for (const viewport of [
           };
     });
     const boundedHandle = await handle.boundingBox();
-    const boundedTopHandle = await topHandle.boundingBox();
-    if (boundedHandle === null || boundedTopHandle === null) {
-      throw new Error("bounded handles missing");
-    }
-    for (const bounded of [boundedTopHandle, boundedHandle]) {
-      expect(bounded.x).toBeGreaterThanOrEqual(visibleViewport.left);
-      expect(bounded.y).toBeGreaterThanOrEqual(visibleViewport.top);
-      expect(bounded.x + bounded.width).toBeLessThanOrEqual(visibleViewport.right);
-      expect(bounded.y + bounded.height).toBeLessThanOrEqual(visibleViewport.bottom);
-    }
+    if (boundedHandle === null) throw new Error("bounded handle missing");
+    expect(boundedHandle.x).toBeGreaterThanOrEqual(visibleViewport.left);
+    expect(boundedHandle.y).toBeGreaterThanOrEqual(visibleViewport.top);
+    expect(boundedHandle.x + boundedHandle.width).toBeLessThanOrEqual(visibleViewport.right);
+    expect(boundedHandle.y + boundedHandle.height).toBeLessThanOrEqual(visibleViewport.bottom);
 
     const settledBeforeInvalidation = await handle.getAttribute("aria-valuenow");
     for (const eventSource of ["window", "visualViewport", "fonts"] as const) {
@@ -273,7 +247,7 @@ for (const viewport of [
     await page.mouse.up();
     await expect(handle).toHaveAttribute("aria-valuenow", committedDegree!);
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("调整把手细化变化程度。");
+      .toHaveText("按回车键按当前程度展开。");
     const selected = await page.getByRole("status").textContent();
     expect(selected).toContain("Selected language:");
 
@@ -304,7 +278,7 @@ for (const viewport of [
     await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("选择一段想法。");
+      .toHaveText("圈选需要改变的文字。");
     expect(browserErrors).toEqual([]);
   });
 
@@ -364,19 +338,20 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     await page.evaluate(async () => document.fonts.ready);
     await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
+    await focusRoot(page, viewport.name === "narrow");
     await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("圈选一段文字作为参照。");
 
-    const text = page.locator(`[data-thought-text-id="${rootId}"]`);
+    const text = page.locator(`[data-thought-text-id="${rootId}"] .spatial-thought__label`);
     const selectedSegment = await segmentProbeRect(text, 0);
     await drawEarlyReleaseLoop(page, selectedSegment);
     await expect(page.getByRole("status")).toContainText("我们怀念的也许不是一个真实存在过的过去");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("拖动把手设定变化程度。");
+      .toHaveText("下拉底部把手展开这段文字。");
     await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
-    await expect(page.getByRole("slider", { name: "Set selected language expansion from the bottom re-grab edge" }))
+    await expect(page.getByRole("slider", { name: "Set selected language expansion with the lower handle" }))
       .toBeVisible();
 
     const before = page.locator(".language-split-before-copy");
@@ -391,11 +366,11 @@ for (const viewport of [
     expect(natural.afterGlyphTop).toBeCloseTo(sourceSuffixTop, 1);
     const sourceGlyphsBefore = await sourceGlyphReceipt(text, 0, "，");
 
-    const bottom = page.getByRole("slider", { name: "Set selected language expansion from the bottom re-grab edge" });
+    const bottom = page.getByRole("slider", { name: "Set selected language expansion with the lower handle" });
     await bottom.press("End");
     await expect(bottom).toHaveAttribute("aria-valuenow", "1");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("调整把手细化变化程度。");
+      .toHaveText("按回车键按当前程度展开。");
     const expanded = await projectionReceipt(page);
     const sourceGlyphsExpanded = await sourceGlyphReceipt(text, 0, "，");
     expect(Math.abs(expanded.before.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
@@ -413,14 +388,9 @@ for (const viewport of [
     expect(sourceAfter.canvas.height).toBeGreaterThanOrEqual(sourceBefore.canvas.height);
 
     await bottom.press("Home");
-    const top = page.getByRole("slider", { name: "Set selected language expansion from the top re-grab edge" });
     const neutralAgain = await projectionReceipt(page);
-    await top.press("End");
-    await expect(top).toHaveAttribute("aria-valuenow", "1");
-    const upward = await projectionReceipt(page);
-    expect(upward.before.top).toBeCloseTo(neutralAgain.before.top, 1);
-    expect(upward.selected.top).toBeCloseTo(neutralAgain.selected.top, 1);
-    expect(upward.afterGlyphTop - neutralAgain.afterGlyphTop).toBeCloseTo(upward.slot.height, 1);
+    expect(neutralAgain.afterGlyphTop).toBeCloseTo(natural.afterGlyphTop, 1);
+    expect(neutralAgain.slot.height).toBeCloseTo(0, 1);
   });
 }
 
@@ -784,23 +754,5 @@ async function drawEarlyReleaseLoop(
   await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });
   // Release before returning to the start; the visible seam is the exact final edge.
   await page.mouse.move(rect.x - margin, rect.y + Math.min(18, rect.height * .45), { steps: 2 });
-  await page.mouse.up();
-}
-
-async function drawClosedLoop(
-  page: Page,
-  rect: { x: number; y: number; width: number; height: number },
-) {
-  const margin = 9;
-  const start = { x: rect.x - margin, y: rect.y - margin };
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(rect.x + rect.width + margin, start.y, { steps: 5 });
-  await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
-  await page.mouse.move(start.x, rect.y + rect.height + margin, { steps: 5 });
-  // The baseline material-selection path closes explicitly. Early release is
-  // covered by its own resilience receipt, so normal selection does not depend
-  // on scheduler-sensitive sampling of that exceptional gesture.
-  await page.mouse.move(start.x, start.y, { steps: 5 });
   await page.mouse.up();
 }

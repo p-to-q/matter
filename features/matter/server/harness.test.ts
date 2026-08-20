@@ -274,7 +274,9 @@ describe("composePrompt", () => {
     // The three things a model gets wrong without it: who is reading, who
     // decides how much changes, and whether this is a conversation.
     expect(MATTER_BACKGROUND).toContain("not a chat");
-    expect(MATTER_BACKGROUND).toContain("The gesture decides what and how much");
+    expect(MATTER_BACKGROUND).toContain(
+      "A gesture decides the reference and degree; the chosen local tool fixes the bounded operation.",
+    );
     expect(MATTER_BACKGROUND).toContain("no asking whether that helped");
   });
 

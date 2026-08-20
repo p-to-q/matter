@@ -263,6 +263,9 @@ export class AdmissionDriver {
           onError: (error) => this.send(
             failureEvent("recording-failed", effect, mapVoiceError(error)),
           ),
+          onOwnershipRevoked: (revoked) => {
+            if (sameVoiceOperation(operation, revoked)) this.send({ type: "cancel" });
+          },
         }).then(
           () => this.send({
             type: "permission-granted",
@@ -565,6 +568,10 @@ function sameScope(left: AdmissionScope, right: AdmissionScope): boolean {
 
 function operationKey(operation: VoiceOperation): string {
   return `${operation.interactionId}:${operation.attempt}`;
+}
+
+function sameVoiceOperation(left: VoiceOperation, right: VoiceOperation): boolean {
+  return left.interactionId === right.interactionId && left.attempt === right.attempt;
 }
 
 function operationFrom(effect: AdmissionInteractionEffect): VoiceOperation {

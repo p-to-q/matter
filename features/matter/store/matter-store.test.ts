@@ -5,6 +5,9 @@ import {
 } from "../material/seeded-document";
 import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
+import { buildTransformPlan, parseTransformEnvelope } from "../protocol/transform-contract";
+import { buildTextSwapPlan, parseTextSwapEnvelope } from "../protocol/text-swap-contract";
+import { selectLineage } from "../tree/selectors";
 
 describe("Matter store", () => {
   it("uses the deployed initial title without replacing restored document titles", () => {
@@ -706,6 +709,160 @@ describe("Matter store", () => {
     expect(store.getState().navigation.selectedNodeId).toBe(SEEDED_DOCUMENT_NODE_IDS.imaginedTime);
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(store.getState().tree.nodes).toEqual(before.nodes);
+  });
+
+  it("returns one private transform arrival receipt while Undo and Redo stay ordinary history", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const tree = structuredClone(store.getState().tree) as ThoughtTree;
+    const nodeId = SEEDED_DOCUMENT_NODE_IDS.imaginedLives;
+    const node = tree.nodes[nodeId];
+    const materialLineage = selectLineage(tree, nodeId);
+    if (node === undefined || materialLineage === null) {
+      throw new Error("transform fixture lineage missing");
+    }
+    const lineage = materialLineage.map((entry, index) => ({
+      id: entry.id,
+      text: entry.text,
+      parentId: index === 0 ? null : entry.parentId,
+      createdAt: entry.createdAt,
+      updatedAt: entry.updatedAt,
+    }));
+    const parsed = parseTransformEnvelope({
+      protocolVersion: tree.protocolVersion,
+      requestVersion: "transform/2",
+      id: "turn_store_expand",
+      treeId: tree.id,
+      mode: "transform",
+      operation: "expand-in-place",
+      treeRevision: tree.revision,
+      selection: {
+        type: "segment-range",
+        nodeId,
+        start: 0,
+        end: node.text.length,
+        selectedText: node.text,
+      },
+      gesture: { type: "stretch", axis: "vertical", amount: 1 },
+      locale: "zh-CN",
+      context: { lineage },
+    });
+    if (!parsed.ok) throw new Error("transform fixture envelope invalid");
+    const expanded = "被允许沿着眼前松动的边界缓慢想象的、仍然保留清晰细节和余地的其他生活";
+    const plan = buildTransformPlan(parsed.envelope, expanded);
+
+    const receipt = store.getState().commitTransform(
+      parsed.envelope,
+      plan,
+      Date.parse("2026-08-11T00:00:00.000Z"),
+    );
+    expect(receipt).toMatchObject({
+      operation: "commit",
+      status: "committed",
+      transformChange: {
+        id: "turn_store_expand",
+        nodeId,
+        motionHint: "grow",
+        before: { text: node.text },
+        after: { text: expanded },
+      },
+    });
+    expect("transformChange" in (store.getState().lastReceipt ?? {})).toBe(false);
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(expanded);
+
+    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(node.text);
+    const redo = store.getState().redo();
+    expect(redo).toMatchObject({ operation: "redo", status: "committed" });
+    expect("transformChange" in redo).toBe(false);
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(expanded);
+  });
+
+  it("returns one private text-swap receipt while canonical Undo and Redo stay presentation-free", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const tree = structuredClone(store.getState().tree) as ThoughtTree;
+    const nodeId = SEEDED_DOCUMENT_NODE_IDS.root;
+    const node = tree.nodes[nodeId];
+    const materialLineage = selectLineage(tree, nodeId);
+    if (node === undefined || materialLineage === null) {
+      throw new Error("text swap fixture lineage missing");
+    }
+    const source = "我们怀念的也许不是一个真实存在过的过去";
+    const start = node.text.indexOf(source);
+    const parsed = parseTextSwapEnvelope({
+      protocolVersion: tree.protocolVersion,
+      requestVersion: "text-swap/1",
+      id: "text_swap_store",
+      treeId: tree.id,
+      mode: "transform",
+      operation: "paraphrase-in-place",
+      treeRevision: tree.revision,
+      selection: {
+        type: "segment-range",
+        nodeId,
+        start,
+        end: start + source.length,
+        selectedText: source,
+      },
+      direction: { text: "换一种更凝练的说法" },
+      locale: "zh-CN",
+      context: {
+        lineage: materialLineage.map((entry, index) => ({
+          id: entry.id,
+          text: entry.text,
+          parentId: index === 0 ? null : entry.parentId,
+          createdAt: entry.createdAt,
+          updatedAt: entry.updatedAt,
+        })),
+      },
+    });
+    if (!parsed.ok) throw new Error("text swap fixture envelope invalid");
+    const replacement = "我们也许怀念的，并不是一个曾经真实存在的过去";
+    const plan = buildTextSwapPlan(parsed.envelope, replacement);
+    const oldDocumentEpoch = store.getState().documentEpoch;
+    expect(store.getState().hydrateSnapshot(tree)).toMatchObject({
+      operation: "hydrate",
+      status: "hydrated",
+      revision: tree.revision,
+    });
+    expect(store.getState().commitTextSwap(
+      parsed.envelope,
+      plan,
+      oldDocumentEpoch,
+      Date.parse("2026-08-20T00:00:00.000Z"),
+    )).toEqual({
+      operation: "commit",
+      status: "stale",
+      revision: tree.revision,
+    });
+    expect(store.getState().lastError).toBeNull();
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(node.text);
+
+    const receipt = store.getState().commitTextSwap(
+      parsed.envelope,
+      plan,
+      store.getState().documentEpoch,
+      Date.parse("2026-08-20T00:00:00.000Z"),
+    );
+    expect(receipt).toMatchObject({
+      operation: "commit",
+      status: "committed",
+      textSwapChange: {
+        id: "text_swap_store",
+        nodeId,
+        motionHint: "settle",
+        before: { text: node.text },
+      },
+    });
+    expect("textSwapChange" in (store.getState().lastReceipt ?? {})).toBe(false);
+    const after = store.getState().tree.nodes[nodeId]?.text;
+    expect(after).toBe(node.text.replace(source, replacement));
+
+    expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(node.text);
+    const redo = store.getState().redo();
+    expect(redo).toMatchObject({ operation: "redo", status: "committed" });
+    expect("textSwapChange" in redo).toBe(false);
+    expect(store.getState().tree.nodes[nodeId]?.text).toBe(after);
   });
 
   it("hydrates one validated snapshot while clearing runtime history and navigation", () => {

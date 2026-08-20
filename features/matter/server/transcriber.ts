@@ -1,4 +1,5 @@
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 import type {
   TranscriptionRequest,
   TranscriptionSuccess,
@@ -17,7 +18,7 @@ const FIXTURE_ADMISSION_TRANSCRIPT =
 export async function transcribeRecording(
   request: TranscriptionRequest,
   requestSignal: AbortSignal,
-  adapter = resolveTranscriptionAdapter(),
+  adapter?: TranscriptionAdapter,
 ): Promise<TranscriptionSuccess> {
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), TRANSCRIPTION_SERVER_TIMEOUT_MS);
@@ -25,10 +26,11 @@ export async function transcribeRecording(
   const abortBoundary = rejectOnAbort(combined.signal);
   try {
     if (requestSignal.aborted) throw new DOMException("Aborted", "AbortError");
+    const selectedAdapter = adapter ?? resolveTranscriptionAdapter(request.purpose);
     // Aborting a signal is advisory. The boundary must still settle when an SDK
     // or provider adapter ignores it, otherwise one request can hang forever.
     const result = await Promise.race([
-      adapter(request, combined.signal),
+      selectedAdapter(request, combined.signal),
       abortBoundary.promise,
     ]);
     const transcript = validateTranscript(result.transcript, request);
@@ -76,15 +78,19 @@ export async function transcribeRecording(
 }
 
 export const fixtureTranscriptionAdapter: TranscriptionAdapter = async (request) => ({
-  transcript:
-    request.purpose === "admission"
-      ? process.env.MATTER_FIXTURE_ADMISSION_TRANSCRIPT ?? FIXTURE_ADMISSION_TRANSCRIPT
-      : process.env.MATTER_FIXTURE_DIRECTION_TRANSCRIPT ??
-        "把这里说得更具体一些，但保留一点不确定。",
+  transcript: fixtureTranscript(request.purpose),
 });
 
-function resolveTranscriptionAdapter(): TranscriptionAdapter {
-  if (process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED === "false") {
+function resolveTranscriptionAdapter(purpose: TranscriptionRequest["purpose"]): TranscriptionAdapter {
+  // Preserve both existing voice paths exactly. Swap direction is a separate
+  // local tool capability and follows its own production-off adapter gate.
+  const existingVoiceDisabled = purpose !== "swap-direction" &&
+    process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED === "false";
+  const textSwapDisabled = purpose === "swap-direction" && (
+    process.env.MATTER_TEXT_SWAP_ADAPTER === "off" ||
+    (process.env.MATTER_TEXT_SWAP_ADAPTER === undefined && process.env.NODE_ENV === "production")
+  );
+  if (existingVoiceDisabled || textSwapDisabled) {
     throw new TranscriptionServerError(
       "TRANSCRIPTION_UNAVAILABLE",
       "Speech transcription is not configured.",
@@ -131,10 +137,28 @@ function validateTranscript(
       request.attempt,
     );
   }
+  if (request.purpose === "swap-direction") {
+    const direction = normalizeTextSwapDirection(value);
+    if (direction === null) throw providerResponseError(request);
+    return direction;
+  }
   if (value.length > MAX_NODE_TEXT_CODE_UNITS) {
     throw providerResponseError(request);
   }
   return value;
+}
+
+function fixtureTranscript(purpose: TranscriptionRequest["purpose"]): string {
+  switch (purpose) {
+    case "admission":
+      return process.env.MATTER_FIXTURE_ADMISSION_TRANSCRIPT ?? FIXTURE_ADMISSION_TRANSCRIPT;
+    case "direction":
+      return process.env.MATTER_FIXTURE_DIRECTION_TRANSCRIPT ??
+        "把这里说得更具体一些，但保留一点不确定。";
+    case "swap-direction":
+      return process.env.MATTER_FIXTURE_SWAP_DIRECTION_TRANSCRIPT ??
+        "换一种更清楚但保留安静感的说法";
+  }
 }
 
 function providerResponseError(request: TranscriptionRequest) {

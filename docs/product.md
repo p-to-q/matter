@@ -2,18 +2,20 @@
 
 Matter is an environment where thought becomes touchable material.
 
-Voice carries language. Gesture carries reference and degree. Structure keeps
-the lineage between thoughts. AI is intelligence inside the material, not an
-agent standing outside it.
+Voice admits human language. In Focus, it may also give one bounded direction
+to language the person has already selected. Gesture fixes reference and, for
+Elastic Language, degree; each material tool owns its closed operation and
+bounds. Structure keeps the lineage between thoughts. AI is intelligence inside
+the material, not an agent standing outside it.
 
 ## The job at this stage
 
 Matter is not trying to become a general workspace, a second brain, or a
 voice-first text editor. Its current job is narrower and more valuable: let one
 unfinished thought arrive, let a person touch the exact language that matters,
-and let it grow once without surrendering authorship. The release should make
-that loop understandable in one sitting before it earns more memory, sync, or
-surface area.
+and let it grow or be restated once without surrendering authorship. The release
+should make that loop understandable in one sitting before it earns more memory,
+sync, or surface area.
 
 ## Two kinds of turn
 
@@ -32,21 +34,53 @@ tree. The correction can settle only while that exact passage
 remains untouched. Admission and repair are separate
 pointer-undoable changes, so the person's first expression stays recoverable.
 
-**Material transformation.** A person acts on material that already exists. An
-AI change is composed from four signals:
+**Material transformation — Elastic Language 2.** A person acts on material that
+already exists. The first transform is deliberately closed: one lassoed
+punctuation segment is stretched, and releasing the stretch asks Matter to
+expand that segment in place. It is composed from four signals:
 
 ```text
-reference   which material        node or lassoed punctuation range
+reference   which material        one lassoed punctuation segment
 degree      how much              non-negative expansion
-direction   where to take it      voice
+direction   where to take it      fixed expand-in-place tool policy
 lineage     why it grew here      visible root → focus path
                          ↓
           one local, perceivable, reversible change
 ```
 
-The channels stay separate: voice does not decide scope or degree, and the model
-does not decide its target. A new interaction that does not fit this grammar is
-an open product question before it is a tool.
+The channels stay separate. Voice does not direct Elastic Language. The lasso
+fixes scope, stretch fixes degree, the tool fixes the only allowed operation,
+and the model decides none of them.
+
+**Material transformation — Text Swap.** In Focus, when the lasso addresses
+exactly one current punctuation segment, the existing Voice control changes
+meaning from admitting a child to **Rewrite selected language**. This is a
+separate sibling grammar, `text-swap/1`; it does not add direction to
+`transform/2`:
+
+```text
+reference   which material        one lassoed punctuation segment
+degree      how much              tool-owned near-source length policy
+direction   where to take it      one bounded transient human direction
+lineage     why it belongs here   visible root → focus path
+                         ↓
+            one atomic in-place replacement
+```
+
+Voice is the primary direction path. A selection-local typed direction may be
+implemented as an accessibility fallback through the same transient port; it is
+not a permanent prompt box, is not available without the eligible selection,
+and is never material, history, persistence, archive content, model memory, or
+logged text. The direction is one trimmed line of at most 240 Unicode code
+points. The lasso fixes reference, the person fixes direction, and the closed
+tool policy fixes a seed output band near the source length; the model may not
+choose another target, operation, or scope.
+
+Entering Text Swap makes the Elastic grip hidden and inert. One complete result
+atomically replaces the selected segment in place and is pointer-undoable.
+Closing, changing the selection, or losing its exact tree/revision basis clears
+the transient direction and gives any late result no authority. Full-view Voice
+admission is unchanged.
 
 ## The handle stays with the person
 
@@ -81,6 +115,15 @@ residue, abandoned starts, sentence restarts, and self-correction, and may add
 only grammatical glue forced by the utterance, because its result is separately
 undoable. It still may not raise the register, invent reasoning, resolve an
 unstated ambiguity, explain its edit, address the user, or mention itself.
+Elastic Language may insert language that unfolds only what the selected passage
+already contains; it may not delete or reorder the original lexical material,
+introduce another topic, change a claim, or finish an idea on the person's
+behalf.
+Text Swap may restate only the selected passage in the person's requested
+direction. It preserves speaker, claims, entities, facts, numbers, polarity,
+modality, conditions, causality, question type, unfinishedness, and the outer
+seam; direction cannot authorize a new topic, fact, conclusion, or answer to the
+person.
 
 ## Not Matter
 

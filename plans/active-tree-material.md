@@ -1,7 +1,7 @@
 # Plan: Matter first release
 
 Status: Active  
-Current phase: 2 — prove the fixture generative turn, then enable its live gate
+Current phase: 3 — source candidate proven; evaluate each live scenario separately while both production gates stay off
 Destination: the first usable public release at `ptoq.io/matter`
 
 This is the only roadmap. It ends at the first release; it is not a forecast of
@@ -13,16 +13,18 @@ The release is complete when a person can, without a keyboard:
 
 1. speak a root thought and another thought beneath a selected node;
 2. move between the full tree and one exact root-to-focus working path;
-3. lasso a punctuation segment, stretch it, speak direction, and receive one
-   local material change;
-4. undo that change with the pointer;
-5. reload and recover the same tree;
-6. export it and later import it on a supported browser;
-7. complete the same path in fixture and live modes on the deployed origin.
+3. lasso one punctuation segment, stretch it, release, and receive one fixed
+   expand-in-place material change;
+4. on one selected Focus segment, use Voice to direct one near-source Text Swap;
+5. undo either change with the pointer;
+6. reload and recover the same tree;
+7. export it and later import it on a supported browser;
+8. complete the same path in fixture and live modes on the deployed origin.
 
-The release ends there. Accounts, sync, collaboration, touch parity, streaming,
-split/merge, cross-links, tool prediction, retrieval, and a public SDK are not
-later phases of this plan. They remain outside the first release.
+The release ends there. Accounts, sync, collaboration, path-dependent or
+multi-touch gestures, streaming, split/merge, cross-links, tool prediction,
+retrieval, and a public SDK are not later phases of this plan. They remain
+outside the first release.
 
 ## Current delivery lens
 
@@ -30,7 +32,9 @@ The product is one interface for unfinished thought, not a bundle of AI
 surfaces. The next release work must make this one loop plain to a new person:
 
 ```text
-admit a thought → focus it → lasso exact language → set degree → speak direction
+admit a thought → focus it → lasso one segment
+  → stretch + release for fixed expansion
+  or selected Voice + bounded direction for Text Swap
   → one reversible material change → pointer undo (keyboard redo) → reload
 ```
 
@@ -40,15 +44,140 @@ language. System files, accounts, sync, collaboration, and native shells may
 arrive only after this loop has a live deployed receipt and a separate ownership
 contract.
 
+## Active freeze — Text Swap / text-swap/1
+
+This is a user-directed promotion of the next material capability into the
+current release slice. It replaces the former current non-goal of any
+Voice-directed selected-language operation, but does not reopen Elastic
+Language or revive `transform/1`.
+
+State: implemented and independently proven through protocol, server, Voice
+authority, store, laptop, 390px/coarse pointer, reduced-motion, Undo/Redo,
+reload, cancellation, and late-response receipts. It is now a regression
+baseline; live promotion remains a separate closed gate.
+
+```text
+Outcome:    in Focus, exactly one current punctuation segment changes the
+            existing Voice action to Rewrite selected language; the person
+            gives one bounded direction and receives one complete in-place
+            replacement with pointer Undo.
+Boundary:   sibling text-swap/1 request/plan, pure direction/length/adjudication
+            policy, dedicated prompt/harness and fixture, selection-local Voice
+            lifecycle, optional typed accessibility carrier, atomic arrival,
+            and a separate still-off production gate.
+Invariants: reference is the lasso; direction is one transient trimmed line of
+            at most 240 Unicode code points; degree is the closed tool-owned
+            `max(1,floor(.75S))..min(ceil(1.35S),Gcap)` seed band,
+            where `Gcap` projects remaining UTF-16 capacity; lineage is the
+            visible Focus path. The model returns `{ text }` only, the
+            server constructs one plan, the browser revalidates it, and only the
+            tree engine commits one replacement and exact inverse.
+Proof:      strict old/unknown/malformed envelope tests; five-locale Unicode,
+            length, capacity, protected-anchor, injection and stale policy
+            tests; recording/pending/cancel/failure/late-response lifecycle;
+            fixture browser flows through rewrite, atomic arrival, Undo/Redo and
+            reload at laptop, 390px, coarse pointer and keyboard/reduced motion.
+Non-goals:  changing transform/2, candidates or variants, permanent prompt,
+            chat/transcript, hidden context, streaming material, automatic
+            retry, second judge, multi-step mutation, new durable fields, a new
+            rail slot, or production enablement.
+```
+
+The interaction state machine is explicit:
+
+```text
+eligible selection
+  → enter Swap / Elastic hidden and inert
+  → recording / bounded local partials
+  → Voice stop finalizes direction / one immutable pending request
+  → success / one atomic replace / transient local settle / mode clears
+  → pointer Undo (keyboard Redo remains a platform convention)
+
+typed fallback → bounded local direction → local submit / same pending request
+recording or ready → cancel / selection changes / mode exit → clear, no request
+pending → aborting change or stale basis → abort + late result inert + clear
+pending → retryable failure → original material + current selection/direction;
+                              only an explicit retry can send again
+```
+
+Voice is the primary and no-keyboard path. The optional typed fallback is the
+same transient selection-local direction port: it appears only while Swap is
+eligible, contributes no carrier field to the protocol, and never becomes a
+permanent prompt, material, history, persistence, archive, logs, or later model
+context. Full-view Voice admission and every other Voice admission state remain
+unchanged.
+
+Research informed this grammar without contributing code or assets.
+[Point-n-Talk](https://diana.lu/point-n-talk) demonstrates the concept of
+pointing for reference and speech for nuance, but its After Effects + Origami
+prototype is not production or evaluation evidence, and Matter does not adopt
+its candidate swipe or generated tool UI. [DirectGPT](https://damienmasson.com/pdfs/directgpt.pdf)
+supports local selection, direct effect, and Undo as useful mature interaction
+properties; Matter does not import its prompt/toolbar surface. The
+[InChorus study](https://www.microsoft.com/en-us/research/wp-content/uploads/2020/02/InChorus-CHI2020.pdf)
+documents speech/gesture coordination and recognition failures, supporting one
+visible local mode, explicit recording ownership, and recoverable cancellation.
+These are provenance, not templates or legal clearance.
+
+## Active freeze — Elastic Language 2 / transform/2
+
+State: implemented and proven through the strict synthetic fixture and focused
+E2E receipt in the shared working tree; it is now the regression baseline for
+Text Swap.
+
+```text
+Outcome:    in focus view, a person lassos exactly one punctuation segment,
+            stretches it, and on release receives one bounded expand-in-place
+            proposal without recording or speaking a direction.
+Boundary:   transform/2 request/plan protocol, pure grapheme/UTF-16 length and
+            adjudication policy, transform prompt/harness, explicit synthetic
+            fixture, pointer-release request lifecycle, and the still-off live gate.
+Invariants: Voice is absent from Elastic; lasso fixes reference, stretch fixes
+            degree, the selected tool fixes expand-in-place, and lineage remains
+            exact root-to-focus context; the model returns `{ text }`
+            only, the server constructs one plan, the browser revalidates it,
+            and only the tree engine commits one pointer-undoable mutation.
+Proof:      implemented focused valid/malformed/bounded/stale Unicode protocol,
+            prompt, adjudication, timeout/cancel/no-op and fixture-route tests;
+            implemented pointer-only fixture browser receipt through commit,
+            undo/redo and reload at laptop and narrow widths. Keep all as the
+            required regression floor while Text Swap changes nearby ownership.
+Non-goals:  adding Voice or Text Swap fields to transform/2, prompt boxes,
+            free-form Elastic intent, multi-passage transforms, streaming
+            generation, automatic retries, a second judge model, live
+            production promotion, Branch/tree/history/persistence changes,
+            accounts, sync, or collaboration.
+```
+
+The contract is strict and versioned as `transform/2`: the envelope carries
+`requestVersion`, fixed `operation: "expand-in-place"`, locale, one validated
+segment, positive stretch amount, revision, and exact lineage; it carries no
+Voice object, transcript, target length, prompt version, fixture flag, or
+client-authored intent. [`../docs/protocol.md`](../docs/protocol.md) owns the
+grapheme plus UTF-16 capacity formula, added-delta tolerance, shared static
+policy, 12/14/16-second timing, cancellation, stale, and durable-effect
+idempotency. [`../docs/reference/prompt-harness.md`](../docs/reference/prompt-harness.md)
+owns the prompt spine, explicit fixture contract, multilingual corpus, and live
+promotion thresholds.
+
+External research references used to reach this freeze affect product
+principles only; they do not authorize copying source, interaction assets, or
+another product's implementation. The reviewed Google application was recorded
+as abandoned in the consulted public record. That procedural status is not a
+legal clearance, non-infringement opinion, ownership conclusion, or substitute
+for counsel.
+
 ## Current phase — release convergence
 
 ```text
-Outcome:    a new person can complete the one material loop with a warmed,
-            truthful voice path, then pointer undo, keyboard redo, and reload it.
+Outcome:    a new person can complete the material loop with warmed truthful
+            Voice admission, pointer-released fixed expansion, and selected-
+            language Text Swap, then pointer undo, keyboard redo, and reload it.
 Boundary:   first-turn voice readiness; immediate admission plus detachable
-            twelve-second composite repair; the existing fixture transform vertical
-            slice; local tree/history durability; release receipt. No new
-            workspace, memory, or system surface.
+            twelve-second composite repair; the implemented transform/2 fixture
+            baseline; the text-swap/1 fixture slice; local tree/history
+            durability; release receipt. No new workspace, memory, or system
+            surface.
 Invariants: readiness never requests microphone permission, captures audio, or
             downloads a speech model; a voice start has a bounded failure;
             repair computes without extending first-paint latency but cannot
@@ -59,12 +188,13 @@ Invariants: readiness never requests microphone permission, captures audio, or
 Proof:      focused voice readiness/lifecycle/rule tests; admission→repair→
             private receipt→canonical settle; two-step undo/redo and
             hydrated-history recovery; same-id/same-revision epoch rejection;
-            duplicate-command capability isolation; one fixture browser flow
-            from lasso through transform, undo/redo and reload; full source
-            check and Chromium suite for the source preview.
-Non-goals:  live transform promotion, account/sync, an Ask Matter log manager,
-            CRDT/event-sourcing rewrite, renderer virtualization without a
-            measured trigger, or a native shell.
+            duplicate-command capability isolation; retained Elastic fixture
+            browser flow; new Text Swap Voice/typed, cancel/failure/late-result,
+            atomic commit, undo/redo and reload flows; full source check and
+            Chromium suite for the source preview.
+Non-goals:  live Elastic or Text Swap promotion, account/sync, an Ask Matter log
+            manager, CRDT/event-sourcing rewrite, renderer virtualization
+            without a measured trigger, or a native shell.
 ```
 
 ### Active sub-slice — one model foundation, separate product fallbacks
@@ -234,22 +364,30 @@ execute as 57 passed and 2 capability-gated skips, including
 Pan deltas, pointer-local zoom, keyboard, coarse pointer, held context, narrow
 geometry, and the one-field/one-ruling 2,000-node bound.
 
-Execution order is deliberately narrow:
+Execution order is deliberately narrow; the first three steps are complete:
 
-1. Publish this source preview with the first-turn voice boundary, durable
-   history, bounded inquiry record, and fixture transform in one receipt.
-2. Prove the fixture loop end to end, including reload after undo/redo. If that
-   exposes a contract failure, repair that path before widening product scope.
-3. Gate the same transform scenario behind distributed rate/spend control and
-   obtain a deployed-origin receipt. Only then consider live promotion.
-4. Measure long-session history serialization and the complete layout path.
+1. Keep the implemented `transform/2` strict contract, fixture, and E2E receipt
+   unchanged as the shared regression baseline.
+2. **Complete.** Implement the frozen `text-swap/1` protocol, pure direction/length policy,
+   adjudicator, prompt scenario, explicit fixture, and independent
+   `POST /api/text-swap` boundary without changing the tree/history contract.
+3. **Complete.** Connect the selected Voice lifecycle and optional transient typed carrier;
+   prove cancel, stale, late, failure, one atomic commit, Undo/Redo, and reload
+   before widening product scope.
+4. Run the two frozen multilingual evaluations independently, then stage each
+   live scenario behind its own gate and shared distributed rate/spend controls.
+   Production remains off until that scenario's complete promotion gate passes.
+5. Measure long-session history serialization and the complete layout path.
    Replace either only when the receipt shows a real limit; the likely history
    response is a segmented reversible journal, not a premature CRDT.
 
 ## Archived preview implementation notes
 
 The following freezes explain earlier previews. They are trace, not the active
-execution line above.
+execution line above. In particular, every archived statement that assigns
+`transform/2` direction to Voice or treats the deleted `transform/1` fixture as
+current is superseded by the Elastic Language 2 freeze above; it does not govern
+the separate `text-swap/1` grammar.
 
 ## Preview.12 inquiry submit-key freeze
 
@@ -352,11 +490,10 @@ and each line closes with its focused proof before the next one starts:
    durable gesture until IndexedDB bootstrap has identified the home lineage.
    Then freeze and build one strict active-document pointer so a successfully
    imported foreign-id archive remains the local home document after reload.
-2. **Fixture transform loop.** Implemented: strict envelope and plan contracts,
-   degree-to-length policy, server planner, fixture provider, bounded route and
-   client, synchronous plan translator, one store commit, and Voice direction
-   for a stretched focused selection. The remaining proof is an end-to-end
-   fixture receipt: one local change, exact pointer undo, and reload.
+2. **Fixture transform loop (superseded).** This entry records the implemented
+   `transform/1` Voice-direction fixture path. It is not the current contract or
+   release evidence. Elastic Language 2 replaces its envelope, degree policy,
+   prompt, fixture, and trigger before a new end-to-end receipt may be claimed.
 3. **Live transform and deployed receipt.** Enable the same validated scenario
    behind server-only provider configuration, distributed rate and spend guards,
    then run the complete no-keyboard path on the deployed origin. Fixture output
@@ -431,7 +568,7 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 
 | Area | State | Frozen answer |
 | --- | --- | --- |
-| Product loop | Frozen | admission and one four-signal transformation; one perceivable pointer-undoable change |
+| Product loop | Re-frozen | Voice admission; then either one-segment stretch + release for fixed expansion, or selected Voice + bounded direction for Text Swap; one atomic pointer-undoable change |
 | Document | Frozen | one normalized `ThoughtTree`, empty root state, monotonic revision |
 | Agent boundary | Frozen | exact lineage in; model returns `{ text }`; server constructs one action |
 | Text address | Frozen | punctuation segments over grapheme-safe UTF-16 offsets |

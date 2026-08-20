@@ -13,7 +13,7 @@ export const TRANSCRIPTION_TRANSPORT_GRACE_MS = 5_000;
 export const TRANSCRIPTION_CLIENT_TIMEOUT_MS =
   TRANSCRIPTION_SERVER_TIMEOUT_MS + TRANSCRIPTION_TRANSPORT_GRACE_MS;
 
-export type TranscriptionPurpose = "admission" | "direction";
+export type TranscriptionPurpose = "admission" | "direction" | "swap-direction";
 
 export type TranscriptionRequest = {
   protocolVersion: typeof PROTOCOL_VERSION;

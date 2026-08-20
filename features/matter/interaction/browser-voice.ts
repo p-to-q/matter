@@ -13,6 +13,7 @@ import {
   type VoiceRecording,
   type VoiceSample,
 } from "./voice-port";
+import { VoiceLeaseCoordinator } from "./voice-lease";
 
 // Re-exported so the vocabulary keeps one import site for its callers, while
 // the transports below depend on `voice-port` directly.
@@ -463,10 +464,14 @@ function notify(callback: () => void): void {
   }
 }
 
+const browserVoiceLease = new VoiceLeaseCoordinator();
+
 export function createBrowserVoicePort(): VoicePort {
   const transport = browserVoiceTransport();
   // Native recognition keeps raw audio out of the Matter server when the UA supports it.
-  if (transport === "speech") return createBrowserSpeechVoicePort();
+  if (transport === "speech") {
+    return browserVoiceLease.coordinate(createBrowserSpeechVoicePort());
+  }
   // Audio upload is an explicit deployment capability. Missing configuration
   // fails before capture instead of collecting audio for a guaranteed 503.
   if (transport === "unavailable") throw new VoiceError("VOICE_UNSUPPORTED");
@@ -477,7 +482,7 @@ export function createBrowserVoicePort(): VoicePort {
   ) {
     throw new VoiceError("VOICE_UNSUPPORTED");
   }
-  return new BrowserVoicePort({
+  return browserVoiceLease.coordinate(new BrowserVoicePort({
     getUserMedia: (constraints) =>
       navigator.mediaDevices.getUserMedia(constraints),
     isTypeSupported: (mimeType) => MediaRecorder.isTypeSupported(mimeType),
@@ -491,7 +496,7 @@ export function createBrowserVoicePort(): VoicePort {
     clearTimer: (timer) => window.clearTimeout(timer as number),
     requestFrame: (callback) => requestAnimationFrame(callback),
     cancelFrame: (frame) => cancelAnimationFrame(frame),
-  });
+  }));
 }
 
 export function isBrowserVoiceTransportAvailable(): boolean {

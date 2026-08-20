@@ -161,7 +161,14 @@ export function useLasso(input: {
       return;
     }
     const measured = measureTextRange(root, node.text, selection);
-    if (!measured.ok) return;
+    if (!measured.ok) {
+      // Keep the semantic selection and request authority, but never render a
+      // pocket from stale client geometry. A later measurement may restore it.
+      setSelectionRects(clearMeasuredSelectionRects);
+      setSelectionSetRects(clearMeasuredSelectionRects);
+      setSelectionColumn(null);
+      return;
+    }
     setSelectionRects(measured.rects);
     const column = root.getBoundingClientRect();
     setSelectionColumn({

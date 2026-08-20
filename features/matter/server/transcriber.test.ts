@@ -34,6 +34,25 @@ describe("transcribeRecording", () => {
     });
   });
 
+  it("canonicalizes and strictly bounds swap-direction without changing existing transcript semantics", async () => {
+    const swapRequest: TranscriptionRequest = { ...REQUEST, purpose: "swap-direction" };
+    await expect(transcribeRecording(
+      swapRequest,
+      new AbortController().signal,
+      async () => ({ transcript: "  换一种更轻的说法  " }),
+    )).resolves.toMatchObject({ transcript: "换一种更轻的说法" });
+    await expect(transcribeRecording(
+      swapRequest,
+      new AbortController().signal,
+      async () => ({ transcript: "x".repeat(241) }),
+    )).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+    await expect(transcribeRecording(
+      { ...REQUEST, purpose: "direction" },
+      new AbortController().signal,
+      async () => ({ transcript: "  existing direction bytes  " }),
+    )).resolves.toMatchObject({ transcript: "  existing direction bytes  " });
+  });
+
   it.each([
     ["empty", "   ", "NO_SPEECH"],
     ["oversize", "念".repeat(2_001), "INVALID_PROVIDER_RESPONSE"],

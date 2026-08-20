@@ -34,10 +34,70 @@ browser records locally and runs the final transcript through a lazy Whisper
 worker instead of sending audio to that refusing route. Fixture
 proof uses the inverse capability pair and never contacts browser speech.
 
+The local release suite also sets the independent transform and Text Swap
+adapters to their closed synthetic fixtures. The dedicated public configuration
+sets neither generative adapter, so both routes remain unavailable rather than
+falling back to fixture prose or borrowing the already-live label/repair/inquiry
+pool. Their browser receipts prove interaction and mutation boundaries only.
+
 `GET /matter/api/health` reports this boundary for the default mount. A
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.35
+
+Preview.35 turns the existing elastic language demonstration into two strict,
+selection-local material operations without changing the tree, archive, Voice
+admission, or five-slot tool rail.
+
+Elastic Language 2 now accepts exactly one current punctuation segment in Focus.
+One bottom grip or its no-drag pointer rail supplies a bounded degree; release
+above 15% sends one immutable `transform/2` request for the fixed
+`expand-in-place` operation. Grapheme targets are projected through the existing
+UTF-16 replacement and node capacities, the server adjudicates one complete
+`{ text }` answer, and the tree engine applies one exact range replacement.
+Pending stays in the opened pocket; cancellation, stale basis, malformed output,
+and failure leave canonical text unchanged. Arrival is complete and atomic, with
+one private grow receipt that neither Redo nor reload replays.
+
+Text Swap is a sibling grammar, not an optional Voice field in Elastic. The same
+exact Focus selection changes the existing Voice action to **Rewrite selected
+language**. One transient spoken direction, or the selection-local typed
+accessibility carrier, enters a strict `text-swap/1` request at the independent
+`/api/text-swap` boundary. Its tool-owned length band, protected-meaning and
+format policy, server-built plan, browser revalidation, atomic tree command, and
+private settle receipt keep the operation near-source and pointer-undoable. No
+direction, audio, partial transcript, pending state, or receipt enters material,
+history, persistence, archive, context, or routine logs.
+
+The three Voice lifecycles now share one browser lease. Admission, Ask Matter
+dictation, and Text Swap retain separate reducers, but a new owner atomically
+revokes the previous capture and every late permission, sample, transcript,
+repair, and model callback loses authority. Text Swap additionally carries the
+browser-only document epoch through the final store commit, so an import or
+hydrate that happens to preserve tree id and revision still rejects the old
+result.
+
+```text
+source proof           npm test: 1,318 Vitest passed, 2 skipped; 49 Node tests
+                       passed; doctor, docs, architecture (342 files, 7 layers,
+                       no outward dependency, no provider leak, no cycle),
+                       typegen, typecheck, lint, and production build passed
+browser proof          full Chromium suite: 64 passed, 2 capability-gated
+                       cases skipped; focused Elastic + Text Swap: 7/7 passed
+                       at laptop, 390px/coarse pointer, keyboard, reduced motion,
+                       atomic Undo/Redo/reload, cancellation and late response
+independent review      protocol/server, Voice authority, browser flow, and
+                       product/HCI render-edge reviews found no open P0/P1
+known timing flake      one full source run let the pre-existing model-pool
+                       attempt-bound test spend its synthetic deadline under
+                       parallel load; its isolated rerun and the next full run
+                       passed without changing code or widening the bound
+production boundary    both generative gates remain off; fixture receipts do
+                       not promote a provider or satisfy distributed rate,
+                       hard spend, multilingual corpus, or deployed-origin gates
+```
 
 ## Candidate verification — 0.2.0-preview.34
 
@@ -969,9 +1029,15 @@ already the product's signature.
 
 ## Hard gates before a public pre-release
 
-- `POST /api/turn` is now a strict fixture-gated vertical slice. It still needs
-  an end-to-end fixture/reload receipt, a separately enabled live provider, and
-  deployed-origin rate/spend controls before it can support a public claim.
+- `POST /api/turn` now has its strict fixture browser receipt through release,
+  one atomic replacement, Undo, Redo, and reload. That receipt does not promote
+  a model: the route still needs its separately enabled live provider,
+  multilingual acceptance corpus, distributed rate rule, hard spend ceiling,
+  and deployed-origin receipt before it can support a public live claim.
+- `POST /api/text-swap` has the same strict fixture browser receipt and an
+  independent production-off gate. It additionally needs its frozen multilingual
+  paraphrase corpus and human review thresholds before the rate/spend and
+  deployed-origin promotion procedure may begin.
 - `POST /api/inquiry` validates a bounded selection-or-tree question; a live
   adapter is enabled only by server environment and otherwise returns an honest
   unavailable result. No server memory adapter is connected; each answer is

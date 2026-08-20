@@ -10,9 +10,8 @@ export type LanguageFlowProjection = Readonly<{
 }>;
 
 /**
- * Moves only the suffix from its measured source-line origin. Either physical
- * grip owns the same downward slot; the edge is input provenance, not language
- * direction. All values are node-local world pixels.
+ * Moves only the suffix from its measured source-line origin. The sole lower
+ * grip owns the downward slot. All values are node-local world pixels.
  */
 export function projectLanguageFlow(input: Readonly<{
   sourceHeight: number;
@@ -31,7 +30,7 @@ export function projectLanguageFlow(input: Readonly<{
     input.selectedTop > input.sourceHeight ||
     input.afterNaturalTop > input.sourceHeight ||
     input.afterNaturalTop < input.selectedTop ||
-    (input.handle !== "top" && input.handle !== "bottom")
+    input.handle !== "bottom"
   ) return null;
 
   const afterTop = input.afterNaturalTop + input.slotDepth;

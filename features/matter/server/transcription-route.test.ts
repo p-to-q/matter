@@ -43,6 +43,34 @@ describe("Matter transcription route", () => {
     });
   });
 
+  it("uses the exact swap-direction fixture under its independent purpose gate", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_ADAPTER = "fixture";
+    process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED = "false";
+    process.env.MATTER_FIXTURE_SWAP_DIRECTION_TRANSCRIPT = "  换一种更轻的说法  ";
+    const form = validForm();
+    form.set("purpose", "swap-direction");
+
+    const response = await POST(requestFrom(form));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ transcript: "换一种更轻的说法" });
+  });
+
+  it("does not transcribe a swap direction while the independent text-swap gate is off", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_ADAPTER = "off";
+    const form = validForm();
+    form.set("purpose", "swap-direction");
+
+    const response = await POST(requestFrom(form));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+    });
+  });
+
   it("does not let the browser select fixture mode or a provider", async () => {
     const form = validForm();
     form.append("fixtureMode", "true");

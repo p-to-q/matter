@@ -3,8 +3,11 @@
 Matter reduces the distance between intent and material. These principles judge
 the running product, not how ambitious a feature sounds.
 
-1. **The handle stays with the person.** Reference and degree come from gesture;
-   voice carries language; AI cannot move the target or widen the scope.
+1. **The handle stays with the person.** Voice admits human language. On one
+   explicitly selected Focus segment it may instead supply a short rewrite
+   direction. Gesture still fixes reference; degree and operation stay inside
+   the selected tool's closed policy. AI cannot move the target, widen the
+   scope, or choose a different operation.
 2. **Intelligence is a property of material.** There is no permanent assistant
    surface. Material turns become local, perceivable, pointer-undoable changes;
    the small inquiry exception may orient from lassoed passages or the bounded
@@ -19,14 +22,24 @@ the running product, not how ambitious a feature sounds.
    lease may aggressively remove recognizable transcription debris, abandoned
    speech, and a spoken correction, then faithfully redraft a proven broken
    spoken seam while locking speaker, modality, facts, relations, and order;
-   changing a claim or completing an idea still requires their direction.
-5. **The primary path is bodily.** Pointer and voice must be sufficient. Normal
-   web accessibility remains supported; keyboard absence is never an excuse to
-   make semantics inaccessible.
+   changing a claim or completing an idea is not expansion and requires new
+   human material.
+5. **The primary path is bodily.** Voice is sufficient to admit a thought or
+   direct one eligible selected passage; pointer is sufficient to address,
+   stretch, release, choose the local rewrite mode, and undo. Normal web
+   accessibility remains supported; keyboard absence is never an excuse to make
+   semantics inaccessible. A transient selection-local typed direction may
+   expose the same Text Swap port as an accessibility fallback, never as a
+   permanent composer.
 6. **Quietness is functional.** Controls appear where material needs a handle.
    Status, AI, and infrastructure do not become permanent chrome; inquiry stays
    closed until the person explicitly opens it.
 
-A proposed interaction must be expressible as reference + degree + direction +
-lineage. If it requires another channel, record it in [`open.md`](open.md) before
-adding a control or protocol field.
+A material interaction must declare reference + degree + direction + lineage
+without letting the model infer a missing signal. Elastic Language 2 takes
+reference and degree from gesture and fixes direction to `expand-in-place`.
+Text Swap takes reference from the same one-segment lasso, takes one bounded
+transient direction from the person, and fixes degree to a tool-owned
+near-source length policy. They are sibling grammars: neither may smuggle a
+field into the other. A new operation or channel remains an open product
+question before it becomes a control or protocol field.

@@ -1,13 +1,13 @@
 /**
  * The one place Matter talks to a model.
  *
- * Four surfaces need a model — repairing a transcript, naming a thought,
- * answering one bounded question, and transforming a stretched passage — and
- * they are deliberately not four integrations. Each is a *scenario*: an id, a
- * frozen prompt, a budget, and an adjudicator that decides whether the answer
- * may be used at all. `runScenario` is the only function that awaits a
- * provider, so the deadline, the shedding, the backoff, and the refusal to leak
- * a provider's identity are written once rather than four times.
+ * Five surfaces need a model — repairing a transcript, naming a thought,
+ * answering one bounded question, expanding a stretched passage, and swapping
+ * one passage's wording — and they are deliberately not five integrations.
+ * Each is a *scenario*: an id, a frozen prompt, a budget, and an adjudicator
+ * that decides whether the answer may be used at all. `runScenario` is the
+ * only function that awaits a provider, so the deadline, the shedding, the
+ * backoff, and the refusal to leak a provider's identity are written once.
  *
  * Two rules hold across every scenario, and they are what "the AI is folded in
  * lightly" means in code rather than in a deck:
@@ -27,7 +27,8 @@ export type MatterScenarioId =
   | "matter-transcript-repair"
   | "matter-thought-label"
   | "matter-inquiry"
-  | "matter-transform";
+  | "matter-transform"
+  | "matter-text-swap";
 
 /** What a scenario asks a provider for, once its prompt is compiled. */
 export type ScenarioCall = Readonly<{

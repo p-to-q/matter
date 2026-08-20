@@ -43,7 +43,7 @@ export function useInquiryDictation(
   const transcriptionRef = useRef<AbortController | null>(null);
   const repairRef = useRef<AbortController | null>(null);
   const sessionRef = useRef(0);
-  const activeRef = useRef(false);
+  const activeOperationRef = useRef<VoiceOperation | null>(null);
   const stoppingRef = useRef(false);
   const callbacksRef = useRef(callbacks);
 
@@ -51,28 +51,40 @@ export function useInquiryDictation(
     callbacksRef.current = callbacks;
   });
 
-  const operation = useCallback((): VoiceOperation => ({
-    interactionId: `inquiry_${sessionRef.current}`,
-    attempt: 1,
-  }), []);
-
   const cancel = useCallback(() => {
     transcriptionRef.current?.abort();
     transcriptionRef.current = null;
     repairRef.current?.abort();
     repairRef.current = null;
-    if (!activeRef.current) return;
-    activeRef.current = false;
+    const current = activeOperationRef.current;
+    activeOperationRef.current = null;
     stoppingRef.current = false;
-    portRef.current?.cancel(operation());
-  }, [operation]);
+    if (current !== null) portRef.current?.cancel(current);
+  }, []);
 
   useEffect(() => cancel, [cancel]);
 
-  const finish = useCallback((outcome: "settled" | InquiryVoiceNotice) => {
-    if (!activeRef.current) return;
-    activeRef.current = false;
+  useEffect(() => {
+    // Locale is part of both recognition and transcription scope. A turn that
+    // began in the previous locale cannot continue under new presentation.
+    cancel();
+  }, [cancel, locale]);
+
+  const finish = useCallback((
+    current: VoiceOperation,
+    outcome: "settled" | InquiryVoiceNotice,
+  ) => {
+    if (!ownsOperation(activeOperationRef.current, current)) return;
+    transcriptionRef.current?.abort();
+    transcriptionRef.current = null;
+    repairRef.current?.abort();
+    repairRef.current = null;
+    activeOperationRef.current = null;
     stoppingRef.current = false;
+    // A coordinated Voice lease deliberately outlives capture so another
+    // lifecycle can also revoke in-flight transcription. Terminal settlement
+    // releases that logical lease even though the raw recorder has stopped.
+    portRef.current?.cancel(current);
     if (outcome === "settled") callbacksRef.current.onSettled();
     else callbacksRef.current.onFailed(outcome);
   }, []);
@@ -84,9 +96,10 @@ export function useInquiryDictation(
    * a usable answer delivers exactly what was heard.
    */
   const deliver = useCallback(async (transcript: string, current: VoiceOperation) => {
+    if (!ownsOperation(activeOperationRef.current, current)) return;
     if (!transcriptRepairEnabled()) {
       callbacksRef.current.onHeard(transcript);
-      finish("settled");
+      finish(current, "settled");
       return;
     }
     callbacksRef.current.onProcessing();
@@ -109,16 +122,16 @@ export function useInquiryDictation(
     } finally {
       if (repairRef.current === controller) repairRef.current = null;
     }
-    if (!activeRef.current) return;
+    if (!ownsOperation(activeOperationRef.current, current)) return;
     callbacksRef.current.onHeard(settled);
-    finish("settled");
+    finish(current, "settled");
   }, [finish, locale]);
 
   const stopOperation = useCallback((current: VoiceOperation) => {
-    if (stoppingRef.current) return;
+    if (!ownsOperation(activeOperationRef.current, current) || stoppingRef.current) return;
     stoppingRef.current = true;
     void portRef.current?.stop(current).then(async (recording) => {
-      if (!activeRef.current) return;
+      if (!ownsOperation(activeOperationRef.current, current)) return;
       if (recording.transcript !== undefined) {
         await deliver(recording.transcript, current);
         return;
@@ -136,14 +149,20 @@ export function useInquiryDictation(
           audio: recording.audio,
           signal: controller.signal,
         });
-        if (!activeRef.current) return;
+        if (
+          !ownsOperation(activeOperationRef.current, current) ||
+          result.interactionId !== current.interactionId ||
+          result.attempt !== current.attempt
+        ) return;
         await deliver(result.transcript, current);
       } catch (error) {
-        if (!controller.signal.aborted) finish(noticeForTranscriptionError(error));
+        if (!controller.signal.aborted) {
+          finish(current, noticeForTranscriptionError(error));
+        }
       } finally {
         if (transcriptionRef.current === controller) transcriptionRef.current = null;
       }
-    }).catch((error: unknown) => finish(
+    }).catch((error: unknown) => finish(current,
       error instanceof VoiceError && error.code === "RECORDING_EMPTY"
         ? "settled"
         : noticeForVoiceError(error),
@@ -151,39 +170,58 @@ export function useInquiryDictation(
   }, [deliver, finish, locale]);
 
   const start = useCallback(() => {
-    if (activeRef.current) return;
+    if (activeOperationRef.current !== null) return;
     if (supported !== true) {
       callbacksRef.current.onFailed("voice-unsupported");
       return;
     }
     sessionRef.current += 1;
-    const current = operation();
+    const current: VoiceOperation = Object.freeze({
+      interactionId: `inquiry_${sessionRef.current}`,
+      attempt: 1,
+    });
     try {
       portRef.current ??= createBrowserVoicePort();
     } catch (error) {
       callbacksRef.current.onFailed(noticeForVoiceError(error));
       return;
     }
-    activeRef.current = true;
+    activeOperationRef.current = current;
     stoppingRef.current = false;
     void portRef.current.start(current, {
       locale,
       onTranscript: (transcript) => {
-        if (activeRef.current) callbacksRef.current.onHeard(transcript);
+        if (ownsOperation(activeOperationRef.current, current)) {
+          callbacksRef.current.onHeard(transcript);
+        }
       },
       onDurationLimit: () => {
         stopOperation(current);
       },
-      onError: (error) => finish(noticeForVoiceError(error)),
-    }).catch((error: unknown) => finish(noticeForVoiceError(error)));
-  }, [finish, locale, operation, stopOperation, supported]);
+      onError: (error) => finish(current, noticeForVoiceError(error)),
+      onOwnershipRevoked: (revoked) => {
+        if (sameOperation(current, revoked)) finish(current, "settled");
+      },
+    }).catch((error: unknown) => finish(current, noticeForVoiceError(error)));
+  }, [finish, locale, stopOperation, supported]);
 
   const stop = useCallback(() => {
-    if (!activeRef.current) return;
-    stopOperation(operation());
-  }, [operation, stopOperation]);
+    const current = activeOperationRef.current;
+    if (current !== null) stopOperation(current);
+  }, [stopOperation]);
 
   return { supported, start, stop, cancel };
+}
+
+function ownsOperation(
+  active: VoiceOperation | null,
+  expected: VoiceOperation,
+): boolean {
+  return active !== null && sameOperation(active, expected);
+}
+
+function sameOperation(left: VoiceOperation, right: VoiceOperation): boolean {
+  return left.interactionId === right.interactionId && left.attempt === right.attempt;
 }
 
 function noticeForVoiceError(error: unknown): InquiryVoiceNotice {

@@ -26,7 +26,7 @@ export type ElasticPreview = Readonly<{
   sourceBounds: ElasticPreviewBounds;
   pocket: ElasticPreviewBounds;
   topHandle: ElasticPreviewLine;
-  /** Compatibility alias while the rendering edge adopts two interactive handles. */
+  /** The upper cue is geometry only; the sole interactive grip is below. */
   topCue: ElasticPreviewLine;
   bottomHandle: ElasticPreviewLine;
   pocketDepth: number;
@@ -51,8 +51,8 @@ export const ELASTIC_PREVIEW_METRICS = Object.freeze({
 });
 
 /**
- * Projects one shared non-negative degree from either visual edge. Range
- * fragments are copied exactly; grouping only derives stable visual-line grips.
+ * Projects one downward non-negative degree. Range fragments are copied
+ * exactly; grouping only derives the stable lower grip and upper seam cue.
  */
 export function elasticPreviewGeometry(
   rects: readonly ElasticPreviewRect[],
@@ -265,7 +265,7 @@ function isFiniteBounds(bounds: ElasticPreviewBounds): boolean {
 }
 
 function isOptionalHandle(value: StretchHandle | null): boolean {
-  return value === null || value === "top" || value === "bottom";
+  return value === null || value === "bottom";
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

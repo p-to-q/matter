@@ -23,6 +23,19 @@ describe("requestTranscription", () => {
     await expect(request()).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
   });
 
+  it("accepts only canonical bounded swap-direction while preserving existing purposes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      protocolVersion: "0.2",
+      interactionId: "voice_1",
+      attempt: 1,
+      transcript: "x".repeat(241),
+    })));
+    await expect(request({ purpose: "swap-direction" }))
+      .rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+    await expect(request({ purpose: "direction" }))
+      .resolves.toMatchObject({ transcript: "x".repeat(241) });
+  });
+
   it("rejects unknown error codes and extra error fields", async () => {
     for (const error of [
       { code: "PROVIDER_SECRET", message: "secret", retryable: true },

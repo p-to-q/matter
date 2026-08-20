@@ -67,15 +67,17 @@ selected visible node + pointer drop as before / after / in / first-level
   → canvas, material index, persistence, and export re-project one tree
 ```
 
-Existing material changes through the four-signal grammar:
+Elastic Language changes existing material without Voice:
 
 ```text
-lasso        → SegmentSelection       reference
-stretch      → StretchGesture         degree
-voice        → transcript             direction
-tree focus   → LineageContext         lineage
+one-segment lasso → SegmentSelection       reference
+stretch amount    → StretchGesture         degree
+selected tool     → fixed expand-in-place  direction
+tree focus        → LineageContext         lineage
                     ↓
-          TransformEnvelope
+       TransformEnvelope transform/2
+                    ↓
+             pointer release
                     ↓
              POST /api/turn
                     ↓
@@ -85,6 +87,52 @@ server constructs validated ActionPlan
                     ↓
 planToTreeCommand → tree engine → exact inverse
 ```
+
+The request carries no transcript and no client-authored output target. The
+server derives the target from the validated selection, stretch amount, and
+UTF-16 capacity; it adjudicates one complete answer before constructing the
+plan. Failure leaves the selected passage unchanged, and neither the browser nor
+the server retries automatically. The strict `transform/2` contract, synthetic
+fixture, and focused E2E receipt are implemented; the deleted Voice-direction
+`transform/1` path remains historical trace only.
+
+Text Swap is a sibling lifecycle and protocol, not an optional branch inside
+Elastic Language:
+
+```text
+one-segment lasso → SegmentSelection              reference
+selected Voice     → bounded transient direction  direction
+Text Swap policy   → near-source length band       degree
+tree focus         → LineageContext                lineage
+                       ↓
+             TextSwapEnvelope text-swap/1
+                       ↓
+               POST /api/text-swap
+                       ↓
+             model returns { text } only
+                       ↓
+          server constructs one validated plan
+                       ↓
+       planToTreeCommand → tree engine → exact inverse
+```
+
+The Voice button's meaning is projected from local eligibility: Full view keeps
+material admission; Focus plus exactly one current punctuation segment exposes
+**Rewrite selected language**. Entering that mode makes Elastic presentation
+hidden and inert before recording starts. One microphone owner and `VoicePort`
+remain shared browser capabilities, but admission and Text Swap have separate
+reducers, operation identities, cancellation rules, and effects. Neither can
+dispatch into the other's document path. A typed accessibility fallback may
+feed the same bounded transient direction port; the transport does not reveal
+whether speech or typing supplied it.
+
+The direction is held only inside the eligible local mode. A retryable failure
+may retain it for one explicit retry; cancel, stale basis, mode exit, or commit
+clears it. The request contains its normalized one-line text but no audio,
+partial transcript, carrier, or client-authored output target. A selection,
+tree, revision, document, mode, or recording ownership change aborts the request
+and revokes late results. Success commits one complete range replacement; no
+token, draft, old-copy, or candidate state becomes canonical material.
 
 The material index names each node without blocking on anything:
 
@@ -109,10 +157,10 @@ reading was already usable before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
 
-Each managed model path — admission or inquiry-draft repair, labelling, inquiry, and
-transform — is one scenario on a single harness: a frozen prompt built from the
-shared spine, a budget, and an adjudicator that decides whether the answer beats
-a floor that is already correct without a model.
+Each managed model path — admission or inquiry-draft repair, labelling, inquiry,
+Elastic transform, and Text Swap — is one scenario on a single harness: a frozen
+prompt built from the shared spine, a budget, and an adjudicator that decides
+whether the answer beats a floor that is already correct without a model.
 [`reference/prompt-harness.md`](reference/prompt-harness.md) records why the
 prompt has a shape and where each scenario's judgement differs.
 
@@ -199,7 +247,7 @@ Identifiers and units do not substitute for one another:
 | `interactionId` + `attempt` | one cancellable async operation, not document history |
 | text offsets | UTF-16 code units, checked against grapheme boundaries |
 | geometry | client CSS pixels tied to one transient `layoutEpoch` |
-| stretch `amount` | unitless normalized expansion value in `[0, 1]` |
+| stretch `amount` | unitless normalized expansion value in `(0, 1]` for a transform request |
 | durable time / duration | canonical ISO string / integer milliseconds |
 
 Ids and durable timestamps enter domain commands as values. Pure modules never
@@ -207,10 +255,13 @@ read a clock, random source, DOM, network, or storage directly.
 
 Interaction authority is split into focused lifecycles, not one application-wide
 reducer. Admission has an explicit reducer and effect driver; lasso and stretch
-have their own focused reducers; rendering-edge code coordinates visible
-precedence and pointer availability. Each lifecycle owns its start, event,
-commit or cancel, and cleanup transitions. An async lifecycle also carries its
-operation identity, attempt, document, and revision basis.
+have their own focused reducers; the Elastic Language turn starts from one
+settled pointer release rather than borrowing admission's Voice lifecycle. Text
+Swap owns a separate selected-segment direction and request lifecycle while
+borrowing only the narrow recording capability. Rendering-edge code coordinates
+their visible precedence and pointer availability. Each lifecycle owns its
+start, event, commit or cancel, and cleanup transitions. An async lifecycle also
+carries its operation identity, attempt, document, and revision basis.
 
 Pointer cancel, lost capture, unmount, and a newer interaction interrupt the
 relevant owner and clean up audio, ranges, highlights, workers, and timers.
@@ -231,7 +282,9 @@ replacement range. Full-tree projection removes folded descendants; the active
 working projection also excludes held-aside branches. Focus projection returns
 the exact root-to-node path and ignores folds on it. Only focus view can start a
 generative transform, so model context cannot be narrower than the material
-visible during that turn.
+visible during that turn. Exactly one current punctuation segment is the shared
+eligibility boundary; Elastic and Text Swap are mutually exclusive consumers of
+it.
 
 Async effects are limited to recording, transcription, labelling, inquiry, planning,
 persistence, and archive transport. Every completion returns with
@@ -289,12 +342,13 @@ app/
   api/repair/route.ts              bounded transcript-repair boundary; answers are adjudicated before use
   api/label/route.ts               implemented label boundary; live adapter gated
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
-  api/turn/route.ts                fixture-gated generative transform boundary
+  api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
+  api/text-swap/route.ts           frozen sibling text-swap/1 boundary; independent live gate
 
 features/matter/
   server/harness.ts                the only place a model is awaited; one scenario contract
   server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
-  server/*-harness.ts              one scenario each: repair, label, inquiry, transform
+  server/*-harness.ts              one scenario each: repair, label, inquiry, transform, text swap
   server/model-pool.ts             the only place an endpoint, model name, or key appears
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules
@@ -373,14 +427,15 @@ use small leaf dependencies when those slices begin.
 Matter is independently deployed beneath `ptoq.io/matter` by default. The base
 path is `MATTER_BASE_PATH=/matter`; a dedicated custom domain may set the value
 to an empty string so `app/page.tsx` owns `/` without forking the application.
-Therefore `app/page.tsx` is the product page and
-`app/api/turn` resolves under `/matter/api/turn` at the default base path.
+Therefore `app/page.tsx` is the product page, `app/api/turn` resolves under
+`/matter/api/turn`, and `app/api/text-swap` resolves under
+`/matter/api/text-swap` at the default base path.
 
 `0.2` has no compatibility aliases because no `0.1` document was persisted.
-The generative mutation route is a strict fixture-gated vertical slice; its live
-provider remains separately gated. `/api/inquiry` exists separately because it
-cannot construct a plan or mutate material; an old scene route is never renamed
-into place.
+The two generative mutation routes are strict, versioned, and fixture-gated;
+their live providers remain independently gated. `/api/inquiry` exists
+separately because it cannot construct a plan or mutate material; an old scene
+route is never renamed into place.
 
 No auth, sync, collaboration, queue, worker, vector store, retrieval, or realtime
 transport belongs in this migration.

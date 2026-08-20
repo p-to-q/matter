@@ -1,32 +1,33 @@
 import { describe, expect, it } from "vitest";
 import { applyTreeCommand } from "../tree/engine";
+import { MATTER_LOCALES } from "../config/locales";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import {
+  TRANSFORM_REQUEST_VERSION,
   buildTransformPlan,
   parseTransformEnvelope,
   parseTransformPlan,
   planToTreeCommand,
-  targetCodePointsForStretch,
 } from "./transform-contract";
 
 const TIME = "2026-08-11T00:00:00.000Z";
-const TEXT = "我一直觉得，这件事可能没那么重要。";
-const PASSAGE = "这件事可能没那么重要";
+const TEXT = "source. next";
+const PASSAGE = "source";
 
 function envelope(overrides: Record<string, unknown> = {}) {
-  const start = TEXT.indexOf(PASSAGE);
   return {
     protocolVersion: PROTOCOL_VERSION,
+    requestVersion: TRANSFORM_REQUEST_VERSION,
     id: "turn_contract",
     treeId: "tree_contract",
     mode: "transform",
+    operation: "expand-in-place",
     treeRevision: 4,
-    selection: { type: "segment-range", nodeId: "thought", start, end: start + PASSAGE.length, selectedText: PASSAGE },
-    gesture: { type: "stretch", axis: "vertical", amount: 0.5 },
-    voice: { transcript: "说得更具体一点", language: "zh-CN", durationMs: 900 },
+    selection: { type: "segment-range", nodeId: "thought", start: 0, end: PASSAGE.length, selectedText: PASSAGE },
+    gesture: { type: "stretch", axis: "vertical", amount: .5 },
+    locale: "en-US",
     context: { lineage: [
-      { id: "document", text: "", parentId: null, createdAt: TIME, updatedAt: TIME },
-      { id: "thought", text: TEXT, parentId: "document", createdAt: TIME, updatedAt: TIME },
+      { id: "thought", text: TEXT, parentId: null, createdAt: TIME, updatedAt: TIME },
     ] },
     ...overrides,
   };
@@ -46,49 +47,48 @@ function tree(): ThoughtTree {
   };
 }
 
-describe("transform contract", () => {
-  it("accepts one exact root-to-selection envelope and rejects protocol drift", () => {
-    const parsed = parseTransformEnvelope(envelope());
-    expect(parsed.ok).toBe(true);
-    expect(parseTransformEnvelope(envelope({ extra: true })).ok).toBe(false);
-    expect(parseTransformEnvelope(envelope({ gesture: { type: "stretch", axis: "horizontal", amount: 0.5 } })).ok).toBe(false);
-    expect(parseTransformEnvelope(envelope({ selection: { type: "segment-range", nodeId: "thought", start: 0, end: 1, selectedText: "我" } })).ok).toBe(false);
+describe("transform/2 contract", () => {
+  it("accepts one exact fixed-expand envelope and rejects voice, legacy, and unknown fields", () => {
+    expect(parseTransformEnvelope(envelope()).ok).toBe(true);
+    expect(parseTransformEnvelope({ ...envelope(), voice: { transcript: "more" } }).ok).toBe(false);
+    expect(parseTransformEnvelope(envelope({ requestVersion: "transform/1" })).ok).toBe(false);
+    expect(parseTransformEnvelope(envelope({ operation: "rewrite" })).ok).toBe(false);
+    expect(parseTransformEnvelope(envelope({ selection: { type: "segment-range", nodeId: "thought", start: 0, end: TEXT.length, selectedText: TEXT } })).ok).toBe(false);
   });
 
-  it("makes the continuous stretch a bounded server-owned expansion target", () => {
-    expect(targetCodePointsForStretch(PASSAGE, 0.5)).toBe(20);
-    expect(targetCodePointsForStretch(PASSAGE, 1)).toBe(30);
-    expect(targetCodePointsForStretch(PASSAGE, 1.1)).toBeNull();
+  it("accepts every supported locale without letting locale change the passage", () => {
+    for (const locale of MATTER_LOCALES) {
+      const parsed = parseTransformEnvelope(envelope({ locale }));
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(parsed.envelope.selection.selectedText).toBe(PASSAGE);
+    }
   });
 
-  it("only accepts a plan that echoes every capability-fixed field", () => {
+  it("requires an exact echo, fixed grow presentation, and a policy-valid expansion", () => {
     const parsed = parseTransformEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");
-    const plan = buildTransformPlan(parsed.envelope, "这件事可能没那么重要，但还有一些尚未展开的地方");
+    const plan = buildTransformPlan(parsed.envelope, "source more");
     expect(parseTransformPlan(plan, parsed.envelope)).toEqual(plan);
-    expect(parseTransformPlan({ ...plan, action: { ...plan.action, nodeId: "other" } }, parsed.envelope)).toBeNull();
-    expect(parseTransformPlan({ ...plan, action: { ...plan.action, text: "很短" } }, parsed.envelope)).toBeNull();
+    expect(parseTransformPlan({ ...plan, presentation: { motionHint: "settle" } }, parsed.envelope)).toBeNull();
+    expect(parseTransformPlan({ ...plan, id: "other" }, parsed.envelope)).toBeNull();
+    expect(parseTransformPlan({ ...plan, action: { ...plan.action, text: "source" } }, parsed.envelope)).toBeNull();
   });
 
-  it("revalidates identity, revision, selection, and composed node bounds immediately before a commit", () => {
+  it("revalidates policy, current punctuation segment, revision, and tree memento immediately before commit", () => {
     const parsed = parseTransformEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");
-    const plan = buildTransformPlan(parsed.envelope, "这件事可能没那么重要，但还有一些尚未展开的地方");
+    const plan = buildTransformPlan(parsed.envelope, "source more");
     const command = planToTreeCommand(tree(), parsed.envelope, plan, {
       source: "fixture",
       now: () => Date.parse("2026-08-11T00:00:01.000Z"),
     });
     expect(command.ok).toBe(true);
     if (!command.ok) throw new Error("plan must become command");
-    const committed = applyTreeCommand(tree(), command.command);
-    expect(committed.ok).toBe(true);
-    expect(planToTreeCommand({ ...tree(), revision: 5 }, parsed.envelope, plan)).toEqual({
-      ok: false,
-      reason: "STALE",
-    });
+    expect(applyTreeCommand(tree(), command.command).ok).toBe(true);
+    expect(planToTreeCommand({ ...tree(), revision: 5 }, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
     expect(planToTreeCommand(tree(), parsed.envelope, {
       ...plan,
-      action: { ...plan.action, end: plan.action.end - 1 },
+      action: { ...plan.action, text: "source\u202Emore" },
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
 });

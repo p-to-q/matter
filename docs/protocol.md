@@ -16,17 +16,18 @@ shared allow-list, client copy, provider handling, and focused tests together.
 
 Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
-segment addressing, stretch degree, Markdown durability, bounded inquiry, and
-the fixture-gated transform vertical slice are implemented. `POST /api/turn`
-accepts one strict envelope, returns one server-built plan, and remains
-unavailable on a production origin until the separate transform provider gate is
-explicitly enabled. Markdown archive export/import is available as a strict
-local return path.
+segment addressing, stretch degree, Markdown durability, and bounded inquiry
+are implemented. The strict `transform/2` Elastic Language contract, synthetic
+fixture, and focused E2E receipt are implemented. The new `text-swap/1` contract
+is frozen as its sibling rather than an optional Voice field. The deleted
+Voice-direction `transform/1` path is historical trace only and its envelopes
+remain invalid. Both production generative provider gates remain off. Markdown
+archive export/import is available as a strict local return path.
 
 `0.2` is a clean break because `0.1` has no persisted documents. A multi-passage
 lasso selection set is deliberately not a protocol field: it is transient UI
-state for copy and navigation, while a transform still receives one validated
-`SegmentSelection` at a time.
+state for copy and navigation, while either material transform receives one
+validated `SegmentSelection` at a time.
 
 ## ThoughtTree
 
@@ -93,22 +94,24 @@ export type StretchGesture = {
 };
 ```
 
-The physical edge (`top` or `bottom`) is transient presentation state, not a
-second semantic direction and not a network field. Both edges express one
-non-negative expansion degree; voice carries where the language should go.
+The sole lower grip is transient presentation state, not a network field. It
+expresses one non-negative downward expansion degree. The selected Elastic
+Language tool supplies the only direction: fixed `expand-in-place`. Voice is a
+human-admission channel and does not enter this request.
 
 Offsets must land on grapheme boundaries. Segment punctuation rules live in
 [`material.md`](material.md); segment indices and screen geometry never cross
 the network. Surrounding text is derived from the final lineage node rather than
 duplicated in the envelope.
 
-`validateSelection(text, selection)` is the shared rule at envelope creation,
-server planning, and pre-commit translation. It requires integer ordered bounds,
-grapheme boundaries from a fixed-locale segmenter, an exact text slice, and a
-range equal to one derived punctuation segment or one contiguous adjacent run.
-Client locale never changes the address space.
+`validateSelection(text, selection)` remains the shared base rule at envelope
+creation, server planning, and pre-commit translation. Both `transform/2` and
+`text-swap/1` narrow it: the range must equal exactly one current derived
+punctuation segment, not a contiguous adjacent run. It requires integer ordered
+bounds, grapheme boundaries from a fixed-locale segmenter, and an exact text
+slice. Client locale never changes the address space.
 
-## Transform envelope
+## Elastic Language transform/2 envelope
 
 ```ts
 export type LineageNode = Pick<
@@ -118,25 +121,77 @@ export type LineageNode = Pick<
 
 export type TransformEnvelope = {
   protocolVersion: typeof PROTOCOL_VERSION;
+  requestVersion: "transform/2";
   id: string;
   treeId: string;
   mode: "transform";
+  operation: "expand-in-place";
   treeRevision: number;
   selection: SegmentSelection;
   gesture: StretchGesture;
-  voice: { transcript: string; language?: string; durationMs?: number };
+  locale: MatterLocale;
   context: {
-    lineage: LineageNode[];  // exactly root → selected node
+    lineage: LineageNode[];  // exactly visible root → selected node
   };
 };
 ```
 
-The lineage is derived by one pure function used by both focus rendering and
-envelope construction. The server validates unique ids, a root first node, every
-following `parentId` against its predecessor, and the final selected node. There
-is no create envelope: material admission ends after transcription and a local
-human command. Fixture routing is deployment/test configuration, not a
-client-controlled product protocol field.
+All keys are exact and all shown keys are required. The request carries no
+Voice object, transcript, target length, prompt version, fixture flag, or
+client-authored intent. An old `transform/1` envelope is rejected rather than
+interpreted as the new action. The lineage is derived by one pure function used
+by both focus rendering and envelope construction. The invisible
+`document-root` never enters model context; the browser normalizes the first
+visible passage's wire `parentId` to `null`. The server validates unique ids, a
+visible root first node, every following `parentId` against its predecessor, and
+the final selected node. There is no create envelope: material admission ends
+after transcription and a local human command. Fixture routing is
+deployment/test configuration, not a client-controlled product protocol field.
+
+### Length units and target
+
+The four units do not substitute for one another:
+
+- selection offsets, replacement capacity, and final-node capacity are UTF-16
+  code units;
+- request and response bounds are measured from actual UTF-8 bytes;
+- stretch degree targets Unicode extended grapheme clusters from
+  `Intl.Segmenter("en", { granularity: "grapheme" })`;
+- provider tokens are only a transport and spend ceiling, never product length.
+
+The server derives the target; the client does not send it. Let:
+
+```text
+S     = graphemeCount(selection.selectedText)
+U     = selection.selectedText.length                         // UTF-16
+R     = min(800, 2000 - before.length - after.length)          // UTF-16
+Gcap  = floor(R * S / U)                                      // capacity projection
+Dmax  = min(2 * S, Gcap - S)
+D     = max(1, ceil(gesture.amount * Dmax))
+T     = S + D
+```
+
+`S` and `U` must be positive and `Dmax` must be at least one; otherwise the
+selection is ineligible and no model call starts. A full unconstrained stretch
+therefore aims at three times the source, while the existing 800-code-unit
+replacement and 2,000-code-unit node bounds retain authority. `Gcap` projects
+capacity using the selected text's observed UTF-16 density; it is not permission
+to skip checking the actual answer. The final answer must still be at most 800
+UTF-16 code units and the composed node at most 2,000.
+
+The answer is judged against added graphemes, not total-length tolerance:
+
+```text
+actualDelta = graphemeCount(answer) - S
+lower       = max(1, floor(0.75 * D))
+upper       = ceil(1.25 * D)
+```
+
+Only `lower <= actualDelta <= upper` is admissible. This replaces the
+`transform/1` whole-target ±45% band, which could accept an unchanged passage at
+small stretch amounts. The provider output ceiling is
+`min(1200, max(96, 2 * T + 96))` tokens; truncation falls to the unchanged floor
+rather than changing `T`.
 
 ## Model output and plan
 
@@ -156,16 +211,17 @@ export type ReplaceTextRangeAction = {
   start: number;
   end: number;
   text: string;
-  intent: "expand" | "compress" | "reinterpret" | "refine";
+  intent: "expand";
 };
 
 export type ActionPlan = {
   protocolVersion: typeof PROTOCOL_VERSION;
+  requestVersion: "transform/2";
   interactionId: string;
   treeId: string;
   treeRevision: number;
   action: ReplaceTextRangeAction;
-  presentation?: { motionHint?: "grow" | "compress" | "settle" };
+  presentation: { motionHint: "grow" };
 };
 ```
 
@@ -180,6 +236,205 @@ slice, and the complete composed node bound. It then creates one whole-node
 `replace-text` mutation and dispatches it without an asynchronous gap. The tree
 engine sees the resulting expected text and timestamp, not the public range.
 The server is not an authoritative document replica.
+
+### Expand-in-place adjudication
+
+The prompt improves the odds; a shared pure adjudicator is the acceptance
+boundary. The server runs it before building a plan and the browser runs the
+same policy while parsing the returned plan. In order, it rejects:
+
+1. a non-string, empty, multi-line, control/format-bearing, over-bound, labelled,
+   list-shaped, chat-shaped, or explanatory answer;
+2. a no-op, including the selected text itself or any answer that does not add a
+   grapheme;
+3. an answer outside the added-grapheme band above;
+4. an answer whose normalized lexical skeleton drops or reorders an original
+   Latin word or Han/Kana grapheme; expansion is insertion-shaped, not a free
+   rewrite;
+5. a change to the ordered multiset of numbers, units, percentages, dates,
+   times, versions, URLs, emails, stable identifiers, polarity, modality,
+   uncertainty, quantifiers, conditions, causal markers, or question type;
+6. a dominant-script change, or a significant new script family not present in
+   mixed-script source material; and
+7. an answer whose punctuation duplicates the preserved outer seam or whose
+   complete node exceeds its UTF-16 bound.
+
+These checks cannot prove that arbitrary new natural language contains no
+semantic claim. That residual risk is owned by the frozen multilingual live
+evaluation corpus; it is not delegated to a second judge model. A provider that
+cannot pass that gate remains disabled rather than receiving a looser prompt or
+adjudicator.
+
+### Timing, failure, and idempotency
+
+The scenario has a 12-second deadline, the route boundary 14 seconds, the client
+16 seconds, and the platform route 25 seconds. The margins cover body parsing,
+plan construction, and response transport without shrinking the measured cold
+provider attempt before live evidence exists. A model rejection is never
+retried. Ordered relay fallback inside one provider call remains transport
+behavior; it does not resample a rejected answer.
+
+Unavailable, timeout, busy, rejected, malformed, no-op, and cancelled turns all
+leave the passage unchanged. A new selection, stretch, document epoch, revision,
+undo/redo, import, unmount, or page hide aborts the current request and makes a
+late answer inert. Pre-commit validation repeats request version, interaction,
+tree, revision, node text/timestamp, selection, grapheme, adjudication, and
+composed-node checks synchronously before the tree engine sees one command.
+
+One pointer release creates one immutable interaction id and one POST. Neither
+client nor route automatically retries it. A successful commit increments the
+tree revision, so the same plan cannot commit twice. This is durable-effect
+idempotency, not a promise that provider billing is exactly once; transform
+responses remain uncached. A future cost-level deduplicator would require a
+distributed, no-material TTL record containing only a hash of the interaction
+id and terminal state, and is not part of the first slice.
+
+## Text Swap text-swap/1
+
+Text Swap is a separate selected-language operation. It does not add a Voice
+field to `transform/2`, accept an Elastic amount, or reinterpret the superseded
+`transform/1` envelope.
+
+```ts
+export type TextSwapEnvelope = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  requestVersion: "text-swap/1";
+  id: string;
+  treeId: string;
+  mode: "transform";
+  operation: "paraphrase-in-place";
+  treeRevision: number;
+  selection: SegmentSelection;
+  direction: {
+    text: string;
+  };
+  locale: MatterLocale;
+  context: {
+    lineage: LineageNode[];  // exactly visible root → selected node
+  };
+};
+```
+
+All shown keys are required and unknown keys reject the whole envelope. The
+boundary trims the direction, then requires the normalized value to be
+non-empty, contain no CR, LF, Unicode line separator, dangerous invisible,
+variation-selector, or bidirectional control, and contain at most 240 Unicode
+code points. UTF-16 length is not substituted for this code-point bound. Audio,
+partial hypotheses, duration, confidence, language detection, and whether Voice
+or the optional typed accessibility path supplied the direction do not cross the
+wire. The whole request remains limited to 32 KiB of actual UTF-8 bytes.
+
+The selected passage and visible lineage are fenced reference material, never
+instructions. The direction is the only person-authored instruction, but it
+cannot override the closed operation, scope, preservation policy, answer shape,
+or system rules. The current node appears once as `before / passage / after` and
+is not duplicated in the ancestor lineage.
+
+### Closed degree and capacity policy
+
+Text Swap has no dragged or model-chosen amount. Its degree is a server-owned
+near-source band. For the first corpus seed, let `S` be the selected passage's
+extended-grapheme count, `U` its UTF-16 length, and `R` the remaining UTF-16
+replacement capacity:
+
+```text
+S     = graphemeCount(selection.selectedText)
+U     = selection.selectedText.length                         // UTF-16
+R     = max(0, min(800, 2000 - before.length - after.length)) // UTF-16
+Gcap  = floor(R * S / U)                                      // capacity projection
+lower = max(1, floor(0.75 * S))
+upper = min(ceil(1.35 * S), Gcap)
+```
+
+`S`, `U`, and `R` must be positive and `upper >= lower`; otherwise no request is
+admissible. `Gcap` projects the selected passage's observed grapheme-to-UTF-16
+density into the remaining capacity. It is an eligibility and target-band
+projection, not permission to skip validation against the actual answer. An
+answer is admissible only when its extended-grapheme count is inside the
+inclusive band, it is at most 800 UTF-16 code units, and `before + answer +
+after` is at most 2,000 UTF-16 code units. Text Swap counts graphemes with the
+locale-independent `Intl.Segmenter("und", { granularity: "grapheme" })`. The
+provider token ceiling is a cost bound derived from `upper`, never a product
+length unit. The band is a frozen seed, not a claimed natural-language constant:
+a dedicated five-locale corpus must calibrate it before live promotion.
+Calibration may narrow the tool-owned policy through a later recorded freeze;
+it may not expose a free degree control or let the model choose length.
+
+### Output, plan, and adjudication
+
+The model still returns only `{ text }`. The server constructs exactly one plan:
+
+```ts
+export type TextSwapAction = {
+  id: string;
+  type: "replace-text-range";
+  nodeId: string;
+  start: number;
+  end: number;
+  text: string;
+  intent: "paraphrase";
+};
+
+export type TextSwapPlan = {
+  protocolVersion: typeof PROTOCOL_VERSION;
+  requestVersion: "text-swap/1";
+  id: string;
+  treeId: string;
+  treeRevision: number;
+  action: TextSwapAction;
+  presentation: { motionHint: "settle" };
+};
+```
+
+The server and browser share a pure Text Swap policy. It rejects empty, no-op,
+multi-line, newly wrapped, labelled, list-shaped, chat-shaped, control-bearing,
+over-band, over-capacity, or script-family-set-drifting output. It also rejects
+drift in the ordered protected anchors the pure policy extracts: numbers, units,
+percentages, dates, versions, URLs, emails, stable identifiers, polarity,
+modality, uncertainty, quantifiers, conditions, and causality markers. Prompt
+artifacts, joiners, variation selectors, and outer seams must preserve their
+ordered sequences. Unlike Elastic expansion, Text Swap may replace and reorder
+lexical wording, so it does not apply the insertion-only lexical-skeleton rule.
+
+Static rules cannot prove that an arbitrary paraphrase adds no claim or fully
+follows a nuanced direction. That residual risk belongs to the dedicated
+synthetic corpus and independent human review, never a second judge model. The
+direction cannot authorize a new topic, fact, example, reason, conclusion,
+advice, certainty, translation, or answer to the person.
+
+Immediately before commit, the browser synchronously revalidates request
+version, id, tree, revision, selected node text and timestamp, exact
+selection, direction bounds, answer policy, echoed action, and the complete
+composed node. Only the tree engine receives one whole-node `replace-text`
+command and constructs its exact inverse. Candidate text, streamed tokens, and
+an old-text copy never become material.
+
+### Lifecycle, failure, and gate
+
+Only Focus plus exactly one current punctuation segment can enter Text Swap.
+Entry makes the Elastic grip hidden and inert. Full-view Voice continues normal
+material admission. Leaving the mode, changing selection or document basis,
+tree mutation, Undo/Redo, import, document switch, unmount, page hide, or Escape
+aborts recording or request work and revokes every late result.
+
+One valid Voice finalization, or one local submit from the optional typed path,
+creates one immutable request. There is no automatic retry, candidate carousel,
+streaming mutation, or multi-step plan. A retryable provider failure leaves
+material untouched and may keep the still-current selection and bounded
+direction only inside the transient mode for a person's explicit retry; a stale
+or cancelled turn clears them. The scenario initially uses the same
+12-second scenario, 14-second route, 16-second client, and 25-second platform
+boundaries as Elastic while retaining its own operation identity, governor, and
+candidate-health lane.
+
+`POST /api/text-swap` is the only Text Swap wire boundary; `/api/turn` remains
+the `transform/2` boundary and never accepts this envelope. Production
+`text-swap/1` is independently gated off. It cannot reuse a fixture as production
+fallback or open merely because `transform/2` is enabled. Live promotion
+requires a frozen synthetic fixture, a dedicated multilingual corpus,
+critical-drift review, distributed rate limiting, an isolated or explicitly
+approved provider credential, hard spend cap and alerts, a deployed-origin
+receipt, privacy-safe metrics, and a tested gate-off rollback.
 
 ## Label envelope
 
@@ -578,15 +833,16 @@ Initial bounds:
 | children per node | 64 |
 | nodes per tree | 2,000 |
 | audio | 60 seconds |
-| planning request | 16 seconds |
+| transform scenario / route / client | 12 / 14 / 16 seconds |
 
 Bounds reject rather than truncate. Stable error codes cover microphone,
 transcription, timeout, invalid interaction or plan, revision conflict, tree
 invariant violation, bound exceeded, and internal failure. Provider errors never
 reach the browser.
 
-`protocolVersion` is checked on every transform envelope, plan, and serialized
-snapshot. Mismatches are rejected; migration is explicit.
+`protocolVersion` is checked on every generative envelope, plan, and serialized
+snapshot; `requestVersion` is additionally checked on every Elastic or Text Swap
+envelope and plan. Mismatches are rejected; migration is explicit.
 
 Tree validation also rejects a record key that differs from `node.id`, invalid
 or non-canonical timestamps, an unsafe revision integer, duplicate or unknown

@@ -1,5 +1,6 @@
 import {
   TRANSFORM_CLIENT_TIMEOUT_MS,
+  parseTransformError,
   parseTransformPlan,
   type TransformEnvelope,
   type TransformPlan,
@@ -39,16 +40,13 @@ export async function requestTransform(
   const payload = await response.json().catch(() => null) as unknown;
   if (!response.ok) throw readError(payload);
   const plan = parseTransformPlan(payload, envelope);
-  if (plan === null) throw new TransformClientError(true, "Matter returned an invalid change.");
+  if (plan === null) throw new TransformClientError(false, "Matter returned an invalid change.");
   return plan;
 }
 
 function readError(value: unknown): TransformClientError {
-  if (
-    value !== null && typeof value === "object" && "error" in value &&
-    value.error !== null && typeof value.error === "object" &&
-    "message" in value.error && "retryable" in value.error &&
-    typeof value.error.message === "string" && typeof value.error.retryable === "boolean"
-  ) return new TransformClientError(value.error.retryable, value.error.message);
-  return new TransformClientError(true, "Matter could not make this change.");
+  const parsed = parseTransformError(value);
+  return parsed === null
+    ? new TransformClientError(false, "Matter returned an invalid refusal.")
+    : new TransformClientError(parsed.retryable, parsed.message);
 }

@@ -1,0 +1,83 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  TEXT_SWAP_CLIENT_TIMEOUT_MS,
+  buildTextSwapPlan,
+  parseTextSwapEnvelope,
+} from "../protocol/text-swap-contract";
+import { requestTextSwap } from "./text-swap-client";
+
+const TIME = "2026-08-20T00:00:00.000Z";
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe("text swap client", () => {
+  it("transports one exact envelope and accepts only its echoed plan", async () => {
+    const envelope = fixtureEnvelope();
+    const plan = buildTextSwapPlan(envelope, "Drops tapped against glass");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json(plan);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestTextSwap(envelope, new AbortController().signal)).resolves.toEqual(plan);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/matter/api/text-swap");
+    const init = fetchMock.mock.calls[0]?.[1];
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(String(init?.body))).toEqual(envelope);
+  });
+
+  it("fails closed on malformed success or refusal and never retries", async () => {
+    const envelope = fixtureEnvelope();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ text: "Drops tapped against glass" }))
+      .mockResolvedValueOnce(Response.json({
+        error: { code: "TURN_REJECTED", message: "try another direction", retryable: true },
+      }, { status: 422 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(requestTextSwap(envelope, new AbortController().signal))
+      .rejects.toMatchObject({
+        retryable: false,
+        kind: "invalid-response",
+        message: "Matter returned an invalid wording change.",
+      });
+    await expect(requestTextSwap(envelope, new AbortController().signal))
+      .rejects.toMatchObject({ retryable: true, message: "try another direction" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets its owner abort and keeps the independent 16 second deadline", async () => {
+    const envelope = fixtureEnvelope();
+    vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")), { once: true });
+    })));
+    const controller = new AbortController();
+    const pending = requestTextSwap(envelope, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(TEXT_SWAP_CLIENT_TIMEOUT_MS).toBe(16_000);
+  });
+});
+
+function fixtureEnvelope() {
+  const parsed = parseTextSwapEnvelope({
+    protocolVersion: "0.2",
+    requestVersion: "text-swap/1",
+    id: "swap_client",
+    treeId: "tree_client",
+    mode: "transform",
+    operation: "paraphrase-in-place",
+    treeRevision: 4,
+    selection: { type: "segment-range", nodeId: "thought", start: 0, end: 23, selectedText: "Rain touched the window" },
+    direction: { text: "make it more tactile" },
+    locale: "en-US",
+    context: { lineage: [
+      { id: "thought", text: "Rain touched the window. Next", parentId: null, createdAt: TIME, updatedAt: TIME },
+    ] },
+  });
+  if (!parsed.ok) throw new Error("text swap client fixture invalid");
+  return parsed.envelope;
+}

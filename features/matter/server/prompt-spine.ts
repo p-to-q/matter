@@ -3,7 +3,7 @@ import type { MatterScenarioId } from "./harness";
 /**
  * The shape every Matter prompt has.
  *
- * Four scenarios ask a model for four different things, but they are the same
+ * Five scenarios ask a model for five different things, but they are the same
  * product speaking, and the parts that protect a person must not be re-argued
  * — or quietly forgotten — once per scenario. So a prompt is not written as
  * prose here. It is assembled from named sections in a fixed order, and the
@@ -55,7 +55,7 @@ import type { MatterScenarioId } from "./harness";
  *
  * - **carry it** when the scenario writes prose a person will read, and where
  *   assuming a chat would produce a fluent, plausible, wrong answer — the
- *   transform and the inquiry;
+ *   transform, text swap, and the inquiry;
  * - **omit it** when the mandate is one narrow mechanical operation stated in
  *   full by the scenario's own first line, and the volume is high — repair and
  *   labelling. Those two carry their framing in a single sentence instead.
@@ -66,7 +66,7 @@ import type { MatterScenarioId } from "./harness";
 export const MATTER_BACKGROUND = [
   "MATTER",
   "Matter is a canvas for thinking, not a chat. A person speaks their thoughts in; the thoughts grow downward as a tree of short passages, in their own unfinished words.",
-  "To act on one, they point at it with their hands — circling a phrase, stretching it to say how much should change — and speak. The gesture decides what and how much; language only says in which direction.",
+  "To act on one, they point at it with their hands. A gesture decides the reference and degree; the chosen local tool fixes the bounded operation. Voice brings a person's own material into the canvas rather than becoming a hidden prompt channel.",
   "The AI is folded into the material. It shows up as a change to what is written, or as one quiet answer beside it, and never as a voice in a conversation.",
   "Nothing you return is a message to the person: it is either used as their own material or shown as one short answer beside it. There is no conversation around it — no greeting, no offer of alternatives, no asking whether that helped.",
   "Your part is small and is described below. Do it exactly, and nothing around it.",

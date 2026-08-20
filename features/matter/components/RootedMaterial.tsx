@@ -29,12 +29,23 @@ import { useLasso } from "../interaction/use-lasso";
 import { useStretch } from "../interaction/use-stretch";
 import type { StretchPreviewSignal } from "../interaction/use-stretch";
 import {
+  STRETCH_COMMIT_THRESHOLD,
+  STRETCH_MOUSE_PEN_DEADZONE_PX,
+  STRETCH_TOUCH_DEADZONE_PX,
+  STRETCH_TRAVEL_PX,
+  isStretchInteractionKey,
+  stretchAmountFromRailPosition,
+} from "../runtime/stretch-interaction";
+import {
   elasticPreviewGeometry,
   prepareElasticPreviewSource,
   projectElasticPreview,
 } from "../interaction/elastic-preview";
 import { projectLanguageAroundSelection } from "../material/language-projection";
 import type { LanguageProjection } from "../material/language-projection";
+import { segmentText, type SegmentSelection } from "../material/text-segments";
+import { deriveExpandInPlaceLength } from "../protocol/expand-in-place-policy";
+import { deriveTextSwapLength } from "../protocol/text-swap-policy";
 import { clientDepthToWorld, projectLanguageFlow } from "../interaction/language-flow";
 import { MaterialFiles, type MaterialArchiveActions } from "./MaterialFiles";
 import { useThoughtLabels } from "../interaction/use-thought-labels";
@@ -86,10 +97,26 @@ import {
 } from "../interaction/node-drop-target";
 import { clientMatterBasePath } from "../config/base-path";
 import { useInquiryRecord } from "../interaction/use-inquiry-record";
-import { useTransformTurn } from "./use-transform-turn";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
+import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
+import { useFixedExpandTurn } from "./use-fixed-expand-turn";
+import {
+  useTextSwap,
+  type TextSwapController,
+} from "../interaction/use-text-swap";
+import {
+  isTransformPresentationCurrent,
+  useTransformPresentation,
+} from "../interaction/use-transform-presentation";
+import type {
+  MaterialTextCommittedChange,
+  TextSwapCommittedChange,
+  TransformCommittedChange,
+} from "../store/matter-store";
+import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import { isRepairPresentationCurrent } from "../interaction/use-repair-presentation";
 import { RepairingMaterialText } from "./RepairingMaterialText";
+import { TransformingMaterialText } from "./TransformingMaterialText";
 import { isCurrentNodeActionIntent } from "../tools/project-node-actions";
 import {
   admissionFeedbackActions,
@@ -115,7 +142,15 @@ export type RootedMaterialProps = {
   onClearSelection: () => void;
   onSelectNode: (nodeId: string) => void;
   onToggleFold: (nodeId: string) => void;
-  onTransformCommit: (envelope: TransformEnvelope, plan: TransformPlan) => boolean;
+  onTransformCommit: (
+    envelope: TransformEnvelope,
+    plan: TransformPlan,
+  ) => TransformCommittedChange | null;
+  onTextSwapCommit: (
+    envelope: TextSwapEnvelope,
+    plan: TextSwapPlan,
+    expectedDocumentEpoch: number,
+  ) => TextSwapCommitResult<TextSwapCommittedChange>;
   onUndo: () => void;
   onRedo: () => void;
   tree: ThoughtTree;
@@ -174,7 +209,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // IndexedDB has identified that lineage. Keep durable gestures inert during
   // bootstrap so hydration can never discard a load-window edit.
   const persistenceLoading = props.persistence.status.phase === "loading";
-  const [transformPending, setTransformPending] = useState(false);
   const [workingContextState, setWorkingContextState] = useState<Readonly<{
     documentEpoch: number;
     epoch: number;
@@ -258,9 +292,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     props.onSelectNode(nodeId);
   }, [props, tree]);
-  const interactionPending = persistenceLoading || transformPending || (
-    props.admission.state.phase !== "idle" && props.admission.state.phase !== "error"
-  );
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -326,6 +357,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const voiceReadiness = useVoiceReadiness();
   const wheelMotionTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
+  const suppressCompatibilityClickUntilRef = useRef(0);
+  const suppressCompatibilityClick = useCallback(() => {
+    // A touch tap can move this transient control before Chromium dispatches
+    // its compatibility click. Own that one follow-up event without blocking
+    // a later intentional click if the browser emits none.
+    suppressCompatibilityClickUntilRef.current = performance.now() + 700;
+  }, []);
   const pointerOriginNodeRef = useRef<string | null>(null);
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
   const clearNodeDrag = useCallback(() => {
@@ -435,62 +473,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onGeometryInvalidated: invalidateStretchGeometry,
   });
   useEffect(() => {
-    const removeSelected = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.isComposing ||
-        (event.key !== "Delete" && event.key !== "Backspace") ||
-        interactionPending ||
-        lasso.active ||
-        lasso.drawing ||
-        navigation.mode !== "full" ||
-        navigation.selectedNodeId === null ||
-        navigation.selectedNodeId === tree.rootId ||
-        isEditableEventTarget(event.target) ||
-        hasNativeTextSelection()
-      ) return;
-      event.preventDefault();
-      onRemoveSelected();
-    };
-    window.addEventListener("keydown", removeSelected);
-    return () => window.removeEventListener("keydown", removeSelected);
-  }, [interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
-  useEffect(() => {
-    const undoFromKeyboard = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.isComposing ||
-        event.altKey ||
-        event.shiftKey ||
-        (!event.metaKey && !event.ctrlKey) ||
-        event.key.toLowerCase() !== "z" ||
-        !canUndo ||
-        interactionPending ||
-        isEditableEventTarget(event.target) ||
-        hasNativeTextSelection()
-      ) return;
-      event.preventDefault();
-      onUndo();
-    };
-    window.addEventListener("keydown", undoFromKeyboard);
-    return () => window.removeEventListener("keydown", undoFromKeyboard);
-  }, [canUndo, interactionPending, onUndo]);
-  useEffect(() => {
-    const redoFromKeyboard = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented || event.isComposing || event.altKey ||
-        (!event.metaKey && !event.ctrlKey) || !canRedo || interactionPending ||
-        isEditableEventTarget(event.target) || hasNativeTextSelection()
-      ) return;
-      const key = event.key.toLowerCase();
-      if ((key !== "z" || !event.shiftKey) && key !== "y") return;
-      event.preventDefault();
-      onRedo();
-    };
-    window.addEventListener("keydown", redoFromKeyboard);
-    return () => window.removeEventListener("keydown", redoFromKeyboard);
-  }, [canRedo, interactionPending, onRedo]);
-  useEffect(() => {
     const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
       const gesture = nodeDragRef.current;
       const shell = shellRef.current;
@@ -507,6 +489,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const elasticRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
+  const stretchSelectionRef = useRef<SegmentSelection | null>(null);
   // Range fragments and their visual-line grouping are stable until lasso
   // geometry changes. Keeping them out of the pointer-move path prevents a
   // long wrapped selection from paying that O(n log n) work every frame.
@@ -558,6 +541,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const bottomCenter = clampClient(rawBottomCenter, visible?.left, visible?.right, 26);
     element.style.setProperty("--elastic-anchor-top", `${topY}px`);
     element.style.setProperty("--elastic-handle-top", `${bottomY}px`);
+    element.style.setProperty("--elastic-rail-top", `${clampStretchRailTop(
+      receipt?.afterTopClient ?? preview.bottomHandle.y - preview.pocketDepth,
+      visible,
+    )}px`);
     element.style.setProperty("--elastic-top-center", `${topCenter}px`);
     element.style.setProperty("--elastic-bottom-center", `${bottomCenter}px`);
     element.style.setProperty("--pocket-left", `${preview.pocket.left}px`);
@@ -565,9 +552,67 @@ export function RootedMaterial(props: RootedMaterialProps) {
     element.style.setProperty("--pocket-width", `${preview.pocket.right - preview.pocket.left}px`);
     element.style.setProperty("--pocket-height", `${Math.max(0, rawBottomY - rawTopY)}px`);
     element.style.setProperty("--elastic-opacity", String(preview.opacity));
-  }, [elasticPreviewSource, viewport.zoom]);
+    const control = element.querySelector<HTMLElement>(".stretch-handle");
+    const ratioLabel = element.querySelector<HTMLElement>(".stretch-handle__ratio");
+    const ratio = stretchExpansionRatio(tree, stretchSelectionRef.current, signal.amount);
+    if (control !== null) {
+      control.dataset.stretchAmount = String(Number(signal.amount.toFixed(3)));
+      control.setAttribute("aria-valuenow", String(Number(signal.amount.toFixed(3))));
+      control.setAttribute("aria-valuetext", stretchValueText(signal.amount, ratio, props.locale));
+      if (signal.amount >= STRETCH_COMMIT_THRESHOLD) control.dataset.stretchCommitReady = "true";
+      else delete control.dataset.stretchCommitReady;
+      if (ratio === null) delete control.dataset.stretchRatio;
+      else control.dataset.stretchRatio = String(Number(ratio.toFixed(3)));
+    }
+    if (ratioLabel !== null) {
+      ratioLabel.textContent = formatStretchRatio(ratio, props.locale);
+      if (signal.amount > 0) ratioLabel.dataset.visible = "true";
+      else delete ratioLabel.dataset.visible;
+    }
+  }, [elasticPreviewSource, props.locale, tree, viewport.zoom]);
   const navigationKey = `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`;
-  const stretchSelection = lasso.selections.length === 1 ? lasso.selection : null;
+  const stretchSelection = eligibleStretchSelection({
+    candidate: lasso.selections.length === 1 ? lasso.selection : null,
+    currentText: lasso.sourceText,
+    focusView: navigation.mode === "focus",
+    tree,
+  });
+  const textSwapSelection = eligibleTextSwapSelection({
+    candidate: lasso.selections.length === 1 ? lasso.selection : null,
+    currentText: lasso.sourceText,
+    focusView: navigation.mode === "focus",
+    tree,
+  });
+  useLayoutEffect(() => {
+    stretchSelectionRef.current = stretchSelection;
+  }, [stretchSelection]);
+  const transformPresentation = useTransformPresentation({
+    treeId: tree.id,
+    documentEpoch: props.documentEpoch,
+  });
+  const { publish: publishTransformPresentation } = transformPresentation;
+  const publishMaterialTextChange = useCallback((change: MaterialTextCommittedChange) => {
+    publishTransformPresentation(change);
+  }, [publishTransformPresentation]);
+  const transform = useFixedExpandTurn({
+    tree,
+    documentEpoch: props.documentEpoch,
+    selection: stretchSelection,
+    locale: props.locale,
+    enabled: stretchSelection !== null && !persistenceLoading,
+    interactionScopeKey: `${navigationKey}:${workingContextState.epoch}`,
+    commit: props.onTransformCommit,
+    onCommitted: publishMaterialTextChange,
+  });
+  const {
+    cancel: cancelTransform,
+    clearError: clearTransformError,
+    start: startTransform,
+    state: transformState,
+  } = transform;
+  const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
+    startTransform(basis);
+  }, [startTransform]);
   const stretch = useStretch({
     selection: stretchSelection,
     treeId: tree.id,
@@ -576,18 +621,174 @@ export function RootedMaterial(props: RootedMaterialProps) {
     navigationKey,
     layoutKey: `${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}`,
     onPreview: updateElasticPreview,
+    onCommit: startFixedExpansion,
   });
-  const transformEligible = navigation.mode === "focus" && stretchSelection !== null && stretch.amount > 0;
-  const transform = useTransformTurn({
+  const textSwap = useTextSwap<TextSwapCommittedChange>({
     tree,
-    selection: stretchSelection,
-    amount: stretch.amount,
+    documentEpoch: props.documentEpoch,
+    selection: textSwapSelection,
     locale: props.locale,
-    enabled: transformEligible && !persistenceLoading,
-    commit: props.onTransformCommit,
-    onPhaseChange: (phase) => setTransformPending(phase !== "idle" && phase !== "error"),
+    enabled: textSwapSelection !== null && !persistenceLoading,
+    interactionScopeKey: `${navigationKey}:${workingContextState.epoch}`,
+    commit: props.onTextSwapCommit,
+    onCommitted: publishMaterialTextChange,
   });
-  const transformActive = transform.state.phase !== "idle" && transform.state.phase !== "error";
+  const textSwapPhase = textSwap.state.phase;
+  const textSwapActive = textSwapPhase !== "idle" &&
+    textSwapPhase !== "success" && textSwapPhase !== "stale";
+  useEffect(() => {
+    if (textSwapPhase === "success" || textSwapPhase === "stale") textSwap.dismiss();
+  }, [textSwap, textSwapPhase]);
+  const { reopen: reopenStretch } = stretch;
+  useEffect(() => {
+    if (transformState.phase === "error") reopenStretch();
+  }, [reopenStretch, transformState.phase]);
+  const beginStretchAdjustment = useCallback(() => {
+    if (textSwap.state.phase !== "idle") textSwap.cancel();
+    if (transformState.phase === "requesting") {
+      cancelTransform();
+    } else if (transformState.phase === "error") {
+      clearTransformError();
+    }
+  }, [cancelTransform, clearTransformError, textSwap, transformState.phase]);
+  const abortElasticExpansion = useCallback(() => {
+    if (transformState.phase === "requesting") cancelTransform();
+    else if (transformState.phase === "error") clearTransformError();
+    stretch.keyDown("Escape");
+  }, [cancelTransform, clearTransformError, stretch, transformState.phase]);
+  const abortFixedExpansion = useCallback(() => {
+    if (textSwap.state.phase !== "idle") textSwap.cancel();
+    abortElasticExpansion();
+  }, [abortElasticExpansion, textSwap]);
+  const textSwapSelectionKey = textSwapSelection === null
+    ? ""
+    : `${textSwapSelection.nodeId}:${textSwapSelection.start}:${textSwapSelection.end}:${textSwapSelection.selectedText}`;
+  const [typedTextSwap, setTypedTextSwap] = useState<Readonly<{
+    selectionKey: string;
+    value: string;
+  }> | null>(null);
+  const currentTypedTextSwap = typedTextSwap?.selectionKey === textSwapSelectionKey
+    ? typedTextSwap
+    : null;
+  const startTypedTextSwap = useCallback(() => {
+    if (textSwapSelection === null) return;
+    abortElasticExpansion();
+    props.admission.discardPendingRepairs();
+    if (textSwap.state.phase !== "idle") textSwap.cancel();
+    if (!textSwap.enter()) return;
+    setTypedTextSwap({ selectionKey: textSwapSelectionKey, value: "" });
+  }, [abortElasticExpansion, props.admission, textSwap, textSwapSelection, textSwapSelectionKey]);
+  const cancelTypedTextSwap = useCallback(() => {
+    setTypedTextSwap(null);
+    textSwap.cancel();
+  }, [textSwap]);
+  const submitTypedTextSwap = useCallback(() => {
+    if (currentTypedTextSwap === null || !textSwap.acceptDirection(currentTypedTextSwap.value)) {
+      return false;
+    }
+    const submitted = textSwap.submit();
+    if (submitted) setTypedTextSwap(null);
+    return submitted;
+  }, [currentTypedTextSwap, textSwap]);
+  useEffect(() => {
+    if (transformState.phase !== "requesting") return;
+    const clearCommittedDegree = (event: KeyboardEvent) => {
+      if (event.key === "Escape") stretch.keyDown("Escape");
+    };
+    window.addEventListener("keydown", clearCommittedDegree);
+    return () => window.removeEventListener("keydown", clearCommittedDegree);
+  }, [stretch, transformState.phase]);
+  const stretchRatio = stretchExpansionRatio(tree, stretchSelection, stretch.amount);
+  const currentTransformChange = isTransformPresentationCurrent(
+    transformPresentation.change,
+    { treeId: tree.id, documentEpoch: props.documentEpoch },
+    tree,
+  ) ? transformPresentation.change : null;
+  const lassoHasSelectionGeometry = lasso.selectionSetRects.length > 0 ||
+    lasso.selectionRects.length > 0;
+  const interactionPending = persistenceLoading || (
+    props.admission.state.phase !== "idle" && props.admission.state.phase !== "error"
+  );
+  const selectNodeAfterAbort = useCallback((nodeId: string) => {
+    abortFixedExpansion();
+    props.onSelectNode(nodeId);
+  }, [abortFixedExpansion, props]);
+  const archiveAfterAbort = useMemo<MaterialArchiveActions | undefined>(() => {
+    if (props.archive === undefined) return undefined;
+    return Object.freeze({
+      exportCopy: () => {
+        abortFixedExpansion();
+        return props.archive!.exportCopy();
+      },
+      validateImport: (file: File) => {
+        abortFixedExpansion();
+        return props.archive!.validateImport(file);
+      },
+      replaceImport: (file: File) => {
+        abortFixedExpansion();
+        return props.archive!.replaceImport(file);
+      },
+    });
+  }, [abortFixedExpansion, props.archive]);
+  useEffect(() => {
+    const removeSelected = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        (event.key !== "Delete" && event.key !== "Backspace") ||
+        interactionPending ||
+        lasso.active ||
+        lasso.drawing ||
+        navigation.mode !== "full" ||
+        navigation.selectedNodeId === null ||
+        navigation.selectedNodeId === tree.rootId ||
+        isEditableEventTarget(event.target) ||
+        hasNativeTextSelection()
+      ) return;
+      event.preventDefault();
+      abortFixedExpansion();
+      onRemoveSelected();
+    };
+    window.addEventListener("keydown", removeSelected);
+    return () => window.removeEventListener("keydown", removeSelected);
+  }, [abortFixedExpansion, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
+  useEffect(() => {
+    const undoFromKeyboard = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.altKey ||
+        event.shiftKey ||
+        (!event.metaKey && !event.ctrlKey) ||
+        event.key.toLowerCase() !== "z" ||
+        !canUndo ||
+        interactionPending ||
+        isEditableEventTarget(event.target) ||
+        hasNativeTextSelection()
+      ) return;
+      event.preventDefault();
+      abortFixedExpansion();
+      onUndo();
+    };
+    window.addEventListener("keydown", undoFromKeyboard);
+    return () => window.removeEventListener("keydown", undoFromKeyboard);
+  }, [abortFixedExpansion, canUndo, interactionPending, onUndo]);
+  useEffect(() => {
+    const redoFromKeyboard = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented || event.isComposing || event.altKey ||
+        (!event.metaKey && !event.ctrlKey) || !canRedo || interactionPending ||
+        isEditableEventTarget(event.target) || hasNativeTextSelection()
+      ) return;
+      const key = event.key.toLowerCase();
+      if ((key !== "z" || !event.shiftKey) && key !== "y") return;
+      event.preventDefault();
+      abortFixedExpansion();
+      onRedo();
+    };
+    window.addEventListener("keydown", redoFromKeyboard);
+    return () => window.removeEventListener("keydown", redoFromKeyboard);
+  }, [abortFixedExpansion, canRedo, interactionPending, onRedo]);
   useLayoutEffect(() => {
     stretchInvalidationRef.current = stretch.layoutInvalidated;
   }, [stretch.layoutInvalidated]);
@@ -681,9 +882,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectedNode =
     navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
   const toolTargetNode = resolveToolTargetNode(navigation, tree);
-  const voiceAvailable = transformEligible
-    ? transform.supported === true
-    : props.admissionAnchor !== null && voiceAdmissionIsEnabled() && voiceReadiness.status === "ready";
+  const textSwapRetryAvailable = textSwap.state.phase === "error" &&
+    textSwap.state.retryable && textSwap.state.direction !== undefined;
+  const textSwapVoiceCanCancel = textSwap.state.phase === "permission" ||
+    textSwap.state.phase === "recording" || textSwap.state.phase === "transcribing" ||
+    textSwap.state.phase === "pending";
+  const textSwapVoiceAvailable = textSwapVoiceCanCancel || (
+    textSwapSelection !== null && (
+      textSwapRetryAvailable || (
+        voiceAdmissionIsEnabled() && voiceReadiness.status === "ready"
+      )
+    )
+  );
+  const admissionVoiceAvailable = props.admissionAnchor !== null &&
+    voiceAdmissionIsEnabled() &&
+    voiceReadiness.status === "ready";
+  const voiceAvailable = textSwapVoiceAvailable || admissionVoiceAvailable;
   const tools = useMemo(
     () =>
       projectTools({
@@ -711,8 +925,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       tree,
     };
     if (!isCurrentNodeActionIntent(context, intent)) return;
+    abortFixedExpansion();
     applyToolIntent(intent, props);
-  }, [interactionPending, navigation, props, tree, workingContext.activeNodeIds]);
+  }, [abortFixedExpansion, interactionPending, navigation, props, tree, workingContext.activeNodeIds]);
   const projectInquiryPayload = useCallback(
     () => projectInquiryContext(tree, activeWorkingProjection, lasso.selections),
     [activeWorkingProjection, lasso.selections, tree],
@@ -727,21 +942,36 @@ export function RootedMaterial(props: RootedMaterialProps) {
             ? null
             : { folded: navigation.foldedNodeIds.has(selectedNode.id) },
         };
-  const selectedLanguageIsCurrent = lasso.selection !== null &&
-    lasso.selections.length === 1 &&
-    lasso.sourceText === tree.nodes[lasso.selection.nodeId]?.text &&
-    projection.some(({ node }) => node.id === lasso.selection?.nodeId);
+  const selectedLanguageNodeId = stretchSelection?.nodeId ?? textSwapSelection?.nodeId ?? null;
+  const selectedLanguageIsCurrent = selectedLanguageNodeId !== null &&
+    projection.some(({ node }) => node.id === selectedLanguageNodeId);
+  const textSwapGuidancePhase: Extract<CanvasLanguageGuidanceState, { kind: "text-swap" }>["phase"] | null =
+    currentTypedTextSwap !== null && textSwap.state.phase === "eligible"
+      ? "typing"
+      : textSwap.state.phase === "permission" || textSwap.state.phase === "recording" ||
+          textSwap.state.phase === "transcribing" || textSwap.state.phase === "pending" ||
+          textSwap.state.phase === "error"
+        ? textSwap.state.phase
+        : textSwap.state.phase === "ready"
+          ? "typing"
+          : null;
   let languageGuidance: CanvasLanguageGuidanceState;
   if (lasso.drawing) {
     languageGuidance = { kind: "lasso-drawing" };
+  } else if (textSwapGuidancePhase !== null) {
+    languageGuidance = { kind: "text-swap", phase: textSwapGuidancePhase };
   } else if (selectedLanguageIsCurrent) {
     languageGuidance = {
       kind: "selected",
-      stretch: stretch.dragging
-        ? { kind: "dragging", amount: stretch.amount }
-        : stretch.amount > 0
-          ? { kind: "committed", amount: stretch.amount }
-          : { kind: "armed", amount: 0 },
+      stretch: transformState.phase === "requesting"
+        ? { kind: "pending", amount: transformState.basis?.amount ?? stretch.amount }
+        : transformState.phase === "error"
+          ? { kind: "error", amount: transformState.basis?.amount ?? stretch.amount }
+          : stretch.dragging
+            ? { kind: "dragging", amount: stretch.amount }
+            : stretch.amount > 0
+              ? { kind: "adjusted", amount: stretch.amount }
+              : { kind: "armed", amount: 0 },
     };
   } else if (lasso.active) {
     languageGuidance = { kind: "lasso-ready" };
@@ -961,7 +1191,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     !lasso.drawing &&
     !stretch.dragging &&
     stretch.amount === 0 &&
-    !transformActive &&
+    transformState.phase === "idle" &&
     !wheelMotionActive &&
     viewport.gesture?.dragging !== true;
 
@@ -1021,7 +1251,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
       data-stretching={stretch.dragging || undefined}
-      data-transform-phase={transform.state.phase === "idle" ? undefined : transform.state.phase}
+      data-transform-phase={transformState.phase === "idle" ? undefined : transformState.phase}
       data-tree-revision={tree.revision}
       data-view={navigation.mode}
       data-viewport-x={viewport.x}
@@ -1029,6 +1259,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-viewport-zoom={viewport.zoom}
       ref={shellRef}
       onClickCapture={(event) => {
+        if (performance.now() <= suppressCompatibilityClickUntilRef.current) {
+          suppressCompatibilityClickUntilRef.current = 0;
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        suppressCompatibilityClickUntilRef.current = 0;
         if (!suppressClickRef.current) return;
         suppressClickRef.current = false;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive]")) return;
@@ -1052,6 +1289,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       onPointerDown={(event) => {
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
+        abortFixedExpansion();
         if (lasso.pointerDown(event)) {
           props.admission.discardPendingRepairs();
           event.preventDefault();
@@ -1230,11 +1468,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           if (shouldMove && nodeDrag.sourceId !== null) {
+            abortFixedExpansion();
             props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
           }
           else if (!nodeDrag.dragging) {
-            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) props.onSelectNode(nodeDrag.originNodeId);
-            else props.onClearSelection();
+            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeAfterAbort(nodeDrag.originNodeId);
+            else {
+              abortFixedExpansion();
+              props.onClearSelection();
+            }
           }
           return;
         }
@@ -1252,8 +1494,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (!dragged) {
           setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
-            props.onSelectNode(originNodeId);
+            selectNodeAfterAbort(originNodeId);
           } else {
+            abortFixedExpansion();
             props.onClearSelection();
           }
         }
@@ -1262,6 +1505,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       }}
     >
+      {currentTransformChange === null ? null : (
+        <span className="visually-hidden" key={currentTransformChange.id} role="status">
+          {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
+        </span>
+      )}
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
         <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
@@ -1278,7 +1526,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFiles
-        archive={props.archive}
+        archive={archiveAfterAbort}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
         lassoSelectedNodeIds={lassoSelectedNodeIds}
@@ -1288,13 +1536,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
         navigation={navigation}
         heldAsideNodeIds={workingContext.heldAsideNodeIds}
         heldAsideRootIds={heldAsideRootIds}
-        onFocusNode={focusWorkingNode}
+        onFocusNode={(nodeId) => {
+          abortFixedExpansion();
+          focusWorkingNode(nodeId);
+        }}
         onRenameNode={labels.rename}
-        onRenameDocument={props.onRenameDocument}
+        onRenameDocument={(title) => {
+          abortFixedExpansion();
+          props.onRenameDocument(title);
+        }}
         onResetNodeName={labels.resetName}
-        onRestoreNode={restoreWorkingNode}
-        onSelectNode={props.onSelectNode}
-        onToggleHeldAside={toggleHeldAside}
+        onRestoreNode={(nodeId) => {
+          abortFixedExpansion();
+          restoreWorkingNode(nodeId);
+        }}
+        onSelectNode={selectNodeAfterAbort}
+        onToggleHeldAside={(nodeId) => {
+          abortFixedExpansion();
+          toggleHeldAside(nodeId);
+        }}
         onVisibleNodes={labels.observe}
         persistence={props.persistence}
         tree={tree}
@@ -1304,6 +1564,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoActive={lasso.active}
         lassoAvailable={workingContext.activeNodeIds.size > 0 && (lasso.active || activeLayout !== null)}
         onLasso={() => {
+          abortFixedExpansion();
           if (lasso.active) {
             lasso.deactivate();
             setCanvasMode("material");
@@ -1315,6 +1576,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
         }}
         onMove={() => {
+          abortFixedExpansion();
           if (canvasMode === "pan" && !lasso.active) {
             setCanvasMode("material");
             return;
@@ -1322,14 +1584,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
           lasso.deactivate();
           setCanvasMode("pan");
         }}
-        onIntent={(intent) => dispatchToolIntent(intent, props)}
+        onIntent={(intent) => {
+          abortFixedExpansion();
+          dispatchToolIntent(intent, props);
+        }}
         onVoice={() => {
-          if (transformEligible) {
-            if (transform.state.phase === "recording") transform.stop();
-            else if (transformActive) transform.cancel();
-            else transform.start();
+          if (textSwapSelection !== null || textSwap.state.phase !== "idle") {
+            abortElasticExpansion();
+            props.admission.discardPendingRepairs();
+            setTypedTextSwap(null);
+            if (textSwap.state.phase === "recording") {
+              textSwap.stopRecording();
+            } else if (
+              textSwap.state.phase === "permission" ||
+              textSwap.state.phase === "transcribing" ||
+              textSwap.state.phase === "pending"
+            ) {
+              textSwap.cancel();
+            } else if (textSwapRetryAvailable) {
+              textSwap.retry();
+            } else if (textSwap.state.phase === "idle") {
+              if (textSwap.enter()) textSwap.startRecording();
+            } else {
+              textSwap.startRecording();
+            }
             return;
           }
+          abortFixedExpansion();
           if (props.admission.state.phase === "recording") {
             props.admission.stop();
           } else if (props.admissionAnchor !== null) {
@@ -1341,22 +1622,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         surface={toolSurface}
         panActive={!lasso.active && canvasMode === "pan"}
-        voiceActive={props.admission.state.phase === "recording" || transformActive}
+        voiceActive={props.admission.state.phase === "recording" || textSwapActive}
         voiceAvailable={voiceAvailable}
         // A navigation restriction must be named as one. The generic build
         // limitation is the last branch, because reaching for it first told a
         // person in focus view that the preview cannot record at all — and left
         // both navigation explanations unreachable.
         voiceLabel={
-          transformEligible
-            ? transform.state.phase === "recording"
-              ? "Stop speaking the direction"
-              : transform.state.phase === "transcribing"
-                ? "Cancel while settling the spoken direction"
-              : transform.state.phase === "requesting"
-                ? "Cancel this material change"
-                : "Speak the direction for this stretched language"
-            : props.admission.state.phase === "recording"
+          textSwap.state.phase === "permission"
+            ? "Cancel rewrite microphone request"
+            : textSwap.state.phase === "recording"
+              ? "Stop rewrite direction"
+              : textSwap.state.phase === "transcribing" || textSwap.state.phase === "pending"
+                ? "Cancel selected language rewrite"
+                : textSwapRetryAvailable
+                  ? "Retry selected language rewrite"
+                  : textSwapSelection !== null
+                  ? "Rewrite selected language"
+          : props.admission.state.phase === "recording"
             ? "Stop recording"
             : props.admissionAnchor?.kind === "root"
             ? "Record a root thought"
@@ -1425,12 +1708,29 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSelections={lasso.selections}
               lassoSourceText={lasso.sourceText}
               navigation={navigation}
-              onSelectNode={props.onSelectNode}
+              onSelectNode={selectNodeAfterAbort}
               activeNodeIds={workingContext.activeNodeIds}
               heldAsideNodeIds={workingContext.heldAsideNodeIds}
               projection={projection}
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
+              transformChange={currentTransformChange}
+              transformStatus={transformState.phase !== "idle" && transformState.basis !== null
+                ? {
+                    nodeId: transformState.basis.selection.nodeId,
+                    phase: transformState.phase,
+                    text: stretchStatusText(transformState.phase, props.locale),
+                    announce: !lassoHasSelectionGeometry,
+                  }
+                : textSwap.state.phase !== "idle" &&
+                    textSwap.state.phase !== "success" && textSwap.state.phase !== "stale"
+                  ? {
+                      nodeId: textSwap.state.basis.selection.nodeId,
+                      phase: textSwap.state.phase === "error" ? "error" : "requesting",
+                      text: textSwapStatusText(textSwap.state, props.locale),
+                      announce: !lassoHasSelectionGeometry,
+                    }
+                  : null}
               tree={tree}
             />
             <AdmissionFeedback
@@ -1467,7 +1767,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         >
           <p className="matter-guidance__next">{guidance.text}</p>
         </footer>
-        <CanvasChrome {...canvasPreferences} inquiryContext={projectInquiryPayload} inquiryRecord={inquiryRecord} />
+        <CanvasChrome
+          {...canvasPreferences}
+          inquiryContext={projectInquiryPayload}
+          inquiryRecord={inquiryRecord}
+          onInquiryOpen={abortFixedExpansion}
+        />
       </section>
       <LassoOverlay
         active={lasso.active}
@@ -1477,9 +1782,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
         inkPathRef={lasso.inkPathRef}
         particleCanvasRef={lasso.particleCanvasRef}
         rects={lasso.selectionSetRects.length > 0 ? lasso.selectionSetRects : lasso.selectionRects}
-        selectedText={stretchSelection?.selectedText ?? null}
+        selectedText={lasso.selection?.selectedText ?? null}
         elasticRef={elasticRef}
+        locale={props.locale}
+        onBeginAdjustment={beginStretchAdjustment}
         onPreciseGesture={props.admission.discardPendingRepairs}
+        onSuppressCompatibilityClick={suppressCompatibilityClick}
+        ratio={stretchRatio}
+        status={transformState.phase}
+        stretchVisible={stretchSelection !== null && !textSwapActive}
+        textSwapState={textSwap.state}
+        textSwapEligible={textSwapSelection !== null}
+        onTextSwapRetry={textSwap.retry}
+        typedTextSwap={currentTypedTextSwap}
+        onStartTypedTextSwap={startTypedTextSwap}
+        onChangeTypedTextSwap={(value) => setTypedTextSwap((current) => current === null
+          ? null
+          : { ...current, value: Array.from(value).slice(0, 240).join("") })}
+        onCancelTypedTextSwap={cancelTypedTextSwap}
+        onSubmitTypedTextSwap={submitTypedTextSwap}
         textColumn={lasso.selectionColumn}
         stretch={stretch}
       />
@@ -1506,6 +1827,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   projection,
   repairPresentations,
   splitProjectionRef,
+  transformChange,
+  transformStatus,
   tree,
 }: {
   documentEpoch: number;
@@ -1520,6 +1843,13 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   projection: readonly LayoutProjectionItem[];
   repairPresentations: AdmissionController["repairPresentations"];
   splitProjectionRef: React.RefObject<HTMLDivElement | null>;
+  transformChange: MaterialTextCommittedChange | null;
+  transformStatus: Readonly<{
+    nodeId: string;
+    phase: "requesting" | "error";
+    text: string;
+    announce: boolean;
+  }> | null;
   tree: ThoughtTree;
 }) {
   const lassoSelectedNodeIds = useMemo(
@@ -1547,12 +1877,17 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         const repairChange = repairPresentations.get(node.id);
         const isRepairSettling = repairPresentations.size > 0 &&
           isRepairPresentationCurrent(repairChange, repairPresentationScope, tree);
-        const materialText = (
-          <RepairingMaterialText
-            change={isRepairSettling ? repairChange : undefined}
-            text={node.text}
-          />
-        );
+        const isTransformSettling = transformChange?.nodeId === node.id &&
+          isTransformPresentationCurrent(transformChange, repairPresentationScope, tree);
+        const isTransformPending = transformStatus?.nodeId === node.id;
+        const materialText = isTransformSettling
+          ? <TransformingMaterialText change={transformChange} text={node.text} />
+          : (
+              <RepairingMaterialText
+                change={isRepairSettling ? repairChange : undefined}
+                text={node.text}
+              />
+            );
         const languageProjection = isProjected && lassoSelection !== null
           ? projectLanguageAroundSelection(node.text, lassoSelection)
           : null;
@@ -1568,7 +1903,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-parent-id={parentId ?? undefined}
             data-tree-parent-id={node.parentId ?? undefined}
             data-movable={node.parentId !== null || undefined}
-            data-material-motion={isRepairSettling ? "repair" : undefined}
+            data-material-motion={isTransformSettling ? "transform" : isRepairSettling ? "repair" : undefined}
+            data-transform-phase={isTransformPending ? transformStatus.phase : undefined}
             key={node.id}
           >
             <button
@@ -1584,6 +1920,11 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                 ? <span className="spatial-thought__label">{materialText}</span>
                 : materialText}
             </button>
+            {isTransformPending && transformStatus.announce ? (
+              <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
+                {transformStatus.text}
+              </span>
+            ) : null}
             {languageProjection?.ok ? (
               <LanguageSplitProjection
                 projection={languageProjection.projection}
@@ -1666,7 +2007,21 @@ function LassoOverlay({
   rects,
   selectedText,
   elasticRef,
+  locale,
+  onBeginAdjustment,
   onPreciseGesture,
+  onSuppressCompatibilityClick,
+  ratio,
+  status,
+  stretchVisible,
+  textSwapState,
+  textSwapEligible,
+  onTextSwapRetry,
+  typedTextSwap,
+  onStartTypedTextSwap,
+  onChangeTypedTextSwap,
+  onCancelTypedTextSwap,
+  onSubmitTypedTextSwap,
   textColumn,
   stretch,
 }: {
@@ -1679,12 +2034,27 @@ function LassoOverlay({
   rects: readonly { x: number; y: number; width: number; height: number }[];
   selectedText: string | null;
   elasticRef: React.RefObject<HTMLDivElement | null>;
+  locale: CanvasLanguage;
+  onBeginAdjustment: () => void;
   onPreciseGesture: () => void;
+  onSuppressCompatibilityClick: () => void;
+  ratio: number | null;
+  status: "idle" | "requesting" | "error";
+  stretchVisible: boolean;
+  textSwapState: TextSwapController["state"];
+  textSwapEligible: boolean;
+  onTextSwapRetry: () => boolean;
+  typedTextSwap: Readonly<{ selectionKey: string; value: string }> | null;
+  onStartTypedTextSwap: () => void;
+  onChangeTypedTextSwap: (value: string) => void;
+  onCancelTypedTextSwap: () => void;
+  onSubmitTypedTextSwap: () => boolean;
   textColumn: Readonly<{ left: number; top: number; right: number; bottom: number }> | null;
   stretch: ReturnType<typeof useStretch>;
 }) {
   const bounds = selectionBounds(rects);
   const descriptionId = useId();
+  const textSwapInputId = useId();
   const preview = elasticPreviewGeometry(
     rects,
     stretch.amount,
@@ -1699,6 +2069,7 @@ function LassoOverlay({
       data-active={active || undefined}
       data-drawing={drawing || undefined}
       data-selected={selectedText !== null || undefined}
+      data-text-swap-phase={textSwapState.phase === "idle" ? undefined : textSwapState.phase}
     >
       {selectedText === null ? null : (
         <span className="visually-hidden" role="status">
@@ -1715,12 +2086,87 @@ function LassoOverlay({
           style={{ left: rect.x - 3, top: rect.y - 3, width: rect.width + 6, height: rect.height + 6 }}
         />
       ))}
-      {bounds === null ? null : (
+      {bounds === null || !textSwapEligible || textSwapState.phase !== "idle" ? null : (
+        <button
+          aria-label={textSwapTypeEntryLabel(locale)}
+          className="text-swap-type-entry"
+          data-canvas-interactive
+          onClick={onStartTypedTextSwap}
+          style={{
+            // Keep the transient no-voice alternative on the material side of
+            // the selection. On a 390px surface, placing it after the last
+            // glyph moves its hit target under the fixed tool rail.
+            left: clampClient(bounds.left - 30, clientViewport()?.left, clientViewport()?.right, 28),
+            top: selectionLocalOverlayTop(bounds, 48, 8, clientViewport()),
+          }}
+          type="button"
+        >
+          {textSwapTypeEntryShortLabel(locale)}
+        </button>
+      )}
+      {bounds === null || typedTextSwap === null || textSwapState.phase !== "eligible" ? null : (
+        <form
+          className="text-swap-composer"
+          data-canvas-interactive
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmitTypedTextSwap();
+          }}
+          style={{
+            left: clampClient(
+              (bounds.left + bounds.right) / 2,
+              clientViewport()?.left,
+              clientViewport()?.right,
+              138,
+            ),
+            top: selectionLocalOverlayTop(bounds, 60, 12, clientViewport()),
+          }}
+        >
+          <label className="visually-hidden" htmlFor={textSwapInputId}>{textSwapTypeEntryLabel(locale)}</label>
+          <input
+            autoFocus
+            dir="auto"
+            id={textSwapInputId}
+            onChange={(event) => onChangeTypedTextSwap(event.currentTarget.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Escape") return;
+              event.preventDefault();
+              event.stopPropagation();
+              onCancelTypedTextSwap();
+            }}
+            placeholder={textSwapTypePlaceholder(locale)}
+            type="text"
+            value={typedTextSwap.value}
+          />
+          <button
+            className="text-swap-composer__cancel"
+            onClick={onCancelTypedTextSwap}
+            type="button"
+          >
+            {textSwapCancelLabel(locale)}
+          </button>
+          <button
+            className="text-swap-composer__submit"
+            disabled={typedTextSwap.value.trim().length === 0}
+            type="submit"
+          >
+            {textSwapApplyLabel(locale)}
+          </button>
+        </form>
+      )}
+      {bounds === null || textSwapState.phase === "idle" ||
+      textSwapState.phase === "eligible" || textSwapState.phase === "success" ||
+      textSwapState.phase === "stale" ? null : (
+        <TextSwapFeedback
+          bounds={bounds}
+          locale={locale}
+          onRetry={onTextSwapRetry}
+          state={textSwapState}
+        />
+      )}
+      {bounds === null || !stretchVisible ? null : (
         <>
           <div
-            aria-label="Expansion degree"
-            aria-roledescription="two edge grips for one degree"
-            role="group"
             className="elastic-preview"
             data-preview-mode={stretch.amount === 0 ? "neutral" : "expand"}
             data-stretch-handle={stretch.activeHandle ?? stretch.lastHandle ?? "bottom"}
@@ -1728,6 +2174,10 @@ function LassoOverlay({
             style={{
               "--elastic-anchor-top": `${preview?.topHandle.y ?? bounds.top}px`,
               "--elastic-handle-top": `${preview?.bottomHandle.y ?? bounds.bottom}px`,
+              "--elastic-rail-top": `${clampStretchRailTop(
+                preview === null ? bounds.bottom : preview.bottomHandle.y - preview.pocketDepth,
+                clientViewport(),
+              )}px`,
               "--elastic-top-center": `${((preview?.topHandle.x1 ?? bounds.left) + (preview?.topHandle.x2 ?? bounds.right)) / 2}px`,
               "--elastic-bottom-center": `${((preview?.bottomHandle.x1 ?? bounds.left) + (preview?.bottomHandle.x2 ?? bounds.right)) / 2}px`,
               "--pocket-left": `${preview?.pocket.left ?? bounds.left}px`,
@@ -1738,11 +2188,37 @@ function LassoOverlay({
             } as CSSProperties}
           >
             <span className="visually-hidden" id={descriptionId}>
-              Both edge grips control the same expansion degree. Drag either grip away from the selected language, or use its arrow keys to refine the degree.
+              Pull the lower handle down to preview expansion. Release at 15% or more to expand. You can also tap the vertical track to set an amount, then tap the handle to apply it. Arrow, Page Up, Page Down, Home, and End adjust the degree. Enter or Space applies it. Escape resets it.
             </span>
             <span aria-hidden="true" className="language-pocket" />
-            <StretchHandleButton descriptionId={descriptionId} handle="top" onPreciseGesture={onPreciseGesture} stretch={stretch} />
-            <StretchHandleButton descriptionId={descriptionId} handle="bottom" onPreciseGesture={onPreciseGesture} stretch={stretch} />
+            {status === "idle" ? null : (
+              <span
+                aria-hidden="true"
+                className="stretch-status-marker"
+                data-phase={status}
+              >
+                {stretchStatusText(status, locale)}
+              </span>
+            )}
+            <StretchAmountRail
+              descriptionId={descriptionId}
+              locale={locale}
+              onBeginAdjustment={onBeginAdjustment}
+              onPreciseGesture={onPreciseGesture}
+              onSuppressCompatibilityClick={onSuppressCompatibilityClick}
+              ratio={ratio}
+              status={status}
+              stretch={stretch}
+            />
+            <StretchHandleButton
+              descriptionId={descriptionId}
+              locale={locale}
+              onBeginAdjustment={onBeginAdjustment}
+              onPreciseGesture={onPreciseGesture}
+              ratio={ratio}
+              status={status}
+              stretch={stretch}
+            />
           </div>
         </>
       )}
@@ -1752,6 +2228,173 @@ function LassoOverlay({
         <path className="lasso-ink__closure" ref={closurePathRef} />
       </svg>
     </div>
+  );
+}
+
+function TextSwapFeedback({
+  bounds,
+  locale,
+  onRetry,
+  state,
+}: {
+  bounds: Readonly<{ left: number; top: number; right: number; bottom: number }>;
+  locale: CanvasLanguage;
+  onRetry: () => boolean;
+  state: Exclude<TextSwapController["state"], { phase: "idle" | "eligible" | "success" | "stale" }>;
+}) {
+  const viewport = clientViewport();
+  const center = clampClient(
+    (bounds.left + bounds.right) / 2,
+    viewport?.left,
+    viewport?.right,
+    116,
+  );
+  const partial = state.phase === "recording" ? state.partialDirection?.trim() : undefined;
+  const retryable = state.phase === "error" && state.retryable && state.direction !== undefined;
+  const status = textSwapStatusText(state, locale);
+  return (
+    <div
+      className="text-swap-feedback"
+      data-canvas-interactive
+      data-phase={state.phase}
+      style={{ left: center, top: selectionLocalOverlayTop(bounds, 56, 14, viewport) }}
+    >
+      <span
+        aria-hidden="true"
+        className="text-swap-feedback__state"
+        dir="auto"
+      >
+        {partial || status}
+      </span>
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
+        {status}
+      </span>
+      {retryable ? (
+        <button
+          className="text-swap-feedback__action"
+          onClick={() => onRetry()}
+          type="button"
+        >
+          {textSwapRetryLabel(locale)}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function StretchAmountRail({
+  descriptionId,
+  locale,
+  onBeginAdjustment,
+  onPreciseGesture,
+  onSuppressCompatibilityClick,
+  ratio,
+  status,
+  stretch,
+}: {
+  descriptionId: string;
+  locale: CanvasLanguage;
+  onBeginAdjustment: () => void;
+  onPreciseGesture: () => void;
+  onSuppressCompatibilityClick: () => void;
+  ratio: number | null;
+  status: "idle" | "requesting" | "error";
+  stretch: ReturnType<typeof useStretch>;
+}) {
+  const pointerRef = useRef<Readonly<{
+    id: number;
+    startX: number;
+    startY: number;
+    tolerance: number;
+  }> | null>(null);
+  const applyRailAmount = useCallback((clientY: number, element: HTMLButtonElement) => {
+    const rect = element.getBoundingClientRect();
+    const amount = stretchAmountFromRailPosition(clientY, rect.top, rect.height);
+    if (amount === null) return;
+    onBeginAdjustment();
+    if (status !== "idle") stretch.reopen();
+    onPreciseGesture();
+    stretch.setAmount(amount, "bottom");
+  }, [onBeginAdjustment, onPreciseGesture, status, stretch]);
+  useEffect(() => {
+    const clearPointer = () => {
+      pointerRef.current = null;
+    };
+    window.addEventListener("scroll", clearPointer, true);
+    window.addEventListener("resize", clearPointer);
+    return () => {
+      window.removeEventListener("scroll", clearPointer, true);
+      window.removeEventListener("resize", clearPointer);
+    };
+  }, []);
+  return (
+    <button
+      aria-describedby={descriptionId}
+      aria-label="Set selected language expansion amount without dragging"
+      aria-orientation="vertical"
+      aria-valuemax={1}
+      aria-valuemin={0}
+      aria-valuenow={Number(stretch.amount.toFixed(3))}
+      aria-valuetext={stretchValueText(stretch.amount, ratio, locale)}
+      className="stretch-amount-rail"
+      data-canvas-interactive
+      data-phase={status}
+      data-stretch-amount={Number(stretch.amount.toFixed(3))}
+      data-stretch-mode={stretch.mode}
+      onKeyDown={(event) => {
+        if (!isStretchInteractionKey(event.key)) return;
+        event.preventDefault();
+        if (status === "requesting" && (event.key === "Enter" || event.key === " ")) return;
+        onBeginAdjustment();
+        if (status !== "idle" && event.key !== "Escape") stretch.reopen();
+        stretch.keyDown(event.key);
+        onPreciseGesture();
+      }}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (!event.isPrimary || event.button !== 0) {
+          pointerRef.current = null;
+          return;
+        }
+        pointerRef.current = Object.freeze({
+          id: event.pointerId,
+          startX: event.clientX,
+          startY: event.clientY,
+          tolerance: event.pointerType === "touch"
+            ? STRETCH_TOUCH_DEADZONE_PX
+            : STRETCH_MOUSE_PEN_DEADZONE_PX,
+        });
+      }}
+      onPointerMove={(event) => {
+        const pointer = pointerRef.current;
+        if (pointer === null || pointer.id !== event.pointerId) return;
+        if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > pointer.tolerance) {
+          pointerRef.current = null;
+        }
+      }}
+      onPointerCancel={(event) => {
+        event.stopPropagation();
+        pointerRef.current = null;
+      }}
+      onLostPointerCapture={(event) => {
+        event.stopPropagation();
+        pointerRef.current = null;
+      }}
+      onPointerUp={(event) => {
+        event.stopPropagation();
+        const pointer = pointerRef.current;
+        pointerRef.current = null;
+        const primaryRelease = event.isPrimary &&
+          (event.pointerType === "touch" || event.button === 0);
+        if (!primaryRelease || pointer?.id !== event.pointerId) return;
+        if (Math.hypot(event.clientX - pointer.startX, event.clientY - pointer.startY) > pointer.tolerance) return;
+        onSuppressCompatibilityClick();
+        event.preventDefault();
+        applyRailAmount(event.clientY, event.currentTarget);
+      }}
+      role="slider"
+      type="button"
+    />
   );
 }
 
@@ -1791,26 +2434,35 @@ function LanguageSplitProjection({
 
 function StretchHandleButton({
   descriptionId,
-  handle,
+  locale,
+  onBeginAdjustment,
   onPreciseGesture,
+  ratio,
+  status,
   stretch,
 }: {
   descriptionId: string;
-  handle: "top" | "bottom";
+  locale: CanvasLanguage;
+  onBeginAdjustment: () => void;
   onPreciseGesture: () => void;
+  ratio: number | null;
+  status: "idle" | "requesting" | "error";
   stretch: ReturnType<typeof useStretch>;
 }) {
   return (
     <button
       aria-describedby={descriptionId}
-      aria-label={`Set selected language expansion from the ${handle} re-grab edge`}
+      aria-label="Set selected language expansion with the lower handle"
       aria-orientation="vertical"
       aria-valuemax={1}
       aria-valuemin={0}
       aria-valuenow={Number(stretch.amount.toFixed(3))}
-      aria-valuetext={stretchValueText(stretch.amount)}
-      className={`stretch-handle stretch-handle--${handle}`}
+      aria-valuetext={stretchValueText(stretch.amount, ratio, locale)}
+      className="stretch-handle stretch-handle--bottom"
       data-canvas-interactive
+      data-stretch-amount={Number(stretch.amount.toFixed(3))}
+      data-stretch-commit-ready={stretch.amount >= STRETCH_COMMIT_THRESHOLD || undefined}
+      data-stretch-ratio={ratio === null ? undefined : Number(ratio.toFixed(3))}
       onPointerCancel={(event) => {
         event.stopPropagation();
         stretch.pointerCancel(event.pointerId);
@@ -1821,7 +2473,10 @@ function StretchHandleButton({
       }}
       onPointerDown={(event) => {
         event.stopPropagation();
-        if (stretch.pointerDown(handle, event)) {
+        if (stretch.pointerDown("bottom", event)) {
+          // Only the primary lower-grip gesture may supersede a pending turn.
+          // Rejected secondary or foreign pointers leave its authority intact.
+          onBeginAdjustment();
           onPreciseGesture();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -1841,11 +2496,13 @@ function StretchHandleButton({
         }
       }}
       onKeyDown={(event) => {
-        const next = keyboardStretchAmount(event.key, stretch.amount, handle);
-        if (next === null) return;
+        if (!isStretchInteractionKey(event.key)) return;
         event.preventDefault();
+        if (status === "requesting" && (event.key === "Enter" || event.key === " ")) return;
+        onBeginAdjustment();
+        if (status !== "idle" && event.key !== "Escape") stretch.reopen();
+        stretch.keyDown(event.key);
         onPreciseGesture();
-        stretch.setAmount(next, handle);
         const control = event.currentTarget;
         // A layout publication can move the control. Preserve the current
         // physical handle rather than querying a duplicate control globally.
@@ -1855,25 +2512,16 @@ function StretchHandleButton({
       }}
       role="slider"
       type="button"
-    />
+    >
+      <span
+        aria-hidden="true"
+        className="stretch-handle__ratio"
+        data-visible={stretch.amount > 0 || undefined}
+      >
+        {formatStretchRatio(ratio, locale)}
+      </span>
+    </button>
   );
-}
-
-function keyboardStretchAmount(
-  key: string,
-  amount: number,
-  handle: "top" | "bottom",
-): number | null {
-  const step = 0.1;
-  const increases = handle === "top" ? key === "ArrowUp" : key === "ArrowDown";
-  const decreases = handle === "top" ? key === "ArrowDown" : key === "ArrowUp";
-  if (increases || key === "ArrowRight") return Math.min(1, amount + step);
-  if (decreases || key === "ArrowLeft") return Math.max(0, amount - step);
-  if (key === "PageUp") return Math.min(1, amount + step * 5);
-  if (key === "PageDown") return Math.max(0, amount - step * 5);
-  if (key === "Home") return 0;
-  if (key === "End") return 1;
-  return null;
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -1886,9 +2534,251 @@ function hasNativeTextSelection(): boolean {
   return selection !== null && !selection.isCollapsed && selection.toString().length > 0;
 }
 
-function stretchValueText(amount: number): string {
-  if (amount === 0) return "Neutral";
-  return `${Math.round(amount * 100)}% expanded`;
+function stretchValueText(
+  amount: number,
+  ratio: number | null,
+  locale: CanvasLanguage,
+): string {
+  if (amount === 0 || ratio === null) {
+    if (locale === "zh-CN") return "尚未设置展开程度";
+    if (locale === "zh-TW") return "尚未設定展開程度";
+    if (locale === "ja-JP") return "展開量は未設定です";
+    if (locale === "de-DE") return "Noch kein Erweiterungsgrad";
+    return "No expansion set";
+  }
+  const ratioText = formatStretchRatio(ratio, locale);
+  if (amount < STRETCH_COMMIT_THRESHOLD) {
+    if (locale === "zh-CN") return `${ratioText}；未达到 15% 提交阈值`;
+    if (locale === "zh-TW") return `${ratioText}；未達到 15% 提交門檻`;
+    if (locale === "ja-JP") return `${ratioText}、15%の確定しきい値未満`;
+    if (locale === "de-DE") return `${ratioText}; unter der 15-%-Schwelle`;
+    return `${ratioText}; below the 15% release threshold`;
+  }
+  if (locale === "zh-CN") return `${ratioText}；松开或按回车展开`;
+  if (locale === "zh-TW") return `${ratioText}；放開或按 Enter 展開`;
+  if (locale === "ja-JP") return `${ratioText}、放すかEnterで展開`;
+  if (locale === "de-DE") return `${ratioText}; loslassen oder Enter drücken`;
+  return `${ratioText}; release or press Enter to expand`;
+}
+
+function stretchStatusText(
+  status: "requesting" | "error",
+  locale: CanvasLanguage,
+): string {
+  if (status === "requesting") {
+    if (locale === "zh-CN" || locale === "zh-TW") return "正在展开";
+    if (locale === "ja-JP") return "展開中";
+    if (locale === "de-DE") return "Wird erweitert";
+    return "Expanding";
+  }
+  if (locale === "zh-CN") return "未展开，原文保留；再拉一次";
+  if (locale === "zh-TW") return "未展開，原文保留；再拉一次";
+  if (locale === "ja-JP") return "展開せず原文を保持。もう一度引いてください";
+  if (locale === "de-DE") return "Nicht erweitert; Text bleibt. Erneut ziehen";
+  return "No change—text kept. Pull again";
+}
+
+function textSwapStatusText(
+  state: Exclude<TextSwapController["state"], { phase: "idle" | "success" | "stale" }>,
+  locale: CanvasLanguage,
+): string {
+  const kind = state.phase === "permission"
+    ? "permission"
+    : state.phase === "recording"
+      ? "recording"
+      : state.phase === "transcribing"
+        ? "transcribing"
+        : state.phase === "pending"
+          ? "pending"
+          : state.phase === "error"
+            ? "error"
+            : "ready";
+  const copy = {
+    "zh-CN": {
+      permission: "等待麦克风",
+      recording: "正在听你想怎样换一种说法",
+      transcribing: "正在听清方向",
+      ready: "改写方向已就绪",
+      pending: "正在换个说法",
+      error: "没有改写，原文保留",
+    },
+    "zh-TW": {
+      permission: "等待麥克風",
+      recording: "正在聽你想怎樣換一種說法",
+      transcribing: "正在聽清方向",
+      ready: "改寫方向已就緒",
+      pending: "正在換一種說法",
+      error: "沒有改寫，原文保留",
+    },
+    "ja-JP": {
+      permission: "マイクを待っています",
+      recording: "言い換え方を聞いています",
+      transcribing: "方向を聞き取っています",
+      ready: "言い換えの方向を受け取りました",
+      pending: "言い換えています",
+      error: "言い換えず、原文を保持しました",
+    },
+    "de-DE": {
+      permission: "Mikrofon wird vorbereitet",
+      recording: "Die gewünschte Umformulierung wird gehört",
+      transcribing: "Richtung wird verstanden",
+      ready: "Richtung ist bereit",
+      pending: "Text wird umformuliert",
+      error: "Nicht umformuliert; Original bleibt erhalten",
+    },
+    "en-US": {
+      permission: "Waiting for the microphone",
+      recording: "Listening for how to reword this",
+      transcribing: "Understanding the direction",
+      ready: "Rewrite direction is ready",
+      pending: "Rewording in place",
+      error: "No rewrite—the original is unchanged",
+    },
+  } satisfies Record<CanvasLanguage, Record<typeof kind, string>>;
+  return copy[locale][kind];
+}
+
+function textSwapRetryLabel(locale: CanvasLanguage): string {
+  if (locale === "zh-CN") return "再试一次";
+  if (locale === "zh-TW") return "再試一次";
+  if (locale === "ja-JP") return "もう一度試す";
+  if (locale === "de-DE") return "Erneut versuchen";
+  return "Try again";
+}
+
+function textSwapTypeEntryLabel(locale: CanvasLanguage): string {
+  if (locale === "zh-CN") return "输入所选文字的改写方向";
+  if (locale === "zh-TW") return "輸入所選文字的改寫方向";
+  if (locale === "ja-JP") return "選択した文章の言い換え方を入力";
+  if (locale === "de-DE") return "Richtung für die Umformulierung eingeben";
+  return "Type a rewrite direction for the selected language";
+}
+
+function textSwapTypeEntryShortLabel(locale: CanvasLanguage): string {
+  if (locale === "zh-CN" || locale === "zh-TW") return "输入";
+  if (locale === "ja-JP") return "入力";
+  if (locale === "de-DE") return "Tippen";
+  return "Type";
+}
+
+function textSwapTypePlaceholder(locale: CanvasLanguage): string {
+  if (locale === "zh-CN") return "例如：更凝练一些";
+  if (locale === "zh-TW") return "例如：更凝練一些";
+  if (locale === "ja-JP") return "例：もう少し簡潔に";
+  if (locale === "de-DE") return "z. B. etwas knapper";
+  return "For example: make it more concise";
+}
+
+function textSwapApplyLabel(locale: CanvasLanguage): string {
+  if (locale === "zh-CN") return "改写";
+  if (locale === "zh-TW") return "改寫";
+  if (locale === "ja-JP") return "言い換える";
+  if (locale === "de-DE") return "Umformulieren";
+  return "Rewrite";
+}
+
+function textSwapCancelLabel(locale: CanvasLanguage): string {
+  if (locale === "zh-CN" || locale === "zh-TW") return "取消";
+  if (locale === "ja-JP") return "キャンセル";
+  if (locale === "de-DE") return "Abbrechen";
+  return "Cancel";
+}
+
+function materialTextSuccessAnnouncement(
+  motionHint: MaterialTextCommittedChange["motionHint"],
+  locale: CanvasLanguage,
+): string {
+  if (motionHint === "settle") {
+    if (locale === "zh-CN") return "已换一种说法，可撤销。";
+    if (locale === "zh-TW") return "已換一種說法，可復原。";
+    if (locale === "ja-JP") return "選択した文章を言い換えました。元に戻せます。";
+    if (locale === "de-DE") return "Ausgewählten Text umformuliert. Rückgängig ist verfügbar.";
+    return "Reworded selected passage. Undo is available.";
+  }
+  if (locale === "zh-CN") return "已展开所选文字，可撤销。";
+  if (locale === "zh-TW") return "已展開所選文字，可復原。";
+  if (locale === "ja-JP") return "選択した文章を展開しました。元に戻せます。";
+  if (locale === "de-DE") return "Ausgewählten Text erweitert. Rückgängig ist verfügbar.";
+  return "Expanded selected passage. Undo is available.";
+}
+
+function formatStretchRatio(
+  ratio: number | null,
+  locale: CanvasLanguage = "en-US",
+): string {
+  if (ratio === null) return "";
+  const value = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(ratio);
+  return `≈${value}×`;
+}
+
+function eligibleStretchSelection(input: Readonly<{
+  candidate: SegmentSelection | null;
+  currentText: string | null;
+  focusView: boolean;
+  tree: ThoughtTree;
+}>): SegmentSelection | null {
+  const { candidate } = input;
+  if (!input.focusView || candidate === null) return null;
+  const node = input.tree.nodes[candidate.nodeId];
+  if (
+    node === undefined ||
+    input.currentText !== node.text ||
+    node.text.slice(candidate.start, candidate.end) !== candidate.selectedText
+  ) return null;
+  const exactSegment = segmentText(node.text).some(
+    (segment) => segment.start === candidate.start && segment.end === candidate.end,
+  );
+  if (!exactSegment) return null;
+  return deriveExpandInPlaceLength(
+    candidate.selectedText,
+    node.text.slice(0, candidate.start),
+    node.text.slice(candidate.end),
+    1,
+  ) === null ? null : candidate;
+}
+
+function eligibleTextSwapSelection(input: Readonly<{
+  candidate: SegmentSelection | null;
+  currentText: string | null;
+  focusView: boolean;
+  tree: ThoughtTree;
+}>): SegmentSelection | null {
+  const { candidate } = input;
+  if (!input.focusView || candidate === null) return null;
+  const node = input.tree.nodes[candidate.nodeId];
+  if (
+    node === undefined ||
+    input.currentText !== node.text ||
+    node.text.slice(candidate.start, candidate.end) !== candidate.selectedText ||
+    !segmentText(node.text).some(
+      (segment) => segment.start === candidate.start && segment.end === candidate.end,
+    )
+  ) return null;
+  return deriveTextSwapLength(
+    candidate.selectedText,
+    node.text.slice(0, candidate.start),
+    node.text.slice(candidate.end),
+  ) === null ? null : candidate;
+}
+
+function stretchExpansionRatio(
+  tree: ThoughtTree,
+  selection: SegmentSelection | null,
+  amount: number,
+): number | null {
+  if (selection === null || amount <= 0) return null;
+  const node = tree.nodes[selection.nodeId];
+  if (node === undefined) return null;
+  const length = deriveExpandInPlaceLength(
+    selection.selectedText,
+    node.text.slice(0, selection.start),
+    node.text.slice(selection.end),
+    amount,
+  );
+  return length === null ? null : length.targetGraphemes / length.sourceGraphemes;
 }
 
 function clientViewport() {
@@ -1902,6 +2792,31 @@ function clientViewport() {
         right: visual.offsetLeft + visual.width,
         bottom: visual.offsetTop + visual.height,
       };
+}
+
+function clampStretchRailTop(
+  value: number,
+  viewport: ReturnType<typeof clientViewport>,
+): number {
+  if (viewport === undefined) return value;
+  const minimum = viewport.top + 8;
+  const maximum = Math.max(minimum, viewport.bottom - STRETCH_TRAVEL_PX - 8);
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function selectionLocalOverlayTop(
+  bounds: Readonly<{ top: number; bottom: number }>,
+  height: number,
+  gap: number,
+  viewport: ReturnType<typeof clientViewport>,
+): number {
+  const below = bounds.bottom + gap;
+  if (viewport === undefined) return below;
+  const minimum = viewport.top + 8;
+  const maximum = Math.max(minimum, viewport.bottom - height - 8);
+  if (below <= maximum) return below;
+  const above = bounds.top - height - gap;
+  return Math.max(minimum, Math.min(maximum, above));
 }
 
 /** Uses the same glyph geometry primitive as lasso addressing. */

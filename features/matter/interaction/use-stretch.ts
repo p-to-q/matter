@@ -4,9 +4,13 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "rea
 import type { SegmentSelection } from "../material/text-segments";
 import {
   createStretchInteractionState,
+  isStretchInteractionKey,
   reduceStretchInteraction,
+  stretchCommitBasisFromTransition,
+  type StretchCommitBasis,
   type StretchHandle,
   type StretchInteractionEvent,
+  type StretchInteractionState,
   type StretchPointerType,
 } from "../runtime/stretch-interaction";
 import {
@@ -15,6 +19,7 @@ import {
 } from "./stretch-preview-frame";
 
 export type StretchController = Readonly<{
+  mode: StretchInteractionState["mode"];
   amount: number;
   dragging: boolean;
   activeHandle: StretchHandle | null;
@@ -27,6 +32,8 @@ export type StretchController = Readonly<{
   pointerUp: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerCancel: (pointerId: number) => boolean;
   setAmount: (amount: number, handle?: StretchHandle) => void;
+  reopen: () => void;
+  keyDown: (key: string) => boolean;
   layoutInvalidated: () => void;
 }>;
 
@@ -45,8 +52,18 @@ export function useStretch(input: {
   navigationKey: string;
   layoutKey: string;
   onPreview: (signal: StretchPreviewSignal) => void;
+  onCommit?: (basis: StretchCommitBasis) => void;
 }): StretchController {
-  const { documentEpoch = 0, layoutKey, navigationKey, onPreview, revision, selection, treeId } = input;
+  const {
+    documentEpoch = 0,
+    layoutKey,
+    navigationKey,
+    onCommit,
+    onPreview,
+    revision,
+    selection,
+    treeId,
+  } = input;
   const [state, dispatchBase] = useReducer(
     reduceStretchInteraction,
     undefined,
@@ -56,11 +73,13 @@ export function useStretch(input: {
   const previousNavigationRef = useRef(`${documentEpoch}:${navigationKey}`);
   const previousLayoutRef = useRef(layoutKey);
   const previewRef = useRef(onPreview);
+  const commitRef = useRef(onCommit);
   const previewFrameRef = useRef<StretchPreviewFrame<StretchPreviewSignal> | null>(null);
 
   useLayoutEffect(() => {
     previewRef.current = onPreview;
-  }, [onPreview]);
+    commitRef.current = onCommit;
+  }, [onCommit, onPreview]);
 
   useLayoutEffect(() => {
     const frame = createStretchPreviewFrame<StretchPreviewSignal>({
@@ -105,7 +124,15 @@ export function useStretch(input: {
     return next;
   }, []);
 
-  useEffect(() => {
+  const emitCommit = useCallback((
+    previous: StretchInteractionState,
+    next: StretchInteractionState,
+  ) => {
+    const basis = stretchCommitBasisFromTransition(previous, next);
+    if (basis !== null) commitRef.current?.(basis);
+  }, []);
+
+  useLayoutEffect(() => {
     if (selection === null) {
       send({ type: "selection-invalidated" });
       flushPreview(previewSignal(createStretchInteractionState()));
@@ -117,9 +144,10 @@ export function useStretch(input: {
         selection,
         treeId,
         revision,
+        documentEpoch,
       },
     });
-  }, [flushPreview, revision, selection, treeId, send]);
+  }, [documentEpoch, flushPreview, revision, selection, treeId, send]);
 
   useEffect(() => {
     const sessionNavigationKey = `${documentEpoch}:${navigationKey}`;
@@ -135,6 +163,30 @@ export function useStretch(input: {
     const next = send({ type: "layout-invalidated" });
     flushPreview(previewSignal(next));
   }, [flushPreview, layoutKey, send]);
+
+  useEffect(() => {
+    const rollbackDrag = (type: "scroll-invalidated" | "resize-invalidated") => {
+      if (stateRef.current.mode !== "dragging") return;
+      const next = send({ type });
+      flushPreview(previewSignal(next));
+    };
+    const onScroll = () => rollbackDrag("scroll-invalidated");
+    const onResize = () => rollbackDrag("resize-invalidated");
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || stateRef.current.mode !== "dragging") return;
+      event.preventDefault();
+      const next = send({ type: "key-down", key: event.key });
+      flushPreview(previewSignal(next));
+    };
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [flushPreview, send]);
 
   const pointerDown = useCallback((
     handle: StretchHandle,
@@ -166,8 +218,9 @@ export function useStretch(input: {
     if (current.mode !== "dragging" || current.pointerId !== event.pointerId) return false;
     const next = send({ type: "pointer-up", pointerId: event.pointerId, clientY: event.clientY });
     flushPreview(previewSignal(next));
+    emitCommit(current, next);
     return true;
-  }, [flushPreview, send]);
+  }, [emitCommit, flushPreview, send]);
 
   const pointerCancel = useCallback((pointerId: number) => {
     const current = stateRef.current;
@@ -182,25 +235,42 @@ export function useStretch(input: {
     flushPreview(previewSignal(next));
   }, [flushPreview, send]);
 
+  const reopen = useCallback(() => {
+    const next = send({ type: "reopen" });
+    flushPreview(previewSignal(next));
+  }, [flushPreview, send]);
+
+  const keyDown = useCallback((key: string) => {
+    if (!isStretchInteractionKey(key)) return false;
+    const current = stateRef.current;
+    const next = send({ type: "key-down", key });
+    flushPreview(previewSignal(next));
+    emitCommit(current, next);
+    return true;
+  }, [emitCommit, flushPreview, send]);
+
   const layoutInvalidated = useCallback(() => {
     const next = send({ type: "layout-invalidated" });
     flushPreview(previewSignal(next));
   }, [flushPreview, send]);
 
   return {
+    mode: state.mode,
     amount: amountOf(state),
     dragging: state.mode === "dragging",
-    activeHandle: state.mode === "dragging" ? state.handle : null,
+    activeHandle: state.mode === "dragging" ? "bottom" : null,
     lastHandle: state.mode === "committed"
       ? state.lastHandle
-      : state.mode === "dragging"
-        ? state.handle
+      : state.mode === "dragging" || state.mode === "adjusted"
+        ? "bottom"
         : null,
     pointerDown,
     pointerMove,
     pointerUp,
     pointerCancel,
     setAmount,
+    reopen,
+    keyDown,
     layoutInvalidated,
   };
 }
@@ -215,9 +285,9 @@ function previewSignal(
   return Object.freeze({
     amount: amountOf(state),
     handle: state.mode === "dragging"
-      ? state.handle
-      : state.mode === "committed"
-        ? state.lastHandle
+      ? "bottom"
+      : state.mode === "committed" || state.mode === "adjusted"
+        ? "bottom"
         : null,
     dragging: state.mode === "dragging",
   });

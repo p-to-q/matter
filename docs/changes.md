@@ -17,6 +17,75 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-20 — Text Swap gives selected language one bounded human direction
+
+Changed: the user explicitly promoted Text Swap into the current first-release
+slice as a sibling to the implemented Elastic Language contract. In Focus,
+exactly one current punctuation segment changes the existing Voice action to
+**Rewrite selected language**. Its strict `text-swap/1` envelope goes only to
+`POST /api/text-swap`: the lasso supplies reference, one transient trimmed
+direction of at most 240 Unicode code points supplies direction, a closed
+tool-owned `max(1,floor(.75S))..min(ceil(1.35S),Gcap)` grapheme seed supplies
+degree, with `Gcap` projecting remaining UTF-16 capacity, and the visible Focus
+path supplies lineage. The model still
+returns `{ text }`; the server builds one range-replace plan; the browser
+revalidates it; only the tree engine atomically commits it with pointer Undo.
+The primary carrier is Voice. A selection-local typed accessibility carrier may
+feed the same transient direction port without adding a carrier field. Both
+carriers, partials, direction, pending state, and presentation receipt remain
+outside material, history, persistence, archives, routine logs, and later model
+context. The independent production Text Swap gate is off.
+
+Why: pointing already expresses the reference better than describing it again,
+while a brief spoken direction expresses the nuance a fixed Elastic gesture
+deliberately withholds. [Point-n-Talk](https://diana.lu/point-n-talk) informed
+that complementarity, but its After Effects + Origami concept prototype is not
+production or evaluation evidence. [DirectGPT](https://damienmasson.com/pdfs/directgpt.pdf)
+supports local selection, direct effect, and Undo; the
+[InChorus study](https://www.microsoft.com/en-us/research/wp-content/uploads/2020/02/InChorus-CHI2020.pdf)
+supports explicit multimodal ownership and recoverable failure. No external
+source, interaction asset, toolbar, candidate UI, or generated tool surface is
+copied. This promotion replaces the former current non-goal of all Voice-
+directed selected-language work; it does not reopen `transform/2` or revive the
+deleted `transform/1` path.
+
+Forecloses: accepting Text Swap on `/api/turn`, optional direction inside
+`transform/2`, multi-segment scope, model-chosen length or operation, permanent
+prompt/chat/transcript UI, candidate carousels, hidden context, streaming text,
+automatic retry, a second judge model, durable direction, direction/material
+logging, a new rail slot, or enabling production before its own corpus,
+rate/spend, deployed-origin, privacy, and rollback proof passes.
+
+## 2026-08-20 — Elastic Language fixes expansion before the model sees it
+
+Changed: the active first-release transform contract is re-frozen as Elastic
+Language 2 / `transform/2`. Voice admits human material only. Exactly one
+punctuation segment supplies reference, stretch supplies degree, and the selected
+tool supplies the fixed `expand-in-place` operation; release creates one strict
+request with no transcript or client-authored target. Length is derived in
+grapheme clusters under the existing UTF-16 replacement and node caps, the model
+still returns `{ text }` only, the server still constructs one plan, the browser
+revalidates it, and only the tree engine commits. The strict `transform/2`
+contract, explicit synthetic fixture, and focused E2E receipt are implemented;
+the deleted Voice-direction `transform/1` path is historical trace only. The
+production transform gate remains off until its multilingual live corpus,
+distributed rate/spend controls, deployed-origin receipt, and rollback proof all
+exist.
+
+Why: an automatic pointer release cannot honestly reuse a protocol that requires
+spoken direction, and the former code-point target plus whole-length ±45% band
+could ignore a small stretch or collide with UTF-16 bounds. External research
+references informed the principles only; no source or implementation is copied.
+The reviewed Google application's abandoned status in the consulted public
+record is recorded as a research fact, not a legal clearance,
+non-infringement opinion, ownership conclusion, or substitute for counsel.
+
+Forecloses: optional Voice fields interpreted as `transform/2`, model-chosen
+scope/degree/operation, free rewriting presented as expansion, a generic fixture
+that invents prose, automatic retries, a second judge model, production enablement
+without a hard spend ceiling, and using this freeze to change Branch, the tree,
+history, persistence, or any other tool.
+
 ## 2026-08-17 — The node action field is control fog, sized by its material
 
 Changed: the passage-local action field now renders as control fog — a blurred

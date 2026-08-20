@@ -3,36 +3,48 @@ import type { SegmentSelection } from "../material/text-segments";
 export const STRETCH_MOUSE_PEN_DEADZONE_PX = 4;
 export const STRETCH_TOUCH_DEADZONE_PX = 8;
 export const STRETCH_TRAVEL_PX = 120;
+export const STRETCH_COMMIT_THRESHOLD = 0.15;
 
 export type StretchPointerType = "mouse" | "pen" | "touch";
-export type StretchHandle = "top" | "bottom";
+
+export type StretchHandle = "bottom";
 
 export type StretchAnchor = Readonly<{
   selection: SegmentSelection;
   treeId: string;
   revision: number;
+  documentEpoch: number;
+}>;
+
+export type StretchCommitBasis = Readonly<{
+  selection: SegmentSelection;
+  treeId: string;
+  baseRevision: number;
+  documentEpoch: number;
+  amount: number;
 }>;
 
 export type StretchInteractionState =
   | Readonly<{ mode: "idle" }>
   | Readonly<{ mode: "armed"; anchor: StretchAnchor; amount: 0 }>
+  | Readonly<{ mode: "adjusted"; anchor: StretchAnchor; amount: number }>
   | Readonly<{
       mode: "dragging";
       anchor: StretchAnchor;
       amount: number;
       priorAmount: number;
-      priorLastHandle: StretchHandle | null;
-      handle: StretchHandle;
       pointerId: number;
       pointerType: StretchPointerType;
       startClientY: number;
       crossedDeadzone: boolean;
+      tapCommits: boolean;
     }>
   | Readonly<{
       mode: "committed";
       anchor: StretchAnchor;
       amount: number;
-      lastHandle: StretchHandle;
+      lastHandle: "bottom";
+      basis: StretchCommitBasis;
     }>;
 
 export type StretchInteractionEvent =
@@ -52,15 +64,19 @@ export type StretchInteractionEvent =
   | Readonly<{ type: "pointer-cancel"; pointerId: number }>
   | Readonly<{ type: "lost-pointer-capture"; pointerId: number }>
   | Readonly<{ type: "set-amount"; amount: number; handle?: StretchHandle }>
+  | Readonly<{ type: "key-down"; key: string }>
+  | Readonly<{ type: "reopen" }>
   | Readonly<{ type: "selection-invalidated" }>
   | Readonly<{ type: "material-invalidated" }>
   | Readonly<{ type: "navigation-invalidated" }>
-  | Readonly<{ type: "layout-invalidated" }>;
+  | Readonly<{ type: "layout-invalidated" }>
+  | Readonly<{ type: "scroll-invalidated" }>
+  | Readonly<{ type: "resize-invalidated" }>;
 
 /**
- * Owns semantic stretch degree and primary-pointer authority. Client geometry
- * enters as plain CSS pixels; handle measurement and rendering stay at the DOM
- * edge, and no state here belongs in material history.
+ * Owns one downward stretch degree and its release boundary. The returned
+ * commit basis is data only; requests and durable mutation stay outside this
+ * reducer and its browser hook.
  */
 export function createStretchInteractionState(): StretchInteractionState {
   return IDLE;
@@ -84,8 +100,8 @@ export function reduceStretchInteraction(
       return state.mode === "idle" ? state : IDLE;
     case "pointer-down":
       if (
-        (state.mode !== "armed" && state.mode !== "committed") ||
-        !isHandle(event.handle) ||
+        (state.mode !== "armed" && state.mode !== "adjusted" && state.mode !== "committed") ||
+        event.handle !== "bottom" ||
         !event.isPrimary ||
         event.button !== 0 ||
         !isPointerId(event.pointerId) ||
@@ -99,13 +115,16 @@ export function reduceStretchInteraction(
         anchor: ownAnchor(state.anchor),
         amount: state.amount,
         priorAmount: state.amount,
-        priorLastHandle: state.mode === "committed" ? state.lastHandle : null,
-        handle: event.handle,
         pointerId: event.pointerId,
         pointerType: event.pointerType,
         startClientY: event.clientY,
         crossedDeadzone: false,
+        tapCommits: state.mode === "adjusted" && state.amount >= STRETCH_COMMIT_THRESHOLD,
       });
+    case "reopen":
+      return state.mode === "committed"
+        ? adjustedState(state.anchor, state.amount)
+        : state;
     case "pointer-move":
       return moveOwnedPointer(state, event.pointerId, event.clientY);
     case "pointer-up": {
@@ -115,32 +134,34 @@ export function reduceStretchInteraction(
         return state;
       }
       if (!moved.crossedDeadzone) {
-        return settledState(moved.anchor, moved.priorAmount, moved.priorLastHandle);
+        return moved.tapCommits
+          ? commitOrReset(moved.anchor, moved.priorAmount)
+          : adjustedState(moved.anchor, moved.priorAmount);
       }
-      return settledState(moved.anchor, moved.amount, moved.handle);
+      return commitOrReset(moved.anchor, moved.amount);
     }
     case "pointer-cancel":
     case "lost-pointer-capture":
       if (state.mode !== "dragging" || state.pointerId !== event.pointerId) {
         return state;
       }
-      return settledState(state.anchor, state.priorAmount, state.priorLastHandle);
+      return adjustedState(state.anchor, state.priorAmount);
     case "set-amount":
       if (
-        (state.mode !== "armed" && state.mode !== "committed") ||
-        !Number.isFinite(event.amount)
+        (state.mode !== "armed" && state.mode !== "adjusted") ||
+        !Number.isFinite(event.amount) ||
+        (event.handle !== undefined && event.handle !== "bottom")
       ) {
         return state;
       }
-      if (event.handle !== undefined && !isHandle(event.handle)) return state;
-      return settledState(
-        state.anchor,
-        clampAmount(event.amount),
-        event.handle ?? (state.mode === "committed" ? state.lastHandle : "bottom"),
-      );
+      return adjustedState(state.anchor, clampAmount(event.amount));
+    case "key-down":
+      return reduceKeyDown(state, event.key);
     case "layout-invalidated":
+    case "scroll-invalidated":
+    case "resize-invalidated":
       return state.mode === "dragging"
-        ? settledState(state.anchor, state.priorAmount, state.priorLastHandle)
+        ? adjustedState(state.anchor, state.priorAmount)
         : state;
     default:
       return assertNever(event);
@@ -163,22 +184,79 @@ function moveOwnedPointer(
   const crossedDeadzone =
     state.crossedDeadzone || Math.abs(delta) > deadzoneFor(state.pointerType);
   if (!crossedDeadzone) return state;
-  const amount = stretchAmountFromClientDelta(state.priorAmount, delta, state.handle);
+  const amount = stretchAmountFromClientDelta(state.priorAmount, delta);
   if (state.crossedDeadzone && amount === state.amount) return state;
   return Object.freeze({ ...state, amount, crossedDeadzone: true });
 }
 
-/** Outward movement expands; reversing either handle reduces the shared degree. */
+/** Downward client-pixel travel expands; upward travel reduces toward zero. */
 export function stretchAmountFromClientDelta(
   priorAmount: number,
   deltaClientY: number,
-  handle: StretchHandle = "bottom",
 ): number {
-  if (!isAmount(priorAmount) || !Number.isFinite(deltaClientY) || !isHandle(handle)) {
+  if (!isAmount(priorAmount) || !Number.isFinite(deltaClientY)) {
     return priorAmount;
   }
-  const directedDelta = handle === "top" ? -deltaClientY : deltaClientY;
-  return clampAmount(priorAmount + directedDelta / STRETCH_TRAVEL_PX);
+  return clampAmount(priorAmount + deltaClientY / STRETCH_TRAVEL_PX);
+}
+
+/** Maps one pointer-up on the transient rail without starting a drag. */
+export function stretchAmountFromRailPosition(
+  clientY: number,
+  railTop: number,
+  railHeight: number = STRETCH_TRAVEL_PX,
+): number | null {
+  if (!Number.isFinite(clientY) || !Number.isFinite(railTop) ||
+      !Number.isFinite(railHeight) || railHeight <= 0) return null;
+  return clampAmount((clientY - railTop) / railHeight);
+}
+
+export function isStretchInteractionKey(key: string): boolean {
+  return KEYBOARD_KEYS.has(key);
+}
+
+export function stretchCommitBasisFromTransition(
+  previous: StretchInteractionState,
+  next: StretchInteractionState,
+): StretchCommitBasis | null {
+  return previous.mode !== "committed" && next.mode === "committed"
+    ? next.basis
+    : null;
+}
+
+function reduceKeyDown(
+  state: StretchInteractionState,
+  key: string,
+): StretchInteractionState {
+  if (!isStretchInteractionKey(key) || state.mode === "idle") return state;
+  if (key === "Escape") {
+    return state.mode === "dragging"
+      ? adjustedState(state.anchor, state.priorAmount)
+      : armedState(state.anchor);
+  }
+  if (state.mode === "dragging" || state.mode === "committed") return state;
+  if (key === "Enter" || key === " ") {
+    return commitOrReset(state.anchor, state.amount);
+  }
+  const amount = state.amount;
+  switch (key) {
+    case "ArrowDown":
+    case "ArrowRight":
+      return adjustedState(state.anchor, amount + KEYBOARD_STEP);
+    case "ArrowUp":
+    case "ArrowLeft":
+      return adjustedState(state.anchor, amount - KEYBOARD_STEP);
+    case "PageUp":
+      return adjustedState(state.anchor, amount + KEYBOARD_PAGE_STEP);
+    case "PageDown":
+      return adjustedState(state.anchor, amount - KEYBOARD_PAGE_STEP);
+    case "Home":
+      return armedState(state.anchor);
+    case "End":
+      return adjustedState(state.anchor, 1);
+    default:
+      return state;
+  }
 }
 
 function deadzoneFor(pointerType: StretchPointerType): number {
@@ -187,14 +265,36 @@ function deadzoneFor(pointerType: StretchPointerType): number {
     : STRETCH_MOUSE_PEN_DEADZONE_PX;
 }
 
-function settledState(
+function commitOrReset(
   anchor: StretchAnchor,
   amount: number,
-  lastHandle: StretchHandle | null,
 ): StretchInteractionState {
-  return amount === 0 || lastHandle === null
+  if (amount < STRETCH_COMMIT_THRESHOLD) return armedState(anchor);
+  const ownedAnchor = ownAnchor(anchor);
+  const basis = Object.freeze({
+    selection: ownedAnchor.selection,
+    treeId: ownedAnchor.treeId,
+    baseRevision: ownedAnchor.revision,
+    documentEpoch: ownedAnchor.documentEpoch,
+    amount,
+  });
+  return Object.freeze({
+    mode: "committed",
+    anchor: ownedAnchor,
+    amount,
+    lastHandle: "bottom",
+    basis,
+  });
+}
+
+function adjustedState(
+  anchor: StretchAnchor,
+  amount: number,
+): StretchInteractionState {
+  const bounded = clampAmount(amount);
+  return bounded === 0
     ? armedState(anchor)
-    : Object.freeze({ mode: "committed", anchor: ownAnchor(anchor), amount, lastHandle });
+    : Object.freeze({ mode: "adjusted", anchor: ownAnchor(anchor), amount: bounded });
 }
 
 function armedState(anchor: StretchAnchor): StretchInteractionState {
@@ -206,6 +306,7 @@ function ownAnchor(anchor: StretchAnchor): StretchAnchor {
     selection: Object.freeze({ ...anchor.selection }),
     treeId: anchor.treeId,
     revision: anchor.revision,
+    documentEpoch: anchor.documentEpoch,
   });
 }
 
@@ -213,6 +314,7 @@ function sameAnchor(left: StretchAnchor, right: StretchAnchor): boolean {
   return (
     left.treeId === right.treeId &&
     left.revision === right.revision &&
+    left.documentEpoch === right.documentEpoch &&
     left.selection.type === right.selection.type &&
     left.selection.nodeId === right.selection.nodeId &&
     left.selection.start === right.selection.start &&
@@ -228,6 +330,8 @@ function isAnchor(anchor: StretchAnchor): boolean {
     anchor.treeId.length > 0 &&
     Number.isSafeInteger(anchor.revision) &&
     anchor.revision >= 0 &&
+    Number.isSafeInteger(anchor.documentEpoch) &&
+    anchor.documentEpoch >= 0 &&
     selection?.type === "segment-range" &&
     typeof selection.nodeId === "string" &&
     selection.nodeId.length > 0 &&
@@ -248,10 +352,6 @@ function isPointerType(value: string): value is StretchPointerType {
   return value === "mouse" || value === "pen" || value === "touch";
 }
 
-function isHandle(value: string): value is StretchHandle {
-  return value === "top" || value === "bottom";
-}
-
 function isAmount(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= 1;
 }
@@ -264,4 +364,19 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled stretch event: ${String(value)}`);
 }
 
+const KEYBOARD_STEP = 0.1;
+const KEYBOARD_PAGE_STEP = 0.5;
+const KEYBOARD_KEYS = new Set([
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "ArrowUp",
+  "PageDown",
+  "PageUp",
+  "Home",
+  "End",
+  "Enter",
+  " ",
+  "Escape",
+]);
 const IDLE: StretchInteractionState = Object.freeze({ mode: "idle" });

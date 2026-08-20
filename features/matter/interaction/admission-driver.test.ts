@@ -406,6 +406,43 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
+  it("cancels a revoked shared Voice lease and ignores its late transcription", async () => {
+    let resolveTranscript!: (value: {
+      protocolVersion: "0.2";
+      interactionId: string;
+      attempt: number;
+      transcript: string;
+    }) => void;
+    let observedSignal: AbortSignal | undefined;
+    const h = harness({
+      transcribe: (input) => {
+        observedSignal = input.signal;
+        return new Promise((resolve) => {
+          resolveTranscript = resolve;
+        });
+      },
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    const operation = { interactionId: "voice_1", attempt: 1 } as const;
+    h.voice.finish(operation);
+    await Promise.resolve();
+    expect(h.driver.getState().phase).toBe("transcribing");
+
+    h.voice.starts[0]?.callbacks.onOwnershipRevoked?.(operation);
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(observedSignal?.aborted).toBe(true);
+    resolveTranscript({
+      protocolVersion: "0.2",
+      interactionId: operation.interactionId,
+      attempt: operation.attempt,
+      transcript: "late admission",
+    });
+    await Promise.resolve();
+
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
   it("disposes idempotently and makes queued browser callbacks inert", async () => {
     const h = harness();
     await reachRecording(h.driver, h.voice);

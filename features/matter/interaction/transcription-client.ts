@@ -11,6 +11,7 @@ import {
   type TranscriptionSuccess,
 } from "../protocol/transcription-contract";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 import { clientMatterBasePath } from "../config/base-path";
 
 export class TranscriptionClientError extends Error {
@@ -76,7 +77,7 @@ export async function requestTranscription(input: {
   }
   const payload = (await response.json().catch(() => null)) as unknown;
   if (!response.ok) throw parseErrorEnvelope(payload);
-  if (!isSuccess(payload, input.interactionId, input.attempt)) {
+  if (!isSuccess(payload, input.interactionId, input.attempt, input.purpose)) {
     throw new TranscriptionClientError(
       "INVALID_PROVIDER_RESPONSE",
       "Speech transcription returned an invalid response.",
@@ -89,6 +90,7 @@ export async function requestTranscription(input: {
 async function requestLocalTranscription(input: {
   interactionId: string;
   attempt: number;
+  purpose: TranscriptionPurpose;
   locale: string;
   audio: Blob;
   signal: AbortSignal;
@@ -96,14 +98,24 @@ async function requestLocalTranscription(input: {
   let local: typeof import("./local-transcription-client") | undefined;
   try {
     local = await import("./local-transcription-client");
-    const transcript = await local.transcribeLocally(input);
+    const rawTranscript = await local.transcribeLocally(input);
+    const transcript = input.purpose === "swap-direction"
+      ? normalizeTextSwapDirection(rawTranscript)
+      : rawTranscript;
+    if (transcript === null) {
+      throw new TranscriptionClientError(
+        "INVALID_PROVIDER_RESPONSE",
+        "Speech transcription returned an invalid response.",
+        true,
+      );
+    }
     const result: TranscriptionSuccess = {
       protocolVersion: PROTOCOL_VERSION,
       interactionId: input.interactionId,
       attempt: input.attempt,
       transcript,
     };
-    if (!isSuccess(result, input.interactionId, input.attempt)) {
+    if (!isSuccess(result, input.interactionId, input.attempt, input.purpose)) {
       throw new TranscriptionClientError(
         "INVALID_PROVIDER_RESPONSE",
         "Speech transcription returned an invalid response.",
@@ -217,10 +229,22 @@ function parseErrorEnvelope(payload: unknown): TranscriptionClientError {
   return new TranscriptionClientError("TRANSCRIPTION_FAILED", "The recording could not be transcribed.", true);
 }
 
-function isSuccess(value: unknown, interactionId: string, attempt: number): value is TranscriptionSuccess {
+function isSuccess(
+  value: unknown,
+  interactionId: string,
+  attempt: number,
+  purpose: TranscriptionPurpose,
+): value is TranscriptionSuccess {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<TranscriptionSuccess>;
-  return exactKeys(candidate, ["protocolVersion", "interactionId", "attempt", "transcript"]) && candidate.protocolVersion === PROTOCOL_VERSION && candidate.interactionId === interactionId && candidate.attempt === attempt && typeof candidate.transcript === "string" && candidate.transcript.trim().length > 0 && candidate.transcript.length <= MAX_NODE_TEXT_CODE_UNITS;
+  return exactKeys(candidate, ["protocolVersion", "interactionId", "attempt", "transcript"]) &&
+    candidate.protocolVersion === PROTOCOL_VERSION &&
+    candidate.interactionId === interactionId &&
+    candidate.attempt === attempt &&
+    typeof candidate.transcript === "string" &&
+    candidate.transcript.trim().length > 0 &&
+    candidate.transcript.length <= MAX_NODE_TEXT_CODE_UNITS &&
+    (purpose !== "swap-direction" || normalizeTextSwapDirection(candidate.transcript) === candidate.transcript);
 }
 
 function basePath(): string {

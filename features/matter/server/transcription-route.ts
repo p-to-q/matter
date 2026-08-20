@@ -68,7 +68,7 @@ async function handleBoundedTranscriptionRequest(
     throw invalidRequest("The transcription protocol version is unsupported.");
   }
   const purpose = requiredString(form, "purpose", 16);
-  if (purpose !== "admission" && purpose !== "direction") {
+  if (purpose !== "admission" && purpose !== "direction" && purpose !== "swap-direction") {
     throw invalidRequest("The transcription purpose is invalid.");
   }
   const locale = requiredString(form, "locale", MAX_LOCALE_LENGTH);

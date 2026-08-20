@@ -1,12 +1,11 @@
 import {
   MAX_TRANSFORM_REQUEST_BYTES,
-  TRANSFORM_CLIENT_TIMEOUT_MS,
   buildTransformPlan,
   parseTransformEnvelope,
-  targetCodePointsForStretch,
   type TransformEnvelope,
   type TransformPlan,
 } from "../protocol/transform-contract";
+import { deriveExpandInPlaceLength } from "../protocol/expand-in-place-policy";
 import {
   withBoundedJsonRequest,
   type BoundedRequestFailure,
@@ -24,6 +23,7 @@ const TURN_LIMITS = Object.freeze({
   failuresBeforeCooldown: 3,
   cooldownMs: 15_000,
 });
+export const TRANSFORM_ROUTE_TIMEOUT_MS = 14_000;
 
 /**
  * One strict material-turn endpoint. It accepts an envelope, lets the model
@@ -78,24 +78,29 @@ export function transformErrorResponse(error: unknown): Response {
 }
 
 function scenarioInput(envelope: TransformEnvelope): TransformScenarioInput | null {
-  const targetCodePoints = targetCodePointsForStretch(
-    envelope.selection.selectedText,
-    envelope.gesture.amount,
-  );
-  if (targetCodePoints === null) return null;
   const selectedNode = envelope.context.lineage.at(-1);
   if (selectedNode === undefined) return null;
+  const surrounding = Object.freeze({
+    before: selectedNode.text.slice(0, envelope.selection.start),
+    after: selectedNode.text.slice(envelope.selection.end),
+  });
+  const length = deriveExpandInPlaceLength(
+    envelope.selection.selectedText,
+    surrounding.before,
+    surrounding.after,
+    envelope.gesture.amount,
+  );
+  if (length === null) return null;
   return Object.freeze({
-    locale: envelope.voice.language ?? "zh-CN",
+    locale: envelope.locale,
     passage: envelope.selection.selectedText,
-    direction: envelope.voice.transcript,
-    intent: "expand",
-    targetCodePoints,
-    lineage: Object.freeze(envelope.context.lineage.map((node, depth) => Object.freeze({ depth, text: node.text }))),
-    surrounding: Object.freeze({
-      before: selectedNode.text.slice(0, envelope.selection.start),
-      after: selectedNode.text.slice(envelope.selection.end),
-    }),
+    amount: envelope.gesture.amount,
+    length,
+    // The selected node is already represented exactly by before/passage/after.
+    // Repeating it in lineage wastes context and can make it look authoritative twice.
+    lineage: Object.freeze(envelope.context.lineage.slice(0, -1)
+      .map((node, depth) => Object.freeze({ depth, text: node.text }))),
+    surrounding,
   });
 }
 
@@ -120,7 +125,7 @@ function transformOutcomeError(reason: "MODEL_UNAVAILABLE" | "MODEL_TIMEOUT" | "
 
 const TURN_REQUEST_POLICY: BoundedRequestPolicy = Object.freeze({
   maxBytes: MAX_TRANSFORM_REQUEST_BYTES,
-  timeoutMs: TRANSFORM_CLIENT_TIMEOUT_MS,
+  timeoutMs: TRANSFORM_ROUTE_TIMEOUT_MS,
   fail: transformBoundaryError,
 });
 

@@ -21,11 +21,6 @@ describe("language flow projection", () => {
     });
   });
 
-  it("keeps the same projection when the upper edge owns degree", () => {
-    expect(projectLanguageFlow({ ...RECEIPT, handle: "top" }))
-      .toEqual(projectLanguageFlow({ ...RECEIPT, handle: "bottom" }));
-  });
-
   it("counts only real overflow beyond the unchanged source box", () => {
     expect(projectLanguageFlow({
       ...RECEIPT,
@@ -38,7 +33,7 @@ describe("language flow projection", () => {
 
   it("rejects impossible or malformed measurement receipts atomically", () => {
     expect(projectLanguageFlow({ ...RECEIPT, afterNaturalTop: 20, handle: "bottom" })).toBeNull();
-    expect(projectLanguageFlow({ ...RECEIPT, sourceHeight: Number.NaN, handle: "top" })).toBeNull();
+    expect(projectLanguageFlow({ ...RECEIPT, sourceHeight: Number.NaN, handle: "bottom" })).toBeNull();
     expect(projectLanguageFlow({ ...RECEIPT, slotDepth: -1, handle: "bottom" })).toBeNull();
   });
 
