@@ -8,6 +8,7 @@ import {
   TRANSCRIPTION_CLIENT_TIMEOUT_MS,
   hasPresentedEmoji,
   maxTranscriptionOutputCodePoints,
+  transcriptionTextFitsCapacity,
   type TranscriptionErrorCode,
   type TranscriptionErrorEnvelope,
   type TranscriptionPurpose,
@@ -179,7 +180,7 @@ function normalizeSuccess(
   purpose: TranscriptionPurpose,
 ): TranscriptionSuccess {
   const transcript = normalizeTranscriptForPurpose(success.transcript, locale, purpose);
-  if (transcript === null || transcript.length > MAX_NODE_TEXT_CODE_UNITS) {
+  if (transcript === null) {
     throw invalidProviderResponse();
   }
   return Object.freeze({ ...success, transcript });
@@ -193,16 +194,22 @@ function normalizeTranscriptForPurpose(
   // Expression is not an STT-provider capability. Admission may add one later
   // through its own deterministic, undoable repair; inquiry and direction do
   // not own that channel at all.
-  if (hasPresentedEmoji(transcript)) return null;
+  if (
+    hasPresentedEmoji(transcript) ||
+    !transcriptionTextFitsCapacity(transcript, purpose)
+  ) return null;
   const punctuated = normalizeSpokenTranscript({
     text: transcript,
     locale,
     maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
     maxOutputCodePoints: maxTranscriptionOutputCodePoints(purpose),
   });
-  return purpose === "swap-direction"
+  const normalized = purpose === "swap-direction"
     ? normalizeTextSwapDirection(punctuated)
     : punctuated;
+  return normalized !== null && transcriptionTextFitsCapacity(normalized, purpose)
+    ? normalized
+    : null;
 }
 
 function withDeadline(parent: AbortSignal, timeoutMs: number): {
@@ -297,15 +304,11 @@ function isSuccess(
 ): value is TranscriptionSuccess {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<TranscriptionSuccess>;
-  const codePointLimit = maxTranscriptionOutputCodePoints(purpose);
   return exactKeys(candidate, ["protocolVersion", "interactionId", "attempt", "transcript"]) &&
     candidate.protocolVersion === PROTOCOL_VERSION &&
     candidate.interactionId === interactionId &&
     candidate.attempt === attempt &&
-    typeof candidate.transcript === "string" &&
-    candidate.transcript.trim().length > 0 &&
-    candidate.transcript.length <= MAX_NODE_TEXT_CODE_UNITS &&
-    (codePointLimit === undefined || Array.from(candidate.transcript).length <= codePointLimit) &&
+    transcriptionTextFitsCapacity(candidate.transcript, purpose) &&
     (purpose !== "swap-direction" || normalizeTextSwapDirection(candidate.transcript) === candidate.transcript);
 }
 

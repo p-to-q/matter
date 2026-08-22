@@ -2,7 +2,10 @@ import {
   isSpokenTranscriptQuestion,
   normalizeSpokenTranscript,
 } from "./spoken-transcript";
-import { decorateSpokenExpression } from "./expressive-transcript";
+import {
+  MAY_CONTAIN_PROTECTED_TRANSCRIPT_LITERAL,
+  protectedTranscriptLiteralPattern,
+} from "./protected-transcript-literal";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 const LOW_AMBIGUITY_LATIN_FILLER = /(^|[\s,])(?:[Uu]m+|[Uu]h+|[Ee]rm+|[Ee]r+)(?=([\s,.!?]|$))/gu;
@@ -142,9 +145,7 @@ const CJK_DIGITS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 const VERBATIM_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"/gu;
-const PROTECTED_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"|(?:https?:\/\/|[Ww]{3}\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s，。！？；：]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|(?<![\p{L}\p{N}_$])[\p{L}\p{N}$]+(?:_[\p{L}\p{N}$]+)+(?![\p{L}\p{N}_$])|(?<![\p{L}\p{N}_$])[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)+(?![\p{L}\p{N}_$])|\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)\b/gu;
 const MAY_CONTAIN_VERBATIM_LITERAL = /[`“‘「『"]/u;
-const MAY_CONTAIN_PROTECTED_LITERAL = /[`“‘「『"@/\\_.]|--|[A-Za-z]/u;
 
 /**
  * The immediate admission floor changes formatting only. Lexical cleanup,
@@ -166,19 +167,6 @@ export function normalizeAdmittedTranscript(value: string, locale = "und"): stri
  * or semantic rewriting never belongs here; the separate expression planner
  * can only append one closed-set emoji under stricter vetoes.
  */
-export function repairAdmittedTranscript(
-  value: string,
-  locale: string,
-  expressionSeed = "",
-): string {
-  return decorateSpokenExpression({
-    text: repairAdmittedTranscriptWords(value, locale),
-    locale,
-    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
-    sampleSeed: expressionSeed,
-  });
-}
-
 /** The managed repair boundary receives words and punctuation, never a
  * deterministic expression guess. Its accepted result is decorated locally. */
 export function repairAdmittedTranscriptWords(value: string, locale: string): string {
@@ -893,7 +881,8 @@ function spokenDomain(value: string): string {
 }
 
 function withProtectedLiterals(value: string, transform: (text: string) => string): string {
-  return withProtectedPattern(value, PROTECTED_LITERAL, transform);
+  if (!MAY_CONTAIN_PROTECTED_TRANSCRIPT_LITERAL.test(value)) return transform(value);
+  return withProtectedPattern(value, protectedTranscriptLiteralPattern(), transform);
 }
 
 function withProtectedPattern(
@@ -902,8 +891,7 @@ function withProtectedPattern(
   transform: (text: string) => string,
 ): string {
   if (
-    (pattern === VERBATIM_LITERAL && !MAY_CONTAIN_VERBATIM_LITERAL.test(value)) ||
-    (pattern === PROTECTED_LITERAL && !MAY_CONTAIN_PROTECTED_LITERAL.test(value))
+    pattern === VERBATIM_LITERAL && !MAY_CONTAIN_VERBATIM_LITERAL.test(value)
   ) return transform(value);
   const literals: Array<Readonly<{ token: string; literal: string }>> = [];
   let marker = 0xe000;

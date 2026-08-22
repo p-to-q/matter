@@ -3,6 +3,7 @@ import {
   MAX_INQUIRY_QUESTION_CODE_POINTS,
   MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
 } from "./spoken-text-limits";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 export const MAX_RECORDING_MS = 60_000;
 export const MAX_ACCEPTED_RECORDING_MS = 65_000;
@@ -35,6 +36,21 @@ export function maxTranscriptionOutputCodePoints(
   if (purpose === "direction") return MAX_INQUIRY_QUESTION_CODE_POINTS;
   if (purpose === "swap-direction") return MAX_TEXT_SWAP_DIRECTION_CODE_POINTS;
   return undefined;
+}
+
+/** The provider/worker boundary validates raw and final text against the same
+ * purpose-specific capacity before punctuation work or consumer delivery. */
+export function transcriptionTextFitsCapacity(
+  value: unknown,
+  purpose: TranscriptionPurpose,
+): value is string {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.length > MAX_NODE_TEXT_CODE_UNITS
+  ) return false;
+  const codePointLimit = maxTranscriptionOutputCodePoints(purpose);
+  return codePointLimit === undefined || Array.from(value).length <= codePointLimit;
 }
 
 export type TranscriptionRequest = {

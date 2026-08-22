@@ -1,3 +1,8 @@
+import {
+  findProtectedTranscriptLiteralSpans,
+  type ProtectedTranscriptLiteralSpan,
+} from "./protected-transcript-literal";
+
 /**
  * Punctuation is an overlay on recognized words. Acoustic evidence may choose
  * a seam, but this layer never deletes, replaces, or reorders what was heard.
@@ -50,10 +55,6 @@ const JAPANESE_WORD_SEGMENTER = new Intl.Segmenter("ja", { granularity: "word" }
 const LATIN_WORD = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
 const CJK_UNIT = /[\p{Script_Extensions=Han}\p{Script=Hiragana}\p{Script=Katakana}]|[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
 const CJK_ANALYSIS_UNIT = /[\p{Script_Extensions=Han}\p{Script=Hiragana}\p{Script=Katakana}]|(?:(?![\p{Script_Extensions=Han}\p{Script=Hiragana}\p{Script=Katakana}])[\p{L}\p{N}])(?:(?![\p{Script_Extensions=Han}\p{Script=Hiragana}\p{Script=Katakana}])[\p{L}\p{N}'’-])*/gu;
-
-// These are boundaries, not content. A pause inside any of them is ignored.
-const PROTECTED_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"|(?:https?:\/\/|[Ww]{3}\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s，。！？；：]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|(?<![\p{L}\p{N}_$])[\p{L}\p{N}$]+(?:_[\p{L}\p{N}$]+)+(?![\p{L}\p{N}_$])|(?<![\p{L}\p{N}_$])[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)+(?![\p{L}\p{N}_$])/gu;
-const MAY_CONTAIN_PROTECTED_LITERAL = /[`“‘「『"@/\\_.]|--|[A-Za-z]/u;
 
 const DIRECT_ENGLISH_QUESTION = /^(?:(?:can|could|would|should|do|does|did|is|are|was|were|will|have|has|am|can['’]t|couldn['’]t|wouldn['’]t|shouldn['’]t|isn['’]t|aren['’]t|wasn['’]t|weren['’]t|won['’]t|don['’]t|doesn['’]t|didn['’]t|hasn['’]t|haven['’]t)\s+(?:i|we|you|he|she|it|they|this|that|there)\b|(?:why|how|what|where|when|who|which)\s+(?:can|could|would|should|do|does|did|is|are|was|were|will|have|has|can['’]t|couldn['’]t|wouldn['’]t|shouldn['’]t|isn['’]t|aren['’]t|wasn['’]t|weren['’]t|won['’]t|don['’]t|doesn['’]t|didn['’]t|hasn['’]t|haven['’]t)\b|(?:how|what)\s+about\b|why\s+not\b)/iu;
 const DIRECT_CJK_QUESTION = /^(?:请问|請問|为什么|為什麼|怎么|怎麼|如何|谁(?!都|也)|誰(?!都|也)|哪(?:里|裡)(?!都|也)|何时|何時|什么时候|什麼時候)(?=[^，。！？；：、\s])/u;
@@ -168,23 +169,25 @@ export function isSpokenTranscriptQuestion(text: string, locale: string): boolea
 }
 
 function normalizePunctuationSpacing(text: string, locale: string): string {
-  let output = mapUnprotected(text, (part) =>
-    part.replace(/\s+([，。！？、,.!?;；:：])/gu, "$1"));
-  output = mapUnprotected(output, (part) => part.replace(/([，、；：])\s+/gu, "$1"));
   // ASCII separators keep Latin spacing even inside a CJK-primary utterance;
   // this is what lets each supported locale safely host an English clause.
-  output = mapUnprotected(output, (part) =>
-    part.replace(/[,;:](?=\S)/gu, (mark, offset: number, whole: string) => {
-      const left = whole[offset - 1] ?? "";
-      const right = whole[offset + 1] ?? "";
-      if (EXISTING_MARK.test(right)) return mark;
-      return (mark === "," || mark === ":") && /\p{Nd}/u.test(left) && /\p{Nd}/u.test(right)
-        ? mark
-        : `${mark} `;
-    }));
+  const outputSpaced = mapUnprotected(text, findProtectedSpans(text), (part) =>
+    part
+      .replace(/\s+([，。！？、,.!?;；:：])/gu, "$1")
+      .replace(/([，、；：])\s+/gu, "$1")
+      .replace(/[,;:](?=\S)/gu, (mark, offset: number, whole: string) => {
+        const left = whole[offset - 1] ?? "";
+        const right = whole[offset + 1] ?? "";
+        if (EXISTING_MARK.test(right)) return mark;
+        return (mark === "," || mark === ":") && /\p{Nd}/u.test(left) && /\p{Nd}/u.test(right)
+          ? mark
+          : `${mark} `;
+      }));
+  const protectedSpans = findProtectedSpans(outputSpaced);
+  let output = outputSpaced;
   const trailingIndex = output.length - 1;
   if (
-    !isProtectedIndex(findProtectedSpans(output), trailingIndex) &&
+    !isProtectedIndex(protectedSpans, trailingIndex) &&
     (output.endsWith("，") || output.endsWith(",") || output.endsWith("、"))
   ) {
     output = `${output.slice(0, -1).trimEnd()}${periodFor(locale, output)}`;
@@ -192,8 +195,11 @@ function normalizePunctuationSpacing(text: string, locale: string): string {
   return output;
 }
 
-function mapUnprotected(text: string, transform: (part: string) => string): string {
-  const spans = findProtectedSpans(text);
+function mapUnprotected(
+  text: string,
+  spans: readonly ProtectedTranscriptLiteralSpan[],
+  transform: (part: string) => string,
+): string {
   if (spans.length === 0) return transform(text);
   const parts: string[] = [];
   let cursor = 0;
@@ -1164,12 +1170,7 @@ function isGermanQuestion(candidate: string): boolean {
   return !/^was für\b/iu.test(candidate) && DIRECT_GERMAN_QUESTION.test(candidate);
 }
 
-function findProtectedSpans(text: string): readonly (readonly [number, number])[] {
-  if (!MAY_CONTAIN_PROTECTED_LITERAL.test(text)) return Object.freeze([]);
-  PROTECTED_LITERAL.lastIndex = 0;
-  return Object.freeze(Array.from(text.matchAll(PROTECTED_LITERAL), (match) =>
-    Object.freeze([match.index, match.index + match[0].length] as const)));
-}
+const findProtectedSpans = findProtectedTranscriptLiteralSpans;
 
 function isProtectedBoundary(spans: readonly (readonly [number, number])[], at: number): boolean {
   return spans.some(([start, end]) => at > start && at < end);

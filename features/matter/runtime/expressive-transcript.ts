@@ -1,8 +1,12 @@
 import { isSpokenTranscriptQuestion } from "./spoken-transcript";
+import { protectedTranscriptLiteralPattern } from "./protected-transcript-literal";
 
-export type SpokenExpressionEmoji =
-  | "😄" | "😠" | "🎉" | "😢"
-  | "✈️" | "☕" | "🎂" | "🚀" | "🎵" | "☀️" | "🌙";
+const SPOKEN_EXPRESSION_EMOJI = Object.freeze([
+  "😄", "😠", "🎉", "😢",
+  "✈️", "☕", "🎂", "🚀", "🎵", "☀️", "🌙",
+] as const);
+
+export type SpokenExpressionEmoji = typeof SPOKEN_EXPRESSION_EMOJI[number];
 
 export type ExpressionInsertion = Readonly<{
   atCodeUnit: number;
@@ -12,7 +16,6 @@ export type ExpressionInsertion = Readonly<{
 
 type Affect = "joy" | "anger" | "celebration" | "sadness";
 
-const PROTECTED_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"|(?:https?:\/\/|[Ww]{3}\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s，。！？；：]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|(?<![\p{L}\p{N}_$])[\p{L}\p{N}$]+(?:_[\p{L}\p{N}$]+)+(?![\p{L}\p{N}_$])|(?<![\p{L}\p{N}_$])[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)+(?![\p{L}\p{N}_$])/gu;
 const EXISTING_EMOJI = /(?:\p{Extended_Pictographic}|\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3)/u;
 const CHINESE_WORD_SEGMENTER = new Intl.Segmenter("zh", { granularity: "word" });
 const JAPANESE_WORD_SEGMENTER = new Intl.Segmenter("ja", { granularity: "word" });
@@ -170,8 +173,7 @@ export function canonicalSpokenExpressionBase(input: Readonly<{
   maxOutputCodeUnits?: number;
   sampleSeed?: string;
 }>): string | undefined {
-  const known = ["😄", "😠", "🎉", "😢", "✈️", "☕", "🎂", "🚀", "🎵", "☀️", "🌙"] as const;
-  for (const emoji of known) {
+  for (const emoji of SPOKEN_EXPRESSION_EMOJI) {
     let at = input.text.indexOf(emoji);
     while (at >= 0) {
       const base = `${input.text.slice(0, at)}${input.text.slice(at + emoji.length)}`;
@@ -215,6 +217,7 @@ function sampleEntityInsertion(
     emoji: SpokenExpressionEmoji;
     sample: number;
   }>> = [];
+  const cjkWordSpans = new Map<"zh" | "ja", ReadonlySet<string>>();
   for (const rule of ENTITY_RULES) {
     if (!entityLanguageEnabled(rule.language, locale, inferredLanguage)) continue;
     rule.pattern.lastIndex = 0;
@@ -223,7 +226,7 @@ function sampleEntityInsertion(
       if (start === undefined) continue;
       const end = start + match[0].length;
       if (
-        !isEntityWord(text, start, end, rule.language) ||
+        !isEntityWord(text, start, end, rule.language, cjkWordSpans) ||
         hasAdjacentLiteralJoin(text, start, end) ||
         hasEntityCompoundCollision(text, end, rule.id)
       ) continue;
@@ -264,6 +267,7 @@ function isEntityWord(
   start: number,
   end: number,
   language: EntityRule["language"],
+  cjkWordSpans: Map<"zh" | "ja", ReadonlySet<string>>,
 ): boolean {
   if (language === "en" || language === "de") {
     // A CJK/Latin script seam is a valid code-switch boundary even without a
@@ -272,11 +276,14 @@ function isEntityWord(
     return !/[\p{Script=Latin}\p{N}'’-]/u.test(text[start - 1] ?? "") &&
       !/[\p{Script=Latin}\p{N}'’-]/u.test(text[end] ?? "");
   }
-  const segmenter = language === "ja" ? JAPANESE_WORD_SEGMENTER : CHINESE_WORD_SEGMENTER;
-  for (const segment of segmenter.segment(text)) {
-    if (segment.index === start && segment.index + segment.segment.length === end) return true;
+  let spans = cjkWordSpans.get(language);
+  if (spans === undefined) {
+    const segmenter = language === "ja" ? JAPANESE_WORD_SEGMENTER : CHINESE_WORD_SEGMENTER;
+    spans = new Set(Array.from(segmenter.segment(text), (segment) =>
+      `${segment.index}:${segment.index + segment.segment.length}`));
+    cjkWordSpans.set(language, spans);
   }
-  return false;
+  return spans.has(`${start}:${end}`);
 }
 
 function hasAdjacentLiteralJoin(text: string, start: number, end: number): boolean {
@@ -318,8 +325,7 @@ function collectAffects(
 }
 
 function maskProtected(text: string): string {
-  PROTECTED_LITERAL.lastIndex = 0;
-  return text.replace(PROTECTED_LITERAL, (literal) => " ".repeat(literal.length));
+  return text.replace(protectedTranscriptLiteralPattern(), (literal) => " ".repeat(literal.length));
 }
 
 function emojiFor(affect: Affect): SpokenExpressionEmoji {

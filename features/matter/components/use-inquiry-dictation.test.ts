@@ -15,6 +15,18 @@ describe("settleInquiryDictationRepair", () => {
     expect(settleInquiryDictationRepair(baseline, `${baseline}.`)).toBe(baseline);
   });
 
+  it("accepts a repaired draft at the exact question capacity", () => {
+    const candidate = "a".repeat(MAX_INQUIRY_QUESTION_CODE_POINTS);
+    expect(settleInquiryDictationRepair("baseline", candidate)).toBe(candidate);
+  });
+
+  it.each(["", "   ", "\n\t"])(
+    "falls back whole from an empty repaired draft: %j",
+    (candidate) => {
+      expect(settleInquiryDictationRepair("baseline", candidate)).toBe("baseline");
+    },
+  );
+
   it.each([
     "We finally did it 🎉.",
     "Take the flight ✈️.",

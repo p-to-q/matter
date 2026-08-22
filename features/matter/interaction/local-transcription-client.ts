@@ -1,5 +1,8 @@
 import { subscribePageSuspension } from "./page-suspension";
-import type { TranscriptionPurpose } from "../protocol/transcription-contract";
+import {
+  transcriptionTextFitsCapacity,
+  type TranscriptionPurpose,
+} from "../protocol/transcription-contract";
 
 const WHISPER_SAMPLE_RATE = 16_000;
 const LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000;
@@ -20,6 +23,7 @@ type Pending = {
   dispose: () => void;
   worker: Worker;
   started: boolean;
+  purpose: TranscriptionPurpose;
 };
 
 let worker: Worker | null = null;
@@ -105,7 +109,14 @@ export async function transcribeLocally(input: Readonly<{
       window.clearTimeout(timeout);
       input.signal.removeEventListener("abort", abort);
     };
-    pending.set(id, { resolve, reject, dispose, worker: target, started: false });
+    pending.set(id, {
+      resolve,
+      reject,
+      dispose,
+      worker: target,
+      started: false,
+      purpose: input.purpose,
+    });
     input.signal.addEventListener("abort", abort, { once: true });
     if (input.signal.aborted) {
       abort();
@@ -172,6 +183,10 @@ function localTranscriptionWorker(): Worker {
     if (request === undefined || request.worker !== target) return;
     pending.delete(event.data.id);
     request.dispose();
+    if (event.data.status === "no-speech") {
+      request.reject(new LocalTranscriptionError("no-speech"));
+      return;
+    }
     if (event.data.status === "failed") {
       request.reject(new LocalTranscriptionError("failed"));
       // A failed pipeline load leaves Transformers.js holding a rejected
@@ -182,9 +197,18 @@ function localTranscriptionWorker(): Worker {
       retireWorker(target, new LocalTranscriptionError("failed"));
       return;
     }
-    const text = event.data.text.trim();
-    if (text.length === 0) request.reject(new LocalTranscriptionError("no-speech"));
-    else request.resolve(text);
+    const workerText = event.data.text;
+    const text = workerText.trim();
+    if (text.length === 0) {
+      request.reject(new LocalTranscriptionError("no-speech"));
+    } else if (!transcriptionTextFitsCapacity(workerText, request.purpose)) {
+      request.reject(new LocalTranscriptionError("failed"));
+      // A worker that violates its result contract cannot safely carry a later
+      // request, even if the underlying model session otherwise looks usable.
+      retireWorker(target, new LocalTranscriptionError("failed"));
+    } else {
+      request.resolve(text);
+    }
   });
   worker.addEventListener("error", () => {
     retireWorker(target, new LocalTranscriptionError("failed"));
@@ -354,6 +378,7 @@ function isWorkerResponse(value: unknown): value is
   | Readonly<{ status: "ready" }>
   | Readonly<{ id: string; status: "started" }>
   | Readonly<{ id: string; status: "cancelled" }>
+  | Readonly<{ id: string; status: "no-speech" }>
   | Readonly<{ id: string; status: "failed" }>
   | Readonly<{ id: string; status: "complete"; text: string }> {
   if (typeof value !== "object" || value === null) return false;
@@ -362,6 +387,7 @@ function isWorkerResponse(value: unknown): value is
   return typeof candidate.id === "string" && (
     candidate.status === "started" ||
     candidate.status === "cancelled" ||
+    candidate.status === "no-speech" ||
     candidate.status === "failed" ||
     (candidate.status === "complete" && typeof candidate.text === "string")
   );

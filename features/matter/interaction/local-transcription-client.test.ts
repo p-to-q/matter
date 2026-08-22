@@ -361,6 +361,64 @@ describe("local transcription audio projection", () => {
     await expect(retry).resolves.toBe("重试成功。");
   });
 
+  it("reports no speech without retiring the warm model lease", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const silent = transcribeLocally(request(new AbortController().signal, "silent"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[0]?.emit({ id: "silent:1:1", status: "no-speech" });
+
+    await expect(silent).rejects.toEqual(new LocalTranscriptionError("no-speech"));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+
+    const retry = transcribeLocally(request(new AbortController().signal, "after-silence"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(2));
+    workers[0]?.emit({
+      id: "after-silence:1:2",
+      status: "complete",
+      text: "这一次听清楚了。",
+    });
+    await expect(retry).resolves.toBe("这一次听清楚了。");
+    expect(workers).toHaveLength(1);
+  });
+
+  it("retires a worker that returns text outside the request capacity", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const pending = transcribeLocally(request(new AbortController().signal, "oversized"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[0]?.emit({
+      id: "oversized:1:1",
+      status: "complete",
+      text: "念".repeat(2_001),
+    });
+
+    await expect(pending).rejects.toEqual(new LocalTranscriptionError("failed"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+  });
+
   it("skips a queued cancellation without interrupting the active inference", async () => {
     const workers: FakeWorker[] = [];
     vi.stubGlobal("window", {

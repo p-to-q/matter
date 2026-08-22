@@ -9,6 +9,7 @@ import {
 import { deriveAcousticPauseEvidence } from "./speech-pause-evidence";
 import {
   maxTranscriptionOutputCodePoints,
+  transcriptionTextFitsCapacity,
   type TranscriptionPurpose,
 } from "../protocol/transcription-contract";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
@@ -75,6 +76,19 @@ async function transcribe(request: TranscriptionRequest): Promise<void> {
       return;
     }
     failureStage = "punctuation";
+    // Silence is a valid recognition outcome, not a poisoned model lease. Keep
+    // it distinct from malformed or oversized provider output so the caller
+    // can preserve the warm worker and give accurate retry feedback.
+    if (typeof result.text === "string" && result.text.trim().length === 0) {
+      scope.postMessage({ id: request.id, status: "no-speech" });
+      return;
+    }
+    // Reject an invalid model result before pause derivation can scan it. The
+    // normalized result is checked again because formatting may only spend the
+    // same purpose-specific capacity; it cannot widen the worker contract.
+    if (!transcriptionTextFitsCapacity(result.text, request.purpose)) {
+      throw new Error("Invalid local transcription result.");
+    }
     const text = normalizeSpokenTranscript({
       text: result.text,
       locale: request.locale,
@@ -87,6 +101,9 @@ async function transcribe(request: TranscriptionRequest): Promise<void> {
       maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
       maxOutputCodePoints: maxTranscriptionOutputCodePoints(request.purpose),
     });
+    if (!transcriptionTextFitsCapacity(text, request.purpose)) {
+      throw new Error("Invalid normalized transcription result.");
+    }
     scope.postMessage({ id: request.id, status: "complete", text });
   } catch {
     // Model, network, and runtime details stay inside the worker boundary.

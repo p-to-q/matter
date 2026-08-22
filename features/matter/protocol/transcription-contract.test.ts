@@ -5,6 +5,7 @@ import {
   baseAudioMimeType,
   isAcceptedAudioType,
   maxTranscriptionOutputCodePoints,
+  transcriptionTextFitsCapacity,
 } from "./transcription-contract";
 
 describe("audio type acceptance", () => {
@@ -30,5 +31,13 @@ describe("audio type acceptance", () => {
     expect(maxTranscriptionOutputCodePoints("admission")).toBeUndefined();
     expect(maxTranscriptionOutputCodePoints("direction")).toBe(500);
     expect(maxTranscriptionOutputCodePoints("swap-direction")).toBe(240);
+  });
+
+  it("applies the same raw and final capacity to every transcription purpose", () => {
+    expect(transcriptionTextFitsCapacity("a".repeat(2_000), "admission")).toBe(true);
+    expect(transcriptionTextFitsCapacity("a".repeat(2_001), "admission")).toBe(false);
+    expect(transcriptionTextFitsCapacity("🚀".repeat(500), "direction")).toBe(true);
+    expect(transcriptionTextFitsCapacity("🚀".repeat(501), "direction")).toBe(false);
+    expect(transcriptionTextFitsCapacity("   ", "swap-direction")).toBe(false);
   });
 });

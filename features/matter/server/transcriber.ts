@@ -8,6 +8,7 @@ import {
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
   hasPresentedEmoji,
   maxTranscriptionOutputCodePoints,
+  transcriptionTextFitsCapacity,
 } from "../protocol/transcription-contract";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import {
@@ -150,7 +151,7 @@ function validateTranscript(
       request.attempt,
     );
   }
-  if (value.length > MAX_NODE_TEXT_CODE_UNITS) {
+  if (!transcriptionTextFitsCapacity(value, request.purpose)) {
     throw providerResponseError(request);
   }
   if (hasPresentedEmoji(value)) throw providerResponseError(request);
@@ -161,17 +162,13 @@ function validateTranscript(
     maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
     maxOutputCodePoints: maxTranscriptionOutputCodePoints(request.purpose),
   });
-  const codePointLimit = maxTranscriptionOutputCodePoints(request.purpose);
-  if (codePointLimit !== undefined && Array.from(punctuated).length > codePointLimit) {
+  if (!transcriptionTextFitsCapacity(punctuated, request.purpose)) {
     throw providerResponseError(request);
   }
   if (request.purpose === "swap-direction") {
     const direction = normalizeTextSwapDirection(punctuated);
     if (direction === null) throw providerResponseError(request);
     return direction;
-  }
-  if (punctuated.length > MAX_NODE_TEXT_CODE_UNITS) {
-    throw providerResponseError(request);
   }
   return punctuated;
 }
