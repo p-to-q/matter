@@ -21,10 +21,14 @@ function parseContentType(value: string | null): ParsedContentType | null {
 
   let boundary: string | undefined;
   for (const parameter of parts.slice(1)) {
-    const match = /^\s*([!#$%&'*+\-.^_`|~0-9A-Za-z]+)\s*=\s*(.+?)\s*$/u.exec(parameter);
+    const match = /^[ \t]*([!#$%&'*+\-.^_`|~0-9A-Za-z]+)[ \t]*=([^\r\n]*)$/u.exec(parameter);
     if (match === null) return null;
     const name = match[1]!.toLowerCase();
-    const rawValue = match[2]!;
+    // HTTP optional whitespace is SP / HTAB only. JavaScript trim() also
+    // removes vertical and Unicode whitespace, which would launder malformed
+    // parameter values into valid tokens at the request boundary.
+    const rawValue = match[2]!.replace(/^[ \t]+|[ \t]+$/gu, "");
+    if (rawValue.length === 0) return null;
     const parameterValue = parseParameterValue(rawValue);
     if (parameterValue === null) return null;
     if (name === "boundary") {

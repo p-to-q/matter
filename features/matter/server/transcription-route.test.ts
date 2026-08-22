@@ -124,6 +124,50 @@ describe("Matter transcription route", () => {
     });
   });
 
+  it("keeps temporary rate admission distinct from browser incompatibility", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+      MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+      NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: "true",
+    };
+    for (let index = 0; index < 12; index += 1) {
+      const response = await POST(productionRequestFrom(validForm()));
+      expect(response.status).toBe(200);
+    }
+
+    const limited = await POST(productionRequestFrom(validForm()));
+
+    expect(limited.status).toBe(429);
+    await expect(limited.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_FAILED", retryable: true },
+    });
+  });
+
+  it("keeps temporary busy admission distinct from browser incompatibility", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+    };
+    const controllers = Array.from({ length: 3 }, () => new AbortController());
+    const held = controllers.map((controller, index) => POST(requestFromStream(
+      new ReadableStream<Uint8Array>(),
+      productionHeaders(`192.0.2.${index + 1}`),
+      controller.signal,
+    )));
+
+    const busy = await POST(productionRequestFrom(validForm(), "192.0.2.9"));
+
+    expect(busy.status).toBe(503);
+    await expect(busy.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_FAILED", retryable: true },
+    });
+    controllers.forEach((controller) => controller.abort());
+    await Promise.all(held);
+  });
+
   it.each([
     "multipart/form-data",
     "multipart/form-data; boundary=",
@@ -395,6 +439,22 @@ function validForm(): FormData {
 
 function requestFrom(form: FormData): Request {
   return new Request("http://localhost/api/transcribe", { method: "POST", body: form });
+}
+
+function productionRequestFrom(form: FormData, address = "192.0.2.1"): Request {
+  return new Request("https://matter.ptoq.io/api/transcribe", {
+    method: "POST",
+    headers: productionHeaders(address),
+    body: form,
+  });
+}
+
+function productionHeaders(address: string): Record<string, string> {
+  return {
+    origin: "https://matter.ptoq.io",
+    "sec-fetch-site": "same-origin",
+    "x-vercel-forwarded-for": address,
+  };
 }
 
 function requestFromStream(

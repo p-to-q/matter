@@ -3,12 +3,14 @@
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet.
 
-Release truth is split explicitly: `v0.2.0-preview.39` / `c347f78` is the
-currently deployed source. `0.2.0-preview.40` is the later source candidate; its
-shared four-route admission perimeter, STT punctuation/expression work, and
-corrected public discovery copy are not live until an exact Preview.40 SHA is
-reviewed and deployed. A healthy Preview.39 origin must not be cited as proof of
-those candidate changes.
+Preview.40 first reached Production as merge commit `53f51a2`; that receipt
+proved the shared four-route admission perimeter, STT punctuation/expression
+work, and corrected public discovery copy. The later review-fix source is
+carried by PR #70. Its head changes whenever a finding is fixed, and merging may
+create another SHA, so the first Preview.40 receipt must not be cited as proof
+of those review fixes: the final release identity is the exact merge commit
+with a successful Production deployment and the immutable
+`v0.2.0-preview.40` tag.
 
 ## Current deployable slice
 
@@ -68,14 +70,15 @@ re-enters the same planner instead of maintaining a drifting second connector
 grammar.
 
 Expression remains a separate, later, pointer-undoable repair. It is disabled
-for Ask Matter and spoken tool directions. A closed semantic set may append one
-affect symbol only after text evidence passes its vetoes; a closed set of
-ordinary entity nouns may receive one token-tail symbol on a stable 24 percent
-admission sample. The identity-derived sample is repeatable across exact store
-revalidation, never `Math.random()`, so the candidate cannot disagree with the
-tree command that commits it. Missing identity, protected literals, questions,
-negation, reported speech, capacity pressure, existing symbols, and unlisted
-nouns fail closed.
+for Ask Matter and spoken tool directions. Each repair may take at most one
+decoration path, never both: a closed semantic set may append one affect symbol
+only after text evidence passes its vetoes, or a closed set of ordinary entity
+nouns may receive one token-tail symbol on a stable 24 percent admission sample.
+The identity-derived sample is repeatable across exact store revalidation,
+never `Math.random()`, so the candidate cannot disagree with the tree command
+that commits it. Missing identity, protected literals, questions, negation,
+reported speech, capacity pressure, existing symbols, and unlisted nouns fail
+closed.
 
 The voice lifecycle also becomes honest and recoverable. Ask Matter and material
 admission can cancel a long transcription from the same microphone control;
@@ -105,20 +108,20 @@ the fixed model revision.
 ```text
 source proof           npm run check exited 0 on the versioned candidate:
                        doctor 21; 42 linked Markdown documents; Node 60/60;
-                       architecture 394 files across 7 layers with no outward
-                       edge, provider leak, or cycle; Vitest 154 files passed
-                       and 2 skipped, 1,767 cases passed and 4 skipped;
+                       architecture 396 files across 7 layers with no outward
+                       edge, provider leak, or cycle; Vitest 155 files passed
+                       and 2 skipped, 1,791 cases passed and 4 skipped;
                        typegen, typecheck, lint, and the Next 16.3 webpack
                        production build of all 21 pages/routes passed
 browser proof          full Chromium: 95 passed, 15 explicitly capability-
                        gated skipped, 0 failed, 110 total
-speech proof           gated real-worker Chromium receipt: 1/1 in 33.1 s;
+speech proof           gated real-worker Chromium receipt: 1/1 in 34.9 s;
                        generated Mandarin WAV stayed under /private/tmp;
                        worker started and completed, expected lexical anchors
                        arrived with at least two internal commas, one terminal
                        full stop and one later expression symbol; zero server
                        transcription requests and zero browser errors
-runtime proof          static root; initial 1,171.8 KiB raw / 371.0 KiB gzip;
+runtime proof          static root; initial 1,171.0 KiB raw / 371.1 KiB gzip;
                        one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
                        visual media 350.8 KiB; 0 repository-only trace files
 punctuation bound      dense 2,000-code-unit / 333-marker corpus median:
@@ -127,9 +130,10 @@ punctuation bound      dense 2,000-code-unit / 333-marker corpus median:
 production boundary    fresh Preview.40-only owner exception; label, repair,
                        and inquiry stay live; Elastic and Text Swap stay off;
                        issues #34 and #68 remain open
-publication state      source candidate only until an exact SHA passes GitHub
-                       CI, protected Vercel Preview, Production, and origin
-                       receipts; npm publication is not authorized
+publication state      first Preview.40 Production receipt complete; review
+                       fixes require their own exact merge-SHA Production and
+                       origin receipts before immutable tag/release creation;
+                       npm publication is not authorized
 ```
 
 The versioned local candidate is a source-level **GO**. Production promotion is

@@ -81,8 +81,12 @@ describe("VoiceLeaseCoordinator", () => {
     const coordinator = new VoiceLeaseCoordinator();
     const raw = new ControlledVoice();
     const port = coordinator.coordinate(raw);
-    const starting = port.start(FIRST, { maxTranscriptCodePoints: 240 });
+    const starting = port.start(FIRST, {
+      locale: "zh-TW",
+      maxTranscriptCodePoints: 240,
+    });
 
+    expect(raw.callbacks.locale).toBe("zh-TW");
     expect(raw.callbacks.maxTranscriptCodePoints).toBe(240);
     raw.grant();
     await starting;

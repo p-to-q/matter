@@ -110,6 +110,17 @@ describe("spoken expression decoration", () => {
     expect(decorated).toBeLessThan(630);
   });
 
+  it("keeps dense maximum-length CJK entity matching bounded", { timeout: 2_500 }, () => {
+    const text = "飞机".repeat(1_000);
+    const decorated = decorateSpokenExpression({
+      text,
+      locale: "zh-CN",
+      sampleSeed: "dense-1",
+    });
+    expect(decorated.length).toBe(text.length + "✈️".length);
+    expect(decorated.match(/✈️/gu)).toHaveLength(1);
+  });
+
   it("requires an admission identity before sampling an ordinary noun", () => {
     for (const [locale, text] of [
       ["zh-CN", "我们坐飞机去上海。"],

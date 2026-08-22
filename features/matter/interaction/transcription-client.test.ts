@@ -2,9 +2,30 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_TRANSCRIPTION_RESPONSE_BYTES } from "../protocol/transcription-contract";
 import { requestTranscription, TranscriptionClientError } from "./transcription-client";
 
+const localTranscription = vi.hoisted(() => ({ transcribe: vi.fn() }));
+
+vi.mock("./local-transcription-client", () => ({
+  transcribeLocally: localTranscription.transcribe,
+  LocalTranscriptionError: class LocalTranscriptionError extends Error {
+    constructor(readonly reason: string) {
+      super(reason);
+    }
+  },
+}));
+
+const originalLocalTranscriptionFlag =
+  process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED;
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  localTranscription.transcribe.mockReset();
+  if (originalLocalTranscriptionFlag === undefined) {
+    delete process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED;
+  } else {
+    process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED =
+      originalLocalTranscriptionFlag;
+  }
 });
 
 describe("requestTranscription", () => {
@@ -103,6 +124,21 @@ describe("requestTranscription", () => {
     await expect(request({ purpose: "direction", locale: "en-US" }))
       .rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
   });
+
+  it.each([
+    ["admission", "念".repeat(2_001)],
+    ["direction", "𠮷".repeat(501)],
+  ] as const)(
+    "rejects oversized raw local %s text before a second normalization pass",
+    async (purpose, transcript) => {
+      process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED = "true";
+      localTranscription.transcribe.mockResolvedValue(transcript);
+
+      await expect(request({ purpose })).rejects.toMatchObject({
+        code: "INVALID_PROVIDER_RESPONSE",
+      });
+    },
+  );
 
   it("rejects unknown error codes and extra error fields", async () => {
     for (const error of [

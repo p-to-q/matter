@@ -1,16 +1,19 @@
 # Preview.40 deployment-owner handoff
 
-Status: `v0.2.0-preview.39` remains deployed at `matter.ptoq.io` while
-`0.2.0-preview.40` is the reviewed source candidate. Labels, transcript repair,
-and Ask Matter stay live; Elastic and Text Swap must remain unavailable. This
-is an operator checklist, not a place to record token values.
+Status: Preview.40 first reached `matter.ptoq.io` as merge commit `53f51a2`.
+That production receipt includes the four-route process-local admission
+perimeter, spoken punctuation/expression work, and corrected `llms.txt` product
+grammar. Labels, transcript repair, and Ask Matter stay live; Elastic and Text
+Swap must remain unavailable. This is an operator checklist, not a place to
+record token values.
 
-The deployed tag is still commit `c347f78`. It does **not** contain the
-Preview.40 candidate's four-route process-local admission perimeter, spoken
-punctuation/expression work, or corrected `llms.txt` product grammar. Those
-remain candidate changes until an exact Preview.40 SHA is reviewed and
-deployed. The source ceilings below describe that candidate after deployment;
-they are not evidence about the currently running Preview.39.
+The later review-fix source is carried by PR #70. Its head may change as a
+finding is fixed, and a merge may create another commit, so neither a prior PR
+head nor the first Preview.40 Production receipt proves the final release.
+Require a successful Production deployment for the resulting exact `main` SHA
+before creating the immutable `v0.2.0-preview.40` tag. The source ceilings below
+are active only per warm instance and are not evidence of distributed edge
+control.
 
 ## Owner boundary
 
@@ -63,10 +66,14 @@ The release sequence is atomic at one candidate commit:
    SHA, then run `npm run check:deployment -- https://matter.ptoq.io --wait=120`.
    Complete the manual voice and model-surface receipts below before saying the
    candidate is live.
-5. Only after the production receipt succeeds, create an annotated immutable
-   `v0.2.0-preview.N` tag on that exact production SHA, push the tag, and create
-   a GitHub release with `--prerelease --verify-tag`. npm publication remains
-   unauthorized.
+5. Only after the production receipt succeeds, require the repository's
+   Immutable Releases setting to report `enabled: true`. Create the annotated
+   `v0.2.0-preview.40` tag on that exact production SHA, push it, and verify the
+   remote annotated tag peels to the same SHA. Create the prerelease as a draft,
+   publish it only after its metadata is complete, then require
+   `gh release verify v0.2.0-preview.40` to validate GitHub's release
+   attestation. Immutable Releases prevents the published tag from being moved
+   or deleted while the release exists. npm publication remains unauthorized.
 
 The GitHub deployment API is the neutral SHA-to-Vercel receipt when dashboard
 access is unavailable: list deployments filtered by the exact SHA, require one

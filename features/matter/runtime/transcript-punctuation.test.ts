@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeAdmittedTranscript,
-  repairAdmittedTranscript,
   repairAdmittedTranscriptWords,
 } from "./transcript-punctuation";
+import { decorateSpokenExpression } from "./expressive-transcript";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+
+function repairAdmittedTranscript(value: string, locale: string, expressionSeed = ""): string {
+  return decorateSpokenExpression({
+    text: repairAdmittedTranscriptWords(value, locale),
+    locale,
+    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+    sampleSeed: expressionSeed,
+  });
+}
 
 describe("normalizeAdmittedTranscript", () => {
   it("publishes a formatting-only language-appropriate floor", () => {
@@ -437,8 +447,10 @@ describe("repairAdmittedTranscript", () => {
   it("keeps dense maximum-length late repair bounded", { timeout: 2_500 }, () => {
     const text = "我们然后".repeat(500);
     const repaired = repairAdmittedTranscriptWords(text, "zh-CN");
+    let settled = repaired;
     for (let pass = 0; pass < 4; pass += 1) {
-      expect(repairAdmittedTranscriptWords(text, "zh-CN")).toBe(repaired);
+      settled = repairAdmittedTranscriptWords(settled, "zh-CN");
+      expect(settled).toBe(repaired);
     }
   });
 

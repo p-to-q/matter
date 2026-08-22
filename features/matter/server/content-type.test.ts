@@ -17,6 +17,12 @@ describe("strict request Content-Type parsing", () => {
     "text/application/json",
     "application/json;",
     "application/json; charset=",
+    "application/json; charset=\vutf-8",
+    "application/json; charset=utf-8\v",
+    "application/json; charset=\futf-8",
+    "application/json; charset=utf-8\f",
+    "application/json; charset=\u00a0utf-8",
+    "application/json; charset=utf-8\u00a0",
   ])("rejects a non-exact or malformed JSON MIME type: %s", (value) => {
     expect(isJsonContentType(value)).toBe(false);
   });
@@ -24,6 +30,8 @@ describe("strict request Content-Type parsing", () => {
   it.each([
     "multipart/form-data; boundary=MatterBoundaryAaZz",
     "Multipart/Form-Data; charset=utf-8; boundary=\"MatterBoundaryAaZz\"",
+    `multipart/form-data; boundary=${"x".repeat(70)}`,
+    "multipart/form-data; boundary=\"Matter Boundary AaZz\"",
   ])("accepts multipart only with a non-empty boundary: %s", (value) => {
     expect(hasMultipartFormDataBoundary(value)).toBe(true);
   });

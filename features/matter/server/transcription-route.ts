@@ -342,7 +342,7 @@ function transcriptionAdmissionError(reason: "ORIGIN" | "RATE" | "BUSY"): Transc
     return invalidRequest("This recording origin is not allowed.", 403);
   }
   return new TranscriptionServerError(
-    "TRANSCRIPTION_UNAVAILABLE",
+    "TRANSCRIPTION_FAILED",
     reason === "RATE" ? "Please wait before recording again." : "Matter is busy. Please try again shortly.",
     true,
     reason === "RATE" ? 429 : 503,

@@ -373,6 +373,16 @@ describe("spoken transcript punctuation", () => {
         source: "word-timestamp",
       }],
     })).toBe(`${literal}.`);
+    const identifier = "we should parseURL then retry carefully";
+    expect(normalizeSpokenTranscript({
+      text: identifier,
+      locale: "en-US",
+      pauses: [{
+        afterCodeUnit: identifier.indexOf("URL"),
+        durationMs: 2_000,
+        source: "word-timestamp",
+      }],
+    })).toBe(`${identifier}.`);
     expect(normalizeSpokenTranscript({
       text: "open https://example.com/a,b now",
       locale: "en-US",

@@ -1,5 +1,6 @@
 import {
   VoiceError,
+  voiceCapture,
   type VoiceCallbacks,
   type VoiceOperation,
   type VoicePort,
@@ -139,8 +140,7 @@ export class VoiceLeaseCoordinator {
 
   private guardCallbacks(lease: Lease): VoiceCallbacks {
     return Object.freeze({
-      locale: lease.callbacks.locale,
-      maxTranscriptCodePoints: lease.callbacks.maxTranscriptCodePoints,
+      ...voiceCapture(lease.callbacks),
       onSample: (sample) => {
         if (this.owns(lease)) safelyNotify(() => lease.callbacks.onSample?.(sample));
       },

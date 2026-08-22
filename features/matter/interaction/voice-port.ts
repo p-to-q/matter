@@ -55,15 +55,27 @@ export type VoicePort = Readonly<{
   cancel(operation: VoiceOperation): void;
 }>;
 
-export type VoiceCallbacks = Readonly<{
-  onSample?: (sample: VoiceSample) => void;
-  onTranscript?: (transcript: string) => void;
+export type VoiceCapture = Readonly<{
   locale?: string;
   /** A narrower consumer may reserve its own final-transcript capacity. */
   maxTranscriptCodePoints?: number;
+}>;
+
+export type VoiceCallbacks = VoiceCapture & Readonly<{
+  onSample?: (sample: VoiceSample) => void;
+  onTranscript?: (transcript: string) => void;
   onDurationLimit?: (operation: VoiceOperation) => void;
   onRecording?: (recording: VoiceRecording) => void;
   onError?: (error: VoiceError) => void;
   /** A different Matter voice lifecycle acquired the shared browser lease. */
   onOwnershipRevoked?: (operation: VoiceOperation) => void;
 }>;
+
+/** Keep non-observer capture configuration together when a Voice adapter wraps
+ * callbacks; late-event guards must not silently drop a consumer's limits. */
+export function voiceCapture(callbacks: VoiceCapture): VoiceCapture {
+  return Object.freeze({
+    locale: callbacks.locale,
+    maxTranscriptCodePoints: callbacks.maxTranscriptCodePoints,
+  });
+}
