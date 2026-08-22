@@ -1,11 +1,25 @@
 import { pipeline } from "@huggingface/transformers";
-import { LOCAL_TRANSCRIPTION_MODEL } from "./local-transcription-model";
+import {
+  LOCAL_TRANSCRIPTION_MODEL,
+  LOCAL_TRANSCRIPTION_TIMESTAMP_MODE,
+} from "./local-transcription-model";
+import {
+  normalizeSpokenTranscript,
+} from "../runtime/spoken-transcript";
+import { deriveAcousticPauseEvidence } from "./speech-pause-evidence";
+import {
+  maxTranscriptionOutputCodePoints,
+  type TranscriptionPurpose,
+} from "../protocol/transcription-contract";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 type TranscriptionRequest = Readonly<{
   type: "transcribe";
   id: string;
   audio: Float32Array;
   language: string;
+  locale: string;
+  purpose: TranscriptionPurpose;
 }>;
 
 type CancelRequest = Readonly<{ type: "cancel"; id: string }>;
@@ -43,24 +57,42 @@ async function transcribe(request: TranscriptionRequest): Promise<void> {
     scope.postMessage({ id: request.id, status: "cancelled" });
     return;
   }
+  let failureStage: "model-load" | "inference" | "punctuation" = "model-load";
   try {
     scope.postMessage({ id: request.id, status: "started" });
     transcriber ??= createTranscriber();
     const recognize = await transcriber;
+    failureStage = "inference";
     const result = await recognize(request.audio, {
       language: request.language,
       task: "transcribe",
       chunk_length_s: 30,
       stride_length_s: 5,
+      return_timestamps: LOCAL_TRANSCRIPTION_TIMESTAMP_MODE,
     });
     if (cancelled.delete(request.id)) {
       scope.postMessage({ id: request.id, status: "cancelled" });
       return;
     }
-    scope.postMessage({ id: request.id, status: "complete", text: result.text });
+    failureStage = "punctuation";
+    const text = normalizeSpokenTranscript({
+      text: result.text,
+      locale: request.locale,
+      pauses: deriveAcousticPauseEvidence({
+        transcript: result.text,
+        chunks: result.chunks,
+        audio: request.audio,
+        sampleRate: 16_000,
+      }),
+      maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+      maxOutputCodePoints: maxTranscriptionOutputCodePoints(request.purpose),
+    });
+    scope.postMessage({ id: request.id, status: "complete", text });
   } catch {
     // Model, network, and runtime details stay inside the worker boundary.
-    scope.postMessage({ id: request.id, status: "failed" });
+    // The stage is safe operational evidence: it contains no audio, text,
+    // provider message, URL, or model output and remains inside the worker port.
+    scope.postMessage({ id: request.id, status: "failed", stage: failureStage });
   }
 }
 

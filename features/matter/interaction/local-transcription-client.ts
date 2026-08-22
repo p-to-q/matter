@@ -1,4 +1,5 @@
 import { subscribePageSuspension } from "./page-suspension";
+import type { TranscriptionPurpose } from "../protocol/transcription-contract";
 
 const WHISPER_SAMPLE_RATE = 16_000;
 const LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000;
@@ -22,6 +23,7 @@ type Pending = {
 };
 
 let worker: Worker | null = null;
+let requestSequence = 0;
 const pending = new Map<string, Pending>();
 const cancelled = new WeakMap<Worker, Set<string>>();
 const readiness = new WeakMap<Worker, Readonly<{
@@ -34,6 +36,7 @@ const pageSuspensionCleanup = new WeakMap<Worker, () => void>();
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
   if (worker !== null) retireWorker(worker, new LocalTranscriptionError("failed"));
+  requestSequence = 0;
 }
 
 /**
@@ -77,6 +80,7 @@ export async function prepareLocalTranscription(): Promise<void> {
 export async function transcribeLocally(input: Readonly<{
   interactionId: string;
   attempt: number;
+  purpose: TranscriptionPurpose;
   locale: string;
   audio: Blob;
   signal: AbortSignal;
@@ -86,7 +90,10 @@ export async function transcribeLocally(input: Readonly<{
   }
   const audio = await decodeRecording(input.audio, input.signal);
   throwIfAborted(input.signal);
-  const id = `${input.interactionId}:${input.attempt}`;
+  // The protocol identity may be reused after a component remount. A local
+  // lease id must not be: a queued cancellation acknowledgement for an older
+  // turn otherwise aliases the new pending request and leaves it unresolved.
+  const id = `${input.interactionId}:${input.attempt}:${++requestSequence}`;
   const target = localTranscriptionWorker();
   return new Promise<string>((resolve, reject) => {
     const abort = () => cancelRequest(id, target, new LocalTranscriptionError("failed"));
@@ -110,6 +117,8 @@ export async function transcribeLocally(input: Readonly<{
         id,
         audio,
         language: whisperLanguage(input.locale),
+        locale: input.locale,
+        purpose: input.purpose,
       }, [audio.buffer]);
     } catch {
       retireWorker(target, new LocalTranscriptionError("failed"));
@@ -165,6 +174,12 @@ function localTranscriptionWorker(): Worker {
     request.dispose();
     if (event.data.status === "failed") {
       request.reject(new LocalTranscriptionError("failed"));
+      // A failed pipeline load leaves Transformers.js holding a rejected
+      // singleton promise, and an inference/runtime failure may have poisoned
+      // the session. Retire the whole lease so the visible retry is genuine;
+      // immutable model responses already committed to Cache Storage remain
+      // reusable by the fresh worker.
+      retireWorker(target, new LocalTranscriptionError("failed"));
       return;
     }
     const text = event.data.text.trim();
@@ -197,10 +212,8 @@ async function decodeRecording(audio: Blob, signal: AbortSignal): Promise<Float3
   }
   const context = new AudioContextConstructor();
   try {
-    const encoded = await audio.arrayBuffer();
-    throwIfAborted(signal);
-    const decoded = await context.decodeAudioData(encoded);
-    throwIfAborted(signal);
+    const encoded = await waitForDecodeStep(audio.arrayBuffer(), signal);
+    const decoded = await waitForDecodeStep(context.decodeAudioData(encoded), signal);
     const channels = Array.from(
       { length: decoded.numberOfChannels },
       (_, index) => decoded.getChannelData(index),
@@ -212,6 +225,30 @@ async function decodeRecording(audio: Blob, signal: AbortSignal): Promise<Float3
   } finally {
     void context.close().catch(() => undefined);
   }
+}
+
+/** Audio decoding itself has no AbortSignal. Race each browser-owned step so a
+ * dismissed turn releases Matter immediately even when a malformed decoder
+ * promise never settles; closing its AudioContext remains the cleanup floor. */
+function waitForDecodeStep<T>(step: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(new LocalTranscriptionError("failed"));
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => {
+      signal.removeEventListener("abort", abort);
+      reject(new LocalTranscriptionError("failed"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    step.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error: unknown) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 export function resampleChannels(

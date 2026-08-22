@@ -168,6 +168,22 @@ describe("fixtureRepairAdapter", () => {
     );
     expect(result.text).toBe("我一直在想这件事到底该怎么做。");
   });
+
+  it("keeps expression out of the model-side fixture answer", async () => {
+    const result = await fixtureRepairAdapter(
+      {
+        scenario: "matter-transcript-repair",
+        prompt: compileRepairPrompt({ text: "we finally did it", locale: "en-US", vocabulary: [] }),
+        locale: "en-US",
+        input: { text: "we finally did it", locale: "en-US", vocabulary: [] },
+        deadlineMs: 1_200,
+        maxOutputTokens: 128,
+      },
+      idle(),
+    );
+    expect(result.text).toBe("We finally did it.");
+    expect(result.text).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
 });
 
 describe("resolveRepairAdapter", () => {

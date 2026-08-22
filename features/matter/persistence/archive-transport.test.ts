@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { createSeededDocument } from "../material/seeded-document";
 import { treeToBundle } from "./snapshot-codec";
@@ -136,6 +136,57 @@ describe("material ZIP transport", () => {
       ok: false,
       error: { code: "ARCHIVE_BOUND_EXCEEDED" },
     });
+  });
+
+  it("terminates every started inflater when one entry fails", async () => {
+    const terminated: string[] = [];
+    class FakeUnzip {
+      constructor(private readonly onfile: (file: {
+        name: string;
+        originalSize: number;
+        compression: number;
+        terminate: () => void;
+        start: () => void;
+        ondata: (error: Error | null, chunk: Uint8Array, final: boolean) => void;
+      }) => void) {}
+
+      register() {}
+
+      push() {
+        for (const name of ["matter/matter.json", "matter/index.md"]) {
+          const file = {
+            name,
+            originalSize: 1,
+            compression: 0,
+            terminate: () => terminated.push(name),
+            start: () => queueMicrotask(() => file.ondata(new Error("corrupt"), new Uint8Array(), false)),
+            ondata: (error: Error | null, chunk: Uint8Array, final: boolean) => {
+              void error;
+              void chunk;
+              void final;
+            },
+          };
+          this.onfile(file);
+        }
+      }
+    }
+
+    vi.resetModules();
+    vi.doMock("fflate", () => ({ AsyncUnzipInflate: class {}, Unzip: FakeUnzip }));
+    try {
+      const transport = await import("./archive-transport");
+      await expect(transport.importSnapshotArchive(zip({
+        "matter/matter.json": "{}",
+        "matter/index.md": "x",
+      }))).resolves.toMatchObject({
+        ok: false,
+        error: { code: "ARCHIVE_INVALID" },
+      });
+      expect(terminated).toEqual(["matter/matter.json", "matter/index.md"]);
+    } finally {
+      vi.doUnmock("fflate");
+      vi.resetModules();
+    }
   });
 });
 

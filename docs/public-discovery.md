@@ -62,8 +62,10 @@ disallowed in robots and return operational data rather than product copy.
 ## Copy boundary
 
 Public copy can describe the intended interaction grammar: reference a node or
-segment, set degree with gesture, speak direction, and receive one local,
-perceivable, reversible change. It must also say that the current public build
+segment, set degree with gesture, let Elastic Language's fixed
+`expand-in-place` tool policy supply direction, and receive one local,
+perceivable, reversible change. Voice admits human material; it does not direct
+Elastic Language. It must also say that the current public build
 is root-seeded, uses browser-native speech when supported, keeps a live
 transform provider gated, and exposes Ask Matter only as a bounded
 non-mutating question whose answer adapter may be unavailable. Do not expose material,

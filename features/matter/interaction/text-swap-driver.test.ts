@@ -160,7 +160,7 @@ describe("TextSwapDriver", () => {
 
     expect(h.buildEnvelope).toHaveBeenCalledWith(
       expect.objectContaining({ sourceText: "Rain is near" }),
-      "Make it more tentative",
+      "Make it more tentative.",
       "text_swap_request_1",
     );
     expect(h.request).toHaveBeenCalledTimes(1);
@@ -181,10 +181,25 @@ describe("TextSwapDriver", () => {
     expect(h.transcribe).not.toHaveBeenCalled();
     expect(h.buildEnvelope).toHaveBeenCalledWith(
       expect.objectContaining({ sourceText: "Rain is near" }),
-      "Use a calmer rhythm",
+      "Use a calmer rhythm.",
       "text_swap_request_1",
     );
     expect(h.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let provider expression become a dormant transform direction", async () => {
+    const h = harness();
+    const operation = await reachRecording(h);
+    h.driver.stopRecording();
+    h.voice.finish(operation, "Use a calmer rhythm 🎉");
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "TRANSCRIPTION_FAILED",
+    });
+    expect(h.buildEnvelope).not.toHaveBeenCalled();
+    expect(h.request).not.toHaveBeenCalled();
   });
 
   it("accepts a future typed carrier through the same bounded direction state", () => {

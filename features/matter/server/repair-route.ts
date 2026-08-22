@@ -10,6 +10,7 @@ import {
 } from "../protocol/repair-contract";
 import { RepairServerError, invalidRepairRequest } from "./repair-errors";
 import { repairTranscript } from "./repair-generator";
+import { createPublicRequestAdmission } from "./public-request-admission";
 
 /**
  * Parses, delegates, and translates. No repair policy lives here: the route
@@ -18,14 +19,26 @@ import { repairTranscript } from "./repair-generator";
  * shared with every other route that accepts a body.
  */
 export async function handleRepairRequest(request: Request): Promise<Response> {
-  return withBoundedJsonRequest(request, REPAIR_REQUEST_POLICY, async (payload, signal) => {
-    const parsed = parseRepairRequest(payload);
-    if (!parsed.ok) throw invalidRepairRequest(parsed.message);
+  const admission = repairAdmission.admit(request);
+  if (!admission.ok) throw repairAdmissionError(admission.reason);
+  try {
+    return await withBoundedJsonRequest(request, REPAIR_REQUEST_POLICY, async (payload, signal) => {
+      const parsed = parseRepairRequest(payload);
+      if (!parsed.ok) throw invalidRepairRequest(parsed.message);
 
-    return Response.json(await repairTranscript(parsed.request, signal), {
-      headers: { "Cache-Control": "no-store" },
+      return Response.json(await repairTranscript(parsed.request, signal), {
+        headers: { "Cache-Control": "no-store" },
+      });
     });
-  });
+  } finally {
+    admission.release();
+  }
+}
+
+const repairAdmission = createPublicRequestAdmission({ requestsPerWindow: 12, maxConcurrent: 4 });
+
+export function resetRepairAdmissionForTests(): void {
+  repairAdmission.resetForTests();
 }
 
 export function repairErrorResponse(error: unknown): Response {
@@ -63,4 +76,16 @@ function repairBoundaryError(reason: BoundedRequestFailure): RepairServerError {
     case "cancelled":
       return new RepairServerError("REPAIR_FAILED", "The repair request was cancelled.", true, 499);
   }
+}
+
+function repairAdmissionError(reason: "ORIGIN" | "RATE" | "BUSY"): RepairServerError {
+  if (reason === "ORIGIN") {
+    return new RepairServerError("INVALID_REQUEST", "This repair origin is not allowed.", false, 403);
+  }
+  return new RepairServerError(
+    "REPAIR_FAILED",
+    reason === "RATE" ? "Please wait before repairing another transcript." : "Matter is busy. Please try again shortly.",
+    true,
+    reason === "RATE" ? 429 : 503,
+  );
 }

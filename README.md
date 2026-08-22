@@ -3,9 +3,10 @@
 > Matter — An interface for unfinished thought.
 
 Matter is an environment where thought becomes touchable material. Voice admits
-human thought and gives generative direction. Gesture identifies exact material
-and degree. A rooted tree keeps lineage. AI appears only as one local,
-reversible material change—not a chat or autonomous agent.
+human thought. Gesture identifies exact material and degree; Elastic Language
+fixes direction to one expand-in-place operation. A rooted tree keeps lineage.
+AI appears only as one local, reversible material change—not a chat or
+autonomous agent.
 
 ## State
 
@@ -27,10 +28,12 @@ commits, only inserted or replaced graphemes arrive in one short sequence;
 unchanged language stays still, while the canonical text remains complete for
 selection, layout, and accessibility. No repair or provider status is exposed.
 
-The fixture-gated generative turn is wired end-to-end. Still gated: a live
-transform provider and its deployed controls, explicit directory export/import,
-and the strict large-tree performance receipt. The retired hackathon prototype
-is retained only under `archive/`.
+Thought labels, transcript repair, and Ask Matter have independent live gates;
+each keeps its deterministic or non-mutating failure floor. Elastic and Text
+Swap remain unavailable on the public deployment. ZIP export/import is part of
+the current local durability boundary. Still gated: live material transforms,
+their deployed controls, and the strict large-tree performance receipt. The
+retired hackathon prototype is retained only under `archive/`.
 
 See [`docs/surfaces.md`](docs/surfaces.md) for the exact boundary and
 [`plans/active-tree-material.md`](plans/active-tree-material.md) for the migration.
@@ -42,9 +45,10 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000/matter`. Tests use a deterministic fixture adapter;
-the dedicated preview uses browser-native recognition, while the MediaRecorder
-fallback remains fixture-gated locally.
+Open `http://localhost:3000/matter`. Tests use deterministic fixture adapters.
+The dedicated preview uses browser-native recognition when available and a
+lazy, pinned local Whisper worker after a person records in an unsupported
+browser; raw audio and transcripts never enter a shared cache.
 
 ```bash
 npm run check

@@ -18,6 +18,9 @@ import {
 } from "../interaction/transcription-client";
 import type { InquiryVoiceNotice } from "./inquiry-composer";
 import { subscribePageSuspension } from "../interaction/page-suspension";
+import { normalizeSpokenTranscript } from "../runtime/spoken-transcript";
+import { MAX_INQUIRY_QUESTION_CODE_POINTS } from "../protocol/inquiry-contract";
+import { hasPresentedEmoji } from "../protocol/transcription-contract";
 
 export type InquiryDictation = Readonly<{
   supported: boolean | null;
@@ -52,7 +55,8 @@ export function useInquiryDictation(
     callbacksRef.current = callbacks;
   });
 
-  const cancel = useCallback(() => {
+  const cancelResources = useCallback((): boolean => {
+    const wasActive = activeOperationRef.current !== null;
     transcriptionRef.current?.abort();
     transcriptionRef.current = null;
     repairRef.current?.abort();
@@ -61,14 +65,21 @@ export function useInquiryDictation(
     activeOperationRef.current = null;
     stoppingRef.current = false;
     if (current !== null) portRef.current?.cancel(current);
+    return wasActive;
   }, []);
 
-  useEffect(() => cancel, [cancel]);
+  const cancel = useCallback(() => {
+    if (cancelResources()) callbacksRef.current.onSettled();
+  }, [cancelResources]);
+
+  // Unmount owns only resource release; there is no remaining composer state
+  // to settle and notifying it during teardown would schedule a stale update.
+  useEffect(() => () => {
+    cancelResources();
+  }, [cancelResources]);
 
   useEffect(() => subscribePageSuspension(() => {
-    const wasActive = activeOperationRef.current !== null;
     cancel();
-    if (wasActive) callbacksRef.current.onSettled();
   }), [cancel]);
 
   useEffect(() => {
@@ -104,24 +115,29 @@ export function useInquiryDictation(
    */
   const deliver = useCallback(async (transcript: string, current: VoiceOperation) => {
     if (!ownsOperation(activeOperationRef.current, current)) return;
+    const baseline = normalizeSpokenTranscript({
+      text: transcript,
+      locale,
+      maxOutputCodePoints: MAX_INQUIRY_QUESTION_CODE_POINTS,
+    });
     if (!transcriptRepairEnabled()) {
-      callbacksRef.current.onHeard(transcript);
+      callbacksRef.current.onHeard(baseline);
       finish(current, "settled");
       return;
     }
     callbacksRef.current.onProcessing();
     const controller = new AbortController();
     repairRef.current = controller;
-    let settled = transcript;
+    let settled = baseline;
     try {
       const result = await requestTranscriptRepair({
         operationId: current.interactionId,
         attempt: current.attempt,
         locale,
-        text: transcript,
+        text: baseline,
         signal: controller.signal,
       });
-      settled = result.text;
+      settled = settleInquiryDictationRepair(baseline, result.text);
     } catch {
       // Cancellation is the one case with nobody left to deliver to; every
       // other failure means the person still gets their own words.
@@ -197,6 +213,7 @@ export function useInquiryDictation(
     stoppingRef.current = false;
     void portRef.current.start(current, {
       locale,
+      maxTranscriptCodePoints: MAX_INQUIRY_QUESTION_CODE_POINTS,
       onTranscript: (transcript) => {
         if (ownsOperation(activeOperationRef.current, current)) {
           callbacksRef.current.onHeard(transcript);
@@ -218,6 +235,22 @@ export function useInquiryDictation(
   }, [stopOperation]);
 
   return { supported, start, stop, cancel };
+}
+
+/**
+ * Optional model repair may improve a dictated draft, but it cannot spend the
+ * question field's remaining capacity or acquire the admission-only expression
+ * channel. An unusable proposal falls back whole to the already visible words.
+ */
+export function settleInquiryDictationRepair(
+  baseline: string,
+  candidate: string,
+): string {
+  return candidate.trim().length > 0 &&
+    Array.from(candidate).length <= MAX_INQUIRY_QUESTION_CODE_POINTS &&
+    !hasPresentedEmoji(candidate)
+    ? candidate
+    : baseline;
 }
 
 function ownsOperation(

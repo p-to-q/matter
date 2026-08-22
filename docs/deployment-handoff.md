@@ -16,11 +16,25 @@ controls as missing rather than infer them from a healthy origin.
 For Preview.39, the deployment owner explicitly directed one production
 promotion before those external receipts are supplied, while delegating the
 vendor-side configuration to a separate operator. This is a one-release risk
-acceptance, not evidence that the controls exist: it may preserve the three
-already-live gates only, must keep Elastic and Text Swap unavailable, and does
-not close issue #34. Preview.38 remains the deployed version until the tagged
-Preview.39 candidate passes CI, Preview deployment, and the production-origin
-receipt described below.
+acceptance, not evidence that the controls exist: it preserves the three
+already-live gates only, keeps Elastic and Text Swap unavailable, and does not
+close issue #34. The `v0.2.0-preview.39` tag is deployed on
+`matter.ptoq.io`; the no-store health receipt was checked on 2026-08-22.
+
+For Preview.40, the owner has again explicitly directed one production
+promotion before those external receipts are supplied. This is a new,
+Preview.40-only risk acceptance; Preview.39's exception did not carry forward
+automatically. It preserves label, repair, and inquiry, keeps Elastic and Text
+Swap unavailable, and leaves issues #34 and #68 open. The shared source
+admission perimeter is only a per-warm-instance first line. It is not evidence
+of a distributed rate limit, provider spend cap, alert delivery, or an
+operator-owned rollback receipt.
+
+Deployment truth and source truth are currently different revisions. The live
+tag is `c347f78`; it predates the current working tree's shared four-route
+process-local admission perimeter and corrected public discovery copy. Treat
+those additions as the next source candidate until an exact later SHA is
+promoted. Preview.39 health cannot prove that candidate code is running.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -53,11 +67,14 @@ The relevant boundaries are [`reference/prompt-harness.md`](reference/prompt-har
 
 ## Required Vercel configuration
 
-Set these as encrypted **server** environment variables in the Matter Vercel
-project. Apply them to Production and, if a shared preview needs real answers,
-Preview. Do not place keys in `vercel.json`, repository files, browser-visible
-`NEXT_PUBLIC_*` variables, GitHub Actions secrets echoed into logs, or issue
-comments.
+Set the `MATTER_MODEL_*` station values as encrypted **server** environment
+variables in the Matter Vercel project. Apply them to Production and, if a
+shared preview needs real answers, Preview. Do not place keys in `vercel.json`,
+repository files, browser-visible `NEXT_PUBLIC_*` variables, GitHub Actions
+secrets echoed into logs, or issue comments. The three adapter switches shown
+below are non-secret reviewed source configuration already declared by
+`vercel.json`; they are listed beside the pool only to make the complete runtime
+shape legible.
 
 ```text
 MATTER_MODEL_POOL=aiping
@@ -131,15 +148,16 @@ must not carry prompt, material, audio, provider identity, endpoint, key, reques
 identity, or response text. The distributed admission, spend ceiling and alert
 ownership for those SLO measurements remains the external issue #34 boundary.
 
-### Content-zero model performance receipt — source candidate
+### Content-zero model performance receipt — Preview.39
 
-This section describes the post-Preview.38 source candidate. The deployed
-Preview.38 origin does not yet prove that it emits this receipt. After this
-candidate is promoted, a production model-scenario invocation with a non-null
-adapter writes at most one `matter.scenario-performance` JSON line. Candidate
-attempts are folded into that terminal line in memory; they never create their
-own logs or network calls. A cache hit, a surface with no adapter, and a caller
-cancellation do not emit this event. Source sampling is intentionally off:
+This section describes the Preview.39 production contract. Health proves the
+deployed version and configured capability only; the deployment operator must
+inspect the retained server-log receipt before claiming that this event was
+emitted. A production model-scenario invocation with a non-null adapter writes
+at most one `matter.scenario-performance` JSON line. Candidate attempts are
+folded into that terminal line in memory; they never create their own logs or
+network calls. A cache hit, a surface with no adapter, and a caller cancellation
+do not emit this event. Source sampling is intentionally off:
 p50/p95 and fallback mix cannot be reconstructed honestly after selective
 success sampling. The volume ceiling is therefore one such scalar line per
 scenario terminal, not one line per candidate, response chunk, label cache read,
@@ -224,10 +242,10 @@ safe at any time: labels stay deterministic, repair keeps its local rule floor,
 and inquiry states that it is unavailable, so turning one gate off remains a
 complete rollback for that surface.
 
-## Runtime delivery and cache boundary — source candidate
+## Runtime delivery and cache boundary — Preview.39
 
-The post-Preview.38 source candidate keeps the product root as a static prerender,
-and Vercel serves its content-hashed Next assets from the deployment cache. The
+The Preview.39 release keeps the product root as a static prerender, and Vercel
+serves its content-hashed Next assets from the deployment cache. The
 stable-name poster, videos, and logo keep the Preview.38-equivalent `public,
 max-age=14400, must-revalidate` browser policy; they are never `immutable` or
 given a separate `s-maxage`. This makes the observed four-hour behavior explicit
@@ -244,7 +262,19 @@ shared application cache may hold material or model answers. The only model
 proposal cache is the existing bounded, process-local, read-time-revalidated
 thought-label cache.
 
-`npm run build` in this source candidate ends with the runtime-artifact budget
+Preview.40 carries a deliberately narrow local-speech exception. Web Speech
+remains the preferred path. When it is unavailable, a person may start the
+experimental local Whisper fallback, which then lazily downloads about 151.5
+MiB of pinned fp32 model weights in addition to tokenizer, WASM, and runtime
+overhead. It returns final text only, has no live partial transcript, and may be
+slow or fail on a weak network or low-performance device; the person can cancel
+it. The release proof covers one Chromium synthetic-audio path only. It does not
+claim Safari, mobile, weak-network, quantized-model, or real multi-segment
+acoustic-pause readiness. Audio remains on the device, but the browser contacts
+Hugging Face to fetch the fixed model revision. Do not present this exception
+as a default-path performance improvement.
+
+`npm run build` in this release ends with the runtime-artifact budget
 gate. Preview.38 did not carry that post-build gate. The gate proves the
 static shell, initial transfer ceiling, lazy model split, content-hashed
 font/WASM output, a complete `public/` budget plus the narrower visual-media
@@ -284,9 +314,12 @@ which surface is unavailable.
 
 The default production gate remains completion of GitHub issue #34:
 
-1. Add distributed rate rules for `/api/label`, `/api/repair`, and
-   `/api/inquiry`. The in-process governors are intentionally only local to a
-   Vercel instance; they are not a distributed abuse control.
+1. Add distributed rate rules for `/api/label`, `/api/repair`, `/api/inquiry`,
+   and `/api/transcribe`. The in-process governors are intentionally only local
+   to a Vercel instance; they are not a distributed abuse control. The exact
+   per-instance source ceilings and the operator warning against multiplying
+   them by an unknown replica count live in
+   [`deployment-owner-handoff.md`](deployment-owner-handoff.md#external-controls-required-before-expanding-model-authority).
 2. Set a provider spend cap and alerts, then verify the provider account has no
    unrestricted key shared with another product.
 3. Restrict Vercel project access to the deployment owner(s), keep production
@@ -402,7 +435,7 @@ video:
 
 ```bash
 npm run probe:material-origin -- https://matter.ptoq.io \
-  --expected-version=0.2.0-preview.39
+  --expected-version=0.2.0-preview.40
 ```
 
 That command only prints the historical paired 1+1 smoke plan. It is useful for
@@ -464,9 +497,10 @@ or to bypass the scenario adjudicator.
   promising multi-document persistence beyond the current local home document.
 
 Validation: local `npm run check` and full Chromium E2E must pass before every
-source preview; after a Vercel promotion, add the explicit
-`--profile=elastic-live` deployment check and the manual real-origin receipt
-above. With the Elastic gate open, `/api/health` reports `thoughtLabel`,
+source preview; after a browser-preview Vercel promotion, run the default
+deployment check and the manual real-origin receipt above. Run the explicit
+`--profile=elastic-live` check only for a reviewed Elastic promotion. With the
+Elastic gate open, `/api/health` reports `thoughtLabel`,
 `transcriptRepair`, `inquiry`, and `transformTurn` as `available`, while
 `textSwap` remains `unavailable`; `available` means a pool is configured, never
 that a relay answered.
@@ -483,5 +517,5 @@ begin a new undo journal; and no existing browser can reconstruct command histor
 that predates journal storage.
 
 Next: the deployment owner supplies the distributed-rate and provider-spend
-receipts required by issue #34, closes that blocker, and promotes only a newly
-reviewed version.
+receipts required by issue #34, closes that blocker, and keeps the material
+model gates unavailable until their separate promotion evidence is complete.

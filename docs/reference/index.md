@@ -12,6 +12,8 @@ ordinary component and store work needs no matching document.
 | [`tool-system.md`](tool-system.md) | contextual tool projection and rail behavior |
 | [`history-and-undo.md`](history-and-undo.md) | atomic tree commands and exact inverse |
 | [`voice-input.md`](voice-input.md) | microphone and transcription lifecycle |
+| [`transcript-punctuation.md`](transcript-punctuation.md) | non-model acoustic pauses, semantic punctuation, and STT normalization |
+| [`spoken-expression.md`](spoken-expression.md) | conservative sentence-final emoji, undo, and the acoustic/legal reopening boundary |
 | [`local-transcript-repair.md`](local-transcript-repair.md) | staged transcript repair, managed fallback, future browser worker, and cache policy |
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
 | [`prompt-harness.md`](prompt-harness.md) | how any Matter prompt is built, budgeted, and judged |

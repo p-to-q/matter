@@ -3354,7 +3354,9 @@ function AdmissionFeedback({
           <button onClick={controller.dismiss} type="button">{actions.dismiss}</button>
         </>
       ) : (
-        <button onClick={controller.cancel} type="button">{actions.cancel}</button>
+        <button onClick={controller.cancel} type="button">
+          {phase === "transcribing" ? actions.cancelTranscription : actions.cancel}
+        </button>
       )}
     </div>
   );

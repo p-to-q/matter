@@ -1,7 +1,9 @@
-const TERMINAL = /(?:[。！？.!?]|…+|\.{3})[\p{Pe}\p{Pf}“"']*$/u;
-const CJK = /[㐀-鿿ぁ-ゖァ-ヺー]/u;
-const CJK_NON_QUOTE_CLOSING_MARKS = /([）】》]+)$/u;
-const CJK_WHOLE_QUOTE = /^([“「『])(.+)([”」』])$/u;
+import {
+  isSpokenTranscriptQuestion,
+  normalizeSpokenTranscript,
+} from "./spoken-transcript";
+import { decorateSpokenExpression } from "./expressive-transcript";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 const LOW_AMBIGUITY_LATIN_FILLER = /(^|[\s,])(?:[Uu]m+|[Uu]h+|[Ee]rm+|[Ee]r+)(?=([\s,.!?]|$))/gu;
 const LOW_AMBIGUITY_CJK_FILLER = /(^|[，。！？、\s])(?:呃+|額+|额+)(?=([，。！？、\s]|$))/gu;
@@ -30,6 +32,7 @@ const SPOKEN_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze([
   { pattern: /((?:冒号|冒號))(?:[。！？.!?])?/gu, punctuation: "：" },
   { pattern: /((?:分号|分號))(?:[。！？.!?])?/gu, punctuation: "；" },
   { pattern: /((?:顿号|頓號))(?:[。！？.!?])?/gu, punctuation: "、" },
+  { pattern: /((?:破折号|破折號))(?:[。！？.!?])?/gu, punctuation: "—" },
 ]);
 
 const SPOKEN_ENGLISH_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze([
@@ -39,6 +42,7 @@ const SPOKEN_ENGLISH_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze([
   { pattern: /\bcomma\b(?:[.!?])?/giu, punctuation: "," },
   { pattern: /\bsemicolon\b(?:[.!?])?/giu, punctuation: ";" },
   { pattern: /\bcolon\b(?:[.!?])?/giu, punctuation: ":" },
+  { pattern: /\bem dash\b(?:[.!?])?/giu, punctuation: "—" },
 ]);
 
 const SPOKEN_JAPANESE_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze([
@@ -46,6 +50,7 @@ const SPOKEN_JAPANESE_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze(
   { pattern: /(?:感嘆符|エクスクラメーションマーク)(?:[。！？.!?])?/gu, punctuation: "！" },
   { pattern: /句点(?:[。！？.!?])?/gu, punctuation: "。" },
   { pattern: /読点(?:[。！？.!?])?/gu, punctuation: "、" },
+  { pattern: /ダッシュ(?:[。！？.!?])?/gu, punctuation: "—" },
 ]);
 
 const SPOKEN_GERMAN_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze([
@@ -55,6 +60,7 @@ const SPOKEN_GERMAN_PUNCTUATION: readonly SpokenPunctuation[] = Object.freeze([
   { pattern: /\bKomma\b(?:[.!?])?/giu, punctuation: "," },
   { pattern: /\bSemikolon\b(?:[.!?])?/giu, punctuation: ";" },
   { pattern: /\bDoppelpunkt\b(?:[.!?])?/giu, punctuation: ":" },
+  { pattern: /\bGedankenstrich\b(?:[.!?])?/giu, punctuation: "—" },
 ]);
 
 const NAMING_PREFIX = /(?:这个|那个|一个|這個|那個|一個|关于|關於|说|說|写|寫|读|讀|叫|称|稱|用|看|的|个|個)$/u;
@@ -66,9 +72,6 @@ const ENGLISH_NAMING_PREFIX = /(?:\b(?:a|the|this|that|word|term|mark|called|nam
 const ENGLISH_NAMING_SUFFIX = /^\s*(?:is|means|refers|rule|rules|mark|punctuation|character|of|between|ended|lasted|began|support|syntax|command|handling|mode|token|word|case|example|literal|key)\b/iu;
 const ENGLISH_DIRECT_QUESTION = /^(?:(?:can|could|would|should|do|does|did|is|are|was|were|will|have|has|am|can['’]t|couldn['’]t|wouldn['’]t|shouldn['’]t|isn['’]t|aren['’]t|wasn['’]t|weren['’]t|won['’]t|don['’]t|doesn['’]t|didn['’]t|hasn['’]t|haven['’]t)\s+(?:i|we|you|he|she|it|they|this|that|there)\b|(?:why|how|what|where|when|who|which)\s+(?:can|could|would|should|do|does|did|is|are|was|were|will|have|has|can['’]t|couldn['’]t|wouldn['’]t|shouldn['’]t|isn['’]t|aren['’]t|wasn['’]t|weren['’]t|won['’]t|don['’]t|doesn['’]t|didn['’]t|hasn['’]t|haven['’]t)\b)/iu;
 const ENGLISH_LEXICAL_QUESTION = /^(?:what happened|what changed|what matters|who knows|who said|who wants|who needs|how come|where to|what to|which one)\b/iu;
-const CJK_DIRECT_QUESTION = /^(?:请问|請問|为什么|為什麼|怎么|怎麼|如何|谁|誰|哪(?:里|裡|个|個|些)|何时|何時|什么时候|什麼時候|多少|几|幾)(?=[^，。！？；：、\s])/u;
-const JAPANESE_DIRECT_QUESTION = /^(?:なぜ|どうして|どうやって|どこ|いつ|誰|だれ|何|なに|どれ|どの|いくつ)(?=[^、。！？\s])/u;
-const GERMAN_DIRECT_QUESTION = /^(?:(?:warum|wieso|weshalb|wie|was|wo|wann|wer|wen|wem|welch\p{L}*)\b|(?:kann|können|könnte|soll|sollen|sollte|ist|sind|war|waren|wird|werden|hat|haben|muss|müssen|darf|dürfen)\s+(?:ich|wir|du|er|sie|es|das|dies))/iu;
 const JAPANESE_PUNCTUATION_NAMING_PREFIX = /(?:言葉|記号|文字|用語|「|『)$/u;
 const JAPANESE_PUNCTUATION_NAMING_SUFFIX = /^(?:とは|は|を|の|という|表す|意味)/u;
 const GERMAN_PUNCTUATION_NAMING_PREFIX = /(?:\b(?:das|ein|dieses|Wort|Zeichen|Begriff|Token|namens|heißt)\s+)$/iu;
@@ -139,47 +142,47 @@ const CJK_DIGITS: Readonly<Record<string, number>> = Object.freeze({
 });
 
 const VERBATIM_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"/gu;
-const PROTECTED_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"|(?:https?:\/\/|[Ww]{3}\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s，。！？；：]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|\b(?:[A-Za-z]+_[A-Za-z0-9_]+|[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)\b/gu;
+const PROTECTED_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"|(?:https?:\/\/|[Ww]{3}\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s，。！？；：]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|(?<![\p{L}\p{N}_$])[\p{L}\p{N}$]+(?:_[\p{L}\p{N}$]+)+(?![\p{L}\p{N}_$])|(?<![\p{L}\p{N}_$])[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)+(?![\p{L}\p{N}_$])|\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)\b/gu;
+const MAY_CONTAIN_VERBATIM_LITERAL = /[`“‘「『"]/u;
+const MAY_CONTAIN_PROTECTED_LITERAL = /[`“‘「『"@/\\_.]|--|[A-Za-z]/u;
 
 /**
  * The immediate admission floor changes formatting only. Lexical cleanup,
  * including spoken punctuation words, belongs to the short late-repair lease
  * so the browser can publish what it heard before optional work begins.
  */
-export function normalizeAdmittedTranscript(value: string): string {
-  let text = value.trim().replace(/\s+([，。！？,.!?])/gu, "$1");
-  if (CJK.test(text)) {
-    text = text.replace(/([，])\s+/gu, "$1");
-  } else {
-    // A comma between digits is a decimal or thousands separator, not a word
-    // boundary. Only repair the unambiguous `word,next` shape.
-    text = text.replace(/,(?=\S)/gu, (comma, offset: number, whole: string) => {
-      const left = whole[offset - 1] ?? "";
-      const right = whole[offset + 1] ?? "";
-      return /\p{Nd}/u.test(left) && /\p{Nd}/u.test(right) ? comma : ", ";
-    });
-  }
-  if (text.endsWith("，") || text.endsWith(",")) text = text.slice(0, -1).trimEnd();
-  if (!TERMINAL.test(text)) {
-    if (CJK.test(text) && CJK_WHOLE_QUOTE.test(text)) {
-      text = text.replace(CJK_WHOLE_QUOTE, "$1$2。$3");
-    } else if (CJK.test(text) && CJK_NON_QUOTE_CLOSING_MARKS.test(text)) {
-      text = text.replace(CJK_NON_QUOTE_CLOSING_MARKS, "。$1");
-    } else {
-      text += CJK.test(text) ? "。" : ".";
-    }
-  }
-  return text;
+export function normalizeAdmittedTranscript(value: string, locale = "und"): string {
+  return normalizeSpokenTranscript({
+    text: value,
+    locale,
+    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+  });
 }
 
 /**
  * A bounded deterministic repair for text that is already material. It is
  * deliberately assertive about recognition-shaped debris and formatting, but
  * every lexical deletion still requires an exact local shape. Open-ended tone
- * or semantic rewriting never belongs in this pipeline.
+ * or semantic rewriting never belongs here; the separate expression planner
+ * can only append one closed-set emoji under stricter vetoes.
  */
-export function repairAdmittedTranscript(value: string, locale: string): string {
-  const baseline = normalizeAdmittedTranscript(value);
+export function repairAdmittedTranscript(
+  value: string,
+  locale: string,
+  expressionSeed = "",
+): string {
+  return decorateSpokenExpression({
+    text: repairAdmittedTranscriptWords(value, locale),
+    locale,
+    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+    sampleSeed: expressionSeed,
+  });
+}
+
+/** The managed repair boundary receives words and punctuation, never a
+ * deterministic expression guess. Its accepted result is decorated locally. */
+export function repairAdmittedTranscriptWords(value: string, locale: string): string {
+  const baseline = normalizeAdmittedTranscript(value, locale);
   let text = baseline;
   if (locale === "zh-CN" || locale === "zh-TW") {
     text = repairCjkTranscript(text);
@@ -190,9 +193,13 @@ export function repairAdmittedTranscript(value: string, locale: string): string 
   } else if (locale === "de-DE") {
     text = repairGermanTranscript(text);
   }
-  text = normalizeRepairSeams(text);
+  text = withProtectedLiterals(text, normalizeRepairSeams);
   if (!hasLexicalContent(text)) return baseline;
-  return normalizeAdmittedTranscript(text);
+  const repaired = normalizeAdmittedTranscript(text, locale);
+  // Lexical repair may add script-boundary spaces even when punctuation has
+  // already degraded at capacity. The optional repair must fall back whole,
+  // never hand the port a candidate the tree cannot represent.
+  return repaired.length <= MAX_NODE_TEXT_CODE_UNITS ? repaired : baseline;
 }
 
 /**
@@ -235,6 +242,7 @@ function repairCjkTranscript(value: string): string {
       let text = replaceSpokenCjkPunctuation(unprotected);
       text = replacePreservingBoundary(text, LOW_AMBIGUITY_CJK_FILLER);
       text = removeLeadingCjkAcousticFiller(text);
+      text = removeInlineCjkAcousticFiller(text);
       text = text.replace(CJK_PARTIAL_RESTART, "");
       text = text.replace(CJK_RECOGNITION_ECHO, "$1");
       text = text.replace(CJK_TIGHT_RECOGNITION_ECHO, "$1");
@@ -242,7 +250,6 @@ function repairCjkTranscript(value: string): string {
       text = text.replace(CJK_TIGHT_RESTART, "$1");
       text = collapseCjkAnchoredRestarts(text);
       text = repairCjkTemporalCorrection(text);
-      text = punctuateCjkSignals(text);
       text = normalizeCjkMarks(text);
       return applyKnownEnglishCasing(spaceHanAndLatin(text));
     });
@@ -262,8 +269,7 @@ function repairJapaneseTranscript(value: string): string {
       text = text.replace(JAPANESE_RECOGNITION_ECHO, "$1");
       // Sentence-final か is grammatical question evidence. の is not: it can
       // be explanatory or attributive, and prosody is no longer available here.
-      text = text.replace(/(か)([”’）】》」』]*)。$/u, "$1$2？");
-      if (JAPANESE_DIRECT_QUESTION.test(text)) {
+      if (isSpokenTranscriptQuestion(text, "ja-JP")) {
         text = text.replace(/。([”’）】》」』]*)$/u, "？$1");
       }
       return applyKnownEnglishCasing(text.replace(/([、。！？])\s+/gu, "$1"));
@@ -284,7 +290,7 @@ function repairGermanTranscript(value: string): string {
       text = text.replace(GERMAN_RECOGNITION_ECHO, "$1");
       text = normalizeRepairSeams(text);
       text = capitalizeLatinSentenceStarts(text);
-      if (GERMAN_DIRECT_QUESTION.test(text)) {
+      if (isSpokenTranscriptQuestion(text, "de-DE")) {
         text = text.replace(/\.([”’"')\]]*)$/u, "?$1");
       }
       return applyKnownEnglishCasing(text);
@@ -300,17 +306,20 @@ function replacePairedEnglishCommands(value: string): string {
   let text = value
     .replace(
       /\bopen (?:parenthesis|paren)\b\s+(.{1,240}?)\s+\bclose (?:parenthesis|paren)\b/giu,
-      (_match: string, content: string) => `(${replaceSpokenEnglishPunctuation(content).trim()})`,
+      (_match: string, content: string) =>
+        `(${normalizeRepairSeams(replaceSpokenEnglishPunctuation(content))})`,
     )
     .replace(
       /\bopen (?:quote|quotation mark)\b\s+(.{1,240}?)\s+\bclose (?:quote|quotation mark)\b/giu,
-      (_match: string, content: string) => `“${replaceSpokenEnglishPunctuation(content).trim()}”`,
+      (_match: string, content: string) =>
+        `“${normalizeRepairSeams(replaceSpokenEnglishPunctuation(content))}”`,
     );
   // Two pairs can be dictated in one utterance; the bounded second pass sees
   // only command text left outside already materialized delimiters.
   text = text.replace(
     /\bopen (?:parenthesis|paren)\b\s+(.{1,240}?)\s+\bclose (?:parenthesis|paren)\b/giu,
-    (_match: string, content: string) => `(${replaceSpokenEnglishPunctuation(content).trim()})`,
+    (_match: string, content: string) =>
+      `(${normalizeRepairSeams(replaceSpokenEnglishPunctuation(content))})`,
   );
   return text;
 }
@@ -319,11 +328,13 @@ function replacePairedCjkCommands(value: string): string {
   return value
     .replace(
       /(?:左括号|左括號)\s*(.{1,240}?)\s*(?:右括号|右括號)/gu,
-      (_match: string, content: string) => `（${replaceSpokenCjkPunctuation(content).trim()}）`,
+      (_match: string, content: string) =>
+        `（${normalizeRepairSeams(replaceSpokenCjkPunctuation(content))}）`,
     )
     .replace(
       /(?:左引号|左引號)\s*(.{1,240}?)\s*(?:右引号|右引號)/gu,
-      (_match: string, content: string) => `“${replaceSpokenCjkPunctuation(content).trim()}”`,
+      (_match: string, content: string) =>
+        `“${normalizeRepairSeams(replaceSpokenCjkPunctuation(content))}”`,
     );
 }
 
@@ -336,6 +347,16 @@ function removeBoundedEnglishDiscourseFillers(value: string): string {
 function removeLeadingCjkAcousticFiller(value: string): string {
   return value.replace(
     /^(?:呃+|额+|額+)[，,\s]*(?=(?:我|我们|我們|你|他|她|这|這|那|先|然后|然後|所以|可以|需要))/u,
+    "",
+  );
+}
+
+function removeInlineCjkAcousticFiller(value: string): string {
+  // Unspaced CJK ASR commonly glues a hesitation to the next discourse cue.
+  // Restrict deletion to that exact shape: 嗯 can be an answer and 呃逆 is a
+  // word, so neither a general single-character deletion nor a noun split is safe.
+  return value.replace(
+    /(?<=[\p{Script=Han}，。！？])呃+(?=[，,]?(?:其实|其實|然后|然後|所以|我|我们|我們|这个|這個|可以|需要|先|再))/gu,
     "",
   );
 }
@@ -427,30 +448,11 @@ function normalizeRepairSeams(value: string): string {
     .replace(/^[,，、]\s*/u, "")
     .replace(/([,，、])(?:\s*[,，、])+\s*/gu, "$1")
     .replace(/\s+([,.;:!?，。！？；：、])/gu, "$1")
+    .replace(/\s*—\s*/gu, "—")
     .replace(/[ \t]{2,}/gu, " ")
     .replace(/[ \t]*\n[ \t]*/gu, "\n")
     .replace(/\n{3,}/gu, "\n\n")
     .trim();
-}
-
-function punctuateCjkSignals(value: string): string {
-  let text = value.replace(
-    /^(所以|然后|然後|不过|不過|可是|然而|其实|其實|首先|其次|最后|最後|总之|總之|换句话说|換句話說)(?=[^，。！？；：、\s])/u,
-    "$1，",
-  );
-  text = text.replace(
-    /([^，。！？；：、\s])(但是|不过|不過|可是|然而|然后|然後|接着|接著|所以|而且|另外|同时|同時)(?=[^，。！？；：、\s])/gu,
-    "$1，$2",
-  );
-  text = text.replace(
-    /(如果|假如|只要|除非)([^，。！？；：]{2,80}?)(那么|那麼|就)(?=[^，。！？；：、\s])/gu,
-    "$1$2，$3",
-  );
-  text = text.replace(/([吗嗎么麼嘛])([”’"'）】》」』]*)[。.]$/u, "$1$2？");
-  if (CJK_DIRECT_QUESTION.test(text)) {
-    text = text.replace(/[。.]([”’"'）】》」』]*)$/u, "？$1");
-  }
-  return text;
 }
 
 function normalizeCjkMarks(value: string): string {
@@ -899,6 +901,10 @@ function withProtectedPattern(
   pattern: RegExp,
   transform: (text: string) => string,
 ): string {
+  if (
+    (pattern === VERBATIM_LITERAL && !MAY_CONTAIN_VERBATIM_LITERAL.test(value)) ||
+    (pattern === PROTECTED_LITERAL && !MAY_CONTAIN_PROTECTED_LITERAL.test(value))
+  ) return transform(value);
   const literals: Array<Readonly<{ token: string; literal: string }>> = [];
   let marker = 0xe000;
   pattern.lastIndex = 0;

@@ -124,10 +124,27 @@ async function unzipBundle(
     let actualBytes = 0;
     const files = Object.create(null) as Record<string, string>;
     const collisionKeys = new Set<string>();
+    const activeEntries = new Set<Readonly<{ terminate: () => void }>>();
+
+    const terminateActiveEntries = () => {
+      // A ZIP may have several asynchronous inflaters in flight. Resolving the
+      // import promise alone leaves those entries retaining compressed chunks
+      // after a later entry has already made the archive invalid.
+      for (const entry of activeEntries) {
+        try {
+          entry.terminate();
+        } catch {
+          // Termination is best-effort cleanup; the validated failure below is
+          // still the only result this transport boundary publishes.
+        }
+      }
+      activeEntries.clear();
+    };
 
     const finish = (result: Readonly<{ ok: true; bundle: SnapshotBundle }> | Extract<ArchiveImportResult, { ok: false }>) => {
       if (settled) return;
       settled = true;
+      if (!result.ok) terminateActiveEntries();
       resolve(result);
     };
     const completeWhenReady = () => {
@@ -174,6 +191,7 @@ async function unzipBundle(
       const chunks: Uint8Array[] = [];
       let entryBytes = 0;
       openEntries += 1;
+      activeEntries.add(file);
       file.ondata = (error, chunk, final) => {
         if (settled) return;
         if (error !== null) {
@@ -202,6 +220,7 @@ async function unzipBundle(
           finish(failure("ARCHIVE_INVALID", "Archive text must be valid UTF-8."));
           return;
         }
+        activeEntries.delete(file);
         openEntries -= 1;
         completeWhenReady();
       };

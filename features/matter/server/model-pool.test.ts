@@ -193,6 +193,27 @@ describe("pool adapter", () => {
     expect(events).toEqual(["pool", "failed", "answered"]);
   });
 
+  it("cancels an irrelevant error body before trying the next candidate", async () => {
+    const cancelled = vi.fn();
+    const adapter = createPoolAdapter(
+      [candidate("refusing"), candidate("steady")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+        if (model === "steady") return chatResponse("cost boundary");
+        return new Response(new ReadableStream<Uint8Array>({
+          pull: () => new Promise(() => undefined),
+          cancel: cancelled,
+        }), { status: 503 });
+      },
+    );
+
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .resolves.toEqual({ text: "cost boundary" });
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
   it("bounds one relay's attempt so a hang cannot spend the whole deadline", async () => {
     const tried: string[] = [];
     const adapter = createPoolAdapter(
@@ -473,6 +494,53 @@ describe("pool adapter", () => {
     tried.length = 0;
     await adapter(adapterInput(), new AbortController().signal);
     expect(tried[0]).toBe("flaky");
+  });
+
+  it("expires old fast-failure evidence before it can trigger a later cooldown", async () => {
+    let clock = 1_000;
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("flaky"), candidate("steady")],
+      { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 2 },
+      () => clock,
+      async (_url, init) => {
+        const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+        tried.push(model);
+        return model === "flaky" ? chatResponse("", 500) : chatResponse("成本问题");
+      },
+    );
+
+    await adapter(adapterInput(), new AbortController().signal);
+    clock += (5 * 60_000) + 1;
+    await adapter(adapterInput(), new AbortController().signal);
+
+    tried.length = 0;
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(tried).toEqual(["flaky", "steady"]);
+  });
+
+  it("evicts the oldest health evidence when rotating pools exceed the bound", async () => {
+    const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 60_000 };
+    const fail = async () => chatResponse("", 500);
+    for (let index = 0; index <= 256; index += 1) {
+      const adapter = createPoolAdapter([candidate(`rotated-${index}`)], limits, () => 1_000, fail);
+      await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+    }
+
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("rotated-0"), candidate("steady")],
+      limits,
+      () => 1_000,
+      async (_url, init) => {
+        const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+        tried.push(model);
+        return model === "rotated-0" ? chatResponse("", 500) : chatResponse("成本问题");
+      },
+    );
+
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(tried).toEqual(["rotated-0", "steady"]);
   });
 
   it("propagates caller cancellation instead of trying the next candidate", async () => {

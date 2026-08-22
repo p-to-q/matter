@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MATTER_PUBLIC_ORIGIN,
   LOCAL_MATTER_PUBLIC_ORIGIN,
+  MATTER_SITE_LAST_UPDATED_ISO,
   MATTER_SITE_URL,
   matterUrl,
   resolveMatterPublicOrigin,
@@ -9,6 +10,10 @@ import {
 } from "./site";
 
 describe("Matter public URL configuration", () => {
+  it("dates public discovery to the current published preview", () => {
+    expect(MATTER_SITE_LAST_UPDATED_ISO).toBe("2026-08-22");
+  });
+
   it("prefers an explicit Matter origin and strips no valid origin data", () => {
     expect(resolveMatterPublicOrigin({
       MATTER_PUBLIC_ORIGIN: "https://matter.example",

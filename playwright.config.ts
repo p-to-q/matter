@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const localTranscriptionReceipt = process.env.MATTER_E2E_LOCAL_TRANSCRIPTION === "true";
+const fakeAudioPath = process.env.MATTER_E2E_FAKE_AUDIO_PATH?.trim();
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -23,6 +26,9 @@ export default defineConfig({
           args: [
             "--use-fake-device-for-media-stream",
             "--use-fake-ui-for-media-stream",
+            ...(fakeAudioPath === undefined || fakeAudioPath.length === 0
+              ? []
+              : [`--use-file-for-fake-audio-capture=${fakeAudioPath}`]),
           ],
         },
       },
@@ -46,7 +52,9 @@ export default defineConfig({
       MATTER_TEXT_SWAP_ADAPTER: "fixture",
       MATTER_FIXTURE_SWAP_DIRECTION_TRANSCRIPT: "换一种更凝练的说法",
       NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED: "true",
-      NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED: "false",
+      NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED: localTranscriptionReceipt
+        ? "true"
+        : "false",
       MATTER_NEXT_DIST_DIR: ".next-e2e",
     },
     url: "http://127.0.0.1:3100/matter",

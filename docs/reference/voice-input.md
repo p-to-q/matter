@@ -21,7 +21,8 @@ pointer starts at empty root / node / segment
   → stop and collect final chunk
   → browser-native Web Speech API (preferred)
   → on-device Whisper worker, or POST /api/transcribe (explicit fallbacks)
-  → transcript
+  → one shared punctuation floor (semantic rules; trusted audio timing when present)
+  → punctuated transcript
   → immediate human material admission
   → one repair lease after a short visibility floor
 ```
@@ -33,7 +34,8 @@ selected-language or transform-direction mode in the current release.
 
 The public preview uses browser-managed Web Speech for transient interim text
 and one final admission when available. Otherwise it records locally and lazily
-loads a quantized multilingual Whisper model in a worker. The model and runtime
+loads a pinned multilingual Whisper model in a worker. The current browser-proven
+profile is full-precision WASM; the model and runtime
 are fetched on first fallback use and may be cached by the browser; raw audio is
 decoded and transcribed on the person's device.
 
@@ -150,11 +152,23 @@ with a formatting-only floor. Repair computes beside a visibility gate, but its
 second command cannot settle until the baseline has crossed two animation-frame
 opportunities and remained visible for at least 650 ms.
 
-Its mandate is faithful spoken-to-written recovery, not free improvement. The ordered pure TypeScript rules
+Final STT output first crosses the insertion-only floor frozen in
+[`transcript-punctuation.md`](transcript-punctuation.md). Browser recognition
+uses its semantic policy because callback timing is not acoustic evidence. The
+pinned export provides segment timestamps, not the cross-attention outputs
+required for word timestamps. The local worker admits an inter-segment pause only
+when Matter's own 20 ms waveform-energy detector corroborates the silence. Timing is
+discarded inside the transcription boundary and never widens the wire response.
+
+Repair's mandate is faithful spoken-to-written recovery, not free improvement. The ordered pure TypeScript rules
 settle CJK/Latin spacing, locale punctuation and sentence shape, explicit spoken
 punctuation, a closed filler list, bounded recognition echoes and stutters,
 well-formed addresses, stable product casing, and explicit self-correction
-shapes. The managed proposal may additionally resolve a contextual filler,
+shapes. One separate expression planner may append one sentence-final emoji
+for an explicit direct affect or celebration, or reproducibly sample one exact
+low-ambiguity noun for a word-tail icon. It is part of the same pointer-undoable
+late repair, never the immediate admission or managed repair prompt. The managed
+proposal may additionally resolve a contextual filler,
 abandoned start, later correction, misheard word, or forced grammar seam.
 Destructive passes protect URLs, email addresses, numbers, units, negation,
 uncertainty, quantifiers, emphasis, and punctuation words used as ordinary
@@ -240,8 +254,10 @@ and physical HTTPS Chrome and Safari receipts. Background suspension and
 proved before the static recording indicator can be presented as final voice UX.
 
 The on-device fallback is a separate capability: it keeps audio local and needs
-no credential or route capacity, but first use downloads a quantized model and
-WASM runtime. It is intentionally lazy, worker-owned, single-flight, and bounded
+no credential or route capacity, but first use downloads a model and WASM
+runtime. The currently compatible fp32 ONNX graphs are about 151.5 MiB before
+tokenizer and runtime bytes, so this remains an explicit capability gate rather
+than a default-path performance claim. It is intentionally lazy, worker-owned, single-flight, and bounded
 by the same recording policy. Web Speech remains preferred because it provides
 live partials without the model download. The local model provides final text,
 not real-time partial hypotheses, and lower-powered devices may take noticeably

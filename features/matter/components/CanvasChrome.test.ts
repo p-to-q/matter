@@ -8,6 +8,7 @@ import {
   CanvasChrome,
   isCanvasChromeInfoOverlay,
   nextMenuFocusIndex,
+  projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
 
@@ -49,6 +50,7 @@ describe("CanvasChrome", () => {
     expect(markup).toContain('data-inquiry-phase="idle"');
     expect(markup).toMatch(/id="matter-inquiry"[^>]*hidden|hidden[^>]*id="matter-inquiry"/);
     expect(markup).toContain('aria-controls="matter-inquiry"');
+    expect(markup).toMatch(/<p[^>]*aria-atomic="true"[^>]*aria-live="polite"[^>]*role="status"/);
     expect(markup).not.toContain("data-inquiry-thread");
     expect(markup).not.toMatch(/chat|assistant|history/i);
   });
@@ -70,14 +72,17 @@ describe("CanvasChrome", () => {
 
   it("keeps pre-release information honest and task-oriented", () => {
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
-    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input is available");
-    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("separately gated");
+    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input, transcript repair, and Ask Matter are available");
+    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("material transformation remains unavailable");
     expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("未完成想法获得形体的界面");
-    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("实时语音输入已可使用");
-    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("仍需单独开启");
-    expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("實時語音輸入已可使用");
+    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("实时语音输入、语音整理和询问 Matter 已可使用");
+    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("材料生成变换尚未开放");
+    expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("實時語音輸入、語音整理和詢問 Matter 已可使用");
+    expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("材料生成變換尚未開放");
     expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("リアルタイム音声入力");
-    expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Live-Spracheingabe ist verfügbar");
+    expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("生成機能はまだ利用できません");
+    expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Live-Spracheingabe, Transkriptreparatur und Matter fragen sind verfügbar");
+    expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Materialtransformation bleibt deaktiviert");
     expect(CANVAS_CHROME_INFO["en-US"].pricing.body.join(" ")).toContain("no paid plan");
     expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("bounded lassoed language");
     expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("held-aside material is not sent");
@@ -121,6 +126,43 @@ describe("CanvasChrome", () => {
     expect(css).toMatch(/\.mobileTrigger\s*{[^}]*width:\s*52px;[^}]*height:\s*56px;/s);
     expect(css).toContain("width: min(320px, 85%);");
     expect(css).toMatch(/\.inquiryAnchor\s*{[^}]*right:\s*0;[^}]*bottom:\s*30px;/s);
+  });
+});
+
+describe("projectInquiryDictationControl", () => {
+  const labels = Object.freeze({
+    startLabel: "Dictate",
+    stopLabel: "Stop dictating",
+    cancelLabel: "Cancel dictation",
+  });
+
+  it("keeps the same control available to cancel long transcription", () => {
+    expect(projectInquiryDictationControl({
+      ...labels,
+      listening: false,
+      transcribing: true,
+      supported: true,
+    })).toEqual({
+      action: "cancel",
+      disabled: false,
+      label: "Cancel dictation",
+      pressed: true,
+    });
+  });
+
+  it("keeps an unavailable idle control inert without disabling active ownership", () => {
+    expect(projectInquiryDictationControl({
+      ...labels,
+      listening: false,
+      transcribing: false,
+      supported: null,
+    })).toMatchObject({ action: "start", disabled: true, pressed: false });
+    expect(projectInquiryDictationControl({
+      ...labels,
+      listening: true,
+      transcribing: false,
+      supported: null,
+    })).toMatchObject({ action: "stop", disabled: false, pressed: true });
   });
 });
 

@@ -49,10 +49,15 @@ person starts Voice and supplies one recording
   -> dynamic import and worker handshake run beside recording
 recording ends
   -> decode and resample in the browser
-  -> initialise pinned whisper-tiny q8/WASM pipeline
+  -> initialise pinned whisper-tiny fp32/WASM pipeline
   -> Cache Storage hit, or one remote model download
   -> inference in the worker
 ```
+
+The fp32 profile is the only graph shape proven in Chromium with the currently
+pinned model and Transformers.js runtime. Its roughly 151.5 MiB of ONNX weights
+is an explicit capability-gate cost, not an initial-route asset and not evidence
+that the original quantized transfer budget has been met.
 
 The Hub model is pinned to commit
 `ff4177021cc41f7db950912b73ea4fdf7d01d8e7`. The revision is part of the

@@ -1,4 +1,8 @@
 import { PROTOCOL_VERSION } from "../tree/model";
+import {
+  MAX_INQUIRY_QUESTION_CODE_POINTS,
+  MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
+} from "./spoken-text-limits";
 
 export const MAX_RECORDING_MS = 60_000;
 export const MAX_ACCEPTED_RECORDING_MS = 65_000;
@@ -17,6 +21,21 @@ export const TRANSCRIPTION_CLIENT_TIMEOUT_MS =
   TRANSCRIPTION_SERVER_TIMEOUT_MS + TRANSCRIPTION_TRANSPORT_GRACE_MS;
 
 export type TranscriptionPurpose = "admission" | "direction" | "swap-direction";
+const PRESENTED_EMOJI = /(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3)/u;
+
+/** STT transports carry words and punctuation; inferred expression belongs to
+ * the separate local, undoable admission-repair authority. */
+export function hasPresentedEmoji(value: string): boolean {
+  return PRESENTED_EMOJI.test(value);
+}
+
+export function maxTranscriptionOutputCodePoints(
+  purpose: TranscriptionPurpose,
+): number | undefined {
+  if (purpose === "direction") return MAX_INQUIRY_QUESTION_CODE_POINTS;
+  if (purpose === "swap-direction") return MAX_TEXT_SWAP_DIRECTION_CODE_POINTS;
+  return undefined;
+}
 
 export type TranscriptionRequest = {
   protocolVersion: typeof PROTOCOL_VERSION;
@@ -32,6 +51,7 @@ export type TranscriptionSuccess = {
   protocolVersion: typeof PROTOCOL_VERSION;
   interactionId: string;
   attempt: number;
+  /** Final locale-aware punctuation is part of the STT boundary contract. */
   transcript: string;
 };
 

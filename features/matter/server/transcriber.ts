@@ -4,13 +4,25 @@ import type {
   TranscriptionRequest,
   TranscriptionSuccess,
 } from "../protocol/transcription-contract";
-import { TRANSCRIPTION_SERVER_TIMEOUT_MS } from "../protocol/transcription-contract";
+import {
+  TRANSCRIPTION_SERVER_TIMEOUT_MS,
+  hasPresentedEmoji,
+  maxTranscriptionOutputCodePoints,
+} from "../protocol/transcription-contract";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
+import {
+  normalizeSpokenTranscript,
+  type TranscriptPauseEvidence,
+} from "../runtime/spoken-transcript";
 
 export type TranscriptionAdapter = (
   request: TranscriptionRequest,
   signal: AbortSignal,
-) => Promise<{ transcript: string }>;
+) => Promise<{
+  transcript: string;
+  /** Provider-private acoustic gaps; never returned in the wire envelope. */
+  pauses?: readonly TranscriptPauseEvidence[];
+}>;
 
 const FIXTURE_ADMISSION_TRANSCRIPT =
   "也许我还没有想清楚，但这句话可以先留在这里，等它继续长出自己的方向。";
@@ -33,7 +45,7 @@ export async function transcribeRecording(
       selectedAdapter(request, combined.signal),
       abortBoundary.promise,
     ]);
-    const transcript = validateTranscript(result.transcript, request);
+    const transcript = validateTranscript(result.transcript, request, result.pauses);
     return {
       protocolVersion: request.protocolVersion,
       interactionId: request.interactionId,
@@ -123,6 +135,7 @@ function resolveTranscriptionAdapter(purpose: TranscriptionRequest["purpose"]): 
 function validateTranscript(
   value: unknown,
   request: TranscriptionRequest,
+  pauses?: readonly TranscriptPauseEvidence[],
 ): string {
   if (typeof value !== "string") {
     throw providerResponseError(request);
@@ -137,15 +150,30 @@ function validateTranscript(
       request.attempt,
     );
   }
-  if (request.purpose === "swap-direction") {
-    const direction = normalizeTextSwapDirection(value);
-    if (direction === null) throw providerResponseError(request);
-    return direction;
-  }
   if (value.length > MAX_NODE_TEXT_CODE_UNITS) {
     throw providerResponseError(request);
   }
-  return value;
+  if (hasPresentedEmoji(value)) throw providerResponseError(request);
+  const punctuated = normalizeSpokenTranscript({
+    text: value,
+    locale: request.locale,
+    pauses,
+    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+    maxOutputCodePoints: maxTranscriptionOutputCodePoints(request.purpose),
+  });
+  const codePointLimit = maxTranscriptionOutputCodePoints(request.purpose);
+  if (codePointLimit !== undefined && Array.from(punctuated).length > codePointLimit) {
+    throw providerResponseError(request);
+  }
+  if (request.purpose === "swap-direction") {
+    const direction = normalizeTextSwapDirection(punctuated);
+    if (direction === null) throw providerResponseError(request);
+    return direction;
+  }
+  if (punctuated.length > MAX_NODE_TEXT_CODE_UNITS) {
+    throw providerResponseError(request);
+  }
+  return punctuated;
 }
 
 function fixtureTranscript(purpose: TranscriptionRequest["purpose"]): string {

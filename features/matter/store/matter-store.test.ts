@@ -248,6 +248,40 @@ describe("Matter store", () => {
       .toBe("I think we need to ship the module.");
   });
 
+  it("commits the store-adjudicated model text instead of its transport wrapper", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_wrapped_repair",
+      commandId: "human_admission_wrapped_repair",
+      nodeId: "voice_node_wrapped_repair",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "i think this still needs testng",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "en-US",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    nowMs = 200;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: '\"I think this still needs testing.\"',
+      source: "model",
+      createdAt: "2026-08-11T10:00:00.100Z",
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_wrapped_repair.text)
+      .toBe("I think this still needs testing.");
+  });
+
   it("keeps a stale repair silent and leaves store diagnostics unchanged", () => {
     const store = createMatterStore("root");
     const rootId = store.getState().tree.rootId;

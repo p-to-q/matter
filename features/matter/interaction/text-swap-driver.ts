@@ -18,6 +18,9 @@ import {
 } from "./voice-port";
 import { TextSwapClientError } from "./text-swap-client";
 import { TranscriptionClientError, type requestTranscription } from "./transcription-client";
+import { normalizeSpokenTranscript } from "../runtime/spoken-transcript";
+import { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "../protocol/text-swap-policy";
+import { hasPresentedEmoji } from "../protocol/transcription-contract";
 
 export type TextSwapScope = Readonly<{
   treeId: string;
@@ -266,6 +269,7 @@ export class TextSwapDriver<TCommitted> {
     this.voiceResources = { operation, generation };
     void voice.start(operation, {
       locale: this.dependencies.locale,
+      maxTranscriptCodePoints: MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
       onTranscript: (text) => {
         if (!this.ownsVoice(operation, generation)) return;
         this.send({ type: "partial-direction", ...operation, text });
@@ -382,8 +386,30 @@ export class TextSwapDriver<TCommitted> {
   }
 
   private completeVoiceDirection(operation: VoiceOperation, text: string): void {
+    const direction = normalizeSpokenTranscript({
+      text,
+      locale: this.dependencies.locale,
+      maxOutputCodePoints: MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
+    });
+    if (
+      direction.length === 0 ||
+      Array.from(direction).length > MAX_TEXT_SWAP_DIRECTION_CODE_POINTS ||
+      hasPresentedEmoji(direction)
+    ) {
+      this.send({
+        type: "transcription-failed",
+        ...operation,
+        errorCode: "TRANSCRIPTION_FAILED",
+        retryable: true,
+      });
+      return;
+    }
     const requestId = this.dependencies.createRequestId();
-    this.send({ type: "direction-resolved", ...operation, text });
+    this.send({
+      type: "direction-resolved",
+      ...operation,
+      text: direction,
+    });
     // Stopping Voice is the person's submit. Queueing these events together is
     // intentional: a native transcript may resolve while an earlier reducer
     // effect is still draining. An invalid or stale direction makes `submit`

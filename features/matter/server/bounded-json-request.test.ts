@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   withBoundedJsonRequest,
   type BoundedRequestFailure,
@@ -99,5 +99,22 @@ describe("withBoundedJsonRequest", () => {
     ).catch((error: unknown) => error);
 
     expect(failure).toBe(own);
+  });
+
+  it.each([
+    ["an invalid declared length", { "content-length": "-1", "content-type": "application/json" }],
+    ["an unsupported media type", { "content-type": "application/jsonx" }],
+  ])("cancels an unread body for %s", async (_label, headers) => {
+    const cancelled = vi.fn();
+    const request = new Request("https://example.test/matter/api/probe", {
+      method: "POST",
+      headers,
+      body: new ReadableStream<Uint8Array>({ cancel: cancelled }),
+      duplex: "half",
+    } as RequestInit & { duplex: "half" });
+
+    await expect(withBoundedJsonRequest(request, policy(10_000), async () => undefined))
+      .rejects.toBeInstanceOf(TestBoundaryError);
+    expect(cancelled).toHaveBeenCalledOnce();
   });
 });

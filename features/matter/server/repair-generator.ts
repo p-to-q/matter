@@ -4,7 +4,7 @@ import {
   normalizeRepairInput,
   type NormalizedRepairInput,
 } from "../material/transcript-repair";
-import { repairAdmittedTranscript } from "../runtime/transcript-punctuation";
+import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
 import { PROTOCOL_VERSION } from "../tree/model";
 import {
   ScenarioGovernor,
@@ -84,7 +84,7 @@ export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
   const configured = process.env.MATTER_FIXTURE_REPAIR;
   if (configured !== undefined) return { text: configured };
   const input = call.input as NormalizedRepairInput;
-  return { text: repairAdmittedTranscript(input.text, input.locale) };
+  return { text: repairAdmittedTranscriptWords(input.text, input.locale) };
 };
 
 /**

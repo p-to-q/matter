@@ -68,7 +68,13 @@ export const DEFAULT_POOL_LIMITS: PoolLimits = Object.freeze({
   cooldownMs: 60_000,
 });
 
-type CandidateHealth = { failures: number; cooldownUntilMs: number };
+type CandidateHealth = { failures: number; cooldownUntilMs: number; expiresAtMs: number };
+
+// The pool can be reconfigured between requests in a warm server process.
+// Health is disposable evidence, so retain it only long enough to influence a
+// nearby retry and never let rotated endpoint identities accumulate forever.
+const HEALTH_TTL_MS = 5 * 60_000;
+const MAX_HEALTH_ENTRIES = 256;
 
 /**
  * Candidate ordering is shared code, but its mutable evidence belongs to the
@@ -224,6 +230,7 @@ function orderedCandidates(
   scenario: MatterScenarioId,
   nowMs: number,
 ): readonly PoolCandidate[] {
+  pruneExpiredHealth(nowMs);
   const healthy: PoolCandidate[] = [];
   const cooling: PoolCandidate[] = [];
   for (const candidate of pool) {
@@ -287,12 +294,14 @@ async function completeOnce(
       }),
       boundary.promise,
     ]);
-    const body = await readBounded(response, limits.maxResponseBytes, attempt.signal);
     if (!response.ok) {
-      // The status is diagnostic; the body may quote the provider and never
-      // reaches the browser, which only ever sees a deterministic label.
+      // Error bodies are neither surfaced nor diagnostic input. Do not let a
+      // relay that has already refused hold the fallback lane open by streaming
+      // or withholding an irrelevant body.
+      void response.body?.cancel().catch(() => undefined);
       throw new Error(`Model provider returned HTTP ${response.status}.`);
     }
+    const body = await readBounded(response, limits.maxResponseBytes, attempt.signal);
     return extractContent(JSON.parse(body) as unknown);
   } finally {
     clearTimeout(timer);
@@ -407,17 +416,43 @@ function recordOutcome(
     health.delete(key);
     return;
   }
-  const entry = health.get(key) ?? { failures: 0, cooldownUntilMs: 0 };
+  const nowMs = now();
+  pruneExpiredHealth(nowMs);
+  let entry = health.get(key);
+  if (entry === undefined) {
+    makeHealthRoom();
+    entry = { failures: 0, cooldownUntilMs: 0, expiresAtMs: 0 };
+  }
   // A stall consumes the caller's budget rather than reporting a fault, so it
   // reaches the cooldown threshold on its own. It is still only a demotion:
   // `orderedCandidates` keeps trying cooling relays after the healthy ones, so
   // a pool of stalled relays degrades to slow rather than to empty.
   entry.failures += outcome === "stalled" ? limits.failuresBeforeCooldown : 1;
   if (entry.failures >= limits.failuresBeforeCooldown) {
-    entry.cooldownUntilMs = now() + limits.cooldownMs;
+    entry.cooldownUntilMs = nowMs + limits.cooldownMs;
     entry.failures = 0;
   }
+  // Evidence must outlive an active cooldown even when a scenario uses a
+  // longer custom cooldown, but expired fast-failure evidence starts fresh.
+  entry.expiresAtMs = Math.max(nowMs + HEALTH_TTL_MS, entry.cooldownUntilMs);
+  // Refresh insertion order so the capacity bound evicts the least recently
+  // updated evidence rather than a relay that is still being observed.
+  health.delete(key);
   health.set(key, entry);
+}
+
+function pruneExpiredHealth(nowMs: number): void {
+  for (const [key, entry] of health) {
+    if (nowMs >= entry.expiresAtMs) health.delete(key);
+  }
+}
+
+function makeHealthRoom(): void {
+  while (health.size >= MAX_HEALTH_ENTRIES) {
+    const oldest = health.keys().next().value;
+    if (oldest === undefined) return;
+    health.delete(oldest);
+  }
 }
 
 /** Identity excludes the key, so rotating a key does not reset health. */

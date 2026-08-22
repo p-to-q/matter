@@ -10,6 +10,7 @@ import {
   type BoundedRequestFailure,
   type BoundedRequestPolicy,
 } from "./bounded-json-request";
+import { createPublicRequestAdmission } from "./public-request-admission";
 
 /**
  * Parses, delegates, and translates. No labelling policy lives here: the route
@@ -18,14 +19,26 @@ import {
  * shared with every other route that accepts a body.
  */
 export async function handleLabelRequest(request: Request): Promise<Response> {
-  return withBoundedJsonRequest(request, LABEL_REQUEST_POLICY, async (payload, signal) => {
-    const parsed = parseLabelRequest(payload);
-    if (!parsed.ok) throw invalidLabelRequest(parsed.message);
+  const admission = labelAdmission.admit(request);
+  if (!admission.ok) throw labelAdmissionError(admission.reason);
+  try {
+    return await withBoundedJsonRequest(request, LABEL_REQUEST_POLICY, async (payload, signal) => {
+      const parsed = parseLabelRequest(payload);
+      if (!parsed.ok) throw invalidLabelRequest(parsed.message);
 
-    return Response.json(await generateLabel(parsed.request, signal), {
-      headers: { "Cache-Control": "no-store" },
+      return Response.json(await generateLabel(parsed.request, signal), {
+        headers: { "Cache-Control": "no-store" },
+      });
     });
-  });
+  } finally {
+    admission.release();
+  }
+}
+
+const labelAdmission = createPublicRequestAdmission({ requestsPerWindow: 48, maxConcurrent: 6 });
+
+export function resetLabelAdmissionForTests(): void {
+  labelAdmission.resetForTests();
 }
 
 export function labelErrorResponse(error: unknown): Response {
@@ -63,4 +76,16 @@ function labelBoundaryError(reason: BoundedRequestFailure): LabelServerError {
     case "cancelled":
       return new LabelServerError("LABEL_FAILED", "The label request was cancelled.", true, 499);
   }
+}
+
+function labelAdmissionError(reason: "ORIGIN" | "RATE" | "BUSY"): LabelServerError {
+  if (reason === "ORIGIN") {
+    return new LabelServerError("INVALID_REQUEST", "This label origin is not allowed.", false, 403);
+  }
+  return new LabelServerError(
+    "LABEL_FAILED",
+    reason === "RATE" ? "Please wait before naming more material." : "Matter is busy. Please try again shortly.",
+    true,
+    reason === "RATE" ? 429 : 503,
+  );
 }

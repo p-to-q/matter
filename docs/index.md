@@ -13,6 +13,7 @@ Read only when the change needs it:
 - [`engineering.md`](engineering.md) — implementation discipline and proof;
 - [`workflow.md`](workflow.md) — slice and verifier handoff;
 - [`release-readiness.md`](release-readiness.md) — preview and public-release gates;
+- [`deployment-owner-handoff.md`](deployment-owner-handoff.md) — tokenless Vercel operator checklist and external-control receipt;
 - [`public-discovery.md`](public-discovery.md) — canonical origin, SEO metadata, and machine-readable surfaces;
 - [`../plans/active-tree-material.md`](../plans/active-tree-material.md) — current migration;
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — change and validation discipline.

@@ -2,8 +2,9 @@ import {
   MAX_NODE_TEXT_CODE_UNITS,
   MAX_REPLACEMENT_TEXT_CODE_UNITS,
 } from "../tree/invariants";
+import { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "./spoken-text-limits";
+export { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "./spoken-text-limits";
 
-export const MAX_TEXT_SWAP_DIRECTION_CODE_POINTS = 240;
 
 export type TextSwapPolicyCode =
   | "EMPTY"

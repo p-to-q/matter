@@ -20,7 +20,7 @@ const REQUEST: TranscriptionRequest = {
 };
 
 describe("transcribeRecording", () => {
-  it("echoes the operation identity and preserves transcript bytes", async () => {
+  it("echoes the operation identity and applies the shared punctuation floor", async () => {
     const result = await transcribeRecording(
       REQUEST,
       new AbortController().signal,
@@ -30,8 +30,33 @@ describe("transcribeRecording", () => {
       protocolVersion: "0.2",
       interactionId: "voice_01",
       attempt: 1,
-      transcript: "  这句话保留原来的停顿。  ",
+      transcript: "这句话保留原来的停顿。",
     });
+  });
+
+  it("uses provider-private acoustic gaps without widening the wire response", async () => {
+    const text = "we finished the first careful review now we start the second careful review";
+    const result = await transcribeRecording(
+      { ...REQUEST, locale: "en-US" },
+      new AbortController().signal,
+      async () => ({
+        transcript: text,
+        pauses: [{
+          afterCodeUnit: text.indexOf(" now"),
+          durationMs: 1_000,
+          source: "word-timestamp",
+        }],
+      }),
+    );
+    expect(result).toEqual({
+      protocolVersion: "0.2",
+      interactionId: "voice_01",
+      attempt: 1,
+      transcript: "we finished the first careful review. now we start the second careful review.",
+    });
+    expect(Object.keys(result).sort()).toEqual([
+      "attempt", "interactionId", "protocolVersion", "transcript",
+    ]);
   });
 
   it("canonicalizes and strictly bounds swap-direction without changing existing transcript semantics", async () => {
@@ -40,22 +65,39 @@ describe("transcribeRecording", () => {
       swapRequest,
       new AbortController().signal,
       async () => ({ transcript: "  换一种更轻的说法  " }),
-    )).resolves.toMatchObject({ transcript: "换一种更轻的说法" });
+    )).resolves.toMatchObject({ transcript: "换一种更轻的说法。" });
     await expect(transcribeRecording(
       swapRequest,
       new AbortController().signal,
       async () => ({ transcript: "x".repeat(241) }),
     )).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
     await expect(transcribeRecording(
+      { ...swapRequest, locale: "en-US" },
+      new AbortController().signal,
+      async () => ({ transcript: "x".repeat(240) }),
+    )).resolves.toMatchObject({ transcript: "x".repeat(240) });
+    await expect(transcribeRecording(
       { ...REQUEST, purpose: "direction" },
       new AbortController().signal,
       async () => ({ transcript: "  existing direction bytes  " }),
-    )).resolves.toMatchObject({ transcript: "  existing direction bytes  " });
+    )).resolves.toMatchObject({ transcript: "existing direction bytes。" });
+    await expect(transcribeRecording(
+      { ...REQUEST, purpose: "direction", locale: "en-US" },
+      new AbortController().signal,
+      async () => ({ transcript: "x".repeat(500) }),
+    )).resolves.toMatchObject({ transcript: "x".repeat(500) });
+    await expect(transcribeRecording(
+      { ...REQUEST, purpose: "direction", locale: "en-US" },
+      new AbortController().signal,
+      async () => ({ transcript: "x".repeat(501) }),
+    )).rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
   });
 
   it.each([
     ["empty", "   ", "NO_SPEECH"],
     ["oversize", "念".repeat(2_001), "INVALID_PROVIDER_RESPONSE"],
+    ["adapter-authored emoji", "这句话不是表达装饰。🎉", "INVALID_PROVIDER_RESPONSE"],
+    ["adapter-authored flag", "this is not a transport mark 🇩🇪", "INVALID_PROVIDER_RESPONSE"],
   ] as const)("rejects an %s transcript whole", async (_name, transcript, code) => {
     await expect(
       transcribeRecording(REQUEST, new AbortController().signal, async () => ({ transcript })),
