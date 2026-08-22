@@ -524,6 +524,15 @@ it is cheaper than reading it back.
 
 ## Repair boundaries
 
+The strict transcription success envelope carries only the final transcript.
+Before that envelope is returned, a server adapter may combine private acoustic
+pause offsets with the shared deterministic punctuation floor; the browser
+worker does the same before crossing its message boundary. Timing, word chunks,
+waveform features, and rule receipts never become wire fields. Browser-native
+speech has no trustworthy word time and therefore uses the same floor without
+pause evidence. Admission, Ask Matter dictation, and spoken tool direction all
+apply the floor idempotently at their final consumer boundary.
+
 Material admission never waits on a network envelope. The final transcript first
 commits through the ordinary human admission translator. That successful call
 returns an opaque, non-persisted repair capability directly to the admission

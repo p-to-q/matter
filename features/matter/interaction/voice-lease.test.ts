@@ -37,10 +37,10 @@ class ControlledVoice implements VoicePort {
     this.startResolution?.();
   }
 
-  finish(): void {
-    if (this.operation === null) throw new Error("missing operation");
+  finish(operation = this.operation): void {
+    if (operation === null) throw new Error("missing operation");
     this.stopResolution?.(Object.freeze({
-      operation: this.operation,
+      operation,
       audio: new Blob(["voice"], { type: "audio/webm" }),
       durationMs: 400,
     }));
@@ -77,6 +77,18 @@ describe("VoiceLeaseCoordinator", () => {
     second.cancel(SECOND);
   });
 
+  it("preserves a consumer's narrower transcript capacity across coordination", async () => {
+    const coordinator = new VoiceLeaseCoordinator();
+    const raw = new ControlledVoice();
+    const port = coordinator.coordinate(raw);
+    const starting = port.start(FIRST, { maxTranscriptCodePoints: 240 });
+
+    expect(raw.callbacks.maxTranscriptCodePoints).toBe(240);
+    raw.grant();
+    await starting;
+    port.cancel(FIRST);
+  });
+
   it("keeps the logical lease through transcription so a new owner can revoke it", async () => {
     const coordinator = new VoiceLeaseCoordinator();
     const firstRaw = new ControlledVoice();
@@ -98,6 +110,25 @@ describe("VoiceLeaseCoordinator", () => {
     secondRaw.grant();
     await secondStarting;
     second.cancel(SECOND);
+  });
+
+  it("rejects a stopped recording whose transport identity does not own the lease", async () => {
+    const coordinator = new VoiceLeaseCoordinator();
+    const raw = new ControlledVoice();
+    const port = coordinator.coordinate(raw);
+    const starting = port.start(FIRST);
+    raw.grant();
+    await starting;
+
+    const stopping = port.stop(FIRST);
+    raw.finish(SECOND);
+    await expect(stopping).rejects.toMatchObject({ code: "RECORDING_FAILED" });
+    expect(raw.cancel).toHaveBeenCalledWith(FIRST);
+
+    const restarted = port.start(FIRST);
+    raw.grant();
+    await expect(restarted).resolves.toBeUndefined();
+    port.cancel(FIRST);
   });
 
   it("releases an explicit cancellation without reporting an ownership loss", async () => {

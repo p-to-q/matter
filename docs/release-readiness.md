@@ -3,6 +3,13 @@
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet.
 
+Release truth is split explicitly: `v0.2.0-preview.39` / `c347f78` is the
+currently deployed source. `0.2.0-preview.40` is the later source candidate; its
+shared four-route admission perimeter, STT punctuation/expression work, and
+corrected public discovery copy are not live until an exact Preview.40 SHA is
+reviewed and deployed. A healthy Preview.39 origin must not be cited as proof of
+those candidate changes.
+
 ## Current deployable slice
 
 The current online-safe claim is narrow:
@@ -44,6 +51,92 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.40
+
+Preview.40 strengthens the spoken-to-written path without adding an LLM to the
+immediate transcript boundary. Every final Web Speech, local Whisper, and
+server transcript passes one insertion-only punctuation planner. Locale packs
+cover simplified and traditional Chinese, English, Japanese, and German, with
+token-anchored English available as a code-switch bridge. Reliable Whisper
+segment gaps may corroborate a boundary only after Matter's waveform check;
+short one-segment speech remains semantic-only. The Chinese pack now recognizes
+bounded stance and temporal frames, paired relations, and guarded clause
+restarts, so continuous speech can gain internal commas without splitting by
+length or cutting protected literals and fixed compounds. Late lexical repair
+re-enters the same planner instead of maintaining a drifting second connector
+grammar.
+
+Expression remains a separate, later, pointer-undoable repair. It is disabled
+for Ask Matter and spoken tool directions. A closed semantic set may append one
+affect symbol only after text evidence passes its vetoes; a closed set of
+ordinary entity nouns may receive one token-tail symbol on a stable 24 percent
+admission sample. The identity-derived sample is repeatable across exact store
+revalidation, never `Math.random()`, so the candidate cannot disagree with the
+tree command that commits it. Missing identity, protected literals, questions,
+negation, reported speech, capacity pressure, existing symbols, and unlisted
+nouns fail closed.
+
+The voice lifecycle also becomes honest and recoverable. Ask Matter and material
+admission can cancel a long transcription from the same microphone control;
+assistive technology receives a polite atomic status; a failed local worker is
+retired so retry creates a clean model lease; audio decode is cancellable; and
+every asynchronous recording is revalidated against its operation identity.
+Provider-authored emoji is rejected at the STT transport boundary, leaving
+expression ownership with the later local repair.
+
+The candidate also hardens the public perimeter and long-lived resources.
+Label, repair, inquiry, and transcription share production origin, identity
+window, and instance-concurrency admission; strict media-type parsing rejects
+prefix lookalikes. Failed ZIP import terminates every open inflater, and model
+health evidence has a bounded TTL and entry count. These are source-local first
+lines, not distributed abuse or spend controls.
+
+The local fallback is intentionally conditional. Web Speech remains preferred.
+Only after unsupported browser speech and a person's recording intent does the
+browser lazily fetch the pinned fp32 Whisper graph, about 151.5 MiB before
+tokenizer, WASM, and runtime overhead. It returns final text only and may be
+slow or fail on weak networks or low-performance devices, but is cancellable.
+The release proves a Chromium synthetic-audio path; it does not claim Safari,
+mobile, weak-network, quantized-model, or real multi-segment acoustic-pause
+readiness. Audio remains on-device, while the browser contacts Hugging Face for
+the fixed model revision.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor 21; 42 linked Markdown documents; Node 60/60;
+                       architecture 394 files across 7 layers with no outward
+                       edge, provider leak, or cycle; Vitest 154 files passed
+                       and 2 skipped, 1,767 cases passed and 4 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack
+                       production build of all 21 pages/routes passed
+browser proof          full Chromium: 95 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 110 total
+speech proof           gated real-worker Chromium receipt: 1/1 in 33.1 s;
+                       generated Mandarin WAV stayed under /private/tmp;
+                       worker started and completed, expected lexical anchors
+                       arrived with at least two internal commas, one terminal
+                       full stop and one later expression symbol; zero server
+                       transcription requests and zero browser errors
+runtime proof          static root; initial 1,171.8 KiB raw / 371.0 KiB gzip;
+                       one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
+                       visual media 350.8 KiB; 0 repository-only trace files
+punctuation bound      dense 2,000-code-unit / 333-marker corpus median:
+                       immediate normalize 1.57 ms, late repair 3.67 ms;
+                       250/500/1,000/2,000 scaling remains near-linear
+production boundary    fresh Preview.40-only owner exception; label, repair,
+                       and inquiry stay live; Elastic and Text Swap stay off;
+                       issues #34 and #68 remain open
+publication state      source candidate only until an exact SHA passes GitHub
+                       CI, protected Vercel Preview, Production, and origin
+                       receipts; npm publication is not authorized
+```
+
+The versioned local candidate is a source-level **GO**. Production promotion is
+authorized only as the fresh **Preview.40-only owner exception** above. The
+exception does not prove distributed rate limits, a provider spend cap, alert
+delivery, or an operator rollback receipt. The branch, deployment, and public
+origin must still prove one exact SHA before the prerelease tag is created.
 
 ## Candidate verification — 0.2.0-preview.39
 
@@ -109,10 +202,9 @@ production boundary    OWNER-AUTHORIZED EXCEPTION for Preview.39 with label,
                        repair, and inquiry preserved exactly as the existing
                        live gates; Elastic and Text Swap remain unavailable;
                        issue #34 remains open and unverified
-publication state      Preview.38 remains deployed until the exact Preview.39
-                       candidate passes branch CI and Preview deployment, is
-                       tagged, and the same SHA is promoted and verified at the
-                       production origin; npm publication is not authorized
+publication state      `v0.2.0-preview.39` (`c347f78`) is tagged and deployed
+                       at `matter.ptoq.io`; its no-store health receipt was
+                       verified on 2026-08-22. npm publication is not authorized
 ```
 
 The frozen local candidate is a source-level browser-preview **GO**. Production

@@ -7,7 +7,11 @@ import {
   isLabelSuccess,
   parseLabelRequest,
 } from "../protocol/label-contract";
-import { handleLabelRequest, labelErrorResponse } from "./label-route";
+import {
+  handleLabelRequest,
+  labelErrorResponse,
+  resetLabelAdmissionForTests,
+} from "./label-route";
 import { resetLabelGeneratorState } from "./label-generator";
 
 const BODY = {
@@ -20,6 +24,7 @@ const BODY = {
   text: "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。",
   reference: { siblingLabels: ["模型调用成本"] },
 };
+const originalEnvironment = { ...process.env };
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("https://example.test/matter/api/label", {
@@ -37,8 +42,15 @@ async function respond(request: Request): Promise<Response> {
   }
 }
 
-beforeEach(() => resetLabelGeneratorState());
-afterEach(() => resetLabelGeneratorState());
+beforeEach(() => {
+  resetLabelGeneratorState();
+  resetLabelAdmissionForTests();
+});
+afterEach(() => {
+  process.env = { ...originalEnvironment };
+  resetLabelGeneratorState();
+  resetLabelAdmissionForTests();
+});
 
 describe("label route", () => {
   it("rejects a well-formed but unsupported locale", () => {
@@ -59,6 +71,27 @@ describe("label route", () => {
   it("rejects a non-JSON content type", async () => {
     const response = await respond(post(BODY, { "content-type": "text/plain" }));
     expect(response.status).toBe(415);
+  });
+
+  it("accepts JSON with a valid Content-Type parameter", async () => {
+    const response = await respond(post(BODY, { "content-type": "application/json; charset=utf-8" }));
+    expect(response.status).toBe(200);
+  });
+
+  it("enforces same-origin admission in production before reading material", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+    };
+    const response = await respond(post(BODY, {
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site",
+    }));
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST", retryable: false },
+    });
   });
 
   it("rejects an oversized declared length", async () => {

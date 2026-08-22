@@ -28,38 +28,45 @@ interface for unfinished thought.
 Matter is a spatial, voice-first material environment for thoughts that have not
 finished forming. It treats language as material that can be addressed by hand:
 the person speaks to bring a thought into the tree, points to what matters,
-lassos a precise phrase, stretches to set how much change is wanted, and speaks
-the direction of a possible transformation.
+lassos a precise phrase, and stretches to set how much expansion is wanted.
+Elastic Language fixes direction to its one \`expand-in-place\` tool policy;
+Voice admits human material and does not direct that transform.
 
 Matter is rooted rather than infinite. The single tree is structure,
 presentation, and context. The visible root-to-focus lineage is the context
 boundary; there is no hidden retrieval layer. AI appears inside material as one
-local change. A separate, closed-by-default Ask Matter control may return one
-read-only orientation answer from the visible lineage. Completed exchanges may
-remain in a bounded local record, but it is never model context, material
-history, or a permanent assistant panel.
+local change. Its sole secondary AI entrance is a separate, closed-by-default
+Ask Matter control: within one opening, a person may ask consecutive short
+read-only orientation questions grounded in the lassoed passages or bounded
+working projection. Each request projects current material afresh; earlier
+questions and answers never become model context. Closing or reloading begins
+a clean bubble. Completed exchanges may remain in a bounded local passive
+record, but it is never material history, a resumed inquiry surface, or a
+permanent assistant panel.
 
 ## Interaction contract
 
 1. Reference: a node or punctuation-bounded segment.
 2. Degree: a non-negative amount expressed by gesture.
-3. Direction: language spoken by the person.
+3. Direction: Elastic Language's fixed \`expand-in-place\` tool policy.
 4. Lineage: the visible path from root to focus.
 5. Result: one perceivable, pointer-undoable material change.
 
 The model boundary is intentionally small: the model returns text and the
 server constructs the change plan. Only the tree engine mutates durable
-material. Raw voice may admit human material; generative voice belongs to a
-selected node or segment.
+material. Raw voice admits human material. The current Elastic transform has
+no generative-voice direction path.
 
 ## Current repository boundary
 
 The running 0.2 preview is root-seeded. It currently includes the rooted
 tree, spatial layout, focus and folding runtime, material index, punctuation
-lasso, stretch projection, browser-native voice admission, local IndexedDB Markdown
-durability, ZIP archive transport, exact pointer undo with keyboard redo, and a fixture-gated
-turn path. A live model rewrite remains separately gated. Ask Matter has a
-bounded request boundary and a local completed-record, never a memory adapter.
+lasso, stretch projection, browser-native voice admission with a lazy local
+fallback, local IndexedDB Markdown durability, ZIP archive transport, and exact
+pointer undo with keyboard redo. Thought labels, transcript repair, and Ask
+Matter have independent live gates and safe failure floors. Elastic and Text
+Swap remain unavailable on the public deployment. Ask Matter has a bounded
+request boundary and a local completed-record, never a memory adapter.
 
 Still gated or not yet released: a live transform provider, its deployed
 rate/spend controls, the strict large-tree performance receipt, and account/sync

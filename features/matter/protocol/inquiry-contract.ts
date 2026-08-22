@@ -1,10 +1,11 @@
 import { PROTOCOL_VERSION } from "../tree/model";
 import { isMatterLocale } from "../config/locales";
+import { MAX_INQUIRY_QUESTION_CODE_POINTS } from "./spoken-text-limits";
+export { MAX_INQUIRY_QUESTION_CODE_POINTS } from "./spoken-text-limits";
 
 /** A bounded, non-mutating question about visible material. */
 export const MAX_INQUIRY_REQUEST_BYTES = 24 * 1_024;
 export const MAX_INQUIRY_RESPONSE_BYTES = 8 * 1_024;
-export const MAX_INQUIRY_QUESTION_CODE_POINTS = 500;
 export const MAX_INQUIRY_ANSWER_CODE_POINTS = 1_201;
 export const MAX_INQUIRY_LINEAGE_NODES = 64;
 export const MAX_INQUIRY_NODE_TEXT_CODE_POINTS = 480;

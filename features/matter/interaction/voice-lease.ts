@@ -101,6 +101,14 @@ export class VoiceLeaseCoordinator {
     return stopping.then(
       (recording) => {
         if (!this.owns(lease)) throw new VoiceError("RECORDING_CANCELLED");
+        if (!sameOperation(lease.operation, recording.operation)) {
+          // A transport result is not authoritative merely because the lease
+          // survived. Revoke the malformed result before any consumer can
+          // treat its native transcript or audio as the current operation.
+          this.release(lease);
+          safelyCancel(lease);
+          throw new VoiceError("RECORDING_FAILED");
+        }
         return recording;
       },
       (error: unknown) => {
@@ -132,6 +140,7 @@ export class VoiceLeaseCoordinator {
   private guardCallbacks(lease: Lease): VoiceCallbacks {
     return Object.freeze({
       locale: lease.callbacks.locale,
+      maxTranscriptCodePoints: lease.callbacks.maxTranscriptCodePoints,
       onSample: (sample) => {
         if (this.owns(lease)) safelyNotify(() => lease.callbacks.onSample?.(sample));
       },

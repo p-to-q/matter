@@ -17,6 +17,49 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-22 — spoken expression is one conservative undoable insertion
+
+Changed: the late human-admission repair may make at most one expression
+insertion. An unambiguous direct affect or celebration appends one
+sentence-final emoji from a four-symbol closed set; otherwise one exact
+low-ambiguity entity from a seven-concept locale pack may receive a word-tail
+icon under a reproducible 24% admission-identity sample. Negation, question,
+condition, report, metalinguistic use, protected literals, existing emoji,
+conflicting affect, word collision, and capacity veto the insertion. Ask Matter,
+spoken tool direction, and the managed repair prompt do not use the expression
+layer.
+
+Why: transcription can discard an explicitly spoken emotional or celebratory
+gesture, but that recovery is a semantic assertion and must remain visibly
+separate from the immediate insertion-only punctuation floor.
+
+Forecloses: decorating unlisted or partial nouns, more than one inferred emoji,
+true runtime randomness, inferred repeated emoji, voice-volume-only emotion, and
+audio-plus-text emotion fusion before a China patent freedom-to-operate review
+and precision receipts.
+
+## 2026-08-22 — final speech owns one deterministic punctuation floor
+
+Changed: every final STT path now applies one insertion-only five-locale
+punctuation policy before admission, Ask Matter draft delivery, or spoken tool
+direction. The pinned Whisper export supplies segment timestamps; the worker accepts a gap
+only when Matter's adaptive 20 ms waveform-energy detector corroborates the
+silence; browser-native speech explicitly uses semantic-only evidence. Timing
+stays transient and the strict HTTP response remains text-only. Each known
+locale owns its grammar and typography while token-anchored English remains a
+code-switch bridge; explicit list cues may admit a colon, while stronger
+rhetorical marks remain explicit spoken commands. The current browser-proven
+local model profile is fp32/WASM because q8, uint8, and fp16 graph construction
+fail under the pinned runtime; its transfer cost keeps local fallback gated.
+
+Why: a voice-first material cannot depend on a person typing punctuation, while
+raw callback gaps and unconditional pause thresholds are not reliable acoustic
+or semantic sentence evidence.
+
+Forecloses: Web Speech callback timing as pause evidence, VAD endpoint values as
+punctuation policy, length-only sentence splitting, immediate filler/restart
+deletion, timing in material or history, and a widened transcription wire shape.
+
 ## 2026-08-22 — a final expanded branch closes its own visible scope
 
 Changed: in a current same-parent group with at least two direct siblings, a

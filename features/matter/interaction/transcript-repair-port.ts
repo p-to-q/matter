@@ -4,7 +4,9 @@ import {
   decideRepairRequest,
   normalizeRepairInput,
 } from "../material/transcript-repair";
-import { repairAdmittedTranscript } from "../runtime/transcript-punctuation";
+import { decorateSpokenExpression } from "../runtime/expressive-transcript";
+import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import {
   requestTranscriptRepair,
   transcriptRepairEnabled,
@@ -46,10 +48,16 @@ export function createTranscriptRepairPort(options: Readonly<{
   return Object.freeze({
     repair: async (input) => {
       throwIfAborted(input.signal);
-      const ruleText = repairAdmittedTranscript(input.text, input.locale);
+      const ruleWords = repairAdmittedTranscriptWords(input.text, input.locale);
+      const ruleText = decorateSpokenExpression({
+        text: ruleWords,
+        locale: input.locale,
+        maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+        sampleSeed: input.operationId,
+      });
       const rules = Object.freeze({ text: ruleText, source: "rules" as const });
       const ruleInput = normalizeRepairInput({
-        text: ruleText,
+        text: ruleWords,
         locale: input.locale,
         vocabulary: input.vocabulary,
       });
@@ -61,7 +69,7 @@ export function createTranscriptRepairPort(options: Readonly<{
           operationId: input.operationId,
           attempt: input.attempt,
           locale: input.locale,
-          text: ruleText,
+          text: ruleWords,
           vocabulary: input.vocabulary,
           signal: input.signal,
         });
@@ -70,7 +78,7 @@ export function createTranscriptRepairPort(options: Readonly<{
         return rules;
       }
       throwIfAborted(input.signal);
-      if (response.source !== "model" || response.text === ruleText) return rules;
+      if (response.source !== "model" || response.text === ruleWords) return rules;
 
       // The deterministic floor already owns its closed lexical removals. Judge
       // only the model's delta from that floor; otherwise a safe restart/filler
@@ -81,7 +89,15 @@ export function createTranscriptRepairPort(options: Readonly<{
         response.text,
       );
       return verdict.ok && verdict.changed
-        ? Object.freeze({ text: verdict.text, source: "model" as const })
+        ? Object.freeze({
+            text: decorateSpokenExpression({
+              text: verdict.text,
+              locale: input.locale,
+              maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+              sampleSeed: input.operationId,
+            }),
+            source: "model" as const,
+          })
         : rules;
     },
     dispose: () => undefined,

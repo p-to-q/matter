@@ -126,10 +126,104 @@ describe("BrowserSpeechVoicePort", () => {
     });
     const recordingPromise = port.stop(OPERATION);
     const recording = await recordingPromise;
-    expect(recording.transcript).toBe("也许我们怀念的过去");
+    expect(recording.transcript).toBe("也许我们怀念的过去。");
     expect(recording.audio.size).toBe(0);
     expect(recognition.lang).toBe("zh-CN");
   });
+
+  it("uses the shared semantic floor when native recognition has no timing", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION, { locale: "en-US" });
+    FakeRecognition.instance?.onresult?.({
+      resultIndex: 0,
+      results: [{
+        isFinal: true,
+        length: 1,
+        0: { transcript: "this works but it still needs testing" },
+      }],
+    });
+    await expect(port.stop(OPERATION)).resolves.toMatchObject({
+      transcript: "this works, but it still needs testing.",
+    });
+  });
+
+  it("does not overflow a narrower final-transcript consumer", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION, {
+      locale: "en-US",
+      maxTranscriptCodePoints: 240,
+    });
+    const transcript = "a".repeat(240);
+    FakeRecognition.instance?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, length: 1, 0: { transcript } }],
+    });
+    await expect(port.stop(OPERATION)).resolves.toMatchObject({ transcript });
+  });
+
+  it("refuses adapter-presented emoji before any consumer can mistake it for expression", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    const onError = vi.fn();
+    await port.start(OPERATION, { locale: "en-US", onError });
+    FakeRecognition.instance?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: true, length: 1, 0: { transcript: "we did it 🎉" } }],
+    });
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+      code: "RECORDING_FAILED",
+    }));
+    await expect(port.stop(OPERATION)).rejects.toMatchObject({
+      code: "RECORDING_NOT_ACTIVE",
+    });
+  });
+
+  it.each([[240, 241], [500, 501]])(
+    "rejects %i-bound native words at %i code points",
+    async (limit, length) => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    const onError = vi.fn();
+    await port.start(OPERATION, {
+      locale: "en-US",
+      maxTranscriptCodePoints: limit,
+      onError,
+    });
+    FakeRecognition.instance?.onresult?.({
+      resultIndex: 0,
+      results: [{
+        isFinal: true,
+        length: 1,
+        0: { transcript: "a".repeat(length) },
+      }],
+    });
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+      code: "RECORDING_TOO_LARGE",
+    }));
+    await expect(port.stop(OPERATION)).rejects.toMatchObject({
+      code: "RECORDING_NOT_ACTIVE",
+    });
+    },
+  );
 
   it("maps browser denial to a stable microphone error", async () => {
     FakeRecognition.autoStart = false;
@@ -253,7 +347,7 @@ describe("BrowserSpeechVoicePort", () => {
       results: [{ isFinal: false, length: 1, 0: { transcript: "还没有最终事件" } }],
     });
     await expect(port.stop(OPERATION)).resolves.toMatchObject({
-      transcript: "还没有最终事件",
+      transcript: "还没有最终事件。",
     });
   });
 

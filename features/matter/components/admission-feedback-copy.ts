@@ -20,6 +20,7 @@ type AdmissionFeedbackLocaleCopy = Readonly<{
   retry: string;
   dismiss: string;
   cancel: string;
+  cancelTranscription: string;
 }>;
 
 const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Object.freeze({
@@ -39,6 +40,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     retry: "Record again",
     dismiss: "Dismiss",
     cancel: "Cancel recording",
+    cancelTranscription: "Cancel transcription",
   }),
   "zh-CN": Object.freeze({
     requesting: "正在等待麦克风权限",
@@ -56,6 +58,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     retry: "重新录音",
     dismiss: "关闭",
     cancel: "取消录音",
+    cancelTranscription: "取消转写",
   }),
   "zh-TW": Object.freeze({
     requesting: "正在等待麥克風權限",
@@ -73,6 +76,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     retry: "重新錄音",
     dismiss: "關閉",
     cancel: "取消錄音",
+    cancelTranscription: "取消轉寫",
   }),
   "ja-JP": Object.freeze({
     requesting: "マイクの許可を待っています",
@@ -90,6 +94,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     retry: "もう一度録音",
     dismiss: "閉じる",
     cancel: "録音をキャンセル",
+    cancelTranscription: "文字起こしをキャンセル",
   }),
   "de-DE": Object.freeze({
     requesting: "Warte auf Mikrofonzugriff",
@@ -107,6 +112,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     retry: "Erneut aufnehmen",
     dismiss: "Schließen",
     cancel: "Aufnahme abbrechen",
+    cancelTranscription: "Transkription abbrechen",
   }),
 });
 
@@ -115,6 +121,7 @@ export type AdmissionFeedbackActions = Readonly<{
   retry: string;
   dismiss: string;
   cancel: string;
+  cancelTranscription: string;
 }>;
 
 export function admissionFeedbackMessage(
@@ -136,8 +143,8 @@ export function admissionFeedbackMessage(
 export function admissionFeedbackActions(
   language: CanvasLanguage,
 ): AdmissionFeedbackActions {
-  const { stop, retry, dismiss, cancel } = COPY[language];
-  return Object.freeze({ stop, retry, dismiss, cancel });
+  const { stop, retry, dismiss, cancel, cancelTranscription } = COPY[language];
+  return Object.freeze({ stop, retry, dismiss, cancel, cancelTranscription });
 }
 
 function admissionErrorMessage(

@@ -439,8 +439,7 @@ into one release claim:
 
 | State | What is true | What it does not authorize |
 | --- | --- | --- |
-| deployed Preview.38 | the historical `browser-preview` receipt remains authoritative; labels, repair and inquiry are live, both material-model gates are off | no claim for this worktree's transport, cache, persistence or renderer hardening; issue #34 remains open |
-| post-Preview.38 source candidate | ordinary Matter keeps the complete renderer and adds the recorded transport, cache, persistence and hidden-resource hardening | no deployment identity, origin receipt or production promotion until a separately versioned candidate is frozen |
+| deployed Preview.39 | the `browser-preview` receipt is authoritative; labels, repair and inquiry are live, both material-model gates are off; transport, cache, persistence and renderer hardening are deployed | issue #34 remains open; health proves configured capability rather than provider-answer or distributed-control evidence |
 | performance research only | C1/C2/C3b run only through the explicit performance fixture; C4a/C4b are pure modules with no ordinary-product importer | no viewport source on Matter, no real lifecycle handoff, no accessibility or release-proof claim |
 | external operations still open | issue #34 distributed admission/rate/spend/alert ownership, retained deployed-origin latency/cold/fallback evidence, Elastic corpus/origin proof, and the viewport AT/lifecycle gates | no inference from a healthy cache, local benchmark, instance log or fixture receipt |
 
@@ -456,12 +455,17 @@ Boundary:   first-turn voice readiness; immediate admission plus detachable
             memory, or system surface.
 Invariants: readiness never requests microphone permission, captures audio, or
             downloads a speech model; a voice start has a bounded failure;
+            every final STT consumer applies one insertion-only locale floor;
+            only Whisper segment gaps corroborated by Matter's waveform detector
+            count as acoustic pauses, while Web Speech timing remains unknown;
             repair computes without extending first-paint latency but cannot
             commit before the 650ms visibility boundary; only a committed correction gets one
             short material-native settle and owns no visible status;
             Ask Matter retention remains behind its existing inquiry surface;
             only the tree engine commits material.
-Proof:      focused voice readiness/lifecycle/rule tests; admission→repair→
+Proof:      focused voice readiness/lifecycle/punctuation/pause/rule tests;
+            exact insertion recovery and five-locale adversarial seams;
+            admission→repair→
             private receipt→canonical settle; two-step undo/redo and
             hydrated-history recovery; same-id/same-revision epoch rejection;
             duplicate-command capability isolation; exact lasso and retained
@@ -2826,6 +2830,47 @@ Non-goals:  a marketing page, analytics, cookies, paid SEO tooling, external
 ```
 
 ## Current risks
+
+### Synthetic speech expression receipt — real content, no committed recording
+
+State: Proven in a real Chromium receipt; still capability-gated.
+
+```text
+Outcome:    one generated utterance proves local Whisper, deterministic
+            punctuation, and separately undoable expression in the browser
+Boundary:   gated Playwright launch configuration and the existing local
+            transcription/admission receipt; generated audio stays in /tmp
+Invariants: no recording or transcript fixture enters the repository; no server
+            transcription request or generative model is needed; ordinary E2E
+            remains fast and local transcription stays capability-gated
+Proof:      synthetic speech contains known celebration words; the committed
+            material contains those words and the late repair appends one 🎉
+Non-goals:  speech-emotion classification, production deployment, provider
+            accuracy claims, or making every noun receive an emoji
+```
+
+The first synthetic-browser run failed before material admission. A direct run
+against the same pinned model proved the audio was valid and exposed two causes:
+the export throws when asked for word-level timestamps because its ONNX graph
+has no cross-attention outputs, and the pinned q8, uint8, and fp16 graphs fail
+browser construction under Transformers.js 4.2.0. Supported segment timestamps
+preserve the transcript and semantic floor; short utterances with one segment
+correctly contribute no fabricated acoustic pause. fp32/WASM is the only profile
+with a successful Chromium receipt and costs about 151.5 MiB of ONNX weights, so
+it proves correctness but does not meet the intended quantized transfer gate.
+An explicit q4 Chromium/WASM run did not admit the same 6.5-second fixture
+within three minutes and was stopped; lower transfer without a usable latency
+receipt is not a fallback improvement.
+
+Two generated Mandarin WAV files stayed under `/private/tmp` and were never
+committed. The stricter continuous fixture contained no written punctuation;
+the content-free receipt records that direct Whisper output contained the
+expected lexical anchors and no punctuation. The gated browser receipt passed
+in about one minute and admitted
+the expected words with at least two internal commas, a terminal full stop, and
+the separately repaired `🎉`, while observing zero `/api/transcribe` requests.
+The optional managed repair rejected quickly in that run; deterministic local
+punctuation and expression still produced the accepted result.
 
 - Phase 2 introduces the first browser-resource and network lifecycles. Voice,
   selection geometry, and late model results must remain transient until one

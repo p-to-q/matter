@@ -7,7 +7,7 @@ export const MATTER_PRODUCT_DESCRIPTION =
   "Matter gives unfinished thought a material form: speak it into a rooted field, touch exact language, and make one local, reversible change.";
 export const MATTER_PRODUCT_TAGLINE =
   "AI gives language intelligence. Matter gives thought a body.";
-export const MATTER_SITE_LAST_UPDATED_ISO = "2026-08-11";
+export const MATTER_SITE_LAST_UPDATED_ISO = "2026-08-22";
 
 /**
  * Search terms describe the product's category and language without replacing

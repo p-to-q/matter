@@ -7,7 +7,11 @@ import {
   parseRepairRequest,
 } from "../protocol/repair-contract";
 import { resetRepairGeneratorState } from "./repair-generator";
-import { handleRepairRequest, repairErrorResponse } from "./repair-route";
+import {
+  handleRepairRequest,
+  repairErrorResponse,
+  resetRepairAdmissionForTests,
+} from "./repair-route";
 
 const BODY = {
   protocolVersion: PROTOCOL_VERSION,
@@ -17,6 +21,7 @@ const BODY = {
   locale: "zh-CN",
   text: "我一直在想这件事到底该怎么做 也许先放一放反而会更清楚",
 };
+const originalEnvironment = { ...process.env };
 
 function post(body: unknown, headers: Record<string, string> = {}): Request {
   return new Request("https://example.test/matter/api/repair", {
@@ -34,8 +39,15 @@ async function respond(request: Request): Promise<Response> {
   }
 }
 
-beforeEach(() => resetRepairGeneratorState());
-afterEach(() => resetRepairGeneratorState());
+beforeEach(() => {
+  resetRepairGeneratorState();
+  resetRepairAdmissionForTests();
+});
+afterEach(() => {
+  process.env = { ...originalEnvironment };
+  resetRepairGeneratorState();
+  resetRepairAdmissionForTests();
+});
 
 describe("parseRepairRequest", () => {
   it("accepts one well-formed utterance", () => {
@@ -105,6 +117,27 @@ describe("repair route", () => {
   it("refuses a non-JSON media type", async () => {
     const response = await respond(post("text", { "content-type": "text/plain" }));
     expect(response.status).toBe(415);
+  });
+
+  it("accepts JSON with a valid Content-Type parameter", async () => {
+    const response = await respond(post(BODY, { "content-type": "application/json; charset=utf-8" }));
+    expect(response.status).toBe(200);
+  });
+
+  it("enforces same-origin admission in production before reading a transcript", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+    };
+    const response = await respond(post(BODY, {
+      origin: "https://attacker.example",
+      "sec-fetch-site": "cross-site",
+    }));
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST", retryable: false },
+    });
   });
 
   it("never leaks a provider or a transcript through an unexpected failure", async () => {

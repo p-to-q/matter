@@ -406,6 +406,31 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
+  it("settles a mismatched transcription receipt instead of waiting forever", async () => {
+    const h = harness({
+      transcribe: vi.fn(async () => ({
+        protocolVersion: "0.2" as const,
+        interactionId: "another_operation",
+        attempt: 1,
+        transcript: "must not be admitted",
+      })),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "TRANSCRIPTION_FAILED",
+    });
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.voice.cancel).toHaveBeenCalledWith({
+      interactionId: "voice_1",
+      attempt: 1,
+    });
+  });
+
   it("cancels a revoked shared Voice lease and ignores its late transcription", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";

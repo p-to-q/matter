@@ -27,6 +27,32 @@ describe("requestTranscription", () => {
     });
   });
 
+  it("applies semantic punctuation even when a text-only adapter omits it", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      protocolVersion: "0.2",
+      interactionId: "voice_1",
+      attempt: 1,
+      transcript: "why is this still not ready",
+    })));
+    await expect(request({ locale: "en-US", purpose: "direction" }))
+      .resolves.toMatchObject({ transcript: "why is this still not ready?" });
+  });
+
+  it.each(["we did it 🎉", "take the flight ✈️", "flag 🇨🇳", "key 1️⃣"])(
+    "rejects provider-authored expression before it reaches any STT consumer: %s",
+    async (transcript) => {
+      vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+        protocolVersion: "0.2",
+        interactionId: "voice_1",
+        attempt: 1,
+        transcript,
+      })));
+
+      await expect(request({ purpose: "direction", locale: "en-US" }))
+        .rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
+    },
+  );
+
   it.each([
     ["extra field", { protocolVersion: "0.2", interactionId: "voice_1", attempt: 1, transcript: "text", provider: "hidden" }],
     ["wrong attempt", { protocolVersion: "0.2", interactionId: "voice_1", attempt: 2, transcript: "text" }],
@@ -46,7 +72,36 @@ describe("requestTranscription", () => {
     await expect(request({ purpose: "swap-direction" }))
       .rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
     await expect(request({ purpose: "direction" }))
-      .resolves.toMatchObject({ transcript: "x".repeat(241) });
+      .resolves.toMatchObject({ transcript: `${"x".repeat(241)}。` });
+  });
+
+  it("does not reject valid raw words merely because a final mark would exceed capacity", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        protocolVersion: "0.2",
+        interactionId: "voice_1",
+        attempt: 1,
+        transcript: "x".repeat(240),
+      }))
+      .mockResolvedValueOnce(Response.json({
+        protocolVersion: "0.2",
+        interactionId: "voice_1",
+        attempt: 1,
+        transcript: "x".repeat(500),
+      }))
+      .mockResolvedValueOnce(Response.json({
+        protocolVersion: "0.2",
+        interactionId: "voice_1",
+        attempt: 1,
+        transcript: "x".repeat(501),
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(request({ purpose: "swap-direction", locale: "en-US" }))
+      .resolves.toMatchObject({ transcript: "x".repeat(240) });
+    await expect(request({ purpose: "direction", locale: "en-US" }))
+      .resolves.toMatchObject({ transcript: "x".repeat(500) });
+    await expect(request({ purpose: "direction", locale: "en-US" }))
+      .rejects.toMatchObject({ code: "INVALID_PROVIDER_RESPONSE" });
   });
 
   it("rejects unknown error codes and extra error fields", async () => {

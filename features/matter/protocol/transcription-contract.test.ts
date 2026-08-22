@@ -4,6 +4,7 @@ import {
   audioUploadName,
   baseAudioMimeType,
   isAcceptedAudioType,
+  maxTranscriptionOutputCodePoints,
 } from "./transcription-contract";
 
 describe("audio type acceptance", () => {
@@ -23,5 +24,11 @@ describe("audio type acceptance", () => {
       expect(isAcceptedAudioType(inherited)).toBe(false);
       expect(audioFileExtension(inherited)).toBeNull();
     }
+  });
+
+  it("keeps final punctuation inside each spoken consumer's capacity", () => {
+    expect(maxTranscriptionOutputCodePoints("admission")).toBeUndefined();
+    expect(maxTranscriptionOutputCodePoints("direction")).toBe(500);
+    expect(maxTranscriptionOutputCodePoints("swap-direction")).toBe(240);
   });
 });

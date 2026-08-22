@@ -5,12 +5,14 @@ import {
   MAX_AUDIO_REQUEST_BYTES,
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
 } from "../protocol/transcription-contract";
+import { resetTranscriptionAdmissionForTests } from "./transcription-route";
 
 const originalEnvironment = { ...process.env };
 
 afterEach(() => {
   process.env = { ...originalEnvironment };
   vi.restoreAllMocks();
+  resetTranscriptionAdmissionForTests();
 });
 
 describe("Matter transcription route", () => {
@@ -56,7 +58,7 @@ describe("Matter transcription route", () => {
     const response = await POST(requestFrom(form));
 
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ transcript: "换一种更轻的说法" });
+    await expect(response.json()).resolves.toMatchObject({ transcript: "换一种更轻的说法。" });
   });
 
   it("does not transcribe a swap direction while the independent text-swap gate is off", async () => {
@@ -109,6 +111,31 @@ describe("Matter transcription route", () => {
     expect(malformed.status).toBe(415);
   });
 
+  it("enforces same-origin admission in production before buffering audio", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+    };
+    const response = await POST(requestFrom(validForm()));
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST", retryable: false },
+    });
+  });
+
+  it.each([
+    "multipart/form-data",
+    "multipart/form-data; boundary=",
+    "multipart/form-data; boundary=one; boundary=two",
+    "multipart/form-datax; boundary=x",
+  ])("rejects malformed multipart Content-Type metadata: %s", async (contentType) => {
+    const response = await POST(requestFromStream(new ReadableStream({ start(controller) { controller.close(); } }), {
+      "content-type": contentType,
+    }));
+    expect(response.status).toBe(415);
+  });
+
   it("fast-fails and cancels an honestly oversized declared request", async () => {
     const cancelled = vi.fn();
     const body = new ReadableStream<Uint8Array>({
@@ -122,6 +149,16 @@ describe("Matter transcription route", () => {
     }));
 
     expect(oversized.status).toBe(413);
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it("cancels an unread body with an invalid declared length", async () => {
+    const cancelled = vi.fn();
+    const response = await POST(requestFromStream(new ReadableStream({ cancel: cancelled }), {
+      "content-length": "-1",
+    }));
+
+    expect(response.status).toBe(400);
     expect(cancelled).toHaveBeenCalledOnce();
   });
 

@@ -20,6 +20,7 @@ describe("admission feedback copy", () => {
       retry: "重新录音",
       dismiss: "关闭",
       cancel: "取消录音",
+      cancelTranscription: "取消转写",
     });
   });
 

@@ -2,6 +2,8 @@ import { RECORDING_LIMIT_MS } from "./audio-policy";
 import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./voice-port";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { subscribePageSuspension } from "./page-suspension";
+import { normalizeSpokenTranscript } from "../runtime/spoken-transcript";
+import { hasPresentedEmoji } from "../protocol/transcription-contract";
 
 export const SPEECH_START_TIMEOUT_MS = 8_000;
 
@@ -81,6 +83,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
   private timer: number | null = null;
   private startTimer: number | null = null;
   private stopping = false;
+  private locale = "zh-CN";
+  private maxTranscriptCodePoints: number | undefined;
   private finalTranscript = "";
   private interimTranscript = "";
   private startPromise: Promise<void> | null = null;
@@ -107,6 +111,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.interimTranscript = "";
     this.startedAt = -1;
     this.stopping = false;
+    this.locale = callbacks.locale ?? "zh-CN";
+    this.maxTranscriptCodePoints = callbacks.maxTranscriptCodePoints;
     const startPromise = new Promise<void>((resolve, reject) => { this.resolveStart = resolve; this.rejectStart = reject; });
     this.startPromise = startPromise;
     let recognition: SpeechRecognitionLike;
@@ -124,7 +130,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
-    recognition.lang = callbacks.locale ?? "zh-CN";
+    recognition.lang = this.locale;
     recognition.onstart = () => {
       if (this.recognition !== recognition) return;
       if (this.startTimer !== null) window.clearTimeout(this.startTimer);
@@ -152,7 +158,15 @@ export class BrowserSpeechVoicePort implements VoicePort {
       if (finalText) this.finalTranscript += finalText;
       this.interimTranscript = interimText;
       const preview = `${this.finalTranscript} ${this.interimTranscript}`.trim();
-      if (preview.length > MAX_NODE_TEXT_CODE_UNITS) {
+      if (hasPresentedEmoji(preview)) {
+        this.fail(new VoiceError("RECORDING_FAILED"));
+        return;
+      }
+      if (
+        preview.length > MAX_NODE_TEXT_CODE_UNITS ||
+        (this.maxTranscriptCodePoints !== undefined &&
+          Array.from(preview).length > this.maxTranscriptCodePoints)
+      ) {
         this.fail(new VoiceError("RECORDING_TOO_LARGE"));
         return;
       }
@@ -176,8 +190,14 @@ export class BrowserSpeechVoicePort implements VoicePort {
         return;
       }
       const operationValue = this.operation!;
-      const transcript = `${this.finalTranscript} ${this.interimTranscript}`.trim();
+      const transcript = normalizeSpokenTranscript({
+        text: `${this.finalTranscript} ${this.interimTranscript}`.trim(),
+        locale: this.locale,
+        maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+        maxOutputCodePoints: this.maxTranscriptCodePoints,
+      });
       if (!transcript) { this.fail(new VoiceError("RECORDING_EMPTY")); return; }
+      if (hasPresentedEmoji(transcript)) { this.fail(new VoiceError("RECORDING_FAILED")); return; }
       const recording: VoiceRecording = Object.freeze({ operation: operationValue, audio: new Blob([], { type: "audio/webm" }), durationMs: Math.max(1, Math.round(performance.now() - this.startedAt)), transcript });
       this.resolveStop?.(recording);
       this.callbacks.onRecording?.(recording);
@@ -249,6 +269,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.stopPromise = null;
     this.startedAt = -1;
     this.stopping = false;
+    this.locale = "zh-CN";
+    this.maxTranscriptCodePoints = undefined;
     this.finalTranscript = "";
     this.interimTranscript = "";
   }

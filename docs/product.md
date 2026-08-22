@@ -21,11 +21,18 @@ sync, or surface area.
 
 **Material admission.** A person speaks at the empty root, beneath the selected
 visible passage, or — when nothing is selected — as a first-level thought in
-the full material view. The final transcript enters the tree immediately as
-human material. A bounded admission repair may then turn the heard utterance
+the full material view. The final transcript first receives deterministic
+locale punctuation, using genuine audio pauses when available and conservative
+semantic seams otherwise, then enters the tree immediately as human material.
+That first pass inserts formatting but never deletes, replaces, or reorders the
+person's words. A bounded admission repair may then turn the heard utterance
 into a faithful written version for twelve seconds: it can remove recognition
 debris, non-semantic fillers, abandoned starts, repeated verbal scaffolding, or
-the discarded side of an unmistakable correction. When the utterance itself
+the discarded side of an unmistakable correction. One high-confidence direct
+affect or celebration may append one sentence-final emoji in that separately
+undoable repair. Alternatively, one low-ambiguity iconographic noun may receive
+a reproducibly sampled word-tail emoji; negation, report, question, condition,
+conflict, protected text, and unlisted or colliding nouns veto it. When the utterance itself
 proves a broken spoken seam, it may redraft that seam into the shortest natural
 written phrasing without changing speaker, modality, relation, fact, or claim
 order. A deterministic five-locale floor is always available; one
@@ -125,14 +132,17 @@ diagnosis; only valid model output can become visible material.
 
 Intent is anchored to a node or segment. AI has no permanent panel, persona, or
 autonomous chain of operations. Its primary output appears only as a change to
-the material a person is handling. One secondary exception exists: a person may
-open a small Matter inquiry, ask one short question about either the lassoed
-passages or, when no passages are selected, the bounded active working
-projection of the material tree,
-and receive orientation that never edits material. Each opening begins clean:
-a completed exchange is not replayed after closing or reload. It adds no
-separate product surface and is not material, history, archive content, or
-later model context.
+the material a person is handling. The sole secondary AI entrance is a small
+Matter inquiry: a person may open it, ask a short question about either the
+lassoed passages or, when no passages are selected, the bounded active working
+projection of the material tree, and receive orientation that never edits
+material. Within that one opening, the person may continue with further short
+questions one at a time. Each request projects current material afresh; earlier
+questions and answers do not become later model context. The bubble is
+transient: each opening begins clean and no exchange is replayed after closing
+or reload. A bounded local completed-record may remain separately for passive
+look-back, but it is not a resumed inquiry surface and is never material,
+history, archive content, or later model context.
 On desktop, the upper-right About/settings pair, bottom-right utility row, and
 lower-left guidance each own the same transparent two-depth optical field. The
 bottom-right row keeps the `28px` inline / `22px` block outer and `15px` inline /

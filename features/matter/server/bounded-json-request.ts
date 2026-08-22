@@ -1,3 +1,5 @@
+import { isJsonContentType } from "./content-type";
+
 /**
  * The one place a JSON request boundary is enforced. Every route that accepts a
  * body needs the same four guarantees — a declared size is not trusted, the
@@ -46,11 +48,22 @@ export async function withBoundedJsonRequest<T>(
     metadata: BoundedJsonRequestMetadata,
   ) => Promise<T>,
 ): Promise<T> {
-  const declaredLength = parseOptionalContentLength(request.headers.get("content-length"), policy);
-  if (declaredLength !== null && declaredLength > policy.maxBytes) throw policy.fail("too-large");
+  let declaredLength: number | null;
+  try {
+    declaredLength = parseOptionalContentLength(request.headers.get("content-length"), policy);
+  } catch (error) {
+    cancelBody(request.body);
+    throw error;
+  }
+  if (declaredLength !== null && declaredLength > policy.maxBytes) {
+    cancelBody(request.body);
+    throw policy.fail("too-large");
+  }
 
-  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!contentType.startsWith("application/json")) throw policy.fail("unsupported-media-type");
+  if (!isJsonContentType(request.headers.get("content-type"))) {
+    cancelBody(request.body);
+    throw policy.fail("unsupported-media-type");
+  }
 
   const boundary = createRequestBoundary(request.signal, policy.timeoutMs);
   try {
@@ -196,6 +209,15 @@ function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
     reader.releaseLock();
   } catch {
     // Releasing is best effort after a broken stream source.
+  }
+}
+
+function cancelBody(body: ReadableStream<Uint8Array> | null): void {
+  if (body === null) return;
+  try {
+    void body.cancel().catch(() => undefined);
+  } catch {
+    // A pre-locked invalid body is still refused before parsing or delegation.
   }
 }
 

@@ -59,6 +59,8 @@ export type VoiceCallbacks = Readonly<{
   onSample?: (sample: VoiceSample) => void;
   onTranscript?: (transcript: string) => void;
   locale?: string;
+  /** A narrower consumer may reserve its own final-transcript capacity. */
+  maxTranscriptCodePoints?: number;
   onDurationLimit?: (operation: VoiceOperation) => void;
   onRecording?: (recording: VoiceRecording) => void;
   onError?: (error: VoiceError) => void;

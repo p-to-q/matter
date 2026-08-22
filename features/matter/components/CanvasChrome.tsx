@@ -85,6 +85,7 @@ type CanvasChromeCopy = Readonly<{
   close: string;
   closeMenu: string;
   dictate: string;
+  dictateCancel: string;
   dictateStop: string;
   fxLabel: string;
   inquiry: string;
@@ -114,6 +115,47 @@ type CanvasChromeCopy = Readonly<{
   terms: string;
 }>;
 
+export type InquiryDictationControl = Readonly<{
+  action: "start" | "stop" | "cancel";
+  disabled: boolean;
+  label: string;
+  pressed: boolean;
+}>;
+
+/** Keeps the one microphone control reversible throughout a potentially long
+ * transcription without presenting cancellation as another permanent tool. */
+export function projectInquiryDictationControl(input: Readonly<{
+  listening: boolean;
+  transcribing: boolean;
+  supported: boolean | null;
+  startLabel: string;
+  stopLabel: string;
+  cancelLabel: string;
+}>): InquiryDictationControl {
+  if (input.listening) {
+    return Object.freeze({
+      action: "stop",
+      disabled: false,
+      label: input.stopLabel,
+      pressed: true,
+    });
+  }
+  if (input.transcribing) {
+    return Object.freeze({
+      action: "cancel",
+      disabled: false,
+      label: input.cancelLabel,
+      pressed: true,
+    });
+  }
+  return Object.freeze({
+    action: "start",
+    disabled: input.supported !== true,
+    label: input.startLabel,
+    pressed: false,
+  });
+}
+
 function PToQAttribution({ before, after }: Readonly<{ before: string; after: string }>) {
   return (
     <>
@@ -132,7 +174,7 @@ const ENGLISH_INFO: CanvasChromeInfo = Object.freeze({
       "Matter is an interface for unfinished thought. Voice brings language in, gesture touches exact material and sets how much it may change, and a rooted structure keeps each thought's lineage.",
       "It is a way of thinking with AI in material, not through a chat. Unfinished thoughts deserve room to remain uncertain, to be touched, and to keep growing.",
       "AI gives language intelligence. Matter gives thought a body.",
-      "This is an early preview. Live voice input is available when the browser supports it; a live generative provider remains separately gated. We are sharing Matter while its material language is becoming.",
+      "This is an early preview. Live voice input, transcript repair, and Ask Matter are available; material transformation remains unavailable. We are sharing Matter while its material language is becoming.",
       <PToQAttribution after="." before="Matter is a project by " key="attribution" />,
     ]),
   }),
@@ -173,7 +215,7 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
       "Matter 是一个让未完成想法获得形体的界面。声音把语言带进来；手势触碰确切的材料，决定它可以改变多少；根状结构让每个想法保留自己的脉络。",
       "这是一种在材料中与 AI 一起思考的方式，而不是在对话框里等待答案。尚未成形的想法需要保留犹豫、被触碰，也继续生长的空间。",
       "AI 赋予语言智能，Matter 让思想拥有身体。",
-      "当前是早期预览。浏览器支持时，实时语音输入已可使用；实时生成服务仍需单独开启。我们在 Matter 的材料语言成形过程中把它打开。",
+      "当前是早期预览。实时语音输入、语音整理和询问 Matter 已可使用；材料生成变换尚未开放。我们在 Matter 的材料语言成形过程中把它打开。",
       <PToQAttribution after=" 发起的项目。" before="Matter 是由 " key="attribution" />,
     ]),
   }),
@@ -212,7 +254,7 @@ const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     "Matter 是讓未完成想法獲得形體的介面。聲音帶入語言，手勢觸碰確切材料並決定改變多少，根狀結構保留每個想法的脈絡。",
     "這是在材料中與 AI 一起思考，而不是在對話框裡等待答案。未完成的想法需要保留猶豫、被觸碰並繼續生長的空間。",
     "AI 賦予語言智能，Matter 讓思想擁有身體。",
-    "這是早期預覽。瀏覽器支援時，實時語音輸入已可使用；即時生成服務仍需單獨開啟。",
+    "這是早期預覽。實時語音輸入、語音整理和詢問 Matter 已可使用；材料生成變換尚未開放。",
     <PToQAttribution after=" 發起的項目。" before="Matter 是由 " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "詢問 Matter", body: Object.freeze([
@@ -230,7 +272,7 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
     "Matter は未完成の考えに形を与えるためのインターフェースです。声が言葉を運び、ジェスチャーが触れる場所と変化の量を決め、根のある構造が系譜を保ちます。",
     "これはチャットで答えを待つのではなく、素材の中で AI と考える方法です。未完成な考えにも、迷いを残し、触れ、育てる余白があります。",
     "AI は言葉に知性を与え、Matter は思考に身体を与えます。",
-    "初期プレビューです。ブラウザが対応している場合、リアルタイム音声入力は利用できます。ライブ生成プロバイダーは別途ゲートされています。",
+    "初期プレビューです。リアルタイム音声入力、音声の整形、Matter への質問は利用できます。素材を変換する生成機能はまだ利用できません。",
     <PToQAttribution after=" の project です。" before="Matter は " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
@@ -248,7 +290,7 @@ const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
     "Matter ist eine Schnittstelle für unfertige Gedanken. Die Stimme bringt Sprache herein, Gesten berühren genaues Material und bestimmen das Maß der Veränderung, eine verwurzelte Struktur bewahrt die Herkunft jedes Gedankens.",
     "Es ist eine Art, mit KI im Material zu denken, nicht in einem Chat auf Antworten zu warten. Unfertige Gedanken dürfen unsicher bleiben, berührt werden und weiterwachsen.",
     "KI gibt Sprache Intelligenz. Matter gibt Gedanken einen Körper.",
-    "Dies ist eine frühe Vorschau. Live-Spracheingabe ist verfügbar, wenn der Browser sie unterstützt; ein Live-Generierungsanbieter bleibt separat freigeschaltet.",
+    "Dies ist eine frühe Vorschau. Live-Spracheingabe, Transkriptreparatur und Matter fragen sind verfügbar; generative Materialtransformation bleibt deaktiviert.",
     <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
@@ -279,13 +321,14 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     close: "Close",
     closeMenu: "Close Matter menu",
     dictate: "Dictate",
+    dictateCancel: "Cancel dictation",
     dictateStop: "Stop dictating",
     fxLabel: "Leaf shadows",
     inquiry: "Ask Matter",
     information: "Information",
     language: "Language",
     listening: "Listening",
-    transcribing: "Transcribing on this device…",
+    transcribing: "Finishing the dictation…",
     menu: "Matter",
     noticeModelUnavailable: "Matter received this, but no answer model is connected yet.",
     noticeNoMaterial: "There is no material to answer about yet.",
@@ -317,13 +360,14 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     close: "关闭",
     closeMenu: "关闭 Matter 菜单",
     dictate: "口述",
+    dictateCancel: "取消口述",
     dictateStop: "停止口述",
     fxLabel: "树影",
     inquiry: "询问 Matter",
     information: "关于",
     language: "语言",
     listening: "正在听",
-    transcribing: "正在此设备上转写…",
+    transcribing: "正在整理口述…",
     menu: "Matter",
     noticeModelUnavailable: "Matter 收到了，但还没有连接可以回答的模型。",
     noticeNoMaterial: "还没有材料可以回答。",
@@ -355,13 +399,14 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     close: "關閉",
     closeMenu: "關閉 Matter 選單",
     dictate: "口述",
+    dictateCancel: "取消口述",
     dictateStop: "停止口述",
     fxLabel: "樹影",
     inquiry: "詢問 Matter",
     information: "資訊",
     language: "語言",
     listening: "正在聽",
-    transcribing: "正在此裝置上轉寫…",
+    transcribing: "正在整理口述…",
     menu: "Matter",
     noticeModelUnavailable: "Matter 收到了，但還沒有連接可以回答的模型。",
     noticeNoMaterial: "還沒有材料可以回答。",
@@ -393,13 +438,14 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     close: "閉じる",
     closeMenu: "Matter メニューを閉じる",
     dictate: "音声入力",
+    dictateCancel: "音声入力をキャンセル",
     dictateStop: "音声入力を停止",
     fxLabel: "葉の影",
     inquiry: "Matter に尋ねる",
     information: "情報",
     language: "言語",
     listening: "聞いています",
-    transcribing: "この端末で文字起こし中…",
+    transcribing: "音声入力を整えています…",
     menu: "Matter",
     noticeModelUnavailable: "Matter は受け取りましたが、答えるモデルがまだ接続されていません。",
     noticeNoMaterial: "まだ答える材料がありません。",
@@ -431,13 +477,14 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     close: "Schließen",
     closeMenu: "Matter-Menü schließen",
     dictate: "Diktieren",
+    dictateCancel: "Diktat abbrechen",
     dictateStop: "Diktat stoppen",
     fxLabel: "Blattschatten",
     inquiry: "Matter fragen",
     information: "Informationen",
     language: "Sprache",
     listening: "Hört zu",
-    transcribing: "Wird auf diesem Gerät transkribiert …",
+    transcribing: "Diktat wird verarbeitet …",
     menu: "Matter",
     noticeModelUnavailable: "Matter hat die Frage erhalten, aber noch ist kein Antwortmodell verbunden.",
     noticeNoMaterial: "Es gibt noch kein Material für eine Antwort.",
@@ -1010,6 +1057,14 @@ function InquiryBubble({
     onFailed: (notice) => dispatch({ type: "listen-failed", notice }),
   }, language);
   const cancelDictation = dictation.cancel;
+  const dictationControl = projectInquiryDictationControl({
+    listening,
+    transcribing,
+    supported: dictation.supported,
+    startLabel: copy.dictate,
+    stopLabel: copy.dictateStop,
+    cancelLabel: copy.dictateCancel,
+  });
 
   useEffect(() => () => requestRef.current?.abort(), []);
 
@@ -1170,14 +1225,18 @@ function InquiryBubble({
           value={text}
         />
         <button
-          aria-label={listening ? copy.dictateStop : copy.dictate}
-          aria-pressed={listening}
+          aria-label={dictationControl.label}
+          aria-pressed={dictationControl.pressed}
           className={styles.inquiryDictate}
           data-inquiry-control="dictate"
           data-voice-available={dictation.supported === true}
-          disabled={transcribing || (!listening && dictation.supported !== true)}
+          disabled={dictationControl.disabled}
           onClick={() => {
-            if (listening) {
+            if (dictationControl.action === "cancel") {
+              dictation.cancel();
+              return;
+            }
+            if (dictationControl.action === "stop") {
               dictation.stop();
               return;
             }
@@ -1199,7 +1258,12 @@ function InquiryBubble({
         </button>
       </div>
       {voiceBusy || state.notice !== null || state.turns.length === 0 || record?.phase === "error" ? (
-        <p className={styles.inquiryStatus}>
+        <p
+          aria-atomic="true"
+          aria-live="polite"
+          className={styles.inquiryStatus}
+          role="status"
+        >
           {record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
             ? voiceNoticeCopy(copy, state.notice)
             : listening ? copy.listening

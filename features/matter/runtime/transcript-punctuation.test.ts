@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAdmittedTranscript, repairAdmittedTranscript } from "./transcript-punctuation";
+import {
+  normalizeAdmittedTranscript,
+  repairAdmittedTranscript,
+  repairAdmittedTranscriptWords,
+} from "./transcript-punctuation";
 
 describe("normalizeAdmittedTranscript", () => {
   it("publishes a formatting-only language-appropriate floor", () => {
@@ -26,6 +30,11 @@ describe("normalizeAdmittedTranscript", () => {
   it("uses CJK punctuation for Japanese", () => {
     expect(normalizeAdmittedTranscript("ありがとう")).toBe("ありがとう。");
   });
+
+  it("does not overflow an exact-capacity human admission", () => {
+    const transcript = "a".repeat(2_000);
+    expect(normalizeAdmittedTranscript(transcript, "en-US")).toBe(transcript);
+  });
 });
 
 describe("repairAdmittedTranscript", () => {
@@ -38,6 +47,12 @@ describe("repairAdmittedTranscript", () => {
       .toBe("我觉得可以。");
     expect(repairAdmittedTranscript("我觉得，呃，然后", "zh-CN"))
       .toBe("我觉得，然后。");
+    expect(repairAdmittedTranscript("我觉得我觉得这个事情呃其实可以", "zh-CN"))
+      .toBe("我觉得这个事情，其实可以。");
+    expect(repairAdmittedTranscript("呃逆需要治疗", "zh-CN"))
+      .toBe("呃逆需要治疗。");
+    expect(repairAdmittedTranscript("嗯我同意", "zh-CN"))
+      .toBe("嗯我同意。");
   });
 
   it("collapses all recognition echoes in one idempotent pass", () => {
@@ -67,6 +82,10 @@ describe("repairAdmittedTranscript", () => {
     expect(repairAdmittedTranscript("先停一下 逗點 然後繼續 句點", "zh-TW"))
       .toBe("先停一下，然後繼續。");
     expect(repairAdmittedTranscript("这样好吗 问号", "zh-CN")).toBe("这样好吗？");
+    expect(repairAdmittedTranscript("我们先停一下 破折号 然后继续", "zh-CN"))
+      .toBe("我们先停一下—然后继续。");
+    expect(repairAdmittedTranscript("pause here em dash then continue", "en-US"))
+      .toBe("Pause here—then continue.");
   });
 
   it("preserves named punctuation in prose and quotes", () => {
@@ -91,6 +110,18 @@ describe("repairAdmittedTranscript", () => {
       .toBe("Can we try this again?");
     expect(repairAdmittedTranscript("this works but it still needs testing", "en-US"))
       .toBe("This works, but it still needs testing.");
+  });
+
+  it("adds one conservative sentence-final expression in the undoable repair", () => {
+    const celebrated = repairAdmittedTranscript("我们终于成功了", "zh-CN");
+    expect(celebrated).toBe("我们终于成功了。🎉");
+    expect(repairAdmittedTranscript(celebrated, "zh-CN")).toBe(celebrated);
+    expect(repairAdmittedTranscript("i am really furious", "en-US"))
+      .toBe("I am really furious.😠");
+    expect(repairAdmittedTranscript("我没有生气", "zh-CN"))
+      .toBe("我没有生气。");
+    expect(repairAdmittedTranscript("我们坐飞机去上海", "zh-CN"))
+      .toBe("我们坐飞机去上海。");
   });
 
   it("handles spoken English punctuation and more obvious ASR echoes", () => {
@@ -169,6 +200,17 @@ describe("repairAdmittedTranscript", () => {
       .toBe("Why isn't this ready?");
     expect(repairAdmittedTranscript("we test it and then we ship it", "en-US"))
       .toBe("We test it and then we ship it.");
+  });
+
+  it.each([
+    ["这不但是技术问题也是工程问题", "这不但是技术问题，也是工程问题。"],
+    ["这是关于所以然的讨论然后呢我们继续", "这是关于所以然的讨论，然后呢，我们继续。"],
+    ["这是同时代的作品然后呢我们继续", "这是同时代的作品，然后呢，我们继续。"],
+    ["这次测试不过关然后呢我们重来", "这次测试不过关，然后呢，我们重来。"],
+    ["事情自然而然形成了共识然后呢我们继续", "事情自然而然形成了共识，然后呢，我们继续。"],
+    ["这等于是什么还不清楚然后呢我们继续", "这等于是什么还不清楚，然后呢，我们继续。"],
+  ] as const)("keeps late repair on the collision-safe punctuation owner: %s", (text, expected) => {
+    expect(repairAdmittedTranscript(text, "zh-CN")).toBe(expected);
   });
 
   it("repairs bounded Japanese dictation without touching ordinary punctuation nouns", () => {
@@ -332,7 +374,7 @@ describe("repairAdmittedTranscript", () => {
     expect(repairAdmittedTranscript("this is kind of uncertain", "en-US"))
       .toBe("This is kind of uncertain.");
     expect(repairAdmittedTranscript("我呃我觉得可以", "zh-CN"))
-      .toBe("我呃我觉得可以。");
+      .toBe("我觉得可以。");
     expect(repairAdmittedTranscript("呃我觉得可以", "zh-CN"))
       .toBe("我觉得可以。");
   });
@@ -387,6 +429,19 @@ describe("repairAdmittedTranscript", () => {
     expect(chinese).not.toContain("\n");
   });
 
+  it("falls back whole when repair-only spacing would exceed node capacity", () => {
+    const exactCapacity = "中A".repeat(1_000);
+    expect(repairAdmittedTranscript(exactCapacity, "zh-CN")).toBe(exactCapacity);
+  });
+
+  it("keeps dense maximum-length late repair bounded", { timeout: 2_500 }, () => {
+    const text = "我们然后".repeat(500);
+    const repaired = repairAdmittedTranscriptWords(text, "zh-CN");
+    for (let pass = 0; pass < 4; pass += 1) {
+      expect(repairAdmittedTranscriptWords(text, "zh-CN")).toBe(repaired);
+    }
+  });
+
   it("treats punctuation vocabulary as prose in naming and quoted contexts", () => {
     expect(repairAdmittedTranscript("we discussed comma support", "en-US"))
       .toBe("We discussed comma support.");
@@ -396,6 +451,12 @@ describe("repairAdmittedTranscript", () => {
       .toBe('He wrote "use comma here".');
     expect(repairAdmittedTranscript("换行符需要保留", "zh-CN"))
       .toBe("换行符需要保留。");
+    expect(repairAdmittedTranscript("the em dash character stays literal", "en-US"))
+      .toBe("The em dash character stays literal.");
+    expect(repairAdmittedTranscript("we pause em dash then continue", "en-US"))
+      .toBe("We pause—then continue.");
+    expect(repairAdmittedTranscript("我们先停破折号然后继续", "zh-CN"))
+      .toBe("我们先停—然后继续。");
   });
 
   it("recognizes only direct lexical question shapes", () => {
@@ -407,6 +468,16 @@ describe("repairAdmittedTranscript", () => {
       .toBe("为什么这个还没好？");
     expect(repairAdmittedTranscript("我不知道为什么这个还没好", "zh-CN"))
       .toBe("我不知道为什么这个还没好。");
+    expect(repairAdmittedTranscript("本来就是这样嘛", "zh-CN"))
+      .toBe("本来就是这样嘛。");
+    expect(repairAdmittedTranscript("几年以后我们会再看", "zh-CN"))
+      .toBe("几年以后，我们会再看。");
+    expect(repairAdmittedTranscript("何かを買う", "ja-JP"))
+      .toBe("何かを買う。");
+    expect(repairAdmittedTranscript("行くかどうか", "ja-JP"))
+      .toBe("行くかどうか。");
+    expect(repairAdmittedTranscript("Warum das wichtig ist bleibt offen", "de-DE"))
+      .toBe("Warum das wichtig ist bleibt offen.");
   });
 
   it("masks code, paths, versions, network addresses, and quoted literals", () => {
@@ -428,6 +499,10 @@ describe("repairAdmittedTranscript", () => {
     )).toBe('He said "the rate is 20 percent and use comma here".');
     expect(repairAdmittedTranscript("isn't this 'good' or isn't it", "en-US"))
       .toBe("Isn't this 'good' or isn't it?");
+    expect(repairAdmittedTranscript('keep "a — b" exactly', "en-US"))
+      .toBe('Keep "a — b" exactly.');
+    expect(repairAdmittedTranscript("keep `a — b` exactly", "en-US"))
+      .toBe("Keep `a — b` exactly.");
   });
 
   it("normalizes only explicit unit displays and preserves ambiguous numbers", () => {

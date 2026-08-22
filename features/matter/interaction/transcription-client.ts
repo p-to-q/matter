@@ -6,6 +6,8 @@ import {
   MAX_AUDIO_BYTES,
   MAX_TRANSCRIPTION_RESPONSE_BYTES,
   TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+  hasPresentedEmoji,
+  maxTranscriptionOutputCodePoints,
   type TranscriptionErrorCode,
   type TranscriptionErrorEnvelope,
   type TranscriptionPurpose,
@@ -15,6 +17,7 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 import { clientMatterBasePath } from "../config/base-path";
 import { readBoundedJsonResponse } from "./bounded-json-response";
+import { normalizeSpokenTranscript } from "../runtime/spoken-transcript";
 
 export class TranscriptionClientError extends Error {
   constructor(
@@ -75,7 +78,7 @@ export async function requestTranscription(input: {
     if (!isSuccess(payload, input.interactionId, input.attempt, input.purpose)) {
       throw invalidProviderResponse();
     }
-    return payload;
+    return normalizeSuccess(payload, input.locale, input.purpose);
   } catch (error) {
     if (deadline.didTimeout()) {
       throw new TranscriptionClientError(
@@ -114,9 +117,11 @@ async function requestLocalTranscription(input: {
   try {
     local = await import("./local-transcription-client");
     const rawTranscript = await local.transcribeLocally(input);
-    const transcript = input.purpose === "swap-direction"
-      ? normalizeTextSwapDirection(rawTranscript)
-      : rawTranscript;
+    const transcript = normalizeTranscriptForPurpose(
+      rawTranscript,
+      input.locale,
+      input.purpose,
+    );
     if (transcript === null) {
       throw new TranscriptionClientError(
         "INVALID_PROVIDER_RESPONSE",
@@ -166,6 +171,38 @@ async function requestLocalTranscription(input: {
       true,
     );
   }
+}
+
+function normalizeSuccess(
+  success: TranscriptionSuccess,
+  locale: string,
+  purpose: TranscriptionPurpose,
+): TranscriptionSuccess {
+  const transcript = normalizeTranscriptForPurpose(success.transcript, locale, purpose);
+  if (transcript === null || transcript.length > MAX_NODE_TEXT_CODE_UNITS) {
+    throw invalidProviderResponse();
+  }
+  return Object.freeze({ ...success, transcript });
+}
+
+function normalizeTranscriptForPurpose(
+  transcript: string,
+  locale: string,
+  purpose: TranscriptionPurpose,
+): string | null {
+  // Expression is not an STT-provider capability. Admission may add one later
+  // through its own deterministic, undoable repair; inquiry and direction do
+  // not own that channel at all.
+  if (hasPresentedEmoji(transcript)) return null;
+  const punctuated = normalizeSpokenTranscript({
+    text: transcript,
+    locale,
+    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+    maxOutputCodePoints: maxTranscriptionOutputCodePoints(purpose),
+  });
+  return purpose === "swap-direction"
+    ? normalizeTextSwapDirection(punctuated)
+    : punctuated;
 }
 
 function withDeadline(parent: AbortSignal, timeoutMs: number): {
@@ -260,6 +297,7 @@ function isSuccess(
 ): value is TranscriptionSuccess {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<TranscriptionSuccess>;
+  const codePointLimit = maxTranscriptionOutputCodePoints(purpose);
   return exactKeys(candidate, ["protocolVersion", "interactionId", "attempt", "transcript"]) &&
     candidate.protocolVersion === PROTOCOL_VERSION &&
     candidate.interactionId === interactionId &&
@@ -267,6 +305,7 @@ function isSuccess(
     typeof candidate.transcript === "string" &&
     candidate.transcript.trim().length > 0 &&
     candidate.transcript.length <= MAX_NODE_TEXT_CODE_UNITS &&
+    (codePointLimit === undefined || Array.from(candidate.transcript).length <= codePointLimit) &&
     (purpose !== "swap-direction" || normalizeTextSwapDirection(candidate.transcript) === candidate.transcript);
 }
 

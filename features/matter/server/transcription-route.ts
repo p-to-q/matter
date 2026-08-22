@@ -13,6 +13,8 @@ import {
 import { isMatterLocale } from "../config/locales";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { transcribeRecording } from "./transcriber";
+import { hasMultipartFormDataBoundary } from "./content-type";
+import { createPublicRequestAdmission } from "./public-request-admission";
 
 const FIELD_NAMES = new Set([
   "protocolVersion",
@@ -25,25 +27,40 @@ const FIELD_NAMES = new Set([
 ]);
 
 export async function handleTranscriptionRequest(request: Request): Promise<Response> {
+  const admission = transcriptionAdmission.admit(request);
+  if (!admission.ok) throw transcriptionAdmissionError(admission.reason);
   const boundary = createRequestBoundary(request.signal);
   try {
     return await handleBoundedTranscriptionRequest(request, boundary.signal);
   } finally {
     boundary.dispose();
+    admission.release();
   }
+}
+
+const transcriptionAdmission = createPublicRequestAdmission({ requestsPerWindow: 12, maxConcurrent: 3 });
+
+export function resetTranscriptionAdmissionForTests(): void {
+  transcriptionAdmission.resetForTests();
 }
 
 async function handleBoundedTranscriptionRequest(
   request: Request,
   signal: AbortSignal,
 ): Promise<Response> {
-  const declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
+  let declaredLength: number | null;
+  try {
+    declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
+  } catch (error) {
+    cancelBody(request.body);
+    throw error;
+  }
   if (declaredLength !== null && declaredLength > MAX_AUDIO_REQUEST_BYTES) {
     cancelBody(request.body);
     throw audioTooLarge();
   }
-  const contentType = request.headers.get("content-type") ?? "";
-  if (!contentType.toLowerCase().startsWith("multipart/form-data")) {
+  const contentType = request.headers.get("content-type");
+  if (!hasMultipartFormDataBoundary(contentType)) {
     cancelBody(request.body);
     throw invalidRequest("The recording request format is invalid.", 415);
   }
@@ -53,7 +70,7 @@ async function handleBoundedTranscriptionRequest(
   let form: FormData;
   try {
     form = await new Response(body, {
-      headers: { "content-type": contentType },
+      headers: { "content-type": contentType ?? "" },
     }).formData();
   } catch {
     throwIfRequestInterrupted(signal);
@@ -318,4 +335,16 @@ function parseOptionalContentLength(value: string | null): number | null {
 
 function invalidRequest(message: string, status = 400): TranscriptionServerError {
   return new TranscriptionServerError("INVALID_REQUEST", message, false, status);
+}
+
+function transcriptionAdmissionError(reason: "ORIGIN" | "RATE" | "BUSY"): TranscriptionServerError {
+  if (reason === "ORIGIN") {
+    return invalidRequest("This recording origin is not allowed.", 403);
+  }
+  return new TranscriptionServerError(
+    "TRANSCRIPTION_UNAVAILABLE",
+    reason === "RATE" ? "Please wait before recording again." : "Matter is busy. Please try again shortly.",
+    true,
+    reason === "RATE" ? 429 : 503,
+  );
 }

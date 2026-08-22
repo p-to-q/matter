@@ -154,6 +154,38 @@ describe("local transcription audio projection", () => {
     ], 48_000, 16_000)).toThrowError(LocalTranscriptionError);
   });
 
+  it("settles cancellation while the browser audio decoder is stalled", async () => {
+    let decoding = false;
+    const close = vi.fn(async () => undefined);
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: class {
+        close = close;
+        decodeAudioData(): Promise<never> {
+          decoding = true;
+          return new Promise<never>(() => undefined);
+        }
+      },
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const controller = new AbortController();
+    const pending = transcribeLocally(request(controller.signal, "decoding"));
+    await vi.waitFor(() => expect(decoding).toBe(true));
+
+    controller.abort();
+
+    await expect(pending).rejects.toEqual(new LocalTranscriptionError("failed"));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(workers).toHaveLength(0);
+  });
+
   it("retires active inference on cancellation and lazily rebuilds the worker", async () => {
     const workers: FakeWorker[] = [];
     vi.stubGlobal("window", {
@@ -173,7 +205,14 @@ describe("local transcription audio projection", () => {
     await vi.waitFor(() => expect(workers).toHaveLength(1));
     const firstWorker = workers[0]!;
     await vi.waitFor(() => expect(firstWorker.postMessage).toHaveBeenCalledTimes(1));
-    firstWorker.emit({ id: "one:1", status: "started" });
+    expect(firstWorker.postMessage.mock.calls[0]?.[0]).toMatchObject({
+      type: "transcribe",
+      id: "one:1:1",
+      language: "chinese",
+      locale: "zh-CN",
+      purpose: "admission",
+    });
+    firstWorker.emit({ id: "one:1:1", status: "started" });
     firstController.abort();
 
     await expect(first).rejects.toEqual(new LocalTranscriptionError("failed"));
@@ -182,8 +221,8 @@ describe("local transcription audio projection", () => {
     const second = transcribeLocally(request(new AbortController().signal, "two"));
     await vi.waitFor(() => expect(workers).toHaveLength(2));
     const secondWorker = workers[1]!;
-    secondWorker.emit({ id: "two:1", status: "started" });
-    secondWorker.emit({ id: "two:1", status: "complete", text: "新的转写。" });
+    secondWorker.emit({ id: "two:1:2", status: "started" });
+    secondWorker.emit({ id: "two:1:2", status: "complete", text: "新的转写。" });
 
     await expect(second).resolves.toBe("新的转写。");
     expect(secondWorker.terminate).not.toHaveBeenCalled();
@@ -214,16 +253,16 @@ describe("local transcription audio projection", () => {
     await expect(first).rejects.toEqual(new LocalTranscriptionError("failed"));
     expect(worker.terminate).not.toHaveBeenCalled();
 
-    worker.emit({ id: "late:1", status: "started" });
+    worker.emit({ id: "late:1:1", status: "started" });
     expect(worker.terminate).toHaveBeenCalledTimes(1);
 
     const second = transcribeLocally(request(new AbortController().signal, "next"));
     await vi.waitFor(() => expect(workers).toHaveLength(2));
     const fresh = workers[1]!;
     // The retired lease can no longer speak for the request the fresh one owns.
-    worker.emit({ id: "next:1", status: "complete", text: "过期的转写。" });
-    fresh.emit({ id: "next:1", status: "started" });
-    fresh.emit({ id: "next:1", status: "complete", text: "当前的转写。" });
+    worker.emit({ id: "next:1:2", status: "complete", text: "过期的转写。" });
+    fresh.emit({ id: "next:1:2", status: "started" });
+    fresh.emit({ id: "next:1:2", status: "complete", text: "当前的转写。" });
     await expect(second).resolves.toBe("当前的转写。");
   });
 
@@ -247,7 +286,7 @@ describe("local transcription audio projection", () => {
     await vi.waitFor(() => expect(workers).toHaveLength(1));
     const worker = workers[0]!;
     await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(1));
-    worker.emit({ id: "slow:1", status: "started" });
+    worker.emit({ id: "slow:1:1", status: "started" });
     await vi.waitFor(() => expect(timers).toHaveLength(1));
     timers[0]!();
 
@@ -258,9 +297,9 @@ describe("local transcription audio projection", () => {
     await vi.waitFor(() => expect(workers).toHaveLength(2));
     // The abandoned inference finishing late cannot become this transcript, and
     // neither can the retired lease answering for the request it never carried.
-    worker.emit({ id: "slow:1", status: "complete", text: "迟到的转写。" });
-    worker.emit({ id: "after:1", status: "complete", text: "被放弃的转写。" });
-    workers[1]!.emit({ id: "after:1", status: "complete", text: "干净的转写。" });
+    worker.emit({ id: "slow:1:1", status: "complete", text: "迟到的转写。" });
+    worker.emit({ id: "after:1:2", status: "complete", text: "被放弃的转写。" });
+    workers[1]!.emit({ id: "after:1:2", status: "complete", text: "干净的转写。" });
     await expect(second).resolves.toBe("干净的转写。");
   });
 
@@ -291,8 +330,35 @@ describe("local transcription audio projection", () => {
 
     const third = transcribeLocally(request(new AbortController().signal, "three"));
     await vi.waitFor(() => expect(workers).toHaveLength(2));
-    workers[1]!.emit({ id: "three:1", status: "complete", text: "重建之后的转写。" });
+    workers[1]!.emit({ id: "three:1:3", status: "complete", text: "重建之后的转写。" });
     await expect(third).resolves.toBe("重建之后的转写。");
+  });
+
+  it("retires a failed model lease so the visible retry is genuine", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const first = transcribeLocally(request(new AbortController().signal, "failed"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[0]?.emit({ id: "failed:1:1", status: "failed", stage: "model-load" });
+
+    await expect(first).rejects.toEqual(new LocalTranscriptionError("failed"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+
+    const retry = transcribeLocally(request(new AbortController().signal, "retry"));
+    await vi.waitFor(() => expect(workers).toHaveLength(2));
+    workers[1]?.emit({ id: "retry:1:2", status: "complete", text: "重试成功。" });
+    await expect(retry).resolves.toBe("重试成功。");
   });
 
   it("skips a queued cancellation without interrupting the active inference", async () => {
@@ -315,16 +381,49 @@ describe("local transcription audio projection", () => {
     await vi.waitFor(() => expect(workers).toHaveLength(1));
     const worker = workers[0]!;
     await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledTimes(2));
-    worker.emit({ id: "active:1", status: "started" });
+    worker.emit({ id: "active:1:1", status: "started" });
     queuedController.abort();
 
     await expect(queued).rejects.toEqual(new LocalTranscriptionError("failed"));
     expect(worker.terminate).not.toHaveBeenCalled();
-    expect(worker.postMessage).toHaveBeenLastCalledWith({ type: "cancel", id: "queued:1" });
+    expect(worker.postMessage).toHaveBeenLastCalledWith({ type: "cancel", id: "queued:1:2" });
 
-    worker.emit({ id: "queued:1", status: "cancelled" });
-    worker.emit({ id: "active:1", status: "complete", text: "仍在进行的转写。" });
+    worker.emit({ id: "queued:1:2", status: "cancelled" });
+    worker.emit({ id: "active:1:1", status: "complete", text: "仍在进行的转写。" });
     await expect(first).resolves.toBe("仍在进行的转写。");
+  });
+
+  it("isolates a remounted operation from an older queued cancellation", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const firstController = new AbortController();
+    const first = transcribeLocally(request(firstController.signal, "reused"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    firstController.abort();
+    await expect(first).rejects.toEqual(new LocalTranscriptionError("failed"));
+
+    const second = transcribeLocally(request(new AbortController().signal, "reused"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(3));
+    expect(workers[0]?.postMessage.mock.calls[2]?.[0]).toMatchObject({
+      type: "transcribe",
+      id: "reused:1:2",
+    });
+    workers[0]?.emit({ id: "reused:1:1", status: "cancelled" });
+    workers[0]?.emit({ id: "reused:1:2", status: "started" });
+    workers[0]?.emit({ id: "reused:1:2", status: "complete", text: "新的请求。" });
+
+    await expect(second).resolves.toBe("新的请求。");
   });
 });
 
@@ -332,6 +431,7 @@ function request(signal: AbortSignal, interactionId: string) {
   return {
     interactionId,
     attempt: 1,
+    purpose: "admission" as const,
     locale: "zh-CN",
     audio: new Blob(["audio"], { type: "audio/webm" }),
     signal,

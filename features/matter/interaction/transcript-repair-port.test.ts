@@ -69,6 +69,27 @@ describe("TranscriptRepairPort", () => {
     }));
   });
 
+  it("keeps inferred expression local to the accepted repair", async () => {
+    const request = vi.fn(async (requestInput) => Object.freeze({
+      protocolVersion: "0.2" as const,
+      promptVersion: TRANSCRIPT_REPAIR_PROMPT_VERSION,
+      operationId: requestInput.operationId,
+      attempt: requestInput.attempt,
+      text: "I think we finally did it and it is amazing.",
+      source: "model" as const,
+    }));
+    const port = createTranscriptRepairPort({ request, remoteEnabled: () => true });
+
+    await expect(port.repair(input("i think we finally did it and it is amazng")))
+      .resolves.toEqual({
+        text: "I think we finally did it and it is amazing.🎉",
+        source: "model",
+      });
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({
+      text: "I think we finally did it and it is amazng.",
+    }));
+  });
+
   it("keeps the rule floor when the remote proposal is rejected", async () => {
     const request = vi.fn(async (requestInput) => Object.freeze({
       protocolVersion: "0.2" as const,

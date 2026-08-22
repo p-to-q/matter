@@ -322,12 +322,25 @@ export class AdmissionDriver {
           audio: owned.recording.audio,
           signal: controller.signal,
         }).then(
-          (result) => this.send({
-            type: "transcription-succeeded",
-            token: result.interactionId,
-            attempt: result.attempt,
-            transcript: result.transcript,
-          }),
+          (result) => {
+            if (
+              result.interactionId !== effect.token ||
+              result.attempt !== effect.attempt
+            ) {
+              this.send(failureEvent(
+                "transcription-failed",
+                effect,
+                "TRANSCRIPTION_FAILED",
+              ));
+              return;
+            }
+            this.send({
+              type: "transcription-succeeded",
+              token: effect.token,
+              attempt: effect.attempt,
+              transcript: result.transcript,
+            });
+          },
           (error) => {
             if (controller.signal.aborted) return;
             this.send(failureEvent(
@@ -349,7 +362,7 @@ export class AdmissionDriver {
         const nodeId = this.dependencies.createMaterialId();
         const admittedAt = this.dependencies.canonicalNow();
         const admittedAtMs = this.dependencies.monotonicNow();
-        const baseline = normalizeAdmittedTranscript(effect.transcript);
+        const baseline = normalizeAdmittedTranscript(effect.transcript, this.dependencies.locale);
         try {
           receipt = this.dependencies.commit(toRuntimeAnchor(effect.anchor), {
             interactionId: effect.token,

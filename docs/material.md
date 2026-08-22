@@ -13,12 +13,24 @@ They are not replayed when the inquiry is opened again and never become model
 context; its adapter boundary is specified in
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
-Browser speech admission performs punctuation-only normalization at the edge,
-then enters the tree immediately. A detachable browser repair port always
+Every final STT path performs the same punctuation-only normalization at the
+edge, then admission enters the tree immediately. The floor combines
+high-confidence five-locale clause rules with trusted acoustic gaps when the
+local Whisper worker can corroborate adjacent segment timestamps against the decoded
+waveform. Each locale remains primary while token-anchored English can bridge
+mixed speech; unknown locale fallback uses local Unicode script evidence.
+Browser callback timing is never treated as a pause. The insertion
+plan preserves every spoken word and timing evidence remains transient. A
+detachable browser repair port always
 computes an ordered locale-rule floor for punctuation, clause signals, spacing,
 casing, filler residue, ASR echoes, restarts, corrections, spoken commands, and
 high-confidence spoken percentages, decimals, dates, times, versions, and
-units. Literal masking and locale-specific classification happen before
+units. The same late repair may append one conservative sentence-final emoji
+for an explicit direct affect or celebration, or reproducibly sample one
+low-ambiguity iconographic noun for a word-tail emoji. Questions, negation,
+reports, conditions, conflict, protected text, unlisted nouns, and existing
+emoji veto it. Literal
+masking and locale-specific classification happen before
 rendering so an ambiguous bare number word, code span, URL, email, or quoted
 phrase remains untouched.
 When its existing gate is enabled, it may send only that one utterance, locale,

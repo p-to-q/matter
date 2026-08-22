@@ -140,8 +140,16 @@ is only a conservative preflight hint, not a capacity promise; the
 [StorageManager contract](https://developer.mozilla.org/en-US/docs/Web/API/StorageManager/estimate)
 states that its usage and quota values are approximate.
 
-The first evaluated profile is WASM plus q8. WebGPU is an optional later profile
-only after it materially improves measured p95; WebGPU and WASM sessions do not
+The first intended profile was WASM plus q8, but the pinned export under the
+repository's Transformers.js 4.2.0 runtime fails while constructing its q8,
+uint8, and fp16 browser graphs. A real Chromium receipt succeeds with fp32 only;
+those encoder and decoder graphs total about 151.5 MiB. This profile is therefore
+correctness evidence, not satisfaction of the 80 MiB release budget below. A
+compatible, pinned quantized export needs its own browser receipt before it can
+replace fp32. The pinned q4 graph was also exercised in Chromium/WASM but did
+not admit the 6.5-second synthetic receipt within three minutes, so it is not a
+latency-safe substitute. WebGPU is an optional later profile only after it materially
+improves measured p95; WebGPU and WASM sessions do not
 co-reside or retry within one utterance. While the local transcription flag is
 enabled, browser-model repair remains disabled until combined Whisper→repair
 receipts prove that transfer, peak memory, main-thread tasks, and worker survival

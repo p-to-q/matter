@@ -45,11 +45,15 @@ import {
   adjudicateRepair,
   normalizeRepairInput,
 } from "../material/transcript-repair";
-import { repairAdmittedTranscript } from "../runtime/transcript-punctuation";
+import {
+  canonicalSpokenExpressionBase,
+  decorateSpokenExpression,
+} from "../runtime/expressive-transcript";
+import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
 import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
-import { validateThoughtTree } from "../tree/invariants";
+import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
@@ -73,6 +77,26 @@ const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   maxEntries: Number.MAX_SAFE_INTEGER,
   maxRetainedInverseBytes: Number.MAX_SAFE_INTEGER,
 });
+
+function locallyDecorateAdjudicatedRepair(
+  verdict: ReturnType<typeof adjudicateRepair>,
+  locale: string,
+  sampleSeed: string,
+  expectedText: string,
+): Readonly<{ ok: true; text: string; changed: boolean }> | Readonly<{ ok: false }> {
+  if (!verdict.ok || !verdict.changed) return Object.freeze({ ok: false as const });
+  const text = decorateSpokenExpression({
+    text: verdict.text,
+    locale,
+    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+    sampleSeed,
+  });
+  return Object.freeze({
+    ok: true as const,
+    text,
+    changed: text !== expectedText,
+  });
+}
 
 type NavigationOperation = "select" | "clear-selection" | "focus" | "show-full" | "toggle-fold";
 
@@ -442,19 +466,36 @@ export function createMatterStore(
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;
         }
-        const ruleFloor = repairAdmittedTranscript(lease.expectedText, lease.locale);
+        const ruleWords = repairAdmittedTranscriptWords(lease.expectedText, lease.locale);
+        const ruleFloor = decorateSpokenExpression({
+          text: ruleWords,
+          locale: lease.locale,
+          maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+          sampleSeed: lease.interactionId,
+        });
+        const modelWords = settlement.source === "model"
+          ? canonicalSpokenExpressionBase({
+              text: settlement.text,
+              locale: lease.locale,
+              maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
+              sampleSeed: lease.interactionId,
+            })
+          : undefined;
         const adjudicated = settlement.source === "rules"
           ? settlement.text === ruleFloor
             ? Object.freeze({ ok: true as const, text: settlement.text, changed: settlement.text !== lease.expectedText })
             : Object.freeze({ ok: false as const })
-          : adjudicateRepair(
+          : modelWords === undefined
+            ? Object.freeze({ ok: false as const })
+            : locallyDecorateAdjudicatedRepair(adjudicateRepair(
               // Rules and model are one candidate, not two model edits. The
               // recomputed floor is trusted only because the rules branch above
               // is pure and exact; the model receives authority solely over its
-              // bounded delta from that floor.
-              normalizeRepairInput({ text: ruleFloor, locale: lease.locale }),
-              settlement.text,
-            );
+              // bounded delta from that floor. Expression is stripped and
+              // re-proven locally before the model delta is judged.
+              normalizeRepairInput({ text: ruleWords, locale: lease.locale }),
+              modelWords,
+            ), lease.locale, lease.interactionId, lease.expectedText);
         if (!adjudicated.ok || !adjudicated.changed) {
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;

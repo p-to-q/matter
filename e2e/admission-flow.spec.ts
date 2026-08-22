@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const parentId = "thought_fixture_imagined_lives";
-const heardTranscript = "呃，我觉得我觉得这个方案可以但是它的实现事件比预期长。";
+const heardTranscript = "呃，我觉得我觉得这个方案可以，但是它的实现事件比预期长。";
 const repairedTranscript = "我觉得这个方案可以，但是它的实现时间比预期长。";
 // This is a functional boundary, not the performance receipt. Keep it below
 // the 12 s repair lease while allowing a loaded parallel browser to schedule
@@ -103,7 +103,9 @@ for (const viewport of [
     await expect(reveal).toHaveText(repairedTranscript, { useInnerText: false });
     const revealCount = Number(await reveal.getAttribute("data-repair-reveal-count"));
     const changedInk = await reveal.locator('[data-repair-part="changed"]').allTextContents();
-    expect(changedInk.join("")).toContain("，");
+    // The insertion-only admission floor already owns this semantic comma;
+    // late repair must not animate it as if a model introduced it.
+    expect(changedInk.join("")).not.toContain("，");
     expect(changedInk.join("")).toContain("时");
     expect(changedInk.join("")).not.toContain("方案");
     await expect.poll(async () => page.evaluate(() =>
