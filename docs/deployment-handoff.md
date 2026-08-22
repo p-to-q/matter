@@ -1,16 +1,24 @@
 # Matter deployment handoff
 
 Status: **live — the root-seeded browser preview is deployed and all three model
-gates are open on `matter.ptoq.io`. The abuse and spend controls in issue #34
-are still outstanding, and that is now a live exposure rather than a plan.**
+gates are open on `matter.ptoq.io`. The required abuse- and spend-control
+receipts in issue #34 are still outstanding, so this remains an unverified live
+exposure rather than a completed release boundary.**
 
 The deployment owner enabled labels, transcript repair, and inquiry together on
 2026-08-08, ahead of the staged order below, so that the deployed origin matches
 a local `.env.local`. What that decision leaves open is recorded honestly here
-rather than removed: the in-process governors are per-instance only, no
-distributed rate rule exists, and no provider spend ceiling is configured. Until
-issue #34 closes, the practical ceiling on a runaway cost is the provider
-account itself.
+rather than removed: the in-process governors are per-instance only, and this
+handoff has no owner-supplied receipt for the required distributed rate rules or
+provider spend ceiling. Until issue #34 closes, release work must treat those
+controls as missing rather than infer them from a healthy origin.
+
+For Preview.38, the deployment owner explicitly directed one production
+promotion before those external receipts are supplied, while delegating the
+vendor-side configuration to a separate operator. This is a one-release risk
+acceptance, not evidence that the controls exist: it may preserve the three
+already-live gates only, must keep Elastic and Text Swap unavailable, and does
+not close issue #34.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -116,7 +124,7 @@ which surface is unavailable.
 
 ## Edge, spend, and access controls
 
-Before any production promotion, complete GitHub issue #34:
+The default production gate remains completion of GitHub issue #34:
 
 1. Add distributed rate rules for `/api/label`, `/api/repair`, and
    `/api/inquiry`. The in-process governors are intentionally only local to a
@@ -132,18 +140,20 @@ Before any production promotion, complete GitHub issue #34:
 
 ## Browser-preview deployment
 
-The current `main` build may deploy the root-seeded browser experience without a
-model credential. This is an intentional safe mode, not a fixture: browser
-speech and local material work, labels retain their deterministic floor,
-transcript repair falls back to heard text, and Ask Matter reports an unavailable
-answer model. Elastic and Text Swap likewise fail closed without fixture prose;
-their successful local browser receipts do not imply that either live model gate
-is open. The public UI must not imply that an answer model is live.
+The public production `browser-preview` profile is not credential-free. Labels,
+transcript repair, and Ask Matter retain their three existing live gates and
+server-only pool; only Elastic and the dormant Text Swap surface remain
+unavailable. The profile name describes the material-model boundary, not the
+state of every model-backed surface. A private credential-free staging build may
+turn the three existing gates off and use their deterministic, verbatim, or
+stated-unavailable floors, but it does not satisfy the current production
+deployment check.
 
-## Live-model promotion procedure
+## Deployment and future Elastic promotion
 
-Do not add a provider secret merely to test the UI. First configure the controls
-above, then create a fresh reviewed version and let its Vercel build run.
+Do not add or rotate a provider secret merely to test the UI. Before changing a
+live gate, first configure the controls above, then create a fresh reviewed
+version and let its Vercel build run.
 
 After each browser-preview deployment, verify the dedicated origin. `--wait=120`
 retries the same bounded receipt during the normal edge propagation window; it
@@ -154,18 +164,20 @@ npm run check:deployment -- https://matter.ptoq.io --wait=120
 ```
 
 That command defaults to `--profile=browser-preview`: it requires both
-`transformTurn` and `textSwap` to report `unavailable`. A reviewed promotion
-uses the explicit profile below only after the corpus, distributed rate rule,
-owner-approved spend cap/alerts, isolated credential, and rollback receipts
-exist:
+`transformTurn` and `textSwap` to report `unavailable`. A reviewed Elastic
+promotion uses the explicit profile below only after the Elastic corpus,
+distributed rate rule, owner-approved spend cap/alerts, isolated credential,
+and rollback receipts exist:
 
 ```bash
-npm run check:deployment -- https://matter.ptoq.io --profile=material-live --wait=120
+npm run check:deployment -- https://matter.ptoq.io --profile=elastic-live --wait=120
 ```
 
-The live profile proves that both independent adapters are configured; it does
-not call the provider and is never a substitute for one successful strict
-synthetic turn through each deployed route.
+The live profile proves that Elastic is configured while the dormant Text Swap
+surface remains unavailable. It does not call the provider and is never a
+substitute for one successful strict synthetic Elastic turn through the
+deployed route. The superseded paired `material-live` profile is rejected so a
+release cannot silently revive Text Swap.
 
 Candidate quality and origin operation are deliberately separate. The language
 evaluation defaults to an ordinary skipped test. First use its zero-call `plan`
@@ -232,17 +244,18 @@ video:
 
 ```bash
 npm run probe:material-origin -- https://matter.ptoq.io \
-  --expected-version=0.2.0-preview.37
+  --expected-version=0.2.0-preview.38
 ```
 
-That command only prints the planned 1+1 smoke receipt. Do not add the execution
-flags until both health surfaces are live and the external controls are already
-proved. The promotion profile cannot be resized: it schedules 50+50 distinct
-strict synthetic turns with one shared eight-second starting interval. Its
-versioned digest binds ten exact-segment inputs per locale, all twelve semantic
-strata, three Transform amounts, and three Text Swap direction families. Any
-model rejection fails promotion, and timeout/unavailability may occupy at most
-one of fifty per surface.
+That command only prints the historical paired 1+1 smoke plan. It is useful for
+inspecting the retained tool, but it is not current Elastic release evidence and
+must not be given execution flags on this release line. The retained paired
+promotion profile cannot be resized: it schedules 50+50 distinct strict
+synthetic turns with one shared eight-second starting interval. Its versioned
+digest binds ten exact-segment inputs per locale, all twelve semantic strata,
+three Transform amounts, and three Text Swap direction families. Any model
+rejection fails that historical profile, and timeout/unavailability may occupy
+at most one of fifty per surface.
 
 Execution creates a running manifest and empty safe journal under the
 gitignored `tmp/material-origin-probe/` directory before the health request.
@@ -261,18 +274,21 @@ Manually verify, with a normal browser and no repository secrets:
 - `https://matter.ptoq.io/` returns the root-seeded canvas and
   `https://matter.ptoq.io/matter` is 404;
 - `/api/health` reports the deployed version, empty base path, and separate
-  truthful `transformTurn` and `textSwap` capability states;
+  truthful states: `thoughtLabel`, `transcriptRepair`, and `inquiry` are
+  `available`, while `transformTurn` and `textSwap` are `unavailable`;
 - browser speech works where the browser provides it; unsupported speech stays
   on-device or reports a truthful limitation;
-- labels retain their deterministic floor, transcript repair falls back
-  verbatim, and Ask Matter truthfully reports an unavailable model until the
-  live-model procedure has been completed;
-- no provider identity or response error leaks into the page; and
-- the unavailable-provider fallback is observed once on the real origin.
+- one bounded synthetic call per existing live surface proves the relay rather
+  than merely its configuration: labels and repair report `model`, and inquiry
+  reports `answered`; and
+- no provider identity or response error leaks into the page. The deterministic,
+  verbatim, and stated-unavailable floors remain rollback behavior, not the
+  expected production receipt while those gates are live.
 
-After live-model promotion, repeat the origin check with a bounded selected
-passage and a bounded virtual-tree inquiry. Verify rate limits and spend alarms
-there, rather than treating the credential-free browser preview as model proof.
+For any future Elastic promotion, repeat the origin check with one strict
+synthetic selected passage after its own corpus and origin tooling are current.
+Verify rate limits and spend alarms there, rather than treating the existing
+browser-preview health receipt as Elastic model proof.
 
 Rollback is a Vercel deployment rollback plus disabling the affected scenario
 gate; rotate a credential if there is any possibility it reached logs or a
@@ -282,24 +298,32 @@ or to bypass the scenario adjudicator.
 ## Next development work
 
 - Issue #34: deployment controls and a real-origin receipt.
-- Issue #12: the fixture `/api/turn` and `/api/text-swap` browser loops are now
-  proven; run their independent multilingual live evaluations, then enable each
-  only after the shared distributed controls and its own real-origin receipt
-  exist.
+- Issue #12: the fixture `/api/turn` browser loop is proven; run its
+  multilingual Elastic evaluation, then enable it only after the distributed
+  controls and its own real-origin receipt exist. `/api/text-swap` remains a
+  dormant, unavailable grammar with no first-release UI or promotion claim.
 - Issue #8: complete the active-document pointer/recovery boundary before
   promising multi-document persistence beyond the current local home document.
 
 Validation: local `npm run check` and full Chromium E2E must pass before every
 source preview; after a Vercel promotion, add the explicit
-`--profile=material-live` deployment check and the manual real-origin receipt
-above. With the gates open, `/api/health` reports `thoughtLabel`,
-`transcriptRepair`, `inquiry`, `transformTurn`, and `textSwap` as `available`;
-that word means a pool is configured, never that a relay answered.
+`--profile=elastic-live` deployment check and the manual real-origin receipt
+above. With the Elastic gate open, `/api/health` reports `thoughtLabel`,
+`transcriptRepair`, `inquiry`, and `transformTurn` as `available`, while
+`textSwap` remains `unavailable`; `available` means a pool is configured, never
+that a relay answered.
+
+The existing deployed-origin sampler still plans the historical paired Elastic
+and Text Swap calls. Do not run it as current release evidence. Elastic live
+promotion remains blocked until that tool has a transform-only, digest-bound
+50-call profile; browser-preview promotion does not require or imply Elastic
+live-provider proof.
 
 Risks: browser speech availability varies by browser/vendor; serverless
 in-memory governors do not replace edge rate limits; archive imports intentionally
 begin a new undo journal; and no existing browser can reconstruct command history
 that predates journal storage.
 
-Next: the permissions holder rotates and installs the server secrets, completes
-the rate/spend controls in issue #34, and promotes only a newly reviewed version.
+Next: the deployment owner supplies the distributed-rate and provider-spend
+receipts required by issue #34, closes that blocker, and promotes only a newly
+reviewed version.

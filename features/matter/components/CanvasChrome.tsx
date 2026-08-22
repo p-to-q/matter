@@ -715,7 +715,7 @@ export function CanvasChrome({
         data-chrome-region="desktop"
         inert={modalOpen || undefined}
       >
-        <div className={styles.topRight}>
+        <div className={styles.topRight} data-chrome-region="top">
           <button
             className={styles.textControl}
             data-chrome-control="about"
@@ -753,7 +753,7 @@ export function CanvasChrome({
           <MenuButton icon={<TermsIcon />} label={copy.terms} onClick={(target) => openInfo("terms", target)} />
         </div>
 
-        <div className={styles.bottomRight}>
+        <div className={styles.bottomRight} data-chrome-region="bottom">
           <div className={styles.popoverAnchor}>
             <button
               aria-controls="matter-inquiry"
@@ -1084,18 +1084,16 @@ function InquiryBubble({
           currentContext === undefined ||
           !sameInquiryContext(payload, currentContext)
         ) return;
+        if (outcome.status === "unavailable" && outcome.reason !== "NO_MATERIAL") {
+          dispatch({ type: "withdraw-unavailable", id: answerId, question });
+          return;
+        }
         dispatch({ type: "answer", id: answerId, outcome });
         appendInquiryRecord(record, answerId, askedAt, question, payload, outcome);
       })
       .catch(() => {
         if (requestRef.current !== request) return;
-        dispatch({ type: "answer", id: answerId, outcome: UNREACHABLE });
-        const currentContext = contextRef.current?.();
-        // A late failure is a no-op against material it no longer describes.
-        // The turn still settles on screen, but the durable record must not
-        // gain a completed exchange belonging to a document that has moved.
-        if (currentContext === undefined || !sameInquiryContext(payload, currentContext)) return;
-        appendInquiryRecord(record, answerId, askedAt, question, payload, UNREACHABLE);
+        dispatch({ type: "withdraw-unavailable", id: answerId, question });
       })
       .finally(() => {
         if (requestRef.current === request) {

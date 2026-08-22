@@ -1,17 +1,22 @@
 import type { MaterialFileRow } from "../material/material-files";
 
 /**
- * A terminal point distinguishes a branch that stops earlier than the rest of
- * the authored outline. It is presentation-only: a deepest leaf stays quiet,
- * and no point can ever imply a disclosure action.
+ * A terminal point belongs to one visible sibling group. When that group has
+ * a structural branch, its leaf siblings are local early endings; an all-leaf
+ * group is already terminal and stays blank. The point is presentation-only
+ * and can never imply a disclosure action.
  */
 export function projectMaterialFileTerminalMarkerIds(
-  authoredRows: readonly MaterialFileRow[],
+  visibleRows: readonly MaterialFileRow[],
+  structuralBranchRowIndexes: ReadonlySet<number>,
 ): ReadonlySet<string> {
-  const deepestDepth = authoredRows.reduce((deepest, row) => Math.max(deepest, row.depth), 0);
+  const branchingParentIds = new Set<string | null>();
+  for (const [index, row] of visibleRows.entries()) {
+    if (structuralBranchRowIndexes.has(index)) branchingParentIds.add(row.parentId);
+  }
   const ids = new Set<string>();
-  for (const row of authoredRows) {
-    if (!row.hasChildren && row.depth < deepestDepth) ids.add(row.nodeId);
+  for (const row of visibleRows) {
+    if (!row.hasChildren && branchingParentIds.has(row.parentId)) ids.add(row.nodeId);
   }
   return ids;
 }

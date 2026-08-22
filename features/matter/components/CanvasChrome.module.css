@@ -171,6 +171,67 @@
   gap: 16px;
 }
 
+/* The desktop corners share one optical grammar. The broad outer plane is
+   capped and shallow; the smaller inner plane uses the same zero-foot before
+   a compact soft step. Insets vary with each group's footprint, while the
+   inherited masks remain one maintainable contract. */
+@media (min-width: 768px) {
+  .topRight,
+  .bottomRight {
+    isolation: isolate;
+  }
+
+  .topRight::before,
+  .topRight::after,
+  .bottomRight::before,
+  .bottomRight::after {
+    position: absolute;
+    z-index: 0;
+    content: "";
+    pointer-events: none;
+  }
+
+  .topRight::before,
+  .bottomRight::before {
+    border-radius: var(--corner-optical-outer-radius);
+    -webkit-backdrop-filter: var(--corner-optical-outer-filter);
+    backdrop-filter: var(--corner-optical-outer-filter);
+    -webkit-mask-image: var(--corner-optical-outer-mask);
+    mask-image: var(--corner-optical-outer-mask);
+  }
+
+  .topRight::after,
+  .bottomRight::after {
+    border-radius: var(--corner-optical-inner-radius);
+    -webkit-backdrop-filter: var(--corner-optical-inner-filter);
+    backdrop-filter: var(--corner-optical-inner-filter);
+    -webkit-mask-image: var(--corner-optical-inner-mask);
+    mask-image: var(--corner-optical-inner-mask);
+  }
+
+  .topRight {
+    --corner-optical-outer-radius: 18px;
+    --corner-optical-inner-radius: 11px;
+  }
+
+  .topRight::before { inset: -24px -30px; }
+  .topRight::after { inset: -13px -17px; }
+
+  .bottomRight {
+    --corner-optical-outer-radius: 16px;
+    --corner-optical-inner-radius: 10px;
+  }
+
+  .bottomRight::before { inset: -22px -28px; }
+  .bottomRight::after { inset: -11px -15px; }
+
+  .topRight > *,
+  .bottomRight > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
 .askButton {
   min-width: 95.05px;
   background: transparent !important;
@@ -792,6 +853,16 @@
 }
 
 @media (forced-colors: active) {
+  .topRight::before,
+  .topRight::after,
+  .bottomRight::before,
+  .bottomRight::after {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+
   .popover,
   .mobileSheet,
   .infoDialog {

@@ -1,7 +1,4 @@
-import {
-  validateSelection,
-  type SegmentSelection,
-} from "./text-segments";
+import { segmentText, validateSelection, type SegmentSelection } from "./text-segments";
 
 export type LanguageProjection = Readonly<{
   before: string;
@@ -29,23 +26,26 @@ export function projectLanguageAroundSelection(
 ): LanguageProjectionResult {
   const validated = validateSelection(text, selection, selection.nodeId);
   if (!validated.ok) return Object.freeze({ ok: false, error: "INVALID_SELECTION" });
-
-  const selectedSegments = validated.segments.filter((segment) =>
-    segment.start >= selection.start && segment.end <= selection.end,
+  const selectedSegments = segmentText(text).filter((segment) =>
+    segment.start >= selection.start && segment.end <= selection.end
   );
-  const last = selectedSegments.at(-1);
-  if (last === undefined || last.end !== selection.end || last.seamEnd < last.end) {
-    return Object.freeze({ ok: false, error: "OUTER_SEAM_UNAVAILABLE" });
+  const lastSegment = selectedSegments.at(-1);
+  if (
+    selectedSegments[0]?.start !== selection.start ||
+    lastSegment?.end !== selection.end
+  ) {
+    return Object.freeze({ ok: false, error: "INVALID_SELECTION" });
   }
-  const outerSeam = text.slice(last.end, last.seamEnd);
+  const seamEnd = lastSegment.seamEnd;
+  const outerSeam = text.slice(selection.end, seamEnd);
   const projection = Object.freeze({
     before: text.slice(0, selection.start),
     selected: selection.selectedText,
-    after: text.slice(last.seamEnd),
+    after: text.slice(seamEnd),
     outerSeam,
-    selectedWithSeam: text.slice(selection.start, last.seamEnd),
+    selectedWithSeam: text.slice(selection.start, seamEnd),
     hasBefore: selection.start > 0,
-    hasAfter: last.seamEnd < text.length,
+    hasAfter: seamEnd < text.length,
   });
   return Object.freeze({ ok: true, projection });
 }

@@ -41,5 +41,8 @@ export function transcriptionErrorResponse(error: unknown): Response {
       ...(known.attempt === undefined ? {} : { attempt: known.attempt }),
     },
   };
-  return Response.json(body, { status: known.status });
+  return Response.json(body, {
+    status: known.status,
+    headers: { "Cache-Control": "no-store" },
+  });
 }

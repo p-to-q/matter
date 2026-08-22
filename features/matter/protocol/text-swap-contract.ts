@@ -16,6 +16,7 @@ import {
 
 export const TEXT_SWAP_REQUEST_VERSION = "text-swap/1" as const;
 export const MAX_TEXT_SWAP_REQUEST_BYTES = 32 * 1024;
+export const MAX_TEXT_SWAP_RESPONSE_BYTES = 8 * 1024;
 export const TEXT_SWAP_CLIENT_TIMEOUT_MS = 16_000;
 export const MAX_TEXT_SWAP_ID_LENGTH = 128;
 export const MAX_TEXT_SWAP_CONTEXT_CODE_POINTS = 8_000;

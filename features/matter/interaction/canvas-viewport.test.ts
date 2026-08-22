@@ -3,6 +3,9 @@ import {
   INITIAL_CANVAS_VIEWPORT,
   MAX_CANVAS_ZOOM,
   MIN_CANVAS_ZOOM,
+  MIN_INDEX_TARGET_FONT_CSS_PX,
+  planCanvasViewportForClientRect,
+  projectCanvasAttentionField,
   reduceCanvasViewport,
   type CanvasViewportEvent,
   type CanvasViewportState,
@@ -284,5 +287,195 @@ describe("reduceCanvasViewport", () => {
     expect(() => {
       (result.state as { x: number }).x = 999;
     }).toThrow();
+  });
+});
+
+describe("plan canvas viewport around measured material", () => {
+  it("moves the camera by the exact client-space delta without changing zoom", () => {
+    const state: CanvasViewportState = {
+      ...INITIAL_CANVAS_VIEWPORT,
+      x: 20,
+      y: -10,
+      zoom: 1.4,
+    };
+    expect(planCanvasViewportForClientRect(
+      state,
+      { left: 720, top: 510, width: 200, height: 80 },
+      { left: 0, top: 0, width: 1280, height: 800 },
+      { x: 0, y: 0 },
+    )).toEqual({
+      durationMs: 257,
+      motion: "smooth",
+      state: {
+        ...state,
+        x: -160,
+        y: -160,
+        userMoved: true,
+      },
+    });
+  });
+
+  it("uses the visual viewport offset and returns the same state at centre", () => {
+    const state = { ...INITIAL_CANVAS_VIEWPORT, userMoved: true };
+    expect(planCanvasViewportForClientRect(
+      state,
+      { left: 170, top: 260, width: 100, height: 80 },
+      { left: 20, top: 40, width: 400, height: 520 },
+      { x: 0, y: 0 },
+    )).toEqual({ durationMs: 0, motion: "instant", state });
+  });
+
+  it("preserves zoom while material fits and only scales oversized material down", () => {
+    const fitting = planCanvasViewportForClientRect(
+      { ...INITIAL_CANVAS_VIEWPORT, zoom: 1.25 },
+      { left: 90, top: 100, width: 250, height: 120 },
+      { left: 0, top: 0, width: 400, height: 500 },
+      { x: 0, y: 0 },
+    );
+    expect(fitting?.state.zoom).toBe(1.25);
+
+    const oversized = planCanvasViewportForClientRect(
+      INITIAL_CANVAS_VIEWPORT,
+      { left: 100, top: 100, width: 500, height: 500 },
+      { left: 0, top: 0, width: 400, height: 500 },
+      { x: 0, y: 0 },
+    );
+    expect(oversized?.state.zoom).toBe(.704);
+    expect(oversized?.state).toMatchObject({ x: -46.4, y: 3.6 });
+    expect(oversized?.motion).toBe("smooth");
+  });
+
+  it("raises only undersized target type to the measured screen-space floor", () => {
+    const undersized = planCanvasViewportForClientRect(
+      { ...INITIAL_CANVAS_VIEWPORT, zoom: MIN_CANVAS_ZOOM },
+      { fontCssPx: 17, left: 110, top: 190, width: 180, height: 40 },
+      { left: 0, top: 0, width: 400, height: 500 },
+      { x: 0, y: 0 },
+    );
+    expect(undersized?.state.zoom).toBe(.883);
+    expect(17 * (undersized?.state.zoom ?? 0)).toBeGreaterThanOrEqual(MIN_INDEX_TARGET_FONT_CSS_PX);
+
+    const alreadyReadable = planCanvasViewportForClientRect(
+      { ...INITIAL_CANVAS_VIEWPORT, zoom: .9 },
+      { fontCssPx: 17, left: 110, top: 190, width: 180, height: 40 },
+      { left: 0, top: 0, width: 400, height: 500 },
+      { x: 0, y: 0 },
+    );
+    expect(alreadyReadable?.state.zoom).toBe(.9);
+  });
+
+  it("keeps the target-specific readable floor when an oversized passage cannot also fit", () => {
+    const plan = planCanvasViewportForClientRect(
+      { ...INITIAL_CANVAS_VIEWPORT, zoom: .7 },
+      { fontCssPx: 17, left: -40, top: -100, width: 1_800, height: 1_200 },
+      { left: 0, top: 0, width: 320, height: 480 },
+      { x: 0, y: 0 },
+    );
+    expect(plan?.state.zoom).toBe(.883);
+  });
+
+  it("bounds an unusually small authored font at the maximum camera zoom", () => {
+    const plan = planCanvasViewportForClientRect(
+      INITIAL_CANVAS_VIEWPORT,
+      { fontCssPx: 4, left: 120, top: 220, width: 40, height: 12 },
+      { left: 0, top: 0, width: 400, height: 500 },
+      { x: 0, y: 0 },
+    );
+    expect(plan?.state.zoom).toBe(MAX_CANVAS_ZOOM);
+  });
+
+  it("fits against the exposed attention field rather than the occluded viewport", () => {
+    const result = planCanvasViewportForClientRect(
+      INITIAL_CANVAS_VIEWPORT,
+      { left: 100, top: 300, width: 300, height: 80 },
+      { left: 0, top: 0, width: 400, height: 800 },
+      { x: 0, y: 0 },
+      { x: 348, y: 400, width: 88, height: 800 },
+    );
+    expect(result?.state.zoom).toBe(MIN_CANVAS_ZOOM);
+    expect(result?.state.x).toBe(198);
+  });
+
+  it("keeps the minimum readable camera scale when even that cannot fit", () => {
+    expect(planCanvasViewportForClientRect(
+      INITIAL_CANVAS_VIEWPORT,
+      { left: -100, top: -100, width: 2_000, height: 2_000 },
+      { left: 0, top: 0, width: 320, height: 480 },
+      { x: 0, y: 0 },
+    )?.state.zoom).toBe(MIN_CANVAS_ZOOM);
+  });
+
+  it("fails closed for active gestures and malformed geometry", () => {
+    const active = apply(INITIAL_CANVAS_VIEWPORT, down());
+    expect(planCanvasViewportForClientRect(
+      active,
+      { left: 0, top: 0, width: 10, height: 10 },
+      { left: 0, top: 0, width: 100, height: 100 },
+      { x: 0, y: 0 },
+    )).toBeNull();
+    expect(planCanvasViewportForClientRect(
+      INITIAL_CANVAS_VIEWPORT,
+      { left: 0, top: 0, width: 0, height: 10 },
+      { left: 0, top: 0, width: 100, height: 100 },
+      { x: 0, y: 0 },
+    )).toBeNull();
+    expect(planCanvasViewportForClientRect(
+      INITIAL_CANVAS_VIEWPORT,
+      { fontCssPx: Number.NaN, left: 0, top: 0, width: 10, height: 10 },
+      { left: 0, top: 0, width: 100, height: 100 },
+      { x: 0, y: 0 },
+    )).toBeNull();
+  });
+});
+
+describe("project the visual attention centre", () => {
+  const visual = { left: 0, top: 0, width: 400, height: 800 };
+  const canvas = { left: 8, top: 66, width: 384, height: 726 };
+
+  it("uses the browser centre without an overlapping instrument", () => {
+    expect(projectCanvasAttentionField(visual, canvas)).toEqual({
+      height: 800,
+      width: 400,
+      x: 200,
+      y: 400,
+    });
+    expect(projectCanvasAttentionField(
+      visual,
+      canvas,
+      { left: 0, top: 0, width: 80, height: 800 },
+    )).toEqual({ height: 800, width: 400, x: 200, y: 400 });
+  });
+
+  it("gives a nearly full-width drawer the exposed canvas centre", () => {
+    expect(projectCanvasAttentionField(
+      visual,
+      canvas,
+      { left: 0, top: 0, width: 304, height: 800 },
+    )).toEqual({ height: 800, width: 88, x: 348, y: 400 });
+  });
+
+  it("blends continuously through an intermediate overlap", () => {
+    const point = projectCanvasAttentionField(
+      { left: 0, top: 0, width: 800, height: 800 },
+      { left: 8, top: 8, width: 784, height: 784 },
+      { left: 0, top: 0, width: 320, height: 800 },
+    );
+    expect(point?.x).toBeGreaterThan(400);
+    expect(point?.x).toBeLessThan(556);
+    expect(point?.width).toBeGreaterThan(472);
+    expect(point?.width).toBeLessThan(800);
+  });
+
+  it("ignores a floating or vertically separate occluder", () => {
+    expect(projectCanvasAttentionField(
+      visual,
+      canvas,
+      { left: 120, top: 0, width: 180, height: 800 },
+    )).toEqual({ height: 800, width: 400, x: 200, y: 400 });
+    expect(projectCanvasAttentionField(
+      visual,
+      canvas,
+      { left: 0, top: 0, width: 304, height: 100 },
+    )).toEqual({ height: 800, width: 400, x: 200, y: 400 });
   });
 });

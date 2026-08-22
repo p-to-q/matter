@@ -1,11 +1,13 @@
 import { clientMatterBasePath } from "../config/base-path";
 import {
+  MAX_TEXT_SWAP_RESPONSE_BYTES,
   TEXT_SWAP_CLIENT_TIMEOUT_MS,
   parseTextSwapError,
   parseTextSwapPlan,
   type TextSwapEnvelope,
   type TextSwapPlan,
 } from "../protocol/text-swap-contract";
+import { readBoundedJsonResponse } from "./bounded-json-response";
 
 export class TextSwapClientError extends Error {
   constructor(
@@ -41,7 +43,17 @@ export async function requestTextSwap(
     if (error instanceof Error && error.name === "AbortError") throw error;
     throw new TextSwapClientError(true, "Matter could not reach this wording change.");
   }
-  const payload = await response.json().catch(() => null) as unknown;
+  let payload: unknown;
+  try {
+    payload = await readBoundedJsonResponse(response, MAX_TEXT_SWAP_RESPONSE_BYTES, combined);
+  } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
+    if (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
+      throw new TextSwapClientError(true, "Matter took too long to swap this passage.");
+    }
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw invalidResponse(response.ok);
+  }
   if (!response.ok) throw readError(payload);
   const plan = parseTextSwapPlan(payload, envelope);
   if (plan === null) {
@@ -54,9 +66,19 @@ export async function requestTextSwap(
   return plan;
 }
 
+function invalidResponse(successStatus: boolean): TextSwapClientError {
+  return new TextSwapClientError(
+    false,
+    successStatus
+      ? "Matter returned an invalid wording change."
+      : "Matter returned an invalid refusal.",
+    "invalid-response",
+  );
+}
+
 function readError(value: unknown): TextSwapClientError {
   const parsed = parseTextSwapError(value);
   return parsed === null
-    ? new TextSwapClientError(false, "Matter returned an invalid refusal.", "invalid-response")
+    ? invalidResponse(false)
     : new TextSwapClientError(parsed.retryable, parsed.message);
 }

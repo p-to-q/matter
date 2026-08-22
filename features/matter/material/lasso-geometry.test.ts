@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LASSO_THRESHOLDS,
   analyzeLassoPath,
+  lassoClickIntent,
   lassoClosureIntent,
   lassoHitsRectFragment,
   lassoStrokeQualification,
@@ -81,6 +82,13 @@ describe("lasso path preparation", () => {
       reason: "tiny",
     });
     expect(analyzeLassoPath([{ x: 0, y: 0 }, { x: 8, y: 0 }, { x: 8, y: 8 }, { x: 0, y: 8 }]).kind).toBe("prepared");
+  });
+
+  it("distinguishes a click from a small open stroke", () => {
+    expect(lassoClickIntent([{ x: 10, y: 10 }, { x: 13, y: 12 }], 4)).toBe(true);
+    expect(lassoClickIntent([{ x: 10, y: 10 }, { x: 15, y: 10 }], 4)).toBe(false);
+    expect(lassoClickIntent([], 4)).toBe(false);
+    expect(lassoClickIntent([{ x: Number.NaN, y: 10 }], 4)).toBe(false);
   });
 
   it("always adds one explicit closing seam at pointer-up", () => {
@@ -224,6 +232,10 @@ describe("text fragment hit predicate", () => {
 
   it("accepts substantial enclosure through at least two of five inset probes", () => {
     expect(lassoHitsRectFragment(lasso, { x: -15, y: 4, width: 40, height: 12 })).toBe(true);
+  });
+
+  it("accepts a small intentional loop inside an off-centre part of one long fragment", () => {
+    expect(lassoHitsRectFragment(lasso, { x: -100, y: 4, width: 300, height: 12 })).toBe(true);
   });
 
   it("does not select merely because a large fragment edge overlaps", () => {

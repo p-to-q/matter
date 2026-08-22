@@ -26,8 +26,6 @@ export type ElasticPreview = Readonly<{
   sourceBounds: ElasticPreviewBounds;
   pocket: ElasticPreviewBounds;
   topHandle: ElasticPreviewLine;
-  /** The upper cue is geometry only; the sole interactive grip is below. */
-  topCue: ElasticPreviewLine;
   bottomHandle: ElasticPreviewLine;
   handleViewportInset: number;
   pocketDepth: number;
@@ -43,8 +41,11 @@ export const ELASTIC_PREVIEW_METRICS = Object.freeze({
   maximumExpansionDepth: 144,
   viewportEdgeInset: 8,
   handleHalfWidth: 26,
-  handleOutwardExtent: 44,
-  coarseHandleOutwardExtent: 48,
+  // The upper control sits five pixels outside its anchor. These values cover
+  // the tallest fine/coarse CSS targets, not only the visible two-pixel cue.
+  handleOutwardExtent: 49,
+  coarseHandleOutwardExtent: 53,
+  minimumHandleSeparation: 12,
   lineTopTolerance: 1,
   minimumCueWidth: 32,
   maximumCueWidth: 96,
@@ -53,8 +54,10 @@ export const ELASTIC_PREVIEW_METRICS = Object.freeze({
 });
 
 /**
- * Projects one downward non-negative degree. Range fragments are copied
- * exactly; grouping only derives the stable lower grip and upper seam cue.
+ * Projects one non-negative degree through two mirrored physical grips. Range
+ * fragments are copied exactly. The upper grip remains the fixed seam while
+ * the selected language moves down; the lower grip follows the suffix it
+ * pushes. Pointer direction is owned by the stretch reducer.
  */
 export function elasticPreviewGeometry(
   rects: readonly ElasticPreviewRect[],
@@ -131,12 +134,23 @@ export function projectElasticPreview(
   // language slot that is later sent to the agent.
   const maximumDepth = ELASTIC_PREVIEW_METRICS.maximumExpansionDepth;
   const pocketDepth = roundClientValue(normalizedAmount * maximumDepth);
+  const movingHandle = activeHandle ?? lastHandle ?? "bottom";
 
   const topCenter = clampHandleX((topLine.left + topLine.right) / 2, viewport);
   const bottomCenter = clampHandleX((bottomLine.left + bottomLine.right) / 2, viewport);
-  const topY = clampHandleY(topBase, viewport, handleViewportInset);
-  const bottomY = clampHandleY(
+  const unclampedTopY = clampHandleY(
+    topBase,
+    viewport,
+    handleViewportInset,
+  );
+  const unclampedBottomY = clampHandleY(
     bottomBase + pocketDepth,
+    viewport,
+    handleViewportInset,
+  );
+  const { top: topY, bottom: bottomY } = separateHandleYs(
+    unclampedTopY,
+    unclampedBottomY,
     viewport,
     handleViewportInset,
   );
@@ -146,9 +160,11 @@ export function projectElasticPreview(
   if (horizontal === null) return null;
   const pocket = Object.freeze({
     left: horizontal.left,
-    top: bottomLine.top - ELASTIC_PREVIEW_METRICS.boundaryOutset,
+    top: movingHandle === "top" ? topBase : bottomBase,
     right: horizontal.right,
-    bottom: bottomY,
+    bottom: movingHandle === "top"
+      ? topBase + pocketDepth
+      : Math.max(bottomBase, bottomY),
   });
   const opacity = roundClientValue(
     ELASTIC_PREVIEW_METRICS.minimumOpacity + normalizedAmount *
@@ -165,7 +181,6 @@ export function projectElasticPreview(
     sourceBounds,
     pocket,
     topHandle,
-    topCue: topHandle,
     bottomHandle,
     handleViewportInset,
     pocketDepth,
@@ -222,11 +237,46 @@ function clampHandleY(
   handleViewportInset: number,
 ): number {
   if (viewport === undefined) return roundClientValue(y);
+  const minimum = viewport.top + handleViewportInset;
+  const maximum = viewport.bottom - handleViewportInset;
+  if (minimum > maximum) return roundClientValue((viewport.top + viewport.bottom) / 2);
   return roundClientValue(clamp(
     y,
-    viewport.top + handleViewportInset,
-    viewport.bottom - handleViewportInset,
+    minimum,
+    maximum,
   ));
+}
+
+/** Keeps the two literal controls separately discoverable after edge clamping. */
+function separateHandleYs(
+  top: number,
+  bottom: number,
+  viewport: ElasticPreviewViewport | undefined,
+  handleViewportInset: number,
+): Readonly<{ top: number; bottom: number }> {
+  if (bottom - top >= ELASTIC_PREVIEW_METRICS.minimumHandleSeparation) {
+    return Object.freeze({ top, bottom });
+  }
+  if (viewport === undefined) {
+    return Object.freeze({
+      top,
+      bottom: roundClientValue(top + ELASTIC_PREVIEW_METRICS.minimumHandleSeparation),
+    });
+  }
+
+  const minimum = viewport.top + handleViewportInset;
+  const maximum = viewport.bottom - handleViewportInset;
+  if (minimum > maximum) {
+    const midpoint = roundClientValue((viewport.top + viewport.bottom) / 2);
+    return Object.freeze({ top: midpoint, bottom: midpoint });
+  }
+  const available = Math.max(0, maximum - minimum);
+  const separation = Math.min(ELASTIC_PREVIEW_METRICS.minimumHandleSeparation, available);
+  const midpoint = clamp((top + bottom) / 2, minimum + separation / 2, maximum - separation / 2);
+  return Object.freeze({
+    top: roundClientValue(midpoint - separation / 2),
+    bottom: roundClientValue(midpoint + separation / 2),
+  });
 }
 
 function pocketHorizontalBounds(
@@ -278,7 +328,7 @@ function isFiniteBounds(bounds: ElasticPreviewBounds): boolean {
 }
 
 function isOptionalHandle(value: StretchHandle | null): boolean {
-  return value === null || value === "bottom";
+  return value === null || value === "top" || value === "bottom";
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -3,6 +3,7 @@ import type { NavigationState } from "../runtime/navigation";
 export type MaterialFilesSurface = Readonly<{
   navigation: NavigationState;
   projectionStale: boolean;
+  queryProjectionStale: boolean;
   rowInteractionDisabled: boolean;
 }>;
 
@@ -14,12 +15,16 @@ export type MaterialFilesSurface = Readonly<{
 export function projectMaterialFilesSurface(input: Readonly<{
   currentNavigation: NavigationState;
   projectedNavigation: NavigationState;
+  currentQuery: string;
+  projectedQuery: string;
   interactionPending: boolean;
 }>): MaterialFilesSurface {
   const projectionStale = input.currentNavigation !== input.projectedNavigation;
+  const queryProjectionStale = input.currentQuery !== input.projectedQuery;
   return Object.freeze({
     navigation: input.projectedNavigation,
     projectionStale,
-    rowInteractionDisabled: input.interactionPending || projectionStale,
+    queryProjectionStale,
+    rowInteractionDisabled: input.interactionPending || projectionStale || queryProjectionStale,
   });
 }

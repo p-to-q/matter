@@ -17,6 +17,288 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-22 — a final expanded branch closes its own visible scope
+
+Changed: in a current same-parent group with at least two direct siblings, a
+final expanded structural branch with visible descendants receives one quiet
+scope tail. It follows the source disclosure axis to the structural last
+visible descendant and turns right by at most 14 px in indentation air. An
+empty slot keeps 2 px, a terminal point 4 px, and a disclosure or restore 8 px
+of air. The turn retracts before a compressed leading control; windowing may clip the line
+but can render the turn only at the authored endpoint.
+
+Why: an expanded final branch had no next sibling control and therefore looked
+unresolved, while connecting it to a child would misstate the tree. A bounded
+scope close finishes the local punctuation without making every parent-child
+pair into a file-tree connector.
+
+Forecloses: viewport-bottom inference, a tail on singleton or collapsed groups,
+child-target connectors, overlap with disclosure or terminal marks, and a
+virtualized fragment that invents a rightward endpoint.
+
+## 2026-08-22 — desktop corner chrome owns local optical clearance
+
+Changed: the upper-right About/settings pair, bottom-right utility row, and
+lower-left guidance each carry the same two transparent backdrop planes. The
+bottom-right group keeps the `28px` inline / `22px` block outer and `15px` inline
+/ `11px` block inner baseline; upper-right and lower-left expand by only a few
+pixels around their different footprints. The broad outer guard uses a capped
+`0.8px` sample and the smaller inner guard uses `3.25px`. With no material
+behind it the field has no visible fill, and the existing mobile handoff carries
+no field. Both planes share a very short, exceptionally slow rise from zero mask
+opacity along their enlarged perimeter. The outer curve then gathers over a
+long shallow shoulder while the inner curve rises later through a compact
+S-shaped soft step. Its short `.32` → `.72` → `.90` rise restores an immediately
+legible shallow/deep handoff without a hard border or third ring, so zoom exposes
+neither hard rectangular rings nor two indistinguishable depths.
+
+Why: per-glyph collision detection would flicker during camera motion, zoom,
+font reflow, and language changes. One shared curve contract with group-owned
+insets follows the actual corner copy and resolves overlap without creating
+another interface panel or three independently drifting implementations.
+
+Forecloses: DOM polling for text collisions, material opacity or filter state,
+an always-visible frosted card, global canvas dimming, and animated entry or
+exit when a passage crosses the corner, as well as hard-edged blur planes.
+
+## 2026-08-22 — Elastic grips open from mirrored physical edges
+
+Changed: the upper Elastic grip increases the shared degree when pulled upward;
+the lower increases it when pulled downward. The upper seam and prefix stay
+fixed while selection and following material move down, so both gestures still
+open one non-negative downward presentation band and one `transform/2` turn.
+Standard slider keys remain Up/Right to increase and Down/Left to decrease.
+
+Why: changing both physical grips to downward travel made the upper edge inert
+under the natural outward gesture and contradicted the two-edge form preserved
+by the original interaction.
+
+Forecloses: two downward physical grips, independent degrees or operations per
+edge, upward structural translation, and keyboard direction derived from screen
+motion instead of slider value.
+
+## 2026-08-22 — one lasso has distinct Elastic and material-selection results
+
+Changed: one node's adjacent current punctuation segments merge into one
+contiguous Elastic range, so a whole multi-clause title remains addressable.
+Disconnected runs or runs in two or more nodes instead form a transient material
+selection set: the index marks their source nodes and inquiry may use them, but
+they expose no grips and cannot enter `transform/2`. Ordinary material, blank
+paper, and the active Lasso tool all clear that state. Dormant Text Swap still
+accepts exactly one segment.
+
+Why: rejecting a whole multi-clause passage broke the person's visible target,
+while treating several passages as one stretch would widen transformation
+authority beyond any one piece of material.
+
+Forecloses: exact-one-segment Elastic as the current UI contract, cross-node or
+gapped generation, hidden promotion of a selection set into one range, and
+lasso state that can be exited only from the tool rail.
+
+## 2026-08-22 — material-index punctuation belongs to one visible sibling group
+
+Changed: every current same-parent group assigns one mutually exclusive leading
+mark per row. If the group contains a structural branch, its leaves receive
+local terminal points; an all-leaf group stays blank. A branch receives its
+disclosure. Only a currently expanded arrow with at least one visible interior
+row before the next sibling control may start a guide to that sibling's arrow or
+terminal point. Collapsed or immediately adjacent arrows, points, and blank
+slots never start a segment. Held-context restore `+` owns the slot alone.
+
+Why: global-depth terminal rules made unrelated leaves look connected, while an
+undirected rail could bridge from a terminal leaf into a later branch. A short
+connector between immediately adjacent controls also described no visible open
+subtree. The line must read as structure currently expanded from its source.
+
+Forecloses: global deepest-depth dots, marks on all-leaf groups, point → arrow
+or point → point rails, collapsed-arrow sources, zero-interior-row connectors,
+stacked restore/terminal controls, and projection or windowing that invents a
+structural endpoint.
+
+## 2026-08-22 — the material index keeps identity quiet and recovery explicit
+
+Changed: the footer remains only the localized non-account identity and
+local-device line, with saving shown only in flight;
+conflict, save-failure, corrupt-row, export, retry, and reload actions live in
+Archive.
+
+Why: persistence controls in the identity row turned a quiet index footer into
+permanent status chrome.
+
+Forecloses: error/action buttons in the identity footer and recovery paths
+outside the explicit archive boundary.
+
+## 2026-08-22 — browser model responses are bounded before parsing
+
+Changed: Inquiry, Elastic, dormant Text Swap, and Voice transcription read JSON
+through one streaming UTF-8 byte boundary that covers declared and actual body
+size, malformed encoding, parsing, cancellation, and the complete client
+deadline. Elastic and Text Swap responses are capped at 8 KiB. A local Elastic
+commit or presentation exception is raised to the application boundary instead
+of being reported as provider unavailability.
+
+Why: a strict response schema does not bound the memory consumed before
+parsing, and an internal invariant failure is not an operational provider fact.
+
+Forecloses: unbounded `response.json()` on primary material paths, body reads
+that outlive their deadline, and quiet recovery that misclassifies a local
+commit failure as a network refusal.
+
+## 2026-08-22 — archive recovery cannot outrun its document
+
+Changed: archive import carries the current tree id, revision, and document
+epoch through preparation and revalidates them immediately before switching.
+The first preview restores only the current document id; a foreign id is
+rejected before persistence until an active-document pointer exists. If the
+current IndexedDB row is corrupt, Matter first downloads a bounded copy of that
+exact row and exposes a separate repair action; repair replaces it in one
+readwrite transaction only while the exported row is still current.
+
+Why: an asynchronous archive must not overwrite material edited while it was
+being prepared, claim a document switch that reload cannot reproduce, or erase
+the only damaged record before a person has a recovery copy.
+
+Forecloses: late unconditional document switches, orphan foreign snapshots in
+the first preview, retry loops against corrupt generations, one-click
+export-and-delete recovery, and compare-then-write outside one transaction.
+
+## 2026-08-22 — Elastic promotion cannot revive dormant Text Swap
+
+Changed: the deployment checker replaces the paired `material-live` profile
+with `elastic-live`. Browser preview still requires both material-model surfaces
+to be unavailable; Elastic live requires `transformTurn` to be available while
+`textSwap` remains unavailable, and the superseded paired profile is rejected.
+
+Why: Text Swap remains a strict dormant grammar, but it is not part of the
+first-release interaction or promotion boundary. Deployment evidence must
+match the product that is actually visible.
+
+Forecloses: treating shared provider infrastructure as authority to revive a
+hidden product surface, and claiming a paired origin probe as Elastic-only
+release evidence.
+
+## 2026-08-22 — index navigation follows one adaptive visual-attention centre
+
+Changed: clicking a material-index passage measures its settled text and moves
+only the transient camera. With little occlusion the target lands at the browser
+visual centre. As an overlapping index grows from 24% to 72% of the viewport, a
+continuous smoothstep moves that centre toward the exposed canvas. Existing
+zoom is preserved while the measured target type is already readable. If that
+type falls below 15 CSS pixels, the camera raises it only to that floor;
+oversized material may scale down only without crossing the same floor or the
+existing camera bounds. Meaningful moves use one bounded symmetric easing
+curve; tiny moves and reduced-motion preferences settle immediately.
+
+Why: a fixed browser centre hides the selected passage behind a dominant narrow
+drawer, while a heavily zoomed-out target remains technically centred but not
+readable. Device breakpoints and unconditional reset zoom create discontinuity.
+The camera should follow measured attention and restore only missing legibility
+without changing the material.
+
+Forecloses: device-specific centring constants, per-node saved positions,
+unconditional fit-to-screen or reset zoom, spring overshoot, inferred node-depth
+font sizes, and layout coordinates that depend on index width.
+
+## 2026-08-21 — Elastic drag opens one live vertical material band
+
+Changed: both Elastic grips travel downward. The upper grip fixes the preceding
+boundary and moves the selection plus all lower material; the lower grip fixes
+the selection and moves only what follows. The same pure vertical-band
+projection drives each drag frame and the settled layout; only settlement may
+start a transform or publish canonical React state.
+
+Why: a physical grip that moves alone and rearranges material only after release
+does not feel attached to the material it claims to stretch.
+
+Forecloses: release-only layout jumps, a second authored coordinate model, tree
+or history writes during drag, and a React layout epoch on every pointer move.
+
+## 2026-08-21 — selected language exposes Elastic only
+
+Changed: the first-release lasso surface exposes the original upper and lower
+Elastic grips only. Text Swap's strict implementation remains dormant, but its
+Rewrite cue, typed direction, and selected-language Voice mode are UI-gated off
+and removed from the active release line.
+
+Why: the local rewrite composer introduced a second operation before the
+physical stretch interaction had reached its final product form.
+
+Forecloses: presenting a dormant model capability as a current product choice,
+mixing rewrite guidance with stretch guidance, or requiring Text Swap live
+promotion before the first Elastic release.
+
+## 2026-08-21 — Control Fog keeps one bounded surface
+
+Changed: the passage-local action field remains one grey-cast capsule with a
+28px backdrop blur. Its final 12px/13px reach and one half-button, uniformly
+quieter text-contact region are CSS presentation; pure geometry publishes only
+placement, relation and the measured material corner. Buttons, actions and hit
+targets do not change.
+
+Why: the visible control should meet material softly without becoming a second
+card or putting visual tuning into tree, protocol or application state.
+
+Forecloses: a second fog part, decorative shadow, protocol-owned visual values,
+or changing material to simulate transparency.
+
+## 2026-08-21 — provider failure returns control instead of becoming interface
+
+Changed: provider, pool, timeout, and transport failure leaves material
+unchanged and restores the still-current local Elastic or inquiry input without
+drawing a model-error message. Strict client/server receipts and
+privacy-safe observation keep the operational reason outside the paper.
+
+Why: availability belongs to operations; rendering it as content makes an
+external service failure look like another piece of Matter.
+
+Forecloses: provider-status chrome, durable failed inquiry turns, automatic
+retry, and hiding protocol or commit violations behind the same quiet path.
+
+## 2026-08-21 — disclosure arrows retain their structural hierarchy
+
+Changed: material disclosure arrows retain their established 0.46 resting
+opacity and full-strength expanded, hover, and keyboard-focus states. A disabled
+branch keeps its arrow visible without becoming operable. Non-interactive
+terminal points remain slightly larger and quieter.
+
+Why: flattening arrows to the terminal point's opacity erased the difference
+between an actionable branch and a quiet ending, and made long expanded
+outlines look structurally incomplete.
+
+Forecloses: using a disabled style to erase structure, or flattening actionable
+disclosure and non-interactive punctuation into one visual weight.
+
+## 2026-08-21 — one lasso owns one punctuation segment and two physical edges
+
+Changed: a successful lasso publishes exactly one transient current
+punctuation segment. A second segment, gap, or second node is ambiguous and
+publishes nothing new. One segment stays in its current Full or Focus layout;
+the lasso never navigates or hides surrounding material. It exposes only the
+upper and lower short-line grips. Both travel downward. The upper grip keeps
+preceding language fixed and pushes the selected segment plus everything below
+it down; the lower grip keeps selected language fixed and pushes only following
+language down. Both own one shared non-negative degree and one
+`transform/2` operation. A one-sentence node remains valid when the segment
+fills the node, and a small deliberate loop within one text fragment may snap
+to that segment without reaching its centre. Voice admission cancels pending
+Elastic work and suspends both grips until admission returns idle. Dark
+selection controls use one explicit quiet ink; light ink
+and the existing Canvas chrome typeface do not change. The strict wire grammars
+remain `transform/2` and `text-swap/1`; document protocol remains `0.2`.
+
+Why: multiple selections, arbitrary ranges, block promotion, and choosing a
+nearby sentence all moved the person's target beyond the original bounded
+gesture grammar.
+
+Forecloses: nearest-sentence inference, arbitrary or multi-range generation,
+persistence of lasso state, automatic Focus navigation, two independent model
+directions, visible ratio/error chrome, and silently widening the evaluated
+request grammars.
+
+The left material index may still navigate to a node. Its click measures the
+settled passage and moves only the transient camera toward the current adaptive
+visual-attention centre; it cannot author or persist position.
+
 ## 2026-08-20 — Promotion evidence is protocol-valid and recoverable
 
 Changed: both 180-case language corpora now prove every selected passage is one

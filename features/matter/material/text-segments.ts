@@ -45,7 +45,7 @@ type Grapheme = Readonly<{
   start: number;
   end: number;
   value: string;
-  kind: "content" | "delimiter" | "horizontal-space";
+  kind: "content" | "delimiter" | "horizontal-space" | "closing-punctuation";
 }>;
 
 const SINGLE_DELIMITERS = new Set([
@@ -65,13 +65,29 @@ const SINGLE_DELIMITERS = new Set([
   "?",
 ]);
 
+// These marks can close in one supported writing convention and open in
+// another (for example, German uses “ where English and Chinese use it as an
+// opener). Their position, rather than Unicode's paired-punctuation category,
+// decides whether they belong to the preceding seam.
+const CONTEXTUAL_QUOTE_CLOSERS = new Set([
+  '"',
+  "'",
+  "“",
+  "‘",
+  "«",
+  "»",
+  "‹",
+  "›",
+]);
+
+const UNICODE_CLOSING_PUNCTUATION = /^(?:\p{Pe}|\p{Pf})$/u;
+
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", {
   granularity: "grapheme",
 });
-
 /**
- * Derives the only replaceable text units. Punctuation remains outside a
- * single selection, while internal seams become part of an adjacent merge.
+ * Derives the only replaceable text units. Punctuation remains outside the
+ * selected language and protects the authored seam around it.
  */
 export function segmentText(text: string): readonly TextSegment[] {
   const graphemes = classifyGraphemes(text);
@@ -81,19 +97,26 @@ export function segmentText(text: string): readonly TextSegment[] {
 
   for (let index = 0; index < graphemes.length; index += 1) {
     const grapheme = graphemes[index]!;
-    if (grapheme.kind === "content") {
+    // A closer is authored language unless a preceding terminal delimiter
+    // proves that it closes that segment. This keeps an opening quote at the
+    // start of the next segment instead of dropping it as punctuation.
+    if (grapheme.kind === "content" || grapheme.kind === "closing-punctuation") {
       lastContentEnd = grapheme.end;
       continue;
     }
     if (grapheme.kind === "horizontal-space") continue;
 
     let seamEnd = grapheme.end;
-    while (
-      index + 1 < graphemes.length &&
-      graphemes[index + 1]!.kind !== "content"
-    ) {
+    while (index + 1 < graphemes.length) {
+      const nextIndex = index + 1;
+      const next = graphemes[nextIndex]!;
+      if (
+        next.kind === "content" ||
+        (next.kind === "closing-punctuation" &&
+          !closingPunctuationBelongsToSeam(graphemes, nextIndex))
+      ) break;
       index += 1;
-      seamEnd = graphemes[index]!.end;
+      seamEnd = next.end;
     }
 
     if (lastContentEnd !== null && lastContentEnd > segmentStart) {
@@ -122,7 +145,7 @@ export function segmentText(text: string): readonly TextSegment[] {
   return Object.freeze(segments);
 }
 
-/** Recomputes the address space and accepts exactly one contiguous segment run. */
+/** Recomputes the address space and accepts one contiguous current segment run. */
 export function validateSelection(
   text: string,
   selection: unknown,
@@ -147,9 +170,7 @@ export function validateSelection(
         if (
           lastSegment.index !== previous.index + 1 ||
           previous.seamEnd !== lastSegment.start
-        ) {
-          break;
-        }
+        ) break;
       }
       if (lastSegment.end === selection.end) {
         return { ok: true, selection: ownSelection(selection), segments };
@@ -162,7 +183,8 @@ export function validateSelection(
 
 /**
  * Converts geometry hits into one semantic address. Duplicate fragments of a
- * wrapped segment collapse, but ambiguity across nodes or gaps is rejected.
+ * wrapped segment collapse. Adjacent hits in one node become one range, while
+ * a gap or a second node remains ambiguous.
  */
 export function selectionFromSegmentHits(
   textByNodeId: Readonly<Record<string, string>>,
@@ -188,16 +210,13 @@ export function selectionFromSegmentHits(
   ) {
     return failure("INVALID_SEGMENT_HIT");
   }
-
   for (let index = 1; index < indices.length; index += 1) {
     const previous = segments[indices[index - 1]!]!;
     const current = segments[indices[index]!]!;
     if (
       current.index !== previous.index + 1 ||
       previous.seamEnd !== current.start
-    ) {
-      return failure("NON_ADJACENT_HITS");
-    }
+    ) return failure("NON_ADJACENT_HITS");
   }
 
   const first = segments[indices[0]!]!;
@@ -267,9 +286,25 @@ function baseKind(value: string): Grapheme["kind"] {
   ) {
     return "delimiter";
   }
-  return /^(?:\p{Zs}|\t)+$/u.test(value)
-    ? "horizontal-space"
+  if (/^(?:\p{Zs}|\t)+$/u.test(value)) return "horizontal-space";
+  return CONTEXTUAL_QUOTE_CLOSERS.has(value) || UNICODE_CLOSING_PUNCTUATION.test(value)
+    ? "closing-punctuation"
     : "content";
+}
+
+function closingPunctuationBelongsToSeam(
+  graphemes: readonly Grapheme[],
+  index: number,
+): boolean {
+  const grapheme = graphemes[index];
+  if (grapheme === undefined || grapheme.kind !== "closing-punctuation") return false;
+  if (!CONTEXTUAL_QUOTE_CLOSERS.has(grapheme.value)) return true;
+
+  // Straight quotes, guillemets, and high curly opening marks are
+  // locale-dependent. They close only when the following grapheme confirms a
+  // boundary; before content they begin the next segment instead.
+  const next = graphemes[index + 1];
+  return next === undefined || next.kind !== "content";
 }
 
 function isSelectionShape(value: unknown): value is SegmentSelection {

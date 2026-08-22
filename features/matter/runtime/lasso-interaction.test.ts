@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SegmentSelection } from "../material/text-segments";
+import type { LassoAddress } from "../material/lasso-selection";
 import {
   createLassoInteractionState,
   reduceLassoInteraction,
@@ -21,8 +22,15 @@ const NEW_SELECTION: SegmentSelection = {
   selectedText: "新选择",
 };
 
+function address(range: SegmentSelection): LassoAddress {
+  return { kind: "contiguous-segment-range", range };
+}
+
+const OLD_ADDRESS = address(OLD_SELECTION);
+const NEW_ADDRESS = address(NEW_SELECTION);
+
 function ready(selection: SegmentSelection | null = OLD_SELECTION) {
-  return reduceLassoInteraction(createLassoInteractionState(selection), {
+  return reduceLassoInteraction(createLassoInteractionState(selection && address(selection)), {
     type: "activate",
   });
 }
@@ -39,7 +47,7 @@ function drawing(selection: SegmentSelection | null = OLD_SELECTION) {
 
 describe("lasso interaction", () => {
   it("requires explicit mode activation before a primary pointer can own a stroke", () => {
-    const inactive = createLassoInteractionState(OLD_SELECTION);
+    const inactive = createLassoInteractionState(OLD_ADDRESS);
     const down = {
       type: "pointer-down",
       pointerId: 7,
@@ -51,12 +59,12 @@ describe("lasso interaction", () => {
     expect(reduceLassoInteraction(inactive, down)).toBe(inactive);
     expect(reduceLassoInteraction(inactive, { type: "activate" })).toEqual({
       mode: "ready",
-      selection: OLD_SELECTION,
+      address: OLD_ADDRESS,
     });
     expect(drawing()).toEqual({
       mode: "drawing",
-      selection: null,
-      startSelection: OLD_SELECTION,
+      address: null,
+      startAddress: OLD_ADDRESS,
       pointerId: 7,
       pointerType: "mouse",
     });
@@ -103,16 +111,55 @@ describe("lasso interaction", () => {
     expect(reduceLassoInteraction(state, {
       type: "pointer-up",
       pointerId: 8,
-      resolution: { kind: "selection", selection: NEW_SELECTION },
+      resolution: { kind: "selection", mode: "contiguous-segment-range", selection: NEW_SELECTION },
     })).toBe(state);
 
     const result = reduceLassoInteraction(state, {
       type: "pointer-up",
       pointerId: 7,
-      resolution: { kind: "selection", selection: NEW_SELECTION },
+      resolution: { kind: "selection", mode: "contiguous-segment-range", selection: NEW_SELECTION },
     });
-    expect(result).toEqual({ mode: "ready", selection: NEW_SELECTION });
-    expect(result.selection).not.toBe(NEW_SELECTION);
+    expect(result).toEqual({ mode: "ready", address: NEW_ADDRESS });
+    expect(result.address).not.toBe(NEW_ADDRESS);
+  });
+
+  it("never publishes an Elastic address for a higher-level selection set", () => {
+    const result = reduceLassoInteraction(drawing(), {
+      type: "pointer-up",
+      pointerId: 7,
+      resolution: {
+        kind: "selection",
+        mode: "selection-set",
+        selection: NEW_SELECTION,
+        selections: [NEW_SELECTION, { ...NEW_SELECTION, nodeId: "node_b" }],
+      },
+    });
+    expect(result).toEqual({ mode: "ready", address: null });
+    expect(reduceLassoInteraction(drawing(), {
+      type: "pointer-up",
+      pointerId: 7,
+      resolution: {
+        kind: "selection",
+        mode: "selection-set",
+        selection: NEW_SELECTION,
+        selections: [NEW_SELECTION],
+      },
+    })).toEqual({ mode: "ready", address: OLD_ADDRESS });
+  });
+
+  it("accepts one exact keyboard-addressed segment only while the tool is ready", () => {
+    expect(reduceLassoInteraction(ready(), {
+      type: "keyboard-select",
+      selection: NEW_SELECTION,
+    })).toEqual({ mode: "ready", address: NEW_ADDRESS });
+    expect(reduceLassoInteraction(createLassoInteractionState(), {
+      type: "keyboard-select",
+      selection: NEW_SELECTION,
+    })).toEqual({ mode: "inactive", address: null });
+    expect(reduceLassoInteraction(drawing(), {
+      type: "keyboard-select",
+      selection: NEW_SELECTION,
+    })).toEqual(drawing());
   });
 
   it("clears the previous selection only after a trustworthy empty closed loop", () => {
@@ -120,7 +167,7 @@ describe("lasso interaction", () => {
       type: "pointer-up",
       pointerId: 7,
       resolution: { kind: "empty-closed" },
-    })).toEqual({ mode: "ready", selection: null });
+    })).toEqual({ mode: "ready", address: null });
   });
 
   it.each(["uncommitted", "ambiguous"] as const)(
@@ -130,7 +177,7 @@ describe("lasso interaction", () => {
         type: "pointer-up",
         pointerId: 7,
         resolution: { kind },
-      })).toEqual({ mode: "ready", selection: OLD_SELECTION });
+      })).toEqual({ mode: "ready", address: OLD_ADDRESS });
     },
   );
 
@@ -139,8 +186,8 @@ describe("lasso interaction", () => {
     expect(reduceLassoInteraction(drawing(), {
       type: "pointer-up",
       pointerId: 7,
-      resolution: { kind: "selection", selection: malformed },
-    })).toEqual({ mode: "ready", selection: OLD_SELECTION });
+      resolution: { kind: "selection", mode: "contiguous-segment-range", selection: malformed },
+    })).toEqual({ mode: "ready", address: OLD_ADDRESS });
   });
 
   it.each(["pointer-cancel", "lost-pointer-capture"] as const)(
@@ -150,7 +197,7 @@ describe("lasso interaction", () => {
       expect(reduceLassoInteraction(state, { type, pointerId: 8 })).toBe(state);
       expect(reduceLassoInteraction(state, { type, pointerId: 7 })).toEqual({
         mode: "ready",
-        selection: OLD_SELECTION,
+        address: OLD_ADDRESS,
       });
     },
   );
@@ -158,14 +205,14 @@ describe("lasso interaction", () => {
   it("restores the start snapshot when the tool is deactivated mid-stroke", () => {
     expect(reduceLassoInteraction(drawing(), { type: "deactivate" })).toEqual({
       mode: "inactive",
-      selection: OLD_SELECTION,
+      address: OLD_ADDRESS,
     });
   });
 
   it("cancels layout-stale ink but retains a semantic selection for remeasurement", () => {
     expect(reduceLassoInteraction(drawing(), {
       type: "layout-invalidated",
-    })).toEqual({ mode: "ready", selection: OLD_SELECTION });
+    })).toEqual({ mode: "ready", address: OLD_ADDRESS });
 
     const stable = ready();
     expect(reduceLassoInteraction(stable, { type: "layout-invalidated" })).toBe(stable);
@@ -176,18 +223,18 @@ describe("lasso interaction", () => {
     (type) => {
       expect(reduceLassoInteraction(drawing(), { type })).toEqual({
         mode: "ready",
-        selection: null,
+        address: null,
       });
-      expect(reduceLassoInteraction(createLassoInteractionState(OLD_SELECTION), {
+      expect(reduceLassoInteraction(createLassoInteractionState(OLD_ADDRESS), {
         type,
-      })).toEqual({ mode: "inactive", selection: null });
+      })).toEqual({ mode: "inactive", address: null });
     },
   );
 
   it("owns the caller's initial selection snapshot", () => {
     const mutable = { ...OLD_SELECTION };
-    const state = createLassoInteractionState(mutable);
+    const state = createLassoInteractionState(address(mutable));
     mutable.selectedText = "changed outside";
-    expect(state.selection?.selectedText).toBe("旧选择");
+    expect(state.address?.kind === "contiguous-segment-range" && state.address.range.selectedText).toBe("旧选择");
   });
 });

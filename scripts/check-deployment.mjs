@@ -14,7 +14,7 @@ const HEALTH_SURFACES = [
   "archiveExportImport",
 ];
 const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
-const DEPLOYMENT_PROFILES = new Set(["browser-preview", "material-live"]);
+const DEPLOYMENT_PROFILES = new Set(["browser-preview", "elastic-live"]);
 
 export function normalizeDeploymentOrigin(value) {
   const url = new URL(value);
@@ -53,13 +53,17 @@ export function inspectDeploymentHealth(value, expectedVersion, profile = "brows
   if (value.surfaces.voiceAdmission !== "available") {
     failures.push("Public voice admission is not available.");
   }
-  const expectedMaterialState = profile === "material-live" ? "available" : "unavailable";
-  for (const name of ["transformTurn", "textSwap"]) {
-    if (value.surfaces[name] !== expectedMaterialState) {
-      failures.push(
-        `Material model surface ${name} must be ${expectedMaterialState} for ${profile}.`,
-      );
-    }
+  const expectedTransformState = profile === "elastic-live" ? "available" : "unavailable";
+  if (value.surfaces.transformTurn !== expectedTransformState) {
+    failures.push(
+      `Material model surface transformTurn must be ${expectedTransformState} for ${profile}.`,
+    );
+  }
+  // Text Swap is a dormant regression grammar, not a current release surface.
+  // Keeping its health lane unavailable prevents an old paired-promotion
+  // command from silently publishing UI authority that no longer exists.
+  if (value.surfaces.textSwap !== "unavailable") {
+    failures.push(`Dormant material surface textSwap must be unavailable for ${profile}.`);
   }
   return failures;
 }
@@ -211,7 +215,7 @@ function parseArguments(args) {
     if (value.startsWith("--profile=")) {
       profile = value.slice("--profile=".length);
       if (!DEPLOYMENT_PROFILES.has(profile)) {
-        throw new Error("--profile must be browser-preview or material-live.");
+        throw new Error("--profile must be browser-preview or elastic-live.");
       }
       continue;
     }

@@ -17,6 +17,8 @@ describe("CanvasChrome", () => {
 
     expect(markup).toContain('data-language="zh-CN"');
     expect(markup).toContain('data-chrome-region="desktop"');
+    expect(markup).toContain('data-chrome-region="top"');
+    expect(markup).toContain('data-chrome-region="bottom"');
     expect(markup).toContain('data-chrome-control="about"');
     expect(markup).toContain('data-chrome-control="settings"');
     expect(markup).toContain('data-chrome-control="inquiry"');
@@ -97,9 +99,22 @@ describe("CanvasChrome", () => {
       new URL("./CanvasChrome.module.css", import.meta.url),
       "utf8",
     );
+    const globalCss = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);
+    expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-24px -30px;/s);
+    expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-13px -17px;/s);
+    expect(css).toMatch(/\.bottomRight::before\s*{\s*inset:\s*-22px -28px;/s);
+    expect(css).toMatch(/\.bottomRight::after\s*{\s*inset:\s*-11px -15px;/s);
+    expect(css).toContain("backdrop-filter: var(--corner-optical-outer-filter)");
+    expect(css).toContain("mask-image: var(--corner-optical-inner-mask)");
+    expect(globalCss).toMatch(/--corner-optical-outer-filter:\s*blur\(\.8px\)/);
+    expect(globalCss).toMatch(/--corner-optical-inner-filter:\s*blur\(3\.25px\)/);
+    expect(globalCss).toMatch(/--corner-optical-outer-mask:[^;]*\.72\) 30%[^;]*\.24\) 70%[^;]*\.03\) 89%[^;]*\.008\) 94%[^;]*\.004\) 97%[^;]*transparent 100%/s);
+    expect(globalCss).toMatch(/--corner-optical-inner-mask:[^;]*\.9\) 72%[^;]*\.72\) 77%[^;]*\.32\) 81%[^;]*\.02\) 91%[^;]*\.004\) 96%[^;]*transparent 100%/s);
+    expect(globalCss).toMatch(/\.matter-guidance::before\s*{[^}]*inset:\s*-24px -32px;[^}]*--corner-optical-outer-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance::after\s*{[^}]*inset:\s*-12px -18px;[^}]*--corner-optical-inner-mask/s);
     expect(css).toMatch(/\.gearButton\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;/s);
     expect(css).toMatch(/\.gearButton svg\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;/s);
     expect(css).toContain("@media (max-width: 767px)");

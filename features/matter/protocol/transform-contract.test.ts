@@ -62,12 +62,36 @@ function boundedLineage(length: number) {
 }
 
 describe("transform/2 contract", () => {
-  it("accepts one exact fixed-expand envelope and rejects voice, legacy, and unknown fields", () => {
+  it("accepts one contiguous segment range and rejects voice, legacy, and unknown fields", () => {
     expect(parseTransformEnvelope(envelope()).ok).toBe(true);
     expect(parseTransformEnvelope({ ...envelope(), voice: { transcript: "more" } }).ok).toBe(false);
     expect(parseTransformEnvelope(envelope({ requestVersion: "transform/1" })).ok).toBe(false);
+    expect(parseTransformEnvelope(envelope({ requestVersion: "transform/3" })).ok).toBe(false);
     expect(parseTransformEnvelope(envelope({ operation: "rewrite" })).ok).toBe(false);
-    expect(parseTransformEnvelope(envelope({ selection: { type: "segment-range", nodeId: "thought", start: 0, end: TEXT.length, selectedText: TEXT } })).ok).toBe(false);
+    expect(parseTransformEnvelope(envelope({ selection: { type: "segment-range", nodeId: "thought", start: 0, end: TEXT.length, selectedText: TEXT } })).ok).toBe(true);
+    expect(parseTransformEnvelope(envelope({
+      selection: {
+        kind: "selection-set",
+        selections: [
+          { type: "segment-range", nodeId: "thought", start: 0, end: PASSAGE.length, selectedText: PASSAGE },
+          { type: "segment-range", nodeId: "other", start: 0, end: 4, selectedText: "next" },
+        ],
+      },
+    })).ok).toBe(false);
+    const unsafe = "a👨‍👩‍👧‍👦b";
+    expect(parseTransformEnvelope(envelope({
+      selection: { type: "segment-range", nodeId: "thought", start: 1, end: 2, selectedText: unsafe.slice(1, 2) },
+      context: { lineage: [{ id: "thought", text: unsafe, parentId: null, createdAt: TIME, updatedAt: TIME }] },
+    })).ok).toBe(false);
+  });
+
+  it("accepts a one-sentence node when its single segment fills the node", () => {
+    expect(parseTransformEnvelope(envelope({
+      selection: { type: "segment-range", nodeId: "thought", start: 0, end: PASSAGE.length, selectedText: PASSAGE },
+      context: { lineage: [
+        { id: "thought", text: PASSAGE, parentId: null, createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(true);
   });
 
   it("accepts every supported locale without letting locale change the passage", () => {
@@ -97,7 +121,7 @@ describe("transform/2 contract", () => {
     expect(parseTransformPlan({ ...plan, action: { ...plan.action, text: "source" } }, parsed.envelope)).toBeNull();
   });
 
-  it("revalidates policy, current punctuation segment, revision, and tree memento immediately before commit", () => {
+  it("revalidates policy, current segment, revision, and tree memento immediately before commit", () => {
     const parsed = parseTransformEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");
     const plan = buildTransformPlan(parsed.envelope, "source more");

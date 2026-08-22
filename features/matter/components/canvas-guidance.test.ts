@@ -90,7 +90,7 @@ describe("canvas guidance projection", () => {
     [{ kind: "full", selected: null }, "select-thought", "Select one thought."],
     [{ kind: "full", selected: { folded: false } }, "speak-child", "Speak to grow beneath it."],
     [{ kind: "full", selected: { folded: true } }, "unfold-thought", "Unfold this thought."],
-    [{ kind: "focus" }, "circle-focus", "Circle the phrase to change."],
+    [{ kind: "focus" }, "circle-selection", "Circle text between punctuation."],
   ] satisfies readonly [CanvasMaterialGuidanceState, string, string][])(
     "projects material state %s",
     (material, id, text) => {
@@ -100,21 +100,14 @@ describe("canvas guidance projection", () => {
   );
 
   it.each([
-    [{ kind: "lasso-ready" }, "circle-reference", "action", "Circle one phrase as reference."],
+    [{ kind: "lasso-ready" }, "circle-selection", "action", "Circle text between punctuation."],
     [{ kind: "lasso-drawing" }, "close-lasso", "action", "Close the loop around a phrase."],
-    [{ kind: "selected", stretch: { kind: "armed", amount: 0 } }, "set-degree", "action", "Pull expands; Voice/Type rewrites."],
-    [{ kind: "selected", stretch: { kind: "dragging", amount: 0 } }, "reach-stretch-threshold", "action", "Pull to 15%, then release."],
-    [{ kind: "selected", stretch: { kind: "dragging", amount: 0.8 } }, "release-stretch", "action", "Release to expand at this degree."],
-    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.1 } }, "reach-stretch-threshold", "action", "Pull to 15%, then release."],
-    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.6 } }, "apply-stretch", "action", "Press Enter to expand here."],
+    [{ kind: "selected", stretch: { kind: "armed", amount: 0 } }, "set-degree", "action", "Pull either handle down to expand."],
+    [{ kind: "selected", stretch: { kind: "dragging", amount: 0 } }, "reach-stretch-threshold", "action", "Pull a little farther."],
+    [{ kind: "selected", stretch: { kind: "dragging", amount: 0.8 } }, "release-stretch", "action", "Release to expand."],
+    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.1 } }, "reach-stretch-threshold", "action", "Pull a little farther."],
+    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.6 } }, "apply-stretch", "action", "Press Enter to expand."],
     [{ kind: "selected", stretch: { kind: "pending", amount: 0.6 } }, "wait-expansion", "progress", "Expanding."],
-    [{ kind: "selected", stretch: { kind: "error", amount: 0.6 } }, "reset-expansion", "recovery", "No change—text kept. Pull again."],
-    [{ kind: "text-swap", phase: "permission" }, "allow-rewrite-microphone", "action", "Allow the microphone for rewrite."],
-    [{ kind: "text-swap", phase: "recording" }, "speak-rewrite-direction", "action", "Say how to reword this passage."],
-    [{ kind: "text-swap", phase: "transcribing" }, "wait-rewrite-direction", "progress", "Understanding your direction."],
-    [{ kind: "text-swap", phase: "typing" }, "type-rewrite-direction", "action", "Type one rewrite direction."],
-    [{ kind: "text-swap", phase: "pending" }, "wait-rewrite", "progress", "Rewording in place."],
-    [{ kind: "text-swap", phase: "error" }, "retry-rewrite", "recovery", "No rewrite—retry or record again."],
   ] satisfies readonly [CanvasLanguageGuidanceState, string, string, string][])(
     "projects language state %s before rooted navigation",
     (language, id, kind, text) => {
@@ -137,22 +130,9 @@ describe("canvas guidance projection", () => {
     });
   });
 
-  it("lets an active local rewrite outrank a dismissed admission error", () => {
-    expect(projectCanvasGuidance(input({
-      admission: attempt({ phase: "error", errorCode: "NO_AUDIO" }),
-      language: { kind: "text-swap", phase: "recording" },
-      material: { kind: "focus" },
-    }))).toEqual({
-      id: "speak-rewrite-direction",
-      kind: "action",
-      text: "Say how to reword this passage.",
-    });
-  });
-
   it.each([
-    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull expands; Voice/Type rewrites."],
+    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull either handle down to expand."],
     [{ kind: "pending", amount: 0.6 }, "wait-expansion", "progress", "Expanding."],
-    [{ kind: "error", amount: 0.6 }, "reset-expansion", "recovery", "No change—text kept. Pull again."],
   ] satisfies readonly [
     Extract<CanvasLanguageGuidanceState, { kind: "selected" }>["stretch"],
     string,
@@ -207,15 +187,7 @@ describe("canvas guidance projection", () => {
       "set-degree": true,
       "apply-stretch": true,
       "wait-expansion": true,
-      "reset-expansion": true,
-      "allow-rewrite-microphone": true,
-      "speak-rewrite-direction": true,
-      "wait-rewrite-direction": true,
-      "type-rewrite-direction": true,
-      "wait-rewrite": true,
-      "retry-rewrite": true,
-      "circle-reference": true,
-      "circle-focus": true,
+      "circle-selection": true,
       "unfold-thought": true,
       "speak-child": true,
       "select-thought": true,

@@ -35,6 +35,7 @@ export type InquiryEvent =
   | Readonly<{ type: "listen-failed"; notice: InquiryVoiceNotice }>
   | Readonly<{ type: "ask" }>
   | Readonly<{ type: "answer"; id: number; outcome: InquiryTurnOutcome }>
+  | Readonly<{ type: "withdraw-unavailable"; id: number; question: string }>
   | Readonly<{ type: "settle-pending"; outcome: InquiryTurnOutcome }>
   | Readonly<{ type: "scope-changed" }>
   | Readonly<{ type: "close" }>;
@@ -120,6 +121,21 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
             : turn,
         )),
       });
+    case "withdraw-unavailable": {
+      const ownsPendingAnswer = state.turns.some((turn) =>
+        turn.id === event.id && turn.role === "matter" && turn.outcome.status === "pending"
+      );
+      if (!ownsPendingAnswer) return state;
+      const visibleDraft = inquiryText(state).trim();
+      return freeze({
+        ...state,
+        draft: visibleDraft.length === 0 ? clamp(event.question) : state.draft,
+        interim: visibleDraft.length === 0 ? "" : state.interim,
+        turns: Object.freeze(state.turns.filter((turn) =>
+          turn.id !== event.id && turn.id !== event.id - 1
+        )),
+      });
+    }
     case "settle-pending":
       // The material moved while a question was in flight. The record keeps the
       // question — that is what it is for — but the turn must reach a terminal

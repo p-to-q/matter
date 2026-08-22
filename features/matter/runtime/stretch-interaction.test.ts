@@ -10,8 +10,8 @@ import {
   reduceStretchInteraction,
   stretchCommitBasisFromTransition,
   stretchAmountFromClientDelta,
-  stretchAmountFromRailPosition,
   type StretchAnchor,
+  type StretchHandle,
   type StretchInteractionState,
   type StretchPointerType,
 } from "./stretch-interaction";
@@ -41,10 +41,11 @@ function armed(anchor: StretchAnchor = ANCHOR): StretchInteractionState {
 function down(
   state = armed(),
   pointerType: StretchPointerType = "mouse",
+  handle: StretchHandle = "bottom",
 ): StretchInteractionState {
   return reduceStretchInteraction(state, {
     type: "pointer-down",
-    handle: "bottom",
+    handle,
     pointerId: 7,
     pointerType,
     isPrimary: true,
@@ -54,7 +55,8 @@ function down(
 }
 
 function setAmount(state: StretchInteractionState, amount: number): StretchInteractionState {
-  return reduceStretchInteraction(state, { type: "set-amount", amount, handle: "bottom" });
+  if (state.mode !== "armed") throw new Error("test setup requires an armed stretch");
+  return Object.freeze({ mode: "adjusted", anchor: state.anchor, amount, lastHandle: "bottom" });
 }
 
 describe("stretch interaction", () => {
@@ -94,7 +96,7 @@ describe("stretch interaction", () => {
     })).toMatchObject({ mode: "armed", amount: 0 });
   });
 
-  it("only gives the bottom grip one valid primary pointer and changes no degree on down", () => {
+  it("gives either physical grip one valid primary pointer and changes no degree on down", () => {
     const state = armed();
     const base = {
       type: "pointer-down" as const,
@@ -106,7 +108,7 @@ describe("stretch interaction", () => {
       clientY: 100,
     };
     for (const event of [
-      { ...base, handle: "retired-top" as "bottom" },
+      { ...base, handle: "side" as StretchHandle },
       { ...base, isPrimary: false },
       { ...base, button: 1 },
       { ...base, pointerId: -1 },
@@ -120,6 +122,12 @@ describe("stretch interaction", () => {
       mode: "dragging",
       amount: 0,
       priorAmount: 0,
+      crossedDeadzone: false,
+    });
+    expect(down(armed(), "mouse", "top")).toMatchObject({
+      mode: "dragging",
+      handle: "top",
+      amount: 0,
       crossedDeadzone: false,
     });
     expect(reduceStretchInteraction(createStretchInteractionState(), base)).toEqual({ mode: "idle" });
@@ -150,11 +158,11 @@ describe("stretch interaction", () => {
     expect(stretchAmountFromClientDelta(0.25, -STRETCH_TRAVEL_PX)).toBe(0);
   });
 
-  it("maps a pointer-up on the transient rail without overshoot", () => {
-    expect(stretchAmountFromRailPosition(160, 100)).toBe(0.5);
-    expect(stretchAmountFromRailPosition(80, 100)).toBe(0);
-    expect(stretchAmountFromRailPosition(260, 100)).toBe(1);
-    expect(stretchAmountFromRailPosition(Number.NaN, 100)).toBeNull();
+  it("maps mirrored outward travel from either edge to the same shared degree", () => {
+    expect(stretchAmountFromClientDelta(0, -STRETCH_TRAVEL_PX / 2, "top")).toBe(0.5);
+    expect(stretchAmountFromClientDelta(0, STRETCH_TRAVEL_PX / 2, "bottom")).toBe(0.5);
+    expect(stretchAmountFromClientDelta(0.5, STRETCH_TRAVEL_PX / 2, "top")).toBe(0);
+    expect(stretchAmountFromClientDelta(0.5, -STRETCH_TRAVEL_PX / 2, "bottom")).toBe(0);
   });
 
   it("ignores foreign and non-finite pointer events", () => {
@@ -235,10 +243,11 @@ describe("stretch interaction", () => {
       mode: "adjusted",
       anchor: ANCHOR,
       amount: committed.amount,
+      lastHandle: "bottom",
     });
   });
 
-  it("lets a settled rail degree submit with one no-move grip release", () => {
+  it("lets an adjusted keyboard degree submit with one no-move grip release", () => {
     const adjusted = setAmount(armed(), 0.5);
     const pressing = down(adjusted);
     expect(pressing).toMatchObject({
@@ -300,6 +309,7 @@ describe("stretch interaction", () => {
         mode: "adjusted",
         anchor: ANCHOR,
         amount: 0.5,
+        lastHandle: "bottom",
       });
     },
   );
@@ -315,12 +325,13 @@ describe("stretch interaction", () => {
       mode: "adjusted",
       anchor: ANCHOR,
       amount: 0.5,
+      lastHandle: "bottom",
     });
   });
 
   it("keeps keyboard adjustment separate from Enter or Space commit", () => {
     let state = armed();
-    state = reduceStretchInteraction(state, { type: "key-down", key: "ArrowDown" });
+    state = reduceStretchInteraction(state, { type: "key-down", key: "ArrowUp" });
     expect(state).toMatchObject({ mode: "adjusted", amount: 0.1 });
     expect(reduceStretchInteraction(state, { type: "key-down", key: "Enter" }))
       .toEqual({ mode: "armed", anchor: ANCHOR, amount: 0 });
@@ -339,10 +350,23 @@ describe("stretch interaction", () => {
       .toMatchObject({ mode: "adjusted", amount: 1 });
   });
 
+  it("uses standard vertical-slider keys independently of mirrored physical travel", () => {
+    expect(reduceStretchInteraction(armed(), {
+      type: "key-down",
+      key: "ArrowUp",
+      handle: "top",
+    })).toMatchObject({ mode: "adjusted", amount: 0.1, lastHandle: "top" });
+    expect(reduceStretchInteraction(setAmount(armed(), 0.5), {
+      type: "key-down",
+      key: "ArrowDown",
+      handle: "top",
+    })).toMatchObject({ mode: "adjusted", amount: 0.4, lastHandle: "top" });
+  });
+
   it("uses Escape to roll back a drag and clear every non-drag degree", () => {
     const adjusted = setAmount(armed(), 0.5);
     expect(reduceStretchInteraction(down(adjusted), { type: "key-down", key: "Escape" }))
-      .toEqual({ mode: "adjusted", anchor: ANCHOR, amount: 0.5 });
+      .toEqual({ mode: "adjusted", anchor: ANCHOR, amount: 0.5, lastHandle: "bottom" });
     expect(reduceStretchInteraction(adjusted, { type: "key-down", key: "Escape" }))
       .toEqual({ mode: "armed", anchor: ANCHOR, amount: 0 });
     const committed = reduceStretchInteraction(adjusted, { type: "key-down", key: "Enter" });

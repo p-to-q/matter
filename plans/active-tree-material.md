@@ -1,11 +1,16 @@
 # Plan: Matter first release
 
 Status: Active  
-Current phase: 3 — source candidate proven; evaluate each live scenario separately while both production gates stay off
+Current phase: 3 — Elastic source candidate proven; keep its production gate off until live evidence closes
 Destination: the first usable public release at `ptoq.io/matter`
 
 This is the only roadmap. It ends at the first release; it is not a forecast of
 Matter as a platform.
+
+Scope decision, 2026-08-21: Text Swap is removed from the first-release line.
+Its strict protocol, harness, and tests remain a dormant regression baseline,
+but the interface exposes no Rewrite cue, typed direction, or selected-language
+Voice mode. No Text Swap live evaluation or promotion is required for this plan.
 
 ## Release line
 
@@ -13,13 +18,13 @@ The release is complete when a person can, without a keyboard:
 
 1. speak a root thought and another thought beneath a selected node;
 2. move between the full tree and one exact root-to-focus working path;
-3. lasso one punctuation segment, stretch it, release, and receive one fixed
-   expand-in-place material change;
-4. on one selected Focus segment, use Voice to direct one near-source Text Swap;
-5. undo either change with the pointer;
-6. reload and recover the same tree;
-7. export it and later import it on a supported browser;
-8. complete the same path in fixture and live modes on the deployed origin.
+3. lasso one contiguous current segment run inside one passage, stretch it,
+   release, and receive one fixed expand-in-place material change; a loop that
+   resolves several passage ranges remains selection-only;
+4. undo the change with the pointer;
+5. reload and recover the same tree;
+6. export it and later restore that same document on a supported browser;
+7. complete the same path in fixture and live modes on the deployed origin.
 
 The release ends there. Accounts, sync, collaboration, path-dependent or
 multi-touch gestures, streaming, split/merge, cross-links, tool prediction,
@@ -32,9 +37,8 @@ The product is one interface for unfinished thought, not a bundle of AI
 surfaces. The next release work must make this one loop plain to a new person:
 
 ```text
-admit a thought → focus it → lasso one segment
+admit a thought → lasso one contiguous passage range without leaving the current view
   → stretch + release for fixed expansion
-  or selected Voice + bounded direction for Text Swap
   → one reversible material change → pointer undo (keyboard redo) → reload
 ```
 
@@ -44,64 +48,203 @@ language. System files, accounts, sync, collaboration, and native shells may
 arrive only after this loop has a live deployed receipt and a separate ownership
 contract.
 
-## Active sub-slice — promotion truth before provider promotion
+## Active correction — desktop corner optical clearance
 
-State: implemented for health/profile separation, tablet/strict-local recovery,
-two independent 180-case candidate corpora, a default-dry-run strict origin
-sampler, and one route-owned privacy-safe terminal observation for every Elastic
-or Text Swap request. Paid corpus runs, independent human review, distributed
-control, owner-approved spend, and successful origin/browser receipts remain
-open.
+State: implemented and proven locally; not released.
 
 ```text
-Outcome:    a release receipt distinguishes a safe browser preview from a live
-            Elastic + Text Swap deployment, and neither one grammar nor a
-            configured pool can impersonate a proven material turn.
+Outcome:    when canvas material passes behind the upper-right About/settings,
+            bottom-right utilities, or lower-left guidance, outside detail
+            softens slightly and the area beneath the copy softens more
+Boundary:   one inherited curve contract and two transparent, elliptically
+            masked pseudo-elements per group, inside the desktop paper-chrome
+            stacking context; bottom-right owns the 28/22 outer and 15/11 inner
+            baseline, while top-right and guidance add only footprint-specific
+            air; the capped 0.8px outer and 3.25px inner planes share
+            an exceptionally slow zero-foot before diverging into a broad
+            shallow outer shoulder and a later compact S-shaped inner soft step
+Invariants: controls, text, camera, tree, history, preferences and pointer hit
+            areas do not change; no observer, collision state or animation;
+            the existing <=767px mobile handoff owns no desktop clearance
+Proof:      static shared-contract receipt; Chromium compares the exact common
+            masks and per-group insets/fill/pointer transparency across all
+            three corners; complete desktop chrome flow; full release gates
+Non-goals:  a card or gradient, material filtering, per-glyph fading, a new
+            responsive breakpoint, or any Ask Matter protocol/state change
+```
+
+## Active correction — one local language interaction
+
+State: implemented locally; source and browser proof in progress; not released.
+
+```text
+Outcome:    one contiguous run of current punctuation segments inside one node
+            remains in its current Full or Focus view with the original
+            upper/lower grips. They travel outward—upper up, lower down—
+            while controlling one degree: upper keeps the prefix fixed and
+            pushes selection+suffix down; lower keeps selection fixed and
+            pushes the suffix down. Affected lower material moves before release.
+            A disconnected run or second node becomes higher-level material
+            selection with no grips or transform authority; the lasso never
+            navigates or hides surrounding material. Ordinary material, blank
+            paper, and the active Lasso tool all clear that state.
+            Provider failure returns the local control without error chrome.
+Boundary:   pure lasso geometry/resolution, one transient semantic address,
+            stretch reducer, pure vertical presentation band, disposable
+            render-edge publication, transform/2, focused source and browser
+            proof. text-swap/1 stays dormant and outside UI.
+Invariants: the gesture fixes the exact target; mixed authority is ambiguous;
+            no lasso state enters tree/history/persistence; model returns only
+            { text }; server constructs one plan; tree engine owns one atomic
+            reversible mutation; production model gates stay off.
+Proof:      one/adjacent/disconnected/cross-node unit matrix; punctuation seam matrix;
+            Full-view non-navigation and pre-release downstream-motion receipt;
+            mirrored outward pointer and standard slider-keyboard geometry;
+            laptop/narrow/tablet; light/dark/reduced-motion; silent provider
+            recovery; protocol parser and stale-commit symmetry.
+Non-goals:  fuzzy target inference, model-chosen scope, persistent prompt/chat,
+            candidate UI, a new typeface, new dependency, provider promotion,
+            or a document/protocol migration.
+```
+
+The request versions do not change. Existing zero-network evidence remains a
+regression baseline; the Elastic production gate stays closed until the
+separate live promotion boundary is satisfied.
+
+## Active correction — the material index keeps one local structural grammar
+
+State: implemented locally; focused source and browser proof complete.
+
+```text
+Outcome:    every current same-parent group projects mutually exclusive
+            disclosure / local-terminal / blank leading marks; only a currently
+            expanded disclosure with visible interior material can start a guide
+            to the next sibling's disclosure or point. A multi-item group's
+            final expanded branch closes its own visible range with one short
+            indentation tail. The footer remains quiet identity and Archive
+            owns recovery.
+Boundary:   pure current-outline guide and terminal projection, its virtualized
+            render receipt, localized identity copy, and existing Archive panel
+Invariants: tree, authored order, persistence state, archive protocol, and
+            recovery authority do not move; one row never stacks arrow, point,
+            blank, or restore; collapsed arrow, zero-interior-row arrow,
+            dot, and blank never source a rail; a singleton receives no tail;
+            windowing clips but cannot move a tail endpoint; identity is not status
+Proof:      expanded branch/branch across the first subtree, then no rail when
+            the source collapses; all-leaf blank group; leaf/branch/leaf as
+            dot/arrow/dot with arrow→dot only while its blank child is visible;
+            collapse makes arrow and dot adjacent and removes the connector;
+            final expanded branch tail, singleton/collapse absence, compressed
+            indentation clearance, held restore exclusivity; search/select/fold
+            and virtual-window matrix; conflict, storage-full, save-failure, corrupt-row and
+            retry/reload Archive receipts; laptop and narrow visual/pointer checks
+Non-goals:  a new tree model, global-depth terminal inference, permanent status
+            chrome, account identity, or automatic conflict choice
+```
+
+## Active correction — index navigation lands at the visual-attention centre
+
+State: implemented locally; focused source and browser proof complete.
+
+```text
+Outcome:    clicking a left-index passage selects or focuses it, then places
+            that measured passage at a continuously projected attention centre:
+            normally the browser centre, but toward the exposed canvas when an
+            overlapping index dominates a narrow viewport; target type below
+            15 screen CSS pixels rises only to that readable floor
+Boundary:   one transient index navigation receipt, settled render-edge DOM
+            rectangle/font measurement, one pure attention projection, and one
+            pure camera plan
+Invariants: tree and pure layout coordinates do not change; no node position is
+            stored; readable fitting passages preserve zoom; undersized target
+            type and oversized passages scale only within the target-specific
+            readable floor and existing camera bounds; stale/missing geometry
+            and active pointer gestures fail closed; an active wheel pulse
+            defers centring; reduced motion settles instantly
+Proof:      client-geometry and continuous-overlap unit matrix; Full, Focus,
+            repeated selection, measured-font threshold, zoom, oversized type,
+            post-click layout/font settlement, reduced-motion, laptop and
+            dominant narrow-drawer browser receipts
+Non-goals:  authored coordinates, scroll memory, per-node camera state,
+            spring physics, document or protocol changes
+```
+
+## Active correction — one bounded Control Fog surface
+
+State: implemented locally; clean source/build and focused browser proof complete;
+not released.
+
+The passage-local +/− field remains one capsule. Its measured placement stays
+pure; CSS owns the final 12px/13px reach, uniform half-button text-contact
+reduction, blur and fallbacks. Actions, hit targets, material, tree, protocol and
+provider boundaries do not change. Focused geometry and browser checks cover
+attached/detached placement, fine/coarse pointers, light/dark, forced colors and
+reduced motion.
+
+Receipt, 2026-08-21: an isolated `HEAD + Control Fog` worktree passed the full
+repository check and production build (1,386 tests passed, 2 skipped; 136 test
+files passed, 1 skipped), the 16-case focused geometry suite, and a 28,224-case
+placement sweep with no attached-corner violation inside the declared visual
+outsets. In the 70-case Chromium run every Control Fog receipt passed; the run
+finished 64 passed and 2 capability-skipped, with four unrelated tests losing
+their page to an unexpected navigation. Re-running exactly those four tests
+serially passed 4/4. This records the concurrency flake instead of treating it
+as evidence for or against the fog.
+
+## Active sub-slice — promotion truth before provider promotion
+
+State: Elastic tooling is implemented for health/profile separation,
+tablet/strict-local recovery, a 180-case candidate corpus, a default-dry-run
+origin sampler, and privacy-safe terminal observation. Its paid run, independent
+review, distributed control, approved spend, and origin/browser receipts remain
+open. Dormant Text Swap evidence is not a release condition.
+
+```text
+Outcome:    a release receipt distinguishes a safe browser preview from live
+            Elastic, and a configured pool cannot impersonate a proven turn.
 Boundary:   no-store health projection, deployment receipt profiles, strict
             local Elastic refusal recovery, one tablet/coarse browser proof,
-            a pure shared evaluation core with scenario-owned synthetic corpora,
+            the Elastic synthetic corpus and evaluation policy,
             an explicitly authorized deployed-origin API sampler, and one
-            server-only allow-listed terminal observation owner shared in shape
-            but not lifecycle by the two material routes.
-Invariants: Elastic and Text Swap keep independent gates and protocols; health
-            exposes no provider or material; browser-preview requires both
-            material model surfaces unavailable; material-live requires both
-            configured but still cannot replace corpus, rate/spend, latency,
-            rollback, and successful-origin proof.
+            server-only allow-listed terminal observation owner.
+Invariants: health exposes no provider or material; browser-preview requires
+            Elastic unavailable; elastic-live requires Elastic configured but
+            cannot replace corpus, rate/spend, latency, rollback, or successful
+            origin proof. Text Swap remains gated off and dormant.
 Proof:      exact health envelope and profile tests; over-capacity lineage
             start refusal with zero request/history; 834×1112 touch lasso,
-            selection-time operation choice, symmetric local ownership,
-            Elastic/Text Swap commit and pointer Undo; full
-            source and Chromium release suites before promotion; 5 locales ×
-            12 classes × 3 axes whose reconstructed passage is one exact
-            current punctuation segment and whose source-length stratum is
-            recomputed from real graphemes; two no-retry repeats, zero-network
+            Elastic commit and pointer Undo; full source and Chromium release
+            suites before promotion; 5 locales ×
+            12 classes × 3 axes whose current corpus reconstructs one exact
+            punctuation segment and whose source-length stratum is recomputed
+            from real graphemes; contiguous multi-segment coverage must be added
+            and digest-bound before elastic-live; two no-retry repeats, zero-network
             defaults, digest-bound private plan/review artifacts, strict origin
-            authorization, a versioned/digest-bound 50+50 origin suite with
+            authorization, a versioned/digest-bound origin suite with
             pre-health running manifest and awaited safe journal, shared
             8-second pacing, bounded response parsing, and low-cardinality
             aggregate tests; hostile-sentinel, exact policy-rejection, admission,
             invalid, unavailable, busy, timeout, cancellation, and one-terminal
             route tests for routine production observations.
-Non-goals:  enabling either live adapter, inventing a spend amount, copying an
-            external asset into the repository, changing tree/history, or
-            weakening either adjudicator to improve acceptance.
+Non-goals:  enabling the live adapter, promoting Text Swap, inventing a spend
+            amount, copying an external asset into the repository, changing
+            tree/history, or weakening adjudication to improve acceptance.
 ```
 
 ## Active sub-slice — selected language owns one interstitial lane
 
 ```text
-Outcome:    after one eligible lasso, Elastic and Text Swap controls occupy real
-            space between the selected passage and its suffix instead of
-            covering material, while the eligible guidance names both choices.
+Outcome:    an eligible lasso stays as quiet highlight plus two edge grips. Real
+            space opens between selection and suffix only after Elastic motion,
+            so neutral selection never resembles an empty tool panel.
 Boundary:   the existing split projection, its render-edge geometry receipt,
             transient presentation damage, local control placement, and focused
             browser geometry assertions only.
 Invariants: canonical text, tree, history, protocol, the five-slot rail, and the
-            mutually exclusive operation lifecycles do not change; no new
+            dormant Text Swap lifecycle do not change; no new
             persistent entity, chrome, or state authority is introduced.
 Proof:      pure lane geometry; zero intersection between the projected suffix
-            and Elastic grip/rail/ratio/status or Text Swap composer/feedback at
+            and Elastic grips/rail/status at
             laptop, 390px coarse/reduced-motion, and 834px tablet breakpoints.
 Non-goals:  production gate changes, provider work, a new operation chooser,
             animation redesign, or changes to Voice admission and material.
@@ -114,16 +257,17 @@ capability skips. The full source gate passed 52 Node checks, 1,382 Vitest with
 3 capability skips, architecture across 352 files, type generation, TypeScript,
 lint, docs, and production build. The default language evaluator passed 17
 checks with its live block skipped and zero network. Independent final review
-found no open P0/P1. Both production material-model gates remain off pending
-the external controls and paid/human/origin receipts below.
+found no open P0/P1. The Elastic production gate remains off pending the
+external controls and paid/human/origin receipts below. The Text Swap gate
+remains intentionally off and is not awaiting promotion.
 
-Receipt, 2026-08-20: the final browser-preview candidate carries the
+Historical receipt, 2026-08-20: that browser-preview candidate carried the
 request-start document epoch through Elastic's private commit boundary and
-rejects same-id/same-revision hydration races without changing state. The same
-fresh lasso exposes either Elastic or Text Swap; after a non-zero degree is
-chosen, Elastic alone owns the local interaction until lasso reset. Both wire
-contracts accept 32 visible lineage nodes and reject 33. The controlled
-Chromium release suite passed 65 cases with 2 capability skips at the measured
+rejected same-id/same-revision hydration races without changing state. Its
+then-current lasso exposed either Elastic or Text Swap; the current scope
+decision above supersedes that UI ownership. Both wire contracts accepted 32
+visible lineage nodes and rejected 33. The controlled Chromium release suite
+passed 65 cases with 2 capability skips at the measured
 three-worker boundary. The language harness remained zero-network by default
 (9 passed, 1 live skip), and the origin smoke command planned exactly 1+1
 synthetic calls without executing them. Exact source-suite counts are recorded
@@ -154,7 +298,7 @@ run's private append-only journal and binds their source digest to the paid
 plan, candidate, prompt, and corpus, so a complete review set from a sibling
 run cannot be substituted. Focused proof stays entirely zero-network.
 
-Receipt, 2026-08-20: both corpora pass the public exact-current-segment parser
+Receipt, 2026-08-20: both historical corpora passed the then-current exact-segment parser
 before provider authority. Every paid result is awaited into separate safe and
 private append-only journals; only 360 unique case/repeat receipts can complete
 the run, and scoring recomputes its metrics from those receipts. The origin
@@ -166,23 +310,20 @@ Both language policies protect locale-written currency amounts, and deployment
 health proof now requires JSON plus `Cache-Control: no-store`. All focused proof
 was zero-network; live gates remain unchanged and off.
 
-## Active freeze — Text Swap / text-swap/1
+## Deferred freeze — Text Swap / text-swap/1
 
-This is a user-directed promotion of the next material capability into the
-current release slice. It replaces the former current non-goal of any
-Voice-directed selected-language operation, but does not reopen Elastic
-Language or revive `transform/1`.
+This previously proven material capability is no longer in the current release
+slice. Its implementation remains intact as a dormant regression baseline; it
+does not reopen Elastic Language, publish UI authority, or revive `transform/1`.
 
-State: implemented and independently proven through protocol, server, Voice
-authority, store, laptop, 390px/coarse pointer, reduced-motion, Undo/Redo,
-reload, cancellation, and late-response receipts. It is now a regression
-baseline; live promotion remains a separate closed gate.
+State: implemented and independently proven through protocol, server, store,
+and historical browser receipts; UI-gated off and not scheduled for live
+promotion in the first release.
 
 ```text
-Outcome:    in Focus, exactly one current punctuation segment changes the
-            existing Voice action to Rewrite selected language; the person
-            gives one bounded direction and receives one complete in-place
-            replacement with pointer Undo.
+Outcome:    text-swap/1 can describe one bounded direction for one exact
+            punctuation segment and one atomic in-place replacement, but no
+            current UI action owns or starts that lifecycle.
 Boundary:   sibling text-swap/1 request/plan, pure direction/length/adjudication
             policy, dedicated prompt/harness and fixture, selection-local Voice
             lifecycle, optional typed accessibility carrier, atomic arrival,
@@ -205,7 +346,8 @@ Non-goals:  changing transform/2, candidates or variants, permanent prompt,
             rail slot, or production enablement.
 ```
 
-The interaction state machine is explicit:
+The dormant interaction state machine is explicit and is not mounted by the
+current interface:
 
 ```text
 eligible selection
@@ -248,9 +390,10 @@ E2E receipt in the shared working tree; it is now the regression baseline for
 Text Swap.
 
 ```text
-Outcome:    in focus view, a person lassos exactly one punctuation segment,
-            stretches it, and on release receives one bounded expand-in-place
-            proposal without recording or speaking a direction.
+Outcome:    in Full or Focus view, a person lassos one contiguous current
+            segment run inside one node, stretches it, and on release receives
+            one bounded expand-in-place proposal without recording or speaking
+            a direction.
 Boundary:   transform/2 request/plan protocol, pure grapheme/UTF-16 length and
             adjudication policy, transform prompt/harness, explicit synthetic
             fixture, pointer-release request lifecycle, and the still-off live gate.
@@ -293,13 +436,14 @@ for counsel.
 
 ```text
 Outcome:    a new person can complete the material loop with warmed truthful
-            Voice admission, pointer-released fixed expansion, and selected-
-            language Text Swap, then pointer undo, keyboard redo, and reload it.
+            Voice admission and one pointer-released fixed expansion of one
+            contiguous current range,
+            then pointer undo, keyboard redo, reload, export and import it.
 Boundary:   first-turn voice readiness; immediate admission plus detachable
             twelve-second composite repair; the implemented transform/2 fixture
-            baseline; the text-swap/1 fixture slice; local tree/history
-            durability; release receipt. No new workspace, memory, or system
-            surface.
+            baseline; dormant text-swap/1 regression grammar; local tree/history
+            durability, archive recovery and release receipt. No new workspace,
+            memory, or system surface.
 Invariants: readiness never requests microphone permission, captures audio, or
             downloads a speech model; a voice start has a bounded failure;
             repair computes without extending first-paint latency but cannot
@@ -310,13 +454,13 @@ Invariants: readiness never requests microphone permission, captures audio, or
 Proof:      focused voice readiness/lifecycle/rule tests; admission→repair→
             private receipt→canonical settle; two-step undo/redo and
             hydrated-history recovery; same-id/same-revision epoch rejection;
-            duplicate-command capability isolation; retained Elastic fixture
-            browser flow; new Text Swap Voice/typed, cancel/failure/late-result,
-            atomic commit, undo/redo and reload flows; full source check and
-            Chromium suite for the source preview.
-Non-goals:  live Elastic or Text Swap promotion, account/sync, an Ask Matter log
-            manager, CRDT/event-sourcing rewrite, renderer virtualization
-            without a measured trigger, or a native shell.
+            duplicate-command capability isolation; exact lasso and retained
+            Elastic fixture browser flow; archive conflict/corrupt/late-import
+            recovery; full source check and Chromium suite for the source
+            preview. Text Swap UI absence remains an active assertion.
+Non-goals:  live Elastic promotion, any Text Swap UI or promotion, account/sync,
+            an Ask Matter log manager, CRDT/event-sourcing rewrite, renderer
+            virtualization without a measured trigger, or a native shell.
 ```
 
 ### Active sub-slice — one model foundation, separate product fallbacks
@@ -610,8 +754,9 @@ and each line closes with its focused proof before the next one starts:
 1. **Recovery and bootstrap.** Make storage exhaustion discoverable while the
    narrow file drawer is closed; keep export and retry reachable; prevent every
    durable gesture until IndexedDB bootstrap has identified the home lineage.
-   Then freeze and build one strict active-document pointer so a successfully
-   imported foreign-id archive remains the local home document after reload.
+   A foreign-id archive stays explicitly rejected before persistence until one
+   strict active-document pointer is separately frozen; that multi-document
+   boundary is not smuggled into the first preview.
 2. **Fixture transform loop (superseded).** This entry records the implemented
    `transform/1` Voice-direction fixture path. It is not the current contract or
    release evidence. Elastic Language 2 replaces its envelope, degree policy,
@@ -690,10 +835,10 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 
 | Area | State | Frozen answer |
 | --- | --- | --- |
-| Product loop | Re-frozen | Voice admission; then either one-segment stretch + release for fixed expansion, or selected Voice + bounded direction for Text Swap; one atomic pointer-undoable change |
+| Product loop | Re-frozen | Voice admission; then one contiguous one-node range stretch + release for fixed expansion; two or more passage ranges remain selection-only; one atomic pointer-undoable change. Text Swap remains dormant outside the release line. |
 | Document | Frozen | one normalized `ThoughtTree`, empty root state, monotonic revision |
 | Agent boundary | Frozen | exact lineage in; model returns `{ text }`; server constructs one action |
-| Text address | Frozen | punctuation segments over grapheme-safe UTF-16 offsets |
+| Text address | Re-frozen | adjacent current segments in one node merge into one Elastic range; disconnected or cross-node runs form a transient selection set with no transform authority; dormant Text Swap narrows to one exact segment |
 | Presentation | Re-frozen | top-anchored columnar tree; measured text, pure derived geometry, no authored coordinate |
 | Editing tools | Frozen | closed context projection; right/bottom rail owns no runtime or tree state |
 | Local return | Frozen | Markdown `SnapshotBundle`, IndexedDB durability, ZIP export/import |
@@ -1129,8 +1274,10 @@ Non-goals:  voice direction, model request, replacement, predicted reflow,
 
 Research compared the old two-handle prototype with tldraw and Excalidraw resize
 lifecycles. Product correction makes both grips interactive without importing
-resize-box semantics: top-up and bottom-down both expand one shared non-negative
-degree, while reversing either grip reduces it toward zero. Degree is a
+resize-box semantics: the upper grip travels up and the lower travels down to
+expand one shared non-negative degree, while reversing either grip reduces it
+toward zero. The upper boundary
+pushes selection+suffix; the lower boundary pushes only suffix. Degree is a
 screen-space bodily signal, so fixed client-pixel travel does not divide by
 canvas zoom. The source material never scales or rewraps. One disposable,
 aria-hidden visual projection may duplicate its language while expansion is
@@ -1175,7 +1322,8 @@ longer represented by a tall tint over one unchanged paragraph. The rendering
 edge derives `before / selected+outer-seam / after` from the validated address
 and projects them as centered, transient language blocks. Bottom expansion
 keeps the upper language fixed and displaces the suffix to the slot floor; the
-upper grip adjusts the same projection without moving or reflowing upper text.
+upper grip keeps that same upper language fixed while displacing selection and
+suffix to the slot floor.
 The original DOM text remains connected and
 geometry-identical underneath, and the tree never acquires presentation-only
 fragments.
@@ -1262,11 +1410,13 @@ explicit retry reachable while the controller retains the latest dirty tree.
 Durable canvas and file actions are inert only during initial storage bootstrap,
 closing the load-window loss path without persisting transient UI state.
 
-The remaining persistence slice is one strict active-document pointer. Its
-freeze must cover metadata migration, pointer CAS ownership, pointer-load then
-snapshot-load ordering, archive save/switch/publication rollback, corrupt or
-missing pointer fallback, and multi-tab conflict. It does not introduce a
-document picker, recent-file list, or more than one active runtime document.
+The next persistence slice is one strict active-document pointer, deferred
+beyond this first-preview boundary. Its freeze must cover metadata migration,
+pointer CAS ownership, pointer-load then snapshot-load ordering, archive
+save/switch/publication rollback, corrupt or missing pointer fallback, and
+multi-tab conflict. Until then, a foreign tree id is rejected before any save.
+The slice does not introduce a document picker, recent-file list, or more than
+one active runtime document.
 
 ### Slice 3B — Material can leave and return as one archive
 

@@ -2,27 +2,41 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const ROOT_ID = "thought_fixture_root";
 const SOURCE_SEGMENT = "我们怀念的也许不是一个真实存在过的过去";
-const REWRITTEN_SEGMENT = "我们也许怀念的，并不是一个曾经真实存在的过去";
 const EXPANDED_SEGMENT = "我们怀念的也许不是一个真实存在过的、拥有非常清楚边界和十分完整形状的过去";
 const SOURCE_TEXT = `${SOURCE_SEGMENT}，而是那个过去在今天仍然允许我们想象的其他生活。`;
 
 test.describe("tablet touch material language", () => {
   test.use({ hasTouch: true, isMobile: true, viewport: { width: 834, height: 1112 } });
 
-  test("Text Swap and Elastic remain reachable without local control collisions", async ({ page }) => {
+  test("coarse admission actions keep a 48px target and a two-pixel keyboard focus", async ({ page }) => {
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await page.getByRole("button", { name: "Record a top-level thought", exact: true }).tap();
+    const feedback = page.locator(".admission-feedback");
+    await expect(feedback).toBeVisible();
+    const actions = feedback.locator("button");
+    expect(await actions.count()).toBeGreaterThan(0);
+    for (const box of await actions.evaluateAll((buttons) => buttons.map((button) => {
+      const rect = button.getBoundingClientRect();
+      return { width: rect.width, height: rect.height };
+    }))) {
+      expect(box.width).toBeGreaterThanOrEqual(48);
+      expect(box.height).toBeGreaterThanOrEqual(48);
+    }
+    await page.keyboard.press("Tab");
+    await actions.first().focus();
+    await expect(actions.first()).toHaveCSS("outline-width", "2px");
+    await actions.last().click();
+    await expect(feedback).toHaveCount(0);
+  });
+
+  test("Elastic remains the only selected-language action without local control collisions", async ({ page }) => {
     const browserErrors: string[] = [];
-    let swapRequests = 0;
     let turnRequests = 0;
-    const releaseSwapResponses: Array<() => void> = [];
     const releaseTurnResponses: Array<() => void> = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
       if (message.type() === "error") browserErrors.push(message.text());
-    });
-    await page.route("**/api/text-swap", async (route) => {
-      swapRequests += 1;
-      await new Promise<void>((resolve) => releaseSwapResponses.push(resolve));
-      await route.continue();
     });
     await page.route("**/api/turn", async (route) => {
       turnRequests += 1;
@@ -40,30 +54,31 @@ test.describe("tablet touch material language", () => {
     await expect(text).toHaveText(SOURCE_TEXT);
     await selectFirstSegmentByTouch(page, text);
 
-    const voice = page.getByRole("button", { name: "Rewrite selected language", exact: true });
-    const typeDirection = page.getByRole("button", {
+    const typeDirection = page.getByRole("textbox", {
       name: "输入所选文字的改写方向",
       exact: true,
     });
-    const grip = page.getByRole("slider", {
-      name: "Set selected language expansion with the lower handle",
+    const upperGrip = page.getByRole("slider", {
+      name: "用上握点设置所选文字的展开程度",
     });
-    const rail = page.getByRole("slider", {
-      name: "Set selected language expansion amount without dragging",
+    const grip = page.getByRole("slider", {
+      name: "用下握点设置所选文字的展开程度",
     });
     const toolRail = page.getByRole("navigation", { name: "Editing tools" });
 
-    await expect(voice).toBeEnabled();
-    await expect(typeDirection).toBeVisible();
-    await expect(page.locator(".stretch-handle")).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true }))
+      .toHaveCount(0);
+    await expect(typeDirection).toHaveCount(0);
+    await expect(page.locator(".stretch-handle")).toHaveCount(2);
     await expect(page.locator(".stretch-handle--bottom")).toHaveCount(1);
-    await expect(page.locator(".stretch-handle--top")).toHaveCount(0);
+    await expect(page.locator(".stretch-handle--top")).toHaveCount(1);
+    await expect(upperGrip).toHaveAttribute("aria-valuenow", "0");
     await expect(grip).toHaveAttribute("aria-valuenow", "0");
-    await expect(rail).toHaveAttribute("aria-valuenow", "0");
-    await expectNoOverlap(typeDirection, toolRail);
+    await expect(page.locator(".stretch-amount-rail")).toHaveCount(0);
+    await expectNoOverlap(upperGrip, toolRail);
     await expectNoOverlap(grip, toolRail);
-    await expectNoOverlap(typeDirection, grip);
-    await expectLaneBeforeSuffix(page, [grip, rail]);
+    await expectUpperGripAtSelection(page, upperGrip);
+    await expectNeutralSelection(page);
     const toolTargets = await toolRail.locator("button").evaluateAll((buttons) =>
       buttons.map((button) => {
         const box = button.getBoundingClientRect();
@@ -72,70 +87,39 @@ test.describe("tablet touch material language", () => {
     expect(toolTargets.length).toBeGreaterThan(0);
     expect(toolTargets.every(({ width, height }) => width >= 48 && height >= 48)).toBe(true);
 
-    await voice.tap();
-    const stop = page.getByRole("button", { name: "Stop rewrite direction", exact: true });
-    await expect(stop).toBeVisible();
-    await expect(page.locator(".stretch-handle")).toHaveCount(0);
-    const recording = page.locator('.text-swap-feedback[data-phase="recording"]');
-    await expect(recording).toContainText("正在听你想怎样换一种说法");
-    await expectNoOverlap(recording, toolRail);
-    await expectLaneBeforeSuffix(page, [recording]);
-    await page.waitForTimeout(350);
-    await stop.tap();
-
-    await expect.poll(() => swapRequests).toBe(1);
-    const swapPending = page.locator('.text-swap-feedback[data-phase="pending"]');
-    await expect(swapPending).toContainText("正在换个说法");
-    await expectLaneBeforeSuffix(page, [swapPending]);
-    await expect(text).toHaveText(SOURCE_TEXT);
-    releaseSwapResponses.shift()?.();
-    await expect(text).toContainText(REWRITTEN_SEGMENT);
-    expect(swapRequests).toBe(1);
-
-    await page.getByRole("button", { name: "Undo last change", exact: true }).tap();
-    await expect(text).toHaveText(SOURCE_TEXT);
-    await expect(page.locator(".transform-text")).toHaveCount(0);
-
-    const exitLasso = page.getByRole("button", { name: "Exit language selection", exact: true });
-    if (await exitLasso.count()) await exitLasso.tap();
-    await selectFirstSegmentByTouch(page, text);
-    await expect(page.locator(".stretch-handle--bottom")).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true })).toBeEnabled();
-
-    const railBox = await rail.boundingBox();
-    if (railBox === null) throw new Error("tablet Elastic amount rail missing");
-    expect(railBox.width).toBeGreaterThanOrEqual(48);
-    expect(railBox.height).toBe(120);
-    await page.touchscreen.tap(railBox.x + railBox.width / 2, railBox.y + railBox.height / 2);
-    await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
+    const lowerGripBox = await grip.boundingBox();
+    if (lowerGripBox === null) throw new Error("tablet lower Elastic grip missing");
+    expect(lowerGripBox.width).toBeGreaterThanOrEqual(48);
+    expect(lowerGripBox.height).toBeGreaterThanOrEqual(48);
+    await dragByTouch(page, grip, 12);
+    await expect(grip).toHaveAttribute("aria-valuenow", "0");
     await expect(typeDirection).toHaveCount(0);
-    await expect(voice).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true }))
+      .toHaveCount(0);
     expect(turnRequests).toBe(0);
 
-    // Choosing an Elastic degree owns the local operation. Resetting the
-    // lasso is the explicit way back to the two-operation choice point.
-    const exitAfterModeSwitch = page.getByRole("button", { name: "Exit language selection", exact: true });
-    if (await exitAfterModeSwitch.count()) await exitAfterModeSwitch.tap();
-    await selectFirstSegmentByTouch(page, text);
-    await expect(typeDirection).toBeVisible();
-    await expect(voice).toBeEnabled();
+    await expect(typeDirection).toHaveCount(0);
     await expect(grip).toHaveAttribute("aria-valuenow", "0");
-    await expectLaneBeforeSuffix(page, [grip, rail]);
+    await expectUpperGripAtSelection(page, upperGrip);
+    await expectNeutralSelection(page);
 
-    const gripBox = await grip.boundingBox();
-    if (gripBox === null) throw new Error("tablet lower Elastic grip missing");
+    const gripBox = await upperGrip.boundingBox();
+    if (gripBox === null) throw new Error("tablet upper Elastic grip missing");
     expect(gripBox.width).toBeGreaterThanOrEqual(48);
     expect(gripBox.height).toBeGreaterThanOrEqual(48);
-    await expectContainedByVisualViewport(page, grip);
-    await dragByTouch(page, grip, 60);
+    await expectContainedByVisualViewport(page, upperGrip);
+    await dragByTouch(page, upperGrip, -60);
     await expect.poll(() => turnRequests).toBe(1);
-    const turnPending = page.locator('.stretch-status-marker[data-phase="requesting"]');
-    await expect(turnPending).toHaveText("正在展开");
+    await expect(page.locator(".stretch-status-marker")).toHaveCount(0);
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
+    await expect(upperGrip).toHaveAttribute("aria-valuenow", "0.5");
     await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
-    await expectLaneBeforeSuffix(page, [grip, rail, page.locator(".stretch-handle__ratio"), turnPending]);
-    await expectContainedByVisualViewport(page, grip);
+    await expect(page.locator(".language-split-projection"))
+      .toHaveAttribute("data-stretch-handle", "top");
+    await expectContainedByVisualViewport(page, upperGrip);
     await expect(typeDirection).toHaveCount(0);
-    await expect(voice).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true }))
+      .toHaveCount(0);
     releaseTurnResponses.shift()?.();
     await expect(text).toContainText(EXPANDED_SEGMENT);
     expect(turnRequests).toBe(1);
@@ -230,26 +214,22 @@ async function expectNoOverlap(first: Locator, second: Locator): Promise<void> {
   expect(overlapWidth * overlapHeight).toBe(0);
 }
 
-async function expectLaneBeforeSuffix(page: Page, controls: readonly Locator[]): Promise<void> {
-  const suffix = page.locator(".language-split-block--after");
-  const selection = page.locator(".language-split-block--selected");
-  await expect(page.locator(".language-split-projection")).toHaveAttribute(
-    "data-preview-mode",
-    /^(lane|expand)$/,
-  );
-  const [selectionBox, suffixBox] = await Promise.all([
-    selection.boundingBox(),
-    suffix.boundingBox(),
+async function expectNeutralSelection(page: Page): Promise<void> {
+  await expect(page.locator(".language-split-projection"))
+    .toHaveAttribute("data-preview-mode", "neutral");
+  await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
+}
+
+async function expectUpperGripAtSelection(page: Page, grip: Locator): Promise<void> {
+  const [gripBox, firstFragment] = await Promise.all([
+    grip.boundingBox(),
+    page.locator(".lasso-selection-fragment").first().boundingBox(),
   ]);
-  expect(selectionBox).not.toBeNull();
-  expect(suffixBox).not.toBeNull();
-  for (const control of controls) {
-    await expect(control).toBeVisible();
-    const controlBox = await control.boundingBox();
-    expect(controlBox).not.toBeNull();
-    expect(controlBox!.y).toBeGreaterThanOrEqual(selectionBox!.y + selectionBox!.height - 1);
-    expect(controlBox!.y + controlBox!.height).toBeLessThanOrEqual(suffixBox!.y + 1);
-  }
+  expect(gripBox).not.toBeNull();
+  expect(firstFragment).not.toBeNull();
+  const lowerEdge = gripBox!.y + gripBox!.height;
+  expect(lowerEdge).toBeLessThanOrEqual(firstFragment!.y + 1);
+  expect(lowerEdge).toBeGreaterThanOrEqual(firstFragment!.y - 14);
 }
 
 async function expectContainedByVisualViewport(page: Page, target: Locator): Promise<void> {
@@ -282,13 +262,14 @@ async function segmentProbeRect(
     const textNode = element.firstChild;
     if (!(textNode instanceof Text)) throw new Error("plain text node missing");
     const content = textNode.data;
-    const delimiters = ["，", "。", "；", "：", "！", "？", ",", ".", ";", ":", "!", "?"];
+    const delimiters = new Set(["，", "。", "；", "：", "！", "？", "、", "…", ",", ".", ";", ":", "!", "?"]);
     const segments: Array<{ start: number; end: number }> = [];
     let start = 0;
     for (let cursor = 0; cursor < content.length; cursor += 1) {
-      if (!delimiters.includes(content[cursor]!)) continue;
+      if (!delimiters.has(content[cursor]!)) continue;
       if (cursor > start) segments.push({ start, end: cursor });
       start = cursor + 1;
+      while (content[start] === " ") start += 1;
     }
     if (start < content.length) segments.push({ start, end: content.length });
     const segment = segments[index];

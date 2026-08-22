@@ -16,9 +16,15 @@ export type MeasuredLassoSegment = Readonly<{
   rects: readonly ClientRect[];
 }>;
 
+export type LassoSegmentMeasurement = Readonly<{
+  index: number;
+  rects: readonly ClientRect[] | null;
+}>;
+
 export type LassoTarget = Readonly<{
   nodeId: string;
   text: string;
+  /** Tight union of visible text fragments, not the layout column box. */
   bounds: ClientBounds;
   measurement: "pending" | "failed" | readonly MeasuredLassoSegment[];
 }>;
@@ -26,14 +32,56 @@ export type LassoTarget = Readonly<{
 export type LassoTargetResolution =
   | Readonly<{
       kind: "selection";
+      mode: "contiguous-segment-range" | "selection-set";
       selection: SegmentSelection;
       selections: readonly SegmentSelection[];
     }>
   | Readonly<{ kind: "empty-closed" | "ambiguous" }>;
 
 /**
- * Resolves both live success feedback and pointer-up from one measured target
- * snapshot. An intersecting incomplete node makes the whole result ambiguous.
+ * Converts one complete render-edge measurement into a resolver target. A
+ * root bound is fallback ambiguity coverage only: if any required segment is
+ * missing or fails, no measured fragment survives as selectable authority.
+ */
+export function lassoTargetFromMeasurements(input: Readonly<{
+  nodeId: string;
+  text: string;
+  rootBounds: ClientBounds;
+  measurements: readonly LassoSegmentMeasurement[];
+}>): LassoTarget | null {
+  if (!validBounds(input.rootBounds)) return null;
+  const expected = segmentText(input.text);
+  if (expected.length === 0) return null;
+  const byIndex = new Map<number, readonly ClientRect[] | null>();
+  for (const measurement of input.measurements) {
+    if (byIndex.has(measurement.index)) {
+      return failedTarget(input);
+    }
+    byIndex.set(measurement.index, measurement.rects);
+  }
+  const measured: MeasuredLassoSegment[] = [];
+  for (const segment of expected) {
+    const rects = byIndex.get(segment.index);
+    if (rects === undefined || rects === null || rects.length === 0) {
+      return failedTarget(input);
+    }
+    measured.push(Object.freeze({ index: segment.index, rects: ownRects(rects) }));
+  }
+  if (byIndex.size !== expected.length) return failedTarget(input);
+  const bounds = unionRects(measured.flatMap(({ rects }) => rects));
+  if (bounds === null) return failedTarget(input);
+  return Object.freeze({
+    nodeId: input.nodeId,
+    text: input.text,
+    bounds,
+    measurement: Object.freeze(measured),
+  });
+}
+
+/**
+ * Resolves one loop to either one contiguous address inside one node or a
+ * higher-level selection set. Wrapped DOM fragments and adjacent punctuation
+ * segments collapse into one range; gaps and multiple nodes stay separate.
  */
 export function resolveLassoTargets(
   lasso: PreparedLasso,
@@ -41,11 +89,11 @@ export function resolveLassoTargets(
 ): LassoTargetResolution {
   const textByNodeId: Record<string, string> = {};
   const hits: Array<{ nodeId: string; segmentIndex: number }> = [];
-  const candidateTargets: LassoTarget[] = [];
+  const candidates: LassoTarget[] = [];
 
   for (const target of targets) {
     if (!boundsIntersectLasso(target.bounds, lasso)) continue;
-    candidateTargets.push(target);
+    candidates.push(target);
     if (target.measurement === "pending" || target.measurement === "failed") {
       return Object.freeze({ kind: "ambiguous" });
     }
@@ -57,48 +105,49 @@ export function resolveLassoTargets(
     }
   }
 
-  // A single loose loop around a wrapped text block is an intentional whole
-  // block selection even when its individual line probes straddle the stroke.
-  // Keep this fallback scoped to one node so adjacent thoughts can never be
-  // merged by generous hit geometry.
-  if (hits.length === 0 && candidateTargets.length === 1) {
-    const target = candidateTargets[0]!;
-    if (target.measurement !== "pending" && target.measurement !== "failed" &&
-      lassoHitsRectFragment(lasso, {
-        x: target.bounds.left,
-        y: target.bounds.top,
-        width: target.bounds.right - target.bounds.left,
-        height: target.bounds.bottom - target.bounds.top,
-      })) {
-      const segments = selectionFromSegmentHits(
+  // A generous loop around exactly one node is still language when that node
+  // consists of exactly one punctuation segment. A whole sentence
+  // must not be demoted to a reference-only block merely because it fills the
+  // authored node.
+  if (hits.length === 0 && candidates.length === 1) {
+    const target = candidates[0]!;
+    if (
+      target.measurement !== "pending" &&
+      target.measurement !== "failed" &&
+      lassoHitsRectFragment(lasso, boundsRect(target.bounds))
+    ) {
+      const whole = selectionFromSegmentHits(
         { [target.nodeId]: target.text },
-        target.measurement.map((segment) => ({ nodeId: target.nodeId, segmentIndex: segment.index })),
+        target.measurement.map((segment) => ({
+          nodeId: target.nodeId,
+          segmentIndex: segment.index,
+        })),
       );
-      if (segments.ok) {
-        const selection = Object.freeze({ ...segments.selection });
-        return Object.freeze({ kind: "selection", selection, selections: Object.freeze([selection]) });
+      if (whole.ok) {
+        const selection = Object.freeze({ ...whole.selection });
+        return Object.freeze({
+          kind: "selection",
+          mode: "contiguous-segment-range",
+          selection,
+          selections: Object.freeze([selection]),
+        });
       }
     }
   }
 
+  if (hits.length === 0) return Object.freeze({ kind: "empty-closed" });
   const selections = selectionsFromSegmentHits(textByNodeId, hits);
-  if (selections.length > 0) {
-    return Object.freeze({
-      kind: "selection",
-      selection: Object.freeze({ ...selections[0] }),
-      selections: Object.freeze(selections.map((selection) => Object.freeze({ ...selection }))),
-    });
-  }
+  if (selections.length === 0) return Object.freeze({ kind: "ambiguous" });
+  const owned = Object.freeze(selections.map((selection) => Object.freeze({ ...selection })));
   return Object.freeze({
-    kind: hits.length === 0 ? "empty-closed" : "ambiguous",
+    kind: "selection",
+    mode: owned.length === 1 ? "contiguous-segment-range" : "selection-set",
+    selection: owned[0]!,
+    selections: owned,
   });
 }
 
-/**
- * Resolves each contiguous run independently. A single loop may therefore
- * address several passages, while gaps inside one passage remain separate
- * selections instead of becoming an accidental replacement range.
- */
+/** Each contiguous run is one passage; two or more runs form selection mode. */
 function selectionsFromSegmentHits(
   textByNodeId: Readonly<Record<string, string>>,
   hits: readonly { nodeId: string; segmentIndex: number }[],
@@ -114,15 +163,17 @@ function selectionsFromSegmentHits(
     const text = textByNodeId[nodeId];
     if (typeof text !== "string") continue;
     const validIndices = new Set(segmentText(text).map((segment) => segment.index));
-    const sorted = indices.filter((index) => validIndices.has(index)).sort((left, right) => left - right);
+    const sorted = indices
+      .filter((index) => validIndices.has(index))
+      .sort((left, right) => left - right);
     let run: number[] = [];
     const flush = () => {
       if (run.length === 0) return;
-      const result = selectionFromSegmentHits(
+      const resolved = selectionFromSegmentHits(
         textByNodeId,
         run.map((segmentIndex) => ({ nodeId, segmentIndex })),
       );
-      if (result.ok) selections.push(Object.freeze({ ...result.selection }));
+      if (resolved.ok) selections.push(Object.freeze({ ...resolved.selection }));
       run = [];
     };
     for (const index of sorted) {
@@ -133,6 +184,53 @@ function selectionsFromSegmentHits(
     flush();
   }
   return selections;
+}
+
+function boundsRect(bounds: ClientBounds): ClientRect {
+  return {
+    x: bounds.left,
+    y: bounds.top,
+    width: bounds.right - bounds.left,
+    height: bounds.bottom - bounds.top,
+  };
+}
+
+function failedTarget(input: Readonly<{
+  nodeId: string;
+  text: string;
+  rootBounds: ClientBounds;
+}>): LassoTarget {
+  return Object.freeze({
+    nodeId: input.nodeId,
+    text: input.text,
+    bounds: Object.freeze({ ...input.rootBounds }),
+    measurement: "failed",
+  });
+}
+
+function ownRects(rects: readonly ClientRect[]): readonly ClientRect[] {
+  return Object.freeze(rects.map((rect) => Object.freeze({ ...rect })));
+}
+
+function unionRects(rects: readonly ClientRect[]): ClientBounds | null {
+  const valid = rects.filter(validRect);
+  if (valid.length !== rects.length || valid.length === 0) return null;
+  return Object.freeze({
+    left: Math.min(...valid.map(({ x }) => x)),
+    top: Math.min(...valid.map(({ y }) => y)),
+    right: Math.max(...valid.map(({ x, width }) => x + width)),
+    bottom: Math.max(...valid.map(({ y, height }) => y + height)),
+  });
+}
+
+function validRect(rect: ClientRect): boolean {
+  return [rect.x, rect.y, rect.width, rect.height].every(Number.isFinite) &&
+    rect.width > 0 && rect.height > 0;
+}
+
+function validBounds(bounds: ClientBounds): boolean {
+  return [bounds.left, bounds.top, bounds.right, bounds.bottom].every(Number.isFinite) &&
+    bounds.right > bounds.left && bounds.bottom > bounds.top;
 }
 
 export function boundsIntersectLasso(

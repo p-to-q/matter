@@ -18,8 +18,13 @@ The left material index separates directory disclosure from working context:
 An included row does not permanently display `−`: on a precise pointer it
 appears at the trailing edge only on row hover or direct keyboard focus, so
 selection remains a reading state rather than an editing mode. A coarse pointer
-has no hover, so its current row exposes the same action as a touch fallback. A
-leaf therefore has no leading mark.
+has no hover, so its current row exposes the same action as a touch fallback.
+An all-leaf sibling group has no leading marks. When one current sibling is a
+structural branch, its leaf siblings receive one non-interactive local terminal
+point so their early ending stays legible beside the disclosure arrows. The
+point is slightly larger and quieter. Disclosure arrows keep the established
+resting weight and become full-strength when expanded, hovered, or focused;
+shape and rotation express structure, and interaction supplies emphasis.
 Pressing `−` holds that node and all of its descendants aside. They remain on
 the canvas at a restrained lower opacity, so their place in the thought remains
 legible, but they cannot receive a normal selection or a lasso. In the browse
@@ -27,20 +32,18 @@ index, that same action closes the branch beneath its faint root, so the root's
 `+` replaces the disclosure mark as the one compact recovery handle. Search and
 Select can still discover the durable descendants; neither changes canvas
 layout or structural fold. Pressing `+` returns that branch and reopens its index
-descendants. The browse outline derives one thin vertical segment for
-each adjacent pair when that *visible* sibling group continues into a deeper
-visible level: three siblings therefore have two distinct relations, owned by
-their parent rather than by a leaf. A singleton has no relation to draw, and a
-group that is entirely the terminal visible leaf level has no redundant rail.
-A small joint gap keeps a larger group from becoming one accidental long rail.
-An inherited parent segment may still pass a leaf row. Segments stop when a
-branch closes and share the exact centre axis of the corresponding disclosure
-or recovery slot. Select mode keeps the same guide topology, with its checkbox
-centred in that slot rather than shifting the title. The original 11-pixel
-control proportion keeps eight pixels of endpoint clearance; a blank leaf joint
-keeps six so separate edges remain distinct without floating away from the
-row. The trailing `−` and row title do not supply guide geometry. Guides are
-only a reading aid, never another hierarchy. A held result found by search
+descendants. The browse outline derives directed segments only from expanded
+structural disclosures. One may cross its visible descendants to the next
+same-parent disclosure or local terminal point; a leaf, blank slot, collapsed
+disclosure, and immediately adjacent control never start a segment. If a
+multi-item sibling group ends in an expanded branch, one short tail closes that
+branch at its structural last visible descendant without touching the
+descendant's leading mark or title. A singleton has no tail, so this punctuation
+never expands into ordinary IDE tree rails. The original 11-pixel control
+proportion keeps eight pixels of source and disclosure clearance and six above
+a terminal point. Windowing may clip a relation but cannot invent its endpoint
+or rightward tail. The trailing `−` and row title do not supply guide geometry.
+Guides are only a reading aid, never another hierarchy. A held result found by search
 explicitly restores its lineage and selects that result in full view; a
 search result opened from an existing focus view keeps that explicit focus
 intent. A node held aside by an ancestor has no independent control until its

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  MAX_TEXT_SWAP_RESPONSE_BYTES,
   TEXT_SWAP_CLIENT_TIMEOUT_MS,
   buildTextSwapPlan,
   parseTextSwapEnvelope,
@@ -47,6 +48,48 @@ describe("text swap client", () => {
     await expect(requestTextSwap(envelope, new AbortController().signal))
       .rejects.toMatchObject({ retryable: true, message: "try another direction" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses declared or streamed oversized and malformed responses", async () => {
+    const envelope = fixtureEnvelope();
+    const stalled = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise(() => undefined),
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(stalled, {
+        headers: { "content-length": String(MAX_TEXT_SWAP_RESPONSE_BYTES + 1) },
+      }))
+      .mockResolvedValueOnce(new Response("x".repeat(MAX_TEXT_SWAP_RESPONSE_BYTES + 1)))
+      .mockResolvedValueOnce(new Response("{"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(requestTextSwap(envelope, new AbortController().signal))
+        .rejects.toMatchObject({
+          retryable: false,
+          kind: "invalid-response",
+          message: "Matter returned an invalid wording change.",
+        });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("cancels a stalled response body when its owner aborts", async () => {
+    const envelope = fixtureEnvelope();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+    const controller = new AbortController();
+    const pending = requestTextSwap(envelope, controller.signal);
+    await Promise.resolve();
+    controller.abort(new DOMException("Text Swap closed.", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled).toBe(true);
   });
 
   it("lets its owner abort and keeps the independent 16 second deadline", async () => {

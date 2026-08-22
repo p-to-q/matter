@@ -17,17 +17,20 @@ shared allow-list, client copy, provider handling, and focused tests together.
 Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
 segment addressing, stretch degree, Markdown durability, and bounded inquiry
-are implemented. The strict `transform/2` Elastic Language contract, synthetic
-fixture, and focused E2E receipt are implemented. The new `text-swap/1` contract
-is frozen as its sibling rather than an optional Voice field. The deleted
+are implemented. The strict `transform/2` Elastic Language contract accepts one
+contiguous run of current punctuation segments inside one node. The dormant
+`text-swap/1` sibling further narrows that shared selection shape to one exact
+current segment. The current interface mounts only Elastic; Text Swap has no
+Rewrite, typed, or Voice UI owner. The deleted
 Voice-direction `transform/1` path is historical trace only and its envelopes
-remain invalid. Both production generative provider gates remain off. Markdown
+remain invalid. The Elastic production gate is off; the dormant Text Swap gate
+is independently off. Markdown
 archive export/import is available as a strict local return path.
 
-`0.2` is a clean break because `0.1` has no persisted documents. A multi-passage
-lasso selection set is deliberately not a protocol field: it is transient UI
-state for copy and navigation, while either material transform receives one
-validated `SegmentSelection` at a time.
+`0.2` is a clean break because `0.1` has no persisted documents. One-node
+adjacent lasso hits may publish one `SegmentSelection`. Disconnected runs and
+cross-node hits remain a browser-only material selection set and never become a
+transform protocol field.
 
 ## ThoughtTree
 
@@ -94,22 +97,20 @@ export type StretchGesture = {
 };
 ```
 
-The sole lower grip is transient presentation state, not a network field. It
-expresses one non-negative downward expansion degree. The selected Elastic
+The upper and lower grips are transient presentation state, not network fields.
+They express one shared non-negative expansion degree. The selected Elastic
 Language tool supplies the only direction: fixed `expand-in-place`. Voice is a
 human-admission channel and does not enter this request.
 
-Offsets must land on grapheme boundaries. Segment punctuation rules live in
-[`material.md`](material.md); segment indices and screen geometry never cross
-the network. Surrounding text is derived from the final lineage node rather than
-duplicated in the envelope.
-
-`validateSelection(text, selection)` remains the shared base rule at envelope
-creation, server planning, and pre-commit translation. Both `transform/2` and
-`text-swap/1` narrow it: the range must equal exactly one current derived
-punctuation segment, not a contiguous adjacent run. It requires integer ordered
-bounds, grapheme boundaries from a fixed-locale segmenter, and an exact text
-slice. Client locale never changes the address space.
+Segment indices and screen geometry never cross the network. The shared
+`validateSelection` rule runs at envelope creation, server planning, and
+pre-commit translation. It accepts only a contiguous run of complete current
+derived punctuation segments, never an arbitrary partial range or a run with a
+gap, and requires safe ordered integer bounds plus exact `selectedText`.
+`transform/2` accepts that range; dormant `text-swap/1` additionally requires
+the range to equal exactly one segment. Client locale never changes the address
+space. A whole one-node title remains valid even when it contains several
+adjacent segments.
 
 ## Elastic Language transform/2 envelope
 
@@ -267,15 +268,18 @@ adjudicator.
 
 ### Timing, failure, and idempotency
 
-The scenario has a 12-second deadline, the route boundary 14 seconds, the client
-16 seconds, and the platform route 25 seconds. The margins cover body parsing,
-plan construction, and response transport without shrinking the measured cold
-provider attempt before live evidence exists. A model rejection is never
-retried. Ordered relay fallback inside one provider call remains transport
-behavior; it does not resample a rejected answer.
+The request is bounded to 32 KiB and the browser reads at most 8 KiB of actual
+UTF-8 response bytes. The scenario has a 12-second deadline, the route boundary
+14 seconds, the client 16 seconds, and the platform route 25 seconds. The
+margins cover body parsing, plan construction, and response transport without
+shrinking the measured cold provider attempt before live evidence exists. A
+model rejection is never retried. Ordered relay fallback inside one provider
+call remains transport behavior; it does not resample a rejected answer.
 
 Unavailable, timeout, busy, rejected, malformed, no-op, and cancelled turns all
-leave the passage unchanged. A new selection, stretch, document epoch, revision,
+leave the passage unchanged. Provider, pool, timeout, and transport failures do
+not create visible error material: the browser returns the control to its prior
+usable selection state while operational receipts remain server-side. A new selection, stretch, document epoch, revision,
 undo/redo, import, unmount, or page hide aborts the current request and makes a
 late answer inert. Pre-commit validation repeats request version, interaction,
 tree, revision, node text/timestamp, selection, grapheme, adjudication, and
@@ -322,7 +326,8 @@ variation-selector, or bidirectional control, and contain at most 240 Unicode
 code points. UTF-16 length is not substituted for this code-point bound. Audio,
 partial hypotheses, duration, confidence, language detection, and whether Voice
 or the optional typed accessibility path supplied the direction do not cross the
-wire. The whole request remains limited to 32 KiB of actual UTF-8 bytes.
+wire. The whole request remains limited to 32 KiB and the browser reads at most
+8 KiB of actual UTF-8 response bytes.
 
 The selected passage and visible lineage are fenced reference material, never
 instructions. The direction is the only person-authored instruction, but it
@@ -411,35 +416,32 @@ an old-text copy never become material.
 
 ### Lifecycle, failure, and gate
 
-Only Focus plus exactly one current punctuation segment can enter Text Swap.
-Entry makes the Elastic grip hidden and inert. Full-view Voice continues normal
-material admission. Leaving the mode, changing selection or document basis,
-tree mutation, Undo/Redo, import, document switch, unmount, page hide, or Escape
-aborts recording or request work and revokes every late result.
+The current interface cannot enter Text Swap; a lasso exposes only Elastic and
+Voice keeps its material-admission meaning. The following lifecycle is a dormant
+grammar contract exercised by regression tests, not current UI authority.
 
-Before either local operation begins, the same eligible selection may expose
-both Elastic and Text Swap. A non-zero Elastic degree, active drag, request, or
-recoverable Elastic failure then owns that selection: the Text Swap carrier is
-absent and Voice cannot begin a second generative operation. Resetting and
-redrawing the lasso returns to the two-operation choice point. This ownership is
-symmetric with Text Swap entry hiding and inerting Elastic; the two grammars
-never hand an in-flight basis directly to one another.
+If reactivated, exactly one current punctuation segment may enter Text Swap in
+Full or Focus; Focus additionally binds it to the exact Focus node. Entry makes
+both Elastic grips hidden and inert. Leaving the mode or changing selection,
+document basis, tree, history, import, page, or recording ownership aborts work
+and revokes every late result. The two grammars never share an in-flight basis.
 
-One valid Voice finalization, or one local submit from the optional typed path,
-creates one immutable request. There is no automatic retry, candidate carousel,
-streaming mutation, or multi-step plan. A retryable provider failure leaves
-material untouched and may keep the still-current selection and bounded
-direction only inside the transient mode for a person's explicit retry; a stale
-or cancelled turn clears them. The scenario initially uses the same
+One valid Voice finalization or typed submit creates one immutable request.
+There is no automatic retry, candidate carousel, streaming mutation, or
+multi-step plan. A provider or transport failure leaves material untouched,
+restores the still-current bounded direction locally, and draws no failure
+notice. A later submit is a new explicit request; stale or cancelled work clears
+the direction. The scenario uses the same
 12-second scenario, 14-second route, 16-second client, and 25-second platform
 boundaries as Elastic while retaining its own operation identity, governor, and
 candidate-health lane.
 
 `POST /api/text-swap` is the only Text Swap wire boundary; `/api/turn` remains
 the `transform/2` boundary and never accepts this envelope. Production
-`text-swap/1` is independently gated off. It cannot reuse a fixture as production
-fallback or open merely because `transform/2` is enabled. Live promotion
-requires a frozen synthetic fixture, a dedicated multilingual corpus,
+`text-swap/1` is independently gated off and has no current promotion owner. It
+cannot reuse a fixture as production fallback or open merely because
+`transform/2` is enabled. Any future promotion would require a frozen synthetic
+fixture, a dedicated multilingual corpus,
 critical-drift review, distributed rate limiting, an isolated or explicitly
 approved provider credential, hard spend cap and alerts, a deployed-origin
 receipt, privacy-safe metrics, and a tested gate-off rollback.
@@ -678,16 +680,16 @@ surface, changing documents, committing material, or changing the selection
 aborts the request and makes a late completion inert.
 
 An error response is also parsed as an exact Matter envelope. Its server message
-is validated and discarded; only the closed `fallbackReason` receipt may select
-localized client copy. `MODEL_BUSY`, `MODEL_TIMEOUT`, and temporary model
-unavailability remain distinct. A legacy, malformed, oversized, unknown, or
-proxy-authored 429/503 fails closed as unreachable instead of claiming that
-Matter received the question. No provider message, status, model, or relay
-identity crosses this boundary.
+is validated and discarded; the closed `fallbackReason` remains an operational
+receipt only. `MODEL_BUSY`, `MODEL_TIMEOUT`, and temporary model unavailability
+remain distinct for diagnosis, but do not become an inquiry turn or localized
+failure message: the submitted question returns to the field. A legacy,
+malformed, oversized, unknown, or proxy-authored 429/503 fails closed the same
+way. No provider message, status, model, or relay identity crosses this boundary.
 
-The browser projects lasso passages in authored order, including multiple
-passages from one node. With no lasso selection it projects the active working
-tree in authored preorder. Both scopes are bounded; the server parses the request whole,
+The browser may project the one current lasso passage. With no lasso selection
+it projects the active working tree in authored preorder. Both scopes are
+bounded; the server parses the request whole,
 reports a receipt,
 and returns `Cache-Control: no-store`. No question, context, answer, or turn list
 enters `ThoughtTree`, command history, material archive, or routine logs.
@@ -820,8 +822,11 @@ rebasing cannot become an unconditional overwrite. Successful undo removes the
 entry and does not push the inverse produced by undo; failure changes neither
 tree nor history. Hydration validates the whole saved inverse chain against the
 restored tree before exposing it; a malformed or legacy journal is discarded
-without affecting material. Archive import and a foreign document switch start
-a new history, and every document transition clears pending turns.
+without affecting material. Restoring an archive of the current document starts
+a new history, and every document transition clears pending turns. Until a
+durable active-document pointer exists, the first release rejects a foreign
+tree id before persistence rather than claiming a switch that reload cannot
+restore.
 
 `affectedNodeIds` is the material touch set: text replacement names its node;
 root operations name the root; insert names node and parent; move names the

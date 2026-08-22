@@ -7,7 +7,17 @@ export type ClientRect = Readonly<{
   height: number;
 }>;
 
-export type NodeHandlePosition = Readonly<{ left: number; top: number }>;
+export type NodeHandlePosition = Readonly<{
+  left: number;
+  top: number;
+  relation: "corner" | "detached";
+  /**
+   * The addressed first-line corner in carrier-local CSS pixels. Paper-edge
+   * clamping may place it just outside the interactive carrier but still within
+   * the fog's non-interactive visual outset.
+   */
+  materialCorner: Readonly<{ x: number; y: number }> | null;
+}>;
 
 /**
  * One source for the field's box. The placement rule below and the CSS that
@@ -108,13 +118,13 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
   const aboveTop = input.textRect.top - height - 14;
   const belowTop = input.textRect.bottom + 14;
   const candidates = [
-    { left: cornerLeft, top: cornerTop, clearance: cornerOverlap },
-    { left: cornerLeft, top: aboveTop, clearance: 0 },
-    { left: rightAlignedLeft, top: aboveTop, clearance: 0 },
-    { left: cornerLeft, top: belowTop, clearance: 0 },
-    { left: rightAlignedLeft, top: belowTop, clearance: 0 },
-    { left: input.textRect.left - width - 14, top: sideTop, clearance: 0 },
-    { left: input.textRect.right + 14, top: sideTop, clearance: 0 },
+    { left: cornerLeft, top: cornerTop, clearance: cornerOverlap, relation: "corner" as const },
+    { left: cornerLeft, top: aboveTop, clearance: 0, relation: "detached" as const },
+    { left: rightAlignedLeft, top: aboveTop, clearance: 0, relation: "detached" as const },
+    { left: cornerLeft, top: belowTop, clearance: 0, relation: "detached" as const },
+    { left: rightAlignedLeft, top: belowTop, clearance: 0, relation: "detached" as const },
+    { left: input.textRect.left - width - 14, top: sideTop, clearance: 0, relation: "detached" as const },
+    { left: input.textRect.right + 14, top: sideTop, clearance: 0, relation: "detached" as const },
   ];
 
   for (const candidate of candidates) {
@@ -132,7 +142,19 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
       !intersectsNullable(input.railRect, rect) &&
       !intersectsNullable(input.guidanceRect, rect)
     ) {
-      return Object.freeze({ left: Math.round(candidate.left), top: Math.round(candidate.top) });
+      const left = Math.round(candidate.left);
+      const top = Math.round(candidate.top);
+      return Object.freeze({
+        left,
+        top,
+        relation: candidate.relation,
+        materialCorner: candidate.relation === "corner"
+          ? Object.freeze({
+              x: Math.round(input.textRect.left - left),
+              y: Math.round(input.textRect.top - top),
+            })
+          : null,
+      });
     }
   }
   return null;

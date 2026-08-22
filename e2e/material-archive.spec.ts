@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
@@ -88,7 +90,7 @@ for (const viewport of [
     expect(browserErrors).toEqual([]);
   });
 
-  test(`material archive waits while lasso owns the canvas at ${viewport.name} width`, async ({ page }) => {
+  test(`material archive respects lasso ownership at ${viewport.name} width`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -105,11 +107,99 @@ for (const viewport of [
     await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
 
     const archive = sidebar.getByRole("region", { name: "Material archive" });
-    await expect(archive.getByRole("button", { name: "Export a copy" })).toBeDisabled();
-    await expect(archive.getByRole("button", { name: "Import a copy" })).toBeDisabled();
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+    if (viewport.name === "narrow") {
+      // The overlay must return transient canvas ownership before it can expose
+      // document-boundary actions. A docked desk index does not take focus, so
+      // its archive remains inert while Lasso still owns the canvas.
+      await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
+      await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
+      await expect(archive.getByRole("button", { name: "Import a copy" })).toBeEnabled();
+    } else {
+      await expect(archive.getByRole("button", { name: "Export a copy" })).toBeDisabled();
+      await expect(archive.getByRole("button", { name: "Import a copy" })).toBeDisabled();
+      await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+    }
   });
 }
+
+test("the first release rejects a foreign document archive before replacement", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const sidebar = page.locator("aside.material-files");
+  const before = await readMaterialSession(page);
+
+  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  const archive = sidebar.getByRole("region", { name: "Material archive" });
+  const downloadReceipt = page.waitForEvent("download");
+  await archive.getByRole("button", { name: "Export a copy" }).click();
+  const downloadPath = await (await downloadReceipt).path();
+  if (downloadPath === null) throw new Error("Archive download did not produce a local file.");
+
+  const files = unzipSync(new Uint8Array(await readFile(downloadPath)));
+  const metadataPath = "matter/matter.json";
+  const metadataBytes = files[metadataPath];
+  if (metadataBytes === undefined) throw new Error("Archive metadata is missing.");
+  const metadata = JSON.parse(strFromU8(metadataBytes)) as Record<string, unknown>;
+  files[metadataPath] = strToU8(`${JSON.stringify({ ...metadata, treeId: "foreign_tree" })}\n`);
+
+  await archive.getByLabel("Choose a material archive").setInputFiles({
+    name: "foreign.matter.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(zipSync(files)),
+  });
+  await expect(archive).toContainText("restore only a copy of the current document");
+  await expect(archive).not.toContainText("Replace current material?");
+  expect(await readMaterialSession(page)).toEqual(before);
+});
+
+test("an explicitly restored older backup survives reload without reviving prior Undo", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const sidebar = page.locator("aside.material-files");
+  const initialRevision = Number(await page.locator("main.matter-shell").getAttribute("data-tree-revision"));
+  const initialIds = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-thought-id")).filter((id): id is string => id !== null),
+  );
+  const removedId = initialIds.at(-1);
+  if (removedId === undefined) throw new Error("Archive fixture has no removable thought.");
+
+  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  let archive = sidebar.getByRole("region", { name: "Material archive" });
+  const downloadReceipt = page.waitForEvent("download");
+  await archive.getByRole("button", { name: "Export a copy" }).click();
+  const backupPath = await (await downloadReceipt).path();
+  if (backupPath === null) throw new Error("Archive download did not produce a local file.");
+  await sidebar.getByRole("button", { name: "Close", exact: true }).click();
+
+  await page.locator(`[data-thought-id="${removedId}"] [data-thought-text-id]`).click();
+  await page.keyboard.press("Delete");
+  await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Undo last change", exact: true })).toBeEnabled();
+  await expect.poll(async () => ({
+    live: Number(await page.locator("main.matter-shell").getAttribute("data-tree-revision")),
+    stored: await readStoredRevision(page),
+    phase: await sidebar.getAttribute("data-persistence-phase"),
+  })).toEqual({ live: initialRevision + 1, stored: initialRevision + 1, phase: "saved" });
+
+  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  archive = sidebar.getByRole("region", { name: "Material archive" });
+  await archive.getByLabel("Choose a material archive").setInputFiles(backupPath);
+  await expect(archive).toContainText("Replace current material?");
+  await archive.getByRole("button", { name: "Replace", exact: true }).click();
+  await expect(archive).toHaveCount(0);
+  await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(1);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialIds.length);
+  await expect(page.getByRole("button", { name: "Undo last change", exact: true })).toBeDisabled();
+  await expect.poll(() => readStoredRevision(page)).toBe(initialRevision);
+
+  await page.reload();
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(1);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialIds.length);
+  await expect(page.getByRole("button", { name: "Undo last change", exact: true })).toBeDisabled();
+});
 
 async function readMaterialSession(page: Page) {
   return page.locator("main.matter-shell").evaluate((main) => ({
@@ -126,4 +216,25 @@ async function readMaterialSession(page: Page) {
       text: node.querySelector<HTMLElement>("[data-thought-text-id]")?.textContent ?? null,
     })),
   }));
+}
+
+async function readStoredRevision(page: Page): Promise<number | null> {
+  return page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("ptoq-matter");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const rows = await new Promise<Array<{ treeRevision?: unknown }>>((resolve, reject) => {
+        const request = database.transaction("snapshots", "readonly").objectStore("snapshots").getAll();
+        request.onsuccess = () => resolve(request.result as Array<{ treeRevision?: unknown }>);
+        request.onerror = () => reject(request.error);
+      });
+      const revision = rows[0]?.treeRevision;
+      return typeof revision === "number" ? revision : null;
+    } finally {
+      database.close();
+    }
+  });
 }

@@ -31,9 +31,8 @@ export type StretchController = Readonly<{
   pointerMove: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerUp: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerCancel: (pointerId: number) => boolean;
-  setAmount: (amount: number, handle?: StretchHandle) => void;
   reopen: () => void;
-  keyDown: (key: string) => boolean;
+  keyDown: (key: string, handle?: StretchHandle) => boolean;
   layoutInvalidated: () => void;
 }>;
 
@@ -230,20 +229,15 @@ export function useStretch(input: {
     return true;
   }, [flushPreview, send]);
 
-  const setAmount = useCallback((amount: number, handle?: StretchHandle) => {
-    const next = send({ type: "set-amount", amount, handle });
-    flushPreview(previewSignal(next));
-  }, [flushPreview, send]);
-
   const reopen = useCallback(() => {
     const next = send({ type: "reopen" });
     flushPreview(previewSignal(next));
   }, [flushPreview, send]);
 
-  const keyDown = useCallback((key: string) => {
+  const keyDown = useCallback((key: string, handle?: StretchHandle) => {
     if (!isStretchInteractionKey(key)) return false;
     const current = stateRef.current;
-    const next = send({ type: "key-down", key });
+    const next = send({ type: "key-down", key, handle });
     flushPreview(previewSignal(next));
     emitCommit(current, next);
     return true;
@@ -258,17 +252,18 @@ export function useStretch(input: {
     mode: state.mode,
     amount: amountOf(state),
     dragging: state.mode === "dragging",
-    activeHandle: state.mode === "dragging" ? "bottom" : null,
+    activeHandle: state.mode === "dragging" ? state.handle : null,
     lastHandle: state.mode === "committed"
       ? state.lastHandle
-      : state.mode === "dragging" || state.mode === "adjusted"
-        ? "bottom"
+      : state.mode === "dragging"
+        ? state.handle
+        : state.mode === "adjusted"
+          ? state.lastHandle
         : null,
     pointerDown,
     pointerMove,
     pointerUp,
     pointerCancel,
-    setAmount,
     reopen,
     keyDown,
     layoutInvalidated,
@@ -285,9 +280,9 @@ function previewSignal(
   return Object.freeze({
     amount: amountOf(state),
     handle: state.mode === "dragging"
-      ? "bottom"
+      ? state.handle
       : state.mode === "committed" || state.mode === "adjusted"
-        ? "bottom"
+        ? state.lastHandle
         : null,
     dragging: state.mode === "dragging",
   });

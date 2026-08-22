@@ -44,6 +44,20 @@ describe("inquiry composer", () => {
     expect(state.turns.at(-1)).toMatchObject({ role: "matter", outcome: { reason: "NO_PROVIDER" } });
   });
 
+  it("withdraws a provider failure and restores the question without drawing an error turn", () => {
+    let state = reduceInquiry(createInquiryState(), { type: "type", value: "这是什么？" });
+    const answerId = pendingAnswerId(state);
+    state = reduceInquiry(state, { type: "ask" });
+    state = reduceInquiry(state, {
+      type: "withdraw-unavailable",
+      id: answerId,
+      question: "这是什么？",
+    });
+    expect(state.turns).toEqual([]);
+    expect(state.draft).toBe("这是什么？");
+    expect(canSubmitInquiry(state)).toBe(true);
+  });
+
   it("only enables a settled non-blank question with no pending answer", () => {
     const typed = reduceInquiry(createInquiryState(), { type: "type", value: "这是什么？" });
     expect(canSubmitInquiry(typed)).toBe(true);

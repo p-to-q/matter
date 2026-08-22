@@ -40,11 +40,23 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   await expect(page.locator(".material-files")).toHaveAttribute("data-persistence-phase", "saved");
 
   const row = page.locator(".material-file").first();
+  await row.focus();
+  await row.press("F2");
+  await expect(row.locator(".material-file__rename")).toBeFocused();
+  await row.locator(".material-file__rename").dispatchEvent("keydown", {
+    key: "Escape",
+    isComposing: true,
+  });
+  await expect(row.locator(".material-file__rename")).toBeVisible();
+  await row.locator(".material-file__rename").press("Escape");
+  await expect(row).toBeFocused();
+
   await openNameEditor(row.locator(".material-file__open"));
   const editor = row.locator(".material-file__rename");
   await expect(editor).toBeVisible();
   await editor.fill("过去的另一种生活");
   await editor.press("Enter");
+  await expect(row).toBeFocused();
   await expect(row.locator(".material-file__title")).toHaveText("过去的另一种生活");
   await expect(row).toHaveAttribute("data-label-origin", "user");
   const renamedNodeId = await row.getAttribute("data-node-id");

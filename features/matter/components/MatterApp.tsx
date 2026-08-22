@@ -11,12 +11,7 @@ import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/arc
 import { treeToBundle } from "../persistence/snapshot-codec";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
-import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
-import type {
-  TextSwapCommittedChange,
-  TransformCommittedChange,
-} from "../store/matter-store";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { TransformCommittedChange } from "../store/matter-store";
 
 export function MatterApp() {
   const tree = useMatterStore((state) => state.tree);
@@ -27,7 +22,6 @@ export function MatterApp() {
   const undo = useMatterStore((state) => state.undo);
   const redo = useMatterStore((state) => state.redo);
   const commitTransform = useMatterStore((state) => state.commitTransform);
-  const commitTextSwap = useMatterStore((state) => state.commitTextSwap);
   const select = useMatterStore((state) => state.select);
   const clearSelection = useMatterStore((state) => state.clearSelection);
   const focus = useMatterStore((state) => state.focus);
@@ -40,39 +34,48 @@ export function MatterApp() {
   const renameDocument = useMatterStore((state) => state.renameDocument);
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
-  const persistence = useMaterialPersistence(tree, history, hydrateSnapshot, switchDocument);
+  const persistence = useMaterialPersistence(tree, history, documentEpoch, hydrateSnapshot, switchDocument);
   const canvasPreferences = useCanvasPreferences();
   const exportArchive = useCallback(async () => {
+    if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
+      const recovery = await persistence.exportCorruptRecovery();
+      if (!recovery.ok) return archiveFailure(recovery.errorCode);
+      downloadLocalBytes(recovery.bytes, recovery.fileName, "application/json");
+      return Object.freeze({
+        ok: true as const,
+        repairCorrupt: async () => {
+          const replaced = await persistence.replaceCorrupt();
+          return replaced.ok
+            ? Object.freeze({ ok: true } as const)
+            : archiveFailure(replaced.errorCode);
+        },
+      });
+    }
     const archive = await exportSnapshotArchive(treeToBundle(tree));
     if (!archive.ok) return archiveFailure(archive.error.code);
-    const archiveCopy = new Uint8Array(archive.bytes.byteLength);
-    archiveCopy.set(archive.bytes);
-    const url = URL.createObjectURL(new Blob([archiveCopy.buffer], { type: "application/zip" }));
-    // A detached anchor is not reliable in every browser (Safari ignores the
-    // download attribute off-document), so append, click, then remove. The
-    // object URL is revoked well after the browser has started the download.
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${tree.id}.matter.zip`;
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
     return Object.freeze({ ok: true } as const);
-  }, [tree]);
+  }, [persistence, tree]);
   const validateArchive = useCallback(async (file: File) => {
     const archive = await importSnapshotArchive(file);
-    return archive.ok ? Object.freeze({ ok: true } as const) : archiveFailure(archive.error.code);
-  }, []);
+    if (!archive.ok) return archiveFailure(archive.error.code);
+    return archive.tree.id === tree.id
+      ? Object.freeze({ ok: true } as const)
+      : archiveFailure("IMPORT_FOREIGN_DOCUMENT");
+  }, [tree.id]);
   const replaceArchive = useCallback(async (file: File) => {
+    const basis = Object.freeze({
+      treeId: tree.id,
+      revision: tree.revision,
+      documentEpoch,
+    });
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code);
-    const imported = await persistence.importMaterial(archive.tree);
+    const imported = await persistence.importMaterial(archive.tree, basis);
     return imported.status === "switched"
       ? Object.freeze({ ok: true } as const)
       : archiveFailure(imported.errorCode);
-  }, [persistence]);
+  }, [documentEpoch, persistence, tree.id, tree.revision]);
   const archive = useMemo(() => Object.freeze({
     exportCopy: exportArchive,
     validateImport: validateArchive,
@@ -139,20 +142,6 @@ export function MatterApp() {
       ? receipt.transformChange
       : null;
   }, [commitTransform]);
-  const commitTextSwapTurn = useCallback((
-    envelope: TextSwapEnvelope,
-    plan: TextSwapPlan,
-    expectedDocumentEpoch: number,
-  ): TextSwapCommitResult<TextSwapCommittedChange> => {
-    const receipt = commitTextSwap(envelope, plan, expectedDocumentEpoch, Date.now());
-    if (receipt.operation === "commit" && receipt.status === "committed" && "textSwapChange" in receipt) {
-      return Object.freeze({ status: "committed", change: receipt.textSwapChange });
-    }
-    return receipt.status === "stale"
-      ? Object.freeze({ status: "stale" })
-      : Object.freeze({ status: "rejected" });
-  }, [commitTextSwap]);
-
   return (
     <RootedMaterial
       canUndo={history.entries.length > 0}
@@ -185,7 +174,6 @@ export function MatterApp() {
       onRenameDocument={renameCurrentDocument}
       onClearSelection={clearSelection}
       onTransformCommit={commitTransformTurn}
-      onTextSwapCommit={commitTextSwapTurn}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={extendChild}
@@ -211,8 +199,12 @@ function archiveFailure(code: string) {
 
 function archiveMessage(code: string): string {
   switch (code) {
+    case "IMPORT_STALE":
+      return "Material changed while this archive was being prepared. Review it and try again.";
     case "IMPORT_CONFLICT":
       return "A different copy of this material is already stored here.";
+    case "IMPORT_FOREIGN_DOCUMENT":
+      return "This preview can restore only a copy of the current document.";
     case "IMPORT_INVALID_TREE":
       return "This material cannot be restored.";
     case "PERSISTENCE_UNAVAILABLE":
@@ -229,4 +221,21 @@ function archiveMessage(code: string): string {
     default:
       return "This archive is not valid Matter material.";
   }
+}
+
+function downloadLocalBytes(bytes: Uint8Array, fileName: string, type: string): void {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  const url = URL.createObjectURL(new Blob([copy.buffer], { type }));
+  // A detached anchor is not reliable in every browser (Safari ignores the
+  // download attribute off-document), so append, click, then remove. The object
+  // URL is revoked well after the browser has started the download.
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

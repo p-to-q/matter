@@ -23,6 +23,7 @@ describe("Matter transcription route", () => {
     const response = await POST(request);
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toEqual({
       protocolVersion: "0.2",
       interactionId: "voice_01",
@@ -38,6 +39,7 @@ describe("Matter transcription route", () => {
     const response = await POST(requestFrom(validForm()));
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
     });

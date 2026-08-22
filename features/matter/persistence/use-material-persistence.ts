@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
 import { createIndexedDbDocumentRepository } from "./document-repository";
@@ -12,6 +12,7 @@ import type { DocumentSwitchReceipt } from "../store/matter-store";
 export function useMaterialPersistence(
   tree: ThoughtTree,
   history: TreeHistory,
+  documentEpoch: number,
   hydrateSnapshot: (tree: ThoughtTree, history?: unknown) => unknown,
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
 ) {
@@ -20,6 +21,7 @@ export function useMaterialPersistence(
   );
   const latestTreeRef = useRef(tree);
   const latestHistoryRef = useRef(history);
+  const [documentBasisOwner] = useState(() => new DocumentBasisOwner(tree, documentEpoch));
   const initialHistoryRef = useRef(history);
   const startedRef = useRef(false);
   const startPromiseRef = useRef<ReturnType<typeof controller.start> | null>(null);
@@ -27,12 +29,14 @@ export function useMaterialPersistence(
   const importCoordinator = useMemo(() => createDocumentImportCoordinator(
     controller,
     switchDocument,
-  ), [controller, switchDocument]);
+    () => documentBasisOwner.read(),
+  ), [controller, documentBasisOwner, switchDocument]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     latestTreeRef.current = tree;
     latestHistoryRef.current = history;
-  }, [history, tree]);
+    documentBasisOwner.publish(tree, documentEpoch);
+  }, [documentBasisOwner, documentEpoch, history, tree]);
 
   useEffect(() => {
     let active = true;
@@ -86,5 +90,34 @@ export function useMaterialPersistence(
     retry: controller.retry,
     resolveConflict,
     importMaterial: importCoordinator.importValidatedTree,
+    exportCorruptRecovery: controller.exportCorruptRecovery,
+    replaceCorrupt: controller.replaceCorrupt,
   });
+}
+
+/** Mutable render-independent owner for one synchronous import authority read. */
+class DocumentBasisOwner {
+  #treeId: string;
+  #revision: number;
+  #documentEpoch: number;
+
+  constructor(tree: ThoughtTree, documentEpoch: number) {
+    this.#treeId = tree.id;
+    this.#revision = tree.revision;
+    this.#documentEpoch = documentEpoch;
+  }
+
+  publish(tree: ThoughtTree, documentEpoch: number): void {
+    this.#treeId = tree.id;
+    this.#revision = tree.revision;
+    this.#documentEpoch = documentEpoch;
+  }
+
+  read() {
+    return Object.freeze({
+      treeId: this.#treeId,
+      revision: this.#revision,
+      documentEpoch: this.#documentEpoch,
+    });
+  }
 }

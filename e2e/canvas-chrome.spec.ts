@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
@@ -85,6 +85,55 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     lineHeight: "20px",
   });
   expect(await measureControlFloor(page, '[data-chrome-region="desktop"] [data-chrome-control]')).toEqual([]);
+  const bottomChrome = page.locator('[data-chrome-region="bottom"]');
+  const topOptical = await readOpticalClearance(page.locator('[data-chrome-region="top"]'));
+  const bottomOptical = await readOpticalClearance(bottomChrome);
+  const guidanceOptical = await readOpticalClearance(page.locator('[data-optical-clearance="guidance"]'));
+  expect(bottomOptical).toMatchObject({
+    outerBlur: "blur(0.8px)",
+    outerBackground: "rgba(0, 0, 0, 0)",
+    outerTop: "-22px",
+    outerRight: "-28px",
+    // Chromium quantizes mask alpha to 8-bit values: the shared .004 zero-foot
+    // is exactly one alpha step. The browser receipt freezes that real output,
+    // the deliberately shallow outer shoulder, and the inner soft step.
+    outerMask: expect.stringMatching(/radial-gradient\(.+rgba\(0, 0, 0, 0\.72\) 30%.+rgba\(0, 0, 0, 0\.24\) 70%.+rgba\(0, 0, 0, 0\.03\) 89%.+rgba\(0, 0, 0, 0\.008\) 94%.+rgba\(0, 0, 0, 0\.004\) 97%.+rgba\(0, 0, 0, 0\) 100%\)/),
+    innerBlur: "blur(3.25px)",
+    innerBackground: "rgba(0, 0, 0, 0)",
+    innerTop: "-11px",
+    innerRight: "-15px",
+    innerMask: expect.stringMatching(/radial-gradient\(.+rgba\(0, 0, 0, 0\.9\) 72%.+rgba\(0, 0, 0, 0\.72\) 77%.+rgba\(0, 0, 0, 0\.32\) 81%.+rgba\(0, 0, 0, 0\.02\) 91%.+rgba\(0, 0, 0, 0\.004\) 96%.+rgba\(0, 0, 0, 0\) 100%\)/),
+    outerPointerEvents: "none",
+    innerPointerEvents: "none",
+  });
+  expect(topOptical).toMatchObject({
+    outerBlur: bottomOptical.outerBlur,
+    outerBackground: "rgba(0, 0, 0, 0)",
+    outerTop: "-24px",
+    outerRight: "-30px",
+    outerMask: bottomOptical.outerMask,
+    innerBlur: bottomOptical.innerBlur,
+    innerBackground: "rgba(0, 0, 0, 0)",
+    innerTop: "-13px",
+    innerRight: "-17px",
+    innerMask: bottomOptical.innerMask,
+    outerPointerEvents: "none",
+    innerPointerEvents: "none",
+  });
+  expect(guidanceOptical).toMatchObject({
+    outerBlur: bottomOptical.outerBlur,
+    outerBackground: "rgba(0, 0, 0, 0)",
+    outerTop: "-24px",
+    outerRight: "-32px",
+    outerMask: bottomOptical.outerMask,
+    innerBlur: bottomOptical.innerBlur,
+    innerBackground: "rgba(0, 0, 0, 0)",
+    innerTop: "-12px",
+    innerRight: "-18px",
+    innerMask: bottomOptical.innerMask,
+    outerPointerEvents: "none",
+    innerPointerEvents: "none",
+  });
 
   await page.waitForTimeout(1100);
   await guidance.evaluate((element) => { element.style.animation = "none"; });
@@ -92,7 +141,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await guidance.hover();
   await page.waitForTimeout(200);
   expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
-    .toContain(await guidance.evaluate((element) => getComputedStyle(element, "::before").backgroundColor));
+    .toContain(await guidance.evaluate((element) => getComputedStyle(element).backgroundColor));
   await askMatter.hover();
   await page.waitForTimeout(200);
   expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
@@ -172,9 +221,10 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.mouse.down();
   await expect(matterTurn).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
   await page.mouse.up();
-  // Lasso is a re-click-to-exit mode. Leave it as this test found it, so the
-  // guidance assertions below still describe the unselected canvas.
-  await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
+  // An ordinary text click leaves Lasso and selects material; the reply stays
+  // stable through that context transition until the person closes inquiry.
+  await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
+  await expect(page.getByRole("button", { name: "Circle-select language", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(inquiryDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
@@ -286,6 +336,27 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
 
 function expectInset(actual: number, expected: number): void {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1.1);
+}
+
+async function readOpticalClearance(element: Locator) {
+  return element.evaluate((target) => {
+    const outer = getComputedStyle(target, "::before");
+    const inner = getComputedStyle(target, "::after");
+    return {
+      outerBlur: outer.backdropFilter || outer.getPropertyValue("-webkit-backdrop-filter"),
+      outerBackground: outer.backgroundColor,
+      outerTop: outer.top,
+      outerRight: outer.right,
+      outerMask: outer.maskImage || outer.getPropertyValue("-webkit-mask-image"),
+      innerBlur: inner.backdropFilter || inner.getPropertyValue("-webkit-backdrop-filter"),
+      innerBackground: inner.backgroundColor,
+      innerTop: inner.top,
+      innerRight: inner.right,
+      innerMask: inner.maskImage || inner.getPropertyValue("-webkit-mask-image"),
+      outerPointerEvents: outer.pointerEvents,
+      innerPointerEvents: inner.pointerEvents,
+    };
+  });
 }
 
 /** Reports every matched control that falls below the 24 CSS px pointer floor. */

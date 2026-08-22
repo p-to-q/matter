@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState
 import type {
   CSSProperties,
   Dispatch,
+  KeyboardEvent as ReactKeyboardEvent,
   MutableRefObject,
   PointerEvent as ReactPointerEvent,
   ReactNode,
@@ -15,7 +16,6 @@ import {
   deriveMaterialFileLabel,
   projectMaterialAncestry,
   projectMaterialFileOutline,
-  projectMaterialFileRows,
   projectMaterialFileSubtree,
   projectMaterialFiles,
   serializeMaterialSelection,
@@ -23,7 +23,7 @@ import {
 import { createNavigationState, type NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
-import { ChevronIcon, CopyIcon, DownloadIcon, MinusIcon, PlusIcon, SearchIcon, SidebarIcon, SyncIcon } from "./icons";
+import { ChevronIcon, CopyIcon, MinusIcon, PlusIcon, SearchIcon, SidebarIcon } from "./icons";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import { allocateSnapshotPath } from "../persistence/snapshot-paths";
 import { projectMaterialFilesSurface } from "./material-files-surface";
@@ -36,6 +36,11 @@ import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
 import { materialFilesCopy } from "./material-files-copy";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
+import {
+  projectMaterialFileTreeSemantics,
+  pruneMaterialFileNodeIds,
+  resolveMaterialFileTreeKey,
+} from "./material-file-tree";
 import type { MatterLocale } from "../config/locales";
 
 export type MaterialFilesProps = Readonly<{
@@ -58,6 +63,8 @@ export type MaterialFilesProps = Readonly<{
   locale: MatterLocale;
   navigation: NavigationState;
   onFocusNode: (nodeId: string) => void;
+  /** Returns transient canvas tools before the narrow overlay takes focus. */
+  onOpenOverlay?: () => void;
   /** Restores a held search result without unexpectedly narrowing full view. */
   onRestoreNode?: (nodeId: string) => void;
   /**
@@ -93,12 +100,16 @@ type CopyState = "idle" | "copied" | "failed";
 const LONG_PRESS_MS = 480;
 /** Matches the durable bound in the label repository. */
 const MAX_ROW_NAME_CODE_UNITS = 64;
-type ArchivePhase = "idle" | "exporting" | "validating" | "replacing";
+type ArchivePhase = "idle" | "exporting" | "validating" | "replacing" | "repairing";
 type IndexMode = "archive" | "browse" | "search" | "select";
 const COMPLETE_INDEX_NAVIGATION = createNavigationState();
 
 export type MaterialArchiveActionResult =
-  | Readonly<{ ok: true }>
+  | Readonly<{
+      ok: true;
+      /** Present only after a corrupt row has been exported by this action. */
+      repairCorrupt?: () => Promise<MaterialArchiveActionResult>;
+    }>
   | Readonly<{ ok: false; message: string }>;
 
 /**
@@ -131,6 +142,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const [archivePhase, setArchivePhase] = useState<ArchivePhase>("idle");
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [preparedImport, setPreparedImport] = useState<File | null>(null);
+  const [corruptRepair, setCorruptRepair] = useState<(() => Promise<MaterialArchiveActionResult>) | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState({ top: 0, height: 0 });
   const [rowHeight, setRowHeight] = useState(40);
   /** Directory disclosure is local presentation, never working context. */
@@ -143,11 +155,20 @@ export function MaterialFiles(props: MaterialFilesProps) {
   >(null);
   const [renamingDocument, setRenamingDocument] = useState(false);
   const [documentTitleDraft, setDocumentTitleDraft] = useState("");
+  const [transientTreeBasis, setTransientTreeBasis] = useState(() => ({
+    epoch: props.documentEpoch,
+    nodes: props.tree.nodes,
+  }));
   const longPressRef = useRef<Readonly<{ timer: number; x: number; y: number }> | null>(null);
   const suppressOpenRef = useRef(false);
   const renameFocusedRef = useRef(false);
   const renameCommitRef = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement>(null);
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const pendingRowFocusRef = useRef<string | null>(null);
+  const returnSearchFocusRef = useRef(false);
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
@@ -156,13 +177,34 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const resetDocumentEpochRef = useRef(props.documentEpoch);
   const deferredQuery = useDeferredValue(query);
   const deferredNavigation = useDeferredValue(props.navigation);
+  if (
+    transientTreeBasis.epoch !== props.documentEpoch ||
+    transientTreeBasis.nodes !== props.tree.nodes
+  ) {
+    const documentChanged = transientTreeBasis.epoch !== props.documentEpoch;
+    setTransientTreeBasis({ epoch: props.documentEpoch, nodes: props.tree.nodes });
+    setSelectionState((current) => ({
+      epoch: props.documentEpoch,
+      ids: documentChanged || current.epoch !== props.documentEpoch
+        ? new Set<string>()
+        : pruneMaterialFileNodeIds(current.ids, props.tree.nodes),
+    }));
+    setCollapsedState((current) => ({
+      epoch: props.documentEpoch,
+      ids: documentChanged || current.epoch !== props.documentEpoch
+        ? new Set<string>()
+        : pruneMaterialFileNodeIds(current.ids, props.tree.nodes),
+    }));
+  }
   const surface = useMemo(
     () => projectMaterialFilesSurface({
       currentNavigation: props.navigation,
       projectedNavigation: deferredNavigation,
+      currentQuery: mode === "search" ? query : "",
+      projectedQuery: mode === "search" ? deferredQuery : "",
       interactionPending: props.interactionPending,
     }),
-    [deferredNavigation, props.interactionPending, props.navigation],
+    [deferredNavigation, deferredQuery, mode, props.interactionPending, props.navigation, query],
   );
   const visibleQuery = mode === "search" ? deferredQuery : "";
   const activeNodeId =
@@ -208,34 +250,72 @@ export function MaterialFiles(props: MaterialFilesProps) {
     },
     [compactedNodeIds, mode, open, props.labels, props.tree, rootId, visibleQuery],
   );
-  // This follows authored structure rather than the locally compacted outline,
-  // so a terminal mark never appears or disappears merely because a nearby
-  // branch was folded in the index.
-  const terminalMarkerIds = useMemo(
-    () => projectMaterialFileTerminalMarkerIds(projectMaterialFileRows(props.tree, COMPLETE_INDEX_NAVIGATION)),
-    [props.tree],
-  );
-  const effectiveFocusedRowId = focusedRowState.epoch === props.documentEpoch ? focusedRowState.nodeId : null;
-  const guideEdges = useMemo(
-    () => mode === "search" || mode === "archive" ? [] : projectMaterialFileGuideEdges(files),
+  const treeSemantics = useMemo(
+    () => mode === "search" ? [] : projectMaterialFileTreeSemantics(files),
     [files, mode],
   );
-  const guideControlRowIndexes = useMemo(() => {
+  const effectiveFocusedRowId = focusedRowState.epoch === props.documentEpoch ? focusedRowState.nodeId : null;
+  const structuralBranchRowIndexes = useMemo(() => {
     const indexes = new Set<number>();
-    if (mode === "select") {
-      for (const index of files.keys()) indexes.add(index);
-      return indexes;
-    }
     if (mode !== "browse") return indexes;
     for (const [index, file] of files.entries()) {
-      if (file.hasChildren || props.heldAsideRootIds?.has(file.nodeId) === true) indexes.add(index);
+      if (file.hasChildren && props.heldAsideRootIds?.has(file.nodeId) !== true) indexes.add(index);
     }
     return indexes;
   }, [files, mode, props.heldAsideRootIds]);
+  const expandedGuideSourceRowIndexes = useMemo(() => {
+    const indexes = new Set<number>();
+    if (mode !== "browse") return indexes;
+    for (const [index, file] of files.entries()) {
+      if (
+        file.hasChildren &&
+        !compactedNodeIds.has(file.nodeId) &&
+        props.heldAsideRootIds?.has(file.nodeId) !== true
+      ) indexes.add(index);
+    }
+    return indexes;
+  }, [compactedNodeIds, files, mode, props.heldAsideRootIds]);
+  const protectedGuideControlRowIndexes = useMemo(() => {
+    const indexes = new Set(structuralBranchRowIndexes);
+    if (mode !== "browse" || props.heldAsideRootIds === undefined) return indexes;
+    for (const [index, file] of files.entries()) {
+      if (props.heldAsideRootIds.has(file.nodeId)) indexes.add(index);
+    }
+    return indexes;
+  }, [files, mode, props.heldAsideRootIds, structuralBranchRowIndexes]);
+  // A terminal is local to one visible sibling group. Search, selection, and
+  // restore-plus rows do not manufacture disclosure-tree syntax.
+  const terminalMarkerIds = useMemo(
+    () => mode === "browse"
+      ? projectMaterialFileTerminalMarkerIds(files, structuralBranchRowIndexes)
+      : new Set<string>(),
+    [files, mode, structuralBranchRowIndexes],
+  );
+  const guideEdges = useMemo(
+    () => mode === "browse"
+      ? projectMaterialFileGuideEdges(files, {
+        protectedControlRowIndexes: protectedGuideControlRowIndexes,
+        sourceRowIndexes: expandedGuideSourceRowIndexes,
+        structuralBranchRowIndexes,
+      })
+      : [],
+    [
+      expandedGuideSourceRowIndexes,
+      files,
+      mode,
+      protectedGuideControlRowIndexes,
+      structuralBranchRowIndexes,
+    ],
+  );
   const focusedRowIndex = effectiveFocusedRowId === null
     ? null
     : files.findIndex((file) => file.nodeId === effectiveFocusedRowId);
   const activeRowIndex = files.findIndex((file) => file.nodeId === activeNodeId);
+  const rovingRowIndex = focusedRowIndex !== null && focusedRowIndex >= 0
+    ? focusedRowIndex
+    : activeRowIndex >= 0
+      ? activeRowIndex
+      : files.length > 0 ? 0 : -1;
   const fileWindow = useMemo(
     () => projectMaterialFileWindow({
       rowCount: files.length,
@@ -256,10 +336,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
     () => projectMaterialFileGuideSegments({
       edges: guideEdges,
       ranges: renderRanges,
-      controlRowIndexes: guideControlRowIndexes,
       rowHeight,
     }),
-    [guideControlRowIndexes, guideEdges, renderRanges, rowHeight],
+    [guideEdges, renderRanges, rowHeight],
   );
   const markdownPathByNodeId = useMemo(
     () => {
@@ -356,6 +435,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
     scrollFrameRef.current = null;
     previousSearchKeyRef.current = null;
+    pendingRowFocusRef.current = null;
+    returnSearchFocusRef.current = false;
+    rowRefs.current.clear();
     if (bodyRef.current !== null) bodyRef.current.scrollTop = 0;
     if (archiveInputRef.current !== null) archiveInputRef.current.value = "";
     setMode("browse");
@@ -370,6 +452,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setArchivePhase("idle");
     setArchiveError(null);
     setPreparedImport(null);
+    setCorruptRepair(null);
     setScrollMetrics({ top: 0, height: bodyRef.current?.clientHeight ?? 0 });
   }, [props.documentEpoch]);
 
@@ -396,12 +479,18 @@ export function MaterialFiles(props: MaterialFilesProps) {
     longPressRef.current = null;
   };
 
-  const commitRename = (nodeId: string, value: string) => {
+  const returnFocusToRow = (nodeId: string) => {
+    pendingRowFocusRef.current = nodeId;
+    setFocusedRowState({ epoch: props.documentEpoch, nodeId });
+  };
+
+  const commitRename = (nodeId: string, value: string, returnFocus = false) => {
     const epochAtCommit = props.documentEpoch;
     const mutationKey = `${epochAtCommit} ${nodeId}`;
     if (renameCommitRef.current === mutationKey) return;
     renameCommitRef.current = mutationKey;
     setRenaming(null);
+    if (returnFocus) returnFocusToRow(nodeId);
     const trimmed = value.trim();
     const mutation = trimmed.length === 0
       ? props.onResetNodeName?.(nodeId)
@@ -481,6 +570,19 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setScrollMetrics({ top: nextTop, height: body.clientHeight });
   }, [activeRowIndex, files.length, open, rowHeight, surface.projectionStale]);
 
+  useLayoutEffect(() => {
+    if (returnSearchFocusRef.current && mode !== "search" && open) {
+      returnSearchFocusRef.current = false;
+      searchTriggerRef.current?.focus({ preventScroll: true });
+    }
+    const nodeId = pendingRowFocusRef.current;
+    if (nodeId === null || !open || surface.rowInteractionDisabled) return;
+    const row = rowRefs.current.get(nodeId);
+    if (row === undefined) return;
+    pendingRowFocusRef.current = null;
+    row.focus({ preventScroll: true });
+  });
+
   const currentSelectedIds = useMemo(
     () => new Set(Array.from(selectionState.epoch === props.documentEpoch ? selectionState.ids : []).filter((nodeId) =>
       Object.hasOwn(props.tree.nodes, nodeId),
@@ -490,6 +592,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const selectedCount = currentSelectedIds.size;
   const persistenceFailed = props.persistence.status.phase === "error";
   const storageFull = props.persistence.status.errorCode === "PERSISTENCE_STORAGE_FULL";
+  const corrupt = props.persistence.status.errorCode === "PERSISTENCE_CORRUPT";
   const activeLineageIds = useMemo(() => {
     const lineage = new Set<string>();
     let current = activeNodeId === null ? null : props.tree.nodes[activeNodeId]?.parentId ?? null;
@@ -503,6 +606,87 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const openNode = (nodeId: string) => {
     if (props.navigation.mode === "focus") props.onFocusNode(nodeId);
     else props.onSelectNode(nodeId);
+  };
+
+  const activateFile = (nodeId: string, heldAside: boolean) => {
+    if (heldAside) {
+      if (props.navigation.mode === "focus") props.onFocusNode(nodeId);
+      else props.onRestoreNode?.(nodeId);
+      return;
+    }
+    openNode(nodeId);
+  };
+
+  const closeSearch = () => {
+    returnSearchFocusRef.current = true;
+    setQuery("");
+    setMode("browse");
+  };
+
+  const closeOverlay = () => {
+    if (docked || archiveBusy) return;
+    setOpen(false);
+    requestAnimationFrame(() => toggleRef.current?.focus());
+  };
+
+  const focusRowAt = (index: number) => {
+    const file = files[index];
+    const body = bodyRef.current;
+    if (file === undefined || body === null || surface.rowInteractionDisabled) return;
+    const nextTop = scrollTopForMaterialFileIndex({
+      index,
+      rowCount: files.length,
+      rowHeight,
+      scrollTop: body.scrollTop,
+      viewportHeight: body.clientHeight,
+    });
+    if (nextTop !== body.scrollTop) {
+      body.scrollTop = nextTop;
+      setScrollMetrics({ top: nextTop, height: body.clientHeight });
+    }
+    pendingRowFocusRef.current = file.nodeId;
+    setFocusedRowState({ epoch: props.documentEpoch, nodeId: file.nodeId });
+  };
+
+  const handleFileKeyDown = (
+    event: ReactKeyboardEvent<HTMLLIElement>,
+    file: MaterialFileRow,
+    index: number,
+    expanded: boolean,
+    heldAside: boolean,
+  ) => {
+    if (
+      event.target !== event.currentTarget || event.nativeEvent.isComposing ||
+      surface.rowInteractionDisabled
+    ) return;
+    if (event.key === "F2" && mode === "browse") {
+      event.preventDefault();
+      beginRename(file.nodeId);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (mode === "select") {
+        setCopyState("idle");
+        setSelectionState((current) => ({
+          epoch: props.documentEpoch,
+          ids: current.epoch === props.documentEpoch
+            ? toggleSetValue(current.ids, file.nodeId)
+            : new Set([file.nodeId]),
+        }));
+      } else {
+        activateFile(file.nodeId, heldAside);
+      }
+      return;
+    }
+    const result = resolveMaterialFileTreeKey(files, index, event.key, expanded);
+    if (result === null) return;
+    event.preventDefault();
+    if (result.kind === "focus") {
+      focusRowAt(result.index);
+    } else if (mode === "browse" && !heldAside) {
+      toggleExpanded(file.nodeId);
+    }
   };
 
   /** Opens or closes one index branch without changing working context. */
@@ -543,6 +727,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (archiveBusy) return;
     setArchiveError(null);
     setPreparedImport(null);
+    setCorruptRepair(null);
     setMode("browse");
   };
 
@@ -550,10 +735,42 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (props.archive === undefined || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    if (corrupt) setCorruptRepair(null);
     setArchivePhase("exporting");
     try {
       const result = await props.archive.exportCopy();
-      if (liveDocumentEpochRef.current === documentEpoch && !result.ok) {
+      if (liveDocumentEpochRef.current === documentEpoch) {
+        if (!result.ok) setArchiveError(result.message);
+        else if (corrupt && result.repairCorrupt !== undefined) {
+          const repair = result.repairCorrupt;
+          setCorruptRepair(() => repair);
+        }
+      }
+    } catch (error) {
+      if (liveDocumentEpochRef.current === documentEpoch) {
+        setArchiveError(actionErrorMessage(error));
+      }
+    } finally {
+      if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
+    }
+  };
+
+  const repairCorruptStorage = async () => {
+    if (
+      !corrupt ||
+      corruptRepair === null ||
+      archiveBusy
+    ) return;
+    const documentEpoch = props.documentEpoch;
+    setArchiveError(null);
+    setArchivePhase("repairing");
+    try {
+      const result = await corruptRepair();
+      if (liveDocumentEpochRef.current !== documentEpoch) return;
+      if (result.ok) {
+        setCorruptRepair(null);
+        setMode("browse");
+      } else {
         setArchiveError(result.message);
       }
     } catch (error) {
@@ -622,7 +839,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
           className="material-files-toggle"
           data-canvas-interactive
           data-persistence-error={persistenceFailed || undefined}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            if (!open) props.onOpenOverlay?.();
+            setOpen((value) => !value);
+          }}
+          ref={toggleRef}
           type="button"
         >
           <SidebarIcon />
@@ -637,8 +858,17 @@ export function MaterialFiles(props: MaterialFilesProps) {
         data-open={open || undefined}
         data-persistence-phase={props.persistence.status.phase}
         data-projection-stale={surface.projectionStale || undefined}
+        data-query-projection-stale={surface.queryProjectionStale || undefined}
         id="material-files"
         inert={!open || surface.projectionStale}
+        onKeyDown={(event) => {
+          if (
+            event.defaultPrevented ||
+            !isCancelEscape({ key: event.key, isComposing: event.nativeEvent.isComposing })
+          ) return;
+          event.preventDefault();
+          closeOverlay();
+        }}
         onPointerDown={stopPointerPropagation}
         onWheel={stopWheelPropagation}
       >
@@ -659,6 +889,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 // it, so an IME composition must never reach either branch.
                 const composing = event.nativeEvent.isComposing;
                 if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                  event.preventDefault();
                   setDocumentTitleDraft(documentTitle);
                   setRenamingDocument(false);
                 } else if (isCommitEnter({ key: event.key, isComposing: composing })) {
@@ -703,6 +934,16 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 aria-label="Filter material files"
                 autoFocus
                 onChange={(event) => setQuery(event.currentTarget.value)}
+                onKeyDown={(event) => {
+                  const composing = event.nativeEvent.isComposing;
+                  if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                    event.preventDefault();
+                    closeSearch();
+                  } else if (!composing && event.key === "ArrowDown" && files.length > 0) {
+                    event.preventDefault();
+                    focusRowAt(0);
+                  }
+                }}
                 placeholder="Find thought"
                 spellCheck={false}
                 type="search"
@@ -711,10 +952,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
               <button
                 aria-label="Close search"
                 className="material-files__search-close"
-                onClick={() => {
-                  setQuery("");
-                  setMode("browse");
-                }}
+                onClick={closeSearch}
                 type="button"
               >
                 <span aria-hidden="true">×</span>
@@ -725,6 +963,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
               aria-label="Search thoughts"
               className="material-files__mode-action material-files__mode-action--search"
               onClick={() => setMode("search")}
+              ref={searchTriggerRef}
               type="button"
             >
               <SearchIcon />
@@ -761,6 +1000,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
             </>
           ) : null}
           <span className="visually-hidden">{props.tree.revision} committed revisions</span>
+          <span aria-atomic="true" aria-live="polite" className="visually-hidden">
+            {mode === "search" && visibleQuery.trim().length > 0 && !surface.queryProjectionStale
+              ? `${files.length} material ${files.length === 1 ? "result" : "results"}`
+              : ""}
+          </span>
         </div>
         {mode === "archive" && props.archive !== undefined ? (
           <ArchivePanel
@@ -769,11 +1013,17 @@ export function MaterialFiles(props: MaterialFilesProps) {
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
+            corrupt={corrupt}
+            corruptExported={corruptRepair !== null}
+            conflict={props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"}
+            saveFailed={persistenceFailed && !storageFull && !corrupt && props.persistence.status.errorCode !== "PERSISTENCE_CONFLICT"}
             storageFull={storageFull}
             onClose={closeArchive}
             onExport={() => void exportArchive()}
             onPickImport={() => archiveInputRef.current?.click()}
             onReplace={() => void replaceArchiveImport()}
+            onRepairCorrupt={() => void repairCorruptStorage()}
+            onReloadStored={props.persistence.resolveConflict}
             onRetrySave={props.persistence.retry}
             onSelectImport={(file) => void validateArchiveImport(file)}
           />
@@ -796,20 +1046,38 @@ export function MaterialFiles(props: MaterialFilesProps) {
               {emptyIndexMessage(props.tree.rootId, mode, visibleQuery)}
             </p>
           ) : (
-            <ul aria-label={`Markdown material tree, ${files.length} entries`} className="material-files__tree">
+            <ul
+              aria-label={`Markdown material tree, ${files.length} entries`}
+              aria-multiselectable={mode !== "search" && (
+                mode === "select" || (props.lassoSelectedNodeIds?.size ?? 0) > 1
+              ) ? true : undefined}
+              className="material-files__tree"
+              role={mode === "search" ? "list" : "tree"}
+            >
               {mode !== "search" && mode !== "archive" && guideSegments.length > 0 ? (
                 <li aria-hidden="true" className="material-files__tree-guides" role="presentation">
                   {guideSegments.map((segment, index) => (
                     <span
                       className="material-files__tree-guide"
+                      data-guide-branch={segment.kind === "branch-tail" ? segment.branchId : undefined}
                       data-guide-from={segment.fromIndex}
+                      data-guide-kind={segment.kind}
                       data-guide-lane-depth={segment.laneDepth}
                       data-guide-parent={segment.parentId ?? "document-root"}
+                      data-guide-tail-end={segment.kind === "branch-tail" && segment.endsAtTarget
+                        ? true
+                        : undefined}
                       data-guide-to={segment.toIndex}
-                      key={`${segment.parentId ?? "document-root"}-${segment.fromIndex}-${segment.toIndex}-${index}`}
+                      key={`${segment.kind}-${segment.parentId ?? "document-root"}-${segment.fromIndex}-${segment.toIndex}-${index}`}
                       style={{
                         "--material-file-guide-child-depth": segment.laneDepth + 1,
                         "--material-file-guide-height": `${segment.height}px`,
+                        "--material-file-guide-target-depth": segment.kind === "branch-tail"
+                          ? segment.targetDepth
+                          : undefined,
+                        "--material-file-guide-target-clearance": segment.kind === "branch-tail"
+                          ? `${segment.targetClearance}px`
+                          : undefined,
                         "--material-file-guide-top": `${segment.top}px`,
                       } as CSSProperties}
                     />
@@ -828,7 +1096,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   : file.hasChildren
                     ? expanded ? "expanded" : "collapsed"
                     : "leaf";
-                const shallowerTerminal = !heldAsideRoot && terminalMarkerIds.has(file.nodeId);
+                const terminal = !heldAside && terminalMarkerIds.has(file.nodeId);
+                const semantics = treeSemantics[index];
+                const rowIsRoving = index === rovingRowIndex;
                 const materialNode = props.tree.nodes[file.nodeId];
                 const derivedLabel = props.labels?.get(file.nodeId);
                 const title = derivedLabel ?? (materialNode === undefined
@@ -836,8 +1106,16 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   : deriveMaterialFileLabel(materialNode).title);
                 return (
                   <li
-                    aria-posinset={index + 1}
-                    aria-setsize={files.length}
+                    aria-current={active ? "page" : undefined}
+                    aria-expanded={mode !== "search" && file.hasChildren
+                      ? mode === "select" || expanded
+                      : undefined}
+                    aria-keyshortcuts={mode === "browse" && renameEnabled ? "F2" : undefined}
+                    aria-label={title}
+                    aria-level={mode === "search" ? undefined : semantics?.level}
+                    aria-posinset={mode === "search" ? index + 1 : semantics?.positionInSet}
+                    aria-selected={mode === "search" ? undefined : mode === "select" ? checked : active || lassoSelected}
+                    aria-setsize={mode === "search" ? files.length : semantics?.setSize}
                     className="material-file"
                     data-active={active || undefined}
                     data-lasso-selected={lassoSelected || undefined}
@@ -849,9 +1127,17 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     style={{ "--material-file-depth": file.depth } as CSSProperties}
                     data-node-id={file.nodeId}
                     data-authored-index={file.authoredIndex}
+                    data-projection-index={index}
                     data-created-at={file.createdAt}
                     data-markdown-path={markdownPathByNodeId.get(file.nodeId)}
                     data-updated-at={file.updatedAt}
+                    onKeyDown={(event) => handleFileKeyDown(
+                      event,
+                      file,
+                      index,
+                      expanded,
+                      heldAside,
+                    )}
                     onBlurCapture={(event) => {
                       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
                         setFocusedRowState((current) => ({ epoch: props.documentEpoch, nodeId: current.nodeId === file.nodeId ? null : current.nodeId }));
@@ -862,12 +1148,18 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     }}
                     data-has-children={file.hasChildren || undefined}
                     data-expanded={expanded || undefined}
+                    ref={(element) => {
+                      if (element === null) rowRefs.current.delete(file.nodeId);
+                      else rowRefs.current.set(file.nodeId, element);
+                    }}
+                    role={mode === "search" ? "listitem" : "treeitem"}
+                    tabIndex={!surface.rowInteractionDisabled && rowIsRoving ? 0 : -1}
                   >
                     {mode === "browse" ? (
                       (heldAside && !heldAsideRoot) || (!heldAsideRoot && !file.hasChildren) ? (
                         <span
                           aria-hidden="true"
-                          className={shallowerTerminal
+                          className={terminal
                             ? "material-file__context-space material-file__terminal-marker"
                             : "material-file__context-space"}
                         />
@@ -891,7 +1183,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                             if (heldAsideRoot) restoreAndExpand(file.nodeId);
                             else toggleExpanded(file.nodeId);
                           }}
-                          tabIndex={heldAsideRoot || file.hasChildren ? 0 : -1}
+                          tabIndex={-1}
                           type="button"
                         >
                           <span aria-hidden="true" className="material-file__structure-glyph">
@@ -916,6 +1208,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                                 : new Set([file.nodeId]),
                             }));
                           }}
+                          tabIndex={-1}
                           type="checkbox"
                         />
                         <span aria-hidden="true" className="material-file__check-mark" />
@@ -943,10 +1236,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
                           const composing = event.nativeEvent.isComposing;
                           if (isCommitEnter({ key: event.key, isComposing: composing })) {
                             event.preventDefault();
-                            commitRename(file.nodeId, event.currentTarget.value);
+                            commitRename(file.nodeId, event.currentTarget.value, true);
                           } else if (isCancelEscape({ key: event.key, isComposing: composing })) {
                             event.preventDefault();
                             setRenaming(null);
+                            returnFocusToRow(file.nodeId);
                           }
                         }}
                         spellCheck={false}
@@ -955,6 +1249,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     ) : (
                       <button
                         aria-current={active ? "page" : undefined}
+                        aria-keyshortcuts={renameEnabled ? "F2" : undefined}
                         aria-label={heldAside ? copy.restoreAndView(title) : undefined}
                         className="material-file__open"
                         disabled={surface.rowInteractionDisabled}
@@ -965,14 +1260,14 @@ export function MaterialFiles(props: MaterialFilesProps) {
                             suppressOpenRef.current = false;
                             return;
                           }
-                          if (heldAside) {
-                            if (props.navigation.mode === "focus") props.onFocusNode(file.nodeId);
-                            else props.onRestoreNode?.(file.nodeId);
-                            return;
-                          }
-                          openNode(file.nodeId);
+                          activateFile(file.nodeId, heldAside);
                         }}
                         onDoubleClick={() => beginRename(file.nodeId)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "F2" || event.nativeEvent.isComposing) return;
+                          event.preventDefault();
+                          beginRename(file.nodeId);
+                        }}
                         onPointerCancel={cancelLongPress}
                         onPointerDown={(event) => {
                           if (!renameEnabled || !event.isPrimary) return;
@@ -995,6 +1290,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                           }
                         }}
                         onPointerUp={cancelLongPress}
+                        tabIndex={-1}
                         title={heldAside ? copy.restoreAndView(title) : title}
                         type="button"
                       >
@@ -1013,6 +1309,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         data-context-action="set-aside"
                         disabled={surface.rowInteractionDisabled || props.onToggleHeldAside === undefined}
                         onClick={() => props.onToggleHeldAside?.(file.nodeId)}
+                        tabIndex={rowIsRoving ? 0 : -1}
                         type="button"
                       >
                         <MinusIcon />
@@ -1046,24 +1343,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
             </button>
           </footer>
         ) : null}
-        {/* This local identity is presentation, not an account surface. Only a
-            recoverable persistence failure introduces an action. */}
+        {/* Local identity stays a quiet, non-account presentation. Persistence
+            recovery belongs to the explicit Archive surface, not this footer. */}
         <footer className="material-files__identity">
-          <div
-            className="material-files__profile"
-            data-state={persistenceFailed ? "error" : undefined}
-          >
+          <div className="material-files__profile">
             <PixelIdenticon />
             <span className="material-files__profile-copy">
               <span className="material-files__profile-name">{copy.identityName}</span>
-              <span aria-live="polite" className="material-files__profile-meta">
-                {persistenceFailed
-                  ? (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"
-                      ? copy.conflict
-                      : storageFull
-                        ? copy.storageFull
-                      : copy.saveFailed)
-                  : showSaving ? copy.saving : copy.localOnly}
+              <span className="material-files__profile-meta">
+                {showSaving && !persistenceFailed ? copy.saving : copy.localOnly}
                 {showSaving && !persistenceFailed ? (
                   <span
                     aria-hidden="true"
@@ -1073,32 +1361,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 ) : null}
               </span>
             </span>
-            {persistenceFailed ? (
-              <button
-                aria-label={props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"
-                  ? copy.conflictAction
-                  : storageFull
-                    ? copy.storageFullAction
-                    : copy.saveFailedAction}
-                className="material-files__profile-action"
-                disabled={props.interactionPending}
-                onClick={() => {
-                  if (props.interactionPending) return;
-                  if (props.persistence.status.errorCode === "PERSISTENCE_CONFLICT") {
-                    props.persistence.resolveConflict();
-                  } else if (storageFull && props.archive !== undefined) {
-                    setArchiveError(null);
-                    setPreparedImport(null);
-                    setMode("archive");
-                  } else {
-                    props.persistence.retry();
-                  }
-                }}
-                type="button"
-              >
-                {storageFull && props.archive !== undefined ? <DownloadIcon /> : <SyncIcon />}
-              </button>
-            ) : null}
           </div>
         </footer>
       </aside>
@@ -1164,6 +1426,7 @@ function renderFileRanges(
           aria-hidden="true"
           className="material-file__spacer"
           key={`spacer:${cursor}:${range.start}`}
+          role="presentation"
           style={{ height: (range.start - cursor) * rowHeight }}
         />,
       );
@@ -1180,6 +1443,7 @@ function renderFileRanges(
         aria-hidden="true"
         className="material-file__spacer"
         key={`spacer:${cursor}:${files.length}`}
+        role="presentation"
         style={{ height: (files.length - cursor) * rowHeight }}
       />,
     );
@@ -1203,11 +1467,17 @@ function ArchivePanel({
   inputRef,
   phase,
   preparedImport,
+  corrupt,
+  corruptExported,
+  conflict,
+  saveFailed,
   storageFull,
   onClose,
   onExport,
   onPickImport,
   onReplace,
+  onRepairCorrupt,
+  onReloadStored,
   onRetrySave,
   onSelectImport,
 }: Readonly<{
@@ -1216,11 +1486,17 @@ function ArchivePanel({
   inputRef: RefObject<HTMLInputElement | null>;
   phase: ArchivePhase;
   preparedImport: File | null;
+  corrupt: boolean;
+  corruptExported: boolean;
+  conflict: boolean;
+  saveFailed: boolean;
   storageFull: boolean;
   onClose: () => void;
   onExport: () => void;
   onPickImport: () => void;
   onReplace: () => void;
+  onRepairCorrupt: () => void;
+  onReloadStored: () => void;
   onRetrySave: () => void;
   onSelectImport: (file: File) => void;
 }>) {
@@ -1230,12 +1506,20 @@ function ArchivePanel({
       ? "Checking archive…"
       : phase === "replacing"
         ? "Replacing material…"
+        : phase === "repairing"
+          ? "Repairing local storage…"
         : null;
   return (
     <section aria-busy={busy || undefined} aria-label="Material archive" className="material-files__archive">
       <p className="material-files__archive-note">
-        {storageFull
+        {corrupt
+          ? "Stored material is damaged. Export a recovery copy before Matter atomically replaces the local row."
+          : conflict
+          ? "Another tab saved a newer copy. Reload the stored material here, or export the current copy first."
+          : storageFull
           ? "Local storage is full. Export a copy before freeing browser storage, then retry saving."
+          : saveFailed
+          ? "Local saving did not finish. Export a copy before retrying if this material matters."
           : "Keep a portable copy, or bring one back into this material."}
       </p>
       <div className="material-files__archive-actions">
@@ -1246,7 +1530,27 @@ function ArchivePanel({
           Import a copy
         </button>
       </div>
-      {storageFull ? (
+      {corrupt && corruptExported ? (
+        <button
+          className="material-files__archive-retry"
+          disabled={busy}
+          onClick={onRepairCorrupt}
+          type="button"
+        >
+          Repair local storage
+        </button>
+      ) : null}
+      {conflict ? (
+        <button
+          className="material-files__archive-retry"
+          disabled={busy}
+          onClick={onReloadStored}
+          type="button"
+        >
+          Reload stored material
+        </button>
+      ) : null}
+      {storageFull || saveFailed ? (
         <button
           className="material-files__archive-retry"
           disabled={busy}

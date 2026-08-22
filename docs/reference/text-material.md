@@ -66,33 +66,36 @@ the address of a person's material.
 
 Each derived segment carries `{ start, end, seamEnd }`. The replaceable content
 is `[start, end)` and its trailing punctuation/whitespace seam is
-`[end, seamEnd)`. A single segment preserves that seam. Merging adjacent
-segments makes one continuous replacement: internal seams enter the selected
-range and only the outer seam remains protected. Cross-node or non-adjacent hits
-are rejected.
+`[end, seamEnd)`. Adjacent current segments inside one node may merge into one
+contiguous range: their internal seams remain in the selected text and only the
+last segment's outer seam stays protected. A gap or another node starts another
+range and therefore material selection mode rather than an Elastic target.
 
-The exact seam lexicon and adjacency invariant are contract in
-[`../material.md`](../material.md), not configurable punctuation. A shared
-`validateSelection` recomputes segments and accepts only one segment or one
-contiguous adjacent run. The envelope carries no segment ordinal; server and
-client both derive it from the final lineage text.
+The exact seam lexicon is contract in [`../material.md`](../material.md), not
+configurable punctuation. The shared `validateSelection` recomputes the current
+segments and accepts exactly one contiguous run. The dormant Text Swap contract
+adds its own exact-one-segment check. The envelope carries no segment ordinal;
+server and client derive the range from the final lineage text.
 
 **Geometry.** Prefer one plain Text node per passage. The interaction edge still
 indexes descendant Text nodes and asserts their concatenated content equals the
 node's material before mapping a logical offset to a DOM `Range`. It converts
 `getClientRects()` to finite, non-zero client-viewport rectangles. Pure material
-code uses a polygon bounding-box broad phase, then accepts a segment when a rect
-fragment's center is inside the lasso or within a small client-pixel edge
-margin. It does not select on any edge touch or require full containment.
+code uses a polygon bounding-box broad phase, then accepts a punctuation segment
+when a rect fragment's center is inside the lasso or within a small client-pixel
+edge margin. It does not select on any edge touch or require full containment.
+A generous loop around one node resolves to its contiguous range, including a
+multi-clause title. Disconnected runs or hits in more than one node settle as a
+transient material selection set with no Elastic controls.
 
 **Painting.** Selection fill via the Custom Highlight API where available, with
 an absolutely-positioned overlay as the fallback. Lasso ink is a separate SVG
 overlay that never participates in layout. Its visible stroke is a midpoint
 quadratic projection of the bounded semantic polyline. A quiet closing seam
-appears only when the current closed path resolves to one valid same-node,
-contiguous punctuation selection in the stroke's measurement snapshot. Empty,
-incomplete, failed, self-crossing, cross-node, and non-adjacent results keep it
-hidden. The seam is recomputed as the path changes, shows the exact final edge,
+appears only when the current closed path resolves to a trustworthy contiguous
+range or material selection set in the stroke's measurement snapshot. Empty,
+incomplete, failed, self-crossing, and unmeasured results keep it hidden. The seam
+is recomputed as the path changes, shows the exact final edge,
 and pointer-up resolves through the same pure target rule.
 The ink has no fill or shadow, and disappears when the semantic result takes
 over. A cancelled stroke never becomes a selection.
@@ -112,23 +115,28 @@ importing their coordinate or shape model.
 values:
 
 ```ts
-type TextAddress = {
-  nodeId: string;
-  start: number;
-  end: number;
-  selectedText: string;
-  nodeUpdatedAt: string;
+type LassoAddress = {
+  kind: "contiguous-segment-range";
+  range: SegmentSelection;
 };
 
+type LassoSelectionSet = readonly SegmentSelection[];
+
 type MeasuredSelection = {
-  address: TextAddress;
+  address: LassoAddress;
   rects: Rect[];
   layoutEpoch: number;
 };
 ```
 
-Selected-node text change, unmount, focus change, or a newer interaction cancels
-both values and its pending turn. Width, font, visual viewport, canvas transform,
+Selected-node text change, unmount, navigation, or a newer interaction cancels
+both values and its pending turn. A successful one-range lasso never navigates:
+it keeps the current Full or Focus projection, validates the current node and
+contiguous range, and remeasures there before controls appear. Two or more
+ranges remain a separate selection set for index projection and explicit
+inquiry context; they never create grips or a transform request. Clicking
+ordinary material, blank paper, or the active Lasso tool clears either form.
+Width, font, visual viewport, canvas transform,
 or any tree/layout commit retains an address only if it still validates, advances
 the epoch, and remeasures before handles or stretch can operate. Scroll retains
 the address; handles and fallback rects remeasure on animation frame. Custom
@@ -217,6 +225,11 @@ Fragments on one line are unioned only for that line; the two handles never use
 the complete selection's horizontal center. This keeps a stepped selection's
 upper and lower grips attached to the actual first and last pink fragments.
 
+At degree zero, the highlight and two grips remain on the source and no empty
+interstitial lane opens. Moving either grip transfers ownership to Elastic and
+opens the bounded local pocket; resetting to zero closes it. This keeps the
+choice state materially quiet while preserving a full pointer hit area.
+
 [Point + Talk](https://diana.lu/point-n-talk) demonstrates a useful presentation
 quality: alternatives remain clipped to the selected phrase while surrounding
 language stays perceptually fixed. Its swipe chooses among discrete generated
@@ -225,12 +238,14 @@ generation. Candidate browsing is therefore not part of this interaction.
 
 The visible surface is projected from the exact Range fragments, the owning
 text column, and a pure `before / selected+outer-seam / after` text projection.
-Fragment tint preserves the stepped shape at rest. During expansion the upper
-language keeps the complete source paragraph's inline layout: a hidden suffix
-ghost retains every prior line break while a centered `after` copy moves to the
-slot floor. Removing the suffix may therefore never redistribute or re-center
-the words above it. Either physical grip adjusts this same downward projection;
-the active edge never becomes a language direction. The connected source text remains the DOM, accessibility, Range, width,
+Fragment tint preserves the stepped shape at rest. During a lower-grip
+expansion the upper language keeps the complete source paragraph's inline
+layout: a hidden suffix ghost retains every prior line break while a centered
+`after` copy moves to the slot floor. During an upper-grip expansion the fixed
+seam and prefix remain stationary while the selected language and suffix move
+down. The two grips own one shared degree and one operation; their mirrored
+pointer directions do not create a second transform. Their difference is which
+language boundary stays fixed. The connected source text remains the DOM, accessibility, Range, width,
 spacing, and wrapping owner. Projection copies never become selectable material,
 context, history, or a second document model. Browser proofs compare source
 text and Range rectangles while separately proving visual displacement.
@@ -240,7 +255,8 @@ text and Range rectangles while separately proving visual displacement.
 - mixed Chinese/Latin text; punctuation runs; CRLF; no punctuation; only seams;
 - combining marks, surrogate pairs, flags, skin tones, variation selectors, ZWJ
   emoji, and Indic conjuncts;
-- adjacent merge, gap rejection, and cross-node rejection;
+- adjacent-segment merge, disconnected-run and cross-node selection-set
+  projection, and proof that only one contiguous range reaches Elastic;
 - clockwise, counter-clockwise, concave, tiny, and near-edge lassos;
 - wrapped DOM Range geometry in Chromium; invalidation on width, text, font, and
   visual viewport changes; Custom Highlight and forced fallback paths.

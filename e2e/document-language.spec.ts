@@ -10,7 +10,7 @@ test("declares the language of the application chrome", async ({ page }) => {
   await expect(page.getByRole("link", { name: "p to q — Matter" })).toBeVisible();
 });
 
-test("accepts an extension-owned root attribute before hydration", async ({ page }) => {
+test("accepts extension-owned root and body attributes before hydration", async ({ page }) => {
   const hydrationErrors: string[] = [];
   page.on("pageerror", (error) => {
     if (/hydrat(?:e|ion)/iu.test(error.message)) hydrationErrors.push(error.message);
@@ -22,12 +22,20 @@ test("accepts an extension-owned root attribute before hydration", async ({ page
   });
   await page.route(/\/matter$/, async (route) => {
     const response = await route.fetch();
-    const body = (await response.text()).replace("<html", '<html nighteye="disabled"');
+    const body = (await response.text())
+      .replace("<html", '<html nighteye="disabled"')
+      .replace(
+        "<body",
+        '<body data-new-gr-c-s-check-loaded="14.1322.0" data-gr-ext-installed=""',
+      );
     await route.fulfill({ response, body });
   });
 
   await page.goto("/matter");
   await expect(page.locator("html")).toHaveAttribute("nighteye", "disabled");
+  await expect(page.locator("body"))
+    .toHaveAttribute("data-new-gr-c-s-check-loaded", "14.1322.0");
+  await expect(page.locator("body")).toHaveAttribute("data-gr-ext-installed", "");
   await expect(page.getByRole("link", { name: "p to q — Matter" })).toBeVisible();
   expect(hydrationErrors).toEqual([]);
 });

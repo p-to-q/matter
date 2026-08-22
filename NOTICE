@@ -8,6 +8,15 @@ Third-party notices
 Runtime and development dependencies are distributed under their own licenses.
 See each package under node_modules for its terms.
 
+The Plantin Now variable webfont used by Matter is third-party commercial font
+software used with the project owner's authorization. Plantin Now and the font
+file are not licensed under Matter's proprietary source terms, and this notice
+grants no right to extract, copy, redistribute, or reuse them.
+
+Departure Mono is distributed under the SIL Open Font License 1.1. Its complete
+license text is retained beside the font at
+public/matter-ui/DepartureMono-LICENSE.txt.
+
 The paper texture in features/matter/components/PaperTexture.tsx is an original
 SVG filter built from standard feTurbulence primitives. Its visual direction was
 informed by GC Minimal Zine Poster

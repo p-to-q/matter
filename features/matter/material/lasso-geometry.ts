@@ -131,6 +131,20 @@ export function analyzeLassoPath(rawPoints: readonly ClientPoint[]): LassoPathAn
   return Object.freeze({ kind: "prepared", lasso });
 }
 
+/** A click exits selection mode; a small but deliberate open stroke does not. */
+export function lassoClickIntent(
+  rawPoints: readonly ClientPoint[],
+  maximumTravel: number,
+): boolean {
+  if (
+    !Array.isArray(rawPoints) || rawPoints.length === 0 ||
+    !Number.isFinite(maximumTravel) || maximumTravel < 0 ||
+    rawPoints.some((point) => !isFinitePoint(point))
+  ) return false;
+  const origin = rawPoints[0]!;
+  return rawPoints.every((point) => distance(origin, point) <= maximumTravel);
+}
+
 /**
  * Detects an intentional closure without requiring the pointer to return to
  * its exact origin. Absolute proximity handles a literal close; otherwise a
@@ -180,6 +194,23 @@ export function lassoHitsRectFragment(lasso: PreparedLasso, rect: ClientRect): b
   ) {
     return true;
   }
+  // A person may circle a few words within a long punctuation segment rather
+  // than its typographic centre. If the loop's own interior centre lands in
+  // this DOM fragment, it is a deliberate hit; adjacent semantic fragments
+  // remain distinct because their client rectangles do not share that point.
+  const loopCenter = {
+    x: (lasso.bounds.left + lasso.bounds.right) / 2,
+    y: (lasso.bounds.top + lasso.bounds.bottom) / 2,
+  };
+  if (
+    pointInPolygon(loopCenter, lasso.points) &&
+    pointInBounds(loopCenter, {
+      left: rect.x,
+      top: rect.y,
+      right: rect.x + rect.width,
+      bottom: rect.y + rect.height,
+    })
+  ) return true;
   const insideCount = probes.filter((probe) => pointInPolygon(probe, lasso.points)).length;
   if (insideCount >= LASSO_THRESHOLDS.minimumInsideProbeCount) return true;
   // A loose loop often crosses a wrapped line without containing its centre.

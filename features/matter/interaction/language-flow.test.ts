@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   clientDepthToWorld,
   projectLanguageFlow,
-  projectSelectionLocalLane,
 } from "./language-flow";
 
 const RECEIPT = {
@@ -14,58 +13,23 @@ const RECEIPT = {
 } as const;
 
 describe("language flow projection", () => {
-  it("places fixed and traveling controls before the projected suffix", () => {
-    expect(projectSelectionLocalLane({
-      selectedBottom: 96,
-      afterNaturalTop: 72,
-      beforeGap: 8,
-      afterGap: 8,
-      contentDepth: 60,
-      fixedControlDepth: 120,
-      travelingControlDepth: 52,
-    })).toEqual({
-      controlTop: 104,
-      travelingControlTop: 164,
-      laneBottom: 224,
-      afterTop: 232,
-      slotDepth: 160,
-    });
-  });
-
-  it("keeps a rewrite lane local when the suffix already begins lower", () => {
-    expect(projectSelectionLocalLane({
-      selectedBottom: 96,
-      afterNaturalTop: 160,
-      beforeGap: 14,
-      afterGap: 8,
-      contentDepth: 0,
-      fixedControlDepth: 60,
-      travelingControlDepth: 0,
-    }))?.toEqual({
-      controlTop: 110,
-      travelingControlTop: 110,
-      laneBottom: 170,
-      afterTop: 178,
-      slotDepth: 18,
-    });
-  });
-
-  it("rejects malformed selection-local lane inputs", () => {
-    expect(projectSelectionLocalLane({
-      selectedBottom: 10,
-      afterNaturalTop: 10,
-      beforeGap: -1,
-      afterGap: 0,
-      contentDepth: 0,
-      fixedControlDepth: 40,
-      travelingControlDepth: 0,
-    })).toBeNull();
-  });
-
-  it("moves only the suffix by the exact downward slot", () => {
+  it("moves only the suffix downward from the lower grip", () => {
     expect(projectLanguageFlow({ ...RECEIPT, handle: "bottom" })).toEqual({
+      beforeTop: 0,
       selectedTop: 36,
       slotTop: 72,
+      afterTop: 132,
+      topExtent: 0,
+      bottomExtent: 60,
+      presentationHeight: 180,
+    });
+  });
+
+  it("keeps the prefix fixed and pushes the selected language plus suffix down", () => {
+    expect(projectLanguageFlow({ ...RECEIPT, handle: "top" })).toEqual({
+      beforeTop: 0,
+      selectedTop: 96,
+      slotTop: 36,
       afterTop: 132,
       topExtent: 0,
       bottomExtent: 60,

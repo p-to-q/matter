@@ -57,13 +57,15 @@ makes the whole path allowed to fail:
 | --- | --- |
 | transcript repair | the deterministic rule floor computed from the words as heard |
 | thought label | the deterministic label already on screen |
-| inquiry | a stated unavailability — never invented prose |
-| Elastic transform | the passage unchanged, and another stretch remains available |
-| Text Swap | the passage unchanged; an explicit retry may reuse only the still-current transient direction |
+| inquiry | withdraw the failed turn and restore the submitted question |
+| Elastic transform | the passage unchanged, with the same selection still usable |
+| Text Swap | the passage unchanged; restore only the still-current transient direction |
 
-Only inquiry and an explicitly submitted material turn need local failure
-feedback, because a person who knowingly waited is owed either a result or the
-fact that there is none. Failure never becomes material or a transcript.
+Provider availability is operational evidence, not product language. A failed
+call returns its local control to the prior usable state without adding a model
+or vendor message to the paper. Strict receipts, low-cardinality observation,
+and server logs retain the distinction needed to diagnose it. Failure never
+becomes material, inquiry history, or a transcript.
 
 **Adjudication is the guarantee; the prompt is only the odds.** Each scenario
 judges the answer against what the person fixed, and each judgement is a
@@ -231,14 +233,18 @@ ordinary claims, unfinished fragments, questions, negation,
 uncertainty/modality, quantifiers, condition/causality/order,
 number/unit/date/version/currency, quotation/name/pronoun, prompt injection,
 mixed script/URL/identifier, and a surrounding/lineage conflict at the seam.
-Every base case reconstructs one node as `before + passage + after`, and the
-production `segmentText` policy must derive `passage` as exactly one current
-punctuation segment before any candidate can be called. Delimiter-bearing URLs
-and dotted version or decimal forms therefore stay in the surrounding seam;
-the selected segment carries the mixed-script identifier plus delimiter-free
-version, date, unit, percentage, and currency anchors. This preserves the real
-lasso contract while still testing that surrounding URLs remain context rather
-than mutable scope.
+Every base case reconstructs one node as `before + passage + after`. The current
+180-case corpus requires `passage` to be exactly one production punctuation
+segment before any candidate can be called. That remains valid single-range
+evidence, but it no longer covers the complete Elastic address contract now
+that adjacent segments may form one contiguous range. Before `elastic-live`
+promotion, the corpus version and paid-plan digest must add multi-segment
+contiguous cases across every locale and degree bucket, including protected
+internal seams and one final outer seam. Browser preview does not use this
+unclosed live authority. Delimiter-bearing URLs and dotted version or decimal
+forms stay in the surrounding seam; selected cases carry the mixed-script
+identifier plus delimiter-free version, date, unit, percentage, and currency
+anchors.
 Each corpus records the actual extended-grapheme count of every selected
 passage. Within each locale, the four shortest sources, middle four, and four
 longest sources freeze the `short` / `medium` / `long` strata, with case id as a
@@ -397,9 +403,12 @@ surface. Promotion is exactly fifty per surface from the frozen
 `material-origin-synthetic/1` suite: ten inputs in each supported locale cover
 all twelve semantic strata, Transform amounts `0.2` / `0.6` / `1.0`, and three
 bounded Text Swap direction families. Every envelope passes the production
-protocol and addresses one exact current punctuation segment; dotted URLs stay
-in surrounding material. The complete synthetic inputs and axes produce one
-stable SHA-256 digest recorded with every run.
+protocol and currently addresses one exact current punctuation segment; dotted
+URLs stay in surrounding material. An `elastic-live` origin promotion must
+version this suite and include contiguous multi-segment Transform envelopes
+before its receipt can cover the current address contract. The complete
+synthetic inputs and axes produce one stable SHA-256 digest recorded with every
+run.
 
 An authorized execution creates a gitignored `tmp/material-origin-probe/`
 running manifest and empty safe JSONL journal before even the health request.

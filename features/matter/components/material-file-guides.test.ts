@@ -1,108 +1,246 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { MaterialFileRow } from "../material/material-files";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 
-const rows: readonly MaterialFileRow[] = [
-  row("root", null, 0),
-  row("first", "root", 1),
-  row("first-child", "first", 2),
-  row("second-child", "first", 2),
-  row("second", "root", 1),
-  row("second-only-child", "second", 2),
-  row("third", "root", 1),
-];
-
 describe("material file indentation guides", () => {
-  it("draws parent-owned edges only for a sibling group that continues deeper", () => {
-    expect(projectMaterialFileGuideEdges(rows)).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 1, toIndex: 4 },
-      { parentId: "root", laneDepth: 0, fromIndex: 4, toIndex: 6 },
+  it("does not draw a short connector between immediately adjacent controls", () => {
+    expect(projectMaterialFileGuideEdges([
+      row("branch-a", "aa", 1, true),
+      row("branch-b", "aa", 1, true),
+      row("branch-c", "ab", 1, true),
+      row("leaf-c", "ab", 1),
+    ], {
+      sourceRowIndexes: new Set([0, 1, 2]),
+      structuralBranchRowIndexes: new Set([0, 1, 2]),
+    })).toEqual([]);
+  });
+
+  it("implements the directed source matrix when visible interior rows create a span", () => {
+    const rows = [
+      row("branch-a", "aa", 1, true),
+      row("branch-a-child", "branch-a", 2),
+      row("branch-b", "aa", 1, true),
+      row("branch-c", "ab", 1, true),
+      row("branch-c-child", "branch-c", 2),
+      row("leaf-c", "ab", 1),
+      row("leaf-d", "ac", 1),
+      row("branch-d", "ac", 1, true),
+    ];
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: new Set([0, 2, 3, 7]),
+      structuralBranchRowIndexes: new Set([0, 2, 3, 7]),
+    })).toEqual([
+      { kind: "sibling", parentId: "aa", laneDepth: 0, fromIndex: 0, toIndex: 2, toKind: "branch" },
+      { kind: "sibling", parentId: "ab", laneDepth: 0, fromIndex: 3, toIndex: 5, toKind: "terminal" },
     ]);
   });
 
-  it("clips distinct edges to virtualized mounted ranges without measuring the DOM", () => {
-    const edges = projectMaterialFileGuideEdges(rows);
+  it("matches the combined product shape and lets a leaf interrupt the rail", () => {
+    const rows = [
+      row("a", "root", 0, true),
+      row("a-1", "a", 1),
+      row("a-2", "a", 1),
+      row("a-3", "a", 1),
+      row("b", "root", 0, true),
+      row("b-early", "b", 1),
+      row("c", "b", 1, true),
+      row("c-deep", "c", 2),
+      row("b-late", "b", 1),
+    ];
+
+    const structuralBranchRowIndexes = new Set([0, 4, 6]);
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: structuralBranchRowIndexes,
+      structuralBranchRowIndexes,
+    })).toEqual([
+      { kind: "sibling", parentId: "root", laneDepth: -1, fromIndex: 0, toIndex: 4, toKind: "branch" },
+      { kind: "branch-tail", parentId: "root", branchId: "b", laneDepth: -1, fromIndex: 4, toIndex: 8, targetDepth: 1, targetClearance: 4 },
+      { kind: "sibling", parentId: "b", laneDepth: 0, fromIndex: 6, toIndex: 8, toKind: "terminal" },
+    ]);
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: new Set([4, 6]),
+      structuralBranchRowIndexes,
+    })).toEqual([
+      { kind: "branch-tail", parentId: "root", branchId: "b", laneDepth: -1, fromIndex: 4, toIndex: 8, targetDepth: 1, targetClearance: 4 },
+      { kind: "sibling", parentId: "b", laneDepth: 0, fromIndex: 6, toIndex: 8, toKind: "terminal" },
+    ]);
+  });
+
+  it("closes only a multi-item group's final expanded branch around its visible scope", () => {
+    const rows = [
+      row("early-leaf", "root", 0),
+      row("tail-branch", "root", 0, true),
+      row("tail-child", "tail-branch", 1),
+      row("tail-deep", "tail-branch", 1, true),
+      row("tail-final", "tail-deep", 2),
+    ];
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: new Set([1, 3]),
+      structuralBranchRowIndexes: new Set([1, 3]),
+    })).toEqual([
+      {
+        kind: "branch-tail",
+        parentId: "root",
+        branchId: "tail-branch",
+        laneDepth: -1,
+        fromIndex: 1,
+        toIndex: 4,
+        targetDepth: 2,
+        targetClearance: 2,
+      },
+      {
+        kind: "branch-tail",
+        parentId: "tail-branch",
+        branchId: "tail-deep",
+        laneDepth: 0,
+        fromIndex: 3,
+        toIndex: 4,
+        targetDepth: 2,
+        targetClearance: 2,
+      },
+    ]);
+
+    // Collapsing the final branch removes its source authority. A one-item
+    // group also stays quiet instead of becoming a conventional file tree.
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: new Set(),
+      structuralBranchRowIndexes: new Set([1, 3]),
+    })).toEqual([]);
+    expect(projectMaterialFileGuideEdges(rows, {
+      protectedControlRowIndexes: new Set([4]),
+      sourceRowIndexes: new Set([1]),
+      structuralBranchRowIndexes: new Set([1, 3]),
+    })).toEqual([expect.objectContaining({
+      kind: "branch-tail",
+      branchId: "tail-branch",
+      targetClearance: 8,
+    })]);
+    expect(projectMaterialFileGuideEdges([
+      row("only-branch", "root", 0, true),
+      row("only-child", "only-branch", 1),
+    ], {
+      sourceRowIndexes: new Set([0]),
+      structuralBranchRowIndexes: new Set([0]),
+    })).toEqual([]);
+  });
+
+  it("leaves eight pixels around arrows and six above a terminal point", () => {
     expect(projectMaterialFileGuideSegments({
-      edges,
+      edges: [
+        { kind: "sibling", parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 2, toKind: "terminal" },
+        { kind: "sibling", parentId: "root", laneDepth: 0, fromIndex: 3, toIndex: 5, toKind: "branch" },
+      ],
+      ranges: [{ start: 0, end: 6 }],
+      rowHeight: 40,
+    })).toEqual([
+      { kind: "sibling", parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 2, top: 28, height: 66 },
+      { kind: "sibling", parentId: "root", laneDepth: 0, fromIndex: 3, toIndex: 5, top: 148, height: 64 },
+    ]);
+  });
+
+  it("clips a branch tail but turns only where its structural endpoint is mounted", () => {
+    expect(projectMaterialFileGuideSegments({
+      edges: [{
+        kind: "branch-tail",
+        parentId: "root",
+        branchId: "tail",
+        laneDepth: 0,
+        fromIndex: 0,
+        toIndex: 4,
+        targetDepth: 3,
+        targetClearance: 2,
+      }],
+      ranges: [{ start: 2, end: 4 }, { start: 4, end: 5 }],
+      rowHeight: 40,
+    })).toEqual([
+      {
+        kind: "branch-tail",
+        parentId: "root",
+        branchId: "tail",
+        laneDepth: 0,
+        fromIndex: 0,
+        toIndex: 4,
+        targetDepth: 3,
+        targetClearance: 2,
+        endsAtTarget: false,
+        top: 80,
+        height: 80,
+      },
+      {
+        kind: "branch-tail",
+        parentId: "root",
+        branchId: "tail",
+        laneDepth: 0,
+        fromIndex: 0,
+        toIndex: 4,
+        targetDepth: 3,
+        targetClearance: 2,
+        endsAtTarget: true,
+        top: 160,
+        height: 20,
+      },
+    ]);
+  });
+
+  it("keeps the branch tail short and retracts it before compressed controls", () => {
+    const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+    expect(css).toMatch(
+      /\[data-guide-kind="branch-tail"\]\[data-guide-tail-end="true"\][^{]*\{[^}]*--material-file-tail-run:\s*max\(0px,\s*min\(14px,[^}]*-\s*var\(--material-file-guide-target-clearance\)\)\)\)[^}]*border-bottom:[^}]*border-left:/s,
+    );
+  });
+
+  it("clips a virtualized arrow-to-terminal edge without inventing endpoints", () => {
+    expect(projectMaterialFileGuideSegments({
+      edges: [{ kind: "sibling", parentId: "root", laneDepth: 0, fromIndex: 1, toIndex: 6, toKind: "terminal" }],
       ranges: [{ start: 2, end: 5 }],
       rowHeight: 40,
     })).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 1, toIndex: 4, top: 80, height: 94 },
-      { parentId: "root", laneDepth: 0, fromIndex: 4, toIndex: 6, top: 186, height: 14 },
+      { kind: "sibling", parentId: "root", laneDepth: 0, fromIndex: 1, toIndex: 6, top: 80, height: 120 },
     ]);
   });
 
-  it("leaves six pixels around a leaf endpoint", () => {
-    expect(projectMaterialFileGuideSegments({
-      edges: [{ parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1 }],
-      ranges: [{ start: 0, end: 2 }],
-      rowHeight: 40,
+  it("filters restore-plus rows at the component boundary", () => {
+    const rows = [
+      row("held-branch", "root", 0, true),
+      row("held-child", "held-branch", 1),
+      row("next-branch", "root", 0, true),
+    ];
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: new Set([2]),
+      structuralBranchRowIndexes: new Set([2]),
+    })).toEqual([]);
+    expect(projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: new Set([0, 2]),
+      structuralBranchRowIndexes: new Set([0, 2]),
     })).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1, top: 26, height: 28 },
+      { kind: "sibling", parentId: "root", laneDepth: -1, fromIndex: 0, toIndex: 2, toKind: "branch" },
     ]);
   });
 
-  it("leaves eight pixels around a disclosure or recovery control", () => {
-    expect(projectMaterialFileGuideSegments({
-      edges: [{ parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1 }],
-      ranges: [{ start: 0, end: 2 }],
-      controlRowIndexes: new Set([0, 1]),
-      rowHeight: 40,
-    })).toEqual([
-      { parentId: "root", laneDepth: 0, fromIndex: 0, toIndex: 1, top: 28, height: 24 },
-    ]);
-  });
-
-  it("does not draw a line for a singleton or terminal leaf group", () => {
-    expect(projectMaterialFileGuideEdges([row("only", "parent", 2)])).toEqual([]);
-    expect(projectMaterialFileGuideEdges([
-      row("first", "parent", 2),
-      row("second", "parent", 2),
-    ])).toEqual([]);
-    expect(projectMaterialFileGuideEdges([
-      row("first", "parent", 2),
-      row("first-child", "first", 3),
-      row("second", "parent", 2),
-    ])).toEqual([
-      { parentId: "parent", laneDepth: 1, fromIndex: 0, toIndex: 2 },
-    ]);
-    // A durable branch that has been closed in this outline is a visible leaf.
-    expect(projectMaterialFileGuideEdges([
-      row("first", "parent", 2, true),
-      row("second", "parent", 2, true),
-    ])).toEqual([]);
-  });
-
-  it("projects a 2,000-row, 32-level outline and clips only mounted edges", () => {
-    const deepRows = buildDeepOutline({ fullBranches: 62, finalBranchLevels: 16, levels: 32 });
-    expect(deepRows).toHaveLength(2_000);
-
-    const edges = projectMaterialFileGuideEdges(deepRows);
-    // Each top-level branch has a visible descendant. Only those 63 direct
-    // siblings form one readable group, so there are 62 adjacent relations.
-    expect(edges).toHaveLength(62);
-    expect(edges[0]).toEqual({ parentId: "document", laneDepth: -1, fromIndex: 0, toIndex: 32 });
-    expect(edges.at(-1)).toEqual({ parentId: "document", laneDepth: -1, fromIndex: 1_952, toIndex: 1_984 });
-
-    // Windowing retains only edges touching mounted rows; it must not make a
-    // new relation across the 32-row gaps occupied by another open branch.
-    expect(projectMaterialFileGuideSegments({
-      edges,
-      ranges: [{ start: 1_952, end: 1_985 }],
-      rowHeight: 40,
-    })).toEqual([
-      { parentId: "document", laneDepth: -1, fromIndex: 1_920, toIndex: 1_952, top: 78_080, height: 14 },
-      { parentId: "document", laneDepth: -1, fromIndex: 1_952, toIndex: 1_984, top: 78_106, height: 1_268 },
-    ]);
-  });
-
-  it("does not emit guides for a 2,000-item terminal sibling group", () => {
-    const terminalRows = Array.from(
-      { length: 2_000 },
-      (_, index) => row(`leaf-${index}`, "parent", 1),
+  it("projects a 2,000-row, 32-level outline without cross-parent edges", () => {
+    const rows = buildDeepOutline({ branches: 63, levels: 32 });
+    const structuralBranches = new Set(
+      rows.flatMap((row, index) => row.hasChildren ? [index] : []),
     );
-
-    expect(projectMaterialFileGuideEdges(terminalRows)).toEqual([]);
+    const edges = projectMaterialFileGuideEdges(rows, {
+      sourceRowIndexes: structuralBranches,
+      structuralBranchRowIndexes: structuralBranches,
+    });
+    expect(rows).toHaveLength(2_016);
+    expect(edges).toHaveLength(63);
+    expect(edges[0]).toEqual({ kind: "sibling", parentId: "document", laneDepth: -1, fromIndex: 0, toIndex: 32, toKind: "branch" });
+    expect(edges.at(-2)).toEqual({ kind: "sibling", parentId: "document", laneDepth: -1, fromIndex: 1_952, toIndex: 1_984, toKind: "branch" });
+    expect(edges.at(-1)).toEqual({
+      kind: "branch-tail",
+      parentId: "document",
+      branchId: "branch-62-depth-0",
+      laneDepth: -1,
+      fromIndex: 1_984,
+      toIndex: 2_015,
+      targetDepth: 31,
+      targetClearance: 2,
+    });
   });
 });
 
@@ -120,20 +258,15 @@ function row(nodeId: string, parentId: string | null, depth: number, hasChildren
   };
 }
 
-function buildDeepOutline(input: Readonly<{
-  fullBranches: number;
-  finalBranchLevels: number;
-  levels: number;
-}>): readonly MaterialFileRow[] {
+function buildDeepOutline(input: Readonly<{ branches: number; levels: number }>): readonly MaterialFileRow[] {
   const rows: MaterialFileRow[] = [];
-  for (let branch = 0; branch <= input.fullBranches; branch += 1) {
+  for (let branch = 0; branch < input.branches; branch += 1) {
     let parentId = "document";
-    const levels = branch === input.fullBranches ? input.finalBranchLevels : input.levels;
-    for (let depth = 0; depth < levels; depth += 1) {
+    for (let depth = 0; depth < input.levels; depth += 1) {
       const nodeId = `branch-${branch}-depth-${depth}`;
-      rows.push(row(nodeId, parentId, depth));
+      rows.push(row(nodeId, parentId, depth, depth < input.levels - 1));
       parentId = nodeId;
     }
   }
-  return Object.freeze(rows);
+  return rows;
 }

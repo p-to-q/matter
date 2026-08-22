@@ -7,6 +7,8 @@ const SOURCE_TEXT = `${SOURCE_SEGMENT}，而是那个过去在今天仍然允许
 const REWRITTEN_TEXT = `${REWRITTEN_SEGMENT}，而是那个过去在今天仍然允许我们想象的其他生活。`;
 const DIRECTION = "换一种更凝练的说法";
 
+test.describe.skip("Text Swap UI is deferred while selected language exposes only Elastic", () => {
+
 test("Text Swap keeps Full-view admission, then Voice rewrites one Focus segment atomically", async ({ page }) => {
   const browserErrors: string[] = [];
   let swapRequests = 0;
@@ -355,3 +357,5 @@ async function drawEarlyReleaseLoop(
   await page.mouse.move(rect.x - margin, rect.y + Math.min(18, rect.height * .45), { steps: 2 });
   await page.mouse.up();
 }
+
+});

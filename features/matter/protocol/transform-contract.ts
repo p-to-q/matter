@@ -1,5 +1,5 @@
 import { isMatterLocale, type MatterLocale } from "../config/locales";
-import { segmentText, validateSelection, type SegmentSelection } from "../material/text-segments";
+import { validateSelection, type SegmentSelection } from "../material/text-segments";
 import {
   MAX_NODE_TEXT_CODE_UNITS,
   MAX_TREE_DEPTH,
@@ -11,6 +11,7 @@ import { PROTOCOL_VERSION, type ThoughtTree, type TreeCommand } from "../tree/mo
 import { deriveExpandInPlaceLength, validateExpandInPlaceCandidate } from "./expand-in-place-policy";
 
 export const MAX_TRANSFORM_REQUEST_BYTES = 32 * 1024;
+export const MAX_TRANSFORM_RESPONSE_BYTES = 8 * 1024;
 export const TRANSFORM_CLIENT_TIMEOUT_MS = 16_000;
 export const MAX_TRANSFORM_ID_LENGTH = 128;
 export const MAX_TRANSFORM_CONTEXT_CODE_POINTS = 8_000;
@@ -105,7 +106,7 @@ export function parseTransformEnvelope(value: unknown): TransformParseResult {
   const lineage = parseLineage(value.context);
   if (lineage === null) return invalid("The transform lineage is invalid.");
   const selectedNode = lineage.at(-1)!;
-  const selection = parseSingleCurrentSegment(value.selection, selectedNode);
+  const selection = parseCurrentSegmentRange(value.selection, selectedNode);
   if (selection === null) return invalid("The transform selection is invalid.");
   if (deriveExpandInPlaceLength(
     selection.selectedText,
@@ -244,7 +245,7 @@ export function planToTreeCommand(
   const originalNode = envelope.context.lineage.at(-1)!;
   const node = currentTree.nodes[plan.action.nodeId];
   if (node === undefined || node.text !== originalNode.text || node.updatedAt !== originalNode.updatedAt) return rejected("STALE");
-  const selection = parseSingleCurrentSegment(envelope.selection, node);
+  const selection = parseCurrentSegmentRange(envelope.selection, node);
   if (selection === null) return rejected("STALE");
   const policy = validateExpandInPlaceCandidate({
     sourceText: selection.selectedText,
@@ -299,14 +300,12 @@ function parseLineage(value: unknown): readonly TransformLineageNode[] | null {
   return Object.freeze(lineage);
 }
 
-function parseSingleCurrentSegment(value: unknown, node: TransformLineageNode | { id: string; text: string }): SegmentSelection | null {
+function parseCurrentSegmentRange(value: unknown, node: TransformLineageNode | { id: string; text: string }): SegmentSelection | null {
   if (!isRecord(value) || !hasExactKeys(value, ["type", "nodeId", "start", "end", "selectedText"])) return null;
   if (value.type !== "segment-range" || value.nodeId !== node.id || typeof value.selectedText !== "string" || !Number.isSafeInteger(value.start) || !Number.isSafeInteger(value.end)) return null;
   const validated = validateSelection(node.text, value, node.id);
   if (!validated.ok) return null;
-  return segmentText(node.text).some((segment) => segment.start === validated.selection.start && segment.end === validated.selection.end)
-    ? Object.freeze({ ...validated.selection })
-    : null;
+  return Object.freeze({ ...validated.selection });
 }
 
 function parseAction(value: unknown, envelope: TransformEnvelope): ReplaceTextRangeAction | null {

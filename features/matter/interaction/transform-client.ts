@@ -1,4 +1,5 @@
 import {
+  MAX_TRANSFORM_RESPONSE_BYTES,
   TRANSFORM_CLIENT_TIMEOUT_MS,
   parseTransformError,
   parseTransformPlan,
@@ -6,6 +7,7 @@ import {
   type TransformPlan,
 } from "../protocol/transform-contract";
 import { clientMatterBasePath } from "../config/base-path";
+import { readBoundedJsonResponse } from "./bounded-json-response";
 
 export class TransformClientError extends Error {
   constructor(readonly retryable: boolean, message: string) {
@@ -37,16 +39,35 @@ export async function requestTransform(
     if (error instanceof Error && error.name === "AbortError") throw error;
     throw new TransformClientError(true, "Matter could not reach this change.");
   }
-  const payload = await response.json().catch(() => null) as unknown;
+  let payload: unknown;
+  try {
+    payload = await readBoundedJsonResponse(response, MAX_TRANSFORM_RESPONSE_BYTES, combined);
+  } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
+    if (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
+      throw new TransformClientError(true, "Matter took too long to change this passage.");
+    }
+    if (error instanceof Error && error.name === "AbortError") throw error;
+    throw invalidResponse(response.ok);
+  }
   if (!response.ok) throw readError(payload);
   const plan = parseTransformPlan(payload, envelope);
   if (plan === null) throw new TransformClientError(false, "Matter returned an invalid change.");
   return plan;
 }
 
+function invalidResponse(successStatus: boolean): TransformClientError {
+  return new TransformClientError(
+    false,
+    successStatus
+      ? "Matter returned an invalid change."
+      : "Matter returned an invalid refusal.",
+  );
+}
+
 function readError(value: unknown): TransformClientError {
   const parsed = parseTransformError(value);
   return parsed === null
-    ? new TransformClientError(false, "Matter returned an invalid refusal.")
+    ? invalidResponse(false)
     : new TransformClientError(parsed.retryable, parsed.message);
 }

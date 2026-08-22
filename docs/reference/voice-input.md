@@ -22,14 +22,14 @@ pointer starts at empty root / node / segment
   → browser-native Web Speech API (preferred)
   → on-device Whisper worker, or POST /api/transcribe (explicit fallbacks)
   → transcript
-  → immediate human material admission, or transient transform direction
-  → for admission only: one repair lease after a short visibility floor
+  → immediate human material admission
+  → one repair lease after a short visibility floor
 ```
 
-Raw audio is never written to storage or logs. Failure preserves the anchor or
-selection and exposes a pointer retry. A transcript is not rendered as a message:
-for admission it becomes human material; for transformation it enters the
-envelope and only the resulting material change is shown.
+Raw audio is never written to storage or logs. Failure preserves the admission
+anchor and exposes a pointer retry. A transcript is not rendered as a message:
+it becomes human material. The dormant Text Swap grammar does not give Voice a
+selected-language or transform-direction mode in the current release.
 
 The public preview uses browser-managed Web Speech for transient interim text
 and one final admission when available. Otherwise it records locally and lazily

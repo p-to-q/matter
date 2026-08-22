@@ -141,6 +141,7 @@ for (const viewport of [
     await expect(lens).toBeVisible();
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
     await expect(lens).toHaveAttribute("aria-orientation", "horizontal");
+    await expect(lens).toHaveAttribute("data-relation", "corner");
     await expect(lens.getByRole("button")).toHaveCount(2);
     await expect(lens.getByRole("button", { name: "Extend from this thought" })).toBeVisible();
     await expect(lens.getByRole("button", { name: "Focus this thought" })).toBeVisible();
@@ -169,6 +170,31 @@ for (const viewport of [
     expect(await lensBoundsAreLawful(page)).toBe(true);
     expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
       .toContain("blur(28px)");
+    expect(await lens.evaluate((element) => {
+      const style = getComputedStyle(element, "::before");
+      return {
+        bottom: style.bottom,
+        contactSize: style.maskSize.split(",").at(-1)?.trim(),
+        contactIsUniform: style.maskImage.includes("linear-gradient"),
+        left: style.left,
+        masked: style.maskImage !== "none",
+        maskSubtractsUniformRegion: style.maskComposite.split(",")
+          .every((operation) => operation.trim() === "subtract"),
+        pointerEvents: style.pointerEvents,
+        right: style.right,
+        top: style.top,
+      };
+    })).toEqual({
+      bottom: "-12px",
+      contactSize: viewport.name === "narrow" ? "24px 24px" : "22px 22px",
+      contactIsUniform: true,
+      left: "-13px",
+      masked: true,
+      maskSubtractsUniformRegion: true,
+      pointerEvents: "none",
+      right: "-13px",
+      top: "-12px",
+    });
     // How far the field may descend is owned by lensBoundsAreLawful above;
     // restating it here would give one rule two definitions to drift between.
     expect(await page.evaluate((rootId) => {
@@ -192,6 +218,8 @@ for (const viewport of [
     await rootText.hover();
     await expect(lens.getByRole("button")).toHaveCount(1);
     await expect(lens.getByRole("button", { name: "Show all material" })).toBeVisible();
+    await expect(lens).toHaveAttribute("data-relation", "corner");
+    expect(await lensBoundsAreLawful(page)).toBe(true);
     await lens.getByRole("button", { name: "Show all material" }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
 
@@ -239,6 +267,25 @@ test("the ruling entry breath yields to reduced motion", async ({ page }) => {
   await expect(ruling).toHaveCSS("animation-duration", "0.001s");
   await expect(ruling).toHaveCSS("animation-iteration-count", "1");
   await expect(ruling).toHaveCSS("opacity", "0.16");
+});
+
+test("the action fog becomes one system capsule in forced colors", async ({ page }) => {
+  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await page.addInitScript(({ key }) => {
+    localStorage.setItem(key, JSON.stringify({ version: 1, language: "zh-CN", leafFx: false, appearance: "light" }));
+  }, { key: PREFERENCES_KEY });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.locator(`[data-thought-id="${ROOT_ID}"] [data-thought-text-id]`).hover();
+  const lens = page.getByRole("toolbar", { name: "Thought actions" });
+  await expect(lens).toBeVisible();
+  expect(await lens.evaluate((element) => {
+    const style = getComputedStyle(element, "::before");
+    return style.content !== "none" && style.borderTopWidth === "1px" && style.backdropFilter === "none";
+  })).toBe(true);
+  await expect(lens).toHaveCSS("animation-duration", "0.001s");
+  await expect(lens.getByRole("button")).toHaveCount(2);
 });
 
 test("the action lens is hoverable across its clear gap and yields to pan and chrome overlays", async ({ page }) => {
@@ -437,9 +484,9 @@ test("the 2,000-node canvas still mounts one ruling and one delegated action len
 });
 
 /**
- * The glyphs rest on the first line by at most CORNER_GLYPH_DESCENT and the fog
- * reaches it too, while the field clears the paper inset, the rail and the
- * guidance line entirely.
+ * The glyphs rest on the first line by at most CORNER_GLYPH_DESCENT while the
+ * field clears the paper inset, the rail and the guidance line entirely. Fog
+ * is decorative overflow and yields at the separately measured corner.
  */
 async function lensBoundsAreLawful(page: Page): Promise<boolean> {
   return page.evaluate(({ rootId, descent }) => {
@@ -459,6 +506,12 @@ async function lensBoundsAreLawful(page: Page): Promise<boolean> {
     const inkTop = fragments.length === 0
       ? text.getBoundingClientRect().top
       : Math.min(...fragments.map((rect) => rect.top));
+    const inkLeft = fragments.length === 0
+      ? text.getBoundingClientRect().left
+      : Math.min(...fragments.filter((rect) => Math.abs(rect.top - inkTop) <= 2).map((rect) => rect.left));
+    const lensStyle = getComputedStyle(lens);
+    const materialCornerX = Number.parseFloat(lensStyle.getPropertyValue("--lens-material-x"));
+    const materialCornerY = Number.parseFloat(lensStyle.getPropertyValue("--lens-material-y"));
     const overlaps = (element: HTMLElement) => {
       const rect = element.getBoundingClientRect();
       return lensRect.left < rect.right && lensRect.right > rect.left &&
@@ -474,6 +527,8 @@ async function lensBoundsAreLawful(page: Page): Promise<boolean> {
       // Rounded: the ink measurement is sub-pixel and the bound is a design
       // limit, not a rasteriser guarantee.
       Math.round(descentOntoMaterial) > 0 && Math.round(descentOntoMaterial) <= descent + 1 &&
+      Math.abs(lensRect.left + materialCornerX - inkLeft) <= 2 &&
+      Math.abs(lensRect.top + materialCornerY - inkTop) <= 2 &&
       lensRect.bottom > inkTop &&
       !overlaps(rail) && !overlaps(guidance);
   }, { rootId: ROOT_ID, descent: CORNER_GLYPH_DESCENT });

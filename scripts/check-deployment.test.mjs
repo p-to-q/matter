@@ -61,14 +61,20 @@ test("requires truthful release surfaces", () => {
   ]);
 });
 
-test("requires both independent material model surfaces for a live promotion", () => {
+test("promotes Elastic alone while the dormant Text Swap gate stays closed", () => {
   const live = structuredClone(HEALTH);
   live.surfaces.transformTurn = "available";
-  assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "material-live"), [
-    "Material model surface textSwap must be available for material-live.",
-  ]);
+  assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "elastic-live"), []);
   live.surfaces.textSwap = "available";
-  assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "material-live"), []);
+  assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "elastic-live"), [
+    "Dormant material surface textSwap must be unavailable for elastic-live.",
+  ]);
+});
+
+test("rejects the superseded paired material-live profile", () => {
+  assert.deepEqual(inspectDeploymentHealth(HEALTH, HEALTH.appVersion, "material-live"), [
+    "Unknown deployment profile material-live.",
+  ]);
 });
 
 test("rejects an unknown deployment profile before trusting health", () => {

@@ -45,6 +45,107 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.38
+
+Preview.38 reopens the lasso freeze from direct browser evidence. Adjacent
+current punctuation segments inside one node now form one contiguous Elastic
+range, so a loop around a whole multi-clause title remains one transform target.
+Disconnected runs or runs across two or more nodes instead enter transient
+material selection: their source rows are marked in the left index and they may
+bound inquiry context, but they expose no Elastic grips and never enter
+`transform/2`. Ordinary material, blank paper, and the active Lasso tool clear
+either state.
+
+The same correction makes the material index's punctuation local. In each
+current visible sibling group, leaves receive terminal points only when the
+group also contains a structural branch; an all-leaf group stays blank. A row's
+leading slot is exactly one disclosure, point, blank, or held-context restore.
+Only a currently expanded disclosure arrow may start a guide, and only when at
+least one visible interior row separates it from the next same-parent control;
+its target may be that sibling's arrow or point. A collapsed or immediately
+adjacent arrow and point/blank → anything remain absent. The root branch →
+branch guide may therefore cross the first branch's flattened descendants.
+A leaf / branch / leaf group reads point / arrow / point and keeps its
+arrow → point segment only while the branch's blank child is visible; collapse
+makes the controls adjacent and removes that short connector. Search, selection,
+folding, and window clipping cannot invent an endpoint or change that grammar.
+When an expanded final structural sibling has visible descendants but no later
+same-parent control, its guide instead closes its own range at the last visible
+descendant with one short rightward hook. That hook is a branch-range closure,
+not a child connector; it disappears when the branch is collapsed or
+compressed, and its reach shrinks before entering any row control's clear
+space. Index navigation also restores only undersized target text to the
+15-CSS-pixel readability floor; already-readable text keeps the current zoom,
+and pointer camera input still takes authority from an in-flight arrival.
+The footer again contains only the
+localized non-account identity and local-device line, with saving shown only
+while a write is active. Conflict, save failure, corrupt-row recovery, export,
+retry, and stored-material reload remain reachable in Archive instead of
+becoming permanent footer chrome.
+
+This candidate also carries the bounded-response, archive-authority,
+camera-attention, Elastic-only promotion, and live vertical-band corrections
+recorded on 2026-08-21 and 2026-08-22. Its release boundary is still
+`browser-preview`: both material-model gates remain off. The existing Elastic
+live corpus and origin suite prove exact-one-segment inputs only; they must be
+versioned with contiguous multi-segment cases and rebound to new digests before
+they can support an `elastic-live` claim.
+
+The final interaction correction restores the two physical edges: the upper
+grip increases the shared degree when pulled upward and the lower when pulled
+downward, while both still open one downward material band. The document shell
+also tolerates extension-owned attributes injected on either root element before
+hydration; the focused receipt covers the Grammarly body attributes reported in
+the candidate browser. Transcription success and every normalized error carry
+an explicit `no-store` response boundary. The upper-right pair, bottom-right
+utility row, and lower-left guidance now share one transparent two-depth optical
+contract, so passing material yields behind corner copy without
+a panel, material mutation,
+collision observer, or new mobile surface. Bottom-right keeps the 28/22 outer
+and 15/11 inner baseline; the other two footprints add only a few pixels. The
+capped outer plane samples at 0.8px and the inner at 3.25px. Both masks share an
+exceptionally slow zero-foot from a transparent perimeter, then diverge into a
+broad shallow outer shoulder and a later compact S-shaped inner soft step, so
+magnification exposes neither a hard rectangle nor two interchangeable blur rings.
+
+```text
+source proof           npm run check exited 0: doctor 21; Markdown checker 5/5
+                       and 38 local-link-valid documents; Node 53/53;
+                       architecture 356 files across 7 layers; Vitest 138 files
+                       passed and 1 skipped, 1,445 cases passed and 3 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack build
+                       of all 21 pages/routes passed
+browser proof          npm run test:e2e: 89 passed, 6 capability-gated skipped,
+                       0 failed, 95 total in 1.3 minutes
+release comparison     frozen Preview.37 → Preview.38 worktree, including all
+                       5 new untracked source files: 109 files changed, 8,925
+                       insertions, 3,232 deletions, net +5,693. Preview.34 → .35
+                       was 91 / +9,888 / -1,423; .35 → .36 was 40 / +3,720 /
+                       -63; .36 → .37 was 40 / +3,506 / -383
+runtime package proof  23 Next trace manifests contained 3,659 entries; runtime
+                       entries from docs, e2e, archive, tmp, .env, and *.test
+                       were all 0
+source pack posture    npm pack listed 471 entries; about 1.47 MB compressed
+                       and 4.34 MB unpacked. The private UNLICENSED source
+                       pack still includes docs, e2e, archive, and tests; it is
+                       not a public install artifact or the deployed runtime
+production boundary    OWNER-AUTHORIZED EXCEPTION for Preview.38 with the three
+                       existing live gates unchanged and both material-model
+                       gates off; #34 remains open and unverified
+known live gap         the #34 edge/spend controls are unverified; contiguous
+                       multi-segment Elastic corpus and origin coverage are not
+                       yet digest-bound or executed
+publication state      source promotion, immutable tag, and deployed-origin
+                       receipts remain execution evidence; npm publication is
+                       neither authorized nor part of this release
+```
+
+The frozen local candidate is therefore a source-level browser-preview **GO**.
+Preview.38 production promotion is owner-authorized as the documented exception
+above, while issue #34 remains an explicit, unverified operational exposure;
+`elastic-live` remains **NO-GO**. A release commit, immutable tag, and
+deployed-origin receipt remain separate actions and evidence.
+
 ## Candidate verification — 0.2.0-preview.37
 
 Preview.37 makes selected language feel like one place rather than a stack of
@@ -1137,12 +1238,15 @@ already the product's signature.
 - `POST /api/turn` now has its strict fixture browser receipt through release,
   one atomic replacement, Undo, Redo, and reload. That receipt does not promote
   a model: the route still needs its separately enabled live provider,
-  multilingual acceptance corpus, distributed rate rule, hard spend ceiling,
-  and deployed-origin receipt before it can support a public live claim.
-- `POST /api/text-swap` has the same strict fixture browser receipt and an
-  independent production-off gate. It additionally needs its frozen multilingual
-  paraphrase corpus and human review thresholds before the rate/spend and
-  deployed-origin promotion procedure may begin.
+  versioned multilingual acceptance corpus covering both single-segment and
+  contiguous multi-segment ranges, distributed rate rule, hard spend ceiling,
+  and digest-bound deployed-origin receipt before it can support a public live
+  claim.
+- `POST /api/text-swap` remains a dormant strict grammar with an independent
+  production-off gate. It is not a browser-preview release gate and must not
+  become available with Elastic. If the product later reactivates it, its own
+  multilingual paraphrase corpus, human review, rate/spend controls, and
+  deployed-origin promotion procedure become a separate freeze.
 - `POST /api/inquiry` validates a bounded selection-or-tree question; a live
   adapter is enabled only by server environment and otherwise returns an honest
   unavailable result. No server memory adapter is connected; each answer is
@@ -1151,12 +1255,12 @@ already the product's signature.
   owning Vercel project must retain a distributed
   Firewall rate rule and a provider spend ceiling; serverless instances do not
   share the in-memory limiter.
-- ZIP export/import is implemented; directory export is not implemented and is
-  intentionally outside this preview.
+- ZIP export and same-document restore are implemented; a foreign tree id is
+  rejected before persistence until an active-document pointer exists.
+  Directory export is not implemented and is intentionally outside this
+  preview.
 - Storage-full material remains in memory and now has a narrow-screen path to
-  export and retry. A successfully imported foreign-id archive still needs one
-  strict active-document pointer before reload can return to it; this is not a
-  multi-document UI.
+  export and retry. This is not a multi-document UI.
 - The product opens with seeded fixture material, not a fresh empty document
   whose first action admits a root thought.
 - The complete 2,000-node tree remains authoritative and pointer-ready, but a full

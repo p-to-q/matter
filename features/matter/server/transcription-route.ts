@@ -128,7 +128,9 @@ async function handleBoundedTranscriptionRequest(
     audio: audioValue,
   };
   throwIfRequestInterrupted(signal);
-  return Response.json(await transcribeRecording(parsed, signal));
+  return Response.json(await transcribeRecording(parsed, signal), {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 async function readBoundedBody(

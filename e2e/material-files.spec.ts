@@ -1,8 +1,221 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const rootId = "matter_document_root_matter_fixture_rooted_01";
 const firstBranchText = "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
 const searchText = "被允许想象的生活";
+
+test("an index passage lands at the browser's visual centre, including a repeated click", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const row = page.locator("aside.material-files .material-file").nth(8);
+  const world = page.locator(".matter-world");
+  const nodeId = await row.getAttribute("data-node-id");
+  if (nodeId === null) throw new Error("index centring fixture is missing");
+  await row.locator(".material-file__open").click();
+  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await expectThoughtAtVisualCentre(page, nodeId);
+  await expect(world).not.toHaveAttribute("data-camera-motion", "index");
+
+  const shell = page.locator("main.matter-shell");
+  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  const paper = await page.locator(".matter-document").boundingBox();
+  if (paper === null) throw new Error("canvas pan receipt is missing");
+  await page.mouse.move(paper.x + paper.width * .7, paper.y + paper.height * .3);
+  await page.mouse.down();
+  await page.mouse.move(paper.x + paper.width * .7 + 90, paper.y + paper.height * .3 + 60, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await shell.getAttribute("data-viewport-x")))
+    .not.toBe(0);
+
+  await row.locator(".material-file__open").click();
+  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await expectThoughtAtVisualCentre(page, nodeId);
+  await expect(world).not.toHaveAttribute("data-camera-motion", "index");
+
+  const target = page.locator(`[data-layout-node-id="${nodeId}"] .spatial-thought__text`);
+  await target.evaluate((element) => {
+    element.style.width = "300px";
+    element.style.fontSize = "64px";
+  });
+  await row.locator(".material-file__open").click();
+  await expectThoughtAtVisualCentre(page, nodeId);
+  expect(Number(await shell.getAttribute("data-viewport-zoom"))).toBeLessThan(1);
+  const fitReceipt = await target.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    return {
+      height: rect.height,
+      viewportHeight: viewport?.height ?? window.innerHeight,
+      viewportWidth: viewport?.width ?? window.innerWidth,
+      width: rect.width,
+    };
+  });
+  expect(fitReceipt.width).toBeLessThanOrEqual(fitReceipt.viewportWidth * .88 + 1);
+  expect(fitReceipt.height).toBeLessThanOrEqual(fitReceipt.viewportHeight * .88 + 1);
+});
+
+test("index navigation restores only undersized material type to its readability floor", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+
+  const shell = page.locator("main.matter-shell");
+  await page.locator(".matter-document").dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 700,
+    clientY: 400,
+    ctrlKey: true,
+    deltaMode: 0,
+    deltaY: 2_000,
+  });
+  await expect(shell).toHaveAttribute("data-viewport-zoom", "0.6");
+
+  const row = page.locator("aside.material-files .material-file").nth(8);
+  const nodeId = await row.getAttribute("data-node-id");
+  if (nodeId === null) throw new Error("readability-floor fixture is missing");
+  await row.locator(".material-file__open").click();
+  await expectThoughtAtVisualCentre(page, nodeId);
+  await expect(shell).toHaveAttribute("data-viewport-zoom", "0.883");
+
+  const target = page.locator(`[data-layout-node-id="${nodeId}"] .spatial-thought__text`);
+  const firstReceipt = await target.evaluate((element) => {
+    const world = element.closest(".matter-world");
+    if (!(world instanceof HTMLElement)) throw new Error("readability world is missing");
+    return Number.parseFloat(getComputedStyle(element).fontSize) *
+      new DOMMatrixReadOnly(getComputedStyle(world).transform).a;
+  });
+  expect(firstReceipt).toBeGreaterThanOrEqual(15);
+  expect(firstReceipt).toBeLessThan(15.1);
+
+  await row.locator(".material-file__open").click();
+  await expectThoughtAtVisualCentre(page, nodeId);
+  await expect(shell).toHaveAttribute("data-viewport-zoom", "0.883");
+});
+
+test("index navigation respects reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.locator(".matter-document").dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 700,
+    clientY: 400,
+    ctrlKey: true,
+    deltaMode: 0,
+    deltaY: 2_000,
+  });
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.6");
+  const row = page.locator("aside.material-files .material-file").nth(8);
+  const nodeId = await row.getAttribute("data-node-id");
+  if (nodeId === null) throw new Error("reduced-motion centring fixture is missing");
+  await row.locator(".material-file__open").click();
+  await expect(page.locator(".matter-world")).not.toHaveAttribute("data-camera-motion", "index");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.883");
+  await expectThoughtAtVisualCentre(page, nodeId);
+});
+
+test("a manual Pan gesture takes over the camera at its rendered mid-flight position", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+
+  const row = page.locator("aside.material-files .material-file").nth(8);
+  const world = page.locator(".matter-world");
+  await row.locator(".material-file__open").click();
+  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await page.waitForTimeout(60);
+
+  const paper = await page.locator(".matter-document").boundingBox();
+  if (paper === null) throw new Error("camera handoff paper is missing");
+  await page.mouse.move(paper.x + paper.width * .85, paper.y + paper.height * .15);
+  const before = await page.locator("main.matter-shell").evaluate((shell) => {
+    const worldElement = shell.querySelector<HTMLElement>(".matter-world");
+    if (worldElement === null) throw new Error("camera handoff world is missing");
+    const matrix = new DOMMatrixReadOnly(getComputedStyle(worldElement).transform);
+    return {
+      finalX: Number((shell as HTMLElement).dataset.viewportX),
+      finalY: Number((shell as HTMLElement).dataset.viewportY),
+      renderedX: matrix.e,
+      renderedY: matrix.f,
+    };
+  });
+  expect(Math.hypot(before.finalX - before.renderedX, before.finalY - before.renderedY))
+    .toBeGreaterThan(20);
+
+  await page.evaluate(() => {
+    const shell = document.querySelector<HTMLElement>("main.matter-shell");
+    if (shell === null) throw new Error("camera handoff shell is missing");
+    document.addEventListener("pointerdown", () => {
+      const worldElement = shell.querySelector<HTMLElement>(".matter-world");
+      if (worldElement === null) throw new Error("camera handoff world is missing");
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(worldElement).transform);
+      shell.dataset.e2ePointerDownRenderedX = String(matrix.e);
+      shell.dataset.e2ePointerDownRenderedY = String(matrix.f);
+    }, { capture: true, once: true });
+  });
+  await page.mouse.down();
+  await expect(world).not.toHaveAttribute("data-camera-motion", "index");
+  const handedOff = await page.locator("main.matter-shell").evaluate((shell) => ({
+    x: Number((shell as HTMLElement).dataset.viewportX),
+    y: Number((shell as HTMLElement).dataset.viewportY),
+    renderedAtPointerDownX: Number((shell as HTMLElement).dataset.e2ePointerDownRenderedX),
+    renderedAtPointerDownY: Number((shell as HTMLElement).dataset.e2ePointerDownRenderedY),
+  }));
+  expect(Math.hypot(
+    handedOff.x - handedOff.renderedAtPointerDownX,
+    handedOff.y - handedOff.renderedAtPointerDownY,
+  ))
+    .toBeLessThan(16);
+  await page.mouse.up();
+});
+
+test("a dominant narrow drawer shifts index attention into the exposed canvas", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.locator(".matter-document").dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 200,
+    clientY: 430,
+    ctrlKey: true,
+    deltaMode: 0,
+    deltaY: 2_000,
+  });
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.6");
+  const sidebar = page.locator("aside.material-files");
+  await page.getByRole("button", { name: /material files/i }).click();
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  const row = sidebar.locator(".material-file").nth(8);
+  const nodeId = await row.getAttribute("data-node-id");
+  if (nodeId === null) throw new Error("narrow attention fixture is missing");
+  await row.locator(".material-file__open").click();
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.883");
+
+  await expect.poll(async () => page.locator(
+    `[data-layout-node-id="${nodeId}"] .spatial-thought__text`,
+  ).evaluate((element) => {
+    const target = element.getBoundingClientRect();
+    const drawer = document.querySelector("aside.material-files")!.getBoundingClientRect();
+    const canvas = document.querySelector(".matter-document")!.getBoundingClientRect();
+    const visual = window.visualViewport;
+    const expectedX = (Math.max(canvas.left, drawer.right) + canvas.right) / 2;
+    const expectedY = (visual?.offsetTop ?? 0) + (visual?.height ?? window.innerHeight) / 2;
+    return Math.max(
+      Math.abs(target.left + target.width / 2 - expectedX),
+      Math.abs(target.top + target.height / 2 - expectedY),
+    );
+  })).toBeLessThanOrEqual(1);
+});
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
@@ -73,6 +286,17 @@ for (const viewport of [
     // first-level material and may share its wording with that metadata.
     await expect(contextRow).toHaveAttribute("data-node-id", rootId);
     await expect(rows).toHaveCount(10);
+    await expect(sidebar.getByRole("tree", { name: /Markdown material tree/u })).toHaveCount(1);
+    await expect(sidebar.getByRole("treeitem")).toHaveCount(10);
+    const accessibleHierarchy = await rows.evaluateAll((elements) => elements.map((row) => ({
+      level: Number(row.getAttribute("aria-level")),
+      position: Number(row.getAttribute("aria-posinset")),
+      setSize: Number(row.getAttribute("aria-setsize")),
+    })));
+    expect(new Set(accessibleHierarchy.map(({ level }) => level))).toEqual(new Set([1, 2, 3]));
+    expect(accessibleHierarchy.every(({ position, setSize }) =>
+      position >= 1 && position <= setSize,
+    )).toBe(true);
     await expect(sidebar.locator(".material-file__context-control")).toHaveCount(10);
     if (viewport.name === "narrow") {
       const browseActionTargets = await sidebar.locator(
@@ -95,8 +319,9 @@ for (const viewport of [
     await expect(activeReceiptRow.locator(".material-file__context-control--set-aside")).toHaveCSS("pointer-events", "none");
     await activeReceiptRow.evaluate((element) => element.removeAttribute("data-active"));
     await expect(sidebar.locator(".material-files__tree-guide")).not.toHaveCount(0);
-    // The fixture root has three visible direct children. Their two adjacent
-    // relations stay separate even though each child owns an open subtree.
+    // Sibling guides remain directed arrow-to-control relations. The final
+    // expanded sibling adds one branch-scope tail to its own last descendant;
+    // it is not a child connector and it never uses the viewport as authority.
     const fixtureBranchId = await rows.nth(0).getAttribute("data-node-id");
     if (fixtureBranchId === null) throw new Error("fixture branch is missing");
     const browseTitleInset = await rows.nth(0).evaluate((row) => {
@@ -104,47 +329,92 @@ for (const viewport of [
       if (title === null) throw new Error("fixture title is missing");
       return title.getBoundingClientRect().x - row.getBoundingClientRect().x;
     });
-    await expect(sidebar.locator(`[data-guide-parent="${fixtureBranchId}"]`)).toHaveCount(2);
-    // Guide geometry is anchored to its own context action, not an independently
-    // tuned overlay offset. Endpoints leave the action's centre readable.
-    const guideAlignment = await sidebar.locator(`[data-guide-parent="${fixtureBranchId}"]`).evaluateAll((guides) => {
+    await expect(sidebar.locator(`[data-guide-parent="${fixtureBranchId}"]`)).toHaveCount(3);
+    await expect(sidebar.locator(
+      `[data-guide-parent="${fixtureBranchId}"][data-guide-kind="branch-tail"]`,
+    )).toHaveCount(1);
+    // Every edge begins below its source disclosure. Sibling relations stop
+    // above the next control; the tail turns at its last descendant's centre.
+    const guideAlignment = await sidebar.locator(".material-files__tree-guide").evaluateAll((guides) => {
       const rows = Array.from(document.querySelectorAll<HTMLElement>(".material-files .material-file"));
       return guides.map((guide) => {
         const from = Number(guide.getAttribute("data-guide-from"));
         const to = Number(guide.getAttribute("data-guide-to"));
-        const fromControl = rows[from]?.querySelector<HTMLElement>(".material-file__structure-control");
-        const toControl = rows[to]?.querySelector<HTMLElement>(".material-file__structure-control");
-        if (fromControl === null || fromControl === undefined || toControl === null || toControl === undefined) {
+        const kind = guide.getAttribute("data-guide-kind");
+        const fromControl = rows[from]?.querySelector<HTMLElement>(
+          ".material-file__structure-control[data-structure-action='expanded'], .material-file__structure-control[data-structure-action='collapsed']",
+        );
+        const toControl = rows[to]?.querySelector<HTMLElement>(
+          ".material-file__structure-control, .material-file__context-space",
+        );
+        if (
+          fromControl === null ||
+          fromControl === undefined ||
+          toControl === null ||
+          toControl === undefined
+        ) {
           throw new Error("guide endpoint control is missing");
         }
         const guideRect = guide.getBoundingClientRect();
         const fromRect = fromControl.getBoundingClientRect();
         const toRect = toControl.getBoundingClientRect();
+        const guideStyle = getComputedStyle(guide);
+        const endpointStyle = getComputedStyle(guide, "::after");
+        let compressedWidth: number | null = null;
+        if (kind === "branch-tail") {
+          guide.style.setProperty("--material-file-max-indent", "0px");
+          compressedWidth = guide.getBoundingClientRect().width;
+          guide.style.removeProperty("--material-file-max-indent");
+        }
         return {
           bottom: guideRect.bottom,
+          branchId: guide.getAttribute("data-guide-branch"),
+          compressedWidth,
+          endpointContent: endpointStyle.content,
           fromCenter: fromRect.left + fromRect.width / 2,
           fromMiddle: fromRect.top + fromRect.height / 2,
-          guideCenter: guideRect.left + guideRect.width / 2,
-          iconSize: Number.parseFloat(getComputedStyle(fromControl.querySelector("svg")!).width),
-          fromClearance: fromControl.dataset.structureAction === "leaf" ? 6 : 8,
-          toClearance: toControl.dataset.structureAction === "leaf" ? 6 : 8,
+          guideAxis: kind === "branch-tail"
+            ? guideRect.left + Number.parseFloat(guideStyle.borderLeftWidth) / 2
+            : guideRect.left + guideRect.width / 2,
+          iconSize: fromControl.querySelector("svg") === null
+            ? 0
+            : Number.parseFloat(getComputedStyle(fromControl.querySelector("svg")!).width),
+          fromClearance: 8,
+          horizontalEnd: guideRect.right,
+          kind,
+          sourceId: rows[from]?.dataset.nodeId,
+          tailEnd: guide.getAttribute("data-guide-tail-end"),
+          targetSlotCenter: toRect.left + toRect.width / 2,
+          toClearance: toControl.matches(".material-file__structure-control") ? 8 : 6,
           toMiddle: toRect.top + toRect.height / 2,
           top: guideRect.top,
+          width: guideRect.width,
         };
       });
     });
     for (const guide of guideAlignment) {
-      expect(Math.abs(guide.guideCenter - guide.fromCenter)).toBeLessThanOrEqual(0.25);
+      expect(Math.abs(guide.guideAxis - guide.fromCenter)).toBeLessThanOrEqual(0.25);
       expect(guide.top - guide.fromMiddle).toBeCloseTo(guide.fromClearance, 0);
-      expect(guide.toMiddle - guide.bottom).toBeCloseTo(guide.toClearance, 0);
-      expect(guide.iconSize).toBeCloseTo(11, 0);
+      expect(guide.endpointContent).toBe("none");
+      expect(guide.iconSize === 0 || Math.abs(guide.iconSize - 11) <= .5).toBe(true);
+      if (guide.kind === "branch-tail") {
+        expect(guide.tailEnd).toBe("true");
+        expect(guide.branchId).toBe(guide.sourceId);
+        expect(guide.bottom).toBeCloseTo(guide.toMiddle, 0);
+        expect(guide.width).toBeGreaterThan(0);
+        expect(guide.width).toBeLessThanOrEqual(14.1);
+        expect(guide.targetSlotCenter - guide.horizontalEnd).toBeGreaterThanOrEqual(1.5);
+        expect(guide.compressedWidth).toBeLessThanOrEqual(1.1);
+      } else {
+        expect(guide.toMiddle - guide.bottom).toBeCloseTo(guide.toClearance, 0);
+      }
     }
     const rootTitle = (await contextTitle.innerText()).trim();
     expect(rootTitle).toBe("被允许想象的其他生活");
     await expect(rows.locator(".material-file__title").filter({ hasText: /^被允许想象的其他生活$/u }))
       .toHaveCount(1);
-    // The seeded outline finishes every leaf at its deepest level; it therefore
-    // stays quiet rather than looking like a collection of false disclosures.
+    // Each leaf group in this fixture is locally terminal (all siblings are
+    // leaves), so another deeper group cannot manufacture terminal points.
     await expect(sidebar.locator(".material-file__terminal-marker")).toHaveCount(0);
     const rowPaths = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-markdown-path")),
@@ -272,6 +542,8 @@ for (const viewport of [
     await expect(rows).toHaveCount(0);
     await expect(sidebar.locator(".material-files__empty")).toContainText("Type to find a thought.");
     const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
+    await expect(search).toBeFocused();
+    await expect(search).toHaveCSS("outline-width", "2px");
     await expect(search).toHaveAttribute("placeholder", "Find thought");
     await expect(controls.locator(".material-files__search")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
     const controlAxesDuringSearch = {
@@ -300,10 +572,26 @@ for (const viewport of [
     expect(searchFit.available).toBeGreaterThan(searchFit.required);
     await search.fill(searchText.slice(0, 5));
     await expect(rows).toHaveCount(1);
+    await expect(controls.locator("[aria-live='polite']")).toHaveText("1 material result");
     await expect(rows.first().locator(".material-file__path")).toHaveCount(1);
-    await sidebar.getByRole("button", { name: "Close search" }).click();
+    await search.dispatchEvent("keydown", { key: "Escape", isComposing: true });
+    await expect(sidebar).toHaveAttribute("data-mode", "search");
+    await search.press("Escape");
     await expect(sidebar).toHaveAttribute("data-mode", "browse");
+    await expect(searchTrigger).toBeFocused();
     await expect(rows).toHaveCount(10);
+    // The first Escape belongs to search. A second Escape closes only an
+    // overlay drawer and returns keyboard authority to its external handle.
+    await page.keyboard.press("Escape");
+    if (viewport.name === "narrow") {
+      await expect(sidebar).not.toHaveAttribute("data-open", "true");
+      await expect(toggle).toBeFocused();
+      await toggle.click();
+      await expect(sidebar).toHaveAttribute("data-open", "true");
+    } else {
+      await expect(sidebar).toHaveAttribute("data-open", "true");
+      await expect(toggle).toHaveCount(0);
+    }
 
     // The index remains fully available for a new admitted thought.
     await rows.first().locator(".material-file__open").click();
@@ -333,20 +621,9 @@ for (const viewport of [
     })).toBeCloseTo(browseTitleInset, 0);
     await expect(selectedModeRow.locator(".material-file__check-mark")).toHaveCSS("width", "11px");
     await expect(selectedModeRow.locator(".material-file__check-mark")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    await expect(sidebar.locator(".material-files__tree-guide")).not.toHaveCount(0);
-    const selectGuideAxis = await sidebar.locator(".material-files__tree-guide").first().evaluate((guide) => {
-      const fromIndex = Number(guide.getAttribute("data-guide-from"));
-      const row = document.querySelectorAll<HTMLElement>(".material-files .material-file")[fromIndex];
-      const checkbox = row?.querySelector<HTMLElement>(".material-file__check-mark");
-      if (checkbox === null || checkbox === undefined) throw new Error("select guide endpoint is missing");
-      const guideRect = guide.getBoundingClientRect();
-      const checkboxRect = checkbox.getBoundingClientRect();
-      return {
-        checkboxCenter: checkboxRect.left + checkboxRect.width / 2,
-        guideCenter: guideRect.left + guideRect.width / 2,
-      };
-    });
-    expect(Math.abs(selectGuideAxis.guideCenter - selectGuideAxis.checkboxCenter)).toBeLessThanOrEqual(.25);
+    // Selection has checkboxes rather than structural arrows and must not
+    // manufacture arrow rails from that alternate projection.
+    await expect(sidebar.locator(".material-files__tree-guide")).toHaveCount(0);
     if (viewport.name === "narrow") {
       const coarseTargets = await sidebar.locator(
         "button:not(:disabled), label.material-file__check",
@@ -376,6 +653,154 @@ for (const viewport of [
   });
 }
 
+test("the flat virtual DOM follows tree keyboard semantics", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const sidebar = page.locator("aside.material-files");
+  const items = sidebar.getByRole("treeitem");
+  await expect(items).toHaveCount(10);
+  await items.first().focus();
+  await expect(items.first()).toBeFocused();
+  await expect(items.first()).toHaveCSS("outline-width", "2px");
+  await expect(items.first().locator(".material-file__structure-control")).toHaveAttribute("tabindex", "-1");
+  await expect(items.first().locator(".material-file__open")).toHaveAttribute("tabindex", "-1");
+  await page.keyboard.press("Tab");
+  await expect(items.first().locator(".material-file__context-control--set-aside")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(items.first()).toBeFocused();
+
+  await page.keyboard.press("ArrowDown");
+  await expect(items.nth(1)).toBeFocused();
+  await expect(items.nth(1)).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("ArrowLeft");
+  await expect(items.nth(1)).toHaveAttribute("aria-expanded", "false");
+  await expect(items).toHaveCount(8);
+  await page.keyboard.press("ArrowRight");
+  await expect(items.nth(1)).toHaveAttribute("aria-expanded", "true");
+  await expect(items).toHaveCount(10);
+  await page.keyboard.press("ArrowRight");
+  await expect(items.nth(2)).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(items.first()).toBeFocused();
+
+  const searchTrigger = sidebar.getByRole("button", { name: "Search thoughts" });
+  await searchTrigger.click();
+  const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
+  await search.fill("时间");
+  const result = sidebar.getByRole("listitem").first();
+  await expect(result).toBeVisible();
+  await search.press("ArrowDown");
+  await expect(result).toBeFocused();
+  await expect(result.locator(".material-file__open")).toHaveAttribute("tabindex", "-1");
+});
+
+test("a mixed sibling group renders one directed arrow-to-terminal guide", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const sidebar = page.locator("aside.material-files");
+  const rows = sidebar.locator(".material-file");
+  const initialIds = await rows.evaluateAll((elements) =>
+    elements.map((element) => element.dataset.nodeId ?? ""),
+  );
+  const parentId = initialIds[1];
+  const firstLeafId = initialIds[2];
+  const secondLeafId = initialIds[3];
+  if (parentId === undefined || firstLeafId === undefined || secondLeafId === undefined) {
+    throw new Error("mixed sibling fixture is incomplete");
+  }
+
+  await sidebar.locator(`[data-node-id="${firstLeafId}"] .material-file__open`).click();
+  await page.getByRole("button", { name: "Extend related thought", exact: true }).click();
+  await expect(rows).toHaveCount(11);
+  const afterNestedInsert = await rows.evaluateAll((elements) =>
+    elements.map((element) => element.dataset.nodeId ?? ""),
+  );
+  const nestedLeafId = afterNestedInsert.find((id) => !initialIds.includes(id));
+  if (nestedLeafId === undefined) throw new Error("nested leaf was not admitted");
+
+  await sidebar.locator(`[data-node-id="${parentId}"] .material-file__open`).click();
+  await page.getByRole("button", { name: "Extend related thought", exact: true }).click();
+  await expect(rows).toHaveCount(12);
+  const finalIds = await rows.evaluateAll((elements) =>
+    elements.map((element) => element.dataset.nodeId ?? ""),
+  );
+  const directLeafId = finalIds.find((id) =>
+    !afterNestedInsert.includes(id),
+  );
+  if (directLeafId === undefined) throw new Error("direct terminal leaf was not admitted");
+
+  const branchRow = sidebar.locator(`[data-node-id="${firstLeafId}"]`);
+  const firstTerminal = sidebar.locator(`[data-node-id="${secondLeafId}"]`);
+  const secondTerminal = sidebar.locator(`[data-node-id="${directLeafId}"]`);
+  const nestedTerminalLevel = sidebar.locator(`[data-node-id="${nestedLeafId}"]`);
+  await expect(branchRow.locator(
+    ".material-file__structure-control[data-structure-action='expanded']",
+  )).toHaveCount(1);
+  await expect(firstTerminal.locator(".material-file__terminal-marker")).toHaveCount(1);
+  await expect(secondTerminal.locator(".material-file__terminal-marker")).toHaveCount(1);
+  await expect(nestedTerminalLevel.locator(".material-file__terminal-marker")).toHaveCount(0);
+
+  const branchIndex = Number(await branchRow.getAttribute("data-projection-index"));
+  const firstTerminalIndex = Number(await firstTerminal.getAttribute("data-projection-index"));
+  const secondTerminalIndex = Number(await secondTerminal.getAttribute("data-projection-index"));
+  const guide = sidebar.locator(`[data-guide-parent="${parentId}"]`);
+  await expect(guide).toHaveCount(1);
+  await expect(guide).toHaveAttribute("data-guide-from", String(branchIndex));
+  await expect(guide).toHaveAttribute("data-guide-to", String(firstTerminalIndex));
+  await expect(sidebar.locator(`[data-guide-from="${firstTerminalIndex}"]`)).toHaveCount(0);
+  await expect(sidebar.locator(`[data-guide-from="${secondTerminalIndex}"]`)).toHaveCount(0);
+
+  // Collapsing removes the only interior child row. The local leaf points stay
+  // truthful, but the now-adjacent controls must not retain a short connector.
+  await branchRow.locator(".material-file__structure-control").click();
+  await expect(branchRow).not.toHaveAttribute("data-expanded", "true");
+  await expect(sidebar.locator(`[data-guide-parent="${parentId}"]`)).toHaveCount(0);
+  await expect(firstTerminal.locator(".material-file__terminal-marker")).toHaveCount(1);
+  await expect(secondTerminal.locator(".material-file__terminal-marker")).toHaveCount(1);
+  await branchRow.locator(".material-file__structure-control").click();
+  await expect(branchRow).toHaveAttribute("data-expanded", "true");
+  await expect(sidebar.locator(`[data-guide-parent="${parentId}"]`)).toHaveCount(1);
+});
+
+test("deleted local selection and disclosure do not return with Undo", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const sidebar = page.locator("aside.material-files");
+  const rows = sidebar.locator(".material-file");
+  const branch = rows.nth(1);
+  const branchId = await branch.getAttribute("data-node-id");
+  if (branchId === null) throw new Error("transient disclosure branch is missing");
+  await branch.locator(".material-file__structure-control").click();
+  await expect(rows).toHaveCount(8);
+  await page.locator(`[data-thought-id="${branchId}"] [data-thought-text-id]`).click();
+  await page.keyboard.press("Delete");
+  await expect(page.locator(`[data-thought-id="${branchId}"]`)).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await expect(page.locator(`[data-thought-id="${branchId}"]`)).toHaveCount(1);
+  await expect(sidebar.locator(`[data-node-id="${branchId}"]`)).toHaveAttribute("data-expanded", "true");
+  await expect(rows).toHaveCount(10);
+
+  await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+  const leaf = rows.last();
+  const leafId = await leaf.getAttribute("data-node-id");
+  if (leafId === null) throw new Error("transient selection leaf is missing");
+  await leaf.getByRole("checkbox").check();
+  await expect(sidebar).toContainText("1 selected");
+  await page.locator(`[data-thought-id="${leafId}"] [data-thought-text-id]`).click();
+  await page.keyboard.press("Delete");
+  await expect(sidebar).toContainText("0 selected");
+  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await expect(page.locator(`[data-thought-id="${leafId}"]`)).toHaveCount(1);
+  await expect(sidebar).toContainText("0 selected");
+  await expect(sidebar.locator(`[data-node-id="${leafId}"]`).getByRole("checkbox")).not.toBeChecked();
+});
+
 test("storage exhaustion stays discoverable with the narrow material drawer closed", async ({ page }) => {
   await page.addInitScript(() => {
     const originalPut = IDBObjectStore.prototype.put;
@@ -394,15 +819,73 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
 
   const sidebar = page.locator("aside.material-files");
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  // Visible text and accessible name must be in the canvas language, not one
-  // Chinese label beside an English one.
-  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("存储已满 · 先导出备份");
-  await sidebar.getByRole("button", { name: "打开归档，先导出材料再清理存储" }).click();
+  // Persistence recovery belongs to the explicit Archive surface. The quiet
+  // local identity must not turn into an error banner or acquire an action.
+  const identity = sidebar.locator(".material-files__profile");
+  await expect(identity).toContainText("采石者");
+  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("仅存于这台设备");
+  await expect(identity.getByRole("button")).toHaveCount(0);
+  await sidebar.getByRole("button", { name: "Archive" }).click();
 
   const archive = sidebar.getByRole("region", { name: "Material archive" });
   await expect(archive).toContainText("Local storage is full");
   await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
   await expect(archive.getByRole("button", { name: "Retry saving" })).toBeEnabled();
+});
+
+test("corrupt local material is exported before an explicit atomic repair", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  const sidebar = page.locator("aside.material-files");
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
+
+  await page.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("ptoq-matter");
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    try {
+      const transaction = database.transaction("snapshots", "readwrite");
+      const store = transaction.objectStore("snapshots");
+      const rows = await new Promise<unknown[]>((resolve, reject) => {
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      const row = rows[0] as { bundle: unknown } | undefined;
+      if (row === undefined) throw new Error("stored material is missing");
+      row.bundle = { files: {} };
+      store.put(row);
+      await new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error);
+      });
+    } finally {
+      database.close();
+    }
+  });
+
+  await page.reload();
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
+  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  const archive = sidebar.getByRole("region", { name: "Material archive" });
+  await expect(archive).toContainText("Export a recovery copy before Matter atomically replaces");
+  await expect(archive.getByRole("button", { name: "Repair local storage" })).toHaveCount(0);
+
+  const downloadReceipt = page.waitForEvent("download");
+  await archive.getByRole("button", { name: "Export a copy" }).click();
+  const download = await downloadReceipt;
+  expect(download.suggestedFilename()).toMatch(/\.matter-recovery\.json$/u);
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
+  await expect(archive.getByRole("button", { name: "Repair local storage" })).toBeEnabled();
+
+  await archive.getByRole("button", { name: "Repair local storage" }).click();
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
+  await page.reload();
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
 });
 
 test("a held-aside index branch is omitted from Ask Matter", async ({ page }) => {
@@ -482,3 +965,18 @@ test("Undo does not revive a held-aside decision after its branch was deleted", 
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).toHaveCount(1);
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).not.toHaveAttribute("data-context-excluded", "true");
 });
+
+async function expectThoughtAtVisualCentre(page: Page, nodeId: string): Promise<void> {
+  await expect.poll(async () => page.locator(
+    `[data-layout-node-id="${nodeId}"] .spatial-thought__text`,
+  ).evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const centreX = (viewport?.offsetLeft ?? 0) + (viewport?.width ?? window.innerWidth) / 2;
+    const centreY = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) / 2;
+    return Math.max(
+      Math.abs(rect.left + rect.width / 2 - centreX),
+      Math.abs(rect.top + rect.height / 2 - centreY),
+    );
+  })).toBeLessThanOrEqual(1);
+}

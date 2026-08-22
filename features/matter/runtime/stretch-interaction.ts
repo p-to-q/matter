@@ -7,7 +7,7 @@ export const STRETCH_COMMIT_THRESHOLD = 0.15;
 
 export type StretchPointerType = "mouse" | "pen" | "touch";
 
-export type StretchHandle = "bottom";
+export type StretchHandle = "top" | "bottom";
 
 export type StretchAnchor = Readonly<{
   selection: SegmentSelection;
@@ -27,12 +27,19 @@ export type StretchCommitBasis = Readonly<{
 export type StretchInteractionState =
   | Readonly<{ mode: "idle" }>
   | Readonly<{ mode: "armed"; anchor: StretchAnchor; amount: 0 }>
-  | Readonly<{ mode: "adjusted"; anchor: StretchAnchor; amount: number }>
+  | Readonly<{
+      mode: "adjusted";
+      anchor: StretchAnchor;
+      amount: number;
+      lastHandle: StretchHandle;
+    }>
   | Readonly<{
       mode: "dragging";
       anchor: StretchAnchor;
       amount: number;
       priorAmount: number;
+      priorLastHandle: StretchHandle | null;
+      handle: StretchHandle;
       pointerId: number;
       pointerType: StretchPointerType;
       startClientY: number;
@@ -43,7 +50,7 @@ export type StretchInteractionState =
       mode: "committed";
       anchor: StretchAnchor;
       amount: number;
-      lastHandle: "bottom";
+      lastHandle: StretchHandle;
       basis: StretchCommitBasis;
     }>;
 
@@ -63,8 +70,7 @@ export type StretchInteractionEvent =
   | Readonly<{ type: "pointer-up"; pointerId: number; clientY: number }>
   | Readonly<{ type: "pointer-cancel"; pointerId: number }>
   | Readonly<{ type: "lost-pointer-capture"; pointerId: number }>
-  | Readonly<{ type: "set-amount"; amount: number; handle?: StretchHandle }>
-  | Readonly<{ type: "key-down"; key: string }>
+  | Readonly<{ type: "key-down"; key: string; handle?: StretchHandle }>
   | Readonly<{ type: "reopen" }>
   | Readonly<{ type: "selection-invalidated" }>
   | Readonly<{ type: "material-invalidated" }>
@@ -74,9 +80,9 @@ export type StretchInteractionEvent =
   | Readonly<{ type: "resize-invalidated" }>;
 
 /**
- * Owns one downward stretch degree and its release boundary. The returned
- * commit basis is data only; requests and durable mutation stay outside this
- * reducer and its browser hook.
+ * Owns one non-negative stretch degree across two physical grips and their
+ * shared release boundary. The returned commit basis is data only; requests
+ * and durable mutation stay outside this reducer and its browser hook.
  */
 export function createStretchInteractionState(): StretchInteractionState {
   return IDLE;
@@ -101,7 +107,7 @@ export function reduceStretchInteraction(
     case "pointer-down":
       if (
         (state.mode !== "armed" && state.mode !== "adjusted" && state.mode !== "committed") ||
-        event.handle !== "bottom" ||
+        !isHandle(event.handle) ||
         !event.isPrimary ||
         event.button !== 0 ||
         !isPointerId(event.pointerId) ||
@@ -115,6 +121,10 @@ export function reduceStretchInteraction(
         anchor: ownAnchor(state.anchor),
         amount: state.amount,
         priorAmount: state.amount,
+        priorLastHandle: state.mode === "adjusted" || state.mode === "committed"
+          ? state.lastHandle
+          : null,
+        handle: event.handle,
         pointerId: event.pointerId,
         pointerType: event.pointerType,
         startClientY: event.clientY,
@@ -123,7 +133,7 @@ export function reduceStretchInteraction(
       });
     case "reopen":
       return state.mode === "committed"
-        ? adjustedState(state.anchor, state.amount)
+        ? adjustedState(state.anchor, state.amount, state.lastHandle)
         : state;
     case "pointer-move":
       return moveOwnedPointer(state, event.pointerId, event.clientY);
@@ -135,33 +145,36 @@ export function reduceStretchInteraction(
       }
       if (!moved.crossedDeadzone) {
         return moved.tapCommits
-          ? commitOrReset(moved.anchor, moved.priorAmount)
-          : adjustedState(moved.anchor, moved.priorAmount);
+          ? commitOrReset(moved.anchor, moved.priorAmount, moved.handle)
+          : adjustedState(
+              moved.anchor,
+              moved.priorAmount,
+              moved.priorLastHandle ?? moved.handle,
+            );
       }
-      return commitOrReset(moved.anchor, moved.amount);
+      return commitOrReset(moved.anchor, moved.amount, moved.handle);
     }
     case "pointer-cancel":
     case "lost-pointer-capture":
       if (state.mode !== "dragging" || state.pointerId !== event.pointerId) {
         return state;
       }
-      return adjustedState(state.anchor, state.priorAmount);
-    case "set-amount":
-      if (
-        (state.mode !== "armed" && state.mode !== "adjusted") ||
-        !Number.isFinite(event.amount) ||
-        (event.handle !== undefined && event.handle !== "bottom")
-      ) {
-        return state;
-      }
-      return adjustedState(state.anchor, clampAmount(event.amount));
+      return adjustedState(
+        state.anchor,
+        state.priorAmount,
+        state.priorLastHandle ?? state.handle,
+      );
     case "key-down":
-      return reduceKeyDown(state, event.key);
+      return reduceKeyDown(state, event.key, event.handle);
     case "layout-invalidated":
     case "scroll-invalidated":
     case "resize-invalidated":
       return state.mode === "dragging"
-        ? adjustedState(state.anchor, state.priorAmount)
+        ? adjustedState(
+            state.anchor,
+            state.priorAmount,
+            state.priorLastHandle ?? state.handle,
+          )
         : state;
     default:
       return assertNever(event);
@@ -184,31 +197,22 @@ function moveOwnedPointer(
   const crossedDeadzone =
     state.crossedDeadzone || Math.abs(delta) > deadzoneFor(state.pointerType);
   if (!crossedDeadzone) return state;
-  const amount = stretchAmountFromClientDelta(state.priorAmount, delta);
+  const amount = stretchAmountFromClientDelta(state.priorAmount, delta, state.handle);
   if (state.crossedDeadzone && amount === state.amount) return state;
   return Object.freeze({ ...state, amount, crossedDeadzone: true });
 }
 
-/** Downward client-pixel travel expands; upward travel reduces toward zero. */
+/** Outward travel expands either grip; reversing reduces the shared degree. */
 export function stretchAmountFromClientDelta(
   priorAmount: number,
   deltaClientY: number,
+  handle: StretchHandle = "bottom",
 ): number {
-  if (!isAmount(priorAmount) || !Number.isFinite(deltaClientY)) {
+  if (!isAmount(priorAmount) || !Number.isFinite(deltaClientY) || !isHandle(handle)) {
     return priorAmount;
   }
-  return clampAmount(priorAmount + deltaClientY / STRETCH_TRAVEL_PX);
-}
-
-/** Maps one pointer-up on the transient rail without starting a drag. */
-export function stretchAmountFromRailPosition(
-  clientY: number,
-  railTop: number,
-  railHeight: number = STRETCH_TRAVEL_PX,
-): number | null {
-  if (!Number.isFinite(clientY) || !Number.isFinite(railTop) ||
-      !Number.isFinite(railHeight) || railHeight <= 0) return null;
-  return clampAmount((clientY - railTop) / railHeight);
+  const directedDelta = handle === "top" ? -deltaClientY : deltaClientY;
+  return clampAmount(priorAmount + directedDelta / STRETCH_TRAVEL_PX);
 }
 
 export function isStretchInteractionKey(key: string): boolean {
@@ -227,33 +231,46 @@ export function stretchCommitBasisFromTransition(
 function reduceKeyDown(
   state: StretchInteractionState,
   key: string,
+  handle: StretchHandle | undefined,
 ): StretchInteractionState {
-  if (!isStretchInteractionKey(key) || state.mode === "idle") return state;
+  if (
+    !isStretchInteractionKey(key) || state.mode === "idle" ||
+    (handle !== undefined && !isHandle(handle))
+  ) return state;
   if (key === "Escape") {
     return state.mode === "dragging"
-      ? adjustedState(state.anchor, state.priorAmount)
+      ? adjustedState(
+          state.anchor,
+          state.priorAmount,
+          state.priorLastHandle ?? state.handle,
+        )
       : armedState(state.anchor);
   }
   if (state.mode === "dragging" || state.mode === "committed") return state;
+  const activeHandle = handle ?? (state.mode === "adjusted" ? state.lastHandle : "bottom");
   if (key === "Enter" || key === " ") {
-    return commitOrReset(state.anchor, state.amount);
+    return commitOrReset(state.anchor, state.amount, activeHandle);
   }
   const amount = state.amount;
   switch (key) {
-    case "ArrowDown":
     case "ArrowRight":
-      return adjustedState(state.anchor, amount + KEYBOARD_STEP);
     case "ArrowUp":
+      return adjustedState(state.anchor, amount + KEYBOARD_STEP, activeHandle);
     case "ArrowLeft":
-      return adjustedState(state.anchor, amount - KEYBOARD_STEP);
+    case "ArrowDown":
+      return adjustedState(
+        state.anchor,
+        amount - KEYBOARD_STEP,
+        activeHandle,
+      );
     case "PageUp":
-      return adjustedState(state.anchor, amount + KEYBOARD_PAGE_STEP);
+      return adjustedState(state.anchor, amount + KEYBOARD_PAGE_STEP, activeHandle);
     case "PageDown":
-      return adjustedState(state.anchor, amount - KEYBOARD_PAGE_STEP);
+      return adjustedState(state.anchor, amount - KEYBOARD_PAGE_STEP, activeHandle);
     case "Home":
       return armedState(state.anchor);
     case "End":
-      return adjustedState(state.anchor, 1);
+      return adjustedState(state.anchor, 1, activeHandle);
     default:
       return state;
   }
@@ -268,6 +285,7 @@ function deadzoneFor(pointerType: StretchPointerType): number {
 function commitOrReset(
   anchor: StretchAnchor,
   amount: number,
+  handle: StretchHandle,
 ): StretchInteractionState {
   if (amount < STRETCH_COMMIT_THRESHOLD) return armedState(anchor);
   const ownedAnchor = ownAnchor(anchor);
@@ -282,7 +300,7 @@ function commitOrReset(
     mode: "committed",
     anchor: ownedAnchor,
     amount,
-    lastHandle: "bottom",
+    lastHandle: handle,
     basis,
   });
 }
@@ -290,11 +308,17 @@ function commitOrReset(
 function adjustedState(
   anchor: StretchAnchor,
   amount: number,
+  lastHandle: StretchHandle,
 ): StretchInteractionState {
   const bounded = clampAmount(amount);
   return bounded === 0
     ? armedState(anchor)
-    : Object.freeze({ mode: "adjusted", anchor: ownAnchor(anchor), amount: bounded });
+    : Object.freeze({
+        mode: "adjusted",
+        anchor: ownAnchor(anchor),
+        amount: bounded,
+        lastHandle,
+      });
 }
 
 function armedState(anchor: StretchAnchor): StretchInteractionState {
@@ -350,6 +374,10 @@ function isPointerId(pointerId: number): boolean {
 
 function isPointerType(value: string): value is StretchPointerType {
   return value === "mouse" || value === "pen" || value === "touch";
+}
+
+function isHandle(value: string): value is StretchHandle {
+  return value === "top" || value === "bottom";
 }
 
 function isAmount(value: number): boolean {

@@ -67,6 +67,7 @@ describe("text-swap/1 contract", () => {
     expect(parseTextSwapEnvelope({ ...envelope(), gesture: { type: "stretch" } }).ok).toBe(false);
     expect(parseTextSwapEnvelope({ ...envelope(), voice: { transcript: "rewrite" } }).ok).toBe(false);
     expect(parseTextSwapEnvelope(envelope({ requestVersion: "transform/2" })).ok).toBe(false);
+    expect(parseTextSwapEnvelope(envelope({ requestVersion: "text-swap/2" })).ok).toBe(false);
     expect(parseTextSwapEnvelope(envelope({ direction: { text: "one\ntwo" } })).ok).toBe(false);
     expect(parseTextSwapEnvelope(envelope({ context: { lineage: [
       { id: "document", text: "", parentId: null, createdAt: TIME, updatedAt: TIME },
@@ -74,10 +75,24 @@ describe("text-swap/1 contract", () => {
     ] } })).ok).toBe(false);
   });
 
-  it("requires exactly one current punctuation segment", () => {
+  it("rejects a multi-segment whole node and split-grapheme authority", () => {
     expect(parseTextSwapEnvelope(envelope({
       selection: { type: "segment-range", nodeId: "thought", start: 0, end: TEXT.length, selectedText: TEXT },
     })).ok).toBe(false);
+    const unsafe = "a👨‍👩‍👧‍👦b";
+    expect(parseTextSwapEnvelope(envelope({
+      selection: { type: "segment-range", nodeId: "thought", start: 1, end: 2, selectedText: unsafe.slice(1, 2) },
+      context: { lineage: [{ id: "thought", text: unsafe, parentId: null, createdAt: TIME, updatedAt: TIME }] },
+    })).ok).toBe(false);
+  });
+
+  it("accepts a one-sentence node when its single segment fills the node", () => {
+    expect(parseTextSwapEnvelope(envelope({
+      selection: { type: "segment-range", nodeId: "thought", start: 0, end: PASSAGE.length, selectedText: PASSAGE },
+      context: { lineage: [
+        { id: "thought", text: PASSAGE, parentId: null, createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(true);
   });
 
   it("accepts the tree depth bound and rejects one extra visible lineage node", () => {

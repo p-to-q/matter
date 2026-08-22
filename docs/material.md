@@ -5,8 +5,8 @@ Matter does not add a separate memory or session system beside it.
 
 A lightweight inquiry may read either the transient lasso selection or a bounded
 projection of the active working material when no lasso selection exists.
-Drafts, pending state, voice partials, and a Text Swap direction are transient
-chrome. Completed
+Drafts, pending state, and voice partials are transient chrome. Dormant Text
+Swap direction data, when exercised by regression tests, is transient too. Completed
 question/answer exchanges may live in the separate, bounded local Ask Matter
 record, but never in the tree, material command history, or material archive.
 They are not replayed when the inquiry is opened again and never become model
@@ -70,7 +70,48 @@ exactly one root. The empty tree still has document identity and a monotonic
 revision; it does not invent a placeholder node. Child order is authored and
 meaningful. A node has no stored position: structure determines its presentation.
 
-## Segment
+## Lasso address
+
+A lasso has one transient semantic owner. Geometry may produce many wrapped DOM
+rectangles. One contiguous run in one node publishes an Elastic address:
+
+```ts
+type LassoAddress = {
+  kind: "contiguous-segment-range";
+  range: SegmentSelection;
+};
+```
+
+- adjacent current segments in one node merge into one contiguous range;
+- duplicate hits from wrapping collapse to that same range;
+- disconnected runs or runs in different nodes become a transient material
+  selection set; two or more selections expose no Elastic controls;
+- failed measurement or mixed authority is ambiguous and preserves the last
+  trustworthy state;
+- a trustworthy empty closed loop clears the address;
+- one range may cover the whole node, including a multi-clause title.
+
+One successful Elastic address stays in the current Full or Focus view, revalidates
+against the current material and layout, and then exposes two Elastic grips plus
+no other operation surface. The upper grip expands when pulled upward and the
+lower grip expands when pulled downward. The lower grip keeps the selected row
+fixed and moves its suffix plus lower material down; the upper grip keeps the
+prefix fixed and moves the selected segment, its suffix, and lower material
+down. The gesture never
+navigates, hides surrounding material, chooses a nearby sentence, or promotes a
+convenient first hit.
+
+The address contains node id, exact UTF-16 bounds, and selected text. Request
+start freezes tree id, revision, and document epoch around it. Both are transient
+render/domain state, not tree, history, persistence, archive, or model context;
+a mismatch clears the controls and revokes late work.
+
+`SegmentSelection` uses the strict discriminator `type: "segment-range"`.
+Offsets are UTF-16 code units, must start and end on a contiguous run of current
+derived segments, and must reproduce `selectedText` exactly. The dormant Text
+Swap grammar narrows this shared shape back to one exact segment.
+
+## Punctuation segment
 
 A segment is a punctuation-bounded range derived from a node's current text. It
 is never stored. The boundary set is:
@@ -81,16 +122,13 @@ Latin   ,   .   ;   :   !   ?
 Other   newline, start of text, end of text
 ```
 
-- a single segment replacement excludes its terminating punctuation;
-- merging adjacent segments includes their internal punctuation and preserves
-  only the outer terminating seam;
-- adjacent hit segments merge into one range;
-- a lasso may address several passages at once; each contiguous run becomes a
-  separate transient selection, and non-adjacent hits never merge across a
-  gap; exactly one current derived punctuation segment may expose either the
-  Elastic Language stretch handle or Text Swap, while an adjacent multi-segment
-  run or two or more passages form a selection set only, mark their source nodes
-  in the material index, and report only a compact count on the canvas;
+- a one-segment range excludes its terminating punctuation;
+- adjacent segments in one node may merge; their internal seams remain inside
+  the selected text and only the final segment's outer seam stays protected;
+- exactly one contiguous current `segment-range` may expose the two Elastic
+  Language grips; two or more passage ranges become material selection mode;
+- the dormant Text Swap grammar accepts only one exact segment and has no
+  current UI owner;
 - offsets are UTF-16 code-unit offsets and must land on grapheme boundaries;
 - text changes, resize, or zoom invalidate selection geometry.
 
@@ -109,17 +147,18 @@ type TextSegment = {
 Single punctuation graphemes are delimiters. `——` and longer em-dash runs
 delimit, while one `—` remains content. CRLF is one newline token. After
 non-whitespace content, the seam is the maximal run containing delimiter/newline
-tokens and horizontal whitespace, provided the run contains at least one
-delimiter or newline. Trailing horizontal whitespace also joins the final seam.
+tokens, horizontal whitespace, and closing punctuation that follows a proven
+terminal delimiter, provided the run contains at least one delimiter or newline.
+Contextual quote marks remain content unless their position proves they close
+that segment. Trailing horizontal whitespace also joins the final seam.
 Leading whitespace belongs to the first content range; leading delimiters are
 an unselectable prefix. Text containing only whitespace and delimiters has no
 selectable segment.
 
-Two segments are adjacent only when their indices are consecutive and the first
-`seamEnd` equals the second `start`. Their merged replacement is
-`[first.start, last.end)`. Address validation always uses
-`Intl.Segmenter("en", { granularity: "grapheme" })`; locale may guide language
-generation but never changes the material address.
+A selection must match one contiguous run of derived segments. Address
+validation uses `Intl.Segmenter("en", {
+granularity: "grapheme" })`; locale may guide language generation but never
+changes the material address.
 
 Structure is coarse; address is fine. A person speaks a passage, then points at
 a clause inside it.
@@ -158,24 +197,36 @@ lasso, inquiry, and later model-facing work until the `+` control returns them.
 It is never material, history, export, archive, or hidden retrieval. See
 [`reference/working-context.md`](reference/working-context.md).
 
-Lasso selection sets are interaction state. They preserve the visible order of
-the addressed passages and support copy, clear, and locate actions at the
-rendering edge. They are never serialized, sent as hidden context, or included
-in tree command history. Deleting a node remains a separate explicit tree
-action; selecting language does not imply deletion.
+The lasso address is interaction state. It is never serialized, sent as hidden
+context, or included in tree command history. Deleting a node remains a
+separate explicit tree action; selecting language does not imply deletion.
 
 The full view is depth-first order minus folded descendants. The focus view is
 the exact root-to-focus path and ignores folds along that path. A generative
-transformation can begin only in focus view, from exactly one current derived
-punctuation segment. Elastic Language requires a positive settled stretch;
-releasing it starts the fixed `expand-in-place` turn without recording, audio,
-or transcript. Text Swap is a mutually exclusive local mode: entering it hides
-and disables the Elastic grip, and the same Voice control records one bounded
-direction for the selected segment rather than admitting material. Full-view
-Voice admission is unchanged.
+transformation can begin in either view from one contiguous current segment run
+on an active node; Focus additionally requires that node to be the exact Focus
+node. In Full, surrounding material stays visible but is not implicit
+model context: the request carries only the authored root-to-selected-node
+lineage. Elastic Language requires a positive settled stretch; releasing it
+starts the fixed `expand-in-place` turn without recording, audio, or transcript.
+Starting Voice admission cancels any pending Elastic turn and passes a null
+selection to the stretch lifecycle until admission is idle again. The semantic
+lasso address may remain transiently available for revalidation, but its grips
+and network authority do not coexist with recording or transcription.
+Text Swap remains implemented as an inactive sibling grammar, but the current
+interface publishes no Text Swap address, direction control, or Voice rewrite
+authority. Full-view Voice admission is unchanged.
 
-Text Swap audio, partial transcript, final direction, carrier choice, pending
-state, and presentation receipt are transient interaction state. None enters the
+The two grips own one degree and one downward presentation band. Pulling the
+lower grip down keeps prefix and selection fixed and moves the suffix down.
+Pulling the upper grip up keeps its upper seam and prefix fixed while moving the
+selection plus suffix down. The mirrored physical directions open the same
+non-negative material pocket. The resulting bottom extent is transient layout input; it never
+enters the document or a network envelope.
+
+If Text Swap is reconsidered, its audio, partial transcript, final direction,
+carrier choice, pending state, and presentation receipt remain transient
+interaction state. None enters the
 tree, command history, persistence, archive, routine logs, or later model
 context. An optional selection-local typed fallback feeds the same direction
 port and has the same lifetime. A successful swap contributes only the complete

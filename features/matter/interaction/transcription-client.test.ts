@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_TRANSCRIPTION_RESPONSE_BYTES } from "../protocol/transcription-contract";
 import { requestTranscription, TranscriptionClientError } from "./transcription-client";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("requestTranscription", () => {
   it("accepts only the exact echoed success envelope", async () => {
@@ -52,6 +56,40 @@ describe("requestTranscription", () => {
     }
   });
 
+  it("refuses declared and actually oversized response bodies", async () => {
+    const stalled = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise(() => undefined),
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(stalled, {
+        headers: { "content-length": String(MAX_TRANSCRIPTION_RESPONSE_BYTES + 1) },
+      }))
+      .mockResolvedValueOnce(new Response("x".repeat(MAX_TRANSCRIPTION_RESPONSE_BYTES + 1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(request()).rejects.toMatchObject({
+        code: "INVALID_PROVIDER_RESPONSE",
+        retryable: true,
+      });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects malformed JSON and UTF-8 within the response bound", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("{"))
+      .mockResolvedValueOnce(new Response(new Uint8Array([0xff, 0xfe])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      await expect(request()).rejects.toMatchObject({
+        code: "INVALID_PROVIDER_RESPONSE",
+        retryable: true,
+      });
+    }
+  });
+
   it("bounds a fetch that never settles and reports a retryable timeout", async () => {
     vi.useFakeTimers();
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
@@ -64,7 +102,27 @@ describe("requestTranscription", () => {
     await vi.advanceTimersByTimeAsync(50);
 
     await assertion;
-    vi.useRealTimers();
+  });
+
+  it("keeps the same deadline while a response body is stalled", async () => {
+    vi.useFakeTimers();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+
+    const pending = request({ timeoutMs: 50 });
+    const assertion = expect(pending).rejects.toMatchObject({
+      code: "TRANSCRIPTION_TIMEOUT",
+      retryable: true,
+    });
+    await vi.advanceTimersByTimeAsync(50);
+
+    await assertion;
+    expect(cancelled).toBe(true);
   });
 
   it("keeps person cancellation distinct from a deadline", async () => {
@@ -79,6 +137,25 @@ describe("requestTranscription", () => {
     controller.abort();
 
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+
+  it("cancels a stalled response body when the owning interaction is cancelled", async () => {
+    const controller = new AbortController();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+
+    const pending = request({ signal: controller.signal });
+    await Promise.resolve();
+    await Promise.resolve();
+    controller.abort(new DOMException("Voice was cancelled.", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled).toBe(true);
   });
 });
 

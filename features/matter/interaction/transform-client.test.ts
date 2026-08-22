@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  MAX_TRANSFORM_RESPONSE_BYTES,
   TRANSFORM_CLIENT_TIMEOUT_MS,
   buildTransformPlan,
   parseTransformEnvelope,
@@ -63,6 +64,42 @@ describe("transform client", () => {
       .rejects.toMatchObject({ retryable: false, message: "Matter returned an invalid refusal." });
     await expect(requestTransform(envelope, new AbortController().signal))
       .rejects.toMatchObject({ retryable: false, message: "stale request" });
+  });
+
+  it("bounds streamed response bytes and refuses malformed JSON or UTF-8", async () => {
+    const envelope = fixtureEnvelope();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("x".repeat(MAX_TRANSFORM_RESPONSE_BYTES + 1)))
+      .mockResolvedValueOnce(new Response("{"))
+      .mockResolvedValueOnce(new Response(new Uint8Array([0xff, 0xfe])));
+    vi.stubGlobal("fetch", fetchMock);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(requestTransform(envelope, new AbortController().signal))
+        .rejects.toMatchObject({
+          retryable: false,
+          message: "Matter returned an invalid change.",
+        });
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("cancels a stalled response body when its owner aborts", async () => {
+    const envelope = fixtureEnvelope();
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream)));
+    const controller = new AbortController();
+    const pending = requestTransform(envelope, controller.signal);
+    await Promise.resolve();
+    controller.abort(new DOMException("The selection changed.", "AbortError"));
+
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    expect(cancelled).toBe(true);
   });
 
   it("lets the owner abort and keeps the client deadline at 16 seconds", async () => {

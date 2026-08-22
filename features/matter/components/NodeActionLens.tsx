@@ -17,11 +17,24 @@ import type { ThoughtTree } from "../tree/model";
 import type { ProjectedTool, ToolIntent } from "../tools/model";
 import { projectNodeActions } from "../tools/project-node-actions";
 import { MinusIcon, PlusIcon, ShowAllIcon } from "./icons";
-import { projectNodeHandleMetrics, projectNodeHandlePosition, type NodeHandleMetrics } from "./node-handle-position";
+import {
+  projectNodeHandleMetrics,
+  projectNodeHandlePosition,
+  type NodeHandleMetrics,
+  type NodeHandlePosition,
+} from "./node-handle-position";
 
 type LensTarget = Readonly<{
   nodeId: string;
   source: "focus" | "pointer" | "selection";
+}>;
+
+type LensPlacement = Readonly<{
+  left: number;
+  top: number;
+  metrics: NodeHandleMetrics;
+  relation: NodeHandlePosition["relation"];
+  materialCorner: NodeHandlePosition["materialCorner"];
 }>;
 
 export type NodeActionLensProps = Readonly<{
@@ -57,7 +70,7 @@ export function NodeActionLens({
   const [compact, setCompact] = useState(false);
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
   const [target, setTarget] = useState<LensTarget | null>(null);
-  const [placement, setPlacement] = useState<Readonly<{ left: number; top: number; metrics: NodeHandleMetrics }> | null>(null);
+  const [placement, setPlacement] = useState<LensPlacement | null>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const targetElementRef = useRef<HTMLElement | null>(null);
   const pendingKeyboardEntryRef = useRef<string | null>(null);
@@ -259,9 +272,18 @@ export function NodeActionLens({
       });
       const next = result === null
         ? null
-        : { left: result.left - paperRect.left, top: result.top - paperRect.top, metrics };
+        : {
+            left: result.left - paperRect.left,
+            top: result.top - paperRect.top,
+            metrics,
+            relation: result.relation,
+            materialCorner: result.materialCorner,
+          };
       setPlacement((current) => current !== null && next !== null &&
         current.left === next.left && current.top === next.top &&
+        current.relation === next.relation &&
+        current.materialCorner?.x === next.materialCorner?.x &&
+        current.materialCorner?.y === next.materialCorner?.y &&
         current.metrics.button === next.metrics.button && current.metrics.gap === next.metrics.gap &&
         current.metrics.paddingX === next.metrics.paddingX && current.metrics.paddingY === next.metrics.paddingY
         ? current
@@ -321,6 +343,7 @@ export function NodeActionLens({
       data-canvas-interactive
       data-node-action-lens
       data-node-id={activeTarget.nodeId}
+      data-relation={placement.relation}
       onBlur={(event) => {
         if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
         scheduleClose();
@@ -343,6 +366,8 @@ export function NodeActionLens({
         "--lens-gap": `${placement.metrics.gap}px`,
         "--lens-pad-x": `${placement.metrics.paddingX}px`,
         "--lens-pad-y": `${placement.metrics.paddingY}px`,
+        "--lens-material-x": `${placement.materialCorner?.x ?? placement.metrics.paddingX}px`,
+        "--lens-material-y": `${placement.materialCorner?.y ?? placement.metrics.paddingY}px`,
       } as CSSProperties}
     >
       {tools.map((tool, index) => (

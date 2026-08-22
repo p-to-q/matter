@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSeededDocument } from "../material/seeded-document";
-import type {
-  DocumentRepository,
-  LoadedSnapshot,
-  RepositoryResult,
+import {
+  STORAGE_SCHEMA_VERSION,
+  type CorruptSnapshotExport,
+  type DocumentRepository,
+  type ImportedSnapshotReservation,
+  type LoadedSnapshot,
+  type RepositoryResult,
 } from "./document-repository";
 import { createPersistenceController } from "./persistence-controller";
-import type { SnapshotBundle } from "./snapshot-codec";
-import type { TreeHistory } from "../tree/history";
+import { treeToBundle, type SnapshotBundle } from "./snapshot-codec";
+import { createTreeHistory, type TreeHistory } from "../tree/history";
+import { createDocumentImportCoordinator } from "./document-import-coordinator";
 
 describe("persistence controller", () => {
   it("loads a stored tree and reports the persisted revision", async () => {
@@ -192,25 +196,51 @@ describe("persistence controller", () => {
     expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
   });
 
-  it("CAS-saves a foreign imported tree before it becomes the active persistence document", async () => {
-    const current = createSeededDocument().tree;
-    const imported = { ...createSeededDocument().tree, id: "imported_tree" };
-    const saves: Array<{ treeId: string; expectedGeneration: number | null }> = [];
+  it("CAS-reserves a different valid same-id bundle after explicit archive replacement", async () => {
+    const imported = createSeededDocument().tree;
+    const stored = { ...imported, revision: imported.revision + 3 };
+    const reservation = importReservation(imported, 4, stored, 3);
+    const reserveImportedSnapshot = vi.fn(async () => ({ ok: true as const, value: reservation }));
     const repository: DocumentRepository = {
-      load: async () => ({ ok: true, value: null }),
-      save: async (treeId, _revision, _bundle, expectedGeneration) => {
-        saves.push({ treeId, expectedGeneration });
-        return { ok: true, value: 8 };
-      },
+      ...unsupportedRecovery(),
+      load: async () => ({ ok: true, value: { tree: stored, writeGeneration: 3 } }),
+      save: vi.fn(),
+      reserveImportedSnapshot,
       close: () => undefined,
     };
     const controller = createPersistenceController(repository);
-    await controller.start(current);
-    const prepared = await controller.prepareImportedTree(imported);
 
-    expect(prepared).toEqual({ ok: true, tree: imported, writeGeneration: 8 });
-    expect(saves.some((save) => save.treeId === "imported_tree" && save.expectedGeneration === null)).toBe(true);
+    await expect(controller.prepareImportedTree(imported)).resolves.toMatchObject({
+      ok: true,
+      createdSnapshot: false,
+      tree: imported,
+      writeGeneration: 4,
+      reservation,
+    });
+    expect(reserveImportedSnapshot).toHaveBeenCalledWith(
+      imported.id,
+      imported.revision,
+      treeToBundle(imported),
+      3,
+    );
+  });
+
+  it("keeps an exact same-id archive import working and activates its empty-history generation", async () => {
+    const imported = createSeededDocument().tree;
+    const reservation = importReservation(imported, 4, imported, 3);
+    const repository: DocumentRepository = {
+      ...unsupportedRecovery(),
+      load: async () => ({ ok: true, value: { tree: imported, writeGeneration: 3 } }),
+      save: vi.fn(),
+      reserveImportedSnapshot: async () => ({ ok: true, value: reservation }),
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+
+    const prepared = await controller.prepareImportedTree(imported);
+    expect(prepared).toMatchObject({ ok: true, tree: imported, writeGeneration: 4 });
     if (!prepared.ok) throw new Error("import preparation rejected");
+    expect(prepared.reservation.imported.history).toEqual(createTreeHistory());
     controller.activateImportedDocument(prepared);
     expect(controller.getStatus()).toEqual({
       phase: "saved",
@@ -220,51 +250,156 @@ describe("persistence controller", () => {
     });
   });
 
-  it("rejects a same-id import whose stored bundle differs without saving", async () => {
-    const imported = { ...createSeededDocument().tree, id: "existing_tree" };
-    const stored = { ...imported, revision: imported.revision + 1 };
-    const save = vi.fn();
+  it("rolls a stale prepared import back before draining a newer local commit", async () => {
+    const imported = createSeededDocument().tree;
+    const current = { ...imported, revision: imported.revision + 3 };
+    const newer = { ...current, revision: current.revision + 1 };
+    const reservation = importReservation(imported, 4, current, 3);
+    let settleReserve!: (result: RepositoryResult<ImportedSnapshotReservation>) => void;
+    let settleRollback!: (result: Awaited<ReturnType<DocumentRepository["rollbackImportedSnapshot"]>>) => void;
+    let settleSave!: (result: RepositoryResult<number>) => void;
+    const reserveImportedSnapshot = vi.fn(() => new Promise<RepositoryResult<ImportedSnapshotReservation>>((resolve) => {
+      settleReserve = resolve;
+    }));
+    const rollbackImportedSnapshot = vi.fn(() => new Promise<Awaited<ReturnType<DocumentRepository["rollbackImportedSnapshot"]>>>((resolve) => {
+      settleRollback = resolve;
+    }));
+    const save = vi.fn(() => new Promise<RepositoryResult<number>>((resolve) => {
+      settleSave = resolve;
+    }));
     const repository: DocumentRepository = {
-      load: async () => ({ ok: true, value: { tree: stored, writeGeneration: 3 } }),
+      ...unsupportedRecovery(),
+      load: async () => ({ ok: true, value: { tree: current, writeGeneration: 3 } }),
       save,
+      reserveImportedSnapshot,
+      rollbackImportedSnapshot,
       close: () => undefined,
     };
     const controller = createPersistenceController(repository);
+    await controller.start(current);
+    const basis = { treeId: current.id, revision: current.revision, documentEpoch: 4 };
+    let currentBasis = basis;
+    const switchDocument = vi.fn();
+    const coordinator = createDocumentImportCoordinator(controller, switchDocument, () => currentBasis);
 
-    await expect(controller.prepareImportedTree(imported)).resolves.toEqual({
-      ok: false,
-      errorCode: "IMPORT_CONFLICT",
-    });
+    const importing = coordinator.importValidatedTree(imported, basis);
+    await waitFor(() => reserveImportedSnapshot.mock.calls.length === 1);
+    controller.publish(newer);
+    currentBasis = { ...basis, revision: newer.revision };
+    settleReserve({ ok: true, value: reservation });
+    await waitFor(() => rollbackImportedSnapshot.mock.calls.length === 1);
     expect(save).not.toHaveBeenCalled();
-  });
 
-  it("reserves a new generation for an identical same-id import", async () => {
-    const imported = { ...createSeededDocument().tree, id: "existing_tree" };
-    const save = vi.fn(async () => ({ ok: true as const, value: 4 }));
-    const repository: DocumentRepository = {
-      load: async () => ({ ok: true, value: { tree: imported, writeGeneration: 3 } }),
-      save,
-      close: () => undefined,
-    };
-    const controller = createPersistenceController(repository);
-
-    await expect(controller.prepareImportedTree(imported)).resolves.toEqual({
-      ok: true,
-      tree: imported,
-      writeGeneration: 4,
-    });
+    settleRollback({ ok: true, value: { status: "rolled-back", writeGeneration: 5 } });
+    await expect(importing).resolves.toEqual({ status: "rejected", errorCode: "IMPORT_STALE" });
+    await waitFor(() => save.mock.calls.length === 1);
     expect(save).toHaveBeenCalledWith(
-      "existing_tree",
-      imported.revision,
-      expect.anything(),
-      3,
+      newer.id,
+      newer.revision,
+      treeToBundle(newer),
+      5,
       expect.anything(),
     );
+    settleSave({ ok: true, value: 6 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus()).toMatchObject({ persistedRevision: newer.revision, errorCode: null });
+    expect(switchDocument).not.toHaveBeenCalled();
+  });
+
+  it("requires an exact corrupt export before atomically replacing local storage", async () => {
+    const tree = createSeededDocument().tree;
+    const history = { entries: [], retainedInverseBytes: 0 };
+    const basis = { treeId: tree.id, serialized: "{\"damaged\":true}" };
+    const repository: DocumentRepository = {
+      ...unsupportedRecovery(),
+      load: async () => ({
+        ok: false,
+        error: { code: "PERSISTENCE_CORRUPT", message: "damaged" },
+      }),
+      save: vi.fn(),
+      exportCorrupt: vi.fn(async (): Promise<RepositoryResult<CorruptSnapshotExport>> => ({
+        ok: true as const,
+        value: { basis, bytes: new TextEncoder().encode(basis.serialized) },
+      })),
+      replaceCorrupt: vi.fn(async () => ({ ok: true as const, value: 6 })),
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+
+    await controller.start(tree, history);
+    expect(controller.getStatus()).toMatchObject({
+      phase: "error",
+      errorCode: "PERSISTENCE_CORRUPT",
+    });
+    controller.retry();
+    expect(repository.save).not.toHaveBeenCalled();
+    await expect(controller.replaceCorrupt()).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_CONFLICT",
+    });
+
+    const exported = await controller.exportCorruptRecovery();
+    expect(exported).toMatchObject({ ok: true, fileName: `${tree.id}.matter-recovery.json` });
+    await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: true });
+    expect(repository.replaceCorrupt).toHaveBeenCalledWith(
+      tree.id,
+      tree.revision,
+      expect.anything(),
+      history,
+      basis,
+    );
+    expect(controller.getStatus()).toEqual({
+      phase: "saved",
+      persistedRevision: tree.revision,
+      dirtyRevision: null,
+      errorCode: null,
+    });
+  });
+
+  it("invalidates a corrupt export when newer local material arrives", async () => {
+    const tree = createSeededDocument().tree;
+    let settleExport!: (result: RepositoryResult<CorruptSnapshotExport>) => void;
+    const repository: DocumentRepository = {
+      ...unsupportedRecovery(),
+      load: async () => ({
+        ok: false,
+        error: { code: "PERSISTENCE_CORRUPT", message: "damaged" },
+      }),
+      save: vi.fn(),
+      exportCorrupt: vi.fn((): Promise<RepositoryResult<CorruptSnapshotExport>> => new Promise((resolve) => {
+        settleExport = resolve;
+      })),
+      replaceCorrupt: vi.fn(),
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+    await controller.start(tree);
+
+    const exporting = controller.exportCorruptRecovery();
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    settleExport({
+      ok: true,
+      value: {
+        basis: { treeId: tree.id, serialized: "{}" },
+        bytes: new Uint8Array([123, 125]),
+      },
+    });
+
+    await expect(exporting).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_CONFLICT",
+    });
+    await expect(controller.replaceCorrupt()).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_CONFLICT",
+    });
+    expect(repository.replaceCorrupt).not.toHaveBeenCalled();
   });
 });
 
 function fakeRepository(loaded: LoadedSnapshot | null) {
   const port: DocumentRepository = {
+    ...unsupportedRecovery(),
     load: async (): Promise<RepositoryResult<LoadedSnapshot | null>> => ({ ok: true, value: loaded }),
     save: async (_treeId, _revision, _bundle, generation) => ({ ok: true, value: (generation ?? 0) + 1 }),
     close: () => undefined,
@@ -286,6 +421,7 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
   const savedRevisions: number[] = [];
   let loads = 0;
   const port: DocumentRepository = {
+    ...unsupportedRecovery(),
     load: async () => {
       loads += 1;
       if (!deferNextLoad) return { ok: true, value: loaded };
@@ -325,6 +461,59 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
       if (write === undefined) throw new Error("no pending write");
       write.settle(result);
     },
+  };
+}
+
+function importReservation(
+  imported: ReturnType<typeof createSeededDocument>["tree"],
+  writeGeneration: number,
+  previousTree: ReturnType<typeof createSeededDocument>["tree"] | null,
+  previousGeneration: number | null,
+): ImportedSnapshotReservation {
+  return Object.freeze({
+    treeId: imported.id,
+    imported: Object.freeze({
+      storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+      treeId: imported.id,
+      treeRevision: imported.revision,
+      writeGeneration,
+      bundle: treeToBundle(imported),
+      history: createTreeHistory(),
+    }),
+    previous: previousTree === null || previousGeneration === null
+      ? null
+      : Object.freeze({
+          storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+          treeId: previousTree.id,
+          treeRevision: previousTree.revision,
+          writeGeneration: previousGeneration,
+          bundle: treeToBundle(previousTree),
+          history: createTreeHistory(),
+        }),
+  });
+}
+
+function unsupportedRecovery(): Pick<
+  DocumentRepository,
+  "exportCorrupt" | "replaceCorrupt" | "reserveImportedSnapshot" | "rollbackImportedSnapshot"
+> {
+  return {
+    exportCorrupt: async () => ({
+      ok: false,
+      error: { code: "PERSISTENCE_UNAVAILABLE", message: "unsupported" },
+    }),
+    replaceCorrupt: async () => ({
+      ok: false,
+      error: { code: "PERSISTENCE_UNAVAILABLE", message: "unsupported" },
+    }),
+    reserveImportedSnapshot: async () => ({
+      ok: false,
+      error: { code: "PERSISTENCE_UNAVAILABLE", message: "unsupported" },
+    }),
+    rollbackImportedSnapshot: async () => ({
+      ok: false,
+      error: { code: "PERSISTENCE_UNAVAILABLE", message: "unsupported" },
+    }),
   };
 }
 

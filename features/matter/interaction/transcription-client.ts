@@ -4,6 +4,7 @@ import {
   isAcceptedAudioType,
   MAX_ACCEPTED_RECORDING_MS,
   MAX_AUDIO_BYTES,
+  MAX_TRANSCRIPTION_RESPONSE_BYTES,
   TRANSCRIPTION_CLIENT_TIMEOUT_MS,
   type TranscriptionErrorCode,
   type TranscriptionErrorEnvelope,
@@ -13,6 +14,7 @@ import {
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 import { clientMatterBasePath } from "../config/base-path";
+import { readBoundedJsonResponse } from "./bounded-json-response";
 
 export class TranscriptionClientError extends Error {
   constructor(
@@ -48,7 +50,7 @@ export async function requestTranscription(input: {
     input.signal,
     input.timeoutMs ?? TRANSCRIPTION_CLIENT_TIMEOUT_MS,
   );
-  let response: Response;
+  let response: Response | undefined;
   try {
     response = await Promise.race([
       fetch(`${basePath()}/api/transcribe`, {
@@ -58,6 +60,19 @@ export async function requestTranscription(input: {
       }),
       deadline.settlement,
     ]);
+    const payload = await Promise.race([
+      readBoundedJsonResponse(
+        response,
+        MAX_TRANSCRIPTION_RESPONSE_BYTES,
+        deadline.signal,
+      ),
+      deadline.settlement,
+    ]);
+    if (!response.ok) throw parseErrorEnvelope(payload);
+    if (!isSuccess(payload, input.interactionId, input.attempt, input.purpose)) {
+      throw invalidProviderResponse();
+    }
+    return payload;
   } catch (error) {
     if (deadline.didTimeout()) {
       throw new TranscriptionClientError(
@@ -66,7 +81,14 @@ export async function requestTranscription(input: {
         true,
       );
     }
-    if (input.signal.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
+    if (input.signal.aborted) throw error;
+    if (response === undefined && error instanceof Error && error.name === "AbortError") throw error;
+    if (error instanceof TranscriptionClientError) throw error;
+    if (response !== undefined) {
+      throw response.ok
+        ? invalidProviderResponse()
+        : parseErrorEnvelope(null);
+    }
     throw new TranscriptionClientError(
       "TRANSCRIPTION_UNAVAILABLE",
       "Speech transcription is unavailable.",
@@ -75,16 +97,6 @@ export async function requestTranscription(input: {
   } finally {
     deadline.dispose();
   }
-  const payload = (await response.json().catch(() => null)) as unknown;
-  if (!response.ok) throw parseErrorEnvelope(payload);
-  if (!isSuccess(payload, input.interactionId, input.attempt, input.purpose)) {
-    throw new TranscriptionClientError(
-      "INVALID_PROVIDER_RESPONSE",
-      "Speech transcription returned an invalid response.",
-      true,
-    );
-  }
-  return payload;
 }
 
 async function requestLocalTranscription(input: {
@@ -227,6 +239,14 @@ function parseErrorEnvelope(payload: unknown): TranscriptionClientError {
     return new TranscriptionClientError(error.error.code, error.error.message, error.error.retryable);
   }
   return new TranscriptionClientError("TRANSCRIPTION_FAILED", "The recording could not be transcribed.", true);
+}
+
+function invalidProviderResponse(): TranscriptionClientError {
+  return new TranscriptionClientError(
+    "INVALID_PROVIDER_RESPONSE",
+    "Speech transcription returned an invalid response.",
+    true,
+  );
 }
 
 function isSuccess(

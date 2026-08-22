@@ -1,11 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildTransformPlan } from "../protocol/transform-contract";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildTransformPlan, type TransformEnvelope, type TransformPlan } from "../protocol/transform-contract";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import type { StretchCommitBasis } from "../runtime/stretch-interaction";
 
 const hookSpies = vi.hoisted(() => ({
   requestTransform: vi.fn(),
   setState: vi.fn(),
+  setInvariantFailure: vi.fn(),
+  cleanups: [] as Array<() => void>,
 }));
 
 vi.mock("react", async (importOriginal) => {
@@ -13,10 +15,16 @@ vi.mock("react", async (importOriginal) => {
   return {
     ...actual,
     useCallback: <Value,>(callback: Value): Value => callback,
-    useEffect: () => undefined,
+    useEffect: (effect: () => void | (() => void)) => {
+      const cleanup = effect();
+      if (typeof cleanup === "function") hookSpies.cleanups.push(cleanup);
+    },
     useLayoutEffect: (effect: () => void) => effect(),
     useRef: <Value,>(value: Value) => ({ current: value }),
-    useState: <Value,>(initial: Value) => [initial, hookSpies.setState] as const,
+    useState: <Value,>(initial: Value) => [
+      initial,
+      initial === null ? hookSpies.setInvariantFailure : hookSpies.setState,
+    ] as const,
   };
 });
 
@@ -47,6 +55,14 @@ const BASIS: StretchCommitBasis = Object.freeze({
 beforeEach(() => {
   hookSpies.requestTransform.mockReset();
   hookSpies.setState.mockReset();
+  hookSpies.setInvariantFailure.mockReset();
+  hookSpies.cleanups.length = 0;
+  vi.stubGlobal("window", new EventTarget());
+});
+
+afterEach(() => {
+  for (const cleanup of hookSpies.cleanups.splice(0).reverse()) cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("createFixedExpandEnvelope", () => {
@@ -71,7 +87,7 @@ describe("createFixedExpandEnvelope", () => {
     expect(envelope).not.toHaveProperty("target");
   });
 
-  it("refuses a stale revision, document, or selected segment", () => {
+  it("refuses a stale revision, document, or selected range", () => {
     const common = { tree: tree(), selection: SELECTION, locale: "en-US" as const, basis: BASIS, id: "turn_fixed" };
     expect(createFixedExpandEnvelope({ ...common, documentEpoch: 4 })).toBeNull();
     expect(createFixedExpandEnvelope({ ...common, documentEpoch: 3, tree: { ...tree(), revision: 5 } })).toBeNull();
@@ -80,6 +96,19 @@ describe("createFixedExpandEnvelope", () => {
       documentEpoch: 3,
       selection: { ...SELECTION, selectedText: "other" },
     })).toBeNull();
+  });
+
+  it("accepts a one-sentence node whose only segment fills the node", () => {
+    const current = tree();
+    current.nodes.thought!.text = SELECTION.selectedText;
+    expect(createFixedExpandEnvelope({
+      tree: current,
+      documentEpoch: 3,
+      selection: SELECTION,
+      locale: "en-US",
+      basis: BASIS,
+      id: "turn_fixed",
+    })).toMatchObject({ selection: SELECTION });
   });
 });
 
@@ -107,9 +136,197 @@ describe("useFixedExpandTurn", () => {
     ));
   });
 
-  it("reopens recovery without a request or tree commit when local envelope construction fails", () => {
+  it("returns to idle without visible failure state when the provider request is unavailable", async () => {
+    hookSpies.requestTransform.mockRejectedValue(new Error("provider unavailable"));
+    const onUnavailable = vi.fn();
+    const turn = useFixedExpandTurn({
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US",
+      enabled: true,
+      interactionScopeKey: "focus:thought",
+      commit: vi.fn(),
+      onCommitted: vi.fn(),
+      onUnavailable,
+    });
+
+    expect(turn.start(BASIS)).toBe(true);
+    await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith({
+      phase: "idle",
+      basis: null,
+    }));
+    expect(hookSpies.setState).not.toHaveBeenCalledWith({ phase: "error", basis: BASIS });
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(hookSpies.setInvariantFailure).not.toHaveBeenCalled();
+  });
+
+  it.each(["commit", "onCommitted"] as const)(
+    "surfaces a local %s exception as an invariant failure, not provider unavailability",
+    async (failureOwner) => {
+      hookSpies.requestTransform.mockImplementation(async (envelope) =>
+        buildTransformPlan(envelope, "source more"));
+      const failure = new Error(`${failureOwner} invariant`);
+      const onUnavailable = vi.fn();
+      const onCommitted = failureOwner === "onCommitted"
+        ? vi.fn(() => { throw failure; })
+        : vi.fn();
+      const commit = failureOwner === "commit"
+        ? vi.fn(() => { throw failure; })
+        : vi.fn(() => ({ nodeId: "thought" }) as never);
+      const turn = useFixedExpandTurn({
+        tree: tree(),
+        documentEpoch: BASIS.documentEpoch,
+        selection: SELECTION,
+        locale: "en-US",
+        enabled: true,
+        interactionScopeKey: "focus:thought",
+        commit,
+        onCommitted,
+        onUnavailable,
+      });
+
+      expect(turn.start(BASIS)).toBe(true);
+      await vi.waitFor(() => expect(hookSpies.setInvariantFailure).toHaveBeenCalledWith({ error: failure }));
+      expect(onUnavailable).not.toHaveBeenCalled();
+      expect(hookSpies.setState).toHaveBeenLastCalledWith({ phase: "idle", basis: null });
+    },
+  );
+
+  it("aborts a superseded request and gives its late plan no commit authority", async () => {
+    const pending: Array<{
+      envelope: TransformEnvelope;
+      signal: AbortSignal;
+      resolve: (plan: TransformPlan) => void;
+    }> = [];
+    hookSpies.requestTransform.mockImplementation((envelope, signal) =>
+      new Promise<TransformPlan>((resolve) => pending.push({ envelope, signal, resolve })));
+    const commit = vi.fn(() => null);
+    const turn = useFixedExpandTurn({
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US",
+      enabled: true,
+      interactionScopeKey: "focus:thought",
+      commit,
+      onCommitted: vi.fn(),
+    });
+
+    expect(turn.start(BASIS)).toBe(true);
+    expect(turn.start(BASIS)).toBe(true);
+    expect(pending).toHaveLength(2);
+    expect(pending[0]!.signal.aborted).toBe(true);
+    pending[0]!.resolve(buildTransformPlan(pending[0]!.envelope, "source more"));
+    await Promise.resolve();
+    expect(commit).not.toHaveBeenCalled();
+    pending[1]!.resolve(buildTransformPlan(pending[1]!.envelope, "source more"));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(["plan", "refusal"] as const)(
+    "gives a stale-scope %s no authority before passive cancellation",
+    async (outcome) => {
+      let pending: {
+        envelope: TransformEnvelope;
+        resolve: (plan: TransformPlan) => void;
+        reject: (error: unknown) => void;
+      } | undefined;
+      hookSpies.requestTransform.mockImplementation((envelope) =>
+        new Promise<TransformPlan>((resolve, reject) => {
+          pending = { envelope, resolve, reject };
+        }));
+      const commit = vi.fn();
+      const onCommitted = vi.fn();
+      const onUnavailable = vi.fn();
+      const input = {
+        tree: tree(),
+        documentEpoch: BASIS.documentEpoch,
+        selection: SELECTION,
+        locale: "en-US" as const,
+        enabled: true,
+        interactionScopeKey: "full:thought:working-1",
+        commit,
+        onCommitted,
+        onUnavailable,
+      };
+      const turn = useFixedExpandTurn(input);
+
+      expect(turn.start(BASIS)).toBe(true);
+      // A navigation or working-context render publishes the new input in a
+      // layout effect. The response guard must not wait for passive cancellation.
+      input.interactionScopeKey = "focus:thought:working-2";
+      if (pending === undefined) throw new Error("Transform request did not start.");
+      if (outcome === "plan") {
+        pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+      } else {
+        pending.reject(new Error("provider unavailable"));
+      }
+
+      await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith({
+        phase: "idle",
+        basis: null,
+      }));
+      expect(input.tree.revision).toBe(BASIS.baseRevision);
+      expect(commit).not.toHaveBeenCalled();
+      expect(onCommitted).not.toHaveBeenCalled();
+      expect(onUnavailable).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["pagehide", "unmount"] as const)(
+    "aborts on %s and makes a late plan inert",
+    async (exit) => {
+      let pending: {
+        envelope: TransformEnvelope;
+        signal: AbortSignal;
+        resolve: (plan: TransformPlan) => void;
+      } | undefined;
+      hookSpies.requestTransform.mockImplementation((envelope, signal) =>
+        new Promise<TransformPlan>((resolve) => {
+          pending = { envelope, signal, resolve };
+        }));
+      const commit = vi.fn();
+      const onUnavailable = vi.fn();
+      const turn = useFixedExpandTurn({
+        tree: tree(),
+        documentEpoch: BASIS.documentEpoch,
+        selection: SELECTION,
+        locale: "en-US",
+        enabled: true,
+        interactionScopeKey: "focus:thought",
+        commit,
+        onCommitted: vi.fn(),
+        onUnavailable,
+      });
+
+      expect(turn.start(BASIS)).toBe(true);
+      if (exit === "pagehide") window.dispatchEvent(new Event("pagehide"));
+      else hookSpies.cleanups.pop()?.();
+      expect(pending?.signal.aborted).toBe(true);
+      pending?.resolve(buildTransformPlan(pending.envelope, "source more"));
+      await Promise.resolve();
+      expect(commit).not.toHaveBeenCalled();
+      expect(onUnavailable).not.toHaveBeenCalled();
+    },
+  );
+
+  it("accepts a whole multi-clause node as one contiguous transform range", () => {
+    const whole = { ...SELECTION, end: TEXT.length, selectedText: TEXT };
+    expect(createFixedExpandEnvelope({
+      tree: tree(),
+      documentEpoch: 3,
+      selection: whole,
+      locale: "en-US",
+      basis: { ...BASIS, selection: whole },
+      id: "turn_fixed",
+    })).toMatchObject({ selection: whole });
+  });
+
+  it("quietly reopens without a request or tree commit when local envelope construction fails", () => {
     const commit = vi.fn();
     const onCommitted = vi.fn();
+    const onUnavailable = vi.fn();
     const turn = useFixedExpandTurn({
       tree: treeWithOversizedLineage(),
       documentEpoch: 3,
@@ -119,11 +336,13 @@ describe("useFixedExpandTurn", () => {
       interactionScopeKey: "focus:thought",
       commit,
       onCommitted,
+      onUnavailable,
     });
 
     expect(turn.start(BASIS)).toBe(false);
     expect(hookSpies.setState).toHaveBeenCalledTimes(1);
-    expect(hookSpies.setState).toHaveBeenCalledWith({ phase: "error", basis: BASIS });
+    expect(hookSpies.setState).toHaveBeenCalledWith({ phase: "idle", basis: null });
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(hookSpies.requestTransform).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();
     expect(onCommitted).not.toHaveBeenCalled();

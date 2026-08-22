@@ -4,6 +4,9 @@ export const MAX_RECORDING_MS = 60_000;
 export const MAX_ACCEPTED_RECORDING_MS = 65_000;
 export const MAX_AUDIO_BYTES = 2 * 1024 * 1024;
 export const MAX_AUDIO_REQUEST_BYTES = 2_200_000;
+// A 2,000-code-unit transcript can expand to 12,000 UTF-8 bytes when JSON
+// escapes every control code unit; leave bounded room for the echoed identity.
+export const MAX_TRANSCRIPTION_RESPONSE_BYTES = 16 * 1024;
 export const MAX_INTERACTION_ID_LENGTH = 128;
 export const MAX_LOCALE_LENGTH = 35;
 // These layers settle independently. The client grace lets ordinary uploads

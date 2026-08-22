@@ -70,10 +70,10 @@ selected visible node + pointer drop as before / after / in / first-level
 Elastic Language changes existing material without Voice:
 
 ```text
-one-segment lasso → SegmentSelection       reference
+one contiguous run → SegmentSelection       reference
 stretch amount    → StretchGesture         degree
 selected tool     → fixed expand-in-place  direction
-tree focus        → LineageContext         lineage
+selected lineage  → LineageContext         lineage
                     ↓
        TransformEnvelope transform/2
                     ↓
@@ -91,19 +91,20 @@ planToTreeCommand → tree engine → exact inverse
 The request carries no transcript and no client-authored output target. The
 server derives the target from the validated selection, stretch amount, and
 UTF-16 capacity; it adjudicates one complete answer before constructing the
-plan. Failure leaves the selected passage unchanged, and neither the browser nor
-the server retries automatically. The strict `transform/2` contract, synthetic
-fixture, and focused E2E receipt are implemented; the deleted Voice-direction
+plan. Provider or transport failure leaves the selected passage unchanged,
+returns the local control to its prior usable state without visible failure
+chrome, and is not retried automatically. The strict `transform/2` contract is
+implemented; the deleted Voice-direction
 `transform/1` path remains historical trace only.
 
 Text Swap is a sibling lifecycle and protocol, not an optional branch inside
 Elastic Language:
 
 ```text
-one-segment lasso → SegmentSelection              reference
+one exact segment  → SegmentSelection              reference
 selected Voice     → bounded transient direction  direction
 Text Swap policy   → near-source length band       degree
-tree focus         → LineageContext                lineage
+selected lineage   → LineageContext                lineage
                        ↓
              TextSwapEnvelope text-swap/1
                        ↓
@@ -116,23 +117,23 @@ tree focus         → LineageContext                lineage
        planToTreeCommand → tree engine → exact inverse
 ```
 
-The Voice button's meaning is projected from local eligibility: Full view keeps
-material admission; Focus plus exactly one current punctuation segment exposes
-**Rewrite selected language**. Entering that mode makes Elastic presentation
-hidden and inert before recording starts. One microphone owner and `VoicePort`
-remain shared browser capabilities, but admission and Text Swap have separate
-reducers, operation identities, cancellation rules, and effects. Neither can
-dispatch into the other's document path. A typed accessibility fallback may
-feed the same bounded transient direction port; the transport does not reveal
-whether speech or typing supplied it.
+Text Swap is implemented as a dormant sibling grammar. No current UI projects
+its Rewrite cue, typed direction, or selected-language Voice authority; Voice
+continues material admission and an eligible lasso belongs only to Elastic.
+Admission and Elastic share one client-side ownership gate: while admission is
+not idle, Elastic receives no actionable selection, renders no grips, and can
+send no turn. Returning to idle revalidates the transient lasso address before
+re-arming the stretch lifecycle.
+The dormant reducer, effect, and `VoicePort` ownership remain isolated from
+admission and `transform/2`, so regression tests cannot dispatch into either
+document path.
 
-The direction is held only inside the eligible local mode. A retryable failure
-may retain it for one explicit retry; cancel, stale basis, mode exit, or commit
-clears it. The request contains its normalized one-line text but no audio,
-partial transcript, carrier, or client-authored output target. A selection,
-tree, revision, document, mode, or recording ownership change aborts the request
-and revokes late results. Success commits one complete range replacement; no
-token, draft, old-copy, or candidate state becomes canonical material.
+If Text Swap is reconsidered, its bounded direction remains local and transient.
+Provider or transport refusal restores that local field without visible error
+state; cancel, stale basis, mode exit, or commit clears it. The request carries
+normalized one-line direction but no audio, partial transcript, carrier, or
+client-authored output target. Success may commit only one complete range
+replacement; no token, draft, old copy, or candidate becomes material.
 
 The material index names each node without blocking on anything:
 
@@ -147,6 +148,27 @@ visible rows
   → label session re-checks node, material fingerprint, latest operation
   → the row changes, or the answer is discarded
 ```
+
+Opening an index row publishes navigation first, then the render edge measures
+that exact node only after a layout publication newer than the click and initial
+font loading have both settled. One pure projection
+derives a visual-attention point from the visual viewport, canvas, and any
+overlapping open index. The point stays at the browser centre while overlap is
+small, then uses a smoothstep weight from 24% to 72% viewport coverage to move
+toward the exposed canvas centre without a device breakpoint. The render edge
+also samples the target's computed CSS font size and gives that plain number to
+a second pure camera planner. The planner preserves a readable current zoom,
+raises undersized target type only to a 15 CSS-pixel screen-space floor, and
+scales oversized material down only enough to enter a 6% safe field without
+crossing the same target-specific floor or the existing camera bounds. The
+render edge presents one bounded symmetric easing curve; tiny moves and
+reduced-motion preferences settle immediately. The tree and pure layout keep
+their coordinates; only transient viewport translation and scale change. When
+readability and complete fit conflict, the planner preserves readability and
+centres best-effort. A still-active wheel pulse defers the pending index camera
+until that short owner releases it. Missing nodes, stale projection, malformed
+rectangles, or an active camera pointer fail closed rather than centring a
+guessed target.
 
 A label is derived presentation, not material: it never enters `ThoughtTree`,
 material history, the material snapshot, or an archive, so it needs no document
@@ -275,16 +297,25 @@ epoch. It does not absorb microphone internals, worker queues, request retries,
 layout caches, provider policy, or persistence, and it never becomes a generic
 `MatterController`.
 
-Selection state separates a semantic `TextAddress` from layout-epoch-bound DOM
-rectangles. A lasso may yield an ordered transient set of addresses; contiguous
-runs remain independently addressable so a gap can never silently become one
-replacement range. Full-tree projection removes folded descendants; the active
-working projection also excludes held-aside branches. Focus projection returns
-the exact root-to-node path and ignores folds on it. Only focus view can start a
-generative transform, so model context cannot be narrower than the material
-visible during that turn. Exactly one current punctuation segment is the shared
-eligibility boundary; Elastic and Text Swap are mutually exclusive consumers of
-it.
+Selection state separates semantic lasso ownership from layout-epoch-bound DOM
+rectangles. One contiguous run of current punctuation segments inside one node
+publishes one Elastic address. Adjacent hits merge; wrapped fragments remain
+geometry only. A disconnected run or another node produces a transient material
+selection set instead: the index may mark its source nodes and inquiry may use
+its explicit passages, but no Elastic grip or transform envelope exists for
+that state. Both forms stay in the current view and are remeasured there before
+controls or context may act; the lasso never causes navigation. Clicking
+ordinary material, blank paper, or the active Lasso tool clears the lasso state.
+
+Full-tree projection removes folded descendants; the active working projection
+also excludes held-aside branches. Focus projection returns the exact
+root-to-node path and ignores folds on it. Either view may start a generative
+transform from one active contiguous run; Focus additionally binds that run to
+its exact Focus node. Full-view siblings remain visible but are not silently
+added to model context: the request carries the exact authored
+root-to-selected-node lineage. The current UI gives only the one-range address
+to Elastic. The dormant Text Swap grammar further narrows the shared selection
+shape to one exact current segment and owns no current interaction surface.
 
 Async effects are limited to recording, transcription, labelling, inquiry, planning,
 persistence, and archive transport. Every completion returns with
@@ -326,6 +357,10 @@ undo after reload; interaction cancel preserves its semantic address for pointer
 retry; persistence retains the latest dirty snapshot until a generation-checked
 save succeeds. An archive import starts a new journal, and a legacy snapshot
 that predates journal storage remains usable but begins with an empty history.
+The material-index footer projects only non-account local identity and an active
+save; it owns no error transition or recovery capability. The explicit Archive
+panel projects persistence failure and invokes the already-owned export, retry,
+reload, or corrupt-row repair operation.
 No write-ahead log, event sourcing, service worker, or background sync belongs
 in the first release.
 
@@ -343,7 +378,7 @@ app/
   api/label/route.ts               implemented label boundary; live adapter gated
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
-  api/text-swap/route.ts           frozen sibling text-swap/1 boundary; independent live gate
+  api/text-swap/route.ts           dormant strict text-swap/1 boundary; gate off
 
 features/matter/
   server/harness.ts                the only place a model is awaited; one scenario contract
@@ -417,12 +452,14 @@ first-release gates are available, fixture-only, unavailable, or not yet
 implemented. It never returns provider names, raw environment values, stored
 material, transcripts, or lineage.
 
-Elastic Language and Text Swap are independent health surfaces. The deployment
-receipt has two explicit profiles: `browser-preview` requires both material
-model gates to remain unavailable, while `material-live` requires both to be
-configured. Health proves configuration only; a successful strict synthetic
+Elastic Language and Text Swap remain independent health surfaces even while
+Text Swap is dormant. The deployment receipt has two explicit profiles:
+`browser-preview` requires both material-model gates to remain unavailable;
+`elastic-live` requires Elastic to be configured and Text Swap to remain
+unavailable. Health proves configuration only; a successful strict Elastic
 turn and the external rate/spend receipts are still required before a live
-claim.
+claim. The superseded paired `material-live` profile is rejected rather than
+quietly reviving the dormant surface.
 
 The complete dependency choice and rejected foundations are in
 [`reference/foundation.md`](reference/foundation.md). The short version: Matter

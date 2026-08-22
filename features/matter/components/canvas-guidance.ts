@@ -17,17 +17,12 @@ export type CanvasLanguageGuidanceState =
   | Readonly<{ kind: "lasso-ready" }>
   | Readonly<{ kind: "lasso-drawing" }>
   | Readonly<{
-      kind: "text-swap";
-      phase: "permission" | "recording" | "transcribing" | "typing" | "pending" | "error";
-    }>
-  | Readonly<{
       kind: "selected";
       stretch:
         | Readonly<{ kind: "armed"; amount: 0 }>
         | Readonly<{ kind: "dragging"; amount: number }>
         | Readonly<{ kind: "adjusted"; amount: number }>
-        | Readonly<{ kind: "pending"; amount: number }>
-        | Readonly<{ kind: "error"; amount: number }>;
+        | Readonly<{ kind: "pending"; amount: number }>;
     }>;
 
 export type CanvasGuidanceInput = Readonly<{
@@ -54,15 +49,7 @@ export type CanvasGuidanceId =
   | "set-degree"
   | "apply-stretch"
   | "wait-expansion"
-  | "reset-expansion"
-  | "allow-rewrite-microphone"
-  | "speak-rewrite-direction"
-  | "wait-rewrite-direction"
-  | "type-rewrite-direction"
-  | "wait-rewrite"
-  | "retry-rewrite"
-  | "circle-reference"
-  | "circle-focus"
+  | "circle-selection"
   | "unfold-thought"
   | "speak-child"
   | "select-thought";
@@ -82,20 +69,12 @@ const GUIDANCE_COPY = Object.freeze({
   "dismiss-stale-recording": "Dismiss this recording.",
   "speak-root": "Speak to place your first thought.",
   "close-lasso": "Close the loop around a phrase.",
-  "reach-stretch-threshold": "Pull to 15%, then release.",
-  "release-stretch": "Release to expand at this degree.",
-  "set-degree": "Pull expands; Voice/Type rewrites.",
-  "apply-stretch": "Press Enter to expand here.",
+  "reach-stretch-threshold": "Pull a little farther.",
+  "release-stretch": "Release to expand.",
+  "set-degree": "Pull either handle down to expand.",
+  "apply-stretch": "Press Enter to expand.",
   "wait-expansion": "Expanding.",
-  "reset-expansion": "No change—text kept. Pull again.",
-  "allow-rewrite-microphone": "Allow the microphone for rewrite.",
-  "speak-rewrite-direction": "Say how to reword this passage.",
-  "wait-rewrite-direction": "Understanding your direction.",
-  "type-rewrite-direction": "Type one rewrite direction.",
-  "wait-rewrite": "Rewording in place.",
-  "retry-rewrite": "No rewrite—retry or record again.",
-  "circle-reference": "Circle one phrase as reference.",
-  "circle-focus": "Circle the phrase to change.",
+  "circle-selection": "Circle text between punctuation.",
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
   "select-thought": "Select one thought.",
@@ -114,20 +93,12 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "dismiss-stale-recording": "关闭这次录音。",
   "speak-root": "说出你的第一个想法。",
   "close-lasso": "闭合圈选这段文字。",
-  "reach-stretch-threshold": "下拉到至少 15% 后松开。",
-  "release-stretch": "松开，按当前程度展开。",
-  "set-degree": "下拉展开，或用 Voice/输入改写。",
-  "apply-stretch": "按回车键按当前程度展开。",
+  "reach-stretch-threshold": "再拉开一点。",
+  "release-stretch": "松开展开。",
+  "set-degree": "向下拉动任一把手展开。",
+  "apply-stretch": "按回车键展开。",
   "wait-expansion": "正在展开。",
-  "reset-expansion": "未展开，原文保留；再拉一次。",
-  "allow-rewrite-microphone": "允许麦克风听取改写方向。",
-  "speak-rewrite-direction": "说出希望怎样换一种说法。",
-  "wait-rewrite-direction": "正在听清改写方向。",
-  "type-rewrite-direction": "输入一条改写方向。",
-  "wait-rewrite": "正在原位换一种说法。",
-  "retry-rewrite": "未改写；重试或重新录音。",
-  "circle-reference": "圈选一段文字作为参照。",
-  "circle-focus": "圈选需要改变的文字。",
+  "circle-selection": "圈住一段连续文字，边界停在标点处。",
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
   "select-thought": "选择一段想法。",
@@ -148,7 +119,7 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     input.admission.phase !== "idle" &&
     !(
       input.admission.phase === "error" &&
-      (input.language.kind === "text-swap" || input.language.kind === "selected")
+      input.language.kind === "selected"
     )
   ) {
     return projectAdmissionGuidance(input.admission);
@@ -175,23 +146,11 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
             : guidance("apply-stretch", "action");
         case "pending":
           return guidance("wait-expansion", "progress");
-        case "error":
-          return guidance("reset-expansion", "recovery");
         default:
           return assertNever(input.language.stretch);
       }
-    case "text-swap":
-      switch (input.language.phase) {
-        case "permission": return guidance("allow-rewrite-microphone", "action");
-        case "recording": return guidance("speak-rewrite-direction", "action");
-        case "transcribing": return guidance("wait-rewrite-direction", "progress");
-        case "typing": return guidance("type-rewrite-direction", "action");
-        case "pending": return guidance("wait-rewrite", "progress");
-        case "error": return guidance("retry-rewrite", "recovery");
-        default: return assertNever(input.language.phase);
-      }
     case "lasso-ready":
-      return guidance("circle-reference", "action");
+      return guidance("circle-selection", "action");
     case "none":
       break;
     default:
@@ -200,7 +159,7 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
 
   switch (input.material.kind) {
     case "focus":
-      return guidance("circle-focus", "action");
+      return guidance("circle-selection", "action");
     case "full":
       if (input.material.selected === null) {
         return guidance("select-thought", "action");
@@ -248,20 +207,12 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "dismiss-stale-recording": "關閉這次錄音。",
   "speak-root": "說出你的第一個想法。",
   "close-lasso": "閉合圈選這段文字。",
-  "reach-stretch-threshold": "下拉到至少 15% 後放開。",
-  "release-stretch": "放開，按目前程度展開。",
-  "set-degree": "下拉展開，或用 Voice/輸入改寫。",
-  "apply-stretch": "按 Enter 依目前程度展開。",
+  "reach-stretch-threshold": "再拉開一點。",
+  "release-stretch": "放開即可展開。",
+  "set-degree": "向下拉動任一把手展開。",
+  "apply-stretch": "按 Enter 展開。",
   "wait-expansion": "正在展開。",
-  "reset-expansion": "未展開，原文保留；再拉一次。",
-  "allow-rewrite-microphone": "允許麥克風聽取改寫方向。",
-  "speak-rewrite-direction": "說出希望怎樣換一種說法。",
-  "wait-rewrite-direction": "正在聽清改寫方向。",
-  "type-rewrite-direction": "輸入一條改寫方向。",
-  "wait-rewrite": "正在原位換一種說法。",
-  "retry-rewrite": "未改寫；重試或重新錄音。",
-  "circle-reference": "圈選一段文字作為參照。",
-  "circle-focus": "圈選需要改變的文字。",
+  "circle-selection": "圈住一段連續文字，邊界停在標點處。",
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
   "select-thought": "選擇一段想法。",
@@ -280,20 +231,12 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "dismiss-stale-recording": "この録音を閉じてください。",
   "speak-root": "最初の考えを話してください。",
   "close-lasso": "フレーズを囲んで輪を閉じてください。",
-  "reach-stretch-threshold": "15%以上まで引いて放してください。",
-  "release-stretch": "放して、この程度で展開します。",
-  "set-degree": "引いて展開、Voice/入力で言い換え。",
-  "apply-stretch": "Enterでこの程度に展開します。",
+  "reach-stretch-threshold": "もう少し引いてください。",
+  "release-stretch": "放すと展開します。",
+  "set-degree": "どちらかのハンドルを下へ引いて展開。",
+  "apply-stretch": "Enterで展開します。",
   "wait-expansion": "展開中。",
-  "reset-expansion": "展開せず原文を保持。もう一度引いてください。",
-  "allow-rewrite-microphone": "言い換えのためマイクを許可してください。",
-  "speak-rewrite-direction": "どのように言い換えるか話してください。",
-  "wait-rewrite-direction": "言い換え方を聞き取っています。",
-  "type-rewrite-direction": "言い換え方を一つ入力してください。",
-  "wait-rewrite": "その場で言い換えています。",
-  "retry-rewrite": "言い換えられませんでした。再試行してください。",
-  "circle-reference": "参照するフレーズを一つ囲んでください。",
-  "circle-focus": "変えるフレーズを囲んでください。",
+  "circle-selection": "連続した一節を囲み、句読点で境界を止めます。",
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
   "select-thought": "考えを一つ選んでください。",
@@ -312,20 +255,12 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "dismiss-stale-recording": "Diese Aufnahme schließen.",
   "speak-root": "Sprich deinen ersten Gedanken aus.",
   "close-lasso": "Schließe den Kreis um eine Phrase.",
-  "reach-stretch-threshold": "Bis 15 % ziehen, dann loslassen.",
-  "release-stretch": "Loslassen, um in diesem Maß zu erweitern.",
-  "set-degree": "Ziehen erweitert; Voice/Eingabe formuliert um.",
-  "apply-stretch": "Mit Enter in diesem Maß erweitern.",
+  "reach-stretch-threshold": "Etwas weiter ziehen.",
+  "release-stretch": "Zum Erweitern loslassen.",
+  "set-degree": "Einen Griff nach unten ziehen, um zu erweitern.",
+  "apply-stretch": "Mit Enter erweitern.",
   "wait-expansion": "Wird erweitert.",
-  "reset-expansion": "Nicht erweitert; Text bleibt. Erneut ziehen.",
-  "allow-rewrite-microphone": "Mikrofon für Umformulierung erlauben.",
-  "speak-rewrite-direction": "Sag, wie der Text umformuliert werden soll.",
-  "wait-rewrite-direction": "Richtung wird verstanden.",
-  "type-rewrite-direction": "Eine Umformulierungsrichtung eingeben.",
-  "wait-rewrite": "Text wird an Ort und Stelle umformuliert.",
-  "retry-rewrite": "Nicht umformuliert. Erneut versuchen.",
-  "circle-reference": "Eine Phrase als Referenz einkreisen.",
-  "circle-focus": "Die zu ändernde Phrase einkreisen.",
+  "circle-selection": "Eine zusammenhängende Passage einkreisen; an Satzzeichen enden.",
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
   "select-thought": "Einen Gedanken auswählen.",

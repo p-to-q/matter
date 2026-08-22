@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { prepareLasso } from "./lasso-geometry";
-import { resolveLassoTargets, type LassoTarget } from "./lasso-targets";
+import { settleLassoSelectionSet } from "./lasso-selection";
+import {
+  lassoTargetFromMeasurements,
+  resolveLassoTargets,
+  type LassoTarget,
+} from "./lasso-targets";
 
 const lasso = prepareLasso([
   { x: 0, y: 0 },
@@ -13,38 +18,79 @@ function target(overrides: Partial<LassoTarget> = {}): LassoTarget {
   return {
     nodeId: "node_a",
     text: "第一句，第二句。第三句。",
-    bounds: { left: 5, top: 5, right: 75, bottom: 45 },
+    bounds: { left: 5, top: 5, right: 150, bottom: 45 },
     measurement: [
-      { index: 0, rects: [{ x: 10, y: 10, width: 30, height: 12 }] },
-      { index: 1, rects: [{ x: 42, y: 10, width: 28, height: 12 }] },
-      { index: 2, rects: [{ x: 120, y: 10, width: 28, height: 12 }] },
+      { index: 0, rects: [{ x: 10, y: 10, width: 24, height: 12 }] },
+      { index: 1, rects: [{ x: 100, y: 10, width: 24, height: 12 }] },
+      { index: 2, rects: [{ x: 130, y: 10, width: 24, height: 12 }] },
     ],
     ...overrides,
   };
 }
 
-describe("lasso target resolution", () => {
-  it("resolves one contiguous selection from cached fragment geometry", () => {
+describe("punctuation-bounded lasso target resolution", () => {
+  it("snaps one hit to exactly one punctuation segment", () => {
     expect(resolveLassoTargets(lasso, [target()])).toMatchObject({
       kind: "selection",
-      selection: { nodeId: "node_a", start: 0, selectedText: "第一句，第二句" },
+      mode: "contiguous-segment-range",
+      selections: [{ nodeId: "node_a" }],
+      selection: {
+        type: "segment-range",
+        nodeId: "node_a",
+        selectedText: "第一句",
+      },
     });
   });
 
-  it("falls back to a single wrapped text block when the loop contains its bounds", () => {
+  it("allows a whole one-sentence node to remain actionable language", () => {
+    expect(resolveLassoTargets(lasso, [target({
+      text: "身体怎样保存这种怀念。",
+      bounds: { left: 8, top: 8, right: 72, bottom: 42 },
+      measurement: [{ index: 0, rects: [{ x: 90, y: 10, width: 20, height: 12 }] }],
+    })])).toMatchObject({
+      kind: "selection",
+      selection: { selectedText: "身体怎样保存这种怀念" },
+    });
+  });
+
+  it("joins adjacent hits and promotes disconnected or cross-node runs to selection mode", () => {
     expect(resolveLassoTargets(lasso, [target({
       measurement: [
-        { index: 0, rects: [{ x: 2, y: 2, width: 2, height: 2 }] },
-        { index: 1, rects: [{ x: 76, y: 2, width: 2, height: 2 }] },
-        { index: 2, rects: [{ x: 2, y: 46, width: 2, height: 2 }] },
+        { index: 0, rects: [{ x: 10, y: 10, width: 20, height: 12 }] },
+        { index: 1, rects: [{ x: 40, y: 10, width: 20, height: 12 }] },
       ],
     })])).toMatchObject({
       kind: "selection",
-      selection: { nodeId: "node_a", selectedText: "第一句，第二句。第三句" },
+      mode: "contiguous-segment-range",
+      selection: { nodeId: "node_a", selectedText: "第一句，第二句" },
+    });
+    expect(resolveLassoTargets(lasso, [target({
+      measurement: [
+        { index: 0, rects: [{ x: 10, y: 10, width: 20, height: 12 }] },
+        { index: 2, rects: [{ x: 40, y: 10, width: 20, height: 12 }] },
+      ],
+    })])).toMatchObject({
+      kind: "selection",
+      mode: "selection-set",
+      selections: [
+        { nodeId: "node_a", selectedText: "第一句" },
+        { nodeId: "node_a", selectedText: "第三句" },
+      ],
+    });
+    expect(resolveLassoTargets(lasso, [
+      target(),
+      target({ nodeId: "node_b", text: "另一句。" }),
+    ])).toMatchObject({
+      kind: "selection",
+      mode: "selection-set",
+      selections: [
+        { nodeId: "node_a", selectedText: "第一句" },
+        { nodeId: "node_b", selectedText: "另一句" },
+      ],
     });
   });
 
-  it("keeps empty, pending, and failed measurements distinct from success", () => {
+  it("keeps empty, pending, and failed measurements distinct", () => {
     expect(resolveLassoTargets(lasso, [target({
       bounds: { left: 100, top: 100, right: 150, bottom: 140 },
     })])).toEqual({ kind: "empty-closed" });
@@ -54,26 +100,66 @@ describe("lasso target resolution", () => {
       .toEqual({ kind: "ambiguous" });
   });
 
-  it("keeps cross-node and non-adjacent hits as separate passages", () => {
-    const second = target({ nodeId: "node_b", text: "另一句。" });
-    expect(resolveLassoTargets(lasso, [target(), second])).toMatchObject({
-      kind: "selection",
-      selections: [
-        { nodeId: "node_a", selectedText: "第一句，第二句" },
-        { nodeId: "node_b", selectedText: "另一句" },
+  it("retains a visible all-failed target as ambiguity and recovers all-or-none", () => {
+    const rootBounds = { left: 5, top: 5, right: 155, bottom: 45 };
+    const allFailed = lassoTargetFromMeasurements({
+      nodeId: "node_a",
+      text: "第一句，第二句。第三句。",
+      rootBounds,
+      measurements: [
+        { index: 0, rects: null },
+        { index: 1, rects: null },
+        { index: 2, rects: null },
       ],
     });
-    expect(resolveLassoTargets(lasso, [target({
-      measurement: [
+    expect(allFailed).toEqual({
+      nodeId: "node_a",
+      text: "第一句，第二句。第三句。",
+      bounds: rootBounds,
+      measurement: "failed",
+    });
+    const prior = Object.freeze([Object.freeze({
+      type: "segment-range" as const,
+      nodeId: "prior",
+      start: 0,
+      end: 3,
+      selectedText: "旧选择",
+    })]);
+    const failedResolution = resolveLassoTargets(lasso, [allFailed!]);
+    expect(failedResolution).toEqual({ kind: "ambiguous" });
+    expect(settleLassoSelectionSet(prior, failedResolution)).toBe(prior);
+
+    const partial = lassoTargetFromMeasurements({
+      nodeId: "node_a",
+      text: "第一句，第二句。第三句。",
+      rootBounds,
+      measurements: [
         { index: 0, rects: [{ x: 10, y: 10, width: 20, height: 12 }] },
-        { index: 2, rects: [{ x: 40, y: 10, width: 20, height: 12 }] },
+        { index: 1, rects: null },
+        { index: 2, rects: [{ x: 130, y: 10, width: 24, height: 12 }] },
       ],
-    })])).toMatchObject({
+    });
+    expect(partial).toMatchObject({ bounds: rootBounds, measurement: "failed" });
+    expect(resolveLassoTargets(lasso, [partial!])).toEqual({ kind: "ambiguous" });
+
+    const recovered = lassoTargetFromMeasurements({
+      nodeId: "node_a",
+      text: "第一句，第二句。第三句。",
+      rootBounds,
+      measurements: [
+        { index: 0, rects: [{ x: 10, y: 10, width: 20, height: 12 }] },
+        { index: 1, rects: [{ x: 40, y: 10, width: 20, height: 12 }] },
+        { index: 2, rects: [{ x: 130, y: 10, width: 24, height: 12 }] },
+      ],
+    });
+    expect(recovered).toMatchObject({
+      bounds: { left: 10, top: 10, right: 154, bottom: 22 },
+      measurement: [{ index: 0 }, { index: 1 }, { index: 2 }],
+    });
+    expect(resolveLassoTargets(lasso, [recovered!])).toMatchObject({
       kind: "selection",
-      selections: [
-        { nodeId: "node_a", selectedText: "第一句" },
-        { nodeId: "node_a", selectedText: "第三句" },
-      ],
+      mode: "contiguous-segment-range",
+      selection: { nodeId: "node_a", selectedText: "第一句，第二句" },
     });
   });
 });

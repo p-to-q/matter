@@ -50,6 +50,28 @@ canvas appearance, or the right-rail editing tools.
   inquiry context, and protocol.
 - Paper utilities align to a 24 px edge grid. Their hover fill may react to the
   leaf atmosphere, but they never migrate into the material field.
+- Upper-right About/settings, bottom-right utilities, and lower-left guidance
+  share one transparent two-depth optical contract. Bottom-right supplies the
+  baseline: a broad `28px` inline / `22px` block outer guard and a smaller
+  `15px` inline / `11px` block inner guard. Upper-right uses `30/24` and `17/13`;
+  lower-left uses `32/24` and `18/12`, giving their different copy only a few
+  more pixels of air. The outer plane samples at `0.8px`, the inner at `3.25px`.
+  Both elliptical alpha masks share a very short zero-foot:
+  the perimeter is fully transparent, reaches only `.004` opacity three percent
+  inward, and remains near `.012`–`.014` six percent inward. After that common
+  quiet beginning the curves deliberately diverge: the `0.8px` outer plane is
+  capped below full mask strength and gathers over a long shallow shoulder,
+  while the inner plane rises later through a compact S-shaped soft step
+  (`.32` → `.72` → `.90`) beneath the labels. The two depths therefore remain
+  immediately distinguishable without a border, a third ring, or a hard cutoff
+  under zoom.
+  Because both planes have no fill, empty paper exposes no card; the effect
+  becomes perceptible only when material or ruling passes behind it.
+  The shared masks inherit from the canvas shell; only each group's insets and
+  radii differ. The planes ignore pointer input and disappear at the existing
+  `767px` mobile handoff. No DOM collision observer, per-glyph
+  opacity, material filter, camera state, animation, history, or preference is
+  introduced.
 - The right rail exposes only the current editing vocabulary. Its selected
   second-preview geometry is `60px` wide with a `22px` outer radius; desktop
   buttons remain visibly `44px` with `13px` corner radii and `20px` artwork.

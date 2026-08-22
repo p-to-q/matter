@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createIndexedDbDocumentRepository } from "./document-repository";
+import { createSeededDocument } from "../material/seeded-document";
+import { treeToBundle } from "./snapshot-codec";
+import { createTreeHistory } from "../tree/history";
 
 vi.mock("idb", () => ({ openDB: vi.fn() }));
 
@@ -171,6 +174,187 @@ describe("IndexedDB document repository", () => {
       bundle: { files: {} },
       history,
     }));
+  });
+
+  it("exports the exact corrupt row before atomically replacing that same basis", async () => {
+    const tree = createSeededDocument().tree;
+    const corrupt = {
+      storageSchemaVersion: 1,
+      treeId: tree.id,
+      treeRevision: tree.revision,
+      writeGeneration: 7,
+      bundle: { files: {} },
+    };
+    const put = vi.fn().mockResolvedValue(undefined);
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue(corrupt),
+        put,
+        delete: vi.fn(),
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    const database = {
+      get: vi.fn().mockResolvedValue(corrupt),
+      transaction: vi.fn().mockReturnValue(transaction),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    const exported = await repository.exportCorrupt(tree.id);
+    expect(exported.ok).toBe(true);
+    if (!exported.ok) throw new Error(exported.error.message);
+    expect(new TextDecoder().decode(exported.value.bytes)).toBe(JSON.stringify(corrupt));
+
+    await expect(repository.replaceCorrupt(
+      tree.id,
+      tree.revision,
+      treeToBundle(tree),
+      createTreeHistory(),
+      exported.value.basis,
+    )).resolves.toEqual({ ok: true, value: 8 });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      treeId: tree.id,
+      writeGeneration: 8,
+      bundle: treeToBundle(tree),
+    }));
+    expect(transaction.abort).not.toHaveBeenCalled();
+  });
+
+  it("refuses corrupt replacement when the exported row changed", async () => {
+    const tree = createSeededDocument().tree;
+    const corrupt = { treeId: tree.id, writeGeneration: 3, bundle: { files: {} } };
+    const changed = { ...corrupt, writeGeneration: 4 };
+    const put = vi.fn();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue(changed),
+        put,
+        delete: vi.fn(),
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    const database = {
+      get: vi.fn().mockResolvedValue(corrupt),
+      transaction: vi.fn().mockReturnValue(transaction),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const repository = createIndexedDbDocumentRepository();
+    const exported = await repository.exportCorrupt(tree.id);
+    if (!exported.ok) throw new Error(exported.error.message);
+
+    await expect(repository.replaceCorrupt(
+      tree.id,
+      tree.revision,
+      treeToBundle(tree),
+      createTreeHistory(),
+      exported.value.basis,
+    )).resolves.toMatchObject({ ok: false, error: { code: "PERSISTENCE_CONFLICT" } });
+    expect(transaction.abort).toHaveBeenCalledTimes(1);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("reserves an imported snapshot with empty history and retains the exact previous row", async () => {
+    const tree = createSeededDocument().tree;
+    const bundle = treeToBundle(tree);
+    const previousHistory = { entries: [{ commandId: "old" }], retainedInverseBytes: 12 };
+    const previous = {
+      storageSchemaVersion: 1,
+      treeId: tree.id,
+      treeRevision: tree.revision + 1,
+      writeGeneration: 4,
+      bundle,
+      history: previousHistory,
+    };
+    const put = vi.fn().mockResolvedValue(undefined);
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue(previous),
+        put,
+        delete: vi.fn(),
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    const reserved = await repository.reserveImportedSnapshot(
+      tree.id,
+      tree.revision,
+      bundle,
+      4,
+    );
+    expect(reserved).toMatchObject({
+      ok: true,
+      value: {
+        previous,
+        imported: {
+          treeId: tree.id,
+          treeRevision: tree.revision,
+          writeGeneration: 5,
+          history: { entries: [], redoEntries: [], retainedInverseBytes: 0 },
+        },
+      },
+    });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      writeGeneration: 5,
+      history: { entries: [], redoEntries: [], retainedInverseBytes: 0 },
+    }));
+  });
+
+  it("rolls an exact imported row back with a newer generation and never overwrites a stale row", async () => {
+    const tree = createSeededDocument().tree;
+    const bundle = treeToBundle(tree);
+    const previous = {
+      storageSchemaVersion: 1 as const,
+      treeId: tree.id,
+      treeRevision: tree.revision + 2,
+      writeGeneration: 7,
+      bundle,
+      history: createTreeHistory(),
+    };
+    const imported = {
+      storageSchemaVersion: 1 as const,
+      treeId: tree.id,
+      treeRevision: tree.revision,
+      writeGeneration: 8,
+      bundle,
+      history: createTreeHistory(),
+    };
+    const put = vi.fn().mockResolvedValue(undefined);
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue(imported),
+        put,
+        delete: vi.fn(),
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+    const repository = createIndexedDbDocumentRepository();
+    const reservation = { treeId: tree.id, imported, previous };
+
+    await expect(repository.rollbackImportedSnapshot(reservation)).resolves.toEqual({
+      ok: true,
+      value: { status: "rolled-back", writeGeneration: 9 },
+    });
+    expect(put).toHaveBeenCalledWith({ ...previous, writeGeneration: 9 });
+
+    transaction.store.get.mockResolvedValue({ ...imported, writeGeneration: 10 });
+    await expect(repository.rollbackImportedSnapshot(reservation)).resolves.toEqual({
+      ok: true,
+      value: { status: "stale" },
+    });
+    expect(put).toHaveBeenCalledTimes(1);
+    expect(transaction.abort).toHaveBeenCalledTimes(1);
   });
 });
 

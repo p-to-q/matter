@@ -45,7 +45,7 @@ describe("projectNodeHandlePosition", () => {
       textRect: rect(72, 264, 120, 62),
       toolCount: 2,
       metrics: coarseBase,
-    })).toEqual({ left: 30, top: 211 });
+    })).toEqual({ left: 30, top: 211, relation: "corner", materialCorner: { x: 42, y: 53 } });
   });
 
   it("keeps a full-width passage's field inside the paper inset", () => {
@@ -56,7 +56,7 @@ describe("projectNodeHandlePosition", () => {
       textRect: rect(20, 264, 272, 62),
       toolCount: 2,
       metrics: coarseBase,
-    })).toEqual({ left: 20, top: 211 });
+    })).toEqual({ left: 20, top: 211, relation: "corner", materialCorner: { x: 0, y: 53 } });
   });
 
   it("lets the glyphs rest on the first line by exactly the authorised descent", () => {
@@ -92,7 +92,29 @@ describe("projectNodeHandlePosition", () => {
       textRect: rect(300, 240, 156, 32),
       toolCount: 2,
       metrics: metricsFor(32, false),
-    })).toEqual({ left: 261, top: 191 });
+    })).toEqual({ left: 261, top: 191, relation: "corner", materialCorner: { x: 39, y: 49 } });
+  });
+
+  it("keeps a clamped paper-edge corner addressable within the visual outset", () => {
+    expect(projectNodeHandlePosition({
+      documentRect: rect(0, 0, 500, 500),
+      guidanceRect: null,
+      railRect: null,
+      textRect: rect(0, 240, 156, 26),
+      toolCount: 1,
+      metrics: metricsFor(26, false),
+    })).toEqual({ left: 12, top: 191, relation: "corner", materialCorner: { x: -12, y: 49 } });
+  });
+
+  it("publishes the measured corner again when one action is clamped at the opposite edge", () => {
+    expect(projectNodeHandlePosition({
+      documentRect: rect(0, 0, 500, 500),
+      guidanceRect: null,
+      railRect: null,
+      textRect: rect(460, 240, 40, 26),
+      toolCount: 1,
+      metrics: metricsFor(26, false),
+    })).toEqual({ left: 420, top: 191, relation: "corner", materialCorner: { x: 40, y: 49 } });
   });
 
   it("fits beside material near the paper inset once the field is sized to it", () => {
@@ -103,7 +125,7 @@ describe("projectNodeHandlePosition", () => {
       textRect: rect(20, 90, 460, 20),
       toolCount: 2,
       metrics: metricsFor(20, false),
-    })).toEqual({ left: 12, top: 54 });
+    })).toEqual({ left: 12, top: 54, relation: "corner", materialCorner: { x: 8, y: 36 } });
   });
 
   it("uses the corner placement when a wide line is near the bottom edge", () => {
@@ -114,6 +136,17 @@ describe("projectNodeHandlePosition", () => {
       textRect: rect(20, 440, 460, 20),
       toolCount: 2,
       metrics: metricsFor(20, false),
-    })).toEqual({ left: 12, top: 404 });
+    })).toEqual({ left: 12, top: 404, relation: "corner", materialCorner: { x: 8, y: 36 } });
+  });
+
+  it("marks a below-material fallback as detached so its fog stays direction-neutral", () => {
+    expect(projectNodeHandlePosition({
+      documentRect: rect(0, 0, 500, 500),
+      guidanceRect: null,
+      railRect: null,
+      textRect: rect(100, 20, 100, 20),
+      toolCount: 2,
+      metrics: metricsFor(26, false),
+    })).toEqual({ left: 61, top: 54, relation: "detached", materialCorner: null });
   });
 });

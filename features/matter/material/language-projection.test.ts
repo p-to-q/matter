@@ -34,16 +34,24 @@ describe("language projection", () => {
     })).toMatchObject({ ok: true, projection: { before: "开头。", after: "", hasBefore: true, hasAfter: false } });
   });
 
-  it("preserves internal seams when adjacent segments merge", () => {
+  it("projects an adjacent multi-segment range and keeps only its outer seam", () => {
     expect(projectLanguageAroundSelection("第一句，第二句。第三句。", {
       type: "segment-range", nodeId, start: 0, end: 7, selectedText: "第一句，第二句",
-    })).toMatchObject({
+    })).toEqual({
       ok: true,
-      projection: { before: "", selectedWithSeam: "第一句，第二句。", after: "第三句。" },
+      projection: {
+        before: "",
+        selected: "第一句，第二句",
+        outerSeam: "。",
+        selectedWithSeam: "第一句，第二句。",
+        after: "第三句。",
+        hasBefore: false,
+        hasAfter: true,
+      },
     });
   });
 
-  it("rejects stale, partial, and non-segment addresses", () => {
+  it("rejects stale text and arbitrary partial ranges", () => {
     expect(projectLanguageAroundSelection("第一句。", {
       type: "segment-range", nodeId, start: 0, end: 2, selectedText: "过期",
     })).toEqual({ ok: false, error: "INVALID_SELECTION" });
@@ -52,4 +60,3 @@ describe("language projection", () => {
     })).toEqual({ ok: false, error: "INVALID_SELECTION" });
   });
 });
-

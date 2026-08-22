@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   copyLassoSelectionSet,
+  lassoAddressFromResolution,
   normalizeLassoSelectionSet,
+  primaryLassoSelection,
   settleLassoSelectionSet,
 } from "./lasso-selection";
 
@@ -13,32 +15,76 @@ const selection = (nodeId: string, start: number, end: number, selectedText: str
   selectedText,
 });
 
-describe("transient lasso selection sets", () => {
-  it("deduplicates geometry repeats while preserving authored visual order", () => {
-    const set = normalizeLassoSelectionSet([
-      selection("a", 0, 2, "甲"),
-      selection("a", 0, 2, "甲"),
-      selection("b", 4, 6, "乙"),
-    ]);
-    expect(set).toHaveLength(2);
-    expect(copyLassoSelectionSet(set)).toBe("甲\n\n乙");
+describe("single lasso address", () => {
+  it("owns exactly one punctuation-bounded selection", () => {
+    const range = selection("a", 0, 2, "甲");
+    const address = lassoAddressFromResolution({
+      kind: "selection",
+      mode: "contiguous-segment-range",
+      selection: range,
+    });
+    expect(address).toEqual({ kind: "contiguous-segment-range", range });
+    expect(primaryLassoSelection(address)).toEqual(range);
   });
 
-  it("keeps every resolved passage after pointer-up instead of clearing the tray", () => {
-    const first = selection("a", 0, 2, "甲");
-    const second = selection("b", 4, 6, "乙");
-
-    expect(settleLassoSelectionSet([], {
+  it("rejects a malformed range instead of publishing an address", () => {
+    const malformed = selection("a", 2, 2, "甲");
+    expect(lassoAddressFromResolution({
       kind: "selection",
+      mode: "contiguous-segment-range",
+      selection: malformed,
+    })).toBeNull();
+  });
+});
+
+describe("lasso selection mode", () => {
+  const first = selection("a", 0, 5, "第一段");
+  const second = selection("b", 0, 4, "另一段");
+
+  it("owns, deduplicates, copies, and settles several passages", () => {
+    const normalized = normalizeLassoSelectionSet([first, first, second]);
+    expect(normalized).toEqual([first, second]);
+    expect(copyLassoSelectionSet(normalized)).toBe("第一段\n\n另一段");
+    expect(settleLassoSelectionSet(Object.freeze([first]), {
+      kind: "selection",
+      mode: "selection-set",
       selection: first,
       selections: [first, second],
     })).toEqual([first, second]);
   });
 
-  it("restores the starting set after an ambiguous stroke and clears only a closed empty loop", () => {
-    const start = normalizeLassoSelectionSet([selection("a", 0, 2, "甲")]);
+  it("keeps selection-set and Elastic cardinality fail-closed", () => {
+    const current = Object.freeze([first, second]);
+    expect(lassoAddressFromResolution({
+      kind: "selection",
+      mode: "selection-set",
+      selection: first,
+      selections: [first, second],
+    })).toBeNull();
+    expect(settleLassoSelectionSet(current, {
+      kind: "selection",
+      mode: "selection-set",
+      selection: first,
+      selections: [first],
+    })).toBe(current);
+    expect(settleLassoSelectionSet(current, {
+      kind: "selection",
+      mode: "contiguous-segment-range",
+      selection: first,
+      selections: [first, second],
+    })).toBe(current);
+    expect(settleLassoSelectionSet(current, {
+      kind: "selection",
+      mode: "selection-set",
+      selection: second,
+      selections: [first, second],
+    })).toBe(current);
+  });
 
-    expect(settleLassoSelectionSet(start, { kind: "ambiguous" })).toBe(start);
-    expect(settleLassoSelectionSet(start, { kind: "empty-closed" })).toEqual([]);
+  it("clears only for a trustworthy empty loop and preserves on ambiguity", () => {
+    const current = Object.freeze([first, second]);
+    expect(settleLassoSelectionSet(current, { kind: "empty-closed" })).toEqual([]);
+    expect(settleLassoSelectionSet(current, { kind: "ambiguous" })).toBe(current);
+    expect(settleLassoSelectionSet(current, { kind: "uncommitted" })).toBe(current);
   });
 });

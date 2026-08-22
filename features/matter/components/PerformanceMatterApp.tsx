@@ -113,7 +113,6 @@ export function PerformanceMatterApp() {
       onRenameDocument={() => undefined}
       onClearSelection={() => setNavigation((current) => clearSelection(current))}
       onTransformCommit={() => null}
-      onTextSwapCommit={() => ({ status: "rejected" })}
       onSelectNode={select}
       onToggleFold={toggle}
       onUndo={() => undefined}

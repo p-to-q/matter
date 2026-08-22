@@ -7,6 +7,7 @@ import {
 } from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { clientMatterBasePath } from "../config/base-path";
+import { readBoundedJsonResponse } from "./bounded-json-response";
 
 export type InquiryOutcome =
   | Readonly<{ status: "answered"; text: string }>
@@ -53,7 +54,11 @@ export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome
       }),
       signal: boundary.signal,
     });
-    const payload = await readBoundedJson(response);
+    const payload = await readBoundedJsonResponse(
+      response,
+      MAX_INQUIRY_RESPONSE_BYTES,
+      boundary.signal,
+    );
     // A refused question was still sent, so it must not be reported as unsent.
     // The route's prose is intentionally discarded: only a strict, closed
     // receipt may select localized interface copy.
@@ -127,39 +132,4 @@ function refusalOutcome(status: number, payload: unknown): InquiryOutcome {
       return TEMPORARILY_UNAVAILABLE;
   }
   return UNREACHABLE;
-}
-
-async function readBoundedJson(response: Response): Promise<unknown> {
-  const declared = response.headers.get("content-length");
-  if (declared !== null && /^\d+$/.test(declared) && Number(declared) > MAX_INQUIRY_RESPONSE_BYTES) {
-    await response.body?.cancel().catch(() => undefined);
-    throw new Error("The inquiry response is too large.");
-  }
-  const body = response.body;
-  if (body === null) throw new Error("The inquiry response has no body.");
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (value === undefined) continue;
-      total += value.byteLength;
-      if (total > MAX_INQUIRY_RESPONSE_BYTES) {
-        throw new Error("The inquiry response is too large.");
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-    if (total > MAX_INQUIRY_RESPONSE_BYTES) await body.cancel().catch(() => undefined);
-  }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(merged)) as unknown;
 }

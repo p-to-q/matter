@@ -30,7 +30,8 @@ matter/
 - parent/children derive from nesting;
 - sibling order derives from the numeric prefix;
 - slug text is readable but non-authoritative;
-- `matter.json` contains tree id, protocol version, and snapshot revision;
+- `matter.json` contains tree id, protocol version, snapshot revision, and an
+  optional document title;
 - invalid, duplicate, unreachable, or version-mismatched input is rejected.
 
 The codec is independent of storage. IndexedDB automatic durability is not
@@ -49,11 +50,12 @@ bundleToTree(bundle): ThoughtTree;
 every path and file, constructs a candidate tree, then performs schema and full
 tree-invariant validation before returning anything.
 
-`matter.json` is UTF-8 JSON with exactly `protocolVersion`, `treeId`, and
-`revision`, written with stable key order and LF. An empty tree contains only
-this file. A rooted bundle additionally has exactly one `matter/index.md`.
-Node frontmatter accepts exactly `id`, `createdAt`, and `updatedAt`; duplicate or
-unknown keys fail. Markdown is UTF-8 and LF without content normalization.
+`matter.json` is UTF-8 JSON with exactly `protocolVersion`, `treeId`, `revision`,
+and optional `title`, written with stable key order and LF. An empty tree
+contains only this file. A rooted bundle additionally has exactly one
+`matter/index.md`. Node frontmatter accepts exactly `id`, `createdAt`,
+`updatedAt`, and the optional `role: document-root`; duplicate, unknown, or
+other role values fail. Markdown is UTF-8 and LF without content normalization.
 
 Child directories are numbered contiguously from `001`. The display slug is
 NFC-normalized, lowercase where applicable, whitespace and reserved path
@@ -74,6 +76,7 @@ type StoredSnapshot = {
   treeRevision: number;
   writeGeneration: number;
   bundle: SnapshotBundle;
+  history?: TreeHistory;
 };
 ```
 
@@ -91,10 +94,73 @@ is in flight, hydration is refused and the conflict remains visible.
 Runtime persistence state tracks base generation, persisted revision, queued
 revision, dirty revision, and error. Write failure does not roll back material;
 pointer retry saves the latest dirty bundle for transient write failures;
-generation conflict instead requires explicit reload. `visibilitychange: hidden` requests
-a flush, but the UI says material is saved only when persisted revision equals
-tree revision. Browser crash between commit and IndexedDB completion cannot be
-promised away.
+generation conflict instead requires explicit reload. `visibilitychange: hidden`
+requests a flush. The footer may say only that a write is in flight; its
+local-device identity never promises that a dirty revision reached storage.
+Browser crash between commit and IndexedDB completion cannot be promised away.
+
+The material-index footer is deliberately not that recovery control. It keeps
+only the localized non-account identity and local-device line, with a brief
+saving phrase while a write is actually in flight. Conflict, storage-full,
+generic save failure, corrupt-row export/repair, retry, and reload of stored
+material are owned by the explicit Archive panel, so a durable failure remains
+recoverable without becoming permanent status chrome.
+
+The outline relationship grammar stays pure, local, and presentation-only. For
+each same-parent group in the current visible outline:
+
+- if at least one sibling is a structural branch, every leaf sibling receives a
+  local terminal point; if all siblings are leaves, every leading slot is blank;
+- a structural branch receives its disclosure instead of a point;
+- only a currently expanded branch disclosure may start a guide, and only when
+  the flattened outline contains at least one visible interior row before the
+  next same-parent sibling control (`toIndex - fromIndex > 1`). It connects to
+  that sibling's disclosure or local terminal point. A collapsed arrow, an
+  immediately adjacent row, a point, or a blank slot never starts a segment;
+- the guide runs in the parent's indentation lane and leaves stable clearance
+  around its source disclosure and the target row's disclosure or point.
+  Because adjacency belongs to siblings rather than flattened row indexes, the
+  segment between two root-level branches may pass the first branch's visible
+  descendants. Folding those descendants removes the segment until expansion
+  makes an interior row visible again;
+- when a group contains at least two direct siblings and its final sibling is
+  an expanded structural branch with visible descendants, that branch receives
+  one scope tail instead of needing a fictional next sibling. The vertical part
+  stays on the source disclosure axis and ends at the branch's last visible
+  descendant row; a rightward run of at most 14 px closes in indentation air.
+  It retains 2 px before a blank lane, 4 px before a terminal point, and 8 px
+  before a disclosure or restore control, retracting further as indentation
+  compression approaches another leading control.
+  The tail is absent for a singleton, collapsed or held branch, and never makes
+  a descendant into an endpoint;
+- disclosure, local terminal point, and blank leading space are mutually
+  exclusive. A held branch's restore `+` owns that slot alone and never stacks
+  with a point.
+
+Thus an all-leaf child group is blank. In a leaf / branch / leaf group the rows
+read point / disclosure / point: the first transition has no guide and the
+second has disclosure → point only while the branch is expanded and its child
+creates a visible interior row. That branch's sole all-leaf child stays blank.
+Collapsing the branch makes its point sibling immediately adjacent, so no short
+connector remains. In a branch / branch group, the first expanded branch may
+lead to the second across its descendants; if the second is expanded, its tail
+closes only the second branch's own visible range. Search, selection, local fold
+projection, and virtual-window clipping may omit, recompute, or clip visible
+relationships, but cannot change their parent, bridge across a leaf,
+manufacture an endpoint, or turn geometry into structure. In particular, a
+virtual window may expose only a vertical piece of a tail; it may draw the
+rightward close only when the structural last descendant is mounted.
+
+Automatic durability stores the bounded undo journal beside the validated
+bundle. Recovery validates that journal independently against the tree; an
+invalid journal is discarded as a local convenience without discarding valid
+material. The portable Markdown archive deliberately excludes runtime history.
+
+A corrupt IndexedDB row is not retried against an unknown generation. Matter
+first produces a bounded recovery copy of that exact row, then replaces it only
+if the same serialized row is still present in the readwrite transaction. A
+late export or a row changed by another tab loses authority instead of erasing
+the newer value.
 
 Load accepts only the exact protocol version and complete valid tree. It never
 casts, partially restores, or silently migrates. Requesting persistent browser
@@ -119,13 +185,19 @@ Unicode-normalized/case-folded duplicates, unexpected files, and anything except
 one top-level `matter/` directory. Transport produces a bundle in memory;
 `bundleToTree` and complete tree validation run before a single document-import
 commit. Archive work uses an asynchronous boundary and cannot block pointer
-interaction at maximum bounds.
+interaction at maximum bounds. The import attempt therefore carries the current
+tree id, revision, and document epoch across preparation and revalidates them
+immediately before the synchronous runtime switch. A foreign tree id is
+rejected before any reservation because the first release has no
+durable active-document pointer. A stale same-document reservation is adopted
+before the newest pending local material drains.
 
 Directory export, if offered, creates a new directory rather than overwriting an
 old one, so a renamed slug cannot leave stale node files behind.
 
-Snapshot round-trip covers the `ThoughtTree`, not runtime command or undo
-history.
+Portable snapshot round-trip covers the `ThoughtTree`, not runtime command or
+undo history. IndexedDB restoration separately carries the bounded history
+cache described above.
 
 Rejected for `0.2`: path identity, a flat heading outline as the canonical form,
 a duplicated `tree.json` containing structure, binary/database-native export,

@@ -49,6 +49,57 @@ describe("punctuation text segments", () => {
     expect(text.slice(0, 7)).toBe("  甲 — 乙");
   });
 
+  it("keeps English and German closing quotes in the preceding seam", () => {
+    const text = '"One." ‘Two?’\r\n„Drei.“ »Vier!«';
+    expect(segmentText(text).map((segment) => ({
+      text: text.slice(segment.start, segment.end),
+      seam: text.slice(segment.end, segment.seamEnd),
+    }))).toEqual([
+      { text: '"One', seam: '." ' },
+      { text: "‘Two", seam: "?’\r\n" },
+      { text: "„Drei", seam: ".“ " },
+      { text: "»Vier", seam: "!«" },
+    ]);
+  });
+
+  it("keeps Chinese and Japanese nested closing punctuation in the seam", () => {
+    const text = "“甲‘乙！’”） 「丙。」『丁？』\r\n（戊：己）";
+    expect(segmentText(text).map((segment) => ({
+      text: text.slice(segment.start, segment.end),
+      seam: text.slice(segment.end, segment.seamEnd),
+    }))).toEqual([
+      { text: "“甲‘乙", seam: "！’”） " },
+      { text: "「丙", seam: "。」" },
+      { text: "『丁", seam: "？』\r\n" },
+      { text: "（戊", seam: "：" },
+      { text: "己）", seam: "" },
+    ]);
+  });
+
+  it("does not swallow a next opener and does not split an unmatched closer", () => {
+    const text = "甲。 “乙。”丙）丁。";
+    expect(segmentText(text).map((segment) => ({
+      text: text.slice(segment.start, segment.end),
+      seam: text.slice(segment.end, segment.seamEnd),
+    }))).toEqual([
+      { text: "甲", seam: "。 " },
+      { text: "“乙", seam: "。”" },
+      { text: "丙）丁", seam: "。" },
+    ]);
+  });
+
+  it("keeps emoji graphemes intact across quoted multilingual boundaries", () => {
+    const text = "“👩‍👩‍👧‍👦！” 「👍🏽？」\r\n🇩🇪.";
+    expect(segmentText(text).map((segment) => ({
+      text: text.slice(segment.start, segment.end),
+      seam: text.slice(segment.end, segment.seamEnd),
+    }))).toEqual([
+      { text: "“👩‍👩‍👧‍👦", seam: "！” " },
+      { text: "「👍🏽", seam: "？」\r\n" },
+      { text: "🇩🇪", seam: "." },
+    ]);
+  });
+
   it("drops leading delimiter prefixes and returns no whitespace-or-seam-only ranges", () => {
     const text = " ？！  甲";
     expect(segmentText(text)).toEqual([
@@ -80,12 +131,9 @@ describe("punctuation text segments", () => {
 describe("segment selection validation", () => {
   const text = "甲， 乙。丙？";
 
-  it("accepts one segment and an adjacent merge with internal punctuation", () => {
+  it("accepts one segment or one adjacent segment run", () => {
     expect(validateSelection(text, selection("node_a", 0, 1, text))).toMatchObject({ ok: true });
-    expect(validateSelection(text, selection("node_a", 0, 4, text))).toMatchObject({
-      ok: true,
-      selection: { selectedText: "甲， 乙" },
-    });
+    expect(validateSelection(text, selection("node_a", 0, 4, text))).toMatchObject({ ok: true });
   });
 
   it("rejects partial, punctuation-only, split-grapheme, stale-text and foreign-node addresses", () => {
@@ -129,7 +177,14 @@ describe("segment selection validation", () => {
 describe("selection from geometry hits", () => {
   const nodes = { a: "甲， 乙。丙？", b: "另一个节点。" };
 
-  it("deduplicates wrapped fragments and merges adjacent hits", () => {
+  it("deduplicates wrapped fragments and joins adjacent segments in one node", () => {
+    expect(selectionFromSegmentHits(nodes, [
+      { nodeId: "a", segmentIndex: 1 },
+      { nodeId: "a", segmentIndex: 1 },
+    ])).toMatchObject({
+      ok: true,
+      selection: { nodeId: "a", start: 3, end: 4, selectedText: "乙" },
+    });
     expect(selectionFromSegmentHits(nodes, [
       { nodeId: "a", segmentIndex: 1 },
       { nodeId: "a", segmentIndex: 0 },
@@ -162,8 +217,13 @@ describe("selection from geometry hits", () => {
 });
 
 describe("selection clipboard serialization", () => {
-  it("returns only the exact validated adjacent language", () => {
+  it("returns one validated contiguous segment range", () => {
     const text = "甲， 乙。丙？";
+    expect(serializeSegmentSelection(text, selection("a", 3, 4, text), "a")).toEqual({
+      ok: true,
+      text: "乙",
+      nodeId: "a",
+    });
     expect(serializeSegmentSelection(text, selection("a", 0, 4, text), "a")).toEqual({
       ok: true,
       text: "甲， 乙",
