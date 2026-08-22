@@ -10,7 +10,7 @@ export type VoiceReadinessState =
 const CHECKING: VoiceReadinessState = Object.freeze({ status: "checking" });
 
 /**
- * A control stays inert while the browser voice path is being prepared. This
+ * A control stays inert while the browser voice path is being verified. This
  * avoids consuming the first pointer activation before its transport exists.
  */
 export function useVoiceReadiness(): VoiceReadinessState {

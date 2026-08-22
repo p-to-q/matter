@@ -9,7 +9,10 @@ import { requestTextSwap } from "./text-swap-client";
 
 const TIME = "2026-08-20T00:00:00.000Z";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("text swap client", () => {
   it("transports one exact envelope and accepts only its echoed plan", async () => {
@@ -27,6 +30,8 @@ describe("text swap client", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/matter/api/text-swap");
     const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.method).toBe("POST");
+    expect(init?.cache).toBe("no-store");
+    expect(init?.redirect).toBe("error");
     expect(JSON.parse(String(init?.body))).toEqual(envelope);
   });
 
@@ -102,6 +107,19 @@ describe("text swap client", () => {
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(TEXT_SWAP_CLIENT_TIMEOUT_MS).toBe(16_000);
+  });
+
+  it("settles its deadline when the transport ignores AbortSignal", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    const pending = requestTextSwap(fixtureEnvelope(), new AbortController().signal);
+    const assertion = expect(pending).rejects.toMatchObject({
+      retryable: true,
+      message: "Matter took too long to swap this passage.",
+    });
+
+    await vi.advanceTimersByTimeAsync(TEXT_SWAP_CLIENT_TIMEOUT_MS);
+    await assertion;
   });
 });
 

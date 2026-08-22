@@ -90,6 +90,94 @@ describe("persistence controller", () => {
     expect(repository.savedRevisions).toEqual([tree.revision, third.revision]);
   });
 
+  it("does not write an exact tree and history reference twice while it is in flight", async () => {
+    const tree = createSeededDocument().tree;
+    const history = createTreeHistory();
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+
+    controller.publish(tree, history);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+
+    expect(repository.savedRevisions).toEqual([tree.revision]);
+    expect(repository.pending).toHaveLength(0);
+  });
+
+  it("lets the last exact publication cancel a newer stale pending value", async () => {
+    const tree = createSeededDocument().tree;
+    const history = createTreeHistory();
+    const newer = { ...tree, revision: tree.revision + 1 };
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+
+    controller.publish(newer, history);
+    controller.publish(tree, history);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+
+    expect(repository.savedRevisions).toEqual([tree.revision]);
+    expect(repository.pending).toHaveLength(0);
+    expect(controller.getStatus().persistedRevision).toBe(tree.revision);
+  });
+
+  it("coalesces one hundred real revision publications into the first and latest write", async () => {
+    const tree = createSeededDocument().tree;
+    const rootId = tree.rootId!;
+    const history = createTreeHistory();
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+
+    let latest = tree;
+    for (let revision = 1; revision <= 100; revision += 1) {
+      latest = {
+        ...tree,
+        revision: tree.revision + revision,
+        nodes: {
+          ...tree.nodes,
+          [rootId]: {
+            ...tree.nodes[rootId],
+            text: `${tree.nodes[rootId].text} ${revision}`,
+            updatedAt: "2026-08-22T12:00:00.000Z",
+          },
+        },
+      };
+      controller.publish(latest, history);
+    }
+
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.treeRevision).toBe(latest.revision);
+    repository.settleNext({ ok: true, value: 2 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
+  });
+
+  it("flushes the latest hidden-page candidate without forking the active write", async () => {
+    const tree = createSeededDocument().tree;
+    const latest = { ...tree, revision: tree.revision + 1 };
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    await waitFor(() => repository.pending.length === 1);
+    controller.publish(latest);
+
+    controller.flush();
+    expect(repository.pending).toHaveLength(1);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.treeRevision).toBe(latest.revision);
+    repository.settleNext({ ok: true, value: 2 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
+  });
+
   it("writes the inverse journal with the same snapshot transaction", async () => {
     const tree = createSeededDocument().tree;
     const history: TreeHistory = { entries: [], retainedInverseBytes: 0 };

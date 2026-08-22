@@ -434,6 +434,16 @@ for counsel.
 
 ## Current phase — release convergence
 
+The current work has four distinct evidence states. They must not be collapsed
+into one release claim:
+
+| State | What is true | What it does not authorize |
+| --- | --- | --- |
+| deployed Preview.38 | the historical `browser-preview` receipt remains authoritative; labels, repair and inquiry are live, both material-model gates are off | no claim for this worktree's transport, cache, persistence or renderer hardening; issue #34 remains open |
+| post-Preview.38 source candidate | ordinary Matter keeps the complete renderer and adds the recorded transport, cache, persistence and hidden-resource hardening | no deployment identity, origin receipt or production promotion until a separately versioned candidate is frozen |
+| performance research only | C1/C2/C3b run only through the explicit performance fixture; C4a/C4b are pure modules with no ordinary-product importer | no viewport source on Matter, no real lifecycle handoff, no accessibility or release-proof claim |
+| external operations still open | issue #34 distributed admission/rate/spend/alert ownership, retained deployed-origin latency/cold/fallback evidence, Elastic corpus/origin proof, and the viewport AT/lifecycle gates | no inference from a healthy cache, local benchmark, instance log or fixture receipt |
+
 ```text
 Outcome:    a new person can complete the material loop with warmed truthful
             Voice admission and one pointer-released fixed expansion of one
@@ -462,6 +472,127 @@ Non-goals:  live Elastic promotion, any Text Swap UI or promotion, account/sync,
             an Ask Matter log manager, CRDT/event-sourcing rewrite, renderer
             virtualization without a measured trigger, or a native shell.
 ```
+
+### Active hardening — runtime delivery and cache boundary
+
+State: implemented and proven locally; the current production release proves
+the equivalent media header, while this source contract remains undeployed.
+
+```text
+Outcome:    repeat visits and weak networks reuse only safe immutable or
+            deployment-stable assets, while the first page stays independent
+            of local speech weights and provider cold starts
+Boundary:   Next response policy, pinned local-model identity, production
+            artifact budgets, deployment probes and disposable CI compiler
+            cache; no material, answer, prompt, provider, or interface changes
+Invariants: every request containing audio, transcript, selected material or a
+            model answer remains no-store; stable-name media keeps the observed
+            four-hour revalidation contract and never becomes immutable;
+            content-hashed Next assets alone receive immutable delivery
+Proof:      exact cache-policy units, static-shell/initial-transfer/lazy-WASM/
+            trace/source-map artifact gate, focused worker identity proof,
+            clean production build, then the real post-deployment media probe
+Non-goals:  service workers, synthetic warmers, shared response caches,
+            provider-business changes, CDN rewrites, or a new UI/loading state
+```
+
+Pre-Phase-C runtime-hardening baseline receipt, 2026-08-22: the shared-tree
+production build at that stage held `/` static,
+all request routes dynamic, 34.8 KiB root HTML, 1,123.4 KiB raw / 355.0 KiB
+gzip initial assets, 24.61 MiB of content-hashed `.next/static` assets, one
+23,014.7 KiB lazy hashed WASM, 103.2 KiB of hashed `next/font` output, and
+458.2 KiB across the complete `public/` directory (including 350.8 KiB of
+visual media). Both root-level NFT manifests and every server-level manifest
+were inspected; repository-only traces and production source maps remain zero.
+The existing `preview.38` origin passes the expanded probe with its equivalent
+four-hour stable-media policy; its shell, legacy, and poster checks are
+header-only.
+
+### Completed hardening — hidden-page browser-resource release
+
+```text
+Outcome:    leaving Matter or moving it into the background promptly releases
+            voice capture, transient voice requests, derived-label requests,
+            and the lazy local speech worker instead of carrying microphone,
+            model memory, network work, or background compute through a long
+            browser session
+Boundary:   one page-suspension adapter, admission/inquiry/material-turn/label
+            adapters, and the local Whisper/readiness leases; no tree, provider,
+            persistence, or interface changes
+Invariants: hidden work cannot commit material or a question draft; returning
+            visible never restarts capture, a request, or model loading; raw
+            audio and transcript remain transient and uncached
+Proof:      focused pagehide/visibility coalescing, BFCache re-entry,
+            request cancellation and worker-retirement tests, existing voice
+            lifecycle tests, typecheck and lint
+Non-goals:  viewport rendering, persistence scheduling, model-pool policy,
+            service workers, a generic resource manager, or release operations
+```
+
+Receipt, 2026-08-22: hidden-at-subscribe, `visibilitychange` plus `pagehide`
+coalescing, listener removal, BFCache re-entry, lazy worker/readiness recreation,
+derived-label release and eligibility re-arming, and the existing
+recorder/AudioContext release paths
+pass 117 focused tests. Typecheck, target lint, documentation links, and diff
+whitespace checks pass. Returning visible recreates nothing until a new intent;
+no user material or raw voice data gained a cache.
+
+### Completed sub-slice — bounded model transport and external pool configuration
+
+```text
+Outcome:    a stalled relay cannot steal fallback time; Ask Matter, Elastic,
+            and Text Swap settle at their browser deadline; an operator can
+            configure one clearly
+            named shared model pool without touching scenario authority gates
+Boundary:   model-pool transport/config parsing and the five bounded browser
+            HTTP clients; no prompt, adjudicator, tree, or UI ownership changes
+Invariants: no user audio, transcript, repair, inquiry, transform, or text-swap
+            answer is cached; redirects are refused; label cache remains only
+            a complete-normalized-input fingerprint plus prompt-version derived
+            presentation;
+            legacy production secrets remain valid but never merge with the
+            canonical namespace; one pointer action still creates no retry
+Proof:      ignored-signal relay fallback, canonical/legacy/conflict config,
+            ignored-signal inquiry and material-turn timeouts, strict request
+            options, all focused
+            pool/client tests, then repository check and browser suite
+Non-goals:  provider prewarming, automatic retry or jitter, shared cross-scenario
+            queues, distributed rate/spend control, live gate promotion, or new UI
+```
+
+Receipt, 2026-08-22: focused model-pool, health, and browser-client tests prove
+74 cases, including a first relay and injected inquiry/material-turn transports
+that never settle or observe abort. The complete release gate remains owned by
+the parent release pass.
+
+### Completed sub-slice — content-zero model performance observations
+
+```text
+Outcome:    successful latency and fallback mix are visible from at most one
+            production `matter.scenario-performance` scalar receipt per
+            model-scenario invocation with a non-null adapter
+Boundary:   harness terminal observation plus anonymous pool attempt counters;
+            ordinary server logs only, with no browser or telemetry transport
+Invariants: no material, prompt, answer, audio, transcript, locale, identity,
+            provider/model/endpoint/key, error text, or arbitrary extra field;
+            observer failure cannot alter settlement; no cold/warm guess
+Proof:      answered/rejected/timeout/busy classifications, candidate attempt
+            counters, hostile extra-field allowlisting, failing observer, pool
+            event sequence, focused type/lint/docs checks
+Non-goals:  deployed-origin p95, edge latency, distributed retention/alerting,
+            provider cold attribution, sampling, or issue #34 controls
+```
+
+Receipt, 2026-08-22: the five-scenario and five-outcome enums, two-value
+candidate provenance, 0–255 counters, and 0–120000 ms numeric duration are the
+entire `matter.scenario-performance` event schema. Source sampling is off and
+Matter retains nothing; one such line per non-null scenario-adapter terminal is
+the harness volume ceiling, including a governor-shed terminal with zero
+candidate attempts. Cache hits, missing adapters, and caller cancellation emit
+nothing. Elastic and dormant Text Swap retain their separate route-owned
+`matter.material-turn` scalar-bucket receipt, so this is not a claim that a
+material turn produces only one application log line. This is instance evidence,
+not an origin SLO; only `candidateTelemetry: "pool"` proves pool attempt facts.
 
 ### Active sub-slice — one model foundation, separate product fallbacks
 
@@ -1344,6 +1475,33 @@ Receipt: empty and rooted bundles round-trip deterministically; IndexedDB reload
 coalescing, conflict and retry work; ZIP export → import restores identity; bad
 versions, paths, collisions, and bounds fail before material changes.
 
+### Completed hardening — continuous local durability cost
+
+```text
+Outcome:    a maximum tree can publish its exact Markdown snapshot without a
+            slug projection long task, and an identical in-flight publication
+            cannot manufacture a second full IndexedDB write
+Boundary:   canonical slug/path projection, bundle byte scan, persistence
+            controller scheduling, CAS generation guard, and opt-in benchmark;
+            no document, history, archive, UI, or storage schema change
+Invariants: every persisted path and byte stays identical; tree and full inverse
+            history still commit in one generation-checked row; one write plus
+            one latest pending snapshot remains the only coalescing rule;
+            hidden-page flush, quota, conflict, corrupt export and import owner
+            keep their existing recovery authority
+Proof:      legacy-algorithm parity across fixed and 256 seeded Unicode cases;
+            maximum-bound round trip; coalescing/exact-duplicate/CAS exhaustion/
+            malformed-row units; repeatable Node and Chromium receipts
+Non-goals:  debounce, lossy history, worker encoding, incremental journals,
+            service workers, schema migration, or a storage-quota promise
+```
+
+Receipt, 2026-08-22: on this machine the realistic 2,000-node encode median
+fell from 24.74 ms to 11.56 ms and the maximum-text median from 125.83 ms to
+18.42 ms. Headless Chromium 151 measured a 12.27 MB synthetic row at 9.2 ms
+median synchronous `put()` clone and 9.6 ms through transaction completion.
+These are local comparison receipts, not cross-device SLOs.
+
 ### Slice 3A — Markdown material is visible and durable
 
 State: Proven for the visible/durable sidebar slice.
@@ -1955,6 +2113,615 @@ canvas renderer remains a possible later route, but it would reopen native text
 selection, accessibility and exact lasso geometry before the first release. This
 recommendation deliberately changes the earlier “all 2,000 nodes mounted” renderer
 assumption, so implementation must not begin until that product boundary is accepted.
+
+### Viewport DOM Phase A — prove typography authority before renderer work
+
+State: Reopened and authorized by the user for feasibility proof only; production
+renderer implementation remains closed.
+
+```text
+Outcome:    determine whether a rendering-edge typography projector can supply the
+            exact text heights a complete pure layout needs without mounting every
+            interactive thought in the DOM
+Boundary:   one non-production pure height projector, a real-browser parity harness,
+            this freeze, and focused proof; RootedMaterial and CanvasThoughtList stay
+            unchanged
+Authority:  authored text and structure remain in the tree; font-ready browser metrics
+            enter through the rendering edge; the projector returns scalar heights;
+            only the existing pure layout may turn those heights into world geometry
+Matrix:     production matter typography plus the real local Plantin and Departure
+            faces; root clamp and 17px child grammar; CJK, Latin, mixed script,
+            punctuation, unbroken words, and RTL; 320, 390, and laptop viewports;
+            236, 280, and 520px columns; production `text-wrap: pretty`
+Build gate: every critical projected height must match DOM `offsetHeight` within
+            0.5px after `document.fonts.ready`; the 2,000-text run records duration
+            and attributed long tasks without changing the existing performance gate
+Stop rule:  one critical parity miss stops Phase A. Record the failing typography and
+            use a bounded DOM measurement bench or another evidence-backed geometry
+            source; do not approximate, widen 0.5px, edit visual CSS, or enter the
+            production renderer
+Proof:      pure adversarial unit cases; production Chromium matrix and computed-style
+            receipt; explicit local-font load receipt; repeated 2,000-text timing;
+            typecheck, lint, and diff hygiene
+Non-goals:  viewport windowing, overscan, pinning, camera handoff, DOM replacement,
+            CSS changes, progressive geometry, protocol or document changes, relaxed
+            visual/performance thresholds, deployment, or release mutation
+```
+
+The current canvas face is the system `--matter-face`; Plantin is the dormant display
+face and Departure owns mono chrome. Phase A loads and tests both local files because a
+height source must be font-generic, but it must not silently move either face onto
+material. Passing proves only that exact heights are feasible. It does not authorize
+the viewport-DOM renderer, whose overscan, pinning, accessibility, SSR, camera, and
+failure semantics remain a separately reviewed build slice.
+
+Receipt, 2026-08-22: Phase A failed its unchanged parity gate and stopped before
+production renderer work. Both local faces loaded from the built WOFF2 assets, and the
+browser receipt captured the complete production tuple: family, size, weight, line
+height, letter spacing, white space, word break, overflow wrap, `text-wrap` mode/style,
+and direction. Of 378 DOM/projector comparisons, 370 matched exactly. Eight critical
+punctuation cases did not: Chromium kept the text to three lines while the Canvas/UAX
+prototype projected four, producing one complete-line height errors of `29`, `36`, or
+`39px` at the 236/280px phone and narrow-column boundaries. RTL and unbroken-word
+samples happened to match, but that cannot rescue a font-generic authority after one
+critical miss. The 2,000-text projector took `66.7`, `43.0`, `41.7`, `41.5`, and
+`41.5ms` across five runs. The Long Tasks observer reported no entry, but the first
+synchronous duration itself crossed the 50ms long-task floor and remains adverse
+evidence rather than a pass.
+
+The next falsifiable alternative is a non-interactive DOM measurement bench, not a
+more permissive Canvas line breaker. Test a one-shot bench and bounded 16/32/64/128-row
+batches in an `inert`, `aria-hidden`, offscreen owner using the real thought element and
+computed typography. It must deduplicate the existing exact
+`{ text, root, columnWidth, typographyEpoch }` key, read all heights in one batched
+layout read per mount, and remove replicas immediately. The proof must retain exact
+parity, record peak bench DOM, maximum task, total blocking time, and end-to-end time to
+complete 2,000 settled heights, and include font/viewport invalidation. Batched work may
+not claim success by making each task short while layout-ready becomes slower. If no
+candidate preserves the current cold-task and readiness budgets, viewport DOM remains
+closed; no approximation or CSS change is an allowed fallback.
+
+### Viewport DOM Phase B — falsify a bounded native-DOM height authority
+
+State: Research authorized and frozen; production renderer integration remains closed.
+
+```text
+Outcome:    determine whether browser-native, non-interactive DOM measurement can
+            return exact scalar text heights quickly enough to unblock a later
+            viewport-DOM renderer phase
+Boundary:   one test-only measurement bench, pure cache-key/ledger helpers, a real-
+            browser parity and performance harness, and this receipt; RootedMaterial,
+            CanvasThoughtList, layout production code, and visual CSS stay unchanged
+Authority:  the production `.spatial-thought__text` element, its complete computed
+            typography tuple, and a `document.fonts` epoch are authoritative; the
+            bench returns only scalar heights and never tree or world geometry
+Owner:      a real `ol > li > button.spatial-thought__text` replica inside an inert,
+            `aria-hidden`, offscreen owner; replicas never receive events or focus
+Key:        exact `{ text, root, columnWidth, production grammar version, complete
+            height-affecting typography/box tuple, fonts epoch, dir, locale }`;
+            duplicates share one scalar result and no replica; conflicting direction
+            authority fails closed
+Candidates: one-shot and 16/32/64/128-row batches; each candidate completes inside
+            one synchronous call with no animation-frame, timer, idle, or task split
+Batching:   each batch performs all writes before its centralized height reads, then
+            removes every replica immediately; no write/read interleave is allowed
+Matrix:     Phase A's real Matter, Plantin, and Departure faces; root clamp and 17px
+            child grammar; CJK, Latin, mixed script, punctuation, long unbroken words,
+            Arabic and Hebrew RTL; 320/390/laptop viewports and 236/280/520px columns
+Invalidation: font load/epoch, viewport, column width, theme, locale, direction, and
+            typography tuple changes must produce an explicit cache miss or ledger
+            invalidation; a warm result from an obsolete epoch is a failure
+Build gate: at least one cold candidate has exact target parity (hard maximum 0.5px),
+            maximum synchronous work below 50ms, and 2,000 total settle no greater
+            than 63ms, a material improvement over the current ~90.2ms complete-DOM
+            React commit; warm-cache speed alone cannot pass
+Proof:      all candidate cold/warm durations, maximum synchronous segment, Long Tasks
+            and TBT, peak replica DOM, available heap samples, font-load receipt,
+            complete computed tuple, invalidation matrix, focused type/lint/diff checks
+Stop rule:  if no cold candidate satisfies parity, <50ms synchronous work, and <=63ms
+            total settle together, stop without production integration and return to a
+            different renderer/measurement architecture; never widen visual or timing
+            gates and never split work across frames merely to hide a long task
+Non-goals:  viewport windowing, overscan, pinning, camera or accessibility handoff,
+            SSR changes, production caches/listeners, authored geometry, CSS changes,
+            protocol/document changes, deployment, release, or gate relaxation
+```
+
+Batch size is a peak-DOM and layout-cost variable, not a scheduling claim. Every
+candidate is timed as one uninterrupted synchronous operation, including all batches
+and cleanup. A candidate that needs a yielding scheduler is evidence for another
+architecture phase, not a Phase B pass. The 63ms readiness bound is intentionally 30%
+below the attributed complete-DOM commit, so normal benchmark noise cannot be presented
+as an architectural gain.
+
+Receipt, 2026-08-22: Phase B passed feasibility for bounded native-DOM measurement,
+but did not authorize or change the production renderer. Chromium loaded the real
+Plantin and Departure WOFF2 files and compared all five candidates across the complete
+378-sample Phase A matrix. Matter/Plantin/Departure, root/child, seven script and wrap
+classes, three viewports, and three column widths all matched native truth by exactly
+`0px`; the bench also rejected any post-mount computed tuple that differed from its
+keyed authority. The original attempt to write serialized pixel metrics back inline
+produced fifteen `1px` laptop root errors because it discarded the production
+unitless-line-height and `clamp()` internal precision. It was withdrawn; the passing
+bench retains the real class grammar, varies only the test face, and validates the
+complete computed height/box tuple before reading.
+
+The hard 2,000-row receipt used 2,000 distinct text keys rather than the normal
+performance fixture's 650 unique/1,350 repeated keys. Results were:
+
+| candidate | cold total / max synchronous (three runs) | warm | peak bench DOM | result |
+| --- | ---: | ---: | ---: | --- |
+| one-shot | `71.4–77.0ms` | `2.3–4.9ms` | `4,001` | fail: crosses 50ms and 63ms |
+| 16 | `37.1–43.0ms` | `2.5–4.4ms` | `33` | pass |
+| 32 | `37.0–40.5ms` | `2.3–4.6ms` | `65` | pass |
+| 64 | `36.1–39.4ms` | `2.4–4.5ms` | `129` | pass |
+| 128 | `36.5–38.1ms` | `2.4–4.3ms` | `257` | pass |
+
+No bounded candidate yielded between batches. Chromium's Long Tasks observer reported
+no entry, so the direct synchronous clock remains the authoritative task receipt; it
+also assigns the failed one-shot a `21.4–27.0ms` blocking-time floor instead of treating
+the observer's silence as zero blocking. `performance.memory` was available but coarsely
+reported `23.1MB` at start/peak/end for every candidate, so it is recorded as available,
+not as proof of zero allocation. Replicas were always `inert`, `aria-hidden`, offscreen,
+and removed immediately. An exact duplicate produced one replica and one cache hit;
+warm runs produced no DOM. Actual viewport resize, column width, theme, locale,
+direction, root/child typography, and a real `FontFaceSet.loadingdone` epoch each forced
+the intended miss. The width authority also fails closed when computed width differs
+from the scalar column width; the real 520→280px case matched an independent 280px
+replica at `78px` exactly. Conflicting `dir` and computed direction fail closed.
+Final fail-closed review keys post-mount validation by both the expected tuple and
+scalar column width. A single 32-row batch containing a correct 280px item followed by
+a 520px item that dishonestly reused the 280px tuple threw before settlement, removed
+the owner, and left the ledger at size zero; no first-row partial cache escaped.
+
+Phase C may now be proposed, not assumed. Split it into: (1) a rendering-edge height
+authority with explicit grammar and font epochs, bounded cache ownership, SSR-empty and
+font-failure behavior; (2) a complete pure-layout barrier that consumes scalar heights
+without making DOM state authoritative; (3) viewport/overscan projection plus focused,
+lasso, drag, transform and camera pinning; and only then (4) accessibility/keyboard and
+full interaction/performance receipts. Start with bounded 32/64/128 candidates and
+select by repeated production-build evidence; at that point the differences were too
+small to canonize a batch size from three development-browser runs. One-shot stays
+rejected.
+
+### Viewport DOM Phase C — complete geometry, bounded native material
+
+State: Architecture frozen; staged implementation authorized. Production renderer
+replacement and release promotion remain closed until every stage and manual AT gate
+below passes.
+
+```text
+Outcome:    keep large material smooth without changing its visible form, authored
+            order, addressability, or one rooted source of truth
+Boundary:   one rendering-edge typography authority; one complete pure-layout barrier;
+            one pure spatial window projector; one transient mount/pin protocol; the
+            canvas list and its existing interaction adapters; no document or wire data
+Authority:  tree + Full/Focus projection stay complete; browser DOM yields only exact
+            positive scalar heights; pure layout owns every world box; DOM membership
+            is a disposable ordered projection of viewport, overscan and valid pin leases
+Cache:      rendering-edge LRU, maximum 4,096 positive heights; exact text/root/width/
+            grammar/tuple/font/direction/locale key; owner-issued generations only;
+            document, font, theme, locale, direction and width invalidation fail closed
+Window:     every box intersecting paper viewport plus spatial overscan is mounted;
+            ordered pins are unioned without becoming tree, navigation or persistence;
+            there is no correctness-truncating DOM cap
+Proof:      exact box/screenshot parity; font success/error/fallback; mount-before-act;
+            every pointer lifecycle; complete keyboard order; Safari VoiceOver plus a
+            Chromium AT receipt; 320/390/laptop; repeated production 2,000-node gates
+Stop rule:  any visible omission, partial layout epoch, zero/guessed height, detached
+            focus/pointer owner, unreachable material, blank smooth camera corridor, or
+            widened performance threshold keeps the full renderer authoritative
+Non-goals:  approximate Canvas/UAX wrapping, Canvas/WebGL text, content-visibility,
+            hidden duplicate accessibility DOM, authored coordinates, incremental
+            geometry publication, generic cache services, store-owned pins, or a model/
+            protocol/persistence change made merely to serve rendering
+```
+
+The authority chain is one-way:
+
+```text
+ThoughtTree + fold/focus
+  → complete pure preorder
+  → rendering-edge positive HeightSnapshot
+  → one atomic complete ColumnarLayout
+  → pure viewport + overscan + ordered valid pins
+  → bounded native li > button DOM
+```
+
+`layoutEpoch` and `windowEpoch` are different facts. Camera motion may change mounted
+DOM without invalidating heights or authored geometry. Every layout publication token
+binds document epoch, projection key, typography-authority generation, grammar epoch,
+font epoch and style/viewport grammar epoch. A missing, non-finite or non-positive
+height, changed tuple/width, late font event, stale token, or pure-layout failure drops
+the complete candidate; mixed epochs never reach pointer or keyboard work.
+
+Cold bootstrap never mounts the complete large tree. Server HTML and the first client
+hydration render are deterministic canvas/chrome plus at most the actual first authored
+passage as an `aria-hidden`, `inert` `.62` visual glimpse. That glimpse is not an
+accessible partial list and exposes no pointer authority. Only after hydration may the
+rendering-edge authority create its two persistent `aria-hidden` + `inert` root/child
+probes under the real canvas CSS ancestry; the canvas stays inert until complete layout,
+window publication and acknowledgement all settle. A probe is never material. Font
+`loading` invalidates the active transaction; both `loadingdone` and `loadingerror`
+advance the epoch. Error settles through the browser's actually computed fallback on the
+next bounded attempt; the paper never waits forever for `document.fonts.ready`.
+
+Steady spatial overscan begins at `clamp(160px, viewportAxis * .5, 480px)` in screen
+space and converts through current camera zoom. Window recomputation occurs only after
+the actual rendered camera leaves an inner guard band. All intersecting boxes mount;
+performance is governed by evidence, not by discarding a correct result. Filtering the
+union back through the complete preorder preserves authored DOM order even for distant
+pins.
+
+One rendering-edge lease protocol owns offscreen actions:
+
+```text
+intent + ids + document/layout basis
+  → reconcile ids against the current complete projection
+  → acquire bounded transient pins
+  → commit the ordered union
+  → layout-effect acknowledgement that each id is connected at that window epoch
+  → synchronously revalidate the originating basis
+  → measure or act
+  → release only after its stable destination window commits
+```
+
+No acknowledgement means cancellation, never guessed geometry. Pins cover the current
+roving focus and pending keyboard destination; selected/focused nodes; NodeActionLens
+focus ownership; index-camera target; settled lasso nodes; the pointer-down lasso or
+stretch window while drawing/dragging; native selection endpoints; drag source/target;
+admission parent/new node; repair and transform presentations; and any camera-interrupt
+source that must receive focus or pointer authority back. Deletion, fold, held-aside,
+navigation, or document change cancels an invalid owner rather than mounting hidden
+material. Pure hover alone closes when it leaves the window.
+
+The Lasso and drag windows freeze at pointer-down. Resize, font, tree, layout or camera
+invalidation cancels the stroke and restores the last trustworthy semantic selection.
+Settled selections acquire their node pins before the frozen window releases. Complete
+pure layout continues to derive empty-paper drop lanes; DOM hit testing confirms only
+currently mounted direct targets.
+
+Index camera mounts and acknowledges its target before measurement. A smooth move may
+mount the swept corridor only while that corridor is at most twice the larger steady
+source/destination window. Larger moves become an immediate destination commit after
+the target is ready; they do not animate through empty paper or remount the full route.
+Pointer interruption cancels the camera lease before Lasso or drag begins.
+
+Canvas keyboard focus becomes one roving native material button for every projection
+size, not only large documents. Up/Down traverse complete preorder; Home/End reach its
+ends; Page keys move by one current spatial window; Right retains the existing action
+lens, while Lasso Left/Right retain segment navigation. An offscreen destination is
+mounted and acknowledged before camera/focus transfer; the old focused button stays
+connected until `focus({ preventScroll: true })` succeeds. Mounted rows expose their
+complete-projection position and total, never window-local numbers. This automatic
+contract is necessary but insufficient: real Safari VoiceOver and Chromium AT browsing
+remain release blockers because `aria-setsize` cannot prove omitted nodes reachable.
+
+Implementation stays in independently reversible stages:
+
+1. **C0 — positive material.** Freeze whether a non-document passage may be empty. The
+   current product admits language, so validation should reject empty/whitespace-only
+   passages at every tree/import/command boundary. If evidence reverses that product
+   choice, define a visible accessible one-line form first; never invent a measurement
+   constant.
+2. **C1 — production height owner.** Add the two real probes, font/style generations,
+   strict-positive staged measurement and bounded LRU. It outputs only a scalar snapshot
+   and does not filter production DOM.
+3. **C2 — complete barrier.** Drive a full test renderer through the snapshot and prove
+   exact current boxes, screenshots, invalidation and interaction geometry. The current
+   production path stays selected.
+4. **C3 — steady window.** Add the pure spatial projector, deterministic bootstrap,
+   complete bounds, ordered pins and a source-owned full/viewport release switch. No
+   runtime failure silently changes renderer.
+5. **C4 — lifecycle handoff.** Land focus/selection, camera, Lasso, stretch/transform,
+   drag, admission/repair and lens leases one at a time with focused late/cancel proof.
+6. **C5 — release proof.** Prove 500 pan/zoom and 200 fold/focus cycles leave no probe,
+   pin or listener residue; cache stays at 4,096; run full pointer/keyboard/AT/browser
+   matrix and the unchanged three-round production receipt. Enable the viewport source
+   for one pre-release before deleting the full path.
+
+C0 receipt, 2026-08-22: the tree invariant authority now accepts exact empty text only
+for `document-root` and requires every passage to contain a non-whitespace Unicode
+character. Initialize, insert, replace, detached-memento validation, snapshot decode,
+archive import, persistence publication, and history hydration all converge on that
+complete-tree validation instead of inventing renderer height. Focused engine tests
+prove empty, ASCII-whitespace, Unicode-whitespace, exact document-root, valid mixed
+text, insert rejection, and atomic replace rejection with no revision or inverse
+publication. Snapshot-codec tests prove invalid passage and non-empty document-root
+files fail before hydration. No UI, renderer, persistence schema, or protocol version
+changed.
+
+C1 receipt, 2026-08-22: a production-shaped rendering-edge height owner now exists,
+but no production component imports it and the full renderer remains authoritative. One
+owner mounts exactly two persistent `inert`, `aria-hidden` root/child probes under the
+real canvas CSS ancestry and creates short-lived real `ol > li > button` replicas only
+for cold misses. Its 4,096-entry LRU stores finite positive scalars only. Tokens are
+instance capabilities and bind authority generation, document, projection, grammar,
+font and style epochs; snapshots carry that complete basis. The owner generation retains
+the exact expanded root/child height/box tuples, while each compact cache key binds text,
+that root/child tuple slot, scalar width, owner/document/grammar/font/style generations,
+locale and direction. This avoids a lossy tuple hash and avoids copying a full serialized
+tuple into every row key. A token retains the probe tuples observed when it was issued, so an
+unannounced CSS change between `begin` and measurement invalidates the entire authority
+rather than publishing new metrics under an old style basis.
+
+Measurement is transactional: all keys and positive heights validate before a copied
+LRU is published; cache-hit recency is staged with the same commit, so a rejected batch
+does not expose even partial eviction order. One epoch has one probe-owned column width,
+locale and direction; disagreement is rejected before replicas mount. A snapshot carries
+the ordered authored node ids separately from repeatable cache keys, preserving exact
+tree order without giving up identical-text deduplication. Width or tuple disagreement,
+an over-limit request, foreign or stale tokens, disconnected owners and font loading all
+settle as no snapshot or an explicit fail-closed error. `FontFaceSet.loading` clears and blocks; both
+`loadingdone` and `loadingerror` advance the epoch, allowing the next attempt to measure
+the browser's actual loaded or fallback face. Destroy removes listeners and probes and
+invalidates every token. The owner exposes `isCurrent(token)` for the mandatory checks
+before pure layout and again before DOM publication. It re-reads live font status and
+probe tuples, rather than trusting event delivery or copied counters.
+
+Focused proof is six ledger tests plus three default real Chromium tests. The browser matched
+root, child and duplicate material heights exactly; the duplicate occupied one cache
+entry; warm reads produced the same scalar snapshot. Synthetic loading blocked `begin`
+and rejected the prior token; loading error and loading done advanced separate epochs and
+successfully remeasured fallback/loaded metrics. A deterministic FontFaceSet that changed
+to `loading` during replica measurement was caught by the pre-commit live check, returned
+no snapshot and left cache size zero. Context change, CSS mutation after token issue and
+destroy all rejected the old basis. Null FontFaceSet, RTL/Arabic, laptop 520px, 390/280px
+and 320/236px paths produced positive exact heights and left no owner. A mixed-width batch
+and a two-key request against a one-entry owner both failed before publication with zero
+cache or temporary DOM. Typecheck, focused lint, architecture, docs and diff hygiene
+passed, and independent review found no open C1 P0/P1 after the pre-commit font check.
+
+The performance gate first failed twice rather than being widened. The initial
+development-browser 2,000-unique-key run took `68–82ms` because it serialized and
+re-read the complete tuple for every replica. Reusing the serialization and reducing
+computed-style validation improved warm-sequence results, but the first ten-round
+production-build matrix still had no survivor: batch 32 reached `71.4ms`, 64 reached
+`56.5ms`, and 128 reached `61.2ms`. C1 therefore replaced repeated tuple strings with
+the exact owner-generation tuple capability and staged only true cache-hit recency; it
+also validates each deterministic `{root, dir, locale}` replica grammar once per
+transaction while still reading all 2,000 native `offsetHeight` values.
+
+The second production-build matrix used ten separately navigated cold authorities for
+each candidate with rotated candidate order. All thirty rounds passed both unchanged
+gates. Batch 32 measured `36.6–39.1ms` (median `37.8`, peak replica DOM 65), batch 64
+`35.6–38.6ms` (median `36.3`, peak 129), and batch 128 `34.9–43.0ms` (median `36.4`,
+peak 257). The frozen rule therefore selects batch 32: its median is within 10% of the
+fastest and it has the smallest peak DOM. `TYPOGRAPHY_HEIGHT_BATCH_SIZE` records that
+production choice. No frame/task yielding was used. The page itself was the normal
+ten-node production surface during this authority-only receipt; it is intentionally not
+an end-to-end 2,000-node renderer claim.
+
+C2 receipt, 2026-08-22: a new pure complete-publication barrier consumes the complete
+projection, one C1 snapshot and one layout configuration without importing a component
+or filtering DOM. It requires the exact same frozen owner token identity supplied by the
+caller, equal heights/keys/nodeIds/projection lengths, unique non-empty projection and
+snapshot node ids in exact authored order, non-empty repeatable cache keys and finite
+strictly positive heights. Only after full validation does it call `layoutColumnarTree`
+once. Layout rejection, output count/order disagreement or any invalid prefix returns one
+closed error and no publication. A success preserves the owner token identity for the
+second `authority.isCurrent` check and freezes the complete layout and ordered ids.
+
+Fifteen focused C2 tests cover immutable success, the empty complete projection, direct
+C1 type compatibility, copied/stale/invalid basis, every incomplete vector, `0`, negative,
+NaN and infinity heights, legitimate repeated keys, empty keys, duplicate/reordered ids,
+pure-layout rejection and input immutability. C2 plus adjacent ledger/columnar tests were
+50/50; typecheck, focused lint, architecture and diff checks passed. The production caller
+and full renderer remain unchanged. Presentation damage remains the existing subsequent
+pure projection and is deliberately not folded into this base barrier.
+
+The dedicated `/performance` production build then drove C1 and C2 beside the unchanged
+full renderer. All 2,000 authored ids, native heights, x/y transforms, widths and canvas
+bounds matched the current production geometry with maximum difference `0px`; the pure
+complete layout took `3.8ms`. Height measurement took `130.4ms` in that special parity
+case because both the old 2,000-node renderer and 2,000 measurement replicas coexisted.
+That is intentional equivalence evidence, not the C3 bounded-renderer performance claim.
+Both pre-layout and pre-comparison `authority.isCurrent` checks passed, and destroy left
+no probe or measurement owner.
+
+C3a receipt, 2026-08-22: a pure spatial projector now derives disposable native material
+membership from one complete `ColumnarLayout`; it is not imported by React. It converts
+the paper viewport relative to the transformed world origin through camera zoom and
+expands each screen axis by `clamp(160px, axis * .5, 480px) / zoom`. Every box touching
+or intersecting that world rect is included. Valid transient leases are unioned, then the
+result is filtered through the complete preorder so distant pins never reorder material.
+There is no correctness-truncating node cap.
+
+Document/layout basis and complete layout/preorder identity fail closed globally. Pin
+leases are reconciled per owner: empty/duplicate owner identity, invalid epochs, stale
+document/layout, malformed/empty ids or an unknown/deleted id invalidate that complete
+owner without blanking visible material or admitting a prefix. Pins cannot create node
+identity. Screen rect, zoom, layout rect and arithmetic overflow are bounded; empty
+complete layout is valid. Result geometry, ordered boxes/ids, pin ids and owner receipts
+are frozen and inputs remain unchanged. Twenty-three focused tests include overscan min/
+ratio/max, boundary contact, offscreen pin ordering, stale/unknown/duplicate owners,
+invalid scalar matrices, empty layout, input immutability and 4,257 simultaneously
+intersecting boxes with no truncation. C3a+C2+columnar tests were 67/67; typecheck,
+focused lint, architecture and diff checks passed. Guard-band scheduling, window epoch,
+mount acknowledgement and every interaction lifecycle remain C3b/C4 work.
+
+C3b cold-path research receipt, 2026-08-22: the viewport source is wired only through
+the explicitly gated production performance fixture. `MatterApp` does not pass the
+source and retains the complete renderer. The server and first hydration render expose
+one inert, `aria-hidden` visual glimpse with no material, layout, button or click
+identity; the C1 constructor creates its two persistent probes only in the hydration
+layout effect. This is the frozen SSR boundary for the current C1 API, not a claim that
+the probes themselves exist in server HTML.
+
+The candidate keeps one complete C1/C2 publication and gives the render edge only C3's
+ordered window ids. Its window basis binds document, complete layout, projection,
+rendered camera and a source-owned window epoch by object identity. The separate DOM
+publisher writes complete canvas bounds, requires every mounted element to be connected
+and in exact window order, applies only the matching complete boxes, revalidates the C1
+capability after the writes, and then publishes an acknowledgement retaining the same
+window-basis and node-id objects. `data-layout-ready` and interaction authority remain
+absent until that acknowledgement. Candidate failure is explicit and never falls back
+to the complete DOM.
+
+The research runtime is a dynamic client chunk requested only by the explicit source;
+the ordinary initial artifact fell from the static-import diagnostic's `1147.8KiB` raw /
+`361.5KiB` gzip to `1130.9KiB` / `357.2KiB`. The exact gated research candidate built at
+`1131.7KiB` raw / `357.5KiB` gzip and passed one complete five-case production run plus
+five separately navigated cold repetitions. All six cold observations preserved the
+2,000-node complete layout (`6244 × 120261px`) while mounting two current material rows,
+478 total page elements and no temporary measurement owner. FCP ranged `68–224ms`,
+layout-ready `181.7–379.9ms`, and the maximum observed cold task was `0–77ms`; the
+observer's zero means no reported entry, not proof of zero synchronous work. The wider
+first-load readiness range includes lazy-chunk and process-start variance, so this is a
+DOM/task reduction receipt rather than a claim that every cold readiness sample is
+faster than the complete renderer. The preceding static-import five-round diagnostic was
+FCP `68–132ms`, layout-ready `165.4–265.4ms` and maximum task `77–89ms`, while its first
+cold run reached `180ms`, `321ms` and `92ms`. Every recorded round kept all seven performance
+marks in order, stayed below the unchanged `<100ms` cold-task gate, had no hydration
+mismatch, and left the ordinary ten-node `/matter` path without viewport attributes or
+typography probes.
+
+Independent review then closed two stale-authority holes before freeze. A window basis
+now retains the exact complete-publication and projection objects plus the actual
+computed rendered-camera snapshot. Geometry publication re-reads that camera before and
+after DOM writes and revalidates the same C1 capability on both sides. Ready is observed
+only after its complete-count, window-count and source window-epoch acknowledgement
+metadata already exist. The three CSS layout grammar scalars are required finite positive
+values; the research source has no numeric fallback.
+
+Failure is one fail-closed transaction: the canvas becomes inert immediately, then the
+acknowledgement, window, complete publication, ready/revealed markers, counts, epoch and
+bounds are withdrawn. A production browser test removes the live typography probes and,
+without changing the projection/publication key, selects a deep offscreen node. The same-
+key geometry attempt fails as `window-geometry-rejected`, leaves zero material layout
+nodes and only the inert bootstrap, and never mounts the complete 2,000-node fallback;
+reload must rebuild measurement, complete publication, window and acknowledgement before
+interaction returns. The production five-case matrix passed cold publication,
+ordinary-route isolation, deep selected/focus mount-before-ack, pan/zoom/390px
+republication and this damage/recovery chain 5/5.
+
+This receipt proves only deterministic bootstrap, complete geometry, bounded initial
+native material and exact mount acknowledgement. The fixture forces index-camera moves
+to be instant because a swept corridor is not implemented. It does not authorize the
+viewport source for Matter: accessibility traversal, keyboard mount-before-focus,
+camera corridors, pointer/Lasso/stretch/drag/admission/repair leases, window scheduling,
+long-session residue and ordinary-route bundle comparison remain C4/C5 stop gates.
+
+C4a registry-foundation freeze, 2026-08-22: lifecycle integration begins with an
+independent pure transient registry, not with a `RootedMaterial` hook or durable document state. The first
+owner vocabulary is exactly `selected`, `focus`, `dom-focus`, `camera`, `lasso`,
+`stretch`, `drag` and `admission`. Each owner may hold at most one current immutable
+lease. Reacquiring one owner replaces its prior capability atomically; release succeeds
+only for that exact current lease object, so a copied, replaced or post-invalidation
+lease is a harmless late release and cannot clear newer intent.
+
+Every registry state and lease binds non-negative safe document, complete-layout and
+projection epochs. A change to any one epoch cancels every active lease before a new
+basis is published. Under an unchanged basis, deletion, fold or other complete-preorder
+removal cancels the complete affected owner rather than admitting an id prefix; other
+owners survive. Acquisition rejects empty, duplicate, malformed or unknown ids without
+partially replacing a valid current lease. Reconciliation unions only valid ids and
+filters that union through the supplied complete preorder, so acquisition order and
+owner order can never reorder material. The module remains pure, frozen and free of
+React, DOM, timers, stores, history or persistence; production lifecycle handoff stays
+closed until each owner receives separate integration and late/cancel proof.
+
+C4a registry-foundation receipt, 2026-08-22: the frozen contract now has one standalone
+functional state owner and no production importer. All eight owner kinds acquire and release an
+immutable identity capability. Same-owner reacquisition replaces rather than duplicates;
+an older, copied or post-invalidation release is a state-identity-preserving late no-op.
+Document, layout and projection epoch tests each cancel the complete registry. Stable-
+basis identity loss cancels only its affected owner; an unknown acquisition, malformed or
+duplicate id, unreconciled prior owner, duplicate forged owner and exhausted serial all
+fail closed without publishing a partial replacement. Reconciliation of interleaved
+owners and a complete 2,000-id pin set both return exact full-preorder order with no cap.
+
+Twenty-five focused registry tests and the adjacent C2/C3 projector tests pass 63/63.
+Strict focused typecheck, target lint, architecture and diff hygiene pass. Inputs remain
+unchanged and every published state, basis, lease, id vector, owner vector, invalidation
+receipt and ordered union is frozen. `RootedMaterial`, `CanvasThoughtList`, React, DOM,
+the document model and persistence remain untouched; this receipt authorizes later
+one-owner-at-a-time C4 lifecycle handoff proof, not viewport-source promotion.
+
+C4b mount-authority coordinator freeze, 2026-08-22: the second lifecycle-foundation
+sub-slice is a new pure coordinator above the C4a registry, not production lifecycle
+wiring. Acquisition
+or same-owner replacement clears prior mount authority before exposing the new lease.
+Any registry change during reconciliation does the same even when the scalar basis is
+unchanged: surviving leases remain, but their prior window and acknowledgements are
+withdrawn until the rendering edge publishes and acknowledges a new exact mounted
+capability. A deleted pin can therefore never leave another owner acting through a stale
+window that still contains the deleted identity.
+The rendering edge may acknowledge a window only after it has independently proved that
+the exact frozen ordered `nodeIds` capability is the complete connected DOM publication;
+the pure coordinator verifies identity, full-preorder order, complete active-pin coverage,
+document/layout/projection basis and a positive source-owned window epoch. It never
+claims to inspect connection, transforms, focus or the DOM itself.
+
+One window epoch has one authority object. A newer acknowledged epoch drops every older
+mount acknowledgement; an older epoch or a different authority reusing the same epoch
+fails closed. Act authorization requires the exact current registry lease, exact current
+acknowledgement, current window object and current three-epoch basis. A normal release
+requires that same lease to have reached an acknowledged `stable` destination window.
+Abandonment, pointer interruption or failure instead uses explicit cancellation, which
+needs no mount acknowledgement and cannot be delayed by DOM settlement. Replaced,
+cancelled or otherwise late leases, acknowledgements and releases remain no-ops against
+newer state. Pure immutable state is the only authority; a future React owner must retain
+and synchronously consult the latest state rather than acting from a captured older state.
+
+This sub-slice may simulate residue cycles, but it does not begin C5 release proof's
+browser, AT, listener, probe, cache, production-performance or pre-release gates. Those
+remain closed
+until the coordinator is connected one owner at a time to the rendering-edge publisher
+and proven against real mounted material.
+
+C4b mount-authority coordinator receipt, 2026-08-22: one new layout-layer functional
+module now composes the C4a registry without importing React, DOM or the C3b research
+component.
+The eight-owner matrix proves acquire, same-owner replace, exact mount acknowledgement,
+act permit, stable release and the replaced lease's late release. A changed pin union
+clears all acknowledgements; a newer window epoch replaces them; same-epoch authority
+conflict and older-window replay fail closed. The acknowledged window must contain every
+active owner's ids once, in complete-preorder order, and `mountedNodeIds` must be the exact
+frozen capability returned by the rendering edge rather than an equal copy.
+
+Document, layout and projection invalidation each clear lease, window, acknowledgement
+and permit authority. Stable-basis identity loss removes only its owner but withdraws the
+shared old window; surviving owners must re-acknowledge a new exact window before acting.
+Transient windows may authorize bounded
+interaction work but cannot release; explicit cancellation settles before mount or from
+a transient window, and every repeated cancellation is late. A 500-window acquire/
+acknowledge/release loop followed by 200 projection acquire/invalidate loops ended with
+serial 700, zero leases, zero acknowledgements and no retained window. This is pure-state
+residue evidence only, not a browser resource claim.
+
+Twenty-five coordinator tests and adjacent C2/C3/C4a tests pass 88/88. The added matrix
+proves all eight owners over one exact 2,000-id mounted window with no cap, same-basis
+owner invalidation followed by survivor re-acknowledgement, late release/cancel isolation,
+and exact state/window/ack identity preservation when reconciliation changes nothing.
+Repository
+typecheck, target lint, documentation links, architecture and diff hygiene pass; the
+architecture scan covers 381 files with no outward dependency, provider leak or cycle.
+The ordinary production graph has no coordinator importer. Every coordinator state,
+window, acknowledgement and permit is frozen and inputs remain untouched. The remaining
+C4 lifecycle owner wiring, DOM publisher trust, current-state ownership and real
+cancellation, followed by C5 AT/performance proof, remain explicitly unpromoted.
+
+Performance-hardening worktree integration receipt, 2026-08-22: the recorded
+post-Preview.38 source snapshot passed
+`npm run check`: doctor 21, 39 Markdown files and five parser checks, 60 Node checks,
+architecture over 381 files and seven layers with no outward edge/provider leak/cycle,
+147 Vitest files passed plus two skipped (`1,590` tests passed, four skipped), typegen,
+typecheck, full lint, and a 21-route production build. The ordinary artifact remains a
+static root at `1131.7KiB` initial raw / `357.5KiB` gzip with one lazy `23014.7KiB` WASM,
+`458.2KiB` public assets, `350.8KiB` visual media and zero repository-only runtime traces.
+
+The recorded ordinary Chromium matrix passed 95/110 with 15 explicit capability/research
+skips and zero failures in 1.5 minutes. It covers the laptop/narrow/coarse pointer paths,
+voice/admission, Lasso/Elastic, archive/corrupt recovery, index camera/search/windowing,
+2,000-node complete-layout parity, persistence-facing reload/undo flows, resource policy,
+and the typography authority. A first run exposed only Chromium resolving a declared
+`48px` coarse search-close control as `47.999984px`; the proof now checks the computed
+CSS width/height remain exactly `48px` and treats the geometric float with the same
+one-decimal tolerance already used by the adjacent 48px receipt. The isolated case then
+passed 1/1 and the complete matrix passed. The C3b source is additionally covered by its
+separate explicit production-build five-case pass and five cold repetitions above; its
+five tests remain research-gated in the ordinary suite.
 
 ### Canvas node DOM economy — one material control owns one geometry box
 

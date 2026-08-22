@@ -17,6 +17,7 @@ ordinary component and store work needs no matching document.
 | [`prompt-harness.md`](prompt-harness.md) | how any Matter prompt is built, budgeted, and judged |
 | [`thought-label.md`](thought-label.md) | naming a node in the material index |
 | [`virtual-file-system.md`](virtual-file-system.md) | Markdown snapshot and browser durability |
+| [`runtime-cache-and-delivery.md`](runtime-cache-and-delivery.md) | runtime caches, deferred local-model work, artifact budgets, and deployment delivery |
 | [`ambient-workbench-ui.md`](ambient-workbench-ui.md) | right-side paper, corner controls, rail, and ambient media ownership |
 | [`control-fog.md`](control-fog.md) | the passage-local action field: its surface, size, and placement |
 | [`architecture-governance.md`](architecture-governance.md) | auditing module boundaries, state ownership, caches, and architecture fitness |

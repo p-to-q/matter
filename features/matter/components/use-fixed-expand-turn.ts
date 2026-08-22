@@ -14,6 +14,7 @@ import type { StretchCommitBasis } from "../runtime/stretch-interaction";
 import type { TransformCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
+import { subscribePageSuspension } from "../interaction/page-suspension";
 
 export type FixedExpandTurnState = Readonly<{
   phase: "idle" | "requesting";
@@ -148,12 +149,11 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       event.preventDefault();
       cancel();
     };
-    const onPageHide = () => cancel();
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("pagehide", onPageHide);
+    const unsubscribePageSuspension = subscribePageSuspension(cancel);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pagehide", onPageHide);
+      unsubscribePageSuspension();
       cancel();
     };
   }, [cancel]);

@@ -92,21 +92,62 @@ describe("voice readiness", () => {
     });
   });
 
-  it("warms the recorded-audio worker without transcribing", async () => {
+  it("keeps the recorded-audio worker out of hydration", async () => {
     vi.stubEnv("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED", "false");
     vi.stubEnv("NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED", "false");
     vi.stubEnv("NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED", "true");
     vi.stubGlobal("window", { setTimeout, clearTimeout });
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn() },
+    });
+    vi.stubGlobal("MediaRecorder", class {});
+    vi.stubGlobal("AudioContext", class {});
     vi.stubGlobal("Worker", FakeWorker);
 
-    const readiness = prepareVoiceReadiness();
-    await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
-    expect(FakeWorker.instances[0]?.postMessage).not.toHaveBeenCalled();
-    FakeWorker.instances[0]?.emit({ status: "ready" });
-
-    await expect(readiness).resolves.toEqual({
+    await expect(prepareVoiceReadiness()).resolves.toEqual({
       status: "ready",
       transport: "audio",
     });
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+
+  it("reports a local-only fallback unavailable when its runtime capability is absent", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED", "true");
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn() },
+    });
+    vi.stubGlobal("MediaRecorder", class {});
+    vi.stubGlobal("AudioContext", class {});
+
+    await expect(prepareVoiceReadiness()).resolves.toEqual({
+      status: "unavailable",
+      transport: "audio",
+    });
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+
+  it("warms the recorded-audio worker only after a person creates the voice path", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED", "true");
+    vi.stubGlobal("window", { setTimeout, clearTimeout });
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn() },
+    });
+    vi.stubGlobal("MediaRecorder", class {
+      static isTypeSupported() { return true; }
+    });
+    vi.stubGlobal("AudioContext", class {});
+    vi.stubGlobal("Worker", FakeWorker);
+    vi.stubGlobal("requestAnimationFrame", vi.fn());
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    expect(FakeWorker.instances).toHaveLength(0);
+    createBrowserVoicePort();
+    await vi.waitFor(() => expect(FakeWorker.instances).toHaveLength(1));
+    expect(FakeWorker.instances[0]?.postMessage).not.toHaveBeenCalled();
+    FakeWorker.instances[0]?.emit({ status: "ready" });
   });
 });

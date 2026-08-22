@@ -9,7 +9,10 @@ import { requestTransform } from "./transform-client";
 
 const TIME = "2026-08-11T00:00:00.000Z";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe("transform client", () => {
   it("transports one immutable envelope and accepts only its exact plan", async () => {
@@ -26,6 +29,8 @@ describe("transform client", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const init = fetchMock.mock.calls[0]?.[1];
     expect(init?.method).toBe("POST");
+    expect(init?.cache).toBe("no-store");
+    expect(init?.redirect).toBe("error");
     expect(JSON.parse(String(init?.body))).toEqual(envelope);
     expect(String(init?.body)).not.toContain("voice");
   });
@@ -112,6 +117,19 @@ describe("transform client", () => {
     controller.abort();
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
     expect(TRANSFORM_CLIENT_TIMEOUT_MS).toBe(16_000);
+  });
+
+  it("settles its deadline when the transport ignores AbortSignal", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => undefined)));
+    const pending = requestTransform(fixtureEnvelope(), new AbortController().signal);
+    const assertion = expect(pending).rejects.toMatchObject({
+      retryable: true,
+      message: "Matter took too long to change this passage.",
+    });
+
+    await vi.advanceTimersByTimeAsync(TRANSFORM_CLIENT_TIMEOUT_MS);
+    await assertion;
   });
 });
 

@@ -45,6 +45,83 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.39
+
+Preview.39 is the post-Preview.38 engineering-hardening candidate. Ordinary
+Matter keeps the complete renderer and the existing product form. The candidate
+adds hard browser and provider deadlines, bounded fatal-UTF-8 response reads,
+no-store and no-redirect transport, ordered provider fallback that remains
+bounded even when a relay ignores cancellation, and one content-zero scalar
+scenario receipt. The external environment may configure the shared station
+order, endpoints, credentials, model order, and optional thinking flag through
+the canonical `MATTER_MODEL_*` namespace; scenario gates, prompts,
+adjudication, byte ceilings, deadlines, and mutation authority remain reviewed
+source contracts. The complete deployed `MATTER_LABEL_*` namespace remains an
+all-or-nothing compatibility fallback and is never merged with the canonical
+namespace.
+
+Runtime work remains equally bounded. The local Whisper graph is absent from
+the initial page and its model revision is pinned; the worker begins only after
+a recorded-speech intent and is terminated on page suspension. Hidden or
+pagehide state cancels transient admission, inquiry, material-model, speech, and
+derived-label work without reviving it on return. Stable-name public media keep
+the existing four-hour revalidation policy, while model answers, material,
+audio, and transcripts never enter shared caches. The production build now
+fails when the static root, initial transfer, lazy WASM split, public assets,
+source maps, or root/server traces leave their recorded budgets. IndexedDB
+snapshot serialization is faster without changing bytes, generations, atomic
+history, corrupt recovery, import rollback, or the existing first-plus-latest
+publish contract.
+
+The candidate also makes one document invariant explicit: every non-root
+passage contains at least one non-whitespace Unicode character, while the
+document root remains exactly empty. The viewport-DOM work is not part of the
+ordinary product renderer. Its typography authority, complete layout
+publication, spatial projection, research renderer, pin registry, and pure
+lease coordinator are isolated behind the explicit performance fixture. They
+prove a possible bounded path for later work but have no ordinary-route importer
+and do not yet satisfy the keyboard, assistive-technology, full interaction
+lifecycle, or deployed performance gates required for promotion.
+
+```text
+source proof           npm run check exited 0 on the frozen pre-release source:
+                       doctor 21; Markdown parser 5/5 and 39 linked documents;
+                       Node 60/60; architecture 381 files across 7 layers with
+                       no outward edge, provider leak, or cycle; Vitest 147
+                       files passed and 2 skipped, 1,590 cases passed and 4
+                       skipped; typegen, typecheck, lint, and the Next 16.3
+                       webpack build of all 21 pages/routes passed
+browser proof          ordinary full Chromium: 95 passed, 15 explicitly
+                       capability-gated skipped, 0 failed, 110 total;
+                       research-only production viewport proof: 5/5 plus five
+                       repeat cold runs, with ordinary routes proving no
+                       viewport authority or lazy research chunk
+runtime proof          static root; initial 1,131.7 KiB raw / 357.5 KiB gzip;
+                       one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
+                       visual media 350.8 KiB; 0 production source maps and 0
+                       forbidden repository-only runtime trace entries
+release comparison     Preview.38 → Preview.39 candidate: 103 files, 10,972
+                       insertions, 333 deletions, net +10,639
+product boundary       ordinary Matter keeps the complete renderer; the C1-C4b
+                       viewport work remains research-only and cannot be cited
+                       as a shipped end-to-end performance improvement
+production boundary    OWNER-AUTHORIZED EXCEPTION for Preview.39 with label,
+                       repair, and inquiry preserved exactly as the existing
+                       live gates; Elastic and Text Swap remain unavailable;
+                       issue #34 remains open and unverified
+publication state      Preview.38 remains deployed until the exact Preview.39
+                       candidate passes branch CI and Preview deployment, is
+                       tagged, and the same SHA is promoted and verified at the
+                       production origin; npm publication is not authorized
+```
+
+The frozen local candidate is a source-level browser-preview **GO**. Production
+promotion is conditionally **GO** only through the owner-authorized exception
+above and the exact-SHA branch, tag, deployment, and origin sequence. It does
+not close issue #34, prove external distributed admission or spend controls, or
+enable a material-model surface. `elastic-live` and npm publication remain
+**NO-GO**.
+
 ## Candidate verification — 0.2.0-preview.38
 
 Preview.38 reopens the lasso freeze from direct browser evidence. Adjacent

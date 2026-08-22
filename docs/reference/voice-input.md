@@ -40,13 +40,15 @@ decoded and transcribed on the person's device.
 At hydration, Matter first checks the selected transport without asking for
 permission. Browser speech constructs one unstarted recognition lease; the first
 voice port consumes that exact object and calls `start()` only from the person's
-pointer action. For the recorded-audio fallback, readiness waits for an isolated
-worker handshake that proves its code graph has evaluated, but it never opens
-the microphone, decodes a recording, calls the Whisper pipeline, or downloads
-the model before a person actually starts a voice turn. The worker handshake is
-bounded to fifteen seconds. Voice controls remain inert during that short
-window, so the first pointer action reaches a prepared transport rather than a
-partially created one. Browser-native recognition also has a bounded start
+pointer action. Recorded audio is a ready capture capability without evaluating
+the optional local-transcription graph. That check requires capture APIs and,
+for a local-only deployment, the worker and audio-decoding APIs, but it neither
+constructs nor imports them. The person's first voice action starts
+that worker handshake beside microphone permission and recording; no worker,
+Whisper runtime, model, audio decoding, or transcription is requested during
+page hydration. The handshake remains bounded to fifteen seconds, and the
+actual transcription call owns the same lazy factory if speculative warming did
+not finish or failed. Browser-native recognition also has a bounded start
 watchdog, so a browser that neither starts nor errors returns a recoverable
 failure instead of leaving the first turn indefinitely in "waiting for
 microphone".
@@ -251,6 +253,14 @@ that model call, so cancellation retires the worker and invalidates every late
 message from its lease; the next request lazily creates a fresh worker. This
 prevents a dismissed utterance from consuming the next person's turn while
 keeping all audio on-device and transient.
+
+The same lease now ends on `visibilitychange:hidden` and `pagehide`. Admission,
+Ask Matter dictation, and any related transcription or repair request cancel at
+that boundary; an in-memory Whisper worker is terminated even after a successful
+turn so its model memory does not remain resident through a background session.
+Returning visible never starts capture, constructs a worker, or reloads model
+assets. Cached immutable runtime/model bytes remain the browser's disposable
+asset cache, never a cache of audio, transcript, question, or answer.
 
 ## Future managed real-time correction
 

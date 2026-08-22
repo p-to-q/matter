@@ -58,6 +58,11 @@ beforeEach(() => {
   hookSpies.setInvariantFailure.mockReset();
   hookSpies.cleanups.length = 0;
   vi.stubGlobal("window", new EventTarget());
+  const pageDocument = new EventTarget() as EventTarget & {
+    visibilityState: DocumentVisibilityState;
+  };
+  pageDocument.visibilityState = "visible";
+  vi.stubGlobal("document", pageDocument);
 });
 
 afterEach(() => {

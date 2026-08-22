@@ -30,6 +30,7 @@ import {
 } from "./text-swap-driver";
 import { requestTextSwap } from "./text-swap-client";
 import { requestTranscription } from "./transcription-client";
+import { subscribePageSuspension } from "./page-suspension";
 
 export type UseTextSwapInput<TCommitted> = Readonly<{
   tree: ThoughtTree;
@@ -114,12 +115,11 @@ export function useTextSwap<TCommitted>(
       event.preventDefault();
       driver.cancel();
     };
-    const onPageHide = () => driver.cancel();
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("pagehide", onPageHide);
+    const unsubscribePageSuspension = subscribePageSuspension(() => driver.cancel());
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pagehide", onPageHide);
+      unsubscribePageSuspension();
     };
   }, [driver]);
 

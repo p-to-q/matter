@@ -93,6 +93,31 @@ export function inspectDeploymentHealthHeaders(headers) {
   return failures;
 }
 
+export function inspectDeploymentMediaHeaders(headers) {
+  const failures = [];
+  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.startsWith("image/jpeg")) {
+    failures.push("Visual-media probe did not declare JPEG.");
+  }
+  const cacheControl = headers.get("cache-control")?.toLowerCase() ?? "";
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "public")) {
+    failures.push("Visual media is missing its public browser-cache scope.");
+  }
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "max-age=14400")) {
+    failures.push("Visual media is missing its bounded four-hour browser cache.");
+  }
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "must-revalidate")) {
+    failures.push("Stable-name visual media must revalidate after its browser TTL.");
+  }
+  if (cacheControl.includes("immutable")) {
+    failures.push("Stable-name visual media must not be cached as immutable.");
+  }
+  if (cacheControl.includes("s-maxage")) {
+    failures.push("Stable-name visual media must leave Vercel edge lifetime to the deployment cache.");
+  }
+  return failures;
+}
+
 export async function checkDeployment({
   origin,
   expectedVersion,
@@ -106,10 +131,11 @@ export async function checkDeployment({
     signal: AbortSignal.timeout(10_000),
     ...init,
   });
-  const [root, legacy, health] = await Promise.all([
-    request("/"),
-    request("/matter"),
-    request("/api/health"),
+  const [root, legacy, health, media] = await Promise.all([
+    request("/", { method: "HEAD" }),
+    request("/matter", { method: "HEAD" }),
+    request("/api/health", { method: "GET" }),
+    request("/matter-ui/shadows-poster.jpg", { method: "HEAD" }),
   ]);
   const failures = [];
   if (root.status !== 200) failures.push(`Root returned HTTP ${root.status}.`);
@@ -127,6 +153,11 @@ export async function checkDeployment({
     if (payload !== undefined) {
       failures.push(...inspectDeploymentHealth(payload, expectedVersion, profile));
     }
+  }
+  if (media.status !== 200) {
+    failures.push(`Visual-media probe returned HTTP ${media.status}.`);
+  } else {
+    failures.push(...inspectDeploymentMediaHeaders(media.headers));
   }
   failures.push(...inspectDeploymentHeaders(root.headers));
   return Object.freeze({ origin: normalized, failures: Object.freeze(failures) });

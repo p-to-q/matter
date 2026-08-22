@@ -84,6 +84,40 @@ describe("thought-tree invariants", () => {
     expect(validateThoughtTree(branchedTree())).toEqual({ ok: true });
   });
 
+  it("accepts only exact empty text on the document root and positive text on passages", () => {
+    const documentRoot: ThoughtNode = {
+      ...node("document", null, ["passage"], ""),
+      role: "document-root",
+    };
+    const tree: ThoughtTree = {
+      ...createEmptyTree("tree-document"),
+      rootId: documentRoot.id,
+      nodes: {
+        [documentRoot.id]: documentRoot,
+        passage: node("passage", documentRoot.id, [], "怀念 stays material"),
+      },
+    };
+
+    expect(validateThoughtTree(tree)).toEqual({ ok: true });
+    expect(validateThoughtTree({
+      ...tree,
+      nodes: { ...tree.nodes, document: { ...documentRoot, text: "\u3000" } },
+    })).toMatchObject({ ok: false, error: { code: "TREE_INVARIANT_VIOLATION" } });
+  });
+
+  it.each([
+    ["empty", ""],
+    ["ASCII whitespace", " \t\r\n"],
+    ["Unicode whitespace", "\u00a0\u1680\u2003\u2028\u2029\u202f\u205f\u3000"],
+  ])("rejects a passage containing only $0", (_name, text) => {
+    const invalid = rootedTree();
+    invalid.nodes = { root: node("root", null, [], text) };
+    expect(validateThoughtTree(invalid)).toMatchObject({
+      ok: false,
+      error: { code: "TREE_INVARIANT_VIOLATION" },
+    });
+  });
+
   it("rejects malformed node records without throwing", () => {
     const malformed = {
       ...rootedTree(),
@@ -222,6 +256,26 @@ describe("tree command engine", () => {
     expect({ ...undone.tree, revision: tree.revision }).toEqual(tree);
   });
 
+  it("rejects a whitespace-only inserted passage before publishing a candidate", () => {
+    const tree = rootedTree();
+    const before = structuredClone(tree);
+    const result = applyTreeCommand(
+      tree,
+      command(tree, {
+        type: "insert-node",
+        node: node("blank", "root", [], "\u3000\n"),
+        parentId: "root",
+        index: 0,
+        expectedParentChildren: [],
+      }),
+    );
+
+    expectFailure(result, "TREE_INVARIANT_VIOLATION");
+    expect(result).not.toHaveProperty("inverse");
+    expect(tree).toEqual(before);
+    expect(tree.revision).toBe(before.revision);
+  });
+
   it("owns inserted material independently from its command and inverse memento", () => {
     const tree = rootedTree();
     const insertedNode = node("child", "root", [], "original child");
@@ -350,6 +404,27 @@ describe("tree command engine", () => {
       ok: true,
       tree: { revision: 6, nodes: { root: { text: "root", updatedAt: T0 } } },
     });
+  });
+
+  it("rejects replacement with whitespace without changing material, revision, or inverse authority", () => {
+    const tree = rootedTree();
+    const before = structuredClone(tree);
+    const result = applyTreeCommand(
+      tree,
+      command(tree, {
+        type: "replace-text",
+        nodeId: "root",
+        expectedText: "root",
+        expectedUpdatedAt: T0,
+        text: "\u00a0\u3000\n",
+        updatedAt: T2,
+      }),
+    );
+
+    expectFailure(result, "TREE_INVARIANT_VIOLATION");
+    expect(result).not.toHaveProperty("inverse");
+    expect(tree).toEqual(before);
+    expect(tree.revision).toBe(before.revision);
   });
 
   it("does not mutate deeply frozen tree or command inputs on success", () => {

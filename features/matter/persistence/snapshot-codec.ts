@@ -27,6 +27,7 @@ const MAX_PATH_BYTES = 2_048;
 const MAX_BUNDLE_BYTES = 18_000_000;
 const CHILD_DIRECTORY = /^(\d{3})-([^/]+)$/u;
 const FRONTMATTER_KEYS = ["id", "createdAt", "updatedAt", "role"] as const;
+const UTF8 = new TextEncoder();
 
 export function treeToBundle(tree: ThoughtTree): SnapshotBundle {
   const validation = validateThoughtTree(tree);
@@ -61,8 +62,9 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
   for (const path of paths) {
     const content = rawFiles[path];
     if (typeof content !== "string") return failure("INVALID_BUNDLE", `Snapshot file ${path} is not text.`);
-    bytes += utf8Bytes(path) + utf8Bytes(content);
-    if (utf8Bytes(path) > MAX_PATH_BYTES || bytes > MAX_BUNDLE_BYTES) {
+    const pathBytes = utf8Bytes(path);
+    bytes += pathBytes + utf8Bytes(content);
+    if (pathBytes > MAX_PATH_BYTES || bytes > MAX_BUNDLE_BYTES) {
       return failure("BOUND_EXCEEDED", "The snapshot exceeds its path or byte bound.");
     }
     const pathError = validateBundlePath(path);
@@ -300,7 +302,7 @@ function normalizedCollisionKey(path: string): string {
 }
 
 function utf8Bytes(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
+  return UTF8.encode(value).byteLength;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

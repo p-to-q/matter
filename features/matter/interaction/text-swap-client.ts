@@ -8,6 +8,7 @@ import {
   type TextSwapPlan,
 } from "../protocol/text-swap-contract";
 import { readBoundedJsonResponse } from "./bounded-json-response";
+import { createRequestDeadline } from "./request-deadline";
 
 export class TextSwapClientError extends Error {
   constructor(
@@ -25,45 +26,61 @@ export async function requestTextSwap(
   envelope: TextSwapEnvelope,
   signal: AbortSignal,
 ): Promise<TextSwapPlan> {
-  const deadline = AbortSignal.timeout(TEXT_SWAP_CLIENT_TIMEOUT_MS);
-  const combined = AbortSignal.any([signal, deadline]);
-  let response: Response;
+  signal.throwIfAborted();
+  const deadline = createRequestDeadline(
+    signal,
+    TEXT_SWAP_CLIENT_TIMEOUT_MS,
+    "The text swap request timed out.",
+  );
   try {
-    response = await fetch(`${clientMatterBasePath()}/api/text-swap`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(envelope),
-      signal: combined,
-    });
-  } catch (error) {
-    if (signal.aborted) throw error;
-    if (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
-      throw new TextSwapClientError(true, "Matter took too long to swap this passage.");
+    let response: Response;
+    try {
+      response = await Promise.race([
+        fetch(`${clientMatterBasePath()}/api/text-swap`, {
+          method: "POST",
+          headers: { accept: "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify(envelope),
+          cache: "no-store",
+          redirect: "error",
+          signal: deadline.signal,
+        }),
+        deadline.settlement,
+      ]);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (deadline.didTimeout()) {
+        throw new TextSwapClientError(true, "Matter took too long to swap this passage.");
+      }
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw new TextSwapClientError(true, "Matter could not reach this wording change.");
     }
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    throw new TextSwapClientError(true, "Matter could not reach this wording change.");
-  }
-  let payload: unknown;
-  try {
-    payload = await readBoundedJsonResponse(response, MAX_TEXT_SWAP_RESPONSE_BYTES, combined);
-  } catch (error) {
-    if (signal.aborted) throw signal.reason ?? error;
-    if (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
-      throw new TextSwapClientError(true, "Matter took too long to swap this passage.");
+    let payload: unknown;
+    try {
+      payload = await Promise.race([
+        readBoundedJsonResponse(response, MAX_TEXT_SWAP_RESPONSE_BYTES, deadline.signal),
+        deadline.settlement,
+      ]);
+    } catch (error) {
+      if (signal.aborted) throw signal.reason ?? error;
+      if (deadline.didTimeout()) {
+        throw new TextSwapClientError(true, "Matter took too long to swap this passage.");
+      }
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw invalidResponse(response.ok);
     }
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    throw invalidResponse(response.ok);
+    if (!response.ok) throw readError(payload);
+    const plan = parseTextSwapPlan(payload, envelope);
+    if (plan === null) {
+      throw new TextSwapClientError(
+        false,
+        "Matter returned an invalid wording change.",
+        "invalid-response",
+      );
+    }
+    return plan;
+  } finally {
+    deadline.dispose();
   }
-  if (!response.ok) throw readError(payload);
-  const plan = parseTextSwapPlan(payload, envelope);
-  if (plan === null) {
-    throw new TextSwapClientError(
-      false,
-      "Matter returned an invalid wording change.",
-      "invalid-response",
-    );
-  }
-  return plan;
 }
 
 function invalidResponse(successStatus: boolean): TextSwapClientError {

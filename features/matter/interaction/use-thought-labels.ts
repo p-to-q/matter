@@ -7,6 +7,7 @@ import type { LabelSessionState } from "../runtime/label-session";
 import type { ThoughtTree } from "../tree/model";
 import { LabelDriver } from "./label-driver";
 import { requestLabel } from "./label-client";
+import { subscribePageSuspension } from "./page-suspension";
 
 export type ThoughtLabels = Readonly<{
   session: LabelSessionState;
@@ -54,6 +55,11 @@ export function useThoughtLabels(input: Readonly<{
   }, [driver]);
 
   useEffect(() => () => repository?.close(), [repository]);
+
+  useEffect(() => subscribePageSuspension(
+    () => driver.suspend(),
+    () => driver.resume(),
+  ), [driver]);
 
   const observe = useCallback(
     (nodeIds: readonly string[]) => {

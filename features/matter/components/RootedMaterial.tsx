@@ -7,6 +7,7 @@ import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
+import type { TypographyHeightAuthorityToken } from "../layout/typography-height-ledger";
 import { projectVerticalPresentationBand } from "../layout/vertical-presentation-band";
 import type { ThoughtTree } from "../tree/model";
 import { isDocumentRoot } from "../tree/document-root";
@@ -120,6 +121,7 @@ import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
 } from "./admission-feedback-copy";
+import type { TypographyHeightAuthority } from "./typography-height-authority";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -155,12 +157,46 @@ export type RootedMaterialProps = {
   }>;
   /** Fixture-only timing marks expose the cold canvas path without changing it. */
   performanceMarking?: boolean;
+  /** Research fixture only. The product renderer remains the complete DOM path. */
+  performanceViewport?: Readonly<{
+    batchSize: 32;
+    source: "viewport-research";
+  }>;
 };
 
 type PublishedGeometry = {
+  heightBasis?: TypographyHeightAuthorityToken;
   key: string;
   layout: ColumnarLayout;
+  nodeIds?: readonly string[];
 };
+
+type ViewportResearchRuntime = typeof import("./viewport-research-runtime");
+
+type RenderedViewportCamera = Readonly<{
+  epoch: string;
+  x: number;
+  y: number;
+  zoom: number;
+}>;
+
+type ViewportWindowBasis = Readonly<{
+  completePublication: PublishedGeometry;
+  documentEpoch: number;
+  projection: readonly LayoutProjectionItem[];
+  renderedCamera: RenderedViewportCamera;
+  windowEpoch: number;
+}>;
+
+type ViewportRenderWindow = Readonly<{
+  basis: ViewportWindowBasis;
+  nodeIds: readonly string[];
+}>;
+
+type ViewportGeometryAcknowledgement = Readonly<{
+  basis: ViewportWindowBasis;
+  nodeIds: readonly string[];
+}>;
 
 type PresentationDamage = Readonly<{
   nodeId: string;
@@ -246,6 +282,10 @@ type NodeDragGesture = {
 
 export function RootedMaterial(props: RootedMaterialProps) {
   const { canRedo, canUndo, navigation, onRedo, onRemoveSelected, onUndo, tree } = props;
+  if (props.performanceViewport !== undefined && props.performanceMarking !== true) {
+    throw new Error("Viewport research requires the explicit performance fixture.");
+  }
+  const viewportRenderer = props.performanceViewport?.source === "viewport-research";
   const matterBasePath = clientMatterBasePath();
   const { canvasPreferences } = props;
   const inquiryRecord = useInquiryRecord(tree.id, props.performanceMarking !== true);
@@ -341,6 +381,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const worldRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const layoutEpochRef = useRef(0);
+  const typographyAuthorityRef = useRef<TypographyHeightAuthority | null>(null);
+  const viewportWindowEpochRef = useRef(0);
   const revealedDocumentEpochRef = useRef<number | null>(null);
   const measuredLayoutCacheRef = useRef(new Map<string, ColumnarLayout>());
   const measuredHeightCacheRef = useRef(new Map<string, Readonly<{
@@ -365,6 +407,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }>({ key: null, attempts: 0, frame: null });
   const [measureRevision, requestMeasurement] = useReducer((value) => value + 1, 0);
   const [published, setPublished] = useState<PublishedGeometry | null>(null);
+  const [viewportResearchRuntime, setViewportResearchRuntime] =
+    useState<ViewportResearchRuntime | null>(null);
+  const [viewportWindow, setViewportWindow] = useState<ViewportRenderWindow | null>(null);
+  const [viewportGeometryAcknowledgement, setViewportGeometryAcknowledgement] =
+    useState<ViewportGeometryAcknowledgement | null>(null);
+  const failViewportCandidate = useCallback((canvas: HTMLDivElement, code: string) => {
+    // Research rendering is fail-closed: stale geometry must lose interaction
+    // authority in the same task that detects damage, before React reconciles.
+    canvas.inert = true;
+    markViewportRendererFailure(canvas, code);
+    setViewportGeometryAcknowledgement(null);
+    setViewportWindow(null);
+    setPublished(null);
+  }, []);
   const [languagePresentationDamage, setLanguagePresentationDamage] = useState<PresentationDamage | null>(null);
   const languagePresentationDamageRef = useRef<PresentationDamage | null>(null);
   const [admissionFeedbackHeight, setAdmissionFeedbackHeight] = useState(0);
@@ -454,13 +510,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => projectLayoutProjection(layoutInput),
     [layoutInput],
   );
+  const publicationKey = viewportRenderer
+    ? `${projectionKey}::viewport-research:${measureRevision}`
+    : projectionKey;
   const activeWorkingProjection = useMemo(
     () => projection
       .filter(({ node }) => workingContext.activeNodeIds.has(node.id))
       .map(({ node, depth }) => Object.freeze({ nodeId: node.id, depth })),
     [projection, workingContext.activeNodeIds],
   );
-  const activeLayout = published?.key === projectionKey ? published.layout : null;
+  const completePublication = published?.key === publicationKey ? published : null;
+  const completeLayout = completePublication?.layout ?? null;
+  const viewportWindowIsCurrent = viewportRenderer && completeLayout !== null &&
+    viewportWindow?.basis.documentEpoch === props.documentEpoch &&
+    viewportWindow.basis.completePublication === completePublication &&
+    viewportWindow.basis.projection === projection;
+  const viewportGeometryIsCurrent = viewportWindowIsCurrent &&
+    viewportGeometryAcknowledgement?.basis === viewportWindow.basis &&
+    viewportGeometryAcknowledgement.nodeIds === viewportWindow.nodeIds;
+  const activeLayout = viewportRenderer
+    ? viewportGeometryIsCurrent ? completeLayout : null
+    : completeLayout;
+  const renderedProjection = useMemo(() => {
+    if (!viewportRenderer) return projection;
+    if (!viewportWindowIsCurrent || viewportWindow === null) return Object.freeze([]);
+    const visible = new Set(viewportWindow.nodeIds);
+    return Object.freeze(projection.filter(({ node }) => visible.has(node.id)));
+  }, [projection, viewportRenderer, viewportWindow, viewportWindowIsCurrent]);
   useLayoutEffect(() => {
     const request = indexCenterRequestRef.current;
     if (request === null) return;
@@ -545,7 +621,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       indexCenterRequestRef.current = null;
       return;
     }
-    if (plan.motion === "smooth" && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (!viewportRenderer && plan.motion === "smooth" &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       world.dataset.cameraMotion = "index";
       world.style.setProperty("--index-camera-duration", `${plan.durationMs}ms`);
       // Commit the transition rule before React publishes the new camera.
@@ -564,10 +641,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     setViewport,
     tree.nodes,
     viewport,
+    viewportRenderer,
     wheelMotionActive,
   ]);
   const liveLanguageLayoutBasisRef = useRef<ColumnarLayout | null>(null);
   useLayoutEffect(() => {
+    if (viewportRenderer) return;
     const canvas = canvasRef.current;
     if (activeLayout === null || canvas === null) {
       liveLanguageLayoutBasisRef.current = null;
@@ -589,7 +668,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       siblingGap: readCssPixels(style, "--matter-sibling-gap", 28),
     });
     liveLanguageLayoutBasisRef.current = result.ok ? result.layout : null;
-  }, [activeLayout]);
+  }, [activeLayout, viewportRenderer]);
   const publishLiveLanguageLayout = useCallback((damage: PresentationDamage | null) => {
     const basis = liveLanguageLayoutBasisRef.current;
     const canvas = canvasRef.current;
@@ -1263,6 +1342,165 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
 
   useEffect(() => {
+    if (!viewportRenderer) return;
+    let active = true;
+    void import("./viewport-research-runtime").then((runtime) => {
+      if (active) setViewportResearchRuntime(runtime);
+    }).catch(() => {
+      const canvas = canvasRef.current;
+      if (active && canvas !== null) failViewportCandidate(canvas, "runtime-unavailable");
+    });
+    return () => {
+      active = false;
+    };
+  }, [failViewportCandidate, viewportRenderer]);
+
+  useLayoutEffect(() => {
+    if (!viewportRenderer) {
+      typographyAuthorityRef.current?.destroy();
+      typographyAuthorityRef.current = null;
+      return;
+    }
+    if (viewportResearchRuntime === null) return;
+    const canvas = canvasRef.current;
+    if (canvas === null) return;
+    const authority = new viewportResearchRuntime.TypographyHeightAuthority({
+      container: canvas,
+      context: {
+        dir: readWritingDirection(canvas),
+        documentEpoch: props.documentEpoch,
+        grammarEpoch: 1,
+        locale: props.locale,
+        styleEpoch: 0,
+      },
+      document,
+      onInvalidated: () => requestMeasurement(),
+    });
+    typographyAuthorityRef.current = authority;
+    requestMeasurement();
+    return () => {
+      if (typographyAuthorityRef.current === authority) {
+        typographyAuthorityRef.current = null;
+      }
+      authority.destroy();
+    };
+  }, [props.documentEpoch, props.locale, viewportRenderer, viewportResearchRuntime]);
+
+  useLayoutEffect(() => {
+    if (!viewportRenderer || viewportResearchRuntime === null) return;
+    const canvas = canvasRef.current;
+    const authority = typographyAuthorityRef.current;
+    if (canvas === null || authority === null || projection.length === 0) return;
+    canvas.removeAttribute("data-layout-ready");
+    if (revealedDocumentEpochRef.current !== props.documentEpoch) {
+      canvas.removeAttribute("data-layout-revealed");
+    }
+    if (presentationDamage !== null) {
+      failViewportCandidate(canvas, "presentation-damage");
+      return;
+    }
+    if (!initialPerformanceMarksRef.current.canvasCommitted) {
+      initialPerformanceMarksRef.current.canvasCommitted = true;
+      markPerformance("matter:performance:initial-canvas-committed");
+    }
+    const style = getComputedStyle(canvas);
+    const columnWidth = readRequiredCssPixels(style, "--matter-column-width");
+    const columnGap = readRequiredCssPixels(style, "--matter-column-gap");
+    const siblingGap = readRequiredCssPixels(style, "--matter-sibling-gap");
+    if (columnWidth === null || columnGap === null || siblingGap === null) {
+      failViewportCandidate(canvas, "layout-grammar-missing");
+      return;
+    }
+    const direction = readWritingDirection(canvas);
+    authority.setContext({
+      dir: direction,
+      documentEpoch: props.documentEpoch,
+      grammarEpoch: 1,
+      locale: props.locale,
+      styleEpoch: measureRevision,
+    });
+    const token = authority.begin(publicationKey);
+    if (token === null) {
+      failViewportCandidate(canvas, "typography-not-ready");
+      return;
+    }
+    if (!initialPerformanceMarksRef.current.heightReadStarted) {
+      initialPerformanceMarksRef.current.heightReadStarted = true;
+      markPerformance("matter:performance:height-read-start");
+    }
+    let snapshot;
+    try {
+      snapshot = authority.measure({
+        batchSize: props.performanceViewport?.batchSize ?? 32,
+        items: projection.map((item) => Object.freeze({
+          columnWidthPx: columnWidth,
+          dir: direction,
+          locale: props.locale,
+          nodeId: item.node.id,
+          root: item.parentId === null,
+          text: item.node.text,
+        })),
+        token,
+      });
+    } catch {
+      failViewportCandidate(canvas, "typography-rejected");
+      return;
+    }
+    if (snapshot === null || !authority.isCurrent(snapshot.basis)) {
+      failViewportCandidate(canvas, "typography-stale");
+      return;
+    }
+    if (!initialPerformanceMarksRef.current.heightReadComplete) {
+      initialPerformanceMarksRef.current.heightReadComplete = true;
+      markPerformance("matter:performance:height-read-complete");
+    }
+    if (!initialPerformanceMarksRef.current.pureLayoutStarted) {
+      initialPerformanceMarksRef.current.pureLayoutStarted = true;
+      markPerformance("matter:performance:pure-layout-start");
+    }
+    const result = viewportResearchRuntime.publishCompleteLayout({
+      expectedBasis: snapshot.basis,
+      layout: {
+        columnGap,
+        columnWidth,
+        layoutEpoch: layoutEpochRef.current + 1,
+        origin: { x: 0, y: 0 },
+        siblingGap,
+      },
+      projection,
+      snapshot,
+    });
+    if (!initialPerformanceMarksRef.current.pureLayoutComplete) {
+      initialPerformanceMarksRef.current.pureLayoutComplete = true;
+      markPerformance("matter:performance:pure-layout-complete");
+    }
+    if (!result.ok || !authority.isCurrent(result.publication.basis)) {
+      failViewportCandidate(canvas, result.ok ? "layout-stale" : "layout-rejected");
+      return;
+    }
+    delete canvas.dataset.viewportRendererError;
+    layoutEpochRef.current = result.publication.layout.layoutEpoch;
+    setPublished({
+      heightBasis: result.publication.basis,
+      key: publicationKey,
+      layout: result.publication.layout,
+      nodeIds: result.publication.nodeIds,
+    });
+  }, [
+    failViewportCandidate,
+    markPerformance,
+    measureRevision,
+    presentationDamage,
+    projection,
+    publicationKey,
+    props.documentEpoch,
+    props.locale,
+    props.performanceViewport?.batchSize,
+    viewportRenderer,
+    viewportResearchRuntime,
+  ]);
+
+  useEffect(() => {
     let mounted = true;
     const remeasure = () => {
       measuredLayoutCacheRef.current.clear();
@@ -1289,6 +1527,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, []);
 
   useLayoutEffect(() => {
+    if (viewportRenderer) return;
     const canvas = canvasRef.current;
     if (canvas === null || projection.length === 0) {
       setPublished(null);
@@ -1438,7 +1677,161 @@ export function RootedMaterial(props: RootedMaterialProps) {
       markPerformance("matter:performance:geometry-dom-published");
     }
     setPublished({ key: projectionKey, layout });
-  }, [admissionPresentationDamage, languagePresentationDamage, markPerformance, measureRevision, presentationDamage, projection, projectionKey, props.documentEpoch, tree.rootId]);
+  }, [admissionPresentationDamage, languagePresentationDamage, markPerformance, measureRevision, presentationDamage, projection, projectionKey, props.documentEpoch, tree.rootId, viewportRenderer]);
+
+  useLayoutEffect(() => {
+    if (!viewportRenderer || viewportResearchRuntime === null) return;
+    const paper = documentRef.current;
+    const world = worldRef.current;
+    const canvas = canvasRef.current;
+    if (completePublication === null || paper === null || world === null || canvas === null) {
+      setViewportWindow(null);
+      setViewportGeometryAcknowledgement(null);
+      return;
+    }
+    const renderedCamera = readRenderedViewportCamera(world);
+    if (renderedCamera === null) {
+      failViewportCandidate(canvas, "camera-invalid");
+      return;
+    }
+    const paperRect = paper.getBoundingClientRect();
+    const canvasRect = canvas.getBoundingClientRect();
+    const completeIds = new Set(completePublication.nodeIds ?? []);
+    const pinLeases: Array<Readonly<{
+      documentEpoch: number;
+      ids: readonly string[];
+      layoutEpoch: number;
+      ownerId: string;
+    }>> = [];
+    const addPinLease = (ownerId: string, nodeId: string | null) => {
+      if (nodeId === null || !completeIds.has(nodeId)) return;
+      pinLeases.push(Object.freeze({
+        documentEpoch: props.documentEpoch,
+        ids: Object.freeze([nodeId]),
+        layoutEpoch: completePublication.layout.layoutEpoch,
+        ownerId,
+      }));
+    };
+    addPinLease("navigation:selected", navigation.selectedNodeId);
+    addPinLease("navigation:focus", navigation.mode === "focus" ? navigation.focusNodeId : null);
+    addPinLease("camera:index-target", indexCenterRequestRef.current?.nodeId ?? null);
+    const activeNodeId = document.activeElement instanceof Element
+      ? document.activeElement.closest<HTMLElement>("[data-thought-id]")?.dataset.thoughtId ?? null
+      : null;
+    addPinLease("dom:active-focus", activeNodeId);
+    const result = viewportResearchRuntime.projectSpatialViewport({
+      cameraZoom: renderedCamera.zoom,
+      completePreorderNodeIds: completePublication.nodeIds ?? [],
+      expectedBasis: {
+        documentEpoch: props.documentEpoch,
+        layoutEpoch: completePublication.layout.layoutEpoch,
+      },
+      layout: completePublication.layout,
+      pinLeases,
+      screenPaperViewport: {
+        x: paperRect.left + paper.clientLeft - canvasRect.left,
+        y: paperRect.top + paper.clientTop - canvasRect.top,
+        width: paper.clientWidth,
+        height: paper.clientHeight,
+      },
+    });
+    if (!result.ok) {
+      failViewportCandidate(canvas, "window-rejected");
+      return;
+    }
+    setViewportWindow((current) => {
+      if (
+        current?.basis.documentEpoch === props.documentEpoch &&
+        current.basis.completePublication === completePublication &&
+        current.basis.projection === projection &&
+        sameRenderedViewportCamera(current.basis.renderedCamera, renderedCamera) &&
+        sameOrderedIds(current.nodeIds, result.projection.nodeIds)
+      ) return current;
+      viewportWindowEpochRef.current += 1;
+      return Object.freeze({
+        basis: Object.freeze({
+          completePublication,
+          documentEpoch: props.documentEpoch,
+          projection,
+          renderedCamera,
+          windowEpoch: viewportWindowEpochRef.current,
+        }),
+        nodeIds: result.projection.nodeIds,
+      });
+    });
+  }, [
+    completePublication,
+    failViewportCandidate,
+    navigation.focusNodeId,
+    navigation.mode,
+    navigation.selectedNodeId,
+    projection,
+    props.documentEpoch,
+    viewport.x,
+    viewport.y,
+    viewport.zoom,
+    viewportRenderer,
+    viewportResearchRuntime,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!viewportRenderer) return;
+    const canvas = canvasRef.current;
+    const world = worldRef.current;
+    const authority = typographyAuthorityRef.current;
+    if (
+      canvas === null || world === null || authority === null || completePublication === null ||
+      completePublication.heightBasis === undefined || completePublication.nodeIds === undefined ||
+      viewportWindow === null || !viewportWindowIsCurrent
+    ) {
+      canvas?.removeAttribute("data-layout-ready");
+      setViewportGeometryAcknowledgement(null);
+      return;
+    }
+    canvas.removeAttribute("data-layout-ready");
+    const elements = canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]");
+    const cameraBeforeWrite = readRenderedViewportCamera(world);
+    if (
+      cameraBeforeWrite === null ||
+      !sameRenderedViewportCamera(cameraBeforeWrite, viewportWindow.basis.renderedCamera) ||
+      !authority.isCurrent(completePublication.heightBasis) ||
+      !publishViewportCanvasGeometry(
+        canvas,
+        elements,
+        completePublication.layout,
+        viewportWindow.nodeIds,
+      ) ||
+      !authority.isCurrent(completePublication.heightBasis) ||
+      !sameRenderedViewportCamera(
+        readRenderedViewportCamera(world),
+        viewportWindow.basis.renderedCamera,
+      )
+    ) {
+      failViewportCandidate(canvas, "window-geometry-rejected");
+      return;
+    }
+    delete canvas.dataset.viewportRendererError;
+    canvas.dataset.completeLayoutNodeCount = String(completePublication.nodeIds.length);
+    canvas.dataset.viewportNodeCount = String(viewportWindow.nodeIds.length);
+    canvas.dataset.viewportWindowEpoch = String(viewportWindow.basis.windowEpoch);
+    setViewportGeometryAcknowledgement((current) =>
+      current?.basis === viewportWindow.basis && current.nodeIds === viewportWindow.nodeIds
+        ? current
+        : Object.freeze({ basis: viewportWindow.basis, nodeIds: viewportWindow.nodeIds }),
+    );
+    if (!initialPerformanceMarksRef.current.geometryPublished) {
+      initialPerformanceMarksRef.current.geometryPublished = true;
+      markPerformance("matter:performance:geometry-dom-published");
+    }
+  }, [
+    completePublication,
+    failViewportCandidate,
+    markPerformance,
+    renderedProjection,
+    viewportRenderer,
+    viewportWindow,
+    viewportWindowIsCurrent,
+  ]);
 
   useLayoutEffect(() => {
     if (activeLayout === null) return;
@@ -1969,8 +2362,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
           <div
             aria-busy={activeLayout === null || persistenceLoading || undefined}
             className="matter-canvas"
+            data-renderer-source={viewportRenderer ? "viewport-research" : undefined}
+            inert={viewportRenderer && activeLayout === null ? true : undefined}
             ref={canvasRef}
           >
+            {viewportRenderer && renderedProjection.length === 0 ? (
+              <ViewportMaterialGlimpse text={projection[0]?.node.text ?? ""} />
+            ) : (
             <CanvasThoughtList
               documentEpoch={props.documentEpoch}
               interactionPending={interactionPending}
@@ -1985,7 +2383,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
               heldAsideNodeIds={workingContext.heldAsideNodeIds}
-              projection={projection}
+              projection={renderedProjection}
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
               transformChange={currentTransformChange}
@@ -1999,6 +2397,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 : null}
               tree={tree}
             />
+            )}
             <AdmissionFeedback
               anchor={admissionAnchor}
               parentBox={admissionParentBox}
@@ -2061,6 +2460,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
         stretch={stretch}
       />
     </main>
+  );
+}
+
+function ViewportMaterialGlimpse({ text }: Readonly<{ text: string }>) {
+  return (
+    <div aria-hidden="true" data-viewport-bootstrap inert>
+      <ol className="spatial-thoughts">
+        <li className="spatial-thought">
+          <span className="spatial-thought__text">{text}</span>
+        </li>
+      </ol>
+    </div>
   );
 }
 
@@ -2267,6 +2678,101 @@ function publishCanvasGeometry(
     }
   }
   return true;
+}
+
+function publishViewportCanvasGeometry(
+  canvas: HTMLDivElement,
+  elements: NodeListOf<HTMLElement>,
+  completeLayout: ColumnarLayout,
+  windowNodeIds: readonly string[],
+): boolean {
+  if (elements.length !== windowNodeIds.length) return false;
+  const boxesById = new Map(completeLayout.boxes.map((box) => [box.nodeId, box]));
+  if (boxesById.size !== completeLayout.boxes.length) return false;
+  const ordered: Array<Readonly<{ box: ColumnarLayout["boxes"][number]; element: HTMLElement }>> = [];
+  for (let index = 0; index < windowNodeIds.length; index += 1) {
+    const nodeId = windowNodeIds[index];
+    const element = elements[index];
+    const box = nodeId === undefined ? undefined : boxesById.get(nodeId);
+    if (
+      nodeId === undefined || element === undefined || box === undefined ||
+      !element.isConnected || element.dataset.layoutNodeId !== nodeId
+    ) return false;
+    ordered.push({ box, element });
+  }
+
+  canvas.style.setProperty("--matter-canvas-width", `${completeLayout.bounds.width}px`);
+  canvas.style.setProperty("--matter-canvas-height", `${completeLayout.bounds.height}px`);
+  for (const { box, element } of ordered) {
+    element.style.transform = `translate3d(${box.x}px, ${box.y}px, 0)`;
+  }
+  // DOM ownership can change synchronously through a nested render boundary.
+  // Revalidate after writes so a detached or reordered partial window never
+  // receives interaction authority.
+  for (let index = 0; index < ordered.length; index += 1) {
+    const entry = ordered[index]!;
+    if (!entry.element.isConnected || entry.element.dataset.layoutNodeId !== windowNodeIds[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function readRenderedViewportCamera(
+  world: HTMLDivElement,
+): RenderedViewportCamera | null {
+  try {
+    const transform = getComputedStyle(world).transform;
+    const matrix = transform === "none"
+      ? new DOMMatrixReadOnly()
+      : new DOMMatrixReadOnly(transform);
+    const zoom = (matrix.a + matrix.d) / 2;
+    if (
+      !Number.isFinite(matrix.e) || !Number.isFinite(matrix.f) ||
+      !Number.isFinite(zoom) || zoom <= 0 ||
+      Math.abs(matrix.b) > .001 || Math.abs(matrix.c) > .001 ||
+      Math.abs(matrix.a - matrix.d) > .001
+    ) return null;
+    const round = (value: number) => Math.round(value * 1_000) / 1_000;
+    const x = round(matrix.e);
+    const y = round(matrix.f);
+    const roundedZoom = round(zoom);
+    return Object.freeze({
+      epoch: `${x}:${y}:${roundedZoom}`,
+      x,
+      y,
+      zoom: roundedZoom,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function sameRenderedViewportCamera(
+  left: RenderedViewportCamera | null,
+  right: RenderedViewportCamera,
+): boolean {
+  return left !== null && left.epoch === right.epoch && left.x === right.x &&
+    left.y === right.y && left.zoom === right.zoom;
+}
+
+function readWritingDirection(element: HTMLElement): "ltr" | "rtl" {
+  return getComputedStyle(element).direction === "rtl" ? "rtl" : "ltr";
+}
+
+function sameOrderedIds(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+function markViewportRendererFailure(canvas: HTMLDivElement, code: string): void {
+  canvas.removeAttribute("data-layout-ready");
+  canvas.removeAttribute("data-layout-revealed");
+  delete canvas.dataset.completeLayoutNodeCount;
+  delete canvas.dataset.viewportNodeCount;
+  delete canvas.dataset.viewportWindowEpoch;
+  canvas.dataset.viewportRendererError = code;
+  canvas.style.removeProperty("--matter-canvas-width");
+  canvas.style.removeProperty("--matter-canvas-height");
 }
 
 function retainBoundedCache<T>(
@@ -2861,6 +3367,14 @@ function normalizeDeltaMode(value: number): 0 | 1 | 2 {
 function readCssPixels(style: CSSStyleDeclaration, property: string, fallback: number) {
   const value = Number.parseFloat(style.getPropertyValue(property));
   return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function readRequiredCssPixels(
+  style: CSSStyleDeclaration,
+  property: string,
+): number | null {
+  const value = Number.parseFloat(style.getPropertyValue(property));
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function samePresentationDamage(

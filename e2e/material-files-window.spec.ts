@@ -342,9 +342,20 @@ test.describe("1024px coarse-pointer material index", () => {
     const searchRect = await search.boundingBox();
     expect(searchRect).not.toBeNull();
     expect(searchRect!.height).toBeGreaterThanOrEqual(48);
-    const closeRect = await sidebar.getByRole("button", { name: "Close search" }).boundingBox();
-    expect(closeRect).not.toBeNull();
-    expect(closeRect!.width).toBeGreaterThanOrEqual(48);
-    expect(closeRect!.height).toBeGreaterThanOrEqual(48);
+    const close = sidebar.getByRole("button", { name: "Close search" });
+    const closeGeometry = await close.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        declaredHeight: style.height,
+        declaredWidth: style.width,
+        height: rect.height,
+        width: rect.width,
+      };
+    });
+    expect(closeGeometry.declaredWidth).toBe("48px");
+    expect(closeGeometry.declaredHeight).toBe("48px");
+    expect(closeGeometry.width).toBeCloseTo(48, 1);
+    expect(closeGeometry.height).toBeCloseTo(48, 1);
   });
 });

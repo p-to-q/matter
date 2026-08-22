@@ -9,13 +9,22 @@ afterEach(() => {
 
 describe("requestTranscription", () => {
   it("accepts only the exact echoed success envelope", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
-      protocolVersion: "0.2",
-      interactionId: "voice_1",
-      attempt: 1,
-      transcript: "保留原来的表达。",
-    })));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json({
+        protocolVersion: "0.2",
+        interactionId: "voice_1",
+        attempt: 1,
+        transcript: "保留原来的表达。",
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
     await expect(request()).resolves.toMatchObject({ transcript: "保留原来的表达。" });
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      cache: "no-store",
+      redirect: "error",
+    });
   });
 
   it.each([

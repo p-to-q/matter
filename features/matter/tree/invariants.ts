@@ -57,6 +57,9 @@ export function validateThoughtNode(
   if (candidate.role === "document-root" && candidate.text !== "") {
     return failure("TREE_INVARIANT_VIOLATION", `Document root ${candidate.id} must have empty text.`);
   }
+  if (candidate.role !== "document-root" && candidate.text.trim().length === 0) {
+    return failure("TREE_INVARIANT_VIOLATION", `Passage ${candidate.id} must contain non-whitespace text.`);
+  }
   if (candidate.text.length > MAX_NODE_TEXT_CODE_UNITS) {
     return failure("BOUND_EXCEEDED", `Node ${candidate.id} exceeds the text bound.`);
   }

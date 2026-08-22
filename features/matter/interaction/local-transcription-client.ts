@@ -1,3 +1,5 @@
+import { subscribePageSuspension } from "./page-suspension";
+
 const WHISPER_SAMPLE_RATE = 16_000;
 const LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000;
 export const LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS = 15_000;
@@ -27,6 +29,7 @@ const readiness = new WeakMap<Worker, Readonly<{
   resolve: () => void;
   reject: (error: LocalTranscriptionError) => void;
 }>>();
+const pageSuspensionCleanup = new WeakMap<Worker, () => void>();
 
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
@@ -171,6 +174,19 @@ function localTranscriptionWorker(): Worker {
   worker.addEventListener("error", () => {
     retireWorker(target, new LocalTranscriptionError("failed"));
   });
+  const suspensionCleanup = subscribePageSuspension(() => {
+    if (worker === target) {
+      retireWorker(target, new LocalTranscriptionError("failed"));
+    }
+  });
+  // Initial-hidden synchronization may retire the worker before the
+  // subscription returns. Do not publish that dead lease to its caller or
+  // retain the just-installed lifecycle listeners.
+  if (worker !== target) {
+    suspensionCleanup();
+    throw new LocalTranscriptionError("failed");
+  }
+  pageSuspensionCleanup.set(target, suspensionCleanup);
   return worker;
 }
 
@@ -268,6 +284,8 @@ function cancelRequest(id: string, target: Worker, error: LocalTranscriptionErro
 
 function retireWorker(target: Worker, error: LocalTranscriptionError): void {
   if (worker === target) worker = null;
+  pageSuspensionCleanup.get(target)?.();
+  pageSuspensionCleanup.delete(target);
   cancelled.delete(target);
   readiness.get(target)?.reject(error);
   readiness.delete(target);

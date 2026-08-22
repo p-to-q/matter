@@ -39,7 +39,7 @@ describe.runIf(enabled)("label model evaluation", () => {
       (candidate) => requested.length === 0 ||
         requested.some((model) => model.toLowerCase() === candidate.model.toLowerCase()),
     );
-    expect(pool, "configure MATTER_LABEL_POOL in .env.local").not.toHaveLength(0);
+    expect(pool, "configure MATTER_MODEL_POOL (or the complete legacy MATTER_LABEL_POOL) in .env.local").not.toHaveLength(0);
 
     for (const candidate of pool) {
       const rows = [];

@@ -11,7 +11,7 @@ export type SnapshotPathEntry = Readonly<{
 
 const MAX_SLUG_SCALARS = 48;
 const MAX_SLUG_UTF8_BYTES = 48;
-const UTF8 = new TextEncoder();
+const SLUG_SEPARATOR = /[\\/:*?"<>|\u0000-\u001f\u007f\s\p{P}\p{S}]/u;
 
 /** Allocates paths from authored structure; readable slugs never carry identity. */
 export function allocateSnapshotPaths(tree: ThoughtTree): readonly SnapshotPathEntry[] {
@@ -72,23 +72,44 @@ export function allocateSnapshotPath(
 }
 
 export function materialSlug(text: string): string {
-  const normalized = text
-    .normalize("NFC")
-    .toLocaleLowerCase("und")
-    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/gu, "-")
-    .replace(/[\s\p{P}\p{S}]+/gu, "-")
-    .replace(/-+/gu, "-")
-    .replace(/^-|-$/gu, "");
+  const normalized = text.normalize("NFC").toLocaleLowerCase("und");
   const boundedScalars: string[] = [];
   let bytes = 0;
-  for (const scalar of Array.from(normalized).slice(0, MAX_SLUG_SCALARS)) {
-    const scalarBytes = UTF8.encode(scalar).byteLength;
-    if (bytes + scalarBytes > MAX_SLUG_UTF8_BYTES) break;
+  let scalarCount = 0;
+  let pendingSeparator = false;
+  for (const scalar of normalized) {
+    if (SLUG_SEPARATOR.test(scalar)) {
+      pendingSeparator = boundedScalars.length > 0;
+      continue;
+    }
+    const separatorScalars = pendingSeparator ? 1 : 0;
+    const separatorBytes = pendingSeparator ? 1 : 0;
+    const scalarBytes = utf8ScalarBytes(scalar);
+    if (
+      scalarCount + separatorScalars + 1 > MAX_SLUG_SCALARS ||
+      bytes + separatorBytes + scalarBytes > MAX_SLUG_UTF8_BYTES
+    ) break;
+    if (pendingSeparator) {
+      boundedScalars.push("-");
+      scalarCount += 1;
+      bytes += 1;
+      pendingSeparator = false;
+    }
     boundedScalars.push(scalar);
+    scalarCount += 1;
     bytes += scalarBytes;
+    if (scalarCount === MAX_SLUG_SCALARS || bytes === MAX_SLUG_UTF8_BYTES) break;
   }
-  const bounded = boundedScalars.join("").replace(/-$/u, "");
+  const bounded = boundedScalars.join("");
   return bounded.length > 0 ? bounded : "thought";
+}
+
+function utf8ScalarBytes(scalar: string): number {
+  const codePoint = scalar.codePointAt(0)!;
+  if (codePoint <= 0x7f) return 1;
+  if (codePoint <= 0x7ff) return 2;
+  if (codePoint <= 0xffff) return 3;
+  return 4;
 }
 
 export function asCanonicalPath(path: string): CanonicalRelativePath {

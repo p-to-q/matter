@@ -23,6 +23,7 @@ import { afterBaselineVisible } from "./repair-presentation-gate";
 import { createTranscriptRepairPort } from "./transcript-repair-port";
 import { requestTranscription } from "./transcription-client";
 import { useRepairPresentation } from "./use-repair-presentation";
+import { subscribePageSuspension } from "./page-suspension";
 
 export type UseAdmissionInput = {
   commit: (
@@ -105,6 +106,13 @@ export function useAdmission({
     driver.retain();
     return () => driver.release();
   }, [driver]);
+
+  useEffect(() => subscribePageSuspension(() => {
+    // A hidden page has no visible baseline to repair and must not retain a
+    // microphone, request, or optional late correction on the person's behalf.
+    driver.cancel();
+    driver.discardPendingRepairs();
+  }), [driver]);
 
   return {
     state,

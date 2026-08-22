@@ -67,6 +67,30 @@ describe("Markdown snapshot codec", () => {
     expect(bundleToTree(bundle)).toEqual({ ok: true, tree });
   });
 
+  it.each([
+    ["empty", ""],
+    ["ASCII whitespace", " \t\n"],
+    ["Unicode whitespace", "\u00a0\u2003\u2028\u3000"],
+  ])("rejects a snapshot whose visible passage contains only $0", (_name, text) => {
+    const tree = normalizeDocumentTree(createSeededDocument().tree);
+    const bundle = treeToBundle(tree);
+    const passagePath = Object.keys(bundle.files).find((path) => path !== "matter/index.md" && path.endsWith("/index.md"));
+    if (passagePath === undefined) throw new Error("visible passage path missing");
+
+    expect(mutate(bundle, (files) => {
+      files[passagePath] = files[passagePath].replace(/\n---\n\n[\s\S]*$/u, `\n---\n\n${text}`);
+    })).toMatchObject({ ok: false, error: { code: "INVALID_TREE" } });
+  });
+
+  it("rejects non-empty document-root text during snapshot hydration", () => {
+    const tree = normalizeDocumentTree(createSeededDocument().tree);
+    const bundle = treeToBundle(tree);
+
+    expect(mutate(bundle, (files) => {
+      files["matter/index.md"] = files["matter/index.md"].replace(/\n---\n\n[\s\S]*$/u, "\n---\n\n\u3000");
+    })).toMatchObject({ ok: false, error: { code: "INVALID_TREE" } });
+  });
+
   it("allows readable slug renames without changing material identity", () => {
     const fixture = createSeededDocument();
     const inserted = commitTreeCommand(

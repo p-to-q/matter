@@ -191,7 +191,12 @@ and server-only. Mutable execution state does not: each scenario owns its
 governor, deadline, cache policy, and candidate-health lane. A short repair stall
 therefore cannot reorder the candidates used for a background label, and a label
 success cannot erase repair's own cooldown. This is one provider foundation,
-not one cross-product failure domain.
+not one cross-product failure domain. Its canonical external configuration uses
+the scenario-neutral `MATTER_MODEL_*` namespace; the complete deployed
+`MATTER_LABEL_*` namespace remains a non-merged compatibility fallback. One
+candidate owns only its bounded share of the scenario deadline even when its
+transport ignores cancellation, so ordered fallback retains actual delivery
+time rather than only receiving an advisory signal.
 
 The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
@@ -206,8 +211,9 @@ short question + lassoed passages, or bounded active-working projection when no 
 ```
 
 Only the tree engine applies durable mutations. Pointer, audio level, partial
-transcript, selection geometry, focus, fold, and derived labels remain
-transient.
+transcript, selection geometry, focus, and fold remain transient. Derived labels
+stay outside material and history; accepted model labels and manual names may
+persist only in their separate browser repository under the boundary above.
 Canvas pan, node-drag targeting, and lasso drawing are mutually exclusive
 pointer modes. An outside-paper lasso particle echo is render-only; the semantic
 stroke and text targets remain client-space geometry over visible canvas text.
@@ -287,8 +293,11 @@ carries its operation identity, attempt, document, and revision basis.
 
 Pointer cancel, lost capture, unmount, and a newer interaction interrupt the
 relevant owner and clean up audio, ranges, highlights, workers, and timers.
-Hooks adapt browser events to those owners; they do not each invent a partial
-copy of another lifecycle.
+`visibilitychange:hidden` and `pagehide` are the same interruption boundary for
+transient capture, model workers, and browser requests: returning visible may
+offer a new pointer action, but never resumes or eagerly recreates old work.
+Hooks adapt browser events to those owners through one narrow browser adapter;
+they do not each invent a partial copy of another lifecycle.
 
 A shared coordinator is justified only when current behavior proves that two
 lifecycles share one invariant that the rendering edge cannot safely enforce.
@@ -344,13 +353,35 @@ between fixture and live behavior for itself.
 
 Caches hold only reproducible work: derived segments may key on node text;
 measured ranges key on `layoutEpoch`; encoded snapshots key on tree revision;
-server label answers key on a non-cryptographic fingerprint of the material,
-locale, bound, and prompt version, and are re-validated on every read rather
-than trusted because they were written by this process.
+server label answers key on a non-cryptographic fingerprint of the complete
+normalized label input and prompt version, including its ordered reference
+context, and are re-validated on every read rather than trusted because they
+were written by this process.
 They are disposable and never authoritative. Raw audio, transcripts, repair or
 inquiry answers, transform responses, and lineage are not cached. A bounded diagnostic trace may record
 operation ids, state transitions, error codes, durations, and byte counts, but
 never material or voice content.
+
+A production model-scenario invocation with a non-null adapter emits at most one
+`matter.scenario-performance` scalar receipt through the harness observation
+seam. It carries only the closed scenario/outcome enums, a bounded numeric
+duration, anonymous candidate counts, and whether the shared pool actually
+reported those counts. Candidate observations are aggregated in memory into
+that terminal receipt; no per-candidate log or telemetry request is made. The
+logger rebuilds an allowlisted object, a failing sink cannot affect the scenario,
+and no cold/warm field exists because provider cache state is not provable inside
+Matter. Cache hits, missing adapters, and caller cancellations remain silent.
+Elastic and dormant Text Swap retain their separate route-owned
+`matter.material-turn` receipt with closed scalar buckets; the harness ceiling is
+not a claim that it is the application's only log line. Deployment logs are not
+application persistence and cannot stand in for externally measured origin SLOs.
+
+Browser model and audio POSTs use no-store transport and reject redirects; the
+same is true between Matter and its configured model relay. These flags are a
+privacy and routing boundary, not an answer cache. The only shared in-process
+answer cache remains the bounded label cache: its key covers the complete
+normalized label input and prompt version, its value is only the adjudicated
+label, and the browser still revalidates current material and operation identity.
 
 Recovery stays with the state owner: a validated inverse journal recovers local
 undo after reload; interaction cancel preserves its semantic address for pointer
@@ -363,6 +394,9 @@ panel projects persistence failure and invokes the already-owned export, retry,
 reload, or corrupt-row repair operation.
 No write-ahead log, event sourcing, service worker, or background sync belongs
 in the first release.
+The concrete HTTP, CDN, local-model, compiler-cache, cold-start, and production
+artifact budgets are recorded in
+[`reference/runtime-cache-and-delivery.md`](reference/runtime-cache-and-delivery.md).
 
 ## Target modules
 
@@ -440,10 +474,13 @@ frozen same-origin credential boundary). Browser speech and MediaRecorder upload
 are distinct, explicit client build capabilities and both default off; API
 presence and a server adapter name never implicitly select a transport or grant
 the browser permission to collect or upload audio. Voice admission is reported
-available only when at least one of those client transports is enabled. Client
-readiness may construct one unstarted native recognition object or await a
-bounded local-worker code handshake; permission, capture, audio decoding, and
-model initialization remain behind the person's first voice turn.
+available only when an enabled client transport has its required browser
+capabilities. Client
+readiness may construct one unstarted native recognition object, but it does not
+load the recorded-audio worker graph. The first pointer-owned recorded-audio
+turn may warm that bounded worker handshake beside microphone permission and
+capture; audio decoding and model initialization remain behind the recorded
+utterance.
 
 `app/api/health` is a deployment probe, not a debug console; under the Matter
 base path it is reached as `/matter/api/health`. It reports only stable Matter

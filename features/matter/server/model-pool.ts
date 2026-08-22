@@ -1,4 +1,9 @@
-import type { MatterScenarioId, ScenarioAdapter } from "./harness";
+import type {
+  MatterScenarioId,
+  ScenarioAdapter,
+  ScenarioCall,
+  ScenarioCandidateEvent,
+} from "./harness";
 
 /**
  * One ordered pool of OpenAI-compatible endpoints, shared by every scenario.
@@ -12,10 +17,10 @@ import type { MatterScenarioId, ScenarioAdapter } from "./harness";
  * key. An answer carries no provider identity, so a person cannot tell — and
  * does not need to tell — which relay named their thought.
  *
- * The environment variables are still spelled `MATTER_LABEL_*` because they are
- * a deployed secret layout, and renaming a secret to match a refactor is how a
- * deployment loses its credentials on a Tuesday. The pool is scenario-agnostic;
- * only the variable names remember where it started.
+ * New deployments use the scenario-neutral `MATTER_MODEL_*` namespace. The
+ * deployed `MATTER_LABEL_*` layout remains a complete legacy fallback so a
+ * source release cannot silently lose production credentials. Setting both
+ * namespaces is rejected as ambiguous instead of combining two authority sets.
  */
 
 export type PoolCandidate = Readonly<{
@@ -80,10 +85,10 @@ export function resetPoolHealth(): void {
  * Reads the pool from the environment.
  *
  * ```text
- * MATTER_LABEL_POOL=abc,backup
- * MATTER_LABEL_ABC_BASE_URL=https://…/v1
- * MATTER_LABEL_ABC_API_KEY=…
- * MATTER_LABEL_ABC_MODELS=Qwen-flash,DeepSeek-V3
+ * MATTER_MODEL_POOL=abc,backup
+ * MATTER_MODEL_ABC_BASE_URL=https://…/v1
+ * MATTER_MODEL_ABC_API_KEY=…
+ * MATTER_MODEL_ABC_MODELS=Qwen-flash,DeepSeek-V3
  * ```
  *
  * Numbered variables rather than one JSON blob: a secret is easier to rotate,
@@ -93,20 +98,26 @@ export function resetPoolHealth(): void {
 export function readModelPool(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): readonly PoolCandidate[] {
-  const stations = (environment.MATTER_LABEL_POOL ?? "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter((entry) => /^[A-Za-z0-9_-]{1,32}$/.test(entry));
+  const namespace = poolNamespace(environment);
+  if (namespace === null) return Object.freeze([]);
+  const stations = [...new Set(
+    (environment[`MATTER_${namespace}_POOL`] ?? "")
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter((entry) => /^[A-Za-z0-9_-]{1,32}$/.test(entry)),
+  )];
 
   const candidates: PoolCandidate[] = [];
   for (const station of stations) {
-    const prefix = `MATTER_LABEL_${station.toUpperCase().replaceAll("-", "_")}`;
+    const prefix = `MATTER_${namespace}_${station.toUpperCase().replaceAll("-", "_")}`;
     const baseUrl = environment[`${prefix}_BASE_URL`]?.trim();
     const apiKey = environment[`${prefix}_API_KEY`]?.trim();
-    const models = (environment[`${prefix}_MODELS`] ?? "")
-      .split(",")
-      .map((model) => model.trim())
-      .filter((model) => model.length > 0);
+    const models = [...new Set(
+      (environment[`${prefix}_MODELS`] ?? "")
+        .split(",")
+        .map((model) => model.trim())
+        .filter((model) => model.length > 0),
+    )];
     const enableThinking = parseOptionalBoolean(environment[`${prefix}_ENABLE_THINKING`]);
     if (baseUrl === undefined || apiKey === undefined) continue;
     if (!isHttpsOrLocal(baseUrl)) continue;
@@ -122,6 +133,19 @@ export function readModelPool(
     }
   }
   return Object.freeze(candidates);
+}
+
+function poolNamespace(
+  environment: Readonly<Record<string, string | undefined>>,
+): "MODEL" | "LABEL" | null {
+  const canonical = environment.MATTER_MODEL_POOL?.trim() ?? "";
+  const legacy = environment.MATTER_LABEL_POOL?.trim() ?? "";
+  // Two complete namespaces must never be merged: candidate order determines
+  // cost and latency, and silently preferring one can strand a rotated key.
+  if (canonical.length > 0 && legacy.length > 0) return null;
+  if (canonical.length > 0) return "MODEL";
+  if (legacy.length > 0) return "LABEL";
+  return null;
 }
 
 export function resolvePoolAdapter(
@@ -141,6 +165,7 @@ export function createPoolAdapter(
   fetchImpl: typeof fetch = fetch,
 ): ScenarioAdapter {
   return async (input, signal) => {
+    noteCandidate(input, "pool");
     const deadlineAtMs = now() + input.deadlineMs;
     let lastError: unknown = new Error("The model pool is empty.");
 
@@ -162,6 +187,7 @@ export function createPoolAdapter(
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
         recordOutcome(candidate, input.scenario, "answered", limits, now);
+        noteCandidate(input, "answered");
         return { text };
       } catch (error) {
         if (signal.aborted) throw error;
@@ -172,13 +198,15 @@ export function createPoolAdapter(
         // again before the pool can even reach a working relay. Grading the
         // hang harder is what stops one stalled relay from spending every
         // caller's deadline until it happens to fail twice.
+        const outcome = now() - startedAt >= attemptMs ? "stalled" : "failed";
         recordOutcome(
           candidate,
           input.scenario,
-          now() - startedAt >= attemptMs ? "stalled" : "failed",
+          outcome,
           limits,
           now,
         );
+        noteCandidate(input, outcome);
         lastError = error;
       }
     }
@@ -218,39 +246,48 @@ async function completeOnce(
   const timer = setTimeout(() => attempt.abort(), attemptMs);
   const forward = () => attempt.abort();
   signal.addEventListener("abort", forward, { once: true });
+  const boundary = rejectOnAbort(attempt.signal);
   try {
-    const response = await fetchImpl(`${candidate.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${candidate.apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: candidate.model,
-        // Every Matter scenario is deterministic by intent: an unchanged node
-        // must not rename itself on a cache miss, and one utterance must not be
-        // repaired differently on a retry. Sampling has nothing to offer here.
-        temperature: 0,
-        // The scenario's own ceiling wins when it asked for one. A short thought
-        // must not buy a long generation, and a long one must not be cut off
-        // mid-sentence and then rejected for it.
-        max_tokens: Math.min(
-          limits.maxOutputTokens,
-          Number.isSafeInteger(input.maxOutputTokens) && input.maxOutputTokens > 0
-            ? input.maxOutputTokens
-            : limits.maxOutputTokens,
-        ),
-        stream: false,
-        ...(candidate.enableThinking === undefined
-          ? {}
-          : { enable_thinking: candidate.enableThinking }),
-        messages: [{ role: "user", content: input.prompt }],
+    // Fetch cancellation is advisory even in server runtimes and third-party
+    // adapters. The hard race is what preserves time for the next relay when a
+    // transport ignores AbortSignal; the signal still performs best-effort
+    // socket and response-body cleanup underneath it.
+    const response = await Promise.race([
+      fetchImpl(`${candidate.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          authorization: `Bearer ${candidate.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: candidate.model,
+          // Every Matter scenario is deterministic by intent: an unchanged node
+          // must not rename itself on a cache miss, and one utterance must not be
+          // repaired differently on a retry. Sampling has nothing to offer here.
+          temperature: 0,
+          // The scenario's own ceiling wins when it asked for one. A short thought
+          // must not buy a long generation, and a long one must not be cut off
+          // mid-sentence and then rejected for it.
+          max_tokens: Math.min(
+            limits.maxOutputTokens,
+            Number.isSafeInteger(input.maxOutputTokens) && input.maxOutputTokens > 0
+              ? input.maxOutputTokens
+              : limits.maxOutputTokens,
+          ),
+          stream: false,
+          ...(candidate.enableThinking === undefined
+            ? {}
+            : { enable_thinking: candidate.enableThinking }),
+          messages: [{ role: "user", content: input.prompt }],
+        }),
+        cache: "no-store",
+        redirect: "error",
+        signal: attempt.signal,
       }),
-      redirect: "error",
-      signal: attempt.signal,
-    });
-    const body = await readBounded(response, limits.maxResponseBytes);
+      boundary.promise,
+    ]);
+    const body = await readBounded(response, limits.maxResponseBytes, attempt.signal);
     if (!response.ok) {
       // The status is diagnostic; the body may quote the provider and never
       // reaches the browser, which only ever sees a deterministic label.
@@ -260,6 +297,7 @@ async function completeOnce(
   } finally {
     clearTimeout(timer);
     signal.removeEventListener("abort", forward);
+    boundary.dispose();
   }
 }
 
@@ -281,24 +319,45 @@ function extractContent(payload: unknown): string {
   return content;
 }
 
-async function readBounded(response: Response, maxBytes: number): Promise<string> {
+async function readBounded(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<string> {
   const body = response.body;
   if (body === null) return "";
+  const declared = response.headers.get("content-length");
+  if (declared !== null && /^\d+$/u.test(declared) && Number(declared) > maxBytes) {
+    void body.cancel().catch(() => undefined);
+    throw new Error("The model provider response was too large.");
+  }
+  signal.throwIfAborted();
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
+  let oversized = false;
+  const boundary = rejectOnAbort(signal);
+  const cancel = () => {
+    void reader.cancel(signal.reason).catch(() => undefined);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await Promise.race([reader.read(), boundary.promise]);
       if (done) break;
       if (value === undefined) continue;
       total += value.byteLength;
-      if (total > maxBytes) throw new Error("The model provider response was too large.");
+      if (total > maxBytes) {
+        oversized = true;
+        throw new Error("The model provider response was too large.");
+      }
       chunks.push(value);
     }
   } finally {
+    signal.removeEventListener("abort", cancel);
+    boundary.dispose();
+    if (signal.aborted || oversized) cancel();
     reader.releaseLock();
-    if (total > maxBytes) await body.cancel().catch(() => undefined);
   }
   const merged = new Uint8Array(total);
   let offset = 0;
@@ -309,7 +368,32 @@ async function readBounded(response: Response, maxBytes: number): Promise<string
   return new TextDecoder("utf-8", { fatal: true }).decode(merged);
 }
 
+function rejectOnAbort(signal: AbortSignal): {
+  promise: Promise<never>;
+  dispose: () => void;
+} {
+  let rejectPromise!: (error: DOMException) => void;
+  const promise = new Promise<never>((_resolve, reject) => {
+    rejectPromise = reject;
+  });
+  // The provider can win the race. Consume the later abort so it never becomes
+  // an unhandled rejection after a successful response.
+  promise.catch(() => undefined);
+  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
+  if (signal.aborted) reject();
+  else signal.addEventListener("abort", reject, { once: true });
+  return { promise, dispose: () => signal.removeEventListener("abort", reject) };
+}
+
 export type CandidateOutcome = "answered" | "failed" | "stalled";
+
+function noteCandidate(input: ScenarioCall, event: ScenarioCandidateEvent): void {
+  try {
+    input.observeCandidate?.(event);
+  } catch {
+    // A metrics sink cannot change candidate order, fallback, or an answer.
+  }
+}
 
 function recordOutcome(
   candidate: PoolCandidate,
@@ -338,11 +422,11 @@ function recordOutcome(
 
 /** Identity excludes the key, so rotating a key does not reset health. */
 function candidateKey(candidate: PoolCandidate): string {
-  return `${candidate.station} ${candidate.baseUrl} ${candidate.model}`;
+  return `${candidate.station}\u0000${candidate.baseUrl}\u0000${candidate.model}`;
 }
 
 function healthKey(scenario: MatterScenarioId, candidate: PoolCandidate): string {
-  return `${scenario} ${candidateKey(candidate)}`;
+  return `${scenario}\u0000${candidateKey(candidate)}`;
 }
 
 function isHttpsOrLocal(value: string): boolean {

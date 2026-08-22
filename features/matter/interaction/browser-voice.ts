@@ -475,13 +475,8 @@ export function createBrowserVoicePort(): VoicePort {
   // Audio upload is an explicit deployment capability. Missing configuration
   // fails before capture instead of collecting audio for a guaranteed 503.
   if (transport === "unavailable") throw new VoiceError("VOICE_UNSUPPORTED");
-  if (
-    typeof navigator === "undefined" ||
-    navigator.mediaDevices?.getUserMedia === undefined ||
-    typeof MediaRecorder === "undefined"
-  ) {
-    throw new VoiceError("VOICE_UNSUPPORTED");
-  }
+  if (!isBrowserRecordedAudioCaptureAvailable()) throw new VoiceError("VOICE_UNSUPPORTED");
+  warmLocalTranscriptionAfterIntent();
   return browserVoiceLease.coordinate(new BrowserVoicePort({
     getUserMedia: (constraints) =>
       navigator.mediaDevices.getUserMedia(constraints),
@@ -499,8 +494,35 @@ export function createBrowserVoicePort(): VoicePort {
   }));
 }
 
+/**
+ * Starts the optional worker graph beside microphone permission, after a
+ * person has expressed voice intent. Failure stays recoverable: the bounded
+ * transcription call retries the same lazy factory after recording stops.
+ */
+export function warmLocalTranscriptionAfterIntent(): void {
+  if (process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED !== "true") return;
+  void import("./local-transcription-client")
+    .then((local) => local.prepareLocalTranscription())
+    .catch(() => undefined);
+}
+
 export function isBrowserVoiceTransportAvailable(): boolean {
-  return browserVoiceTransport() !== "unavailable";
+  const transport = browserVoiceTransport();
+  return transport === "speech" ||
+    (transport === "audio" && isBrowserRecordedAudioCaptureAvailable());
+}
+
+/** Pure capability check: it never constructs a worker or requests a stream. */
+export function isBrowserRecordedAudioCaptureAvailable(): boolean {
+  if (
+    typeof navigator === "undefined" ||
+    navigator.mediaDevices?.getUserMedia === undefined ||
+    typeof MediaRecorder === "undefined"
+  ) {
+    return false;
+  }
+  if (process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED !== "true") return true;
+  return typeof Worker !== "undefined" && typeof AudioContext !== "undefined";
 }
 
 export type BrowserVoiceTransport = "speech" | "audio" | "unavailable";

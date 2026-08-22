@@ -98,6 +98,7 @@ export class LabelDriver {
   private restoring = false;
   private lastScope: LabelScope | null = null;
   private lastNodeIds: readonly string[] = [];
+  private paused = false;
   private disposed = false;
   private leases = 0;
   private leaseGeneration = 0;
@@ -267,6 +268,32 @@ export class LabelDriver {
     this.listeners.clear();
   }
 
+  /** Hidden documents release derived model work without touching durable names. */
+  suspend(): void {
+    if (this.disposed || this.paused) return;
+    this.paused = true;
+    const pending = [...this.active.values(), ...this.queue];
+    this.active.clear();
+    this.queue.length = 0;
+    for (const request of pending) {
+      request.controller.abort();
+      const released = reduceLabelSession(this.state, {
+        type: "failed",
+        nodeId: request.item.nodeId,
+        basis: request.item.basis,
+        operationId: request.operationId,
+        deferred: true,
+      });
+      if (released !== this.state) this.publish(released);
+    }
+  }
+
+  /** Visibility restores eligibility; a later real projection observation replans. */
+  resume(): void {
+    if (this.disposed || !this.paused) return;
+    this.paused = false;
+  }
+
   private applyDocument(scope: LabelScope): void {
     const next = reduceLabelSession(this.state, {
       type: "document-changed",
@@ -417,6 +444,7 @@ export class LabelDriver {
   }
 
   private mayRequest(): boolean {
+    if (this.paused) return false;
     if (this.now() < this.cooldownUntilMs) return false;
     return this.active.size + this.queue.length < this.limits.maxQueuedRequests;
   }
@@ -429,6 +457,7 @@ export class LabelDriver {
   private drain(): void {
     while (
       !this.disposed &&
+      !this.paused &&
       this.active.size < this.limits.maxConcurrentRequests &&
       this.queue.length > 0
     ) {

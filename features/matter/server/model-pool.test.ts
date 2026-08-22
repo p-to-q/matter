@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_POOL_LIMITS,
   createPoolAdapter,
@@ -47,8 +47,32 @@ beforeEach(() => resetPoolHealth());
 afterEach(() => resetPoolHealth());
 
 describe("readModelPool", () => {
+  it("uses the scenario-neutral model namespace for new deployments", () => {
+    expect(readModelPool({
+      MATTER_MODEL_POOL: "primary",
+      MATTER_MODEL_PRIMARY_BASE_URL: "https://models.example/v1",
+      MATTER_MODEL_PRIMARY_API_KEY: "key",
+      MATTER_MODEL_PRIMARY_MODELS: "fast,steady",
+    })).toEqual([
+      { station: "primary", baseUrl: "https://models.example/v1", apiKey: "key", model: "fast" },
+      { station: "primary", baseUrl: "https://models.example/v1", apiKey: "key", model: "steady" },
+    ]);
+  });
+
   it("flattens stations into ordered candidates and trims the base URL", () => {
     expect(readModelPool(ENVIRONMENT)).toEqual([
+      { station: "abc", baseUrl: "https://relay.example/v1", apiKey: "key-one", model: "Qwen-flash" },
+      { station: "abc", baseUrl: "https://relay.example/v1", apiKey: "key-one", model: "DeepSeek-V3" },
+      { station: "backup", baseUrl: "https://other.example/v1", apiKey: "key-two", model: "Qwen-flash" },
+    ]);
+  });
+
+  it("deduplicates repeated stations and models without changing first-seen order", () => {
+    expect(readModelPool({
+      ...ENVIRONMENT,
+      MATTER_LABEL_POOL: "abc,abc,backup,abc",
+      MATTER_LABEL_ABC_MODELS: "Qwen-flash,Qwen-flash,DeepSeek-V3,Qwen-flash",
+    })).toEqual([
       { station: "abc", baseUrl: "https://relay.example/v1", apiKey: "key-one", model: "Qwen-flash" },
       { station: "abc", baseUrl: "https://relay.example/v1", apiKey: "key-one", model: "DeepSeek-V3" },
       { station: "backup", baseUrl: "https://other.example/v1", apiKey: "key-two", model: "Qwen-flash" },
@@ -58,6 +82,16 @@ describe("readModelPool", () => {
   it("is empty when nothing is configured", () => {
     expect(readModelPool({})).toEqual([]);
     expect(resolvePoolAdapter({})).toBeNull();
+  });
+
+  it("fails closed instead of merging canonical and legacy pool namespaces", () => {
+    expect(readModelPool({
+      ...ENVIRONMENT,
+      MATTER_MODEL_POOL: "primary",
+      MATTER_MODEL_PRIMARY_BASE_URL: "https://models.example/v1",
+      MATTER_MODEL_PRIMARY_API_KEY: "new-key",
+      MATTER_MODEL_PRIMARY_MODELS: "fast",
+    })).toEqual([]);
   });
 
   it.each([
@@ -118,6 +152,8 @@ describe("pool adapter", () => {
     const body = JSON.parse(String(call?.init.body)) as Record<string, unknown>;
     expect(body).toMatchObject({ model: "Qwen-flash", temperature: 0, stream: false });
     expect((call?.init.headers as Record<string, string>).authorization).toBe("Bearer key");
+    expect(call?.init.cache).toBe("no-store");
+    expect(call?.init.redirect).toBe("error");
   });
 
   it("sends a configured non-thinking mode at the provider boundary", async () => {
@@ -137,6 +173,7 @@ describe("pool adapter", () => {
 
   it("falls through to the next candidate on failure", async () => {
     const tried: string[] = [];
+    const events: string[] = [];
     const adapter = createPoolAdapter(
       [candidate("first"), candidate("second")],
       DEFAULT_POOL_LIMITS,
@@ -147,9 +184,13 @@ describe("pool adapter", () => {
         return model === "first" ? chatResponse("", 503) : chatResponse("成本问题");
       },
     );
-    await expect(adapter(adapterInput(), new AbortController().signal))
+    await expect(adapter({
+      ...adapterInput(),
+      observeCandidate: (event) => events.push(event),
+    }, new AbortController().signal))
       .resolves.toEqual({ text: "成本问题" });
     expect(tried).toEqual(["first", "second"]);
+    expect(events).toEqual(["pool", "failed", "answered"]);
   });
 
   it("bounds one relay's attempt so a hang cannot spend the whole deadline", async () => {
@@ -175,6 +216,33 @@ describe("pool adapter", () => {
     await expect(adapter(adapterInput(1_000), new AbortController().signal))
       .resolves.toEqual({ text: "成本问题" });
     expect(tried).toEqual(["hanging", "steady"]);
+  });
+
+  it("preserves relay fallback when a transport ignores AbortSignal", async () => {
+    vi.useFakeTimers();
+    try {
+      const tried: string[] = [];
+      const adapter = createPoolAdapter(
+        [candidate("ignores-abort"), candidate("steady")],
+        DEFAULT_POOL_LIMITS,
+        Date.now,
+        async (_url, init) => {
+          const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+          tried.push(model);
+          return model === "steady"
+            ? chatResponse("成本问题")
+            : new Promise<Response>(() => undefined);
+        },
+      );
+
+      const pending = adapter(adapterInput(1_000), new AbortController().signal);
+      const assertion = expect(pending).resolves.toEqual({ text: "成本问题" });
+      await vi.advanceTimersByTimeAsync(500);
+      await assertion;
+      expect(tried).toEqual(["ignores-abort", "steady"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("cools a stalled relay after one hang, not after two", async () => {
@@ -254,6 +322,31 @@ describe("pool adapter", () => {
     tried.length = 0;
     await adapter(adapterInput(1_000, "matter-transcript-repair"), new AbortController().signal);
     expect(tried).toEqual(["steady"]);
+  });
+
+  it("keeps candidate health isolated across delimiter-ambiguous identities", async () => {
+    const urls: string[] = [];
+    const adapter = createPoolAdapter(
+      [
+        { station: "ab", baseUrl: "c", apiKey: "key", model: "d" },
+        { station: "a", baseUrl: "bc", apiKey: "key", model: "d" },
+      ],
+      { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1 },
+      Date.now,
+      async (url) => {
+        const value = String(url);
+        urls.push(value);
+        return value.startsWith("c/") ? chatResponse("", 503) : chatResponse("成本问题");
+      },
+    );
+
+    await adapter(adapterInput(), new AbortController().signal);
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(urls).toEqual([
+      "c/chat/completions",
+      "bc/chat/completions",
+      "bc/chat/completions",
+    ]);
   });
 
   it("does not let one scenario's success erase another scenario's failure evidence", async () => {
@@ -421,6 +514,20 @@ describe("pool adapter", () => {
       async () => chatResponse("x".repeat(4_096)),
     );
     await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+  });
+
+  it("fast-fails a declared oversize without waiting for body cancellation", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      cancel: () => new Promise(() => undefined),
+    });
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      { ...DEFAULT_POOL_LIMITS, maxResponseBytes: 64 },
+      Date.now,
+      async () => new Response(body, { headers: { "content-length": "65" } }),
+    );
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .rejects.toThrow("too large");
   });
 
   it("never puts the key in a thrown message", async () => {

@@ -54,6 +54,11 @@ about which passages the same stroke selects.
 A node is one passage of language. Voice admits it, the tree orders it, and
 serialization writes it as Markdown.
 
+Every passage contains at least one non-whitespace Unicode character. Empty or
+whitespace-only text is not material and is rejected at the tree boundary. The
+only node whose text is empty is the invisible `document-root`; its text must be
+exactly the empty string.
+
 ```ts
 type ThoughtNode = {
   id: string;

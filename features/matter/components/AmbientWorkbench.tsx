@@ -3,6 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./AmbientWorkbench.module.css";
 import { clientMatterBasePath } from "../config/base-path";
+import {
+  shouldPresentAmbientMotion,
+  type AmbientConnectionHint,
+} from "./ambient-motion-policy";
 
 export type AmbientWorkbenchProps = Readonly<{
   className?: string;
@@ -18,6 +22,8 @@ const NAVIGATION_PLAYBACK_RATE = 1.55;
  * or camera state and stays outside the material mutation path.
  */
 export function AmbientWorkbench({ className, enabled = true, navigationActive = false }: AmbientWorkbenchProps) {
+  const [motionAllowed, setMotionAllowed] = useState(false);
+  const [motionFailed, setMotionFailed] = useState(false);
   const [motionReady, setMotionReady] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const basePath = clientMatterBasePath();
@@ -27,7 +33,37 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
     .join(" ");
 
   useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const connection = (navigator as Navigator & {
+      connection?: AmbientConnectionHint & Partial<EventTarget>;
+    }).connection;
+    const update = () => setMotionAllowed(shouldPresentAmbientMotion({
+      connection,
+      reducedMotion: motionPreference.matches,
+    }));
+    update();
+    const legacyMotionPreference = motionPreference as MediaQueryList & {
+      addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+      removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+    };
+    if (typeof motionPreference.addEventListener === "function") {
+      motionPreference.addEventListener("change", update);
+    } else {
+      legacyMotionPreference.addListener?.(update);
+    }
+    connection?.addEventListener?.("change", update);
+    return () => {
+      if (typeof motionPreference.removeEventListener === "function") {
+        motionPreference.removeEventListener("change", update);
+      } else {
+        legacyMotionPreference.removeListener?.(update);
+      }
+      connection?.removeEventListener?.("change", update);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!enabled || !motionAllowed || motionFailed || motionReady) return;
 
     const revealMotion = () => setMotionReady(true);
     const idleWindow = window as Window & {
@@ -41,10 +77,10 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
 
     const timeoutId = window.setTimeout(revealMotion, 320);
     return () => window.clearTimeout(timeoutId);
-  }, []);
+  }, [enabled, motionAllowed, motionFailed, motionReady]);
 
   useEffect(() => {
-    if (!motionReady) return;
+    if (!enabled || !motionAllowed || !motionReady) return;
     const video = videoRef.current;
     if (video === null) return;
     const followVisibility = () => {
@@ -54,7 +90,7 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
     followVisibility();
     document.addEventListener("visibilitychange", followVisibility);
     return () => document.removeEventListener("visibilitychange", followVisibility);
-  }, [enabled, motionReady]);
+  }, [enabled, motionAllowed, motionReady]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -73,7 +109,7 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
         className={`matter-ambient__poster ${styles.poster}`}
         style={{ backgroundImage: `url("${assetPath("shadows-poster.jpg")}")` }}
       />
-      {motionReady ? (
+      {enabled && motionAllowed && motionReady ? (
         <video
           aria-hidden="true"
           autoPlay
@@ -85,7 +121,10 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
           preload="none"
           ref={videoRef}
           tabIndex={-1}
-          onError={() => setMotionReady(false)}
+          onError={() => {
+            setMotionFailed(true);
+            setMotionReady(false);
+          }}
         >
           <source src={assetPath("shadows-loop.webm")} type="video/webm" />
           <source src={assetPath("shadows-loop.mp4")} type="video/mp4" />

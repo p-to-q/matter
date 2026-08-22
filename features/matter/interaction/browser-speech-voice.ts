@@ -1,6 +1,7 @@
 import { RECORDING_LIMIT_MS } from "./audio-policy";
 import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./voice-port";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+import { subscribePageSuspension } from "./page-suspension";
 
 export const SPEECH_START_TIMEOUT_MS = 8_000;
 
@@ -29,6 +30,7 @@ type PreparedRecognition = Readonly<{
 }>;
 
 let preparedRecognition: PreparedRecognition | null = null;
+let preparedSuspensionCleanup: (() => void) | null = null;
 
 export function speechRecognitionConstructor(): SpeechRecognitionConstructor | undefined {
   if (typeof window === "undefined") return undefined;
@@ -50,15 +52,24 @@ export function prepareBrowserSpeechRecognition(): void {
   const Constructor = speechRecognitionConstructor();
   if (Constructor === undefined) throw new VoiceError("VOICE_UNSUPPORTED");
   if (preparedRecognition?.Constructor === Constructor) return;
+  releasePreparedRecognition();
   preparedRecognition = Object.freeze({
     Constructor,
     recognition: new Constructor(),
   });
+  const suspensionCleanup = subscribePageSuspension(releasePreparedRecognition);
+  if (preparedRecognition === null) {
+    // Initial-hidden synchronization released the lease before subscribe
+    // returned; its listener must not outlive the now-unowned recognition.
+    suspensionCleanup();
+    return;
+  }
+  preparedSuspensionCleanup = suspensionCleanup;
 }
 
 /** Test-only cleanup prevents the prepared first-turn lease crossing cases. */
 export function resetBrowserSpeechPreparationForTests(): void {
-  preparedRecognition = null;
+  releasePreparedRecognition();
 }
 
 export class BrowserSpeechVoicePort implements VoicePort {
@@ -82,6 +93,8 @@ export class BrowserSpeechVoicePort implements VoicePort {
   constructor() {
     this.prepared = preparedRecognition;
     preparedRecognition = null;
+    preparedSuspensionCleanup?.();
+    preparedSuspensionCleanup = null;
   }
 
   start(operation: VoiceOperation, callbacks: VoiceCallbacks = {}): Promise<void> {
@@ -243,4 +256,11 @@ export class BrowserSpeechVoicePort implements VoicePort {
 
 export function createBrowserSpeechVoicePort(): BrowserSpeechVoicePort {
   return new BrowserSpeechVoicePort();
+}
+
+function releasePreparedRecognition(): void {
+  preparedRecognition = null;
+  const cleanup = preparedSuspensionCleanup;
+  preparedSuspensionCleanup = null;
+  cleanup?.();
 }

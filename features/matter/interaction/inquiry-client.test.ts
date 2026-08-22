@@ -1,11 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  INQUIRY_CLIENT_TIMEOUT_MS,
   MAX_INQUIRY_ANSWER_CODE_POINTS,
   MAX_INQUIRY_RESPONSE_BYTES,
   sameInquiryContext,
 } from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { askInquiry } from "./inquiry-client";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("inquiry client", () => {
   it("sends the bounded question and reads a stated result", async () => {
@@ -19,6 +24,10 @@ describe("inquiry client", () => {
       requestId: INPUT.requestId,
       question: INPUT.question,
       context: { treeId: "tree_inquiry" },
+    });
+    expect(fetchImpl.mock.calls[0]![1]).toMatchObject({
+      cache: "no-store",
+      redirect: "error",
     });
   });
 
@@ -114,6 +123,20 @@ describe("inquiry client", () => {
       reason: "UNREACHABLE",
     });
     expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("settles its own timeout even when an injected transport ignores AbortSignal", async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;
+    const pending = askInquiry({ ...INPUT, fetchImpl });
+    const assertion = expect(pending).resolves.toEqual({
+      status: "unavailable",
+      reason: "TIMED_OUT",
+    });
+
+    await vi.advanceTimersByTimeAsync(INQUIRY_CLIENT_TIMEOUT_MS);
+    await assertion;
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });
 

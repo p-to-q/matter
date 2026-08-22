@@ -19,6 +19,7 @@ const repairEnabled = resolveMatterRepairEnabled(
 );
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
+export const MATTER_MEDIA_CACHE_CONTROL = "public, max-age=14400, must-revalidate";
 
 export function resolveMatterNextDistDir(
   phase: string,
@@ -48,15 +49,24 @@ export default function matterNextConfig(phase: string): NextConfig {
       }];
     },
     async headers() {
-      return [{
-        source: "/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Referrer-Policy", value: "no-referrer" },
-          { key: "Permissions-Policy", value: "microphone=(self)" },
-        ],
-      }];
+      return [
+        {
+          // These names are deployment-stable rather than content-hashed. A
+          // bounded browser TTL preserves the production delivery contract
+          // without making a stable-name asset immutable across later releases.
+          source: "/matter-ui/:path*",
+          headers: [{ key: "Cache-Control", value: MATTER_MEDIA_CACHE_CONTROL }],
+        },
+        {
+          source: "/:path*",
+          headers: [
+            { key: "X-Content-Type-Options", value: "nosniff" },
+            { key: "X-Frame-Options", value: "DENY" },
+            { key: "Referrer-Policy", value: "no-referrer" },
+            { key: "Permissions-Policy", value: "microphone=(self)" },
+          ],
+        },
+      ];
     },
     env: {
       NEXT_PUBLIC_MATTER_BASE_PATH: basePath,

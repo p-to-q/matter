@@ -59,7 +59,9 @@ export type ThoughtTree = {
 
 A valid tree is either empty (`rootId: null` and no nodes) or has one root,
 bidirectional parent/child agreement, unique ordered children, no cycle, and no
-unreachable node. Invalid documents are rejected as a whole, never repaired.
+unreachable node. Every node other than `document-root` contains at least one
+non-whitespace Unicode character; `document-root` alone has, and must have,
+exactly empty text. Invalid documents are rejected as a whole, never repaired.
 Tree and node ids use 1–128 ASCII characters from `[A-Za-z0-9_-]`, beginning
 with an alphanumeric character. This grammar is safe in Markdown frontmatter,
 network envelopes, IndexedDB keys, and logical paths without transport-specific
@@ -274,7 +276,11 @@ UTF-8 response bytes. The scenario has a 12-second deadline, the route boundary
 margins cover body parsing, plan construction, and response transport without
 shrinking the measured cold provider attempt before live evidence exists. A
 model rejection is never retried. Ordered relay fallback inside one provider
-call remains transport behavior; it does not resample a rejected answer.
+call remains transport behavior; it does not resample a rejected answer. A
+candidate's attempt is hard-bounded even if its transport ignores cancellation,
+so it cannot consume the delivery margin reserved for the next relay. Browser
+and provider POSTs use no-store transport and reject redirects; no material turn
+answer becomes an HTTP cache entry or follows a redirect to another origin.
 
 Unavailable, timeout, busy, rejected, malformed, no-op, and cancelled turns all
 leave the passage unchanged. Provider, pool, timeout, and transport failures do
@@ -860,8 +866,9 @@ envelope and plan. Mismatches are rejected; migration is explicit.
 Tree validation also rejects a record key that differs from `node.id`, invalid
 or non-canonical timestamps, an unsafe revision integer, duplicate or unknown
 children, parent/child disagreement, a non-empty tree without exactly one root,
-cycles, unreachable nodes, and any depth, child, node, or text bound violation.
-Validation never repairs.
+cycles, unreachable nodes, an empty or whitespace-only passage, a non-empty
+`document-root`, and any depth, child, node, or text bound violation. Validation
+never repairs.
 
 A command also rejects the wrong tree id, `revision >= Number.MAX_SAFE_INTEGER`,
 a text replacement equal to its expected text, a non-leaf inserted node,

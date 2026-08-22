@@ -1,12 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GOVERNOR_LIMITS,
   ScenarioGovernor,
+  recordScenarioPerformance,
   runScenario,
   withRequestSignal,
   type MatterScenario,
   type ScenarioAdapter,
   type ScenarioCall,
+  type ScenarioPerformanceObservation,
 } from "./harness";
 import {
   KEEP_UNFINISHED,
@@ -30,6 +32,11 @@ const ECHO: MatterScenario<string, string> = Object.freeze({
 
 const answers = (text: string): ScenarioAdapter => async () => ({ text });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
 describe("runScenario", () => {
   it("passes the compiled prompt, locale, and budget to the adapter", async () => {
     const seen: ScenarioCall[] = [];
@@ -47,6 +54,143 @@ describe("runScenario", () => {
       deadlineMs: 40,
       maxOutputTokens: 16,
     });
+  });
+
+  it("emits one content-free answered receipt with anonymous candidate counts", async () => {
+    const observePerformance = vi.fn();
+    const outcome = await runScenario(ECHO, "MATERIAL_SENTINEL", async (call) => {
+      call.observeCandidate?.("pool");
+      call.observeCandidate?.("failed");
+      call.observeCandidate?.("stalled");
+      call.observeCandidate?.("answered");
+      return { text: "ok" };
+    }, new ScenarioGovernor(), {
+      observe: () => undefined,
+      observePerformance,
+      now: () => 100,
+    });
+
+    expect(outcome).toEqual({ ok: true, value: "ok" });
+    expect(observePerformance).toHaveBeenCalledOnce();
+    expect(observePerformance).toHaveBeenCalledWith({
+      scenario: "matter-inquiry",
+      outcome: "answered",
+      elapsedMs: 0,
+      candidateTelemetry: "pool",
+      candidateAttempts: 3,
+      candidateTimeouts: 1,
+      candidateFailures: 1,
+    });
+    expect(JSON.stringify(observePerformance.mock.calls)).not.toContain("MATERIAL_SENTINEL");
+  });
+
+  it("classifies rejected, unavailable, timed-out, and busy terminals without identity", async () => {
+    const rejected = vi.fn();
+    await runScenario(ECHO, "hello", async (call) => {
+      call.observeCandidate?.("pool");
+      call.observeCandidate?.("answered");
+      return { text: "" };
+    }, new ScenarioGovernor(), {
+      observe: () => undefined,
+      observePerformance: rejected,
+    });
+    expect(rejected.mock.calls[0]?.[0]).toMatchObject({
+      outcome: "rejected",
+      candidateAttempts: 1,
+    });
+
+    const unavailable = vi.fn();
+    await runScenario(ECHO, "hello", async (call) => {
+      call.observeCandidate?.("pool");
+      call.observeCandidate?.("failed");
+      throw new Error("relay unavailable");
+    }, new ScenarioGovernor(), {
+      observe: () => undefined,
+      observePerformance: unavailable,
+    });
+    expect(unavailable.mock.calls[0]?.[0]).toMatchObject({
+      outcome: "unavailable",
+      candidateAttempts: 1,
+      candidateFailures: 1,
+    });
+
+    const timedOut = vi.fn();
+    await runScenario(ECHO, "hello", (call) => {
+      call.observeCandidate?.("pool");
+      call.observeCandidate?.("stalled");
+      return new Promise(() => undefined);
+    }, new ScenarioGovernor(), {
+      observe: () => undefined,
+      observePerformance: timedOut,
+    });
+    expect(timedOut.mock.calls[0]?.[0]).toMatchObject({
+      outcome: "timeout",
+      candidateAttempts: 1,
+      candidateTimeouts: 1,
+    });
+
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, maxConcurrentModelCalls: 1 };
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => { release = resolve; });
+    const first = runScenario(ECHO, "first", async () => {
+      await held;
+      return { text: "ok" };
+    }, governor, { limits, observe: () => undefined, observePerformance: () => undefined });
+    const busy = vi.fn();
+    await runScenario(ECHO, "second", answers("ok"), governor, {
+      limits,
+      observe: () => undefined,
+      observePerformance: busy,
+    });
+    expect(busy.mock.calls[0]?.[0]).toMatchObject({
+      outcome: "busy",
+      candidateTelemetry: "unreported",
+      candidateAttempts: 0,
+    });
+    release();
+    await first;
+  });
+
+  it("allowlists the production scalar log and ignores hostile extra fields", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    recordScenarioPerformance({
+      scenario: "matter-inquiry",
+      outcome: "answered",
+      elapsedMs: 127.6,
+      candidateTelemetry: "pool",
+      candidateAttempts: 2,
+      candidateTimeouts: 1,
+      candidateFailures: 0,
+      material: "MATERIAL_SENTINEL",
+      requestId: "request_secret",
+    } as unknown as ScenarioPerformanceObservation);
+
+    expect(info).toHaveBeenCalledOnce();
+    const line = String(info.mock.calls[0]?.[0]);
+    expect(line).toBe(
+      "matter.scenario-performance "
+      + '{"scenario":"matter-inquiry","outcome":"answered","elapsedMs":128,'
+      + '"candidateTelemetry":"pool","candidateAttempts":2,"candidateTimeouts":1,'
+      + '"candidateFailures":0}',
+    );
+    expect(line).not.toContain("MATERIAL_SENTINEL");
+    expect(line).not.toContain("request_secret");
+    info.mockRestore();
+  });
+
+  it("uses the structured scalar sink by default only in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    await runScenario(ECHO, "hello", answers("ok"), new ScenarioGovernor());
+    expect(info).toHaveBeenCalledOnce();
+    expect(String(info.mock.calls[0]?.[0])).toContain('"outcome":"answered"');
+  });
+
+  it("keeps a performance sink failure outside scenario settlement", async () => {
+    await expect(runScenario(ECHO, "hello", answers("ok"), new ScenarioGovernor(), {
+      observePerformance: () => { throw new Error("metrics unavailable"); },
+    })).resolves.toEqual({ ok: true, value: "ok" });
   });
 
   it("uses the floor when there is no adapter at all", async () => {

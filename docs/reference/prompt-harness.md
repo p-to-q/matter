@@ -161,13 +161,22 @@ own server-only authority switch, so permission is granted per surface rather
 than per credential. Existing deployed switches include
 `MATTER_LABEL_ADAPTER`, `MATTER_REPAIR_ADAPTER`, and `MATTER_INQUIRY_ADAPTER`;
 Elastic and Text Swap require distinct live gates rather than inheriting one of
-them or each other. The variables still spelled `MATTER_LABEL_*` are a deployed
-secret layout, and renaming a secret to match a refactor is how a deployment
-loses its credentials. The ordered candidate registry and transport are shared.
+them or each other. New deployments use the scenario-neutral `MATTER_MODEL_*`
+namespace. The existing `MATTER_LABEL_*` secret layout remains a complete
+compatibility fallback, while configuring both pool variables fails closed
+instead of merging two authority sets. The ordered candidate registry and transport are shared.
 Mutable candidate health is keyed by scenario, because a stall is a judgement
 made against that scenario's deadline: a relay that is too slow for foreground
 repair may still be healthy for a background label. Governors, cache policy,
 and adjudication are scenario-local; health follows the same ownership boundary.
+
+**Observation is a scalar side channel, never a second model protocol.** The
+harness emits one production terminal receipt for a provider-backed invocation;
+the pool contributes only anonymous `answered`/`failed`/`stalled` attempt events
+that are counted in memory. Neither prompt nor model answer enters this seam, and
+an observer cannot change settlement. The closed log contract and attribution
+limits live in `deployment-handoff.md`; in particular, Matter never infers
+provider cold/warm state from instance age or first-attempt latency.
 
 **The scenario's budget scales with its input; the caller may only shorten it.**
 Repair scales with the utterance, Elastic output tokens with the server-owned

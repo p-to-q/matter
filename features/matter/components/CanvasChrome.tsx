@@ -50,6 +50,7 @@ import {
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
+import { subscribePageSuspension } from "../interaction/page-suspension";
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
@@ -1011,6 +1012,12 @@ function InquiryBubble({
   const cancelDictation = dictation.cancel;
 
   useEffect(() => () => requestRef.current?.abort(), []);
+
+  useEffect(() => subscribePageSuspension(() => {
+    // Keep completed local turns, but return an in-flight question to its
+    // editable draft through the request's existing abort/fallback path.
+    requestRef.current?.abort(new DOMException("Page suspended", "AbortError"));
+  }), []);
 
   useEffect(() => {
     if (!hasPendingAnswer) submittingRef.current = false;

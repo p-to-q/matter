@@ -38,6 +38,80 @@ describe("local transcription audio projection", () => {
     expect(workers[0]?.postMessage).not.toHaveBeenCalled();
   });
 
+  it("retires the lazy worker on pagehide and recreates it only on later intent", async () => {
+    const workers: FakeWorker[] = [];
+    const pageWindow = Object.assign(new EventTarget(), {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "visible";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const firstPreparation = prepareLocalTranscription();
+    workers[0]?.emit({ status: "ready" });
+    await expect(firstPreparation).resolves.toBeUndefined();
+
+    pageDocument.visibilityState = "hidden";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    pageWindow.dispatchEvent(new Event("pageshow"));
+    pageDocument.visibilityState = "visible";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+    expect(workers).toHaveLength(1);
+
+    const secondPreparation = prepareLocalTranscription();
+    expect(workers).toHaveLength(2);
+    workers[1]?.emit({ status: "ready" });
+    await expect(secondPreparation).resolves.toBeUndefined();
+  });
+
+  it("does not publish a worker constructed while the document is already hidden", async () => {
+    const workers: FakeWorker[] = [];
+    const pageWindow = Object.assign(new EventTarget(), {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "hidden";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    await expect(prepareLocalTranscription()).rejects.toEqual(
+      new LocalTranscriptionError("failed"),
+    );
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+
+    pageDocument.visibilityState = "visible";
+    pageWindow.dispatchEvent(new Event("pageshow"));
+    expect(workers).toHaveLength(1);
+    const nextPreparation = prepareLocalTranscription();
+    expect(workers).toHaveLength(2);
+    workers[1]?.emit({ status: "ready" });
+    await expect(nextPreparation).resolves.toBeUndefined();
+  });
+
   it("bounds a worker code graph that never becomes ready", async () => {
     vi.useFakeTimers();
     const workers: FakeWorker[] = [];

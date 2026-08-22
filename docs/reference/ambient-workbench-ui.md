@@ -31,6 +31,12 @@ canvas appearance, or the right-rail editing tools.
   workbench field.
 - The paper owns the supplied leaf-shadow media. It is decorative, transient,
   and never part of document state or persistence.
+- Decorative motion is optional delivery, not structural UI. The poster and
+  wash remain when leaf atmosphere is enabled but reduced motion, explicit data
+  saving, or a browser-reported `2g`/`slow-2g` connection suppresses video. The
+  browser re-evaluates explicit preference and connection changes; missing
+  network hints keep the normal path and user-agent guesses are forbidden. A
+  failed video load settles on the poster rather than entering a retry loop.
 - When leaf atmosphere is off, the paper exposes one quiet structural ruling
   across the complete visible surface. The ruling uses a quiet dashed
   line and repeats on the existing derived horizontal column step: `636 x 196px`
@@ -75,6 +81,8 @@ canvas appearance, or the right-rail editing tools.
 - The right rail exposes only the current editing vocabulary. Its selected
   second-preview geometry is `60px` wide with a `22px` outer radius; desktop
   buttons remain visibly `44px` with `13px` corner radii and `20px` artwork.
+  Its white surface is opaque and therefore owns no backdrop sample or blur
+  layer; the optical buffers remain confined to the three corner groups above.
   Their non-overlapping pointer boxes may extend horizontally beyond the rail so
   imprecise approach still lands on the intended tool; narrow screens retain
   `48px`-high targets. Focus follows the visible button, not the invisible

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PHASE_PRODUCTION_BUILD } from "next/constants";
 import matterNextConfig, {
+  MATTER_MEDIA_CACHE_CONTROL,
   resolveMatterRepairEnabled,
   resolveMatterVoiceBuildConfig,
 } from "../../../next.config";
@@ -33,6 +34,10 @@ describe("Matter Next response headers", () => {
 
     await expect(nextConfig.headers()).resolves.toEqual([
       {
+        source: "/matter-ui/:path*",
+        headers: [{ key: "Cache-Control", value: MATTER_MEDIA_CACHE_CONTROL }],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
@@ -42,6 +47,11 @@ describe("Matter Next response headers", () => {
         ],
       },
     ]);
+  });
+
+  it("holds the observed production media TTL without making stable names immutable", () => {
+    expect(MATTER_MEDIA_CACHE_CONTROL).toBe("public, max-age=14400, must-revalidate");
+    expect(MATTER_MEDIA_CACHE_CONTROL).not.toMatch(/immutable|s-maxage/iu);
   });
 
   it("redirects a domain root to the default mounted application", async () => {

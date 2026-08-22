@@ -99,6 +99,41 @@ requests a flush. The footer may say only that a write is in flight; its
 local-device identity never promises that a dirty revision reached storage.
 Browser crash between commit and IndexedDB completion cannot be promised away.
 
+Continuous editing does not add a debounce window: the controller starts the
+first save immediately, permits one write at a time, and replaces at most one
+pending value with the newest complete tree plus history. An exact tree/history
+reference already owned by the in-flight or pending save is ignored. This
+reference check does not widen the existing saved-state rule: after a revision
+is saved, that revision remains authoritative. A structurally divergent value
+claiming the same revision violates the caller invariant and is not promised a
+second write. `visibilitychange: hidden` requests the same immediate drain; it
+does not pretend that a browser can synchronously guarantee disk completion
+while suspending or crashing.
+
+The canonical slug allocator stops once the persisted 48-scalar/48-byte prefix
+is decided, but produces exactly the same normalized path as the original
+whole-string replacement grammar. The decoder reuses one UTF-8 encoder and
+counts each path once. `npm run bench:persistence` records the deterministic
+2,000-node codec/JSON/structured-clone profile and a local Chromium IndexedDB
+profile. On the 2026-08-22 development machine, the realistic encode median
+moved from 24.74 ms to 11.56 ms; the 2,000-node, maximum-text median moved from
+125.83 ms to 18.42 ms. The corresponding serialized rows with empty history
+were 1,282,656 and 13,063,261 bytes. Headless Chromium 151 measured a synthetic
+12.27 MB row at 9.2 ms median synchronous `put()` clone and 9.6 ms through
+transaction completion. These receipts compare implementations on one machine;
+they are not device or quota promises.
+
+History remains complete until physical storage rejects the atomic row. It is
+therefore the residual memory and write-amplification risk for a very long
+editing session: every snapshot still carries the complete inverse journal.
+Dropping old inverses would violate recovery, while a worker, incremental
+journal, or checkpointed schema would change lifecycle and crash semantics.
+Those options remain frozen unless target-browser evidence shows a persistence
+long task over 50 ms or repeatable quota pressure before explicit export. Any
+reopened design must keep one transactional generation owner, validate the
+whole recovered history, preserve corrupt-row export, and specify how hidden-
+page flush reaches a worker; it cannot land as a scheduler patch.
+
 The material-index footer is deliberately not that recovery control. It keeps
 only the localized non-account identity and local-device line, with a brief
 saving phrase while a write is actually in flight. Conflict, storage-full,

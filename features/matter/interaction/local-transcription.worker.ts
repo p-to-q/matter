@@ -1,6 +1,5 @@
 import { pipeline } from "@huggingface/transformers";
-
-const MODEL_ID = "onnx-community/whisper-tiny";
+import { LOCAL_TRANSCRIPTION_MODEL } from "./local-transcription-model";
 
 type TranscriptionRequest = Readonly<{
   type: "transcribe";
@@ -68,7 +67,11 @@ async function transcribe(request: TranscriptionRequest): Promise<void> {
 function createTranscriber() {
   return pipeline(
     "automatic-speech-recognition",
-    MODEL_ID,
-    { device: "wasm", dtype: "q8" },
+    LOCAL_TRANSCRIPTION_MODEL.id,
+    {
+      device: LOCAL_TRANSCRIPTION_MODEL.device,
+      dtype: LOCAL_TRANSCRIPTION_MODEL.dtype,
+      revision: LOCAL_TRANSCRIPTION_MODEL.revision,
+    },
   );
 }

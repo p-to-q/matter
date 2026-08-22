@@ -55,7 +55,10 @@ export async function requestTranscription(input: {
     response = await Promise.race([
       fetch(`${basePath()}/api/transcribe`, {
         method: "POST",
+        headers: { accept: "application/json" },
         body: form,
+        cache: "no-store",
+        redirect: "error",
         signal: deadline.signal,
       }),
       deadline.settlement,

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import packageMetadata from "../../../package.json";
 import { GET } from "../../../app/api/health/route";
 import { healthSnapshot } from "./health-route";
@@ -6,6 +6,7 @@ import { healthSnapshot } from "./health-route";
 const originalEnvironment = { ...process.env };
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   process.env = { ...originalEnvironment };
 });
 
@@ -60,6 +61,24 @@ describe("Matter health route", () => {
   it("marks the label model unavailable until a supported adapter is configured", () => {
     process.env.MATTER_LABEL_ADAPTER = "off";
 
+    expect(healthSnapshot().surfaces.thoughtLabel).toBe("unavailable");
+  });
+
+  it("recognizes the canonical shared pool and fails closed on a legacy conflict", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.MATTER_LABEL_ADAPTER = "live";
+    delete process.env.MATTER_LABEL_POOL;
+    process.env.MATTER_MODEL_POOL = "primary";
+    process.env.MATTER_MODEL_PRIMARY_BASE_URL = "https://models.example/v1";
+    process.env.MATTER_MODEL_PRIMARY_API_KEY = "test-only";
+    process.env.MATTER_MODEL_PRIMARY_MODELS = "fast";
+
+    expect(healthSnapshot().surfaces.thoughtLabel).toBe("available");
+
+    process.env.MATTER_LABEL_POOL = "legacy";
+    process.env.MATTER_LABEL_LEGACY_BASE_URL = "https://legacy.example/v1";
+    process.env.MATTER_LABEL_LEGACY_API_KEY = "test-only";
+    process.env.MATTER_LABEL_LEGACY_MODELS = "old";
     expect(healthSnapshot().surfaces.thoughtLabel).toBe("unavailable");
   });
 

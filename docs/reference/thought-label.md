@@ -219,7 +219,7 @@ particle has it trimmed, so a label never begins with `は`.
 ## The pool
 
 Relays are cheap and unreliable, so the model is a *pool*, not a provider:
-`MATTER_LABEL_POOL` names ordered stations, each with its own base URL, key, and
+`MATTER_MODEL_POOL` names ordered stations, each with its own base URL, key, and
 ordered model list. The first healthy candidate answers. A station that just
 failed is tried last rather than dropped, so a relay that recovers returns to
 service on its own. An attempt that cannot finish inside the caller's remaining
@@ -236,7 +236,9 @@ cooldown. Accepted labels alone use the bounded label caches described above;
 no transcript or repair answer enters them.
 
 Keys live only in git-ignored `.env.local`, are read at call time, and appear in
-no cache key, log line, error, or response.
+no cache key, log line, error, or response. The deployed `MATTER_LABEL_*`
+namespace remains an all-or-nothing compatibility fallback; it is never merged
+with the canonical namespace.
 
 ## Measurement
 

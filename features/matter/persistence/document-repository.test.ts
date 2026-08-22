@@ -147,6 +147,57 @@ describe("IndexedDB document repository", () => {
     expect(put).not.toHaveBeenCalled();
   });
 
+  it("never overwrites a present malformed row as though the document were missing", async () => {
+    const put = vi.fn();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({ treeId: "tree-1", bundle: { files: {} } }),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    await expect(repository.save("tree-1", 2, { files: {} }, null)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_CONFLICT" },
+    });
+    expect(transaction.abort).toHaveBeenCalledTimes(1);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("fails atomically instead of creating an unsafe write generation", async () => {
+    const put = vi.fn();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({ writeGeneration: Number.MAX_SAFE_INTEGER }),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+    const repository = createIndexedDbDocumentRepository();
+
+    await expect(repository.save(
+      "tree-1",
+      2,
+      { files: {} },
+      Number.MAX_SAFE_INTEGER,
+    )).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_WRITE_FAILED" },
+    });
+    expect(transaction.abort).toHaveBeenCalledTimes(1);
+    expect(put).not.toHaveBeenCalled();
+  });
+
   it("stores the local inverse journal in the same snapshot write", async () => {
     const put = vi.fn().mockResolvedValue(undefined);
     const transaction = {

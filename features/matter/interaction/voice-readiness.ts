@@ -2,10 +2,10 @@
 
 import {
   browserVoiceTransport,
+  isBrowserRecordedAudioCaptureAvailable,
   type BrowserVoiceTransport,
 } from "./browser-voice";
 import { prepareBrowserSpeechRecognition } from "./browser-speech-voice";
-import { localTranscriptionIsEnabled } from "./transcription-client";
 
 export type VoiceReadiness = Readonly<{
   status: "ready" | "unavailable";
@@ -13,11 +13,10 @@ export type VoiceReadiness = Readonly<{
 }>;
 
 /**
- * Prepares the code path a first voice turn needs without requesting
- * microphone permission. Native speech gets one unstarted recognition lease;
- * the recorded-audio fallback waits for its worker module graph, while model
- * initialization and any person-provided audio remain deferred to an actual
- * turn.
+ * Checks the code path a first voice turn needs without requesting microphone
+ * permission. Native speech gets one unstarted recognition lease. Recorded
+ * audio is already a usable capture path; its optional local worker graph is
+ * warmed only when a person starts that path, never during page hydration.
  */
 export async function prepareVoiceReadiness(): Promise<VoiceReadiness> {
   const transport = browserVoiceTransport();
@@ -30,17 +29,8 @@ export async function prepareVoiceReadiness(): Promise<VoiceReadiness> {
       return unavailable(transport);
     }
   }
-  if (transport !== "audio" || !localTranscriptionIsEnabled()) {
-    return ready(transport);
-  }
-
-  try {
-    const local = await import("./local-transcription-client");
-    await local.prepareLocalTranscription();
-    return ready(transport);
-  } catch {
-    return unavailable(transport);
-  }
+  if (!isBrowserRecordedAudioCaptureAvailable()) return unavailable(transport);
+  return ready(transport);
 }
 
 function ready(transport: Exclude<BrowserVoiceTransport, "unavailable">): VoiceReadiness {

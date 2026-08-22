@@ -30,6 +30,9 @@ export type MatterScenarioId =
   | "matter-transform"
   | "matter-text-swap";
 
+/** Provider-pool transport facts, deliberately stripped of candidate identity. */
+export type ScenarioCandidateEvent = "pool" | "answered" | "failed" | "stalled";
+
 /** What a scenario asks a provider for, once its prompt is compiled. */
 export type ScenarioCall = Readonly<{
   scenario: MatterScenarioId;
@@ -48,6 +51,12 @@ export type ScenarioCall = Readonly<{
    */
   deadlineMs: number;
   maxOutputTokens: number;
+  /**
+   * A server-local scalar seam. Pool adapters report only that a pool was used
+   * and how an anonymous candidate attempt settled; no station, model, host,
+   * key, prompt, material, or request identity can fit through this type.
+   */
+  observeCandidate?: (event: ScenarioCandidateEvent) => void;
 }>;
 
 export type ScenarioAdapter = (
@@ -181,11 +190,12 @@ export type RunScenarioOptions = Readonly<{
    */
   deadlineCeilingMs?: number;
   /**
-   * Where a settled fallback is recorded. Defaults to one stdout line, which is
-   * what makes the reason a deployment fact instead of a value only the browser
-   * holding one response can see.
+   * Optional scenario-policy observer for a settled fallback. Production's
+   * content-free terminal performance receipt is owned separately below.
    */
   observe?: (observation: ScenarioObservation) => void;
+  /** One content-free terminal performance receipt for a provider-backed call. */
+  observePerformance?: (observation: ScenarioPerformanceObservation) => void;
 }>;
 
 /**
@@ -201,17 +211,51 @@ export type ScenarioObservation = Readonly<{
   elapsedMs: number;
 }>;
 
+export type ScenarioPerformanceOutcome =
+  | "answered"
+  | "unavailable"
+  | "timeout"
+  | "busy"
+  | "rejected";
+
+export type ScenarioPerformanceObservation = Readonly<{
+  scenario: MatterScenarioId;
+  outcome: ScenarioPerformanceOutcome;
+  elapsedMs: number;
+  /** `pool` proves the shared pool emitted attempt facts; `unreported` does not guess. */
+  candidateTelemetry: "pool" | "unreported";
+  candidateAttempts: number;
+  candidateTimeouts: number;
+  candidateFailures: number;
+}>;
+
 /**
- * The default sink. `ScenarioFallback` exists so a deployment can tell a cold
- * provider from a rejected answer, and that distinction is only real if
- * something outside the response writes it down: when every surface degrades to
- * its floor at once, each request still looks locally successful, so an outage
- * is visible only in aggregate.
+ * Development fallback sink. Production uses the structured performance sink
+ * below so one failed invocation never creates two operational log records.
  */
 export function recordScenarioFallback(observation: ScenarioObservation): void {
   console.warn(
     `matter.scenario ${observation.scenario} ${observation.reason} ${Math.round(observation.elapsedMs)}ms`,
   );
+}
+
+/**
+ * The production default is one structured scalar line per provider-backed
+ * scenario invocation. Exact durations remain numeric measurements rather than
+ * metric labels; every string field is a closed enum. Provider cold/warm is
+ * intentionally absent because this process cannot prove provider cache state.
+ */
+export function recordScenarioPerformance(observation: ScenarioPerformanceObservation): void {
+  const receipt = Object.freeze({
+    scenario: safeScenarioId(observation.scenario),
+    outcome: safePerformanceOutcome(observation.outcome),
+    elapsedMs: boundedScalar(observation.elapsedMs, 120_000),
+    candidateTelemetry: observation.candidateTelemetry === "pool" ? "pool" : "unreported",
+    candidateAttempts: boundedScalar(observation.candidateAttempts, 255),
+    candidateTimeouts: boundedScalar(observation.candidateTimeouts, 255),
+    candidateFailures: boundedScalar(observation.candidateFailures, 255),
+  });
+  console.info(`matter.scenario-performance ${JSON.stringify(receipt)}`);
 }
 
 export async function runScenario<Input, Value>(
@@ -224,18 +268,61 @@ export async function runScenario<Input, Value>(
   const now = options.now ?? Date.now;
   const limits = options.limits ?? DEFAULT_GOVERNOR_LIMITS;
   const startedAtMs = now();
-  const observe = options.observe ?? recordScenarioFallback;
+  const observeFallback = options.observe
+    ?? (process.env.NODE_ENV === "production" ? undefined : recordScenarioFallback);
+  const observePerformance = options.observePerformance
+    ?? (process.env.NODE_ENV === "production" ? recordScenarioPerformance : undefined);
+  let performanceSettled = false;
+  let candidateTelemetry: ScenarioPerformanceObservation["candidateTelemetry"] = "unreported";
+  let candidateAttempts = 0;
+  let candidateTimeouts = 0;
+  let candidateFailures = 0;
+  const noteCandidate = (event: ScenarioCandidateEvent): void => {
+    if (event === "pool") {
+      candidateTelemetry = "pool";
+      return;
+    }
+    candidateAttempts = boundedIncrement(candidateAttempts);
+    if (event === "stalled") candidateTimeouts = boundedIncrement(candidateTimeouts);
+    if (event === "failed") candidateFailures = boundedIncrement(candidateFailures);
+  };
+  const notePerformance = (outcome: ScenarioPerformanceOutcome): void => {
+    if (performanceSettled || observePerformance === undefined) return;
+    performanceSettled = true;
+    const observation = Object.freeze({
+      scenario: scenario.id,
+      outcome,
+      elapsedMs: safeElapsed(now() - startedAtMs),
+      candidateTelemetry,
+      candidateAttempts,
+      candidateTimeouts,
+      candidateFailures,
+    });
+    try {
+      observePerformance(observation);
+    } catch {
+      // Metrics are never allowed to change a model floor or accepted answer.
+    }
+  };
   // Only outcomes that say something about the relay or the governor are
   // recorded. A surface with no adapter is a configuration fact and would
   // otherwise log once per request forever; a caller that walked away is a fact
   // about the caller. Logging either would bury the outage they surround.
   const settle = <T,>(reason: ScenarioFallback, rejectionReason?: string): ScenarioOutcome<T> => {
-    observe({
+    const observation = Object.freeze({
       scenario: scenario.id,
       reason,
       ...(reason === "MODEL_REJECTED" && rejectionReason !== undefined ? { rejectionReason } : {}),
-      elapsedMs: now() - startedAtMs,
+      elapsedMs: safeElapsed(now() - startedAtMs),
     });
+    if (observeFallback !== undefined) {
+      try {
+        observeFallback(observation);
+      } catch {
+        // Policy observation is diagnostic and cannot own scenario settlement.
+      }
+    }
+    notePerformance(performanceOutcome(reason));
     return fallback(reason);
   };
   if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
@@ -243,9 +330,9 @@ export async function runScenario<Input, Value>(
   if (governor.cooling(now())) return settle("MODEL_UNAVAILABLE");
   if (!governor.admit(limits)) return settle("MODEL_BUSY");
 
-  // The slot is held until the provider promise itself settles, not until this
-  // function returns. A provider that ignores the abort keeps its slot, so
-  // repeated timeouts can never amplify real concurrency past the limit.
+  // The slot is held until the adapter promise itself settles, not until this
+  // function returns. The shared pool hard-bounds each candidate and cools a
+  // stalled one; transport cleanup beneath that boundary remains best-effort.
   //
   // Everything that can throw before that promise exists — sizing the budget,
   // compiling the prompt, an adapter that rejects synchronously — must give the
@@ -266,6 +353,7 @@ export async function runScenario<Input, Value>(
       input,
       deadlineMs: budget.deadlineMs,
       maxOutputTokens: budget.maxOutputTokens,
+      observeCandidate: noteCandidate,
     });
     timer = setTimeout(() => deadline.abort(), budget.deadlineMs);
     boundary = rejectOnAbort(deadline.signal);
@@ -302,6 +390,7 @@ export async function runScenario<Input, Value>(
       return settle("MODEL_REJECTED", verdict.reason);
     }
     governor.succeeded();
+    notePerformance("answered");
     return Object.freeze({ ok: true, value: verdict.value });
   } catch {
     // An adjudicator that throws is a defect, not a provider failure, but it
@@ -347,6 +436,56 @@ function withCeiling(budget: ScenarioBudget, ceilingMs?: number): ScenarioBudget
 
 function fallback<Value>(reason: ScenarioFallback): ScenarioOutcome<Value> {
   return Object.freeze({ ok: false, fallback: reason });
+}
+
+function performanceOutcome(reason: ScenarioFallback): ScenarioPerformanceOutcome {
+  switch (reason) {
+    case "MODEL_TIMEOUT": return "timeout";
+    case "MODEL_BUSY": return "busy";
+    case "MODEL_REJECTED": return "rejected";
+    case "MODEL_UNAVAILABLE": return "unavailable";
+  }
+}
+
+function safeElapsed(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
+}
+
+function boundedIncrement(value: number): number {
+  return Math.min(255, value + 1);
+}
+
+function boundedScalar(value: number, maximum: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(maximum, Math.max(0, Math.round(value)));
+}
+
+function safeScenarioId(value: MatterScenarioId): MatterScenarioId | "unknown" {
+  switch (value) {
+    case "matter-transcript-repair":
+    case "matter-thought-label":
+    case "matter-inquiry":
+    case "matter-transform":
+    case "matter-text-swap":
+      return value;
+    default:
+      return "unknown";
+  }
+}
+
+function safePerformanceOutcome(
+  value: ScenarioPerformanceOutcome,
+): ScenarioPerformanceOutcome | "unknown" {
+  switch (value) {
+    case "answered":
+    case "unavailable":
+    case "timeout":
+    case "busy":
+    case "rejected":
+      return value;
+    default:
+      return "unknown";
+  }
 }
 
 function rejectOnAbort(signal: AbortSignal): { promise: Promise<never>; dispose: () => void } {

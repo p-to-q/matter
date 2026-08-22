@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  checkDeployment,
   inspectDeploymentHeaders,
   inspectDeploymentHealthHeaders,
+  inspectDeploymentMediaHeaders,
   inspectDeploymentHealth,
   normalizeDeploymentOrigin,
   waitForDeployment,
@@ -112,6 +114,96 @@ test("requires a JSON no-store health receipt", () => {
     "Health probe did not declare JSON.",
     "Health probe is not marked no-store.",
   ]);
+});
+
+test("requires the observed bounded browser cache for stable-name visual media", () => {
+  const complete = new Headers({
+    "cache-control": "public, max-age=14400, must-revalidate",
+    "content-type": "image/jpeg",
+  });
+  assert.deepEqual(inspectDeploymentMediaHeaders(complete), []);
+  complete.set("cache-control", "private, max-age=14400, must-revalidate");
+  assert.deepEqual(inspectDeploymentMediaHeaders(complete), [
+    "Visual media is missing its public browser-cache scope.",
+  ]);
+  complete.set("cache-control", "public, max-age=31536000, immutable");
+  assert.deepEqual(inspectDeploymentMediaHeaders(complete), [
+    "Visual media is missing its bounded four-hour browser cache.",
+    "Stable-name visual media must revalidate after its browser TTL.",
+    "Stable-name visual media must not be cached as immutable.",
+  ]);
+  complete.set("cache-control", "public, max-age=14400, s-maxage=31536000");
+  assert.deepEqual(inspectDeploymentMediaHeaders(complete), [
+    "Stable-name visual media must revalidate after its browser TTL.",
+    "Stable-name visual media must leave Vercel edge lifetime to the deployment cache.",
+  ]);
+});
+
+test("uses header-only probes except for the JSON health receipt", async () => {
+  const calls = [];
+  let healthReads = 0;
+  const headerOnly = (status, headers) => ({
+    status,
+    headers: new Headers(headers),
+    get body() { throw new Error("header probe touched the response body"); },
+    get bodyUsed() { throw new Error("header probe inspected response body state"); },
+    async arrayBuffer() { throw new Error("header probe downloaded bytes"); },
+    async json() { throw new Error("header probe parsed a body"); },
+    async text() { throw new Error("header probe downloaded text"); },
+  });
+  const fetchImpl = async (url, init) => {
+    const path = new URL(url).pathname;
+    calls.push({
+      path,
+      method: init.method,
+      cache: init.cache,
+      redirect: init.redirect,
+      hasAbortSignal: init.signal instanceof AbortSignal,
+    });
+    if (path === "/") {
+      return headerOnly(200, {
+        "permissions-policy": "microphone=(self)",
+        "referrer-policy": "no-referrer",
+        "strict-transport-security": "max-age=63072000",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+      });
+    }
+    if (path === "/matter") return headerOnly(404, {});
+    if (path === "/matter-ui/shadows-poster.jpg") {
+      return headerOnly(200, {
+        "cache-control": "public, max-age=14400, must-revalidate",
+        "content-type": "image/jpeg",
+      });
+    }
+    assert.equal(path, "/api/health");
+    return {
+      status: 200,
+      headers: new Headers({
+        "cache-control": "no-store",
+        "content-type": "application/json",
+      }),
+      async json() {
+        healthReads += 1;
+        return HEALTH;
+      },
+    };
+  };
+
+  const result = await checkDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    fetchImpl,
+  });
+
+  assert.deepEqual(result.failures, []);
+  assert.deepEqual(calls, [
+    { path: "/", method: "HEAD", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+    { path: "/matter", method: "HEAD", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+    { path: "/api/health", method: "GET", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+    { path: "/matter-ui/shadows-poster.jpg", method: "HEAD", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+  ]);
+  assert.equal(healthReads, 1);
 });
 
 test("waits through one stale edge receipt without widening the probe", async () => {

@@ -93,6 +93,13 @@ for (const viewport of [
     if (initialSurface === null || initialRail === null || initialRoot === null) {
       throw new Error("workbench geometry is not visible");
     }
+    expect(await page.locator(".tool-rail").evaluate((rail) => {
+      const style = getComputedStyle(rail);
+      return {
+        backdropFilter: style.backdropFilter || style.getPropertyValue("-webkit-backdrop-filter"),
+        backgroundColor: style.backgroundColor,
+      };
+    })).toEqual({ backdropFilter: "none", backgroundColor: "rgb(255, 255, 255)" });
     if (viewport.name !== "laptop") {
       expect(initialSurface.x).toBeGreaterThan(0);
       expect(initialSurface.y).toBeGreaterThanOrEqual(60);
@@ -279,6 +286,31 @@ for (const viewport of [
     expect(browserErrors).toEqual([]);
   });
 }
+
+test("ambient motion keeps the poster and avoids media on an explicit data-saving connection", async ({ page }) => {
+  const mediaResponses: string[] = [];
+  page.on("response", (response) => {
+    if (response.request().resourceType() === "media") mediaResponses.push(response.url());
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: {
+        effectiveType: "4g",
+        saveData: true,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      },
+    });
+  });
+
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.waitForTimeout(1_300);
+  await expect(page.locator(".matter-ambient__poster")).toBeVisible();
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+  expect(mediaResponses).toEqual([]);
+});
 
 test("compact workbench keeps material clear of coarse controls", async ({ page }) => {
   const browserErrors: string[] = [];

@@ -13,12 +13,14 @@ handoff has no owner-supplied receipt for the required distributed rate rules or
 provider spend ceiling. Until issue #34 closes, release work must treat those
 controls as missing rather than infer them from a healthy origin.
 
-For Preview.38, the deployment owner explicitly directed one production
+For Preview.39, the deployment owner explicitly directed one production
 promotion before those external receipts are supplied, while delegating the
 vendor-side configuration to a separate operator. This is a one-release risk
 acceptance, not evidence that the controls exist: it may preserve the three
 already-live gates only, must keep Elastic and Text Swap unavailable, and does
-not close issue #34.
+not close issue #34. Preview.38 remains the deployed version until the tagged
+Preview.39 candidate passes CI, Preview deployment, and the production-origin
+receipt described below.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -58,16 +60,139 @@ Preview. Do not place keys in `vercel.json`, repository files, browser-visible
 comments.
 
 ```text
-MATTER_LABEL_POOL=aiping
-MATTER_LABEL_AIPING_BASE_URL=https://aiping.cn/api/v1
-MATTER_LABEL_AIPING_API_KEY=<newly rotated secret>
-MATTER_LABEL_AIPING_MODELS=Qwen3.5-Flash,GLM-4.7-Flash
-MATTER_LABEL_AIPING_ENABLE_THINKING=false
+MATTER_MODEL_POOL=aiping
+MATTER_MODEL_AIPING_BASE_URL=https://aiping.cn/api/v1
+MATTER_MODEL_AIPING_API_KEY=<newly rotated secret>
+MATTER_MODEL_AIPING_MODELS=Qwen3.5-Flash,GLM-4.7-Flash
+MATTER_MODEL_AIPING_ENABLE_THINKING=false
 
 MATTER_LABEL_ADAPTER=live
 MATTER_REPAIR_ADAPTER=live
 MATTER_INQUIRY_ADAPTER=live
 ```
+
+`MATTER_MODEL_*` is the canonical scenario-neutral namespace for a new or
+deliberately migrated deployment. The currently deployed `MATTER_LABEL_*`
+namespace remains a complete compatibility fallback; it does not make the pool
+label-specific. Migrate all station variables and the pool variable in one
+reviewed environment change. Never leave both `MATTER_MODEL_POOL` and
+`MATTER_LABEL_POOL` non-empty: Matter deliberately reports the pool unavailable
+instead of merging two candidate orders or guessing which credentials own live
+traffic. A Preview/Production environment may keep the complete legacy namespace
+until that atomic migration is scheduled; no key rotation is required merely by
+this source release.
+
+External configuration owns only the station order, each OpenAI-compatible base
+URL and key, the ordered model names within that station, and the optional
+station-level `ENABLE_THINKING=true|false` transport flag. Scenario gates remain
+independent (`LABEL`, `REPAIR`, `INQUIRY`, `TRANSFORM`, `TEXT_SWAP`), but every
+live gate resolves the same candidate registry. Environment values cannot change
+prompt policy, temperature zero, response-byte ceilings, scenario deadlines,
+adjudication, automatic-retry policy, or a material action. Those remain reviewed
+source contracts; separate per-scenario pools would recreate five drifting
+provider integrations and are intentionally unsupported.
+
+### Model-path budgets and fallback boundary
+
+These are hard ownership boundaries, not claimed production SLOs:
+
+| Surface | Scenario/provider | Route/browser | Safe floor | Shared answer cache |
+| --- | ---: | ---: | --- | --- |
+| thought label | 12 s | 13 s / 13 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
+| transcript repair | 6–8 s | 8.8 s / 8.8 s | deterministic repair rules | none |
+| Ask Matter | 16 s | 20 s / 20 s | restore the submitted question | none |
+| Elastic | 12 s | 14 s / 16 s | exact passage unchanged | none |
+| dormant Text Swap | 12 s | 14 s / 16 s | exact passage unchanged | none |
+| server transcription | 30 s | 30 s / 35 s | browser-native or local capability remains separate | none |
+
+The platform allowances remain 20 s for labels, 15 s for repair, 25 s for
+inquiry/Elastic/Text Swap, and 35 s for server transcription. Candidate fallback
+happens only inside one scenario call: it never resamples an adjudicator
+rejection and never retries a completed browser action. A candidate that ignores
+cancellation still loses its bounded attempt when the timer expires, preserving
+the remaining deadline for the next configured candidate.
+
+The label cache stores only an adjudicated label behind two 32-bit FNV-style
+digests plus the exact serialized byte length; this is a non-cryptographic cache
+key, not an integrity boundary. It stores no node text, prompt, provider,
+identity, or credential, and a browser repeats current-material validation. Its
+complete-input-fingerprint single flight is the only cross-request model
+coalescing. Audio,
+transcript, repair, question, inquiry answer, lineage, Elastic output, and Text
+Swap output are never cached or coalesced. Every model/audio browser-to-Matter
+POST and the Matter-to-provider POST explicitly uses no-store transport and
+refuses redirects.
+
+A duration budget is not evidence that a relay meets it. Production p50/p95,
+timeout/unavailability rate, cold-start share, and fallback mix still require
+privacy-safe aggregate receipts from the deployed origin. Routine evidence may
+carry only surface, closed outcome/reason, duration and byte/length buckets; it
+must not carry prompt, material, audio, provider identity, endpoint, key, request
+identity, or response text. The distributed admission, spend ceiling and alert
+ownership for those SLO measurements remains the external issue #34 boundary.
+
+### Content-zero model performance receipt — source candidate
+
+This section describes the post-Preview.38 source candidate. The deployed
+Preview.38 origin does not yet prove that it emits this receipt. After this
+candidate is promoted, a production model-scenario invocation with a non-null
+adapter writes at most one `matter.scenario-performance` JSON line. Candidate
+attempts are folded into that terminal line in memory; they never create their
+own logs or network calls. A cache hit, a surface with no adapter, and a caller
+cancellation do not emit this event. Source sampling is intentionally off:
+p50/p95 and fallback mix cannot be reconstructed honestly after selective
+success sampling. The volume ceiling is therefore one such scalar line per
+scenario terminal, not one line per candidate, response chunk, label cache read,
+or unrelated route request. Governor-shed `busy` and cooldown `unavailable`
+terminals also produce that single event even though no candidate starts; their
+zero attempt count is the useful fact.
+
+The event and field set is closed:
+
+| Field | Allowed values / cardinality | Meaning and privacy boundary |
+| --- | --- | --- |
+| `scenario` | five scenario ids, plus logger-only `unknown` | Which reviewed Matter surface ran; never a tool, node, tree, request, user, or provider id. |
+| `outcome` | `answered`, `unavailable`, `timeout`, `busy`, `rejected`, plus logger-only `unknown` | Terminal harness classification. `rejected` means the provider answered and adjudication refused it; it is not a provider failure. |
+| `elapsedMs` | integer `0..120000` | Harness wall time from admission checks through terminal settlement. It is a numeric measurement, never a metric label. |
+| `candidateTelemetry` | `pool` or `unreported` | `pool` proves the shared pool supplied anonymous attempt facts; `unreported` makes no claim for a fixture or custom adapter. |
+| `candidateAttempts` | integer `0..255` | Anonymous candidate attempts that settled before the scenario terminal. |
+| `candidateTimeouts` | integer `0..255` | Those attempts that exhausted their pool-owned attempt boundary. |
+| `candidateFailures` | integer `0..255` | Fast transport, HTTP, body-bound, decoding, or envelope failures; no body or status is logged. |
+
+This table is the complete schema only for `matter.scenario-performance`.
+Elastic and dormant Text Swap retain the separate existing
+`matter.material-turn` route receipt with closed locale, amount, length and byte
+buckets. The one-event harness ceiling therefore does not claim that a material
+turn produces only one application log line. `candidateTelemetry: "pool"` is
+the only value that proves the shared provider pool supplied attempt facts;
+`"unreported"` may describe a fixture or another injected adapter and makes no
+provider claim.
+
+The logger reconstructs this allowlist rather than serializing a caller-owned
+object, so extra fields cannot ride into a line. Material, prompt, selected
+text, answer, transcript, audio, locale, byte content, node/tree/request id,
+IP, provider/station/model/endpoint/key, and error text are impossible receipt
+fields. A metrics sink failure is swallowed outside scenario settlement.
+
+Attribution is deliberately narrow. `timeout` proves the scenario deadline;
+`candidateTimeouts` counts only pool attempts whose own boundary settled before
+that terminal, so it may be zero when the parent deadline won the race. `busy`
+proves process-local governor shedding, not edge saturation. `unavailable` may
+mean scenario cooldown, an exhausted/failing adapter, or an internal
+compile/adjudication failure; anonymous candidate counts distinguish some, not
+all, of those cases. `answered` proves server
+adjudication accepted the answer, not that the browser later committed it.
+Provider cold/warm is omitted: neither first use in a serverless instance nor a
+slow first attempt proves provider cache state. Platform cold-start evidence
+must come from the platform itself and be correlated only in aggregate.
+
+After promotion, Matter retains none of these receipts. They exist only in the
+deployment's ordinary server-log retention and add no telemetry request, queue,
+database, or dependency. They can support instance-side scenario latency and
+fallback-mix analysis. They cannot measure browser-to-origin latency, edge
+queueing, dropped instances, or a deployed-origin p95, and therefore do not
+replace issue #34's distributed controls, externally retained aggregate
+receipt, or alert owner.
 
 `vercel.json` already fixes the non-secret product build shape:
 
@@ -98,6 +223,39 @@ leaves labels, repair, or inquiry unavailable. A missing or failing pool remains
 safe at any time: labels stay deterministic, repair keeps its local rule floor,
 and inquiry states that it is unavailable, so turning one gate off remains a
 complete rollback for that surface.
+
+## Runtime delivery and cache boundary — source candidate
+
+The post-Preview.38 source candidate keeps the product root as a static prerender,
+and Vercel serves its content-hashed Next assets from the deployment cache. The
+stable-name poster, videos, and logo keep the Preview.38-equivalent `public,
+max-age=14400, must-revalidate` browser policy; they are never `immutable` or
+given a separate `s-maxage`. This makes the observed four-hour behavior explicit
+and portable without claiming a new cache hit or letting a changed stable-name
+asset remain stale indefinitely.
+
+The local speech worker, 24 MiB-ceiling ONNX WASM, and pinned Whisper model are
+absent from the initial page graph. The worker code is reached only when browser
+speech is unavailable; model weights are reached only after the person starts a
+voice turn. Transformers.js may keep the pinned revision in disposable browser
+Cache Storage. It never stores audio or a transcript there. Every Matter API,
+browser model client, and outbound provider POST remains `no-store`; no CDN or
+shared application cache may hold material or model answers. The only model
+proposal cache is the existing bounded, process-local, read-time-revalidated
+thought-label cache.
+
+`npm run build` in this source candidate ends with the runtime-artifact budget
+gate. Preview.38 did not carry that post-build gate. The gate proves the
+static shell, initial transfer ceiling, lazy model split, content-hashed
+font/WASM output, a complete `public/` budget plus the narrower visual-media
+budget, absence of production source maps, and clean root/server Next traces.
+CI restores `.next/cache` under lockfile and source keys
+to reduce repeated compiler work; that cache is disposable and never deployed.
+The deployment probe checks the real poster response policy with a header-only
+request along with the existing release receipt. See
+[`reference/runtime-cache-and-delivery.md`](reference/runtime-cache-and-delivery.md)
+for the complete matrix, weak-network behavior, cold-start posture, budgets,
+and content-free operational measurements.
 
 `available` on the health probe means a pool is configured, never that a relay
 is reachable from the deployed region — the probe must not open a provider
@@ -244,7 +402,7 @@ video:
 
 ```bash
 npm run probe:material-origin -- https://matter.ptoq.io \
-  --expected-version=0.2.0-preview.38
+  --expected-version=0.2.0-preview.39
 ```
 
 That command only prints the historical paired 1+1 smoke plan. It is useful for

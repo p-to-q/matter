@@ -8,6 +8,7 @@ import {
 import { PROTOCOL_VERSION } from "../tree/model";
 import { clientMatterBasePath } from "../config/base-path";
 import { readBoundedJsonResponse } from "./bounded-json-response";
+import { createRequestDeadline } from "./request-deadline";
 
 export type InquiryOutcome =
   | Readonly<{ status: "answered"; text: string }>
@@ -35,30 +36,41 @@ export type AskInquiryInput = Readonly<{
 export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome> {
   if (input.signal?.aborted) return UNREACHABLE;
   const fetchImpl = input.fetchImpl ?? globalThis.fetch;
-  const boundary = new AbortController();
-  const timeout = setTimeout(() => boundary.abort(), INQUIRY_CLIENT_TIMEOUT_MS);
-  const relay = () => boundary.abort();
+  const deadline = createRequestDeadline(
+    input.signal,
+    INQUIRY_CLIENT_TIMEOUT_MS,
+    "The inquiry timed out.",
+  );
   const requestId = input.requestId ?? createInquiryRequestId();
-  input.signal?.addEventListener("abort", relay, { once: true });
 
   try {
-    const response = await fetchImpl(input.endpoint ?? `${clientMatterBasePath()}/api/inquiry`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        protocolVersion: PROTOCOL_VERSION,
-        requestId,
-        question: input.question,
-        locale: input.locale,
-        context: input.context,
+    // AbortSignal is advisory to an injected transport. The explicit race
+    // keeps the browser deadline authoritative even when a relay ignores it.
+    const response = await Promise.race([
+      fetchImpl(input.endpoint ?? `${clientMatterBasePath()}/api/inquiry`, {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({
+          protocolVersion: PROTOCOL_VERSION,
+          requestId,
+          question: input.question,
+          locale: input.locale,
+          context: input.context,
+        }),
+        cache: "no-store",
+        redirect: "error",
+        signal: deadline.signal,
       }),
-      signal: boundary.signal,
-    });
-    const payload = await readBoundedJsonResponse(
-      response,
-      MAX_INQUIRY_RESPONSE_BYTES,
-      boundary.signal,
-    );
+      deadline.settlement,
+    ]);
+    const payload = await Promise.race([
+      readBoundedJsonResponse(
+        response,
+        MAX_INQUIRY_RESPONSE_BYTES,
+        deadline.signal,
+      ),
+      deadline.settlement,
+    ]);
     // A refused question was still sent, so it must not be reported as unsent.
     // The route's prose is intentionally discarded: only a strict, closed
     // receipt may select localized interface copy.
@@ -69,10 +81,9 @@ export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome
       ? Object.freeze({ status: "answered", text: answer.text })
       : Object.freeze({ status: "unavailable", reason: answer.reason });
   } catch {
-    return UNREACHABLE;
+    return deadline.didTimeout() ? TIMED_OUT : UNREACHABLE;
   } finally {
-    clearTimeout(timeout);
-    input.signal?.removeEventListener("abort", relay);
+    deadline.dispose();
   }
 }
 

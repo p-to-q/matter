@@ -17,6 +17,7 @@ import {
   TranscriptionClientError,
 } from "../interaction/transcription-client";
 import type { InquiryVoiceNotice } from "./inquiry-composer";
+import { subscribePageSuspension } from "../interaction/page-suspension";
 
 export type InquiryDictation = Readonly<{
   supported: boolean | null;
@@ -63,6 +64,12 @@ export function useInquiryDictation(
   }, []);
 
   useEffect(() => cancel, [cancel]);
+
+  useEffect(() => subscribePageSuspension(() => {
+    const wasActive = activeOperationRef.current !== null;
+    cancel();
+    if (wasActive) callbacksRef.current.onSettled();
+  }), [cancel]);
 
   useEffect(() => {
     // Locale is part of both recognition and transcription scope. A turn that

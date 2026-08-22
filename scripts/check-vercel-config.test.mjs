@@ -110,8 +110,8 @@ test("rejects a credential by key name and by value shape", () => {
 
 test("does not mistake an ordinary configuration value for a credential", () => {
   const config = validConfig();
-  config.env.MATTER_LABEL_POOL = "abc,aiping";
-  config.env.MATTER_LABEL_AIPING_MODELS = "Qwen3.5-Flash,GLM-4.7-Flash";
+  config.env.MATTER_MODEL_POOL = "abc,aiping";
+  config.env.MATTER_MODEL_AIPING_MODELS = "Qwen3.5-Flash,GLM-4.7-Flash";
   assert.deepEqual(inspectVercelConfig(config), []);
 });
 

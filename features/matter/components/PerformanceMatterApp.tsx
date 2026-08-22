@@ -27,9 +27,14 @@ const performanceTree = createPerformanceThoughtTree();
  */
 const NO_REPAIR_PRESENTATIONS: ReadonlyMap<string, AdmissionRepairCommittedChange> = new Map();
 const admissionState = createAdmissionInteractionState();
+const VIEWPORT_RESEARCH = Object.freeze({
+  batchSize: 32 as const,
+  source: "viewport-research" as const,
+});
 
 type PerformanceNavigationBridge = Readonly<{
   focus: (nodeId: string) => void;
+  select: (nodeId: string) => void;
   showFull: () => void;
   toggleFold: (nodeId: string) => void;
 }>;
@@ -41,7 +46,11 @@ declare global {
 }
 
 /** This harness exercises the real renderer without becoming product state. */
-export function PerformanceMatterApp() {
+export function PerformanceMatterApp({
+  rendererSource = "complete",
+}: Readonly<{
+  rendererSource?: "complete" | "viewport-research";
+}>) {
   const canvasPreferences = useCanvasPreferences();
   const [navigation, setNavigation] = useState<NavigationState>(() =>
     createNavigationState(),
@@ -71,14 +80,14 @@ export function PerformanceMatterApp() {
   useEffect(() => {
     // The production-only receipt exercises retained navigation without
     // reintroducing test controls into the first-release presentation.
-    const bridge = Object.freeze({ focus, showFull: exitFocus, toggleFold: toggle });
+    const bridge = Object.freeze({ focus, select, showFull: exitFocus, toggleFold: toggle });
     window.__matterPerformanceNavigation = bridge;
     return () => {
       if (window.__matterPerformanceNavigation === bridge) {
         delete window.__matterPerformanceNavigation;
       }
     };
-  }, [exitFocus, focus, toggle]);
+  }, [exitFocus, focus, select, toggle]);
 
   return (
     <RootedMaterial
@@ -118,6 +127,7 @@ export function PerformanceMatterApp() {
       onUndo={() => undefined}
       onRedo={() => undefined}
       performanceMarking
+      performanceViewport={rendererSource === "viewport-research" ? VIEWPORT_RESEARCH : undefined}
       tree={performanceTree}
     />
   );

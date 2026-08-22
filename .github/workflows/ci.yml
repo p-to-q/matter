@@ -20,6 +20,16 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Restore Next build cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.next/cache
+          # Hash repository-owned inputs only. A workspace-wide glob here would
+          # also traverse node_modules after npm ci and could make generated
+          # files influence the compiler-cache key.
+          key: ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('package.json', 'next.config.ts', 'tsconfig.json', 'app/**/*.js', 'app/**/*.jsx', 'app/**/*.ts', 'app/**/*.tsx', 'app/**/*.css', 'features/**/*.js', 'features/**/*.jsx', 'features/**/*.ts', 'features/**/*.tsx', 'scripts/**/*.mjs') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('package-lock.json') }}-
       - run: npm run doctor
       - run: npm run check:docs
       - run: npm test

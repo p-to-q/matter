@@ -18,7 +18,13 @@ export async function readBoundedJsonResponse(
 
   const body = response.body;
   if (body === null) throw new Error("The response has no body.");
-  signal.throwIfAborted();
+  if (signal.aborted) {
+    // The owner may leave after headers but before this reader is installed.
+    // Close that narrow gap so the unread body is not left behind merely
+    // because no reader-level abort listener existed yet.
+    void body.cancel(signal.reason).catch(() => undefined);
+    signal.throwIfAborted();
+  }
 
   const reader = body.getReader();
   const chunks: Uint8Array[] = [];

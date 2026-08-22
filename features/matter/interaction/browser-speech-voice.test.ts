@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RECORDING_LIMIT_MS } from "./audio-policy";
-import { BrowserSpeechVoicePort, SPEECH_START_TIMEOUT_MS } from "./browser-speech-voice";
+import {
+  BrowserSpeechVoicePort,
+  prepareBrowserSpeechRecognition,
+  resetBrowserSpeechPreparationForTests,
+  SPEECH_START_TIMEOUT_MS,
+} from "./browser-speech-voice";
 import type { VoiceOperation } from "./browser-voice";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
@@ -9,6 +14,7 @@ const originalWindow = globalThis.window;
 
 class FakeRecognition {
   static instance: FakeRecognition | null = null;
+  static instances: FakeRecognition[] = [];
   static autoStart = true;
   continuous = false;
   interimResults = false;
@@ -22,7 +28,10 @@ class FakeRecognition {
   stop = vi.fn(() => this.onend?.());
   abort = vi.fn();
 
-  constructor() { FakeRecognition.instance = this; }
+  constructor() {
+    FakeRecognition.instance = this;
+    FakeRecognition.instances.push(this);
+  }
 }
 
 afterEach(() => {
@@ -30,10 +39,71 @@ afterEach(() => {
   if (originalWindow === undefined) delete (globalThis as { window?: Window }).window;
   else globalThis.window = originalWindow;
   FakeRecognition.instance = null;
+  FakeRecognition.instances = [];
   FakeRecognition.autoStart = true;
+  resetBrowserSpeechPreparationForTests();
+  vi.unstubAllGlobals();
 });
 
 describe("BrowserSpeechVoicePort", () => {
+  it("drops an unstarted readiness lease across BFCache and rebuilds on later intent", async () => {
+    const pageWindow = Object.assign(new EventTarget(), {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "visible";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+
+    prepareBrowserSpeechRecognition();
+    expect(FakeRecognition.instances).toHaveLength(1);
+    expect(FakeRecognition.instances[0]?.start).not.toHaveBeenCalled();
+    pageDocument.visibilityState = "hidden";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    pageWindow.dispatchEvent(new Event("pageshow"));
+    pageDocument.visibilityState = "visible";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION);
+    expect(FakeRecognition.instances).toHaveLength(2);
+    expect(FakeRecognition.instances[0]?.start).not.toHaveBeenCalled();
+    expect(FakeRecognition.instances[1]?.start).toHaveBeenCalledTimes(1);
+    port.cancel(OPERATION);
+  });
+
+  it("does not retain a readiness lease prepared while already hidden", async () => {
+    const pageWindow = Object.assign(new EventTarget(), {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "hidden";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+
+    prepareBrowserSpeechRecognition();
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    expect(FakeRecognition.instances).toHaveLength(1);
+    expect(FakeRecognition.instances[0]?.start).not.toHaveBeenCalled();
+
+    pageDocument.visibilityState = "visible";
+    pageWindow.dispatchEvent(new Event("pageshow"));
+    expect(FakeRecognition.instances).toHaveLength(1);
+    const port = new BrowserSpeechVoicePort();
+    await port.start(OPERATION);
+    expect(FakeRecognition.instances).toHaveLength(2);
+    expect(FakeRecognition.instances[1]?.start).toHaveBeenCalledTimes(1);
+    port.cancel(OPERATION);
+  });
   it("keeps interim text transient and returns only final text", async () => {
     vi.useFakeTimers();
     const onTranscript = vi.fn();

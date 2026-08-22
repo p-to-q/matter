@@ -96,27 +96,26 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
         const db = await database();
         const transaction = db.transaction("snapshots", "readwrite");
         const existing = await transaction.store.get(treeId);
-        const currentGeneration = existing?.writeGeneration ?? null;
+        const currentGeneration = existing === undefined ? null : existing.writeGeneration;
         if (currentGeneration !== expectedGeneration) {
-          transaction.abort();
-          try {
-            await transaction.done;
-          } catch {
-            // The deliberate abort is the atomic conflict outcome.
-          }
+          await abortTransaction(transaction);
           return failure("PERSISTENCE_CONFLICT", "Material changed in another tab.");
         }
-        const nextGeneration = (currentGeneration ?? 0) + 1;
+        const writeGeneration = nextGeneration(currentGeneration);
+        if (writeGeneration === null) {
+          await abortTransaction(transaction);
+          return failure("PERSISTENCE_WRITE_FAILED", "The local write generation is exhausted.");
+        }
         await transaction.store.put(Object.freeze({
           storageSchemaVersion: STORAGE_SCHEMA_VERSION,
           treeId,
           treeRevision,
-          writeGeneration: nextGeneration,
+          writeGeneration,
           bundle,
           ...(history === undefined ? {} : { history }),
         }));
         await transaction.done;
-        return success(nextGeneration);
+        return success(writeGeneration);
       } catch (error) {
         if (error instanceof DOMException && error.name === "QuotaExceededError") {
           return failure("PERSISTENCE_STORAGE_FULL", "Local material storage is full.");

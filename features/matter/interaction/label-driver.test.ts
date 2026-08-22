@@ -237,6 +237,35 @@ describe("LabelDriver", () => {
     expect(recorded.calls).toHaveLength(1);
   });
 
+  it("aborts bounded derived-label work while hidden and rearms without eager work", () => {
+    const recorded = recorder();
+    const instance = driver(recorded.request, {
+      limits: {
+        ...DEFAULT_LABEL_DRIVER_LIMITS,
+        maxConcurrentRequests: 1,
+        maxQueuedRequests: 2,
+      },
+    });
+    instance.observe(ROOT, ["root", "child"]);
+    expect(recorded.calls).toHaveLength(1);
+    const firstSignal = recorded.calls[0]?.signal;
+
+    instance.suspend();
+    instance.suspend();
+    expect(firstSignal?.aborted).toBe(true);
+    expect(instance.getState().entries.get("root")?.pendingOperationId).toBeNull();
+    expect(instance.getState().entries.get("child")?.pendingOperationId).toBeNull();
+    expect(recorded.calls).toHaveLength(1);
+
+    instance.resume();
+    instance.resume();
+    expect(recorded.calls).toHaveLength(1);
+
+    instance.observe(ROOT, ["root", "child"]);
+    expect(recorded.calls).toHaveLength(2);
+    expect(recorded.calls[1]?.signal.aborted).toBe(false);
+  });
+
   it("ignores an answer whose node has since been edited", async () => {
     const recorded = recorder();
     const instance = driver(recorded.request);

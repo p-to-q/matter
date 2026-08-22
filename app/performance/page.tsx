@@ -9,5 +9,11 @@ export const metadata: Metadata = {
 
 export default function PerformancePage() {
   if (process.env.MATTER_PERFORMANCE_FIXTURE !== "true") notFound();
-  return <PerformanceMatterApp />;
+  return (
+    <PerformanceMatterApp
+      rendererSource={process.env.MATTER_VIEWPORT_RENDERER_FIXTURE === "true"
+        ? "viewport-research"
+        : "complete"}
+    />
+  );
 }

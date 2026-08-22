@@ -243,6 +243,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.getByRole("button", { name: "Leaf shadows: On" }).click();
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
   await expect(page.locator("[data-matter-ambient='leaf-shadows']")).toHaveAttribute("data-fx", "off");
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Appearance: Auto" }).click();
   await expect(paper).toHaveAttribute("data-canvas-theme-preference", "light");
@@ -260,14 +261,13 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     .toHaveCSS("background-color", "rgba(245, 245, 242, 0.15)");
   await expect(page.locator("[data-matter-ambient='leaf-shadows'] .matter-ambient__poster"))
     .toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(0.9)");
-  await expect(page.locator("[data-matter-ambient='leaf-shadows'] .matter-ambient__video"))
-    .toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(0.9)");
 
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), PREFERENCES_KEY))
     .toEqual({ version: 1, language: "en-US", leafFx: false, appearance: "dark" });
   await page.reload();
   await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });
 

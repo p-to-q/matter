@@ -69,6 +69,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
   let documentEpoch = 0;
   let baseGeneration: number | null = null;
   let pending: Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null = null;
+  let writingDocument: Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null = null;
   let importAttemptSequence = 0;
   let activeImportAttempt: number | null = null;
   let corruptRecovery: Readonly<{
@@ -99,6 +100,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
     while (active && pending !== null) {
       const pendingDocument = pending;
       pending = null;
+      writingDocument = pendingDocument;
       const { tree, history } = pendingDocument;
       update({
         phase: "saving",
@@ -130,6 +132,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
         errorCode: null,
       });
     }
+    writingDocument = null;
     writing = false;
     if (active && pending !== null && status.phase !== "error") void drain();
   };
@@ -162,6 +165,15 @@ export function createPersistenceController(repository: DocumentRepository): Per
 
     publish(tree, history = createTreeHistory()) {
       if (tree.id !== activeTreeId) return;
+      if (pending?.tree === tree && pending.history === history) return;
+      if (writingDocument?.tree === tree && writingDocument.history === history) {
+        // The latest publication returned to the exact value already being
+        // written. Any different pending value is now stale and must not win
+        // merely because it arrived between the two identical publications.
+        // If this write fails, drain's failure path requeues writingDocument.
+        pending = null;
+        return;
+      }
       if (pending === null && status.phase === "saved" && status.persistedRevision === tree.revision) return;
       pending = Object.freeze({ tree, history });
       if (ready && status.phase !== "error") void drain();
@@ -410,6 +422,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
 
     dispose() {
       active = false;
+      writingDocument = null;
       activeImportAttempt = null;
       corruptRecovery = null;
       listeners.clear();

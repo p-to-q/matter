@@ -8,6 +8,7 @@ import {
 } from "../protocol/transform-contract";
 import { clientMatterBasePath } from "../config/base-path";
 import { readBoundedJsonResponse } from "./bounded-json-response";
+import { createRequestDeadline } from "./request-deadline";
 
 export class TransformClientError extends Error {
   constructor(readonly retryable: boolean, message: string) {
@@ -21,39 +22,55 @@ export async function requestTransform(
   envelope: TransformEnvelope,
   signal: AbortSignal,
 ): Promise<TransformPlan> {
-  const deadline = AbortSignal.timeout(TRANSFORM_CLIENT_TIMEOUT_MS);
-  const combined = AbortSignal.any([signal, deadline]);
-  let response: Response;
+  signal.throwIfAborted();
+  const deadline = createRequestDeadline(
+    signal,
+    TRANSFORM_CLIENT_TIMEOUT_MS,
+    "The transform request timed out.",
+  );
   try {
-    response = await fetch(`${clientMatterBasePath()}/api/turn`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(envelope),
-      signal: combined,
-    });
-  } catch (error) {
-    if (signal.aborted) throw error;
-    if (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
-      throw new TransformClientError(true, "Matter took too long to change this passage.");
+    let response: Response;
+    try {
+      response = await Promise.race([
+        fetch(`${clientMatterBasePath()}/api/turn`, {
+          method: "POST",
+          headers: { accept: "application/json", "Content-Type": "application/json" },
+          body: JSON.stringify(envelope),
+          cache: "no-store",
+          redirect: "error",
+          signal: deadline.signal,
+        }),
+        deadline.settlement,
+      ]);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      if (deadline.didTimeout()) {
+        throw new TransformClientError(true, "Matter took too long to change this passage.");
+      }
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw new TransformClientError(true, "Matter could not reach this change.");
     }
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    throw new TransformClientError(true, "Matter could not reach this change.");
-  }
-  let payload: unknown;
-  try {
-    payload = await readBoundedJsonResponse(response, MAX_TRANSFORM_RESPONSE_BYTES, combined);
-  } catch (error) {
-    if (signal.aborted) throw signal.reason ?? error;
-    if (deadline.aborted || (error instanceof DOMException && error.name === "TimeoutError")) {
-      throw new TransformClientError(true, "Matter took too long to change this passage.");
+    let payload: unknown;
+    try {
+      payload = await Promise.race([
+        readBoundedJsonResponse(response, MAX_TRANSFORM_RESPONSE_BYTES, deadline.signal),
+        deadline.settlement,
+      ]);
+    } catch (error) {
+      if (signal.aborted) throw signal.reason ?? error;
+      if (deadline.didTimeout()) {
+        throw new TransformClientError(true, "Matter took too long to change this passage.");
+      }
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw invalidResponse(response.ok);
     }
-    if (error instanceof Error && error.name === "AbortError") throw error;
-    throw invalidResponse(response.ok);
+    if (!response.ok) throw readError(payload);
+    const plan = parseTransformPlan(payload, envelope);
+    if (plan === null) throw new TransformClientError(false, "Matter returned an invalid change.");
+    return plan;
+  } finally {
+    deadline.dispose();
   }
-  if (!response.ok) throw readError(payload);
-  const plan = parseTransformPlan(payload, envelope);
-  if (plan === null) throw new TransformClientError(false, "Matter returned an invalid change.");
-  return plan;
 }
 
 function invalidResponse(successStatus: boolean): TransformClientError {
