@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_CANVAS_PREFERENCES } from "./canvas-preferences";
+import {
+  CANVAS_LANGUAGE_OPTIONS,
+  DEFAULT_CANVAS_PREFERENCES,
+  type CanvasLanguage,
+} from "./canvas-preferences";
 import {
   CANVAS_CHROME_INFO,
   CanvasChrome,
@@ -11,6 +15,7 @@ import {
   projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
+import { toolRailCopy } from "./tool-rail-copy";
 
 describe("CanvasChrome", () => {
   it("renders the desktop corner system and one mobile menu trigger", () => {
@@ -191,6 +196,63 @@ describe("nextMenuFocusIndex", () => {
   ])("maps %s from %i across %i items", (key, current, count, expected) => {
     expect(nextMenuFocusIndex(key, current, count)).toBe(expected);
   });
+});
+
+describe("canvas chrome info parity", () => {
+  // The info overlay is the only place the product states its pre-release
+  // legal posture. A locale that silently drops that sentence gives its
+  // readers a weaker disclosure than an English reader, so parity is an
+  // invariant here rather than a per-locale phrase assertion.
+  const PRE_RELEASE_PRIVACY_DISCLOSURE: Readonly<Record<CanvasLanguage, string>> = {
+    "en-US": "A published privacy policy is not available for this pre-release.",
+    "zh-CN": "尚未发布正式隐私政策",
+    "zh-TW": "正式隱私政策尚未發布",
+    "ja-JP": "正式なプライバシーポリシーはまだありません",
+    "de-DE": "Eine veröffentlichte Datenschutzerklärung gibt es noch nicht.",
+  };
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s discloses that no privacy policy is published yet",
+    (locale) => {
+      const body = CANVAS_CHROME_INFO[locale].privacy.body.join(" ");
+      expect(body).toContain(PRE_RELEASE_PRIVACY_DISCLOSURE[locale]);
+    },
+  );
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s gives a truthful local-speech fallback disclosure",
+    (locale) => {
+      const body = CANVAS_CHROME_INFO[locale].privacy.body.join(" ");
+      // The fallback stays local only after browser-managed recognition is
+      // unavailable; silence about its first-use model download would make the
+      // privacy surface materially weaker than the actual voice contract.
+      expect(body).toContain("Hugging Face");
+      expect(CANVAS_CHROME_INFO[locale].privacy.body).toHaveLength(3);
+    },
+  );
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s inquiry copy names the controls that locale's tool rail renders",
+    (locale) => {
+      const body = CANVAS_CHROME_INFO[locale].inquiry.body.join(" ");
+      const rail = toolRailCopy(locale);
+      // Naming a control the rail does not show sends the person hunting for
+      // a button that is not there. Localizing the rail must localize this copy.
+      expect(body).toContain(rail.lasso);
+      expect(body).toContain(rail.branch);
+      expect(body).toContain(rail.undo);
+    },
+  );
+
+  it.each(["about", "inquiry", "pricing", "privacy", "terms"] as const)(
+    "%s keeps the same paragraph count in every locale",
+    (section) => {
+      const expected = CANVAS_CHROME_INFO["en-US"][section].body.length;
+      for (const { value } of CANVAS_LANGUAGE_OPTIONS) {
+        expect(CANVAS_CHROME_INFO[value][section].body).toHaveLength(expected);
+      }
+    },
+  );
 });
 
 function renderChrome(overrides: Partial<CanvasChromeProps> = {}): string {

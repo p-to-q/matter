@@ -6,13 +6,15 @@ import {
   admissionFeedbackMessage,
 } from "./admission-feedback-copy";
 
+const ANCHOR = Object.freeze({ kind: "root" as const, treeId: "tree_1", baseRevision: 0 });
+
 describe("admission feedback copy", () => {
   it("uses the selected canvas language for the first-recording recovery path", () => {
     expect(admissionFeedbackMessage("zh-CN", {
       phase: "error",
       token: "voice_1",
       attempt: 1,
-      anchor: { kind: "root", treeId: "tree_1", baseRevision: 0 },
+      anchor: ANCHOR,
       errorCode: "MICROPHONE_DENIED",
     })).toBe("麦克风权限已被阻止。");
     expect(admissionFeedbackActions("zh-CN")).toEqual({
@@ -46,7 +48,7 @@ describe("admission feedback copy", () => {
           phase: "error",
           token: "voice_1",
           attempt: 1,
-          anchor: { kind: "root", treeId: "tree_1", baseRevision: 0 },
+          anchor: ANCHOR,
           errorCode,
         }).length).toBeGreaterThan(0);
       }

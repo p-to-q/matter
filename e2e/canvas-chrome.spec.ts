@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
@@ -211,7 +212,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expect(inquiryQuestions).toEqual(["这份材料在怀念什么？\n保留这里的停顿。"]);
   // Beginning another lasso swaps the context callback while its projected
   // tree context is still the same. That render must not discard this reply.
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   // Hover rather than a measured offset. A node's box may begin left of the
   // paper it is clipped by, and a raw `x + 8` then lands in the material index
   // — an outside pointer-down, which legitimately dismisses the bubble. Hover
@@ -224,7 +225,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   // An ordinary text click leaves Lasso and selects material; the reply stays
   // stable through that context transition until the person closes inquiry.
   await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
-  await expect(page.getByRole("button", { name: "Circle-select language", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(inquiryDialog).toBeHidden();
   await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "none");
@@ -277,7 +278,7 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
 
   const paper = page.getByRole("region", { name: "Thought material" });
   const trigger = page.getByRole("button", { name: "打开 Matter 菜单" });
-  const indexTrigger = page.getByRole("button", { name: "Show material files" });
+  const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
   await expect(page.getByRole("button", { name: "关于", exact: true })).toBeHidden();
   await expect(trigger).toBeVisible();
   await expect(indexTrigger).toBeVisible();

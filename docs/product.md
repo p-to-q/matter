@@ -3,10 +3,12 @@
 Matter is an environment where thought becomes touchable material.
 
 Voice admits human language. On one contiguous range inside a passage the person has
-explicitly lassoed, the current release exposes one bounded Elastic Language
-operation: gesture fixes reference and degree, while the tool owns direction
-and bounds. Structure keeps the lineage between thoughts. AI is intelligence
-inside the material, not an agent standing outside it.
+explicitly lassoed, the current source release implements one bounded Elastic
+Language operation: gesture fixes reference and degree, while the tool owns
+direction and bounds. Its public deployment gate remains closed in Preview.40,
+so it is not yet a publicly available transform. Structure keeps the lineage
+between thoughts. AI is intelligence inside the material, not an agent standing
+outside it.
 
 ## The job at this stage
 
@@ -41,8 +43,8 @@ tree. The correction can settle only while that exact passage
 remains untouched. Admission and repair are separate
 pointer-undoable changes, so the person's first expression stays recoverable.
 
-**Material transformation — Elastic Language 2.** A person acts on material that
-already exists. The first transform is deliberately closed: one lassoed current
+**Material transformation — Elastic Language 2.** The implemented, deployment-gated
+transform acts on material that already exists. The first transform is deliberately closed: one lassoed current
 contiguous range inside one node. Adjacent punctuation-bounded segments may
 join that range, so circling a whole multi-clause title still expresses one
 target. One valid range stays in the
@@ -61,8 +63,9 @@ pulled up from its fixed seam, then pushes the selected segment, its suffix,
 and every lower material row down. The mirrored outward gestures therefore
 open the same downward-growing material pocket; their difference is which
 boundary stays anchored. This displacement follows the pointer before release;
-release settles the degree and may start the one
-transform, but it never introduces the first visible layout movement. The quiet
+release settles the degree and may start the one transform only when its public
+deployment gate is explicitly opened, but it never introduces the first visible
+layout movement. The quiet
 selected state opens no empty tool lane; local space appears only when a grip
 actually moves.
 

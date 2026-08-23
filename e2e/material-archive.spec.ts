@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
 for (const viewport of [
@@ -18,15 +19,15 @@ for (const viewport of [
 
     const sidebar = page.locator("aside.material-files");
     // The index has no handle at desk widths; below them it is a drawer.
-    const toggle = page.getByRole("button", { name: /material files/i }).first();
+    const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).first();
     if (await toggle.count() > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
       await toggle.click();
     }
     await expect(sidebar).toHaveAttribute("data-open", "true");
-    await sidebar.getByRole("button", { name: "Select", exact: true }).click();
-    await sidebar.getByRole("checkbox", { name: /for copying/ }).first().check();
-    await expect(sidebar).toContainText("1 selected");
-    await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
+    await sidebar.getByRole("checkbox").first().check();
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
     const archive = sidebar.getByRole("region", { name: "Material archive" });
     await expect(archive).toBeVisible();
     await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
@@ -44,8 +45,8 @@ for (const viewport of [
     await expect(sidebar.getByRole("region", { name: "Material archive" })).toHaveCount(0);
     await expect(sidebar).toHaveAttribute("data-mode", "browse");
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
-    await sidebar.getByRole("button", { name: "Select", exact: true }).click();
-    await expect(sidebar).toContainText("0 selected");
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(0));
     expect(browserErrors).toEqual([]);
   });
 
@@ -66,11 +67,11 @@ for (const viewport of [
 
     const sidebar = page.locator("aside.material-files");
     // The index has no handle at desk widths; below them it is a drawer.
-    const toggle = page.getByRole("button", { name: /material files/i }).first();
+    const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).first();
     if (await toggle.count() > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
       await toggle.click();
     }
-    await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
     const archive = sidebar.getByRole("region", { name: "Material archive" });
 
     const chooserPromise = page.waitForEvent("filechooser");
@@ -96,15 +97,15 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
     const sidebar = page.locator("aside.material-files");
-    const toggle = page.getByRole("button", { name: /material files/i }).first();
+    const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).first();
     const hasToggle = await toggle.count() > 0;
     if (hasToggle && (await toggle.getAttribute("aria-expanded")) === "true" && viewport.name === "narrow") {
       await toggle.click();
     }
-    await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     if (hasToggle && (await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-    await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
 
     const archive = sidebar.getByRole("region", { name: "Material archive" });
     if (viewport.name === "narrow") {
@@ -129,7 +130,7 @@ test("the first release rejects a foreign document archive before replacement", 
   const sidebar = page.locator("aside.material-files");
   const before = await readMaterialSession(page);
 
-  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
   const archive = sidebar.getByRole("region", { name: "Material archive" });
   const downloadReceipt = page.waitForEvent("download");
   await archive.getByRole("button", { name: "Export a copy" }).click();
@@ -165,25 +166,25 @@ test("an explicitly restored older backup survives reload without reviving prior
   const removedId = initialIds.at(-1);
   if (removedId === undefined) throw new Error("Archive fixture has no removable thought.");
 
-  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
   let archive = sidebar.getByRole("region", { name: "Material archive" });
   const downloadReceipt = page.waitForEvent("download");
   await archive.getByRole("button", { name: "Export a copy" }).click();
   const backupPath = await (await downloadReceipt).path();
   if (backupPath === null) throw new Error("Archive download did not produce a local file.");
-  await sidebar.getByRole("button", { name: "Close", exact: true }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.close, exact: true }).click();
 
   await page.locator(`[data-thought-id="${removedId}"] [data-thought-text-id]`).click();
   await page.keyboard.press("Delete");
   await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Undo last change", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true })).toBeEnabled();
   await expect.poll(async () => ({
     live: Number(await page.locator("main.matter-shell").getAttribute("data-tree-revision")),
     stored: await readStoredRevision(page),
     phase: await sidebar.getAttribute("data-persistence-phase"),
   })).toEqual({ live: initialRevision + 1, stored: initialRevision + 1, phase: "saved" });
 
-  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
   archive = sidebar.getByRole("region", { name: "Material archive" });
   await archive.getByLabel("Choose a material archive").setInputFiles(backupPath);
   await expect(archive).toContainText("Replace current material?");
@@ -191,14 +192,14 @@ test("an explicitly restored older backup survives reload without reviving prior
   await expect(archive).toHaveCount(0);
   await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(1);
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialIds.length);
-  await expect(page.getByRole("button", { name: "Undo last change", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true })).toBeDisabled();
   await expect.poll(() => readStoredRevision(page)).toBe(initialRevision);
 
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(1);
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialIds.length);
-  await expect(page.getByRole("button", { name: "Undo last change", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true })).toBeDisabled();
 });
 
 async function readMaterialSession(page: Page) {

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
 const SOURCE_SEGMENT = "我们怀念的也许不是一个真实存在过的过去";
@@ -25,7 +26,7 @@ test("Text Swap keeps Full-view admission, then Voice rewrites one Focus segment
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await expect(page.getByRole("button", { name: "Record a top-level thought", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: fixtureUiCopy.voiceTool.recordTopLevelThought, exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true })).toHaveCount(0);
 
   await focusRoot(page, false);
@@ -73,7 +74,7 @@ test("Text Swap keeps Full-view admission, then Voice rewrites one Focus segment
   await expect(page.locator('.transform-text[data-transform-motion="settle"]')).toHaveCount(1);
   await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
 
-  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
   await expect(text).toHaveText(SOURCE_TEXT);
   await expect(page.locator(".transform-text")).toHaveCount(0);
 
@@ -131,7 +132,7 @@ test.describe("coarse pointer and reduced motion", () => {
     expect(swapRequests).toBe(1);
     await expect(page.locator(".transform-text")).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(text).toHaveText(SOURCE_TEXT);
     await page.keyboard.press("Control+Shift+Z");
     await expect(text).toHaveText(REWRITTEN_TEXT);
@@ -189,7 +190,7 @@ test("Text Swap cancel revokes a late response without changing material", async
   await page.getByRole("button", { name: "改写", exact: true }).click();
   await expect(page.locator('.text-swap-feedback[data-phase="pending"]')).toBeVisible();
 
-  await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitLanguageSelection, exact: true }).click();
   await expect(page.locator(".text-swap-feedback")).toHaveCount(0);
   await page.waitForTimeout(650);
   await expect(text).toHaveText(SOURCE_TEXT);
@@ -246,7 +247,7 @@ async function selectFirstSegment(
   page: Page,
   text: ReturnType<Page["locator"]>,
 ): Promise<void> {
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
 }

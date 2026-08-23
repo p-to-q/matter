@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const SOURCE = "thought_fixture_imagined_time";
 const ORIGINAL_PARENT = "thought_fixture_imagined_lives";
@@ -18,7 +19,7 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await expect(source).toHaveAttribute("data-selected", "true");
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
 
-  const move = page.getByRole("button", { name: "Canvas pan", exact: true });
+  const move = page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true });
   await move.click();
   await expect(page.locator('[data-tool-id="move"]')).toHaveAttribute("aria-pressed", "true");
   await expect(shell).toHaveAttribute("data-canvas-mode", "pan");
@@ -45,7 +46,7 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await page.mouse.up();
   await expect(source).not.toHaveAttribute("data-parent-id", /.+/u);
   await expect(source).toHaveAttribute("data-tree-parent-id", DOCUMENT_ROOT);
-  await page.getByRole("button", { name: "Undo last change" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
 
   const deeperParent = page.locator(`[data-thought-id="${DEEPER_PARENT}"]`);
@@ -91,7 +92,7 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await expect(shell).toHaveAttribute("data-node-drop-mode", "after");
   await page.mouse.up();
   await expect(source).toHaveAttribute("data-parent-id", ALIGN_PARENT);
-  await page.getByRole("button", { name: "Undo last change" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
 
   const sibling = page.locator(`[data-thought-id="${ORIGINAL_SIBLING}"]`);
@@ -106,7 +107,7 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await expect(shell).toHaveAttribute("data-node-drop-mode", "after");
   await page.mouse.up();
   await expect.poll(async () => (await source.boundingBox())?.y ?? 0).toBeGreaterThan((await sibling.boundingBox())?.y ?? 0);
-  await page.getByRole("button", { name: "Undo last change" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
   await expect.poll(async () => (await source.boundingBox())?.y ?? 0).toBeLessThan((await sibling.boundingBox())?.y ?? 0);
 
   const nestedSourceBox = await source.boundingBox();
@@ -119,23 +120,29 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await expect(shell).toHaveAttribute("data-node-drop-mode", "nest");
   await page.mouse.up();
   await expect(source).toHaveAttribute("data-parent-id", DEEPER_PARENT);
-  await page.getByRole("button", { name: "Undo last change" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
 });
 
 test("canvas title is independent material with pointer undo", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/matter");
-  const titleButton = page.getByRole("button", { name: /^Rename canvas:/u });
-  const originalLabel = await titleButton.getAttribute("aria-label");
-  if (originalLabel === null) throw new Error("canvas title is not available");
+  const titleButton = page.locator("button.material-files__context-title");
+  const originalTitle = (await titleButton.textContent())?.trim();
+  if (originalTitle === undefined || originalTitle.length === 0) {
+    throw new Error("canvas title is not available");
+  }
+  const originalLabel = fixtureUiCopy.materialFiles.renameCanvas(originalTitle);
+  await expect(titleButton).toHaveAccessibleName(originalLabel);
 
   await titleButton.click();
-  const input = page.getByRole("textbox", { name: "Canvas title" });
+  const input = page.getByRole("textbox", { name: fixtureUiCopy.materialFiles.canvasTitle });
   await input.fill("Other possible lives");
   await input.press("Enter");
-  await expect(page.getByRole("button", { name: "Rename canvas: Other possible lives" })).toBeVisible();
+  await expect(page.getByRole("button", {
+    name: fixtureUiCopy.materialFiles.renameCanvas("Other possible lives"),
+  })).toBeVisible();
 
-  await page.getByRole("button", { name: "Undo last change" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
   await expect(page.getByRole("button", { name: originalLabel })).toBeVisible();
 });

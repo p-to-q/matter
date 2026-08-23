@@ -55,6 +55,12 @@ watchdog, so a browser that neither starts nor errors returns a recoverable
 failure instead of leaving the first turn indefinitely in "waiting for
 microphone".
 
+An on-device transcription owns one 180-second end-to-end deadline from the
+start of browser audio decoding through worker inference. `AudioContext`
+decoding has no deadline of its own, so this lifetime begins before decode: a
+malformed recording that never settles returns the same recoverable timeout as
+a slow worker, without ever constructing that worker.
+
 ## Admission boundary
 
 The voice control has a target only in the full material view. A truly empty

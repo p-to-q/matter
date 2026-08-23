@@ -186,6 +186,37 @@ describe("local transcription audio projection", () => {
     expect(workers).toHaveLength(0);
   });
 
+  it("times out a stalled browser audio decoder before a worker is created", async () => {
+    vi.useFakeTimers();
+    const close = vi.fn(async () => undefined);
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: class {
+        close = close;
+        decodeAudioData(): Promise<never> {
+          return new Promise<never>(() => undefined);
+        }
+      },
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const pending = transcribeLocally(request(new AbortController().signal, "decode-timeout"));
+    const assertion = expect(pending).rejects.toEqual(new LocalTranscriptionError("timeout"));
+
+    await vi.advanceTimersByTimeAsync(180_000);
+
+    await assertion;
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(workers).toHaveLength(0);
+  });
+
   it("retires active inference on cancellation and lazily rebuilds the worker", async () => {
     const workers: FakeWorker[] = [];
     vi.stubGlobal("window", {

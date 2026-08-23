@@ -432,14 +432,22 @@ as abandoned in the consulted public record. That procedural status is not a
 legal clearance, non-infringement opinion, ownership conclusion, or substitute
 for counsel.
 
-## Current phase — release convergence
+## Historical phase — Preview.39 release convergence
+
+This is the frozen convergence baseline recorded before Preview.40. Preview.40
+completed its final `af4bcb9` Production and public-origin receipts and published
+the immutable `v0.2.0-preview.40` tag. Current deployable facts, remaining
+operational exceptions, and the public-gate state live in
+[`release-readiness.md`](../docs/release-readiness.md) and
+[`deployment-owner-handoff.md`](../docs/deployment-owner-handoff.md); this
+historical section must not be read as the current deployment state.
 
 The current work has four distinct evidence states. They must not be collapsed
 into one release claim:
 
 | State | What is true | What it does not authorize |
 | --- | --- | --- |
-| deployed Preview.39 | the `browser-preview` receipt is authoritative; labels, repair and inquiry are live, both material-model gates are off; transport, cache, persistence and renderer hardening are deployed | issue #34 remains open; health proves configured capability rather than provider-answer or distributed-control evidence |
+| deployed Preview.39 at that time | the `browser-preview` receipt was authoritative; labels, repair and inquiry were live, both material-model gates were off; transport, cache, persistence and renderer hardening were deployed | issue #34 remained open; health proved configured capability rather than provider-answer or distributed-control evidence |
 | performance research only | C1/C2/C3b run only through the explicit performance fixture; C4a/C4b are pure modules with no ordinary-product importer | no viewport source on Matter, no real lifecycle handoff, no accessibility or release-proof claim |
 | external operations still open | issue #34 distributed admission/rate/spend/alert ownership, retained deployed-origin latency/cold/fallback evidence, Elastic corpus/origin proof, and the viewport AT/lifecycle gates | no inference from a healthy cache, local benchmark, instance log or fixture receipt |
 

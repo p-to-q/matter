@@ -143,8 +143,20 @@ export function admissionFeedbackMessage(
 export function admissionFeedbackActions(
   language: CanvasLanguage,
 ): AdmissionFeedbackActions {
-  const { stop, retry, dismiss, cancel, cancelTranscription } = COPY[language];
-  return Object.freeze({ stop, retry, dismiss, cancel, cancelTranscription });
+  const {
+    stop,
+    retry,
+    dismiss,
+    cancel,
+    cancelTranscription,
+  } = COPY[language];
+  return Object.freeze({
+    stop,
+    retry,
+    dismiss,
+    cancel,
+    cancelTranscription,
+  });
 }
 
 function admissionErrorMessage(

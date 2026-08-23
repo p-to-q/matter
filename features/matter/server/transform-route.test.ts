@@ -10,6 +10,10 @@ import { TRANSFORM_ROUTE_TIMEOUT_MS, handleTransformRequest, resetTransformGover
 const TIME = "2026-08-11T00:00:00.000Z";
 const TEXT = "我一直觉得，这件事可能没那么重要。";
 const PASSAGE = "这件事可能没那么重要";
+const SAME_ORIGIN = Object.freeze({
+  origin: "https://matter.test",
+  "sec-fetch-site": "same-origin",
+});
 
 beforeEach(() => {
   resetTransformAdmissionForTests();
@@ -130,11 +134,19 @@ describe("transform route", () => {
       locale: "unknown",
     }));
 
-    for (let index = 0; index < 8; index += 1) {
-      await post(body({ id: `turn_rate_${index}` }), fixtureTransformAdapter, {}, { observe: observations });
+    // The public perimeter only meters production; fixture and development
+    // traffic shares one process and often no forwarded identity. Drive the
+    // deployed path so the RATE terminal stays covered.
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      for (let index = 0; index < 8; index += 1) {
+        await post(body({ id: `turn_rate_${index}` }), fixtureTransformAdapter, SAME_ORIGIN, { observe: observations });
+      }
+      expect((await post(body({ id: "turn_rate_blocked" }), fixtureTransformAdapter, SAME_ORIGIN, { observe: observations })).status)
+        .toBe(429);
+    } finally {
+      vi.unstubAllEnvs();
     }
-    expect((await post(body({ id: "turn_rate_blocked" }), fixtureTransformAdapter, {}, { observe: observations })).status)
-      .toBe(429);
     expect(observations).toHaveBeenCalledTimes(10);
     expect(observations).toHaveBeenLastCalledWith(expect.objectContaining({
       outcome: "admission",

@@ -33,7 +33,7 @@ import {
   scrollTopForMaterialFileIndex,
 } from "./material-file-window";
 import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
-import { materialFilesCopy } from "./material-files-copy";
+import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
 import {
@@ -225,13 +225,13 @@ export function MaterialFiles(props: MaterialFilesProps) {
     return compacted;
   }, [collapsedNodeIds, props.heldAsideRootIds]);
   const rootId = props.tree.rootId;
-  const documentTitle = props.tree.title ?? "Untitled matter";
+  const documentTitle = props.tree.title ?? copy.untitledMatter;
   const titleForNode = useMemo(() => (nodeId: string): string => {
     const derived = props.labels?.get(nodeId);
     if (derived !== undefined) return derived;
     const node = props.tree.nodes[nodeId];
-    return node === undefined ? "Untitled thought" : deriveMaterialFileLabel(node).title;
-  }, [props.labels, props.tree.nodes]);
+    return node === undefined ? copy.untitledThought : deriveMaterialFileLabel(node).title;
+  }, [copy.untitledThought, props.labels, props.tree.nodes]);
   const files = useMemo<readonly MaterialFileRow[]>(
     () => {
       if (!open) return [];
@@ -832,10 +832,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
           aria-controls="material-files"
           aria-expanded={open}
           aria-label={open
-            ? "Hide material files"
+            ? copy.hideMaterialFiles
             : persistenceFailed
-              ? "Show material files; saving needs attention"
-              : "Show material files"}
+              ? copy.showMaterialFilesSavingNeedsAttention
+              : copy.showMaterialFiles}
           className="material-files-toggle"
           data-canvas-interactive
           data-persistence-error={persistenceFailed || undefined}
@@ -850,7 +850,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
         </button>
       )}
       <aside
-        aria-label="Material files"
+        aria-label={copy.materialFiles}
         aria-hidden={!open}
         className="material-files"
         data-canvas-interactive
@@ -875,7 +875,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
         <header className="material-files__context" data-node-id={rootId ?? undefined}>
           {renamingDocument ? (
             <input
-              aria-label="Canvas title"
+              aria-label={copy.canvasTitle}
               autoFocus
               className="material-files__context-title-input"
               maxLength={160}
@@ -900,14 +900,14 @@ export function MaterialFiles(props: MaterialFilesProps) {
             />
           ) : (
             <button
-              aria-label={`Rename canvas: ${documentTitle}`}
+              aria-label={copy.renameCanvas(documentTitle)}
               className="material-files__context-title"
               disabled={surface.rowInteractionDisabled}
               onClick={() => {
                 setDocumentTitleDraft(documentTitle);
                 setRenamingDocument(true);
               }}
-              title="Rename canvas"
+              title={copy.renameCanvasTitle}
               type="button"
             >
               <span dir="auto">{documentTitle}</span>
@@ -917,21 +917,21 @@ export function MaterialFiles(props: MaterialFilesProps) {
         <div className="material-files__controls">
           {mode === "archive" ? (
             <>
-              <span className="material-files__section-label">Material archive</span>
+              <span className="material-files__section-label">{copy.archive}</span>
               <button
                 className="material-files__mode-action material-files__mode-action--close"
                 disabled={archiveBusy}
                 onClick={closeArchive}
                 type="button"
               >
-                Close
+                {copy.close}
               </button>
             </>
           ) : mode === "search" ? (
             <div className="material-files__search">
               <SearchIcon />
               <input
-                aria-label="Filter material files"
+                aria-label={copy.filterMaterialFiles}
                 autoFocus
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 onKeyDown={(event) => {
@@ -944,13 +944,13 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     focusRowAt(0);
                   }
                 }}
-                placeholder="Find thought"
+                placeholder={copy.findThought}
                 spellCheck={false}
                 type="search"
                 value={query}
               />
               <button
-                aria-label="Close search"
+                aria-label={copy.closeSearch}
                 className="material-files__search-close"
                 onClick={closeSearch}
                 type="button"
@@ -960,14 +960,14 @@ export function MaterialFiles(props: MaterialFilesProps) {
             </div>
           ) : (
             <button
-              aria-label="Search thoughts"
+              aria-label={copy.searchThoughts}
               className="material-files__mode-action material-files__mode-action--search"
               onClick={() => setMode("search")}
               ref={searchTriggerRef}
               type="button"
             >
               <SearchIcon />
-              <span>Search</span>
+              <span>{copy.search}</span>
             </button>
           )}
           {mode !== "archive" ? (
@@ -981,7 +981,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 }}
                 type="button"
               >
-                {mode === "select" ? "Done" : "Select"}
+                {mode === "select" ? copy.done : copy.select}
               </button>
               {props.archive !== undefined ? (
                 <button
@@ -994,15 +994,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   }}
                   type="button"
                 >
-                  Archive
+                  {copy.archive}
                 </button>
               ) : null}
             </>
           ) : null}
-          <span className="visually-hidden">{props.tree.revision} committed revisions</span>
+          <span className="visually-hidden">{copy.revisionCount(props.tree.revision)}</span>
           <span aria-atomic="true" aria-live="polite" className="visually-hidden">
             {mode === "search" && visibleQuery.trim().length > 0 && !surface.queryProjectionStale
-              ? `${files.length} material ${files.length === 1 ? "result" : "results"}`
+              ? copy.resultCount(files.length)
               : ""}
           </span>
         </div>
@@ -1043,11 +1043,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
           >
             {files.length === 0 ? (
             <p className="material-files__empty">
-              {emptyIndexMessage(props.tree.rootId, mode, visibleQuery)}
+              {emptyIndexMessage(props.tree.rootId, mode, visibleQuery, copy)}
             </p>
           ) : (
             <ul
-              aria-label={`Markdown material tree, ${files.length} entries`}
+              aria-label={copy.materialTree(files.length)}
               aria-multiselectable={mode !== "search" && (
                 mode === "select" || (props.lassoSelectedNodeIds?.size ?? 0) > 1
               ) ? true : undefined}
@@ -1102,7 +1102,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 const materialNode = props.tree.nodes[file.nodeId];
                 const derivedLabel = props.labels?.get(file.nodeId);
                 const title = derivedLabel ?? (materialNode === undefined
-                  ? "Untitled thought"
+                  ? copy.untitledThought
                   : deriveMaterialFileLabel(materialNode).title);
                 return (
                   <li
@@ -1194,9 +1194,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
                       )
                     ) : null}
                     {mode === "select" ? (
-                      <label className="material-file__check" title={`Include ${title} when copying`}>
+                      <label className="material-file__check" title={copy.includeWhenCopying(title)}>
                         <input
-                          aria-label={`Select ${title} for copying`}
+                          aria-label={copy.selectForCopying(title)}
                           checked={checked}
                           disabled={surface.rowInteractionDisabled}
                           onChange={() => {
@@ -1216,7 +1216,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                       </label>
                     ) : activeRename === file.nodeId ? (
                       <input
-                        aria-label={`Name for ${title}`}
+                        aria-label={copy.nameFor(title)}
                         autoFocus
                         className="material-file__rename"
                         defaultValue={activeRenameDraft ?? title}
@@ -1326,20 +1326,20 @@ export function MaterialFiles(props: MaterialFilesProps) {
           <footer className="material-files__footer">
             <span aria-live="polite" className="material-files__copy-status">
               {copyState === "copied"
-                ? "Copied"
+                ? copy.copied
                 : copyState === "failed"
-                  ? "Copy unavailable"
-                  : `${selectedCount} selected`}
+                  ? copy.copyUnavailable
+                  : copy.selectedCount(selectedCount)}
             </span>
             <button
-              aria-label={`Copy ${selectedCount} selected thoughts`}
+              aria-label={copy.copySelectedThoughts(selectedCount)}
               className="material-files__copy"
               disabled={selectedCount === 0 || props.interactionPending}
               onClick={() => void copySelection()}
               type="button"
             >
               <CopyIcon />
-              <span>Copy</span>
+              <span>{copy.copy}</span>
             </button>
           </footer>
         ) : null}
@@ -1395,14 +1395,19 @@ function PixelIdenticon() {
   );
 }
 
-function emptyIndexMessage(rootId: string | null, mode: IndexMode, query: string): string {
-  if (rootId === null) return "Speak the first thought to begin.";
+function emptyIndexMessage(
+  rootId: string | null,
+  mode: IndexMode,
+  query: string,
+  copy: MaterialFilesCopy,
+): string {
+  if (rootId === null) return copy.emptyFirstThought;
   if (mode === "search") {
-    return query.trim().length === 0 ? "Type to find a thought." : "No material matches.";
+    return query.trim().length === 0 ? copy.emptyTypeToFind : copy.emptyNoMatches;
   }
   return mode === "select"
-    ? "Nothing to select in this material yet."
-    : "Nothing branches from this thought yet.";
+    ? copy.emptyNothingToSelect
+    : copy.emptyNothingBranches;
 }
 
 function toggleSetValue(current: ReadonlySet<string>, value: string): ReadonlySet<string> {

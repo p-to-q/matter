@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fixtureUiCopy, fixtureVoiceAdmissionName } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
 const SOURCE = "我们怀念的也许不是一个真实存在过的过去";
@@ -19,7 +20,7 @@ test("both literal grips stay visible in the paper's light and dark appearances"
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, false);
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
 
@@ -66,7 +67,7 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, false);
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 1));
 
@@ -110,7 +111,7 @@ test("the upper grip on the opening segment pushes every lower material row down
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, false);
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
 
@@ -188,7 +189,7 @@ test("Elastic Language cancels below-threshold and late turns without changing m
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, false);
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   const grip = page.getByRole("slider", {
@@ -245,7 +246,7 @@ test("Elastic Language provider failure stays quiet and leaves material unchange
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, false);
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   const grip = page.getByRole("slider", {
@@ -268,7 +269,7 @@ test("Elastic Language provider failure stays quiet and leaves material unchange
   await expect.poll(() => turnRequests).toBe(2);
 });
 
-test("Voice admission suspends both selected-language grips and re-arms them after cancel", async ({ page }) => {
+test("Voice recording suspends selected-language grips while either stop control remains reachable", async ({ page }) => {
   let turnRequests = 0;
   await page.route("**/api/turn", async (route) => {
     turnRequests += 1;
@@ -278,16 +279,22 @@ test("Voice admission suspends both selected-language grips and re-arms them aft
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   await expect(page.locator(".stretch-handle")).toHaveCount(2);
 
-  const voice = page.getByRole("button", {
-    name: /Record a (?:top-level thought|thought below the selected material)/,
-  });
+  // Both controls deliberately finish the same recording: the rail preserves
+  // the fixed instrument, while local feedback keeps the live state reachable.
+  const toolRail = page.locator(".tool-rail");
+  const voice = toolRail.getByRole("button", { name: fixtureVoiceAdmissionName });
   await voice.click();
-  await expect(page.getByRole("button", { name: "Stop recording", exact: true })).toBeVisible();
+  await expect(toolRail.getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true }))
+    .toBeVisible();
+  await expect(page.getByRole("button", {
+    name: fixtureUiCopy.voiceTool.stopRecording,
+    exact: true,
+  })).toHaveCount(2);
   await expect(page.locator("main.matter-shell"))
     .toHaveAttribute("data-interaction-pending", "true");
   await expect(page.locator("main.matter-shell"))
@@ -297,12 +304,11 @@ test("Voice admission suspends both selected-language grips and re-arms them aft
   expect(turnRequests).toBe(0);
 
   await page.locator(".admission-feedback")
-    .getByRole("button", { name: "取消录音", exact: true })
+    .getByRole("button", { name: fixtureUiCopy.admissionFeedback.stop, exact: true })
     .click();
   await expect(page.locator("main.matter-shell"))
     .not.toHaveAttribute("data-interaction-pending", "true");
-  await expect(page.locator(".stretch-handle")).toHaveCount(2);
-  await expect(page.getByRole("button", { name: "Circle-select language", exact: true })).toBeVisible();
+  await expect(page.locator(".stretch-handle")).toHaveCount(0);
   expect(turnRequests).toBe(0);
 });
 
@@ -334,7 +340,7 @@ async function runElasticReceipt(
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, input === "touch");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await expect(text).toContainText(SOURCE);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
@@ -407,7 +413,7 @@ async function runElasticReceipt(
   }
   await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
 
-  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
   await expect(text).toContainText(SOURCE);
   await expect(text).not.toContainText(EXPANDED);
   await expect(page.locator(".transform-text")).toHaveCount(0);

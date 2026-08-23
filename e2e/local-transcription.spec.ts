@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 type WorkerObservation = Readonly<{
   status: string;
@@ -102,10 +103,10 @@ test("synthetic recorded speech reaches local Whisper, punctuation, and expressi
   });
 
   await page.goto("/matter");
-  await page.getByRole("button", { name: "Record a top-level thought", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.voiceTool.recordTopLevelThought, exact: true }).click();
   const stop = page
-    .getByRole("navigation", { name: "Editing tools" })
-    .getByRole("button", { name: "Stop recording", exact: true });
+    .getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+    .getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true });
   await expect(stop).toBeVisible();
   await page.waitForTimeout(captureMs);
   await stop.click();

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const PERFORMANCE_ROW_COUNT = 2_000;
 /**
@@ -81,12 +82,12 @@ test("windows the 2,000-row material index without losing deep selection or copy
   expect(virtualGrammar.leadingSlotsAreExclusive).toBe(true);
   expect(virtualGrammar.mountedEndpointsFollowGrammar).toBe(true);
 
-  await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
   await expect(sidebar).toHaveAttribute("data-mode", "select");
   await expect(sidebar.getByRole("tree")).toHaveAttribute("aria-multiselectable", "true");
   await expect(sidebar.locator(".material-files__tree")).toHaveAttribute(
     "aria-label",
-    `Markdown material tree, ${SELECTABLE_ROW_COUNT} entries`,
+    fixtureUiCopy.materialFiles.materialTree(SELECTABLE_ROW_COUNT),
   );
   expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
   expect(await page.locator("*").count()).toBeLessThanOrEqual(TOTAL_ELEMENT_BUDGET);
@@ -113,10 +114,10 @@ test("windows the 2,000-row material index without losing deep selection or copy
   });
   await expect(first).toBeVisible();
   await first.getByRole("checkbox").check();
-  await expect(sidebar).toContainText("2 selected");
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
 
-  await sidebar.getByRole("button", { name: "Copy 2 selected thoughts" }).click();
-  await expect(sidebar).toContainText("Copied");
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied.split("\n\n")).toHaveLength(2);
   expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
@@ -178,8 +179,8 @@ test("keeps stale deferred search rows inert while the search control stays usab
 
   const sidebar = page.locator("aside.material-files");
   await expect(page.locator("[data-thought-id]")).toHaveCount(PERFORMANCE_ROW_COUNT);
-  await sidebar.getByRole("button", { name: "Search thoughts" }).click();
-  const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts }).click();
+  const search = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
   await search.fill("材料");
   await expect(sidebar.locator(".material-file")).not.toHaveCount(0);
 
@@ -244,7 +245,7 @@ for (const viewport of [
 
     await expect(page.locator("[data-thought-id]")).toHaveCount(PERFORMANCE_ROW_COUNT);
     await expect(sidebar).not.toHaveAttribute("data-open", "true");
-    await page.getByRole("button", { name: "Show material files" }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
     await expect(sidebar).toHaveAttribute("data-open", "true");
     await expect(sidebar).not.toHaveAttribute("data-projection-stale", "true");
     await expect(page.locator(".tool-rail")).toBeHidden();
@@ -282,7 +283,7 @@ for (const viewport of [
     expect(depthReceipt.titleWidth).toBeGreaterThanOrEqual(79);
     expect(depthReceipt.trailingRight).toBeLessThanOrEqual(depthReceipt.rowRight + .5);
 
-    await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
     await expect(sidebar).toHaveAttribute("data-mode", "select");
     await body.evaluate((element) => {
       element.scrollTop = element.scrollHeight;
@@ -298,11 +299,11 @@ for (const viewport of [
     });
     await expect(first).toBeVisible();
     await first.getByRole("checkbox").check();
-    await expect(sidebar).toContainText("2 selected");
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
     expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
 
-    await sidebar.getByRole("button", { name: "Copy 2 selected thoughts" }).click();
-    await expect(sidebar).toContainText("Copied");
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied.split("\n\n")).toHaveLength(2);
   });
@@ -337,12 +338,12 @@ test.describe("1024px coarse-pointer material index", () => {
     // declared size after device-pixel placement.
     expect(sizes.filter(({ height, width }) => height < 47.9 || width < 47.9)).toEqual([]);
 
-    await sidebar.getByRole("button", { name: "Search thoughts" }).click();
-    const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts }).click();
+    const search = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
     const searchRect = await search.boundingBox();
     expect(searchRect).not.toBeNull();
     expect(searchRect!.height).toBeGreaterThanOrEqual(48);
-    const close = sidebar.getByRole("button", { name: "Close search" });
+    const close = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.closeSearch });
     const closeGeometry = await close.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
