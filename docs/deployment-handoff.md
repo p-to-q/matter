@@ -48,6 +48,19 @@ probe. It preserves the same live gates, keeps Elastic and Text Swap
 unavailable, and leaves issues #34 and #68 open. The immutable tag and GitHub
 prerelease must point to the final release-record Production SHA.
 
+For Preview.42, the owner explicitly directed the Slate / Bone brand, ambient
+stacking, discovery, and deployed-receipt work through main. This is a fresh
+Preview.42-only risk acceptance; it preserves label, repair, inquiry, and voice,
+keeps Elastic and Text Swap unavailable, and leaves issues #34 and #68 open.
+Topic `233614e` passed Preview deployment `6053631689`; PR #73 merged it as
+`738d077` and Production deployment `6053671842` exposed the approved icon
+bytes. The public edge's bounded icon cache differed from the local Next header,
+so topic `0eeb289` made that observed contract strict and passed Preview
+`6053732823`. PR #74 merged it as `776b003`; exact Production deployment
+`6053793739`, the public-origin receipt, and a real-browser metadata and ambient
+stacking walk all succeeded. The immutable tag and GitHub prerelease must point
+to the final release-record Production SHA.
+
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
 shared outside the deployment secret store must be rotated before use.
