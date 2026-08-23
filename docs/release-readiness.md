@@ -3,12 +3,11 @@
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet.
 
-Preview.40 first reached Production as merge commit `53f51a2`; that receipt
-proved the shared four-route admission perimeter, STT punctuation/expression
-work, and corrected public discovery copy. The final review fixes then merged
-through PR #70 as `af4bcb9`, received their exact Production deployment receipt,
-and are the immutable `v0.2.0-preview.40` release. npm publication remains
-unauthorized.
+Preview.41 source work merged through PR #71 as `6ecbabc`; exact Production
+deployment `6050614354` succeeded and the first public-origin probe matched
+`0.2.0-preview.41`. Its final release-record Production SHA is the target of the
+annotated immutable `v0.2.0-preview.41` tag and GitHub prerelease. npm
+publication remains unauthorized.
 
 ## Current deployable slice
 
@@ -52,9 +51,9 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Candidate verification — 0.2.0-preview.41
+## Release verification — 0.2.0-preview.41
 
-Preview.41 is the next source candidate after the immutable Preview.40 release.
+Preview.41 is the current release after the immutable Preview.40 release.
 It does not expand model authority or make Elastic or Text Swap available. It
 finishes the five-locale control copy while preserving both equivalent Stop
 recording controls: the fixed rail remains reachable as the primary instrument,
@@ -78,6 +77,12 @@ baseline. Lower-left text alone owns the entry animation; its parent backdrop
 owner remains static, so ambient and material pixels can be sampled throughout
 hover, focus, active state, and camera motion.
 
+The material index keeps its compact hierarchy without treating CJK glyphs as
+Latin glyphs of the same nominal size. Search, selection, archive, close, and
+the archive-mode heading render at 12px for Simplified Chinese, Traditional
+Chinese, and Japanese, while English and German retain 10px. Archive-internal
+actions retain their established 9px density in every locale.
+
 ```text
 source proof           npm run check exited 0 on the versioned candidate:
                        doctor 21; 42 linked Markdown documents; Node 60/60;
@@ -98,9 +103,10 @@ runtime proof          static root; initial 1,191.0 KiB raw / 377.8 KiB gzip;
 production boundary    the owner has directed one Preview.41 promotion while
                        #34/#68 remain open; label, repair, inquiry, and voice
                        retain their current gates; Elastic and Text Swap stay off
-publication state      candidate only: do not describe Preview.41 as deployed
-                       or tagged until its exact Preview and Production receipts
-                       and immutable release record exist
+publication state      topic `7fb7774` passed exact Preview; PR #71 merged as
+                       `6ecbabc`; exact Production `6050614354` and the first
+                       public-origin probe succeeded; the annotated immutable
+                       tag must peel to the final release-record Production SHA
 ```
 
 Preview.41 retains the Preview.40-only operational exception only as a fresh,
