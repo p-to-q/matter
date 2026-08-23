@@ -130,7 +130,12 @@ export function inspectDeploymentMediaHeaders(headers) {
   return failures;
 }
 
-export function inspectDeploymentMetadataHeaders(headers, expectedContentType, label) {
+export function inspectDeploymentMetadataHeaders(
+  headers,
+  expectedContentType,
+  label,
+  expectedMaxAgeSeconds = 0,
+) {
   const failures = [];
   const contentType = headers.get("content-type")?.toLowerCase() ?? "";
   if (!contentType.startsWith(expectedContentType)) {
@@ -140,9 +145,21 @@ export function inspectDeploymentMetadataHeaders(headers, expectedContentType, l
     .split(",")
     .map((directive) => directive.trim());
   if (!directives.includes("public")) failures.push(`${label} is missing its public cache scope.`);
-  if (!directives.includes("max-age=0")) failures.push(`${label} must revalidate immediately.`);
+  const maxAgeDirectives = directives.filter((directive) => directive.startsWith("max-age="));
+  if (
+    maxAgeDirectives.length !== 1
+    || maxAgeDirectives[0] !== `max-age=${expectedMaxAgeSeconds}`
+  ) {
+    failures.push(`${label} must use max-age=${expectedMaxAgeSeconds}.`);
+  }
   if (!directives.includes("must-revalidate")) failures.push(`${label} is missing must-revalidate.`);
   if (directives.includes("immutable")) failures.push(`${label} must not be immutable.`);
+  if (directives.includes("private") || directives.includes("no-store")) {
+    failures.push(`${label} has a conflicting non-public cache directive.`);
+  }
+  if (directives.some((directive) => directive.startsWith("s-maxage="))) {
+    failures.push(`${label} must leave shared-cache lifetime to the deployment edge.`);
+  }
   return failures;
 }
 
@@ -332,6 +349,7 @@ export async function checkDeployment({
       response.headers,
       "image/png",
       contract.path,
+      14_400,
     ));
     failures.push(...inspectDeploymentIcon(
       await response.arrayBuffer(),
