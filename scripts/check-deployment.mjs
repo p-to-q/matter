@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,6 +16,17 @@ const HEALTH_SURFACES = [
 ];
 const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
 const DEPLOYMENT_PROFILES = new Set(["browser-preview", "elastic-live"]);
+const BRAND_MANIFEST_URL = new URL(
+  "../features/matter/brand/assets/brand-assets.json",
+  import.meta.url,
+);
+const DEPLOYMENT_BRAND_ICONS = Object.freeze([
+  Object.freeze({ file: "app/icon1.png", path: "/icon1.png", rel: "icon", sizes: "16x16" }),
+  Object.freeze({ file: "app/icon2.png", path: "/icon2.png", rel: "icon", sizes: "32x32" }),
+  Object.freeze({ file: "app/icon3.png", path: "/icon3.png", rel: "icon", sizes: "192x192" }),
+  Object.freeze({ file: "app/icon4.png", path: "/icon4.png", rel: "icon", sizes: "512x512" }),
+  Object.freeze({ file: "app/apple-icon.png", path: "/apple-icon.png", rel: "apple-touch-icon", sizes: "180x180" }),
+]);
 
 export function normalizeDeploymentOrigin(value) {
   const url = new URL(value);
@@ -118,27 +130,148 @@ export function inspectDeploymentMediaHeaders(headers) {
   return failures;
 }
 
+export function inspectDeploymentMetadataHeaders(headers, expectedContentType, label) {
+  const failures = [];
+  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.startsWith(expectedContentType)) {
+    failures.push(`${label} did not declare ${expectedContentType}.`);
+  }
+  const directives = (headers.get("cache-control")?.toLowerCase() ?? "")
+    .split(",")
+    .map((directive) => directive.trim());
+  if (!directives.includes("public")) failures.push(`${label} is missing its public cache scope.`);
+  if (!directives.includes("max-age=0")) failures.push(`${label} must revalidate immediately.`);
+  if (!directives.includes("must-revalidate")) failures.push(`${label} is missing must-revalidate.`);
+  if (directives.includes("immutable")) failures.push(`${label} must not be immutable.`);
+  return failures;
+}
+
+export function inspectDeploymentMetadataHtml(html) {
+  if (typeof html !== "string") return ["Root metadata response is not text."];
+  const failures = [];
+  if (/\/(?:icon\.svg|icon-192\.png|icon-512\.png)(?:[?"#]|$)/u.test(html)) {
+    failures.push("Root metadata still references a provisional Matter icon.");
+  }
+  const manifests = [...html.matchAll(/<link\b[^>]*\brel="manifest"[^>]*>/gu)]
+    .map((match) => readHtmlAttributes(match[0]));
+  if (manifests.length !== 1) {
+    failures.push(`Root metadata exposes ${manifests.length} web manifests; expected 1.`);
+  } else {
+    let manifestPath = "";
+    try {
+      manifestPath = new URL(manifests[0]?.href ?? "", "https://matter.ptoq.io").pathname;
+    } catch {
+      // The comparison below reports the malformed href once.
+    }
+    if (manifestPath !== "/manifest.webmanifest") {
+      failures.push("Root metadata does not discover /manifest.webmanifest.");
+    }
+  }
+  const links = [...html.matchAll(/<link\b[^>]*\brel="(?:icon|apple-touch-icon)"[^>]*>/gu)]
+    .map((match) => readHtmlAttributes(match[0]));
+  if (links.length !== DEPLOYMENT_BRAND_ICONS.length) {
+    failures.push(`Root metadata exposes ${links.length} icon links; expected ${DEPLOYMENT_BRAND_ICONS.length}.`);
+    return failures;
+  }
+  DEPLOYMENT_BRAND_ICONS.forEach((expected, index) => {
+    const actual = links[index];
+    let href;
+    try {
+      href = new URL(actual?.href ?? "", "https://matter.ptoq.io");
+    } catch {
+      failures.push(`Root metadata icon ${index + 1} has an invalid href.`);
+      return;
+    }
+    if (
+      actual?.rel !== expected.rel
+      || href.pathname !== expected.path
+      || href.search.length <= 1
+      || actual?.sizes !== expected.sizes
+      || actual?.type !== "image/png"
+    ) {
+      failures.push(`Root metadata icon ${index + 1} does not match ${expected.rel} ${expected.path} ${expected.sizes}.`);
+    }
+  });
+  return failures;
+}
+
+export function inspectDeploymentManifest(value) {
+  if (!isRecord(value) || !Array.isArray(value.icons)) {
+    return ["Web manifest icons are missing."];
+  }
+  const expected = [
+    ["/icon3.png", "192x192", "any"],
+    ["/icon4.png", "512x512", "any"],
+    ["/icon4.png", "512x512", "maskable"],
+  ];
+  if (value.icons.length !== expected.length) {
+    return [`Web manifest exposes ${value.icons.length} icons; expected ${expected.length}.`];
+  }
+  const failures = [];
+  expected.forEach(([path, sizes, purpose], index) => {
+    const icon = value.icons[index];
+    let pathname = "";
+    try {
+      pathname = new URL(icon?.src ?? "", "https://matter.ptoq.io").pathname;
+    } catch {
+      // The comparison below reports the malformed source once.
+    }
+    if (
+      pathname !== path
+      || icon?.sizes !== sizes
+      || icon?.purpose !== purpose
+      || icon?.type !== "image/png"
+    ) {
+      failures.push(`Web manifest icon ${index + 1} does not match ${path} ${sizes} ${purpose}.`);
+    }
+  });
+  return failures;
+}
+
+export function inspectDeploymentIcon(bytes, expectedSha256, path) {
+  const buffer = Buffer.from(bytes);
+  const failures = [];
+  if (
+    buffer.length < 24
+    || !buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  ) {
+    failures.push(`${path} is not a PNG.`);
+    return failures;
+  }
+  const digest = createHash("sha256").update(buffer).digest("hex");
+  if (digest !== expectedSha256) failures.push(`${path} differs from the approved brand asset.`);
+  return failures;
+}
+
 export async function checkDeployment({
   origin,
   expectedVersion,
   profile = "browser-preview",
   fetchImpl = fetch,
+  expectedBrandAssets,
 }) {
   const normalized = normalizeDeploymentOrigin(origin);
+  const brandAssets = expectedBrandAssets ?? await readExpectedBrandAssets();
   const request = (path, init = {}) => fetchImpl(`${normalized}${path}`, {
     cache: "no-store",
     redirect: "manual",
     signal: AbortSignal.timeout(10_000),
     ...init,
   });
-  const [root, legacy, health, media] = await Promise.all([
-    request("/", { method: "HEAD" }),
+  const [root, legacy, health, media, manifest, ...icons] = await Promise.all([
+    request("/", { method: "GET" }),
     request("/matter", { method: "HEAD" }),
     request("/api/health", { method: "GET" }),
     request("/matter-ui/shadows-poster.jpg", { method: "HEAD" }),
+    request("/manifest.webmanifest", { method: "GET" }),
+    ...DEPLOYMENT_BRAND_ICONS.map((icon) => request(icon.path, { method: "GET" })),
   ]);
   const failures = [];
-  if (root.status !== 200) failures.push(`Root returned HTTP ${root.status}.`);
+  if (root.status !== 200) {
+    failures.push(`Root returned HTTP ${root.status}.`);
+  } else {
+    failures.push(...inspectDeploymentMetadataHtml(await root.text()));
+  }
   if (legacy.status !== 404) failures.push(`Legacy /matter returned HTTP ${legacy.status}, expected 404.`);
   if (health.status !== 200) {
     failures.push(`Health probe returned HTTP ${health.status}.`);
@@ -159,8 +292,64 @@ export async function checkDeployment({
   } else {
     failures.push(...inspectDeploymentMediaHeaders(media.headers));
   }
+  if (manifest.status !== 200) {
+    failures.push(`Web manifest returned HTTP ${manifest.status}.`);
+  } else {
+    failures.push(...inspectDeploymentMetadataHeaders(
+      manifest.headers,
+      "application/manifest+json",
+      "Web manifest",
+    ));
+    try {
+      failures.push(...inspectDeploymentManifest(await manifest.json()));
+    } catch {
+      failures.push("Web manifest did not return JSON.");
+    }
+  }
+  for (const [index, response] of icons.entries()) {
+    const expected = brandAssets[index];
+    const contract = DEPLOYMENT_BRAND_ICONS[index];
+    if (expected === undefined || contract === undefined) {
+      failures.push("Deployment brand asset contract is incomplete.");
+      break;
+    }
+    if (response.status !== 200) {
+      failures.push(`${contract.path} returned HTTP ${response.status}.`);
+      continue;
+    }
+    failures.push(...inspectDeploymentMetadataHeaders(
+      response.headers,
+      "image/png",
+      contract.path,
+    ));
+    failures.push(...inspectDeploymentIcon(
+      await response.arrayBuffer(),
+      expected.sha256,
+      contract.path,
+    ));
+  }
   failures.push(...inspectDeploymentHeaders(root.headers));
   return Object.freeze({ origin: normalized, failures: Object.freeze(failures) });
+}
+
+async function readExpectedBrandAssets() {
+  const manifest = JSON.parse(await readFile(BRAND_MANIFEST_URL, "utf8"));
+  const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+  const byFile = new Map(assets.map((asset) => [asset?.file, asset]));
+  return DEPLOYMENT_BRAND_ICONS.map(({ file }) => {
+    const asset = byFile.get(file);
+    if (!/^[a-f0-9]{64}$/u.test(asset?.sha256 ?? "")) {
+      throw new Error(`Brand asset manifest is missing ${file}.`);
+    }
+    return Object.freeze({ file, sha256: asset.sha256 });
+  });
+}
+
+function readHtmlAttributes(tag) {
+  return Object.fromEntries(
+    [...tag.matchAll(/\b([a-z-]+)="([^"]*)"/gu)]
+      .map((match) => [match[1], match[2]]),
+  );
 }
 
 /**

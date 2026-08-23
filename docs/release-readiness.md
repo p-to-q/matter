@@ -84,7 +84,10 @@ browser proof          full Chromium: 98 passed, 15 explicitly capability-
                        gated skipped, 0 failed, 113 total
 brand proof            one frozen 1024 px master; static 16/32/180/192/512 px
                        platform outputs; decoded RGB and file digests verified;
-                       metadata images total 475.0 KiB under the 512 KiB budget
+                       metadata images total 475.0 KiB under the 512 KiB budget;
+                       the public-origin gate verifies the five fingerprinted
+                       discovery links, manifest roles, exact PNG digests, and
+                       revalidated stable-name cache policy
 publication state      candidate only: the exact Preview deployment must expose
                        the new icon links and bytes before merge; Production,
                        public-origin, annotated tag, and GitHub prerelease are

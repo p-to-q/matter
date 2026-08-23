@@ -1,4 +1,4 @@
-import { access, glob, readFile } from "node:fs/promises";
+import { access, glob, readFile, readdir, stat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 
 const requiredFiles = [
@@ -87,6 +87,38 @@ if (brandPlatformIconBytes > 512 * 1_024) {
   problems.push(
     `Platform brand icons use ${brandPlatformIconBytes} bytes; budget is 524288.`,
   );
+}
+const unexpectedBrandIcons = [];
+for await (const file of glob("app/icon*.png")) {
+  if (!brandIconSizes.has(file) && await hasMaterialContent(file)) {
+    unexpectedBrandIcons.push(file);
+  }
+}
+if (unexpectedBrandIcons.length > 0) {
+  problems.push(
+    `Unexpected Matter metadata icons found: ${unexpectedBrandIcons.join(", ")}.`,
+  );
+}
+for (const file of [
+  "app/icon.svg",
+  "app/apple-icon.tsx",
+  "app/icon-192.png",
+  "app/icon-512.png",
+  "features/matter/brand/icon-image.tsx",
+  "features/matter/brand/icon-mark.ts",
+]) {
+  if (await hasMaterialContent(file)) {
+    problems.push(`Provisional Matter brand asset returned: ${file}.`);
+  }
+}
+
+async function hasMaterialContent(path) {
+  try {
+    const value = await stat(path);
+    return value.isFile() || (value.isDirectory() && (await readdir(path)).length > 0);
+  } catch {
+    return false;
+  }
 }
 
 try {

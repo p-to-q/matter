@@ -2655,15 +2655,22 @@ a cool slate mineral field. Each platform receives a pre-rendered PNG at its
 declared size rather than a runtime-resized or generated mark. Public discovery
 moves to the same release date, removes one duplicate search phrase, and keeps
 the one-URL sitemap to its verifiable last modification rather than ignored
-frequency or priority hints.
+frequency or priority hints. The deployed-origin gate now reads the root icon
+links, web manifest, and all five metadata PNG bodies; it requires the approved
+asset digests and immediate revalidation for their stable URLs. Repository
+checks reject extra numbered icons and the superseded provisional files.
 
 Why: the material itself now provides the product identity, while the smaller
 mark and target-specific rasterization preserve the deliberate air and clarity
-needed at 16 px without turning the icon into a generic white silhouette.
+needed at 16 px without turning the icon into a generic white silhouette. A
+successful build or deployment status alone cannot prove that browser discovery
+and edge routing expose the selected release asset.
 
 Forecloses: independently redrawn platform marks, runtime image filters, pure
 white or pure black fills, and reusing the Matter mark to replace the separate
-`p → q` parent identity.
+`p → q` parent identity. It also forecloses a green release receipt with the
+old favicon, lexical ambiguity from an unapproved numbered icon, and immutable
+caching on a stable metadata filename.
 
 ---
 
