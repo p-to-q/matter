@@ -3,11 +3,14 @@
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet.
 
-Preview.41 source work merged through PR #71 as `6ecbabc`; exact Production
-deployment `6050614354` succeeded and the first public-origin probe matched
-`0.2.0-preview.41`. Its final release-record Production SHA is the target of the
-annotated immutable `v0.2.0-preview.41` tag and GitHub prerelease. npm
-publication remains unauthorized.
+Preview.42 source work merged through PR #73 as `738d077`; the exact public
+cache receipt merged through PR #74 as `776b003`. Exact Production deployment
+`6053793739` succeeded and the first final public-origin probe matched
+`0.2.0-preview.42`, including the approved favicon bytes, discovery links,
+manifest roles, cache policy, health surfaces, and security headers. Its final
+release-record Production SHA is the target of the annotated immutable
+`v0.2.0-preview.42` tag and GitHub prerelease. npm publication remains
+unauthorized.
 
 ## Current deployable slice
 
@@ -51,9 +54,9 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Candidate verification — 0.2.0-preview.42
+## Release verification — 0.2.0-preview.42
 
-Preview.42 is the next source candidate after the immutable Preview.41 release.
+Preview.42 is the current release after the immutable Preview.41 release.
 It changes no model authority, material mutation, or live adapter gate. It
 replaces the provisional tree metadata mark with the approved Slate / Bone
 stone system across the browser favicon, Apple touch icon, installable app
@@ -68,7 +71,7 @@ uses the external GitHub profile—not Matter's own canonical URL—as the
 Organization identity reference. Canonical, Open Graph, robots, and the
 dedicated-root deployment shape remain unchanged.
 
-The candidate also keeps the foreground leaf canvas as one continuous media
+The release also keeps the foreground leaf canvas as one continuous media
 owner while desktop chrome opens. Language, settings, Ask Matter, and modal
 content temporarily raise the existing chrome stacking context above that
 canvas instead of replacing it with a weaker poster below the wash. Light and
@@ -89,20 +92,24 @@ brand proof            one frozen 1024 px master; static 16/32/180/192/512 px
                        discovery links, manifest roles, exact PNG digests, and
                        the bounded four-hour, must-revalidate, non-immutable
                        public icon cache policy
-publication state      candidate only: the exact Preview deployment must expose
-                       the new icon links and bytes before merge; Production,
-                       public-origin, annotated tag, and GitHub prerelease are
-                       deliberately not yet claimed
+publication state      topic `233614e` passed exact Preview `6053631689`; PR #73
+                       merged as `738d077` and Production `6053671842` exposed
+                       the approved bytes; cache-receipt topic `0eeb289` passed
+                       Preview `6053732823`; PR #74 merged as `776b003`, exact
+                       Production `6053793739` and the first final public-origin
+                       probe succeeded; a real browser adopted all five metadata
+                       links and kept one ambient foreground through the tested
+                       light and dark overlay transitions
 ```
 
-Preview.42 is a source-level candidate only. Its protected Vercel Preview must
-be checked at the same commit SHA before merge. The immutable
-`v0.2.0-preview.42` tag and GitHub prerelease may be created only after that
-candidate reaches Production and the public-origin receipt succeeds.
+Preview.42 has crossed the source, Preview, Production, public-origin, and real
+browser boundaries without expanding model authority. The immutable
+`v0.2.0-preview.42` tag and GitHub prerelease must point to the final
+release-record Production SHA.
 
 ## Release verification — 0.2.0-preview.41
 
-Preview.41 is the current release after the immutable Preview.40 release.
+Preview.41 was the preceding release after the immutable Preview.40 release.
 It does not expand model authority or make Elastic or Text Swap available. It
 finishes the five-locale control copy while preserving both equivalent Stop
 recording controls: the fixed rail remains reachable as the primary instrument,

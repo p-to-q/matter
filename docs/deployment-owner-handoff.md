@@ -1,13 +1,15 @@
 # Preview deployment-owner handoff
 
-Status: Preview.41 source work merged through PR #71 as `6ecbabc`; the exact
-Production deployment `6050614354` completed and `matter.ptoq.io` matched
-`0.2.0-preview.41` on the first public-origin probe. Its final release-record
-commit is the target of the annotated immutable `v0.2.0-preview.41` tag. The
-release preserves the four-route process-local admission perimeter, adds the
-reviewed voice, locale, camera-authority, and optical hardening, and keeps
-labels, transcript repair, and Ask Matter live. Elastic and Text Swap remain
-unavailable. This is an operator checklist, not a place to record token values.
+Status: Preview.42 source work merged through PR #73 as `738d077`; its bounded
+public-cache receipt merged through PR #74 as `776b003`. Exact Production
+deployment `6053793739` completed and `matter.ptoq.io` matched
+`0.2.0-preview.42`, including the approved favicon bytes and metadata contract,
+on the first final public-origin probe. Its final release-record commit is the
+target of the annotated immutable `v0.2.0-preview.42` tag. The release preserves
+the four-route process-local admission perimeter, adds the reviewed Slate / Bone
+identity and ambient stacking correction, and keeps labels, transcript repair,
+and Ask Matter live. Elastic and Text Swap remain unavailable. This is an
+operator checklist, not a place to record token values.
 
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
@@ -20,8 +22,8 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The owner has directed one Preview.41 production promotion while the external
-receipts remain outstanding. Treat that direction as a Preview.41-only risk
+The owner has directed one Preview.42 production promotion while the external
+receipts remain outstanding. Treat that direction as a Preview.42-only risk
 acceptance, not a continuing waiver and not evidence that the controls exist.
 Issues #34 and #68 remain open; label, repair, inquiry, and browser/local voice
 stay as configured, while Elastic and Text Swap remain unavailable. The source
@@ -29,21 +31,25 @@ admission ceilings below are per warm instance only. Before any later release,
 obtain a fresh owner decision or the distributed-rate, provider-spend, alert,
 and rollback receipts.
 
-## Preview.41 release and authorization
+## Preview.42 release and authorization
 
-The owner has directed one Preview.41 production promotion after the current
+The owner has directed one Preview.42 production promotion after the current
 review and hardening work. This is a fresh, one-preview exception: it keeps the
 same label, repair, inquiry, and browser/local-voice gates, keeps Elastic and
 Text Swap unavailable, and leaves issues #34 and #68 open. It is not permission
 to treat the process-local source perimeter as distributed abuse control or to
 claim a provider spend cap, alert delivery, or rollback receipt.
 
-The versioned topic head `7fb7774` passed GitHub CI and exact Preview deployment
-`6050555542`. PR #71 merged it as `6ecbabc`; exact Production deployment
-`6050614354` succeeded, and the public origin matched `0.2.0-preview.41` after
-one probe. The annotated immutable `v0.2.0-preview.41` tag must peel to the
-final release-record Production SHA; the remote tag and GitHub prerelease are
-the authority for that last identity check.
+The versioned topic head `233614e` passed GitHub CI and exact Preview deployment
+`6053631689`. PR #73 merged it as `738d077`; exact Production deployment
+`6053671842` exposed the approved icon bytes. The public cache receipt correction
+`0eeb289` passed Preview deployment `6053732823`; PR #74 merged it as `776b003`,
+exact Production deployment `6053793739` succeeded, and the final public origin
+matched `0.2.0-preview.42` after one probe. A real browser also adopted all five
+metadata links and kept one foreground owner through dark language/inquiry and
+light settings transitions. The annotated immutable `v0.2.0-preview.42` tag
+must peel to the final release-record Production SHA; the remote tag and GitHub
+prerelease are the authority for that last identity check.
 
 ## Exact source-preview and production sequence
 
@@ -54,10 +60,11 @@ project binding, so a maintainer must not substitute an ad-hoc `vercel` CLI
 deployment for that auditable path or risk selecting another project or
 environment.
 
-The completed Preview.40 candidate records `0.2.0-preview.40` in `package.json`
+The completed Preview.42 candidate records `0.2.0-preview.42` in `package.json`
 and both root package entries in `package-lock.json`. Its health route, Preview,
-Production, and immutable tag all agree on that identity. Future candidates must
-make the same source-to-receipt comparison before promotion.
+and Production agree on that identity. The immutable tag must agree before this
+release is complete; future candidates must make the same source-to-receipt
+comparison before promotion.
 
 The release sequence is atomic at one candidate commit:
 
