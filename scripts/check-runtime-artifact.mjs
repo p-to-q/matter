@@ -13,6 +13,7 @@ export const RUNTIME_ARTIFACT_BUDGETS = Object.freeze({
   wasmBytes: 24 * 1_024 * 1_024,
   fontBytes: 128 * 1_024,
   visualMediaBytes: 400 * 1_024,
+  metadataImageBytes: 512 * 1_024,
 });
 
 const API_ROUTES = Object.freeze([
@@ -46,6 +47,7 @@ export function inspectRuntimeArtifact(metrics) {
     ["local-transcription WASM", metrics.wasmBytes, RUNTIME_ARTIFACT_BUDGETS.wasmBytes],
     ["hashed fonts", metrics.fontBytes, RUNTIME_ARTIFACT_BUDGETS.fontBytes],
     ["visual media", metrics.visualMediaBytes, RUNTIME_ARTIFACT_BUDGETS.visualMediaBytes],
+    ["metadata images", metrics.metadataImageBytes, RUNTIME_ARTIFACT_BUDGETS.metadataImageBytes],
   ]) {
     if (value > ceiling) failures.push(`${name} uses ${value} bytes; budget is ${ceiling}.`);
   }
@@ -113,6 +115,9 @@ export async function readRuntimeArtifact(root = process.cwd()) {
     .filter((file) => extname(file) === ".woff2")
     .map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
   const prerendered = Object.keys(prerender.routes ?? {});
+  const metadataImageAssets = serverFiles.filter((file) => (
+    /\/app\/(?:icon\d+|apple-icon)\.(?:ico|jpe?g|png|svg)\.body$/u.test(file)
+  )).sort();
 
   return Object.freeze({
     pageHtmlBytes: Buffer.byteLength(html),
@@ -123,9 +128,13 @@ export async function readRuntimeArtifact(root = process.cwd()) {
     wasmBytes: await totalBytes(staticFiles.filter((file) => extname(file) === ".wasm")),
     fontBytes: await totalBytes(staticFiles.filter((file) => extname(file) === ".woff2")),
     visualMediaBytes: await totalBytes(VISUAL_MEDIA.map((file) => join(root, file))),
+    metadataImageBytes: await totalBytes(metadataImageAssets),
     initialAssets,
     wasmAssets: Object.freeze(wasmAssets),
     fontAssets: Object.freeze(fontAssets),
+    metadataImageAssets: Object.freeze(
+      metadataImageAssets.map((file) => relative(nextRoot, file).split(sep).join("/")),
+    ),
     rootStatic: prerender.routes?.["/"]?.compute === "static" &&
       prerender.routes?.["/"]?.initialRevalidateSeconds === false,
     prerenderedApiRoutes: Object.freeze(API_ROUTES.filter((route) => prerendered.includes(route))),
@@ -196,6 +205,7 @@ async function main() {
     `initial ${formatKiB(metrics.initialRawBytes)} raw / ${formatKiB(metrics.initialGzipBytes)} gzip; ` +
     `lazy WASM ${formatKiB(metrics.wasmBytes)}; public ${formatKiB(metrics.publicBytes)}; ` +
     `visual media ${formatKiB(metrics.visualMediaBytes)}; ` +
+    `metadata images ${formatKiB(metrics.metadataImageBytes)}; ` +
     "0 repository-only trace files",
   );
 }

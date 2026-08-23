@@ -29,19 +29,13 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#d9dcde",
     icons: [
       {
-        src: matterUrl("/icon.svg"),
-        sizes: "any",
-        type: "image/svg+xml",
-        purpose: "any",
-      },
-      {
-        src: matterUrl("/icon-192.png"),
+        src: matterUrl("/icon3.png"),
         sizes: "192x192",
         type: "image/png",
         purpose: "any",
       },
       {
-        src: matterUrl("/icon-512.png"),
+        src: matterUrl("/icon4.png"),
         sizes: "512x512",
         type: "image/png",
         purpose: "any",
@@ -49,7 +43,7 @@ export default function manifest(): MetadataRoute.Manifest {
       // The mark sits well inside the central 80% a launcher may crop to, so
       // the same square serves as the maskable icon.
       {
-        src: matterUrl("/icon-512.png"),
+        src: matterUrl("/icon4.png"),
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

@@ -1,15 +1,45 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 
 import {
   checkDeployment,
   inspectDeploymentHeaders,
   inspectDeploymentHealthHeaders,
+  inspectDeploymentIcon,
+  inspectDeploymentManifest,
   inspectDeploymentMediaHeaders,
+  inspectDeploymentMetadataHeaders,
+  inspectDeploymentMetadataHtml,
   inspectDeploymentHealth,
   normalizeDeploymentOrigin,
   waitForDeployment,
 } from "./check-deployment.mjs";
+
+const ICON_PATHS = ["/icon1.png", "/icon2.png", "/icon3.png", "/icon4.png", "/apple-icon.png"];
+const ICON_BYTES = ICON_PATHS.map((path) => Buffer.concat([
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  Buffer.from(`fixture-${path}`.padEnd(24, "x")),
+]));
+const EXPECTED_BRAND_ASSETS = ICON_BYTES.map((bytes, index) => ({
+  file: `fixture-${index}`,
+  sha256: createHash("sha256").update(bytes).digest("hex"),
+}));
+const BRAND_ROOT_HTML = [
+  '<link rel="manifest" href="/manifest.webmanifest"/>',
+  '<link rel="icon" href="/icon1.png?one" type="image/png" sizes="16x16"/>',
+  '<link rel="icon" href="/icon2.png?two" type="image/png" sizes="32x32"/>',
+  '<link rel="icon" href="/icon3.png?three" type="image/png" sizes="192x192"/>',
+  '<link rel="icon" href="/icon4.png?four" type="image/png" sizes="512x512"/>',
+  '<link rel="apple-touch-icon" href="/apple-icon.png?apple" type="image/png" sizes="180x180"/>',
+].join("");
+const BRAND_MANIFEST = {
+  icons: [
+    { src: "https://matter.ptoq.io/icon3.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "https://matter.ptoq.io/icon4.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: "https://matter.ptoq.io/icon4.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ],
+};
 
 const HEALTH = {
   protocolVersion: "0.2",
@@ -139,7 +169,61 @@ test("requires the observed bounded browser cache for stable-name visual media",
   ]);
 });
 
-test("uses header-only probes except for the JSON health receipt", async () => {
+test("requires revalidated PNG metadata assets and the approved bytes", () => {
+  const complete = new Headers({
+    "cache-control": "public, max-age=0, must-revalidate",
+    "content-type": "image/png",
+  });
+  assert.deepEqual(inspectDeploymentMetadataHeaders(complete, "image/png", "/icon1.png"), []);
+  assert.deepEqual(inspectDeploymentIcon(
+    ICON_BYTES[0],
+    EXPECTED_BRAND_ASSETS[0].sha256,
+    "/icon1.png",
+  ), []);
+  complete.set("cache-control", "public, max-age=31536000, immutable");
+  assert.deepEqual(inspectDeploymentMetadataHeaders(complete, "image/png", "/icon1.png"), [
+    "/icon1.png must revalidate immediately.",
+    "/icon1.png is missing must-revalidate.",
+    "/icon1.png must not be immutable.",
+  ]);
+  assert.deepEqual(inspectDeploymentIcon(
+    ICON_BYTES[0],
+    "0".repeat(64),
+    "/icon1.png",
+  ), ["/icon1.png differs from the approved brand asset."]);
+});
+
+test("requires the exact fingerprinted browser links and installable icons", () => {
+  assert.deepEqual(inspectDeploymentMetadataHtml(BRAND_ROOT_HTML), []);
+  assert.deepEqual(inspectDeploymentManifest(BRAND_MANIFEST), []);
+  assert.deepEqual(inspectDeploymentMetadataHtml(
+    BRAND_ROOT_HTML.replace("/icon1.png?one", "/icon.svg?old"),
+  ), [
+    "Root metadata still references a provisional Matter icon.",
+    "Root metadata icon 1 does not match icon /icon1.png 16x16.",
+  ]);
+  assert.deepEqual(inspectDeploymentMetadataHtml(
+    BRAND_ROOT_HTML.replace('<link rel="manifest" href="/manifest.webmanifest"/>', ""),
+  ), ["Root metadata exposes 0 web manifests; expected 1."]);
+  assert.deepEqual(inspectDeploymentMetadataHtml(
+    BRAND_ROOT_HTML.replace("/icon1.png?one", "https://outside.example/icon1.png?one"),
+  ), ["Root metadata icon 1 does not match icon /icon1.png 16x16."]);
+  assert.deepEqual(inspectDeploymentMetadataHtml(
+    BRAND_ROOT_HTML.replace("/manifest.webmanifest", "https://outside.example/manifest.webmanifest"),
+  ), ["Root metadata web manifest leaves the deployed origin."]);
+  const staleManifest = structuredClone(BRAND_MANIFEST);
+  staleManifest.icons[0].src = "/icon-192.png";
+  assert.deepEqual(inspectDeploymentManifest(staleManifest), [
+    "Web manifest icon 1 does not match /icon3.png 192x192 any.",
+  ]);
+  const externalManifest = structuredClone(BRAND_MANIFEST);
+  externalManifest.icons[0].src = "https://outside.example/icon3.png";
+  assert.deepEqual(inspectDeploymentManifest(externalManifest), [
+    "Web manifest icon 1 does not match /icon3.png 192x192 any.",
+  ]);
+});
+
+test("uses bounded discovery bodies and keeps unrelated probes header-only", async () => {
   const calls = [];
   let healthReads = 0;
   const headerOnly = (status, headers) => ({
@@ -161,13 +245,17 @@ test("uses header-only probes except for the JSON health receipt", async () => {
       hasAbortSignal: init.signal instanceof AbortSignal,
     });
     if (path === "/") {
-      return headerOnly(200, {
-        "permissions-policy": "microphone=(self)",
-        "referrer-policy": "no-referrer",
-        "strict-transport-security": "max-age=63072000",
-        "x-content-type-options": "nosniff",
-        "x-frame-options": "DENY",
-      });
+      return {
+        status: 200,
+        headers: new Headers({
+          "permissions-policy": "microphone=(self)",
+          "referrer-policy": "no-referrer",
+          "strict-transport-security": "max-age=63072000",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+        }),
+        async text() { return BRAND_ROOT_HTML; },
+      };
     }
     if (path === "/matter") return headerOnly(404, {});
     if (path === "/matter-ui/shadows-poster.jpg") {
@@ -176,17 +264,38 @@ test("uses header-only probes except for the JSON health receipt", async () => {
         "content-type": "image/jpeg",
       });
     }
-    assert.equal(path, "/api/health");
+    if (path === "/api/health") {
+      return {
+        status: 200,
+        headers: new Headers({
+          "cache-control": "no-store",
+          "content-type": "application/json",
+        }),
+        async json() {
+          healthReads += 1;
+          return HEALTH;
+        },
+      };
+    }
+    if (path === "/manifest.webmanifest") {
+      return {
+        status: 200,
+        headers: new Headers({
+          "cache-control": "public, max-age=0, must-revalidate",
+          "content-type": "application/manifest+json",
+        }),
+        async json() { return BRAND_MANIFEST; },
+      };
+    }
+    const iconIndex = ICON_PATHS.indexOf(path);
+    assert.notEqual(iconIndex, -1);
     return {
       status: 200,
       headers: new Headers({
-        "cache-control": "no-store",
-        "content-type": "application/json",
+        "cache-control": "public, max-age=0, must-revalidate",
+        "content-type": "image/png",
       }),
-      async json() {
-        healthReads += 1;
-        return HEALTH;
-      },
+      async arrayBuffer() { return ICON_BYTES[iconIndex]; },
     };
   };
 
@@ -194,14 +303,23 @@ test("uses header-only probes except for the JSON health receipt", async () => {
     origin: "https://matter.ptoq.io",
     expectedVersion: HEALTH.appVersion,
     fetchImpl,
+    expectedBrandAssets: EXPECTED_BRAND_ASSETS,
   });
 
   assert.deepEqual(result.failures, []);
   assert.deepEqual(calls, [
-    { path: "/", method: "HEAD", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+    { path: "/", method: "GET", cache: "no-store", redirect: "manual", hasAbortSignal: true },
     { path: "/matter", method: "HEAD", cache: "no-store", redirect: "manual", hasAbortSignal: true },
     { path: "/api/health", method: "GET", cache: "no-store", redirect: "manual", hasAbortSignal: true },
     { path: "/matter-ui/shadows-poster.jpg", method: "HEAD", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+    { path: "/manifest.webmanifest", method: "GET", cache: "no-store", redirect: "manual", hasAbortSignal: true },
+    ...ICON_PATHS.map((path) => ({
+      path,
+      method: "GET",
+      cache: "no-store",
+      redirect: "manual",
+      hasAbortSignal: true,
+    })),
   ]);
   assert.equal(healthReads, 1);
 });

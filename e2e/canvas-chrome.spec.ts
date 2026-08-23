@@ -311,12 +311,15 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });
 
-test("one leaf foreground stays inside the paper and yields to open chrome", async ({ page }) => {
+test("one leaf foreground stays stable while open chrome rises above it", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
 
+  const paper = page.getByRole("region", { name: "Thought material" });
   const foreground = page.locator("[data-matter-ambient-foreground-pass]");
   await expect(foreground).toHaveAttribute("data-active", "true", { timeout: 8_000 });
+  await page.locator('[data-chrome-control="appearance"]').click();
+  await expect(paper).toHaveAttribute("data-canvas-theme", "light");
   expect(await foreground.evaluate((canvas) => {
     const paper = canvas.closest<HTMLElement>(".matter-document");
     const top = paper?.querySelector<HTMLElement>('[data-chrome-region="top"]');
@@ -373,10 +376,29 @@ test("one leaf foreground stays inside the paper and yields to open chrome", asy
 
   await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
   await expect(page.getByRole("menu", { name: "Matter 设置" })).toBeVisible();
-  await expect(foreground).toHaveAttribute("data-active", "false");
-  await expect(foreground).toHaveCSS("opacity", "0");
-  expect(await page.locator(".matter-ambient__poster").evaluate((element) => getComputedStyle(element).opacity))
-    .not.toBe("0");
+  await expect(foreground).toHaveAttribute("data-active", "true");
+  await expect(foreground).toHaveCSS("opacity", "0.32");
+  await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "38");
+  await expect(page.locator(".matter-ambient__poster")).toHaveCSS("opacity", "0");
+
+  await page.locator('[data-chrome-control="settings"]').click();
+  await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "36");
+  for (const control of ["language", "inquiry"]) {
+    await page.locator(`[data-chrome-control="${control}"]`).click();
+    await expect(foreground).toHaveAttribute("data-active", "true");
+    await expect(foreground).toHaveCSS("opacity", "0.32");
+    await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "38");
+    await expect(page.locator(".matter-ambient__poster")).toHaveCSS("opacity", "0");
+    await page.locator(`[data-chrome-control="${control}"]`).click();
+  }
+
+  await page.locator('[data-chrome-control="appearance"]').click();
+  await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
+  await expect(foreground).toHaveCSS("opacity", "0.46");
+  await page.locator('[data-chrome-control="language"]').click();
+  await expect(foreground).toHaveCSS("opacity", "0.46");
+  await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "38");
+  await expect(page.locator(".matter-ambient__poster")).toHaveCSS("opacity", "0");
 });
 
 test("reduced motion keeps the single poster foreground without loading leaf video", async ({ page }) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_MATTER_PUBLIC_ORIGIN,
   LOCAL_MATTER_PUBLIC_ORIGIN,
+  MATTER_PRODUCT_KEYWORDS,
   MATTER_SITE_LAST_UPDATED_ISO,
   MATTER_SITE_URL,
   matterUrl,
@@ -11,7 +12,11 @@ import {
 
 describe("Matter public URL configuration", () => {
   it("dates public discovery to the current published preview", () => {
-    expect(MATTER_SITE_LAST_UPDATED_ISO).toBe("2026-08-22");
+    expect(MATTER_SITE_LAST_UPDATED_ISO).toBe("2026-08-23");
+  });
+
+  it("publishes one stable entry per search phrase", () => {
+    expect(new Set(MATTER_PRODUCT_KEYWORDS).size).toBe(MATTER_PRODUCT_KEYWORDS.length);
   });
 
   it("prefers an explicit Matter origin and strips no valid origin data", () => {

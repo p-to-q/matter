@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-24 — open chrome rises without replacing the leaf atmosphere
+
+Changed: the desktop foreground leaf pass remains the paper's one active media
+presentation while a language, settings, inquiry, or modal overlay is open.
+The canvas-chrome stacking context rises from 36 to 38 only for that bounded
+open interval; the foreground stays at 37, while the external tool rail and
+material index retain 40–42. Closing the overlay returns chrome to 36 so the
+same leaf frame again passes over the quiet corner copy.
+
+Why: replacing the foreground canvas (`0.32` light / `0.46` dark) with the
+lower poster (`0.18` / `0.24`) whenever chrome opened changed the whole paper's
+tone. The lower poster also sits beneath the wash, so opacity calibration could
+not make those two rendering paths continuous.
+
+Forecloses: tuning two theme-specific opacity pairs by eye, masking rectangular
+holes around each overlay, letting leaf media enter the external workbench
+chrome, or treating a global paper-color jump as interaction feedback.
+
 ## 2026-08-24 — corner optics stay transparent and keep a stable backdrop owner
 
 Changed: upper-right and lower-left desktop optical guards now fit their smaller
@@ -2627,6 +2645,32 @@ it is not presented as offline recognition.
 
 Forecloses: fixture audio masquerading as live speech, a hidden chat transcript,
 and uploading native-recognition audio when no server adapter was selected.
+
+## 2026-08-24 — Matter's icon is a restrained negative stone
+
+Changed: the provisional tree glyph is replaced across browser, Apple, and
+installed-app icons by one Slate / Bone stone mark. The original stone silhouette
+occupies 68% of the square; its bone aperture keeps only quiet facet relief over
+a cool slate mineral field. Each platform receives a pre-rendered PNG at its
+declared size rather than a runtime-resized or generated mark. Public discovery
+moves to the same release date, removes one duplicate search phrase, and keeps
+the one-URL sitemap to its verifiable last modification rather than ignored
+frequency or priority hints. The deployed-origin gate now reads the root icon
+links, web manifest, and all five metadata PNG bodies; it requires the approved
+asset digests and immediate revalidation for their stable URLs. Repository
+checks reject extra numbered icons and the superseded provisional files.
+
+Why: the material itself now provides the product identity, while the smaller
+mark and target-specific rasterization preserve the deliberate air and clarity
+needed at 16 px without turning the icon into a generic white silhouette. A
+successful build or deployment status alone cannot prove that browser discovery
+and edge routing expose the selected release asset.
+
+Forecloses: independently redrawn platform marks, runtime image filters, pure
+white or pure black fills, and reusing the Matter mark to replace the separate
+`p → q` parent identity. It also forecloses a green release receipt with the
+old favicon, lexical ambiguity from an unapproved numbered icon, and immutable
+caching on a stable metadata filename.
 
 ---
 

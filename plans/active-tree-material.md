@@ -31,6 +31,27 @@ multi-touch gestures, streaming, split/merge, cross-links, tool prediction,
 retrieval, and a public SDK are not later phases of this plan. They remain
 outside the first release.
 
+## Active correction — one material icon across platform surfaces
+
+State: implemented and proven locally; not released.
+
+```text
+Outcome:    browser tabs, Apple touch surfaces, and installed Matter windows
+            use one recognisable Slate / Bone stone identity
+Boundary:   one frozen 1024 px raster master, exact platform PNG outputs,
+            Next metadata conventions, manifest references, and asset checks
+Invariants: the stone remains 68% of the square; master background and stone
+            interior are not sharpened; small-size raster treatment cannot
+            redraw the mark or change its palette; p → q remains the separate
+            parent identity; no runtime component, document, or interaction moves
+Proof:      exact PNG type/dimension/digest checks; production metadata and
+            artifact budgets; browser head, tab, touch, manifest, canonical,
+            robots, sitemap, and structured-data inspection at /matter and the
+            dedicated-domain root shape
+Non-goals:  page chrome, the p → q footer lockup, social cards, a dependency,
+            runtime image filtering, or a new responsive or product surface
+```
+
 ## Current delivery lens
 
 The product is one interface for unfinished thought, not a bundle of AI
@@ -85,13 +106,17 @@ Boundary:   one paper-sized render-edge canvas receives the already-decoded leaf
             frame and temporarily replaces the lower media presentation; it
             owns no document, preference, pointer, camera, or Chrome state
 Invariants: the paper remains the clipping and stacking boundary; the material
-            index, header, tool rail, lasso, mobile sheet, and every open menu
-            or dialog remain outside the foreground pass; the two existing
-            backdrop-blur planes remain unchanged and are not sampled through
+            index, header, tool rail, lasso, and mobile sheet remain outside the
+            foreground pass; an open menu or dialog raises the one canvas-chrome
+            context above the pass without replacing the media presentation;
+            the two existing backdrop-blur planes remain unchanged and are not
+            sampled through
 Proof:      pure cover-crop matrix; browser proof that one full-paper frame
             replaces rather than duplicates base media, remains paper-contained
-            and pointer-transparent, yields to overlays, falls back to the
-            poster under reduced motion, and disappears at the mobile handoff
+            and pointer-transparent, stays stable across settings, language,
+            inquiry, and light/dark changes while open chrome rises above it,
+            falls back to the poster under reduced motion, and disappears at
+            the mobile handoff
 Non-goals:  a second video decoder, a global shadow layer, blur or filter over
             external workbench chrome, new persisted state, a new preference,
             or changed corner control geometry
