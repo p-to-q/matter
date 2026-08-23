@@ -283,6 +283,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(paper).toHaveAttribute("data-leaf-fx", "off");
   await expect(page.locator("[data-matter-ambient='leaf-shadows']")).toHaveAttribute("data-fx", "off");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Appearance: Auto" }).click();
   await expect(paper).toHaveAttribute("data-canvas-theme-preference", "light");
@@ -310,6 +311,83 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });
 
+test("one leaf foreground stays inside the paper and yields to open chrome", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+
+  const foreground = page.locator("[data-matter-ambient-foreground-pass]");
+  await expect(foreground).toHaveAttribute("data-active", "true", { timeout: 8_000 });
+  expect(await foreground.evaluate((canvas) => {
+    const paper = canvas.closest<HTMLElement>(".matter-document");
+    const top = paper?.querySelector<HTMLElement>('[data-chrome-region="top"]');
+    const settings = paper?.querySelector<HTMLElement>('[data-chrome-control="settings"]');
+    if (!(canvas instanceof HTMLCanvasElement) || paper === null || top == null || settings == null) {
+      throw new Error("foreground projection anchors are missing");
+    }
+    const surface = canvas.getBoundingClientRect();
+    const paperBounds = paper.getBoundingClientRect();
+    const topBounds = top.getBoundingClientRect();
+    const settingsBounds = settings.getBoundingClientRect();
+    const baseMedia = paper.querySelector<HTMLElement>(".matter-ambient__poster");
+    const toolRail = document.querySelector<HTMLElement>(".tool-rail");
+    const context = canvas.getContext("2d");
+    if (baseMedia === null || toolRail === null || context === null || canvas.width === 0 || canvas.height === 0) {
+      throw new Error("foreground projection has no paint surface");
+    }
+    const alphaAt = (x: number, y: number) => {
+      const pixelX = Math.min(canvas.width - 1, Math.max(0, Math.floor((x - surface.left) / surface.width * canvas.width)));
+      const pixelY = Math.min(canvas.height - 1, Math.max(0, Math.floor((y - surface.top) / surface.height * canvas.height)));
+      return context.getImageData(pixelX, pixelY, 1, 1).data[3];
+    };
+    const hit = document.elementFromPoint(
+      settingsBounds.left + settingsBounds.width / 2,
+      settingsBounds.top + settingsBounds.height / 2,
+    );
+    return {
+      baseMediaMask: getComputedStyle(baseMedia).maskImage,
+      baseMediaOpacity: getComputedStyle(baseMedia).opacity,
+      topChromeAlpha: alphaAt(topBounds.left + topBounds.width / 2, topBounds.top + topBounds.height / 2),
+      elementAtSettings: hit?.closest("[data-chrome-control]")?.getAttribute("data-chrome-control"),
+      paperCenterAlpha: alphaAt(surface.left + surface.width / 2, surface.top + surface.height / 2),
+      paperZIndex: getComputedStyle(paper).zIndex,
+      passInsidePaper: surface.left >= paperBounds.left
+        && surface.top >= paperBounds.top
+        && surface.right <= paperBounds.right
+        && surface.bottom <= paperBounds.bottom,
+      pointerEvents: getComputedStyle(canvas).pointerEvents,
+      toolRailZIndex: getComputedStyle(toolRail).zIndex,
+      zIndex: getComputedStyle(canvas).zIndex,
+    };
+  })).toEqual({
+    baseMediaMask: "none",
+    baseMediaOpacity: "0",
+    topChromeAlpha: 255,
+    elementAtSettings: "settings",
+    paperCenterAlpha: 255,
+    paperZIndex: "2",
+    passInsidePaper: true,
+    pointerEvents: "none",
+    toolRailZIndex: "40",
+    zIndex: "37",
+  });
+
+  await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Matter 设置" })).toBeVisible();
+  await expect(foreground).toHaveAttribute("data-active", "false");
+  await expect(foreground).toHaveCSS("opacity", "0");
+  expect(await page.locator(".matter-ambient__poster").evaluate((element) => getComputedStyle(element).opacity))
+    .not.toBe("0");
+});
+
+test("reduced motion keeps the single poster foreground without loading leaf video", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/matter");
+
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveAttribute("data-active", "true");
+});
+
 test("mobile canvas menu stays inside the paper and restores focus", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/matter");
@@ -317,6 +395,8 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   const paper = page.getByRole("region", { name: "Thought material" });
   const trigger = page.getByRole("button", { name: "打开 Matter 菜单" });
   const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
+  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveCount(1);
+  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toBeHidden();
   await expect(page.getByRole("button", { name: "关于", exact: true })).toBeHidden();
   await expect(trigger).toBeVisible();
   await expect(indexTrigger).toBeVisible();

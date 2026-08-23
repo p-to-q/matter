@@ -31,9 +31,10 @@ describe("ambient motion policy", () => {
     })).toBe(false);
   });
 
-  it("keeps poster and video color treatment aligned when motion is present", () => {
+  it("keeps base media and the bounded foreground pass color treatment aligned", () => {
     const css = readFileSync(new URL("./AmbientWorkbench.module.css", import.meta.url), "utf8");
-    expect(css.match(/filter:\s*grayscale\(1\) contrast\(0\.84\) brightness\(1\.08\);/g)).toHaveLength(2);
+    expect(css.match(/filter:\s*grayscale\(1\) contrast\(0\.84\) brightness\(1\.08\);/g)).toHaveLength(3);
     expect(css).toMatch(/:global\([^)]*dark[^)]*\) \.poster,\s*:global\([^)]*dark[^)]*\) \.video\s*\{[^}]*filter:\s*grayscale\(1\) contrast\(0\.9\) brightness\(0\.9\)/s);
+    expect(css).toMatch(/:global\([^)]*dark[^)]*\) \.foregroundPass\s*\{[^}]*filter:\s*grayscale\(1\) contrast\(0\.9\) brightness\(0\.9\)/s);
   });
 });

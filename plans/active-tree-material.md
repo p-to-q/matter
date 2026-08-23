@@ -73,6 +73,30 @@ Non-goals:  a card or gradient, material filtering, per-glyph fading, a new
             responsive breakpoint, or any Ask Matter protocol/state change
 ```
 
+## Active correction — paper-bounded foreground leaf pass
+
+State: implemented locally; focused source and browser proof complete; not released.
+
+```text
+Outcome:    one continuous leaf atmosphere passes over the paper's upper-right,
+            bottom-right, and lower-left copy without rectangular seams or a
+            second shadow exposure
+Boundary:   one paper-sized render-edge canvas receives the already-decoded leaf
+            frame and temporarily replaces the lower media presentation; it
+            owns no document, preference, pointer, camera, or Chrome state
+Invariants: the paper remains the clipping and stacking boundary; the material
+            index, header, tool rail, lasso, mobile sheet, and every open menu
+            or dialog remain outside the foreground pass; the two existing
+            backdrop-blur planes remain unchanged and are not sampled through
+Proof:      pure cover-crop matrix; browser proof that one full-paper frame
+            replaces rather than duplicates base media, remains paper-contained
+            and pointer-transparent, yields to overlays, falls back to the
+            poster under reduced motion, and disappears at the mobile handoff
+Non-goals:  a second video decoder, a global shadow layer, blur or filter over
+            external workbench chrome, new persisted state, a new preference,
+            or changed corner control geometry
+```
+
 ## Active correction — one local language interaction
 
 State: implemented locally; source and browser proof in progress; not released.

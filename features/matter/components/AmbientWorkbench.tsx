@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./AmbientWorkbench.module.css";
 import { clientMatterBasePath } from "../config/base-path";
+import { AmbientForegroundPass } from "./AmbientForegroundPass";
 import {
   shouldPresentAmbientMotion,
   type AmbientConnectionHint,
@@ -25,9 +26,11 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
   const [motionAllowed, setMotionAllowed] = useState(false);
   const [motionFailed, setMotionFailed] = useState(false);
   const [motionReady, setMotionReady] = useState(false);
+  const [poster, setPoster] = useState<HTMLImageElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const basePath = clientMatterBasePath();
   const assetPath = (name: string) => `${basePath}/matter-ui/${name}`;
+  const posterSource = assetPath("shadows-poster.jpg");
   const rootClassName = ["matter-ambient", styles.root, className]
     .filter(Boolean)
     .join(" ");
@@ -93,44 +96,66 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
   }, [enabled, motionAllowed, motionReady]);
 
   useEffect(() => {
+    if (!enabled) return;
+    const posterImage = new Image();
+    posterImage.decoding = "async";
+    posterImage.onload = () => {
+      setPoster(posterImage);
+    };
+    posterImage.src = posterSource;
+    return () => {
+      posterImage.onload = null;
+    };
+  }, [enabled, posterSource]);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (video === null) return;
     video.playbackRate = navigationActive ? NAVIGATION_PLAYBACK_RATE : BASE_PLAYBACK_RATE;
   }, [motionReady, navigationActive]);
 
   return (
-    <div
-      aria-hidden="true"
-      className={rootClassName}
-      data-fx={enabled ? "on" : "off"}
-      data-matter-ambient="leaf-shadows"
-    >
+    <>
       <div
-        className={`matter-ambient__poster ${styles.poster}`}
-        style={{ backgroundImage: `url("${assetPath("shadows-poster.jpg")}")` }}
-      />
-      {enabled && motionAllowed && motionReady ? (
-        <video
-          aria-hidden="true"
-          autoPlay
-          className={`matter-ambient__video ${styles.video}`}
-          loop
-          muted
-          playsInline
-          poster={assetPath("shadows-poster.jpg")}
-          preload="none"
-          ref={videoRef}
-          tabIndex={-1}
-          onError={() => {
-            setMotionFailed(true);
-            setMotionReady(false);
-          }}
-        >
-          <source src={assetPath("shadows-loop.webm")} type="video/webm" />
-          <source src={assetPath("shadows-loop.mp4")} type="video/mp4" />
-        </video>
+        aria-hidden="true"
+        className={rootClassName}
+        data-fx={enabled ? "on" : "off"}
+        data-matter-ambient="leaf-shadows"
+      >
+        <div
+          className={`matter-ambient__poster ${styles.poster}`}
+          style={{ backgroundImage: `url("${posterSource}")` }}
+        />
+        {enabled && motionAllowed && motionReady ? (
+          <video
+            aria-hidden="true"
+            autoPlay
+            className={`matter-ambient__video ${styles.video}`}
+            loop
+            muted
+            playsInline
+            poster={posterSource}
+            preload="none"
+            ref={videoRef}
+            tabIndex={-1}
+            onError={() => {
+              setMotionFailed(true);
+              setMotionReady(false);
+            }}
+          >
+            <source src={assetPath("shadows-loop.webm")} type="video/webm" />
+            <source src={assetPath("shadows-loop.mp4")} type="video/mp4" />
+          </video>
+        ) : null}
+        <div className={`matter-ambient__wash ${styles.wash}`} />
+      </div>
+      {enabled ? (
+        <AmbientForegroundPass
+          motionReady={motionReady}
+          poster={poster}
+          videoRef={videoRef}
+        />
       ) : null}
-      <div className={`matter-ambient__wash ${styles.wash}`} />
-    </div>
+    </>
   );
 }
