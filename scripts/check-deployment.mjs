@@ -146,9 +146,10 @@ export function inspectDeploymentMetadataHeaders(headers, expectedContentType, l
   return failures;
 }
 
-export function inspectDeploymentMetadataHtml(html) {
+export function inspectDeploymentMetadataHtml(html, origin = "https://matter.ptoq.io") {
   if (typeof html !== "string") return ["Root metadata response is not text."];
   const failures = [];
+  const deployedOrigin = new URL(origin).origin;
   if (/\/(?:icon\.svg|icon-192\.png|icon-512\.png)(?:[?"#]|$)/u.test(html)) {
     failures.push("Root metadata still references a provisional Matter icon.");
   }
@@ -159,7 +160,11 @@ export function inspectDeploymentMetadataHtml(html) {
   } else {
     let manifestPath = "";
     try {
-      manifestPath = new URL(manifests[0]?.href ?? "", "https://matter.ptoq.io").pathname;
+      const manifestUrl = new URL(manifests[0]?.href ?? "", deployedOrigin);
+      if (manifestUrl.origin !== deployedOrigin) {
+        failures.push("Root metadata web manifest leaves the deployed origin.");
+      }
+      manifestPath = manifestUrl.pathname;
     } catch {
       // The comparison below reports the malformed href once.
     }
@@ -177,13 +182,14 @@ export function inspectDeploymentMetadataHtml(html) {
     const actual = links[index];
     let href;
     try {
-      href = new URL(actual?.href ?? "", "https://matter.ptoq.io");
+      href = new URL(actual?.href ?? "", deployedOrigin);
     } catch {
       failures.push(`Root metadata icon ${index + 1} has an invalid href.`);
       return;
     }
     if (
-      actual?.rel !== expected.rel
+      href.origin !== deployedOrigin
+      || actual?.rel !== expected.rel
       || href.pathname !== expected.path
       || href.search.length <= 1
       || actual?.sizes !== expected.sizes
@@ -195,7 +201,7 @@ export function inspectDeploymentMetadataHtml(html) {
   return failures;
 }
 
-export function inspectDeploymentManifest(value) {
+export function inspectDeploymentManifest(value, origin = "https://matter.ptoq.io") {
   if (!isRecord(value) || !Array.isArray(value.icons)) {
     return ["Web manifest icons are missing."];
   }
@@ -208,16 +214,21 @@ export function inspectDeploymentManifest(value) {
     return [`Web manifest exposes ${value.icons.length} icons; expected ${expected.length}.`];
   }
   const failures = [];
+  const deployedOrigin = new URL(origin).origin;
   expected.forEach(([path, sizes, purpose], index) => {
     const icon = value.icons[index];
     let pathname = "";
+    let iconOrigin = "";
     try {
-      pathname = new URL(icon?.src ?? "", "https://matter.ptoq.io").pathname;
+      const iconUrl = new URL(icon?.src ?? "", deployedOrigin);
+      pathname = iconUrl.pathname;
+      iconOrigin = iconUrl.origin;
     } catch {
       // The comparison below reports the malformed source once.
     }
     if (
-      pathname !== path
+      iconOrigin !== deployedOrigin
+      || pathname !== path
       || icon?.sizes !== sizes
       || icon?.purpose !== purpose
       || icon?.type !== "image/png"
@@ -270,7 +281,7 @@ export async function checkDeployment({
   if (root.status !== 200) {
     failures.push(`Root returned HTTP ${root.status}.`);
   } else {
-    failures.push(...inspectDeploymentMetadataHtml(await root.text()));
+    failures.push(...inspectDeploymentMetadataHtml(await root.text(), normalized));
   }
   if (legacy.status !== 404) failures.push(`Legacy /matter returned HTTP ${legacy.status}, expected 404.`);
   if (health.status !== 200) {
@@ -301,7 +312,7 @@ export async function checkDeployment({
       "Web manifest",
     ));
     try {
-      failures.push(...inspectDeploymentManifest(await manifest.json()));
+      failures.push(...inspectDeploymentManifest(await manifest.json(), normalized));
     } catch {
       failures.push("Web manifest did not return JSON.");
     }

@@ -205,9 +205,20 @@ test("requires the exact fingerprinted browser links and installable icons", () 
   assert.deepEqual(inspectDeploymentMetadataHtml(
     BRAND_ROOT_HTML.replace('<link rel="manifest" href="/manifest.webmanifest"/>', ""),
   ), ["Root metadata exposes 0 web manifests; expected 1."]);
+  assert.deepEqual(inspectDeploymentMetadataHtml(
+    BRAND_ROOT_HTML.replace("/icon1.png?one", "https://outside.example/icon1.png?one"),
+  ), ["Root metadata icon 1 does not match icon /icon1.png 16x16."]);
+  assert.deepEqual(inspectDeploymentMetadataHtml(
+    BRAND_ROOT_HTML.replace("/manifest.webmanifest", "https://outside.example/manifest.webmanifest"),
+  ), ["Root metadata web manifest leaves the deployed origin."]);
   const staleManifest = structuredClone(BRAND_MANIFEST);
   staleManifest.icons[0].src = "/icon-192.png";
   assert.deepEqual(inspectDeploymentManifest(staleManifest), [
+    "Web manifest icon 1 does not match /icon3.png 192x192 any.",
+  ]);
+  const externalManifest = structuredClone(BRAND_MANIFEST);
+  externalManifest.icons[0].src = "https://outside.example/icon3.png";
+  assert.deepEqual(inspectDeploymentManifest(externalManifest), [
     "Web manifest icon 1 does not match /icon3.png 192x192 any.",
   ]);
 });

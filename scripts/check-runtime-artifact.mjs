@@ -117,7 +117,7 @@ export async function readRuntimeArtifact(root = process.cwd()) {
   const prerendered = Object.keys(prerender.routes ?? {});
   const metadataImageAssets = serverFiles.filter((file) => (
     /\/app\/(?:icon\d+|apple-icon)\.(?:ico|jpe?g|png|svg)\.body$/u.test(file)
-  ));
+  )).sort();
 
   return Object.freeze({
     pageHtmlBytes: Buffer.byteLength(html),

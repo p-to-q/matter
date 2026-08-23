@@ -12,7 +12,7 @@ import {
 
 describe("Matter public URL configuration", () => {
   it("dates public discovery to the current published preview", () => {
-    expect(MATTER_SITE_LAST_UPDATED_ISO).toBe("2026-08-24");
+    expect(MATTER_SITE_LAST_UPDATED_ISO).toBe("2026-08-23");
   });
 
   it("publishes one stable entry per search phrase", () => {

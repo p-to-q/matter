@@ -89,14 +89,16 @@ if (brandPlatformIconBytes > 512 * 1_024) {
   );
 }
 const unexpectedBrandIcons = [];
-for await (const file of glob("app/icon*.png")) {
-  if (!brandIconSizes.has(file) && await hasMaterialContent(file)) {
-    unexpectedBrandIcons.push(file);
+for (const pattern of ["app/icon*", "app/apple-icon*", "app/favicon.ico"]) {
+  for await (const file of glob(pattern)) {
+    if (!brandIconSizes.has(file) && await hasMaterialContent(file)) {
+      unexpectedBrandIcons.push(file);
+    }
   }
 }
 if (unexpectedBrandIcons.length > 0) {
   problems.push(
-    `Unexpected Matter metadata icons found: ${unexpectedBrandIcons.join(", ")}.`,
+    `Unexpected Matter metadata icons found: ${[...new Set(unexpectedBrandIcons)].sort().join(", ")}.`,
   );
 }
 for (const file of [
