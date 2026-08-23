@@ -7,6 +7,25 @@ describe("material files copy", () => {
     const copy = materialFilesCopy(locale);
     const labels = [
       copy.archive,
+      copy.archivePanel,
+      copy.archiveExportCopy,
+      copy.archiveImportCopy,
+      copy.archiveRepairLocalStorage,
+      copy.archiveReloadStoredMaterial,
+      copy.archiveRetrySaving,
+      copy.archiveChooseMaterialArchive,
+      copy.archiveExporting,
+      copy.archiveChecking,
+      copy.archiveReplacing,
+      copy.archiveRepairing,
+      copy.archiveNoteDefault,
+      copy.archiveNoteCorrupt,
+      copy.archiveNoteConflict,
+      copy.archiveNoteStorageFull,
+      copy.archiveNoteSaveFailed,
+      copy.archiveConfirmReplace,
+      copy.archiveKeepCurrent,
+      copy.archiveReplace,
       copy.canvasTitle,
       copy.close,
       copy.closeSearch,
@@ -43,6 +62,11 @@ describe("material files copy", () => {
       copy.revisionCount(2),
       copy.selectedCount(2),
       copy.selectForCopying("A"),
+      copy.collapseBranch("A"),
+      copy.expandBranch("A"),
+      copy.includeInWorkingContext("A"),
+      copy.restoreAndView("A"),
+      copy.setAsideFromWorkingContext("A"),
     ];
 
     expect(labels.every((label) => label.trim().length > 0)).toBe(true);

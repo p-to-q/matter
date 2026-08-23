@@ -61,7 +61,7 @@ for (const viewport of [
     expect(await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator("[data-tool-id]").evaluateAll(
       (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
     )).toEqual(["voice", "lasso", "branch", "move", "undo"]);
-    await expect(page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).getByRole("button", { name: "Focus" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator('[data-tool-id="focus"]')).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
     const ambientVideo = page.locator("video.matter-ambient__video");
     await expect(ambientVideo).toHaveCount(1);

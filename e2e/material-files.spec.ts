@@ -475,7 +475,11 @@ for (const viewport of [
     await expect(branch.locator(".material-file__restore-plus")).toHaveCSS("opacity", "1");
     await expect(branch.locator(".material-file__disclosure-chevron")).toHaveCSS("opacity", "0");
     await expect(branch.locator(".material-file__restore-plus path")).toHaveCSS("stroke-width", "1px");
-    await expect(branch.locator(".material-file__context-control")).toHaveAttribute("aria-label", /^重新纳入画面里的材料/u);
+    const branchTitle = await branch.locator(".material-file__title").innerText();
+    await expect(branch.locator(".material-file__context-control")).toHaveAttribute(
+      "aria-label",
+      fixtureUiCopy.materialFiles.includeInWorkingContext(branchTitle),
+    );
     await expect(rows).toHaveCount(8);
     await expect(contextTitle).toHaveText(rootTitle);
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
@@ -501,7 +505,11 @@ for (const viewport of [
     await heldSearch.fill(searchText.slice(0, 5));
     const heldResult = rows.first();
     await expect(heldResult).toHaveAttribute("data-context-excluded", "true");
-    await expect(heldResult.locator(".material-file__open")).toHaveAttribute("aria-label", /^重新纳入画面里的材料并查看/u);
+    const heldTitle = await heldResult.locator(".material-file__title").innerText();
+    await expect(heldResult.locator(".material-file__open")).toHaveAttribute(
+      "aria-label",
+      fixtureUiCopy.materialFiles.restoreAndView(heldTitle),
+    );
     await heldResult.locator(".material-file__open").click();
     await expect(heldResult).not.toHaveAttribute("data-context-excluded", "true");
     await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.closeSearch }).click();
@@ -828,10 +836,10 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
   await expect(identity.getByRole("button")).toHaveCount(0);
   await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive }).click();
 
-  const archive = sidebar.getByRole("region", { name: "Material archive" });
-  await expect(archive).toContainText("Local storage is full");
-  await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
-  await expect(archive.getByRole("button", { name: "Retry saving" })).toBeEnabled();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteStorageFull);
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRetrySaving })).toBeEnabled();
 });
 
 test("corrupt local material is exported before an explicit atomic repair", async ({ page }) => {
@@ -871,18 +879,18 @@ test("corrupt local material is exported before an explicit atomic repair", asyn
   await page.reload();
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
   await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
-  const archive = sidebar.getByRole("region", { name: "Material archive" });
-  await expect(archive).toContainText("Export a recovery copy before Matter atomically replaces");
-  await expect(archive.getByRole("button", { name: "Repair local storage" })).toHaveCount(0);
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteCorrupt);
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRepairLocalStorage })).toHaveCount(0);
 
   const downloadReceipt = page.waitForEvent("download");
-  await archive.getByRole("button", { name: "Export a copy" }).click();
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy }).click();
   const download = await downloadReceipt;
   expect(download.suggestedFilename()).toMatch(/\.matter-recovery\.json$/u);
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  await expect(archive.getByRole("button", { name: "Repair local storage" })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRepairLocalStorage })).toBeEnabled();
 
-  await archive.getByRole("button", { name: "Repair local storage" }).click();
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRepairLocalStorage }).click();
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");

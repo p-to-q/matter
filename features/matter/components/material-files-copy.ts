@@ -7,6 +7,25 @@ import { MATTER_LOCALE, type MatterLocale } from "../config/locales";
  */
 export type MaterialFilesCopy = Readonly<{
   archive: string;
+  archivePanel: string;
+  archiveExportCopy: string;
+  archiveImportCopy: string;
+  archiveRepairLocalStorage: string;
+  archiveReloadStoredMaterial: string;
+  archiveRetrySaving: string;
+  archiveChooseMaterialArchive: string;
+  archiveExporting: string;
+  archiveChecking: string;
+  archiveReplacing: string;
+  archiveRepairing: string;
+  archiveNoteDefault: string;
+  archiveNoteCorrupt: string;
+  archiveNoteConflict: string;
+  archiveNoteStorageFull: string;
+  archiveNoteSaveFailed: string;
+  archiveConfirmReplace: string;
+  archiveKeepCurrent: string;
+  archiveReplace: string;
   canvasTitle: string;
   close: string;
   closeSearch: string;
@@ -52,6 +71,25 @@ export type MaterialFilesCopy = Readonly<{
 
 const ENGLISH: MaterialFilesCopy = Object.freeze({
   archive: "Archive",
+  archivePanel: "Material archive",
+  archiveExportCopy: "Export a copy",
+  archiveImportCopy: "Import a copy",
+  archiveRepairLocalStorage: "Repair local storage",
+  archiveReloadStoredMaterial: "Reload stored material",
+  archiveRetrySaving: "Retry saving",
+  archiveChooseMaterialArchive: "Choose a material archive",
+  archiveExporting: "Exporting a copy…",
+  archiveChecking: "Checking archive…",
+  archiveReplacing: "Replacing material…",
+  archiveRepairing: "Repairing local storage…",
+  archiveNoteDefault: "Keep a portable copy, or bring one back into this material.",
+  archiveNoteCorrupt: "Stored material is damaged. Export a recovery copy before Matter atomically replaces the local row.",
+  archiveNoteConflict: "Another tab saved a newer copy. Reload the stored material here, or export the current copy first.",
+  archiveNoteStorageFull: "Local storage is full. Export a copy before freeing browser storage, then retry saving.",
+  archiveNoteSaveFailed: "Local saving did not finish. Export a copy before retrying if this material matters.",
+  archiveConfirmReplace: "Replace current material? This clears undo, focus and selection.",
+  archiveKeepCurrent: "Keep current",
+  archiveReplace: "Replace",
   canvasTitle: "Canvas title",
   close: "Close",
   closeSearch: "Close search",
@@ -97,6 +135,25 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
 
 const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archive: "归档",
+  archivePanel: "材料归档",
+  archiveExportCopy: "导出副本",
+  archiveImportCopy: "导入副本",
+  archiveRepairLocalStorage: "修复本地存储",
+  archiveReloadStoredMaterial: "重新载入已存材料",
+  archiveRetrySaving: "重新保存",
+  archiveChooseMaterialArchive: "选择材料归档文件",
+  archiveExporting: "正在导出副本…",
+  archiveChecking: "正在检查归档…",
+  archiveReplacing: "正在替换材料…",
+  archiveRepairing: "正在修复本地存储…",
+  archiveNoteDefault: "保留一份可携带的副本，或把一份副本带回这份材料。",
+  archiveNoteCorrupt: "已存材料已损坏。请先导出恢复副本，再让 Matter 原子替换本地记录。",
+  archiveNoteConflict: "另一个标签页保存了更新的副本。可在这里重新载入已存材料，或先导出当前副本。",
+  archiveNoteStorageFull: "本地存储已满。请先导出副本、释放浏览器存储后，再重试保存。",
+  archiveNoteSaveFailed: "本地保存未完成。若这份材料很重要，请先导出副本再重试。",
+  archiveConfirmReplace: "替换当前材料吗？这会清除撤销、聚焦和选择状态。",
+  archiveKeepCurrent: "保留当前材料",
+  archiveReplace: "替换",
   canvasTitle: "画布标题",
   close: "关闭",
   closeSearch: "关闭搜索",
@@ -142,6 +199,25 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
 
 const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archive: "封存",
+  archivePanel: "材料封存",
+  archiveExportCopy: "匯出副本",
+  archiveImportCopy: "匯入副本",
+  archiveRepairLocalStorage: "修復本機儲存",
+  archiveReloadStoredMaterial: "重新載入已存材料",
+  archiveRetrySaving: "重新儲存",
+  archiveChooseMaterialArchive: "選擇材料封存檔案",
+  archiveExporting: "正在匯出副本…",
+  archiveChecking: "正在檢查封存…",
+  archiveReplacing: "正在替換材料…",
+  archiveRepairing: "正在修復本機儲存…",
+  archiveNoteDefault: "保留一份可攜副本，或把一份副本帶回這份材料。",
+  archiveNoteCorrupt: "已存材料已損壞。請先匯出復原副本，再讓 Matter 原子替換本機記錄。",
+  archiveNoteConflict: "另一個分頁儲存了較新的副本。可在這裡重新載入已存材料，或先匯出目前副本。",
+  archiveNoteStorageFull: "本機儲存已滿。請先匯出副本、釋放瀏覽器儲存後，再重試儲存。",
+  archiveNoteSaveFailed: "本機儲存未完成。若這份材料很重要，請先匯出副本再重試。",
+  archiveConfirmReplace: "要替換目前材料嗎？這會清除復原、聚焦和選取狀態。",
+  archiveKeepCurrent: "保留目前材料",
+  archiveReplace: "替換",
   canvasTitle: "畫布標題",
   close: "關閉",
   closeSearch: "關閉搜尋",
@@ -187,6 +263,25 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
 
 const JAPANESE: MaterialFilesCopy = Object.freeze({
   archive: "アーカイブ",
+  archivePanel: "素材のアーカイブ",
+  archiveExportCopy: "コピーを書き出す",
+  archiveImportCopy: "コピーを読み込む",
+  archiveRepairLocalStorage: "端末内ストレージを修復",
+  archiveReloadStoredMaterial: "保存済みの素材を再読み込み",
+  archiveRetrySaving: "保存を再試行",
+  archiveChooseMaterialArchive: "素材アーカイブを選択",
+  archiveExporting: "コピーを書き出しています…",
+  archiveChecking: "アーカイブを確認しています…",
+  archiveReplacing: "素材を置き換えています…",
+  archiveRepairing: "端末内ストレージを修復しています…",
+  archiveNoteDefault: "持ち運べるコピーを保管するか、この素材にコピーを戻せます。",
+  archiveNoteCorrupt: "保存済みの素材が壊れています。Matter が端末の記録を原子的に置き換える前に、復旧用コピーを書き出してください。",
+  archiveNoteConflict: "別のタブがより新しいコピーを保存しました。ここで保存済みの素材を再読み込みするか、先に現在のコピーを書き出してください。",
+  archiveNoteStorageFull: "端末内ストレージがいっぱいです。ブラウザの空き容量を作る前にコピーを書き出し、その後保存を再試行してください。",
+  archiveNoteSaveFailed: "端末への保存が完了しませんでした。この素材が大切なら、再試行前にコピーを書き出してください。",
+  archiveConfirmReplace: "現在の素材を置き換えますか？取り消し、フォーカス、選択が消去されます。",
+  archiveKeepCurrent: "現在の素材を保持",
+  archiveReplace: "置き換える",
   canvasTitle: "キャンバスのタイトル",
   close: "閉じる",
   closeSearch: "検索を閉じる",
@@ -232,6 +327,25 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
 
 const GERMAN: MaterialFilesCopy = Object.freeze({
   archive: "Archiv",
+  archivePanel: "Materialarchiv",
+  archiveExportCopy: "Kopie exportieren",
+  archiveImportCopy: "Kopie importieren",
+  archiveRepairLocalStorage: "Lokalen Speicher reparieren",
+  archiveReloadStoredMaterial: "Gespeichertes Material neu laden",
+  archiveRetrySaving: "Speichern erneut versuchen",
+  archiveChooseMaterialArchive: "Materialarchiv auswählen",
+  archiveExporting: "Kopie wird exportiert…",
+  archiveChecking: "Archiv wird geprüft…",
+  archiveReplacing: "Material wird ersetzt…",
+  archiveRepairing: "Lokaler Speicher wird repariert…",
+  archiveNoteDefault: "Bewahren Sie eine portable Kopie auf oder holen Sie eine Kopie in dieses Material zurück.",
+  archiveNoteCorrupt: "Gespeichertes Material ist beschädigt. Exportieren Sie eine Wiederherstellungskopie, bevor Matter den lokalen Eintrag atomar ersetzt.",
+  archiveNoteConflict: "Ein anderer Tab hat eine neuere Kopie gespeichert. Laden Sie hier das gespeicherte Material neu oder exportieren Sie zuerst die aktuelle Kopie.",
+  archiveNoteStorageFull: "Der lokale Speicher ist voll. Exportieren Sie eine Kopie, geben Sie Browser-Speicher frei und versuchen Sie das Speichern dann erneut.",
+  archiveNoteSaveFailed: "Das lokale Speichern wurde nicht abgeschlossen. Exportieren Sie eine Kopie, bevor Sie erneut versuchen zu speichern, wenn dieses Material wichtig ist.",
+  archiveConfirmReplace: "Aktuelles Material ersetzen? Dadurch werden Rückgängig, Fokus und Auswahl gelöscht.",
+  archiveKeepCurrent: "Aktuelles Material behalten",
+  archiveReplace: "Ersetzen",
   canvasTitle: "Canvas-Titel",
   close: "Schließen",
   closeSearch: "Suche schließen",

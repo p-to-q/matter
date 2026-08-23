@@ -79,7 +79,7 @@ const COPY: Readonly<Record<CanvasLanguage, ToolRailCopy>> = Object.freeze({
   }),
   "de-DE": Object.freeze({
     editingTools: "Bearbeitungswerkzeuge",
-    voice: "Sprache",
+    voice: "Spracheingabe",
     lasso: "Lasso",
     branch: "Verzweigen",
     pan: "Verschieben",

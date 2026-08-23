@@ -1009,6 +1009,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
         {mode === "archive" && props.archive !== undefined ? (
           <ArchivePanel
             busy={archiveBusy}
+            copy={copy}
             error={archiveError}
             inputRef={archiveInputRef}
             phase={archivePhase}
@@ -1468,6 +1469,7 @@ function settleCopyState(
 
 function ArchivePanel({
   busy,
+  copy,
   error,
   inputRef,
   phase,
@@ -1487,6 +1489,7 @@ function ArchivePanel({
   onSelectImport,
 }: Readonly<{
   busy: boolean;
+  copy: MaterialFilesCopy;
   error: string | null;
   inputRef: RefObject<HTMLInputElement | null>;
   phase: ArchivePhase;
@@ -1506,33 +1509,33 @@ function ArchivePanel({
   onSelectImport: (file: File) => void;
 }>) {
   const phaseLabel = phase === "exporting"
-    ? "Exporting a copy…"
+    ? copy.archiveExporting
     : phase === "validating"
-      ? "Checking archive…"
-      : phase === "replacing"
-        ? "Replacing material…"
-        : phase === "repairing"
-          ? "Repairing local storage…"
+      ? copy.archiveChecking
+    : phase === "replacing"
+        ? copy.archiveReplacing
+    : phase === "repairing"
+          ? copy.archiveRepairing
         : null;
   return (
-    <section aria-busy={busy || undefined} aria-label="Material archive" className="material-files__archive">
+    <section aria-busy={busy || undefined} aria-label={copy.archivePanel} className="material-files__archive">
       <p className="material-files__archive-note">
         {corrupt
-          ? "Stored material is damaged. Export a recovery copy before Matter atomically replaces the local row."
+          ? copy.archiveNoteCorrupt
           : conflict
-          ? "Another tab saved a newer copy. Reload the stored material here, or export the current copy first."
+          ? copy.archiveNoteConflict
           : storageFull
-          ? "Local storage is full. Export a copy before freeing browser storage, then retry saving."
+          ? copy.archiveNoteStorageFull
           : saveFailed
-          ? "Local saving did not finish. Export a copy before retrying if this material matters."
-          : "Keep a portable copy, or bring one back into this material."}
+          ? copy.archiveNoteSaveFailed
+          : copy.archiveNoteDefault}
       </p>
       <div className="material-files__archive-actions">
         <button disabled={busy} onClick={onExport} type="button">
-          Export a copy
+          {copy.archiveExportCopy}
         </button>
         <button disabled={busy} onClick={onPickImport} type="button">
-          Import a copy
+          {copy.archiveImportCopy}
         </button>
       </div>
       {corrupt && corruptExported ? (
@@ -1542,7 +1545,7 @@ function ArchivePanel({
           onClick={onRepairCorrupt}
           type="button"
         >
-          Repair local storage
+          {copy.archiveRepairLocalStorage}
         </button>
       ) : null}
       {conflict ? (
@@ -1552,7 +1555,7 @@ function ArchivePanel({
           onClick={onReloadStored}
           type="button"
         >
-          Reload stored material
+          {copy.archiveReloadStoredMaterial}
         </button>
       ) : null}
       {storageFull || saveFailed ? (
@@ -1562,12 +1565,12 @@ function ArchivePanel({
           onClick={onRetrySave}
           type="button"
         >
-          Retry saving
+          {copy.archiveRetrySaving}
         </button>
       ) : null}
       <input
         accept=".zip,application/zip,application/x-zip-compressed"
-        aria-label="Choose a material archive"
+        aria-label={copy.archiveChooseMaterialArchive}
         className="visually-hidden"
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
@@ -1586,11 +1589,11 @@ function ArchivePanel({
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
           <p>
-            Replace current material? This clears undo, focus and selection.
+            {copy.archiveConfirmReplace}
           </p>
           <div>
-            <button disabled={busy} onClick={onClose} type="button">Keep current</button>
-            <button disabled={busy} onClick={onReplace} type="button">Replace</button>
+            <button disabled={busy} onClick={onClose} type="button">{copy.archiveKeepCurrent}</button>
+            <button disabled={busy} onClick={onReplace} type="button">{copy.archiveReplace}</button>
           </div>
         </div>
       ) : null}

@@ -210,6 +210,13 @@ describe("canvas chrome info parity", () => {
     "ja-JP": "正式なプライバシーポリシーはまだありません",
     "de-DE": "Eine veröffentlichte Datenschutzerklärung gibt es noch nicht.",
   };
+  const LOCAL_FALLBACK_ASSET_DISCLOSURE: Readonly<Record<CanvasLanguage, string>> = {
+    "en-US": "tokenizer and WASM runtime assets may download separately",
+    "zh-CN": "分词器和 WASM 运行时资源可能另行下载",
+    "zh-TW": "分詞器和 WASM 執行期資源可能另行下載",
+    "ja-JP": "トークナイザーと WASM ランタイムの資産は別途取得されることがあります",
+    "de-DE": "Tokenizer- und WASM-Laufzeitressourcen können getrennt geladen werden",
+  };
 
   it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
     "%s discloses that no privacy policy is published yet",
@@ -227,6 +234,7 @@ describe("canvas chrome info parity", () => {
       // unavailable; silence about its first-use model download would make the
       // privacy surface materially weaker than the actual voice contract.
       expect(body).toContain("Hugging Face");
+      expect(body).toContain(LOCAL_FALLBACK_ASSET_DISCLOSURE[locale]);
       expect(CANVAS_CHROME_INFO[locale].privacy.body).toHaveLength(3);
     },
   );
