@@ -2657,8 +2657,10 @@ moves to the same release date, removes one duplicate search phrase, and keeps
 the one-URL sitemap to its verifiable last modification rather than ignored
 frequency or priority hints. The deployed-origin gate now reads the root icon
 links, web manifest, and all five metadata PNG bodies; it requires the approved
-asset digests and immediate revalidation for their stable URLs. Repository
-checks reject extra numbered icons and the superseded provisional files.
+asset digests, immediate manifest revalidation, and the public edge's bounded
+four-hour, must-revalidate, non-immutable icon policy. Browser favicon links
+remain content-fingerprinted. Repository checks reject extra numbered icons and
+the superseded provisional files.
 
 Why: the material itself now provides the product identity, while the smaller
 mark and target-specific rasterization preserve the deliberate air and clarity

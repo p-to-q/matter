@@ -87,7 +87,8 @@ brand proof            one frozen 1024 px master; static 16/32/180/192/512 px
                        metadata images total 475.0 KiB under the 512 KiB budget;
                        the public-origin gate verifies the five fingerprinted
                        discovery links, manifest roles, exact PNG digests, and
-                       revalidated stable-name cache policy
+                       the bounded four-hour, must-revalidate, non-immutable
+                       public icon cache policy
 publication state      candidate only: the exact Preview deployment must expose
                        the new icon links and bytes before merge; Production,
                        public-origin, annotated tag, and GitHub prerelease are

@@ -175,6 +175,13 @@ test("requires revalidated PNG metadata assets and the approved bytes", () => {
     "content-type": "image/png",
   });
   assert.deepEqual(inspectDeploymentMetadataHeaders(complete, "image/png", "/icon1.png"), []);
+  complete.set("cache-control", "public, max-age=14400, must-revalidate");
+  assert.deepEqual(inspectDeploymentMetadataHeaders(
+    complete,
+    "image/png",
+    "/icon1.png",
+    14_400,
+  ), []);
   assert.deepEqual(inspectDeploymentIcon(
     ICON_BYTES[0],
     EXPECTED_BRAND_ASSETS[0].sha256,
@@ -182,9 +189,23 @@ test("requires revalidated PNG metadata assets and the approved bytes", () => {
   ), []);
   complete.set("cache-control", "public, max-age=31536000, immutable");
   assert.deepEqual(inspectDeploymentMetadataHeaders(complete, "image/png", "/icon1.png"), [
-    "/icon1.png must revalidate immediately.",
+    "/icon1.png must use max-age=0.",
     "/icon1.png is missing must-revalidate.",
     "/icon1.png must not be immutable.",
+  ]);
+  complete.set(
+    "cache-control",
+    "public, private, no-store, max-age=14400, max-age=0, must-revalidate, s-maxage=60",
+  );
+  assert.deepEqual(inspectDeploymentMetadataHeaders(
+    complete,
+    "image/png",
+    "/icon1.png",
+    14_400,
+  ), [
+    "/icon1.png must use max-age=14400.",
+    "/icon1.png has a conflicting non-public cache directive.",
+    "/icon1.png must leave shared-cache lifetime to the deployment edge.",
   ]);
   assert.deepEqual(inspectDeploymentIcon(
     ICON_BYTES[0],
@@ -292,7 +313,7 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
     return {
       status: 200,
       headers: new Headers({
-        "cache-control": "public, max-age=0, must-revalidate",
+        "cache-control": "public, max-age=14400, must-revalidate",
         "content-type": "image/png",
       }),
       async arrayBuffer() { return ICON_BYTES[iconIndex]; },
