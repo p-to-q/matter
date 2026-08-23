@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-24 — open chrome rises without replacing the leaf atmosphere
+
+Changed: the desktop foreground leaf pass remains the paper's one active media
+presentation while a language, settings, inquiry, or modal overlay is open.
+The canvas-chrome stacking context rises from 36 to 38 only for that bounded
+open interval; the foreground stays at 37, while the external tool rail and
+material index retain 40–42. Closing the overlay returns chrome to 36 so the
+same leaf frame again passes over the quiet corner copy.
+
+Why: replacing the foreground canvas (`0.32` light / `0.46` dark) with the
+lower poster (`0.18` / `0.24`) whenever chrome opened changed the whole paper's
+tone. The lower poster also sits beneath the wash, so opacity calibration could
+not make those two rendering paths continuous.
+
+Forecloses: tuning two theme-specific opacity pairs by eye, masking rectangular
+holes around each overlay, letting leaf media enter the external workbench
+chrome, or treating a global paper-color jump as interaction feedback.
+
 ## 2026-08-24 — corner optics stay transparent and keep a stable backdrop owner
 
 Changed: upper-right and lower-left desktop optical guards now fit their smaller

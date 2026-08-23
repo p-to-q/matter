@@ -106,13 +106,17 @@ Boundary:   one paper-sized render-edge canvas receives the already-decoded leaf
             frame and temporarily replaces the lower media presentation; it
             owns no document, preference, pointer, camera, or Chrome state
 Invariants: the paper remains the clipping and stacking boundary; the material
-            index, header, tool rail, lasso, mobile sheet, and every open menu
-            or dialog remain outside the foreground pass; the two existing
-            backdrop-blur planes remain unchanged and are not sampled through
+            index, header, tool rail, lasso, and mobile sheet remain outside the
+            foreground pass; an open menu or dialog raises the one canvas-chrome
+            context above the pass without replacing the media presentation;
+            the two existing backdrop-blur planes remain unchanged and are not
+            sampled through
 Proof:      pure cover-crop matrix; browser proof that one full-paper frame
             replaces rather than duplicates base media, remains paper-contained
-            and pointer-transparent, yields to overlays, falls back to the
-            poster under reduced motion, and disappears at the mobile handoff
+            and pointer-transparent, stays stable across settings, language,
+            inquiry, and light/dark changes while open chrome rises above it,
+            falls back to the poster under reduced motion, and disappears at
+            the mobile handoff
 Non-goals:  a second video decoder, a global shadow layer, blur or filter over
             external workbench chrome, new persisted state, a new preference,
             or changed corner control geometry

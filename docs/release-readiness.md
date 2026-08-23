@@ -68,6 +68,13 @@ uses the external GitHub profile—not Matter's own canonical URL—as the
 Organization identity reference. Canonical, Open Graph, robots, and the
 dedicated-root deployment shape remain unchanged.
 
+The candidate also keeps the foreground leaf canvas as one continuous media
+owner while desktop chrome opens. Language, settings, Ask Matter, and modal
+content temporarily raise the existing chrome stacking context above that
+canvas instead of replacing it with a weaker poster below the wash. Light and
+dark paper therefore keep one ambient tone through those interactions, and the
+external tool rail and material index remain above the leaf pass.
+
 ```text
 source proof           npm run check exited 0 on the versioned candidate:
                        160 test files passed and 2 skipped; 1,839 tests passed

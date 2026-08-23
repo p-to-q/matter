@@ -32,6 +32,10 @@
   --chrome-answer-fg: #f0f2f3;
 }
 
+.root:not([data-overlay="none"]) {
+  z-index: 38;
+}
+
 .root button {
   border: 0;
   background: transparent;

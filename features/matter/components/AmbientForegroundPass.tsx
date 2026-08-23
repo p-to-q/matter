@@ -78,10 +78,7 @@ export function AmbientForegroundPass({
     const draw = () => {
       animationFrame = 0;
       if (disposed) return;
-      const chrome = paper.querySelector<HTMLElement>("[data-canvas-chrome]");
-      const isOverlayOpen = chrome?.dataset.overlay !== "none"
-        || paper.dataset.canvasModalOpen === "true";
-      if (!desktopQuery.matches || forcedColorsQuery.matches || isOverlayOpen) {
+      if (!desktopQuery.matches || forcedColorsQuery.matches) {
         canvas.dataset.active = "false";
         clearCanvas(canvas);
         restoreBaseMedia();
@@ -147,12 +144,6 @@ export function AmbientForegroundPass({
       ? null
       : new ResizeObserver(scheduleDraw);
     resizeObserver?.observe(canvas);
-    const mutationObserver = new MutationObserver(scheduleDraw);
-    mutationObserver.observe(paper, { attributes: true, attributeFilter: ["data-canvas-modal-open"] });
-    const chrome = paper.querySelector<HTMLElement>("[data-canvas-chrome]");
-    if (chrome !== null) {
-      mutationObserver.observe(chrome, { attributes: true, attributeFilter: ["data-overlay"] });
-    }
     const onMediaQueryChange = () => scheduleDraw();
     desktopQuery.addEventListener("change", onMediaQueryChange);
     forcedColorsQuery.addEventListener("change", onMediaQueryChange);
@@ -185,7 +176,6 @@ export function AmbientForegroundPass({
       clearCanvas(canvas);
       restoreBaseMedia();
       resizeObserver?.disconnect();
-      mutationObserver.disconnect();
       desktopQuery.removeEventListener("change", onMediaQueryChange);
       forcedColorsQuery.removeEventListener("change", onMediaQueryChange);
       window.removeEventListener("resize", scheduleDraw);
