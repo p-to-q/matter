@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "identity": "slate-bone-negative-stone",
+  "assets": [
+    {
+      "file": "features/matter/brand/assets/slate-bone-master-1024.png",
+      "role": "authoritative-master",
+      "size": 1024,
+      "profile": "slate-bone-baseline/1",
+      "sha256": "b7e7b3b397e0d30cf59b66d776a9b6f888100fc9ea9fc86e276b42b3ca31cf2f",
+      "pixelSha256": "a19624398d216e4c74e9f7b8bff99bb60a3bad11fabd33bdeb5633c7ab50c5b4"
+    },
+    {
+      "file": "app/icon1.png",
+      "role": "browser-icon",
+      "size": 16,
+      "profile": "lanczos3-stone-luma-usm-0.04/1",
+      "sha256": "950c5edc6d6ff56e97854f22855870d065d97488507368a25deac2303695600e",
+      "pixelSha256": "de5e37bcdc3f30161269b534e15655f191109284f884fb41fea0223d911bf762"
+    },
+    {
+      "file": "app/icon2.png",
+      "role": "browser-icon",
+      "size": 32,
+      "profile": "lanczos3-restrained-usm/1",
+      "sha256": "f45eef60a39469b9ff279f262894d4ef064a6cc390745f8de9ef30c0d3c7b822",
+      "pixelSha256": "1cf6de7b62e770ca9521d2c76c3f931d4c12e46c635798de0c66ca637b26a574"
+    },
+    {
+      "file": "app/apple-icon.png",
+      "role": "apple-touch-icon",
+      "size": 180,
+      "profile": "lanczos3-faithful/1",
+      "sha256": "ae5c56d6d7627745da45570571b8b055d5f62281bd9fb6137278821e1021210a",
+      "pixelSha256": "09f2159601252233c2e441ca4e8752ca23b9cbb6c7de1f73ea56a810c517a735"
+    },
+    {
+      "file": "app/icon3.png",
+      "role": "installed-app-icon",
+      "size": 192,
+      "profile": "lanczos3-faithful/1",
+      "sha256": "d5a6523a982743e21a6e04a00c1ddb5a4ef21a3cc66f17e48bef7eb4d710d7d6",
+      "pixelSha256": "b6f43d294e234dbeac5fbbe40f4127f6c254fb1a95b10f961919a505fbb69828"
+    },
+    {
+      "file": "app/icon4.png",
+      "role": "installed-app-icon",
+      "size": 512,
+      "profile": "lanczos3-faithful/1",
+      "sha256": "a889d84fd26cf81330d6e0307741e4152d561dd7027249dff65587d2fb648d19",
+      "pixelSha256": "3a7077a85c2f01e893d94204e2a0cc3e130d4b13fbaeeadb1041782f91700416"
+    }
+  ]
+}

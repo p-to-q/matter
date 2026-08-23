@@ -19,6 +19,7 @@ function validMetrics() {
     wasmBytes: 23 * 1_024 * 1_024,
     fontBytes: 108 * 1_024,
     visualMediaBytes: 360 * 1_024,
+    metadataImageBytes: 480 * 1_024,
     initialAssets: ["chunks/app/page.12345678.js", "css/app.12345678.css"],
     wasmAssets: ["media/ort-wasm.12345678.wasm"],
     fontAssets: ["media/12345678-s.woff2", "media/abcdef12-s.p.woff2"],
@@ -58,6 +59,7 @@ test("holds every transfer class to an explicit ceiling", () => {
     wasmBytes: RUNTIME_ARTIFACT_BUDGETS.wasmBytes,
     fontBytes: RUNTIME_ARTIFACT_BUDGETS.fontBytes,
     visualMediaBytes: RUNTIME_ARTIFACT_BUDGETS.visualMediaBytes,
+    metadataImageBytes: RUNTIME_ARTIFACT_BUDGETS.metadataImageBytes,
   })) {
     const metrics = validMetrics();
     metrics[metric] = budget + 1;
@@ -106,6 +108,8 @@ test("reads root and server traces while budgeting every public asset", async ()
       writeFile(join(root, ".next/static/chunks/app.12345678.js"), "console.log('matter')"),
       writeFile(join(root, ".next/static/media/ort.12345678.wasm"), "wasm"),
       writeFile(join(root, ".next/static/media/12345678-s.woff2"), "font"),
+      writeFile(join(root, ".next/server/app/icon1.png.body"), "tab-icon"),
+      writeFile(join(root, ".next/server/app/apple-icon.png.body"), "touch-icon"),
       writeFile(
         join(root, ".next/prerender-manifest.json"),
         JSON.stringify({ routes: { "/": { compute: "static", initialRevalidateSeconds: false } } }),
@@ -131,6 +135,11 @@ test("reads root and server traces while budgeting every public asset", async ()
       metrics.publicBytes,
       [...publicAssets.values()].reduce((total, contents) => total + Buffer.byteLength(contents), 0),
     );
+    assert.equal(metrics.metadataImageBytes, Buffer.byteLength("tab-icontouch-icon"));
+    assert.deepEqual(metrics.metadataImageAssets, [
+      "server/app/apple-icon.png.body",
+      "server/app/icon1.png.body",
+    ]);
     assert.deepEqual([...metrics.forbiddenTraceFiles].sort(), [
       "../../../e2e/browser.ts",
       "../.env.local",

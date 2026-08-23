@@ -31,6 +31,27 @@ multi-touch gestures, streaming, split/merge, cross-links, tool prediction,
 retrieval, and a public SDK are not later phases of this plan. They remain
 outside the first release.
 
+## Active correction — one material icon across platform surfaces
+
+State: implemented and proven locally; not released.
+
+```text
+Outcome:    browser tabs, Apple touch surfaces, and installed Matter windows
+            use one recognisable Slate / Bone stone identity
+Boundary:   one frozen 1024 px raster master, exact platform PNG outputs,
+            Next metadata conventions, manifest references, and asset checks
+Invariants: the stone remains 68% of the square; master background and stone
+            interior are not sharpened; small-size raster treatment cannot
+            redraw the mark or change its palette; p → q remains the separate
+            parent identity; no runtime component, document, or interaction moves
+Proof:      exact PNG type/dimension/digest checks; production metadata and
+            artifact budgets; browser head, tab, touch, manifest, canonical,
+            robots, sitemap, and structured-data inspection at /matter and the
+            dedicated-domain root shape
+Non-goals:  page chrome, the p → q footer lockup, social cards, a dependency,
+            runtime image filtering, or a new responsive or product surface
+```
+
 ## Current delivery lens
 
 The product is one interface for unfinished thought, not a bundle of AI

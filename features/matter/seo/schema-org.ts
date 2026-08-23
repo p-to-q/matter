@@ -29,7 +29,7 @@ export function getMatterSchemaOrgGraph(
         name: "[p → q]",
         legalName: "Wooden Computer Co., Ltd.",
         url: P_TO_Q_URL,
-        sameAs: [P_TO_Q_URL, P_TO_Q_GITHUB_URL],
+        sameAs: [P_TO_Q_GITHUB_URL],
       },
       {
         "@type": "WebSite",

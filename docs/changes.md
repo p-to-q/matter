@@ -2628,6 +2628,25 @@ it is not presented as offline recognition.
 Forecloses: fixture audio masquerading as live speech, a hidden chat transcript,
 and uploading native-recognition audio when no server adapter was selected.
 
+## 2026-08-24 — Matter's icon is a restrained negative stone
+
+Changed: the provisional tree glyph is replaced across browser, Apple, and
+installed-app icons by one Slate / Bone stone mark. The original stone silhouette
+occupies 68% of the square; its bone aperture keeps only quiet facet relief over
+a cool slate mineral field. Each platform receives a pre-rendered PNG at its
+declared size rather than a runtime-resized or generated mark. Public discovery
+moves to the same release date, removes one duplicate search phrase, and keeps
+the one-URL sitemap to its verifiable last modification rather than ignored
+frequency or priority hints.
+
+Why: the material itself now provides the product identity, while the smaller
+mark and target-specific rasterization preserve the deliberate air and clarity
+needed at 16 px without turning the icon into a generic white silhouette.
+
+Forecloses: independently redrawn platform marks, runtime image filters, pure
+white or pure black fills, and reusing the Matter mark to replace the separate
+`p → q` parent identity.
+
 ---
 
 ## 2026-08-07 — Lasso selection favors a forgiving hand

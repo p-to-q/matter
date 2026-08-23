@@ -56,17 +56,17 @@ visual orientation aid: Pan and zoom project its cells, custom softened dash
 rhythm, and open intersections through the same transient camera as material. The actual
 material widths, gaps, and derived boxes remain unchanged. It cannot become a
 coordinate, snap target, or second layout authority.
-`app/icon.svg` is explicitly provisional and is not the product mark: it draws
-the same rooted figure the material index draws, on ink and paper only, sized so
-it survives 16 px. `app/apple-icon.tsx` renders that same figure full-bleed at
-180 px because iOS masks its own corners, and `/icon-192.png` and `/icon-512.png`
-render it again for installation. All of them come from
-[`../features/matter/brand/icon-mark.ts`](../features/matter/brand/icon-mark.ts)
-so they cannot drift; `app/icon.svg` is the one hand-kept copy, because a static
-file cannot import. All may be replaced without a product-contract revision. The
-manifest keeps `theme_color` on the field grey rather than the icon's ink: it
-colours the mobile address bar, which must meet the top of the page, not the tab
-strip.
+Matter's product icon is one Slate / Bone negative stone. The frozen 1024 px
+master in [`../features/matter/brand/assets/`](../features/matter/brand/assets/)
+owns the silhouette, 68% scale, palette, mineral background, and quiet internal
+relief. Numbered static PNGs under `app/` publish exact 16, 32, 192, and 512 px
+browser and installation sizes; `app/apple-icon.png` publishes the exact 180 px
+Apple size. A smaller output may receive bounded raster-only treatment for its
+declared pixel grid, but it cannot redraw or recolour the mark, alter its scale,
+or become a second master. The `p → q / matter` footer lockup remains the
+separate parent identity. The manifest keeps `theme_color` on the field grey
+rather than the icon's ink: it colours the mobile address bar, which must meet
+the top of the page, not the tab strip.
 
 Browser installation is claimed at the manifest layer only: `standalone` display
 with 192, 512 and maskable icons is what Chrome reads to offer "Install app".
