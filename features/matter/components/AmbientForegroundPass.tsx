@@ -181,6 +181,8 @@ export function AmbientForegroundPass({
       disposed = true;
       if (animationFrame !== 0) window.cancelAnimationFrame(animationFrame);
       if (videoFrame !== null) video?.cancelVideoFrameCallback?.(videoFrame);
+      canvas.dataset.active = "false";
+      clearCanvas(canvas);
       restoreBaseMedia();
       resizeObserver?.disconnect();
       mutationObserver.disconnect();

@@ -51,6 +51,44 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Candidate verification — 0.2.0-preview.42
+
+Preview.42 is the next source candidate after the immutable Preview.41 release.
+It changes no model authority, material mutation, or live adapter gate. It
+replaces the provisional tree metadata mark with the approved Slate / Bone
+stone system across the browser favicon, Apple touch icon, installable app
+icons, and web manifest. One unsharpened 1024 px master remains the high-fidelity
+brand authority; 180, 192, and 512 px outputs preserve it through one Lanczos3
+downsample, while 16 and 32 px use separate restrained small-raster profiles so
+the same stone remains legible in a real browser tab.
+
+The discovery surface also removes one duplicate search phrase, keeps the
+sitemap's modification date truthful without unsupported priority hints, and
+uses the external GitHub profile—not Matter's own canonical URL—as the
+Organization identity reference. Canonical, Open Graph, robots, and the
+dedicated-root deployment shape remain unchanged.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       160 test files passed and 2 skipped; 1,839 tests passed
+                       and 4 skipped; doctor, docs, typegen, typecheck, lint,
+                       and the Next 16.3 webpack production build passed
+browser proof          full Chromium: 98 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 113 total
+brand proof            one frozen 1024 px master; static 16/32/180/192/512 px
+                       platform outputs; decoded RGB and file digests verified;
+                       metadata images total 475.0 KiB under the 512 KiB budget
+publication state      candidate only: the exact Preview deployment must expose
+                       the new icon links and bytes before merge; Production,
+                       public-origin, annotated tag, and GitHub prerelease are
+                       deliberately not yet claimed
+```
+
+Preview.42 is a source-level candidate only. Its protected Vercel Preview must
+be checked at the same commit SHA before merge. The immutable
+`v0.2.0-preview.42` tag and GitHub prerelease may be created only after that
+candidate reaches Production and the public-origin receipt succeeds.
+
 ## Release verification — 0.2.0-preview.41
 
 Preview.41 is the current release after the immutable Preview.40 release.
