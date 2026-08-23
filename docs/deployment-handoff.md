@@ -38,13 +38,15 @@ and corrected public discovery copy. The unresolved operational controls below
 remain exceptions, not evidence that distributed limits, spend caps, alerts, or
 rollback ownership now exist.
 
-For Preview.41, the owner has directed one further production promotion after
-the voice, locale, camera-authority, and public-boundary hardening recorded in
-the current candidate. This is a fresh Preview.41-only risk acceptance, not an
-extension of either earlier exception. It preserves the same live gates, keeps
-Elastic and Text Swap unavailable, and leaves issues #34 and #68 open. Until the
-exact candidate has a successful Preview receipt, Production receipt, public
-origin probe, and immutable tag, it is not deployed fact.
+For Preview.41, the owner directed one further production promotion after the
+voice, locale, camera-authority, and public-boundary hardening. This is a fresh
+Preview.41-only risk acceptance, not an extension of either earlier exception.
+The versioned topic head `7fb7774` passed exact Preview deployment; PR #71
+merged it as `6ecbabc`, exact Production deployment `6050614354` succeeded,
+and `matter.ptoq.io` matched `0.2.0-preview.41` on the first public-origin
+probe. It preserves the same live gates, keeps Elastic and Text Swap
+unavailable, and leaves issues #34 and #68 open. The immutable tag and GitHub
+prerelease must point to the final release-record Production SHA.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was

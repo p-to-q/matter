@@ -1,13 +1,13 @@
 # Preview deployment-owner handoff
 
-Status: Preview.40 first reached `matter.ptoq.io` as merge commit `53f51a2`.
-The final review fixes merged through PR #70 as `af4bcb9`; that exact Production
-deployment and public-origin receipt completed before the annotated immutable
-`v0.2.0-preview.40` tag was published. The final release includes the
-four-route process-local admission perimeter, spoken punctuation/expression
-work, and corrected `llms.txt` product grammar. Labels, transcript repair, and
-Ask Matter stay live; Elastic and Text Swap remain unavailable. This is an
-operator checklist, not a place to record token values.
+Status: Preview.41 source work merged through PR #71 as `6ecbabc`; the exact
+Production deployment `6050614354` completed and `matter.ptoq.io` matched
+`0.2.0-preview.41` on the first public-origin probe. Its final release-record
+commit is the target of the annotated immutable `v0.2.0-preview.41` tag. The
+release preserves the four-route process-local admission perimeter, adds the
+reviewed voice, locale, camera-authority, and optical hardening, and keeps
+labels, transcript repair, and Ask Matter live. Elastic and Text Swap remain
+unavailable. This is an operator checklist, not a place to record token values.
 
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
@@ -20,8 +20,8 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The owner has directed one Preview.40 production promotion while the external
-receipts remain outstanding. Treat that direction as a Preview.40-only risk
+The owner has directed one Preview.41 production promotion while the external
+receipts remain outstanding. Treat that direction as a Preview.41-only risk
 acceptance, not a continuing waiver and not evidence that the controls exist.
 Issues #34 and #68 remain open; label, repair, inquiry, and browser/local voice
 stay as configured, while Elastic and Text Swap remain unavailable. The source
@@ -29,7 +29,7 @@ admission ceilings below are per warm instance only. Before any later release,
 obtain a fresh owner decision or the distributed-rate, provider-spend, alert,
 and rollback receipts.
 
-## Preview.41 candidate and authorization
+## Preview.41 release and authorization
 
 The owner has directed one Preview.41 production promotion after the current
 review and hardening work. This is a fresh, one-preview exception: it keeps the
@@ -38,11 +38,12 @@ Text Swap unavailable, and leaves issues #34 and #68 open. It is not permission
 to treat the process-local source perimeter as distributed abuse control or to
 claim a provider spend cap, alert delivery, or rollback receipt.
 
-The candidate records `0.2.0-preview.41` in `package.json` and both root
-package entries in `package-lock.json`. It must receive an exact-SHA Preview
-receipt, Production receipt, public-origin probe, and annotated immutable
-`v0.2.0-preview.41` tag before this section is replaced by a completed-release
-fact. Until then it is source only.
+The versioned topic head `7fb7774` passed GitHub CI and exact Preview deployment
+`6050555542`. PR #71 merged it as `6ecbabc`; exact Production deployment
+`6050614354` succeeded, and the public origin matched `0.2.0-preview.41` after
+one probe. The annotated immutable `v0.2.0-preview.41` tag must peel to the
+final release-record Production SHA; the remote tag and GitHub prerelease are
+the authority for that last identity check.
 
 ## Exact source-preview and production sequence
 
