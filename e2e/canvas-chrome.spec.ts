@@ -210,7 +210,9 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await askMatter.click();
   const inquiryDialog = page.getByRole("dialog", { name: "询问 Matter" });
   await expect(inquiryDialog).toBeVisible();
-  await page.waitForTimeout(180);
+  await inquiryDialog.evaluate(async (element) => {
+    await Promise.allSettled(element.getAnimations().map((animation) => animation.finished));
+  });
   const inquiryBox = await inquiryDialog.boundingBox();
   const currentAskMatterBox = await askMatter.boundingBox();
   if (inquiryBox === null || currentAskMatterBox === null) {
