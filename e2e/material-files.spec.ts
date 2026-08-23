@@ -8,7 +8,7 @@ const rootId = "matter_document_root_matter_fixture_rooted_01";
 const firstBranchText = "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
 const searchText = "被允许想象的生活";
 
-test("archive compact type compensates CJK glyph metrics without changing English density", async ({ page }) => {
+test("mode controls compensate CJK glyph metrics without enlarging archive actions", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
 
@@ -26,12 +26,24 @@ test("archive compact type compensates CJK glyph metrics without changing Englis
 
     const copy = materialFilesCopy(locale);
     const sidebar = page.locator("aside.material-files");
+    const expectedModeSize = locale === "en-US" || locale === "de-DE" ? "10px" : "12px";
+    for (const name of [copy.searchThoughts, copy.select, copy.archive]) {
+      await expect(sidebar.getByRole("button", { name, exact: true }))
+        .toHaveCSS("font-size", expectedModeSize);
+    }
+    const controls = sidebar.locator(".material-files__controls");
+    expect(await controls.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
     await sidebar.getByRole("button", { name: copy.archive, exact: true }).click();
-    const expectedSize = locale === "en-US" || locale === "de-DE" ? "9px" : "10px";
+    await expect(sidebar.locator(".material-files__section-label"))
+      .toHaveCSS("font-size", expectedModeSize);
+    await expect(sidebar.getByRole("button", { name: copy.close, exact: true }))
+      .toHaveCSS("font-size", expectedModeSize);
     await expect(sidebar.getByRole("button", { name: copy.archiveExportCopy, exact: true }))
-      .toHaveCSS("font-size", expectedSize);
+      .toHaveCSS("font-size", "9px");
     await expect(sidebar.getByRole("button", { name: copy.archiveImportCopy, exact: true }))
-      .toHaveCSS("font-size", expectedSize);
+      .toHaveCSS("font-size", "9px");
+    expect(await controls.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
   }
 });
 

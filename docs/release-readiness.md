@@ -86,13 +86,13 @@ source proof           npm run check exited 0 on the versioned candidate:
                        and 2 skipped, 1,836 cases passed and 4 skipped;
                        typegen, typecheck, lint, and the Next 16.3 webpack
                        production build of all 21 pages/routes passed
-browser proof          full Chromium: 95 passed, 15 explicitly capability-
-                       gated skipped, 0 failed, 110 total
+browser proof          full Chromium: 96 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 111 total
 camera proof           the index-motion Lasso receipt passed six serial
                        Chromium repetitions after activation takes the
                        rendered camera; it still asserts live ink, closure,
                        selected-language state, and both stretch grips
-runtime proof          static root; initial 1,191.1 KiB raw / 377.8 KiB gzip;
+runtime proof          static root; initial 1,191.0 KiB raw / 377.8 KiB gzip;
                        one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
                        visual media 350.8 KiB; 0 repository-only trace files
 production boundary    the owner has directed one Preview.41 promotion while
