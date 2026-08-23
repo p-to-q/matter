@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
 const originalText =
@@ -39,8 +40,8 @@ for (const viewport of [
       thought(nodeId).locator("[data-thought-text-id]").click();
     const tool = (name: string) =>
       name === "Undo"
-        ? page.getByRole("navigation", { name: "Editing tools" }).locator('[data-tool-id="undo"]')
-        : page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name, exact: true });
+        ? page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator('[data-tool-id="undo"]')
+        : page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).getByRole("button", { name, exact: true });
 
     await expect(page.getByRole("link", { name: "p to q — Matter" })).toBeVisible();
     const guidance = page.locator(".matter-guidance[aria-label='Matter guidance']");
@@ -57,11 +58,11 @@ for (const viewport of [
     expect(initialIds[0]).toBe(rootId);
     await expect(thought(rootId)).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(page.locator(".spatial-thought svg")).toHaveCount(0);
-    expect(await page.getByRole("navigation", { name: "Editing tools" }).locator("[data-tool-id]").evaluateAll(
+    expect(await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator("[data-tool-id]").evaluateAll(
       (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
     )).toEqual(["voice", "lasso", "branch", "move", "undo"]);
-    await expect(page.getByRole("navigation", { name: "Editing tools" }).getByRole("button", { name: "Focus" })).toHaveCount(0);
-    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator('[data-tool-id="focus"]')).toHaveCount(0);
+    await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
     const ambientVideo = page.locator("video.matter-ambient__video");
     await expect(ambientVideo).toHaveCount(1);
     await expect(ambientVideo).toHaveCSS("object-fit", "cover");
@@ -88,7 +89,7 @@ for (const viewport of [
       return document.fonts.status === "loaded" && document.fonts.check(`12px ${family}`);
     })).toBe(true);
     const initialSurface = await page.locator(".matter-document").boundingBox();
-    const initialRail = await page.getByRole("navigation", { name: "Editing tools" }).boundingBox();
+    const initialRail = await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).boundingBox();
     const initialRoot = await thought(rootId).boundingBox();
     if (initialSurface === null || initialRail === null || initialRoot === null) {
       throw new Error("workbench geometry is not visible");
@@ -126,7 +127,7 @@ for (const viewport of [
       // The visible rail stays 60px wide, while each real pointer target reaches
       // slightly beyond it. The outside strip must hover and invoke the same
       // control without overlapping the tools above or below.
-      const branchTool = page.getByRole("button", { name: "Extend related thought", exact: true });
+      const branchTool = page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true });
       const branchBox = await branchTool.boundingBox();
       if (branchBox === null) throw new Error("branch target is not visible");
       expect(branchBox.x).toBeLessThan(initialRail.x);
@@ -149,7 +150,7 @@ for (const viewport of [
       }))).toEqual({ outlineStyle: "solid", outlineWidth: "2px" });
     }
 
-    await tool("Extend related thought").click();
+    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
     await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
     const defaultRootChildId = (await visibleIds(page)).at(-1);
     if (defaultRootChildId === undefined) throw new Error("default root child missing");
@@ -170,16 +171,16 @@ for (const viewport of [
     await selectThought(rootId);
     await expect(guidance.locator(".matter-guidance__next"))
       .toHaveText("说话，让想法向下生长。");
-    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    await expect(page.locator("[data-node-action-lens]")).toBeVisible();
     const rootBeforeGrowth = await thought(rootId).evaluate((node) => {
       const rect = node.getBoundingClientRect();
       return { x: rect.x, y: rect.y };
     });
-    await tool("Extend related thought").click();
+    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
     const firstChildId = (await visibleIds(page)).at(-1);
     if (firstChildId === undefined) throw new Error("first child missing");
     await selectThought(rootId);
-    await tool("Extend related thought").click();
+    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
     const idsAfterTwoChildren = await visibleIds(page);
     const secondChildId = idsAfterTwoChildren.at(-1);
     if (secondChildId === undefined) throw new Error("second child missing");
@@ -197,7 +198,7 @@ for (const viewport of [
       x: viewport.width * 0.48,
       y: viewport.height * 0.7,
     };
-    await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
     const beforeFailedCapture = await readViewportAndGeometry(page);
     await page.evaluate(() => {
@@ -260,7 +261,7 @@ for (const viewport of [
     await expect.poll(async () => (await readViewportAndGeometry(page)).zoom)
       .toBeGreaterThan(afterTextPan.zoom);
     await selectThought(rootId);
-    await tool("Extend related thought").click();
+    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
     const idsAfterZoomGrowth = await visibleIds(page);
     const thirdChildId = idsAfterZoomGrowth.at(-1);
     if (thirdChildId === undefined) throw new Error("third child missing");
@@ -269,7 +270,7 @@ for (const viewport of [
     expect(zoomGeometry[thirdChildId]!.y).toBeGreaterThan(zoomGeometry[secondChildId]!.bottom);
 
     const railPosition = await page
-      .getByRole("navigation", { name: "Editing tools" })
+      .getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
       .evaluate((rail) => {
         const rect = rail.getBoundingClientRect();
         return { bottom: rect.bottom, left: rect.left, right: rect.right };
@@ -325,7 +326,7 @@ test("compact workbench keeps material clear of coarse controls", async ({ page 
 
   const surface = await page.locator(".matter-document").boundingBox();
   const root = await page.locator(`[data-thought-id="${rootId}"]`).boundingBox();
-  const rail = await page.getByRole("navigation", { name: "Editing tools" }).boundingBox();
+  const rail = await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).boundingBox();
   if (surface === null || root === null || rail === null) {
     throw new Error("compact workbench geometry is not visible");
   }
@@ -343,7 +344,7 @@ test("compact workbench keeps material clear of coarse controls", async ({ page 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   await expectOneLineGuidance(page.locator(".matter-guidance"));
   await page.locator(`[data-thought-id="${rootId}"]`).locator("[data-thought-text-id]").click();
-  await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+  await expect(page.locator("[data-node-action-lens]")).toBeVisible();
   expect(browserErrors).toEqual([]);
 });
 
@@ -356,7 +357,7 @@ test("material clears the rail across every narrow width", async ({ page }) => {
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     const root = await page.locator(`[data-thought-id="${rootId}"]`).boundingBox();
-    const rail = await page.getByRole("navigation", { name: "Editing tools" }).boundingBox();
+    const rail = await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).boundingBox();
     if (root === null || rail === null) {
       throw new Error(`narrow geometry is not visible at ${width}px`);
     }

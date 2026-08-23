@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
 const imaginedLivesId = "thought_fixture_imagined_lives";
@@ -29,11 +30,11 @@ for (const viewport of [
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
-    const lasso = page.getByRole("button", { name: "Circle-select language", exact: true });
-    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeEnabled();
+    const lasso = page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true });
+    await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true })).toBeEnabled();
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
-    const move = page.getByRole("button", { name: "Return to canvas pan", exact: true });
+    const move = page.getByRole("button", { name: fixtureUiCopy.toolRail.returnToCanvasPan, exact: true });
     await expect(move).toBeEnabled();
     await move.click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
@@ -50,7 +51,7 @@ for (const viewport of [
       x: Number(main.getAttribute("data-viewport-x")),
       y: Number(main.getAttribute("data-viewport-y")),
     }))).toEqual({ x: cameraBeforeMovePan.x + 24, y: cameraBeforeMovePan.y + 18 });
-    await page.getByRole("button", { name: "Exit canvas pan", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan, exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
     await focusRoot(page, viewport.name === "narrow");
     await lasso.click();
@@ -75,7 +76,10 @@ for (const viewport of [
 
     const text = page.locator(`[data-thought-text-id="${rootId}"] .spatial-thought__label`);
     const fragment = await segmentProbeRect(text, 0);
-    await drawEarlyReleaseLoop(page, fragment);
+    // This receipt exercises wrapped-language selection, not early release.
+    // Complete the simple rectangle so a loaded browser cannot turn a
+    // near-closure threshold into an unrelated geometry failure.
+    await drawClosedLoop(page, fragment);
     await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
     await expect(page.locator(".lasso-selection-count")).toHaveCount(0);
@@ -312,7 +316,7 @@ for (const viewport of [
     await expect(page.locator(".lasso-selection-fragment")).not.toHaveCount(0);
     // The Lasso control is also the explicit exit: pointer mode and every
     // transient language address leave together.
-    await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitLanguageSelection, exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".lasso-selection-fragment")).toHaveCount(0);
     await expect(page.locator(".stretch-handle")).toHaveCount(0);
@@ -322,7 +326,7 @@ for (const viewport of [
   test(`lasso shows closure only for a releasable selection at ${viewport.name} width`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/matter");
-    await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     const fragment = await segmentProbeRect(page.locator(`[data-thought-text-id="${rootId}"]`), 0);
 
     const empty = { x: viewport.width - 72, y: viewport.height - 116, width: 44, height: 36 };
@@ -367,7 +371,7 @@ for (const viewport of [
   test(`lasso does not add a sidebar hint at ${viewport.name} width`, async ({ page }) => {
     await page.setViewportSize(viewport);
     await page.goto("/matter");
-    await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     await expect(page.locator(".lasso-hint")).toHaveCount(0);
   });
 
@@ -378,7 +382,7 @@ for (const viewport of [
     await page.evaluate(async () => document.fonts.ready);
     await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
     await focusRoot(page, viewport.name === "narrow");
-    await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("圈住一段连续文字，边界停在标点处。");
 
@@ -439,7 +443,7 @@ for (const viewport of [
     await expect(page.locator(".language-split-projection"))
       .toHaveAttribute("data-preview-mode", "neutral");
     await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
-    await page.getByRole("button", { name: "Exit language selection", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitLanguageSelection, exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".stretch-handle")).toHaveCount(0);
   });
@@ -453,7 +457,7 @@ test("keyboard addresses exact segments and Escape or the narrow index returns L
 
   const shell = page.locator("main.matter-shell");
   await expect(shell).toHaveAttribute("lang", "zh-CN");
-  const lasso = page.getByRole("button", { name: "Circle-select language", exact: true });
+  const lasso = page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true });
   const rootText = page.locator(`[data-thought-text-id="${rootId}"]`);
   await lasso.click();
   await rootText.focus();
@@ -486,7 +490,7 @@ test("keyboard addresses exact segments and Escape or the narrow index returns L
   await expect(page.locator(".lasso-layer")).not.toHaveAttribute("data-drawing", "true");
 
   await lasso.click();
-  await page.getByRole("button", { name: "Show material files", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles, exact: true }).click();
   await expect(page.locator("#material-files")).toHaveAttribute("data-open", "true");
   await expect(shell).not.toHaveAttribute("data-lasso-mode", "true");
 });
@@ -495,7 +499,7 @@ test("lasso keeps its outside-paper particle echo visual-only", async ({ page })
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
   if (paper === null) throw new Error("paper is not visible");
   await page.mouse.move(paper.x + 40, paper.y + 120);
@@ -535,7 +539,7 @@ test("lasso keeps its echo through the paper's rounded corner", async ({ page })
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
   if (paper === null) throw new Error("paper is not visible");
 
@@ -559,7 +563,7 @@ test("a loop across two passages enters selection mode without Elastic grips", a
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
 
   const passages = page.locator(".spatial-thought__text");
   const first = await passages.nth(0).boundingBox();
@@ -605,7 +609,7 @@ test("a loop across two passages enters selection mode without Elastic grips", a
   await expect(page.locator(".lasso-selection-count")).toHaveCount(0);
   await expect(page.locator(".material-file[data-lasso-selected=true]")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
   if (paper === null) throw new Error("paper disappeared");
   await page.mouse.click(paper.x + paper.width - 80, paper.y + paper.height - 90);
@@ -625,7 +629,7 @@ test("one Full-view punctuation segment keeps the full canvas and reveals both g
   );
   await expect(disclosure).toBeEnabled();
   await expect(disclosure).toHaveCSS("opacity", "1");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   await expect(disclosure).toBeDisabled();
   await expect(disclosure).toHaveCSS("opacity", "1");
   await expect(disclosure.locator(".material-file__disclosure-chevron"))
@@ -683,14 +687,14 @@ test("one Full-view punctuation segment keeps the full canvas and reveals both g
     .toHaveAttribute("data-stretch-handle", "bottom");
 });
 
-test("a lasso started during index camera motion owns the rendered camera epoch", async ({ page }) => {
+test("activating Lasso adopts the rendered camera during index motion", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await page.addStyleTag({
-    // Keep the rendered target effectively stationary between Playwright's
-    // measurement and pointer-down even when the shared release server is busy.
-    // Pointer-down still interrupts a genuinely in-flight CSS camera.
+    // Give the test a real but long-enough motion interval to place the tool
+    // click. The lasso itself starts only after it takes ownership of one
+    // rendered camera, never by joining coordinates from two animation frames.
     content: '.matter-world[data-camera-motion="index"] { transition-duration: 8000ms !important; }',
   });
 
@@ -700,51 +704,38 @@ test("a lasso started during index camera motion owns the rendered camera epoch"
   const world = page.locator(".matter-world");
   await row.locator(".material-file__open").click();
   await expect(world).toHaveAttribute("data-camera-motion", "index");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
-  await expect(world).toHaveAttribute("data-camera-motion", "index");
   const target = page.locator(
     `[data-layout-node-id="${nodeId}"] .spatial-thought__label`,
   );
   await page.waitForFunction((selector) => {
     const element = document.querySelector(selector);
     const worldElement = document.querySelector<HTMLElement>(".matter-world");
-    if (element === null || worldElement?.dataset.cameraMotion !== "index") return false;
-    const rect = element.getBoundingClientRect();
     const paper = document.querySelector(".matter-document")?.getBoundingClientRect();
-    return paper !== undefined && rect.left + rect.width / 2 > paper.left + 24 &&
-      rect.left + rect.width / 2 < paper.right - 24;
+    if (element === null || worldElement?.dataset.cameraMotion !== "index" || paper === undefined) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.left + rect.width / 2 > paper.left + 24 && rect.left + rect.width / 2 < paper.right - 24;
   }, `[data-layout-node-id="${nodeId}"] .spatial-thought__label`, { polling: "raf" });
-
-  const initialFragment = await segmentProbeRect(target, 0);
-  const margin = 9;
-  await page.mouse.move(initialFragment.x - margin, initialFragment.y - margin);
-  await page.mouse.down();
-  // Pointer-down freezes the in-flight camera. Measure the now-stable fragment
-  // for the remainder of the same physical stroke.
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await expect(world).not.toHaveAttribute("data-camera-motion", "index");
+  await expect(target).toBeInViewport();
   const fragment = await segmentProbeRect(target, 0);
-  const left = Math.min(initialFragment.x, fragment.x) - margin;
-  const top = Math.min(initialFragment.y, fragment.y) - margin;
-  const right = Math.max(
-    initialFragment.x + initialFragment.width,
-    fragment.x + fragment.width,
-  ) + margin;
-  const bottom = Math.max(
-    initialFragment.y + initialFragment.height,
-    fragment.y + fragment.height,
-  ) + margin;
-  await page.mouse.move(right, top, { steps: 5 });
-  await page.mouse.move(right, bottom, { steps: 4 });
-  await page.mouse.move(left, bottom, { steps: 5 });
+  const margin = 9;
+  await page.mouse.move(fragment.x - margin, fragment.y - margin);
+  await page.mouse.down();
+  await page.mouse.move(fragment.x + fragment.width + margin, fragment.y - margin, { steps: 5 });
   await page.mouse.move(
-    initialFragment.x - margin,
-    initialFragment.y - margin,
+    fragment.x + fragment.width + margin,
+    fragment.y + fragment.height + margin,
     { steps: 4 },
   );
+  await page.mouse.move(fragment.x - margin, fragment.y + fragment.height + margin, { steps: 5 });
+  // Assert the live seam before pointer-up clears transient ink. The path is
+  // measured after Lasso has frozen the rendered camera, so it cannot splice
+  // coordinates from two camera epochs.
+  await page.mouse.move(fragment.x - margin, fragment.y + Math.min(18, fragment.height * .45), { steps: 2 });
   await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / Q /);
   await expect(page.locator(".lasso-ink__closure")).toHaveAttribute("d", / L /);
   await page.mouse.up();
-
-  await expect(world).not.toHaveAttribute("data-camera-motion", "index");
   await expect(page.getByRole("status").filter({ hasText: "已选文字" }))
     .toHaveCount(1);
   await expect(page.locator(".stretch-handle")).toHaveCount(2);
@@ -754,7 +745,7 @@ test("circling a few off-centre words snaps to their single punctuation segment"
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
 
   const text = page.locator(`[data-thought-text-id="${rootId}"]`);
   await drawEarlyReleaseLoop(page, await textSliceProbeRect(text, 2, 6));
@@ -784,7 +775,7 @@ test("Focus lasso authority belongs only to the exact focused thought", async ({
   await expect(page.locator(`[data-thought-text-id="${rootId}"]`)).toBeVisible();
   await expect(child).toBeVisible();
 
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   await drawEarlyReleaseLoop(
     page,
     await segmentProbeRect(page.locator(`[data-thought-text-id="${rootId}"]`), 0),
@@ -824,7 +815,7 @@ test("a non-root upper grip pulls upward while its fixed seam pushes the selecti
     .getByRole("button", { name: "Focus this thought" })
     .evaluate((button: HTMLButtonElement) => button.click());
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   await child.scrollIntoViewIfNeeded();
   await drawEarlyReleaseLoop(
     page,
@@ -889,7 +880,7 @@ test("a whole multi-segment main thought becomes one contiguous Elastic range", 
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await focusRoot(page, false);
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
 
   const text = page.locator(`[data-thought-text-id="${rootId}"] .spatial-thought__label`);
   const first = await segmentRect(page, text, 0);
@@ -1207,5 +1198,19 @@ async function drawEarlyReleaseLoop(
   await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });
   // Release before returning to the start; the visible seam is the exact final edge.
   await page.mouse.move(rect.x - margin, rect.y + Math.min(18, rect.height * .45), { steps: 2 });
+  await page.mouse.up();
+}
+
+async function drawClosedLoop(
+  page: Page,
+  rect: { x: number; y: number; width: number; height: number },
+) {
+  const margin = 9;
+  await page.mouse.move(rect.x - margin, rect.y - margin);
+  await page.mouse.down();
+  await page.mouse.move(rect.x + rect.width + margin, rect.y - margin, { steps: 5 });
+  await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
+  await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });
+  await page.mouse.move(rect.x - margin, rect.y - margin, { steps: 4 });
   await page.mouse.up();
 }

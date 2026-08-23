@@ -3,7 +3,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { projectToolSurface } from "../tools/project-tool-surface";
 import { projectTools } from "../tools/project-tools";
+import { CANVAS_LANGUAGE_OPTIONS } from "./canvas-preferences";
 import { ToolRail, type ToolRailProps } from "./ToolRail";
+import { toolRailCopy } from "./tool-rail-copy";
 
 const EXPECTED_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo"];
 
@@ -56,15 +58,31 @@ describe("ToolRail", () => {
     expect(markup).not.toContain("Redo");
   });
 
-  it("keeps the recording control available as stop", () => {
+  it("keeps the recording control available to finish", () => {
     const markup = renderToolRail({
       interactionPending: true,
       voiceActive: true,
-      voiceLabel: "Stop recording",
+      voiceLabel: "Finish recording",
     });
 
-    expect(markup).toContain('aria-label="Stop recording"');
+    expect(markup).toContain('aria-label="Finish recording"');
     expect(markup).not.toMatch(/data-tool-id="voice"[^>]*disabled/);
+  });
+
+  it.each(CANVAS_LANGUAGE_OPTIONS)("renders fixed controls in $label", ({ value: locale }) => {
+    const copy = toolRailCopy(locale);
+    const markup = renderToolRail({ locale, voiceLabel: copy.voice });
+
+    expect(markup).toContain(`aria-label="${copy.editingTools}"`);
+    expect(markup).toContain(`aria-label="${copy.circleSelectLanguage}"`);
+    expect(markup).toContain(`aria-label="${copy.extendRelatedThought}"`);
+    expect(markup).toContain(`aria-label="${copy.canvasPan}"`);
+    expect(markup).toContain(`aria-label="${copy.undoLastChange}"`);
+    expect(markup).toContain(`>${copy.voice}</span>`);
+    expect(markup).toContain(`>${copy.lasso}</span>`);
+    expect(markup).toContain(`>${copy.branch}</span>`);
+    expect(markup).toContain(`>${copy.pan}</span>`);
+    expect(markup).toContain(`>${copy.undo}</span>`);
   });
 });
 
@@ -73,6 +91,7 @@ function renderToolRail(overrides: Partial<ToolRailProps>): string {
     interactionPending: false,
     lassoActive: false,
     lassoAvailable: true,
+    locale: "en-US",
     onIntent: vi.fn(),
     onLasso: vi.fn(),
     onMove: vi.fn(),

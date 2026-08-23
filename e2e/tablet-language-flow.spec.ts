@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
 const SOURCE_SEGMENT = "我们怀念的也许不是一个真实存在过的过去";
@@ -11,7 +12,7 @@ test.describe("tablet touch material language", () => {
   test("coarse admission actions keep a 48px target and a two-pixel keyboard focus", async ({ page }) => {
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-    await page.getByRole("button", { name: "Record a top-level thought", exact: true }).tap();
+    await page.getByRole("button", { name: fixtureUiCopy.voiceTool.recordTopLevelThought, exact: true }).tap();
     const feedback = page.locator(".admission-feedback");
     await expect(feedback).toBeVisible();
     const actions = feedback.locator("button");
@@ -47,7 +48,7 @@ test.describe("tablet touch material language", () => {
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
-    await expect(page.getByRole("button", { name: "Record a top-level thought", exact: true })).toBeEnabled();
+    await expect(page.getByRole("button", { name: fixtureUiCopy.voiceTool.recordTopLevelThought, exact: true })).toBeEnabled();
 
     await focusRootByTouch(page);
     const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
@@ -64,7 +65,7 @@ test.describe("tablet touch material language", () => {
     const grip = page.getByRole("slider", {
       name: "用下握点设置所选文字的展开程度",
     });
-    const toolRail = page.getByRole("navigation", { name: "Editing tools" });
+    const toolRail = page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools });
 
     await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true }))
       .toHaveCount(0);
@@ -124,7 +125,7 @@ test.describe("tablet touch material language", () => {
     await expect(text).toContainText(EXPANDED_SEGMENT);
     expect(turnRequests).toBe(1);
 
-    await page.getByRole("button", { name: "Undo last change", exact: true }).tap();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).tap();
     await expect(text).toHaveText(SOURCE_TEXT);
     expect(browserErrors).toEqual([]);
   });
@@ -139,7 +140,7 @@ async function focusRootByTouch(page: Page): Promise<void> {
 }
 
 async function selectFirstSegmentByTouch(page: Page, text: Locator): Promise<void> {
-  await page.getByRole("button", { name: "Circle-select language", exact: true }).tap();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).tap();
   await drawTouchLoop(page, await segmentProbeRect(text, 0));
   await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
 }

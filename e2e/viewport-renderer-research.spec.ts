@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 test("C3b publishes one bounded research window over the complete 2,000-node layout", async ({ page }) => {
   test.skip(
@@ -257,7 +258,7 @@ test("pan, zoom and responsive width republish bounded acknowledged windows", as
   const initialX = Number(await shell.getAttribute("data-viewport-x"));
   const initialZoom = Number(await shell.getAttribute("data-viewport-zoom"));
 
-  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
   await expect(shell).toHaveAttribute("data-canvas-mode", "pan");
   await page.mouse.move(640, 560);
   await page.mouse.down();

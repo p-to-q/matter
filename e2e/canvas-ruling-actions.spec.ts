@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 import { CORNER_GLYPH_DESCENT } from "../features/matter/components/node-handle-position";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
@@ -208,8 +209,8 @@ for (const viewport of [
     await lens.getByRole("button", { name: "Extend from this thought" }).click();
     await expect(page.locator("[data-thought-id]")).toHaveCount(beforeBranch + 1);
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
-    await page.getByRole("navigation", { name: "Editing tools" })
-      .getByRole("button", { name: "Undo last change" }).click();
+    await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+      .getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
     await expect(page.locator("[data-thought-id]")).toHaveCount(beforeBranch);
 
     await rootText.hover();
@@ -225,11 +226,11 @@ for (const viewport of [
 
     await rootText.hover();
     await expect(lens).toBeVisible();
-    await page.getByRole("navigation", { name: "Editing tools" })
-      .getByRole("button", { name: "Circle-select language" }).click();
+    await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+      .getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage }).click();
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
-    await page.getByRole("navigation", { name: "Editing tools" })
-      .getByRole("button", { name: "Exit language selection" }).click();
+    await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+      .getByRole("button", { name: fixtureUiCopy.toolRail.exitLanguageSelection }).click();
 
     if (viewport.name === "laptop") {
       await page.locator('[data-chrome-control="appearance"]').click();
@@ -309,8 +310,8 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   await page.mouse.move(lensBox.x + lensBox.width / 2, lensBox.y + lensBox.height / 2);
   await expect(lens).toBeVisible();
 
-  const pan = page.getByRole("navigation", { name: "Editing tools" })
-    .getByRole("button", { name: "Canvas pan" });
+  const pan = page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+    .getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan });
   await pan.click();
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
   const beforePan = await rulingCameraReceipt(page);
@@ -336,7 +337,7 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   expect(afterPan.cellWidth).toBeCloseTo(beforePan.cellWidth, 4);
   expect(afterPan.cellHeight).toBeCloseTo(beforePan.cellHeight, 4);
 
-  await page.getByRole("button", { name: "Exit canvas pan" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan }).click();
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
   await rootText.hover();
   await expect(lens).toBeVisible();
@@ -360,8 +361,8 @@ test("zoom scales one world ruling around the paper-local pointer pivot", async 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("navigation", { name: "Editing tools" })
-    .getByRole("button", { name: "Canvas pan" }).click();
+  await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+    .getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan }).click();
 
   const beforeZoom = await rulingCameraReceipt(page);
   const surfacePivot = await page.locator(".matter-document").evaluate((paper) => {

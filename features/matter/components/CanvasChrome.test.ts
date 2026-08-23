@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_CANVAS_PREFERENCES } from "./canvas-preferences";
+import {
+  CANVAS_LANGUAGE_OPTIONS,
+  DEFAULT_CANVAS_PREFERENCES,
+  type CanvasLanguage,
+} from "./canvas-preferences";
 import {
   CANVAS_CHROME_INFO,
   CanvasChrome,
@@ -11,6 +15,7 @@ import {
   projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
+import { toolRailCopy } from "./tool-rail-copy";
 
 describe("CanvasChrome", () => {
   it("renders the desktop corner system and one mobile menu trigger", () => {
@@ -108,8 +113,8 @@ describe("CanvasChrome", () => {
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);
-    expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-24px -30px;/s);
-    expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-13px -17px;/s);
+    expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-14px -18px;/s);
+    expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-7px -10px;/s);
     expect(css).toMatch(/\.bottomRight::before\s*{\s*inset:\s*-22px -28px;/s);
     expect(css).toMatch(/\.bottomRight::after\s*{\s*inset:\s*-11px -15px;/s);
     expect(css).toContain("backdrop-filter: var(--corner-optical-outer-filter)");
@@ -118,8 +123,13 @@ describe("CanvasChrome", () => {
     expect(globalCss).toMatch(/--corner-optical-inner-filter:\s*blur\(3\.25px\)/);
     expect(globalCss).toMatch(/--corner-optical-outer-mask:[^;]*\.72\) 30%[^;]*\.24\) 70%[^;]*\.03\) 89%[^;]*\.008\) 94%[^;]*\.004\) 97%[^;]*transparent 100%/s);
     expect(globalCss).toMatch(/--corner-optical-inner-mask:[^;]*\.9\) 72%[^;]*\.72\) 77%[^;]*\.32\) 81%[^;]*\.02\) 91%[^;]*\.004\) 96%[^;]*transparent 100%/s);
-    expect(globalCss).toMatch(/\.matter-guidance::before\s*{[^}]*inset:\s*-24px -32px;[^}]*--corner-optical-outer-mask/s);
-    expect(globalCss).toMatch(/\.matter-guidance::after\s*{[^}]*inset:\s*-12px -18px;[^}]*--corner-optical-inner-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance::before,\s*\.matter-guidance::after\s*{[^}]*z-index:\s*0/s);
+    expect(globalCss).toMatch(/\.matter-guidance::before\s*{[^}]*inset:\s*-18px -22px;[^}]*--corner-optical-outer-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance::after\s*{[^}]*inset:\s*-9px -12px;[^}]*--corner-optical-inner-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance\s*{[^}]*pointer-events:\s*auto;[^}]*transition:\s*color/s);
+    expect(globalCss).toMatch(/\.matter-guidance__next\s*{[^}]*animation:\s*matter-guidance-in/s);
+    expect(globalCss).toMatch(/\.matter-guidance__next::before\s*{[^}]*inset:\s*0 -4px;[^}]*background:\s*transparent/s);
+    expect(globalCss).toMatch(/\.matter-guidance:hover\s+\.matter-guidance__next::before[^}]*background:\s*var\(--chrome-hover-bg/s);
     expect(css).toMatch(/\.gearButton\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;/s);
     expect(css).toMatch(/\.gearButton svg\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;/s);
     expect(css).toContain("@media (max-width: 767px)");
@@ -191,6 +201,71 @@ describe("nextMenuFocusIndex", () => {
   ])("maps %s from %i across %i items", (key, current, count, expected) => {
     expect(nextMenuFocusIndex(key, current, count)).toBe(expected);
   });
+});
+
+describe("canvas chrome info parity", () => {
+  // The info overlay is the only place the product states its pre-release
+  // legal posture. A locale that silently drops that sentence gives its
+  // readers a weaker disclosure than an English reader, so parity is an
+  // invariant here rather than a per-locale phrase assertion.
+  const PRE_RELEASE_PRIVACY_DISCLOSURE: Readonly<Record<CanvasLanguage, string>> = {
+    "en-US": "A published privacy policy is not available for this pre-release.",
+    "zh-CN": "尚未发布正式隐私政策",
+    "zh-TW": "正式隱私政策尚未發布",
+    "ja-JP": "正式なプライバシーポリシーはまだありません",
+    "de-DE": "Eine veröffentlichte Datenschutzerklärung gibt es noch nicht.",
+  };
+  const LOCAL_FALLBACK_ASSET_DISCLOSURE: Readonly<Record<CanvasLanguage, string>> = {
+    "en-US": "tokenizer and WASM runtime assets may download separately",
+    "zh-CN": "分词器和 WASM 运行时资源可能另行下载",
+    "zh-TW": "分詞器和 WASM 執行期資源可能另行下載",
+    "ja-JP": "トークナイザーと WASM ランタイムの資産は別途取得されることがあります",
+    "de-DE": "Tokenizer- und WASM-Laufzeitressourcen können getrennt geladen werden",
+  };
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s discloses that no privacy policy is published yet",
+    (locale) => {
+      const body = CANVAS_CHROME_INFO[locale].privacy.body.join(" ");
+      expect(body).toContain(PRE_RELEASE_PRIVACY_DISCLOSURE[locale]);
+    },
+  );
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s gives a truthful local-speech fallback disclosure",
+    (locale) => {
+      const body = CANVAS_CHROME_INFO[locale].privacy.body.join(" ");
+      // The fallback stays local only after browser-managed recognition is
+      // unavailable; silence about its first-use model download would make the
+      // privacy surface materially weaker than the actual voice contract.
+      expect(body).toContain("Hugging Face");
+      expect(body).toContain(LOCAL_FALLBACK_ASSET_DISCLOSURE[locale]);
+      expect(CANVAS_CHROME_INFO[locale].privacy.body).toHaveLength(3);
+    },
+  );
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s inquiry copy names the controls that locale's tool rail renders",
+    (locale) => {
+      const body = CANVAS_CHROME_INFO[locale].inquiry.body.join(" ");
+      const rail = toolRailCopy(locale);
+      // Naming a control the rail does not show sends the person hunting for
+      // a button that is not there. Localizing the rail must localize this copy.
+      expect(body).toContain(rail.lasso);
+      expect(body).toContain(rail.branch);
+      expect(body).toContain(rail.undo);
+    },
+  );
+
+  it.each(["about", "inquiry", "pricing", "privacy", "terms"] as const)(
+    "%s keeps the same paragraph count in every locale",
+    (section) => {
+      const expected = CANVAS_CHROME_INFO["en-US"][section].body.length;
+      for (const { value } of CANVAS_LANGUAGE_OPTIONS) {
+        expect(CANVAS_CHROME_INFO[value][section].body).toHaveLength(expected);
+      }
+    },
+  );
 });
 
 function renderChrome(overrides: Partial<CanvasChromeProps> = {}): string {

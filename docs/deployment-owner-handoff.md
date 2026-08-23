@@ -1,19 +1,16 @@
-# Preview.40 deployment-owner handoff
+# Preview deployment-owner handoff
 
 Status: Preview.40 first reached `matter.ptoq.io` as merge commit `53f51a2`.
-That production receipt includes the four-route process-local admission
-perimeter, spoken punctuation/expression work, and corrected `llms.txt` product
-grammar. Labels, transcript repair, and Ask Matter stay live; Elastic and Text
-Swap must remain unavailable. This is an operator checklist, not a place to
-record token values.
+The final review fixes merged through PR #70 as `af4bcb9`; that exact Production
+deployment and public-origin receipt completed before the annotated immutable
+`v0.2.0-preview.40` tag was published. The final release includes the
+four-route process-local admission perimeter, spoken punctuation/expression
+work, and corrected `llms.txt` product grammar. Labels, transcript repair, and
+Ask Matter stay live; Elastic and Text Swap remain unavailable. This is an
+operator checklist, not a place to record token values.
 
-The later review-fix source is carried by PR #70. Its head may change as a
-finding is fixed, and a merge may create another commit, so neither a prior PR
-head nor the first Preview.40 Production receipt proves the final release.
-Require a successful Production deployment for the resulting exact `main` SHA
-before creating the immutable `v0.2.0-preview.40` tag. The source ceilings below
-are active only per warm instance and are not evidence of distributed edge
-control.
+The source ceilings below are active only per warm instance and are not evidence
+of distributed edge control.
 
 ## Owner boundary
 
@@ -32,6 +29,21 @@ admission ceilings below are per warm instance only. Before any later release,
 obtain a fresh owner decision or the distributed-rate, provider-spend, alert,
 and rollback receipts.
 
+## Preview.41 candidate and authorization
+
+The owner has directed one Preview.41 production promotion after the current
+review and hardening work. This is a fresh, one-preview exception: it keeps the
+same label, repair, inquiry, and browser/local-voice gates, keeps Elastic and
+Text Swap unavailable, and leaves issues #34 and #68 open. It is not permission
+to treat the process-local source perimeter as distributed abuse control or to
+claim a provider spend cap, alert delivery, or rollback receipt.
+
+The candidate records `0.2.0-preview.41` in `package.json` and both root
+package entries in `package-lock.json`. It must receive an exact-SHA Preview
+receipt, Production receipt, public-origin probe, and annotated immutable
+`v0.2.0-preview.41` tag before this section is replaced by a completed-release
+fact. Until then it is source only.
+
 ## Exact source-preview and production sequence
 
 Matter deploys through the repository's Vercel Git integration. A pushed topic
@@ -41,11 +53,10 @@ project binding, so a maintainer must not substitute an ad-hoc `vercel` CLI
 deployment for that auditable path or risk selecting another project or
 environment.
 
-The first unused version after the remote tag and GitHub prerelease inventory is
-`0.2.0-preview.40`, and the candidate records that identity in `package.json`
-and both root package entries in `package-lock.json`. The health route reads
-that package version, so source, Preview, and Production receipts must all agree
-on it before promotion.
+The completed Preview.40 candidate records `0.2.0-preview.40` in `package.json`
+and both root package entries in `package-lock.json`. Its health route, Preview,
+Production, and immutable tag all agree on that identity. Future candidates must
+make the same source-to-receipt comparison before promotion.
 
 The release sequence is atomic at one candidate commit:
 
@@ -68,10 +79,10 @@ The release sequence is atomic at one candidate commit:
    candidate is live.
 5. Only after the production receipt succeeds, require the repository's
    Immutable Releases setting to report `enabled: true`. Create the annotated
-   `v0.2.0-preview.40` tag on that exact production SHA, push it, and verify the
-   remote annotated tag peels to the same SHA. Create the prerelease as a draft,
-   publish it only after its metadata is complete, then require
-   `gh release verify v0.2.0-preview.40` to validate GitHub's release
+   tag for the exact candidate version on that production SHA, push it, and
+   verify the remote annotated tag peels to the same SHA. Create the prerelease
+   as a draft, publish it only after its metadata is complete, then require
+   `gh release verify <candidate-tag>` to validate GitHub's release
    attestation. Immutable Releases prevents the published tag from being moved
    or deleted while the release exists. npm publication remains unauthorized.
 

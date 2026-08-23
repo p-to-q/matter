@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
 
@@ -77,10 +78,10 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   expect(labelRequests).toHaveLength(0);
 
   // Search finds a row by the name that is actually on screen.
-  await page.getByRole("button", { name: "Search thoughts" }).click();
-  await page.getByRole("searchbox", { name: "Filter material files" }).fill("另一种");
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts }).click();
+  await page.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles }).fill("另一种");
   await expect(page.locator(".material-file")).toHaveCount(1);
-  await page.getByRole("button", { name: "Close search" }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.closeSearch }).click();
 
   // Clearing the name returns the row to automatic naming.
   await openNameEditor(reloaded.locator(".material-file__open"));

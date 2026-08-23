@@ -30,11 +30,21 @@ admission perimeter is only a per-warm-instance first line. It is not evidence
 of a distributed rate limit, provider spend cap, alert delivery, or an
 operator-owned rollback receipt.
 
-Deployment truth and source truth are currently different revisions. The live
-tag is `c347f78`; it predates the current working tree's shared four-route
-process-local admission perimeter and corrected public discovery copy. Treat
-those additions as the next source candidate until an exact later SHA is
-promoted. Preview.39 health cannot prove that candidate code is running.
+Preview.40 completed the later source-to-production boundary: final review fixes
+merged as `af4bcb9`, reached Production, and were published as the annotated
+immutable `v0.2.0-preview.40` tag. That release supersedes Preview.39's
+`c347f78` deployment for the shared four-route process-local admission perimeter
+and corrected public discovery copy. The unresolved operational controls below
+remain exceptions, not evidence that distributed limits, spend caps, alerts, or
+rollback ownership now exist.
+
+For Preview.41, the owner has directed one further production promotion after
+the voice, locale, camera-authority, and public-boundary hardening recorded in
+the current candidate. This is a fresh Preview.41-only risk acceptance, not an
+extension of either earlier exception. It preserves the same live gates, keeps
+Elastic and Text Swap unavailable, and leaves issues #34 and #68 open. Until the
+exact candidate has a successful Preview receipt, Production receipt, public
+origin probe, and immutable tag, it is not deployed fact.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -435,7 +445,7 @@ video:
 
 ```bash
 npm run probe:material-origin -- https://matter.ptoq.io \
-  --expected-version=0.2.0-preview.40
+  --expected-version=0.2.0-preview.41
 ```
 
 That command only prints the historical paired 1+1 smoke plan. It is useful for

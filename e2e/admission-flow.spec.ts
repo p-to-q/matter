@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const parentId = "thought_fixture_imagined_lives";
 const heardTranscript = "呃，我觉得我觉得这个方案可以，但是它的实现事件比预期长。";
@@ -50,15 +51,19 @@ for (const viewport of [
       "true",
     );
     const voice = page.getByRole("button", {
-      name: "Record a thought below the selected material",
+      name: fixtureUiCopy.voiceTool.recordBelowSelectedMaterial,
       exact: true,
     });
     await expect(voice).toBeEnabled();
     await voice.click();
     const stop = page
-      .getByRole("navigation", { name: "Editing tools" })
-      .getByRole("button", { name: "Stop recording", exact: true });
+      .getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+      .getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true });
     await expect(stop).toBeVisible();
+    await expect(page.getByRole("button", {
+      name: fixtureUiCopy.voiceTool.stopRecording,
+      exact: true,
+    })).toHaveCount(2);
     await expect(page.locator(".matter-guidance__next")).toHaveText("说出你的想法。");
     await expect(page.locator("main.matter-shell")).toHaveAttribute(
       "data-interaction-pending",
@@ -83,8 +88,8 @@ for (const viewport of [
           rect.bottom > box.y;
       }).map((node) => node.getAttribute("data-thought-id")), feedbackBox!);
     expect(overlaps).toEqual([]);
-    await expect(page.getByRole("button", { name: "Extend related thought", exact: true })).toBeDisabled();
-    await expect(page.getByRole("button", { name: "Canvas pan", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true })).toBeDisabled();
     // MediaRecorder chunks are asynchronous; this crosses one 250 ms capture
     // interval so Stop can prove the final dataavailable boundary with audio.
     await page.waitForTimeout(350);
@@ -166,10 +171,10 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
     await expect(admitted).toHaveCount(1);
-    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(heard).toHaveCount(1);
     await expect(admitted).toHaveCount(0);
-    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(heard).toHaveCount(0);
     await expect(admitted).toHaveCount(0);
     expect(browserErrors).toEqual([]);
@@ -181,7 +186,7 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
     const root = page.locator('[data-thought-id="thought_fixture_root"]');
-    const voice = page.getByRole("button", { name: "Record a top-level thought", exact: true });
+    const voice = page.getByRole("button", { name: fixtureUiCopy.voiceTool.recordTopLevelThought, exact: true });
     await voice.click();
     const feedback = page.locator(".admission-feedback");
     await expect(feedback).toBeVisible();
@@ -204,8 +209,10 @@ for (const viewport of [
           rect.bottom > box.y;
       }).map((node) => node.getAttribute("data-thought-id")), feedbackBox);
     expect(overlaps).toEqual([]);
-    await feedback.getByRole("button", { name: "取消录音", exact: true }).click();
-    await expect(feedback).toHaveCount(0);
+    // This receipt owns the anchored layout, not an uncontrolled microphone
+    // result. The separate admission receipt proves both equivalent Stop
+    // controls; ending the test keeps this geometry proof independent of the
+    // browser's device-specific transcription ending.
   });
 }
 
@@ -218,13 +225,13 @@ test("reduced motion presents repaired text whole without a reveal sequence", as
     .locator("[data-thought-text-id]")
     .click();
   await page.getByRole("button", {
-    name: "Record a thought below the selected material",
+    name: fixtureUiCopy.voiceTool.recordBelowSelectedMaterial,
     exact: true,
   }).click();
   await page.waitForTimeout(350);
   await page
-    .getByRole("navigation", { name: "Editing tools" })
-    .getByRole("button", { name: "Stop recording", exact: true })
+    .getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+    .getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true })
     .click();
 
   const admitted = page.locator('[data-thought-id^="thought_"]')

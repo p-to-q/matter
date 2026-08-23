@@ -196,6 +196,7 @@ const ENGLISH_INFO: CanvasChromeInfo = Object.freeze({
     body: Object.freeze([
       "Material is kept in this browser unless you export it or invoke a model-powered change.",
       "A published privacy policy is not available for this pre-release. Each model call receives only its bounded task material. An inquiry sends only bounded lassoed language or the bounded material included on this canvas; held-aside material is not sent.",
+      "Voice normally uses browser-managed recognition, whose service handling depends on the browser. If Matter falls back to on-device recognition, audio stays on this device; first use downloads an approximately 152 MB fixed model from Hugging Face, may take time, and can be cancelled. That figure covers the model graphs; tokenizer and WASM runtime assets may download separately.",
     ]),
   }),
   terms: Object.freeze({
@@ -223,7 +224,7 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     title: "询问 Matter",
     body: Object.freeze([
       "就画面里被纳入的材料问一句短问题。询问不会改变它。",
-      "用套索圈定确切语言，拖动边缘决定改变多少；用分支生成相关想法，用撤销退回上一次已提交的改变。",
+      "用套索圈定确切语言，拖动边缘决定改变多少；用延展生成相关想法，用撤销退回上一次已提交的改变。",
     ]),
   }),
   pricing: Object.freeze({
@@ -237,6 +238,7 @@ const CHINESE_INFO: CanvasChromeInfo = Object.freeze({
     body: Object.freeze([
       "材料保存在当前浏览器中，除非你主动导出，或发起一次由模型完成的改变。",
       "内测阶段尚未发布正式隐私政策。每次模型调用只接收该任务所需的有限材料；询问只发送套索圈定且受限长度的语言，或画面里被纳入的有限材料，暂不纳入的材料不会发送。",
+      "语音通常使用浏览器管理的识别服务，其服务处理方式取决于浏览器。若 Matter 回退到本机识别，音频会留在这台设备上；首次使用会从 Hugging Face 下载约 152 MB 的固定模型，可能需要一些时间，且可以取消。该数字只涵盖模型图；分词器和 WASM 运行时资源可能另行下载。",
     ]),
   }),
   terms: Object.freeze({
@@ -259,10 +261,10 @@ const TRADITIONAL_CHINESE_INFO: CanvasChromeInfo = Object.freeze({
   ]) }),
   inquiry: Object.freeze({ title: "詢問 Matter", body: Object.freeze([
     "就畫面裡被納入的材料問一句短問題。詢問不會改變它。",
-    "用套索圈定語言，拖動邊緣決定改變多少；用分支生成相關想法，用復原退回上一次已提交的改變。",
+    "用套索圈定語言，拖動邊緣決定改變多少；用延展生成相關想法，用復原退回上一次已提交的改變。",
   ]) }),
   pricing: Object.freeze({ title: "定價", body: Object.freeze(["Matter 仍在預覽階段，此版本沒有付費方案或結帳功能。"])}),
-  privacy: Object.freeze({ title: "隱私", body: Object.freeze(["材料保存在目前瀏覽器中，除非你主動匯出或發起模型改變。", "每次模型呼叫只接收該任務所需的有限材料；詢問只傳送套索圈定且受限長度的語言，或畫面裡被納入的有限材料，暫不納入的材料不會傳送。"])}),
+  privacy: Object.freeze({ title: "隱私", body: Object.freeze(["材料保存在目前瀏覽器中，除非你主動匯出或發起模型改變。", "正式隱私政策尚未發布。每次模型呼叫只接收該任務所需的有限材料；詢問只傳送套索圈定且受限長度的語言，或畫面裡被納入的有限材料，暫不納入的材料不會傳送。", "語音通常使用由瀏覽器管理的辨識服務，其服務處理方式取決於瀏覽器。若 Matter 改用本機辨識，音訊會留在這台裝置；首次使用會從 Hugging Face 下載約 152 MB 的固定模型，可能需要一些時間，而且可以取消。這個數字只涵蓋模型圖；分詞器和 WASM 執行期資源可能另行下載。"])}),
   terms: Object.freeze({ title: "服務條款", body: Object.freeze(["Matter 仍是預覽軟體，正式服務條款尚未發布。", "產品仍在驗證階段，請為無法替代的材料保留匯出副本。"])}),
 });
 
@@ -277,10 +279,10 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
   ]) }),
   inquiry: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
     "この画面に含まれている素材について短く尋ねます。尋ねても素材は変わりません。",
-    "Lasso で言葉を囲み、伸縮で変化の量を決め、Branch で関連する考えを育て、Undo で直前の変更を戻します。",
+    "なげなわで言葉を囲み、伸縮で変化の量を決め、展開で関連する考えを育て、取り消すで直前の変更を戻します。",
   ]) }),
   pricing: Object.freeze({ title: "料金", body: Object.freeze(["Matter はプレビュー中です。このビルドに有料プランや決済はありません。"])}),
-  privacy: Object.freeze({ title: "プライバシー", body: Object.freeze(["素材は、書き出しまたはモデルによる変更を行わない限り、このブラウザに保存されます。", "各モデル呼び出しには、その処理に必要な範囲の素材だけが渡されます。問い合わせでは、上限内の Lasso で選んだ言葉、またはこの画面に含まれている範囲内の素材だけを送り、除外した素材は送りません。"])}),
+  privacy: Object.freeze({ title: "プライバシー", body: Object.freeze(["素材は、書き出しまたはモデルによる変更を行わない限り、このブラウザに保存されます。", "正式なプライバシーポリシーはまだありません。各モデル呼び出しには、その処理に必要な範囲の素材だけが渡されます。問い合わせでは、上限内の Lasso で選んだ言葉、またはこの画面に含まれている範囲内の素材だけを送り、除外した素材は送りません。", "音声入力は通常、ブラウザ管理の認識機能を使うため、サービス側の扱いはブラウザに依存します。Matter が端末内認識へ切り替わる場合、音声はこの端末に残ります。初回は Hugging Face から約 152 MB の固定モデルを取得するため時間がかかることがありますが、キャンセルできます。この数値はモデルグラフのみで、トークナイザーと WASM ランタイムの資産は別途取得されることがあります。"])}),
   terms: Object.freeze({ title: "利用規約", body: Object.freeze(["Matter はプレビューソフトウェアで、正式な利用規約はまだありません。", "置き換えられない素材は、検証中のあいだ書き出しを保管してください。"])}),
 });
 
@@ -295,10 +297,10 @@ const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
   ]) }),
   inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
     "Stelle eine kurze Frage zu dem Material, das auf dieser Fläche einbezogen ist. Eine Frage verändert es nicht.",
-    "Mit Lasso markierst du Sprache, mit Stretch bestimmst du das Ausmaß, Branch erzeugt einen verwandten Gedanken und Undo macht die letzte Änderung rückgängig.",
+    "Mit Lasso markierst du Sprache, mit Stretch bestimmst du das Ausmaß, Verzweigen erzeugt einen verwandten Gedanken und Rückgängig macht die letzte Änderung rückgängig.",
   ]) }),
   pricing: Object.freeze({ title: "Preise", body: Object.freeze(["Matter ist in der Vorschau. Dieser Build hat keinen kostenpflichtigen Plan und keine Kasse."])}),
-  privacy: Object.freeze({ title: "Datenschutz", body: Object.freeze(["Material bleibt in diesem Browser, außer du exportierst es oder startest eine modellgestützte Änderung.", "Jeder Modellaufruf erhält nur das für seine begrenzte Aufgabe nötige Material. Eine Frage sendet begrenztes, mit Lasso markiertes Sprachmaterial oder das begrenzte, auf dieser Fläche einbezogene Material; zurückgestelltes Material wird nicht gesendet."])}),
+  privacy: Object.freeze({ title: "Datenschutz", body: Object.freeze(["Material bleibt in diesem Browser, außer du exportierst es oder startest eine modellgestützte Änderung.", "Eine veröffentlichte Datenschutzerklärung gibt es noch nicht. Jeder Modellaufruf erhält nur das für seine begrenzte Aufgabe nötige Material. Eine Frage sendet begrenztes, mit Lasso markiertes Sprachmaterial oder das begrenzte, auf dieser Fläche einbezogene Material; zurückgestelltes Material wird nicht gesendet.", "Spracheingabe nutzt normalerweise die browserverwaltete Erkennung; wie deren Dienst mit Daten umgeht, hängt vom Browser ab. Falls Matter auf Erkennung auf dem Gerät zurückfällt, bleibt das Audio auf diesem Gerät. Beim ersten Mal wird ein festes Modell von etwa 152 MB von Hugging Face geladen; das kann dauern und lässt sich abbrechen. Diese Angabe umfasst die Modellgraphen; Tokenizer- und WASM-Laufzeitressourcen können getrennt geladen werden."])}),
   terms: Object.freeze({ title: "Nutzungsbedingungen", body: Object.freeze(["Matter ist Vorschau-Software; veröffentlichte Nutzungsbedingungen gibt es noch nicht.", "Bewahre für unersetzliches Material einen Export auf, solange das Produkt erprobt wird."])}),
 });
 

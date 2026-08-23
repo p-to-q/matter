@@ -1,8 +1,75 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { fixtureMaterialFilesToggleName, fixtureUiCopy } from "./matter-ui-copy";
+import { CANVAS_PREFERENCES_STORAGE_KEY } from "../features/matter/components/canvas-preferences";
+import { MATTER_LOCALES } from "../features/matter/config/locales";
+import { materialFilesCopy } from "../features/matter/components/material-files-copy";
 
 const rootId = "matter_document_root_matter_fixture_rooted_01";
 const firstBranchText = "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
 const searchText = "被允许想象的生活";
+
+test("mode controls compensate CJK glyph metrics without enlarging archive actions", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+
+  for (const locale of MATTER_LOCALES) {
+    await page.evaluate(({ key, language }) => {
+      localStorage.setItem(key, JSON.stringify({
+        version: 1,
+        language,
+        leafFx: true,
+        appearance: "auto",
+      }));
+    }, { key: CANVAS_PREFERENCES_STORAGE_KEY, language: locale });
+    await page.reload();
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+    const copy = materialFilesCopy(locale);
+    const sidebar = page.locator("aside.material-files");
+    const expectedModeSize = locale === "en-US" || locale === "de-DE" ? "10px" : "12px";
+    for (const name of [copy.searchThoughts, copy.select, copy.archive]) {
+      await expect(sidebar.getByRole("button", { name, exact: true }))
+        .toHaveCSS("font-size", expectedModeSize);
+    }
+    const controls = sidebar.locator(".material-files__controls");
+    expect(await controls.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+
+    await sidebar.getByRole("button", { name: copy.archive, exact: true }).click();
+    await expect(sidebar.locator(".material-files__section-label"))
+      .toHaveCSS("font-size", expectedModeSize);
+    await expect(sidebar.getByRole("button", { name: copy.close, exact: true }))
+      .toHaveCSS("font-size", expectedModeSize);
+    await expect(sidebar.getByRole("button", { name: copy.archiveExportCopy, exact: true }))
+      .toHaveCSS("font-size", "9px");
+    await expect(sidebar.getByRole("button", { name: copy.archiveImportCopy, exact: true }))
+      .toHaveCSS("font-size", "9px");
+    expect(await controls.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  }
+});
+
+async function expectIndexCameraMotion(
+  world: Locator,
+  action: () => Promise<void>,
+): Promise<void> {
+  await world.evaluate((element) => {
+    delete element.dataset.e2eIndexCameraTransition;
+    element.addEventListener("transitionrun", (event) => {
+      if (
+        event instanceof TransitionEvent &&
+        event.target === element &&
+        event.propertyName === "transform" &&
+        element.dataset.cameraMotion === "index"
+      ) {
+        element.dataset.e2eIndexCameraTransition = "transform";
+      }
+    }, { once: true });
+  });
+  await action();
+  // `data-camera-motion` is intentionally removed on transitionend. Record
+  // the matching transition before clicking so a loaded worker cannot make a
+  // correct short camera motion disappear between actionability and polling.
+  await expect(world).toHaveAttribute("data-e2e-index-camera-transition", "transform");
+}
 
 test("an index passage lands at the browser's visual centre, including a repeated click", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -13,13 +80,12 @@ test("an index passage lands at the browser's visual centre, including a repeate
   const world = page.locator(".matter-world");
   const nodeId = await row.getAttribute("data-node-id");
   if (nodeId === null) throw new Error("index centring fixture is missing");
-  await row.locator(".material-file__open").click();
-  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await expectIndexCameraMotion(world, () => row.locator(".material-file__open").click());
   await expectThoughtAtVisualCentre(page, nodeId);
   await expect(world).not.toHaveAttribute("data-camera-motion", "index");
 
   const shell = page.locator("main.matter-shell");
-  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
   const paper = await page.locator(".matter-document").boundingBox();
   if (paper === null) throw new Error("canvas pan receipt is missing");
   await page.mouse.move(paper.x + paper.width * .7, paper.y + paper.height * .3);
@@ -29,8 +95,7 @@ test("an index passage lands at the browser's visual centre, including a repeate
   await expect.poll(async () => Number(await shell.getAttribute("data-viewport-x")))
     .not.toBe(0);
 
-  await row.locator(".material-file__open").click();
-  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await expectIndexCameraMotion(world, () => row.locator(".material-file__open").click());
   await expectThoughtAtVisualCentre(page, nodeId);
   await expect(world).not.toHaveAttribute("data-camera-motion", "index");
 
@@ -60,7 +125,7 @@ test("index navigation restores only undersized material type to its readability
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
 
   const shell = page.locator("main.matter-shell");
   await page.locator(".matter-document").dispatchEvent("wheel", {
@@ -101,7 +166,7 @@ test("index navigation respects reduced motion", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
   await page.locator(".matter-document").dispatchEvent("wheel", {
     bubbles: true,
     cancelable: true,
@@ -125,7 +190,7 @@ test("a manual Pan gesture takes over the camera at its rendered mid-flight posi
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
 
   const row = page.locator("aside.material-files .material-file").nth(8);
   const world = page.locator(".matter-world");
@@ -181,7 +246,7 @@ test("a dominant narrow drawer shifts index attention into the exposed canvas", 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: "Canvas pan", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
   await page.locator(".matter-document").dispatchEvent("wheel", {
     bubbles: true,
     cancelable: true,
@@ -193,7 +258,7 @@ test("a dominant narrow drawer shifts index attention into the exposed canvas", 
   });
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.6");
   const sidebar = page.locator("aside.material-files");
-  await page.getByRole("button", { name: /material files/i }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
   await expect(sidebar).toHaveAttribute("data-open", "true");
   const row = sidebar.locator(".material-file").nth(8);
   const nodeId = await row.getAttribute("data-node-id");
@@ -239,7 +304,7 @@ for (const viewport of [
     const rows = sidebar.locator(".material-file");
     const contextRow = sidebar.locator(".material-files__context");
     const contextTitle = sidebar.locator(".material-files__context-title");
-    const toggle = page.getByRole("button", { name: /material files/i });
+    const toggle = page.getByRole("button", { name: fixtureMaterialFilesToggleName });
     const setSidebarOpen = async (open: boolean) => {
       if ((await toggle.first().getAttribute("aria-expanded")) !== String(open)) {
         await toggle.first().click();
@@ -286,7 +351,7 @@ for (const viewport of [
     // first-level material and may share its wording with that metadata.
     await expect(contextRow).toHaveAttribute("data-node-id", rootId);
     await expect(rows).toHaveCount(10);
-    await expect(sidebar.getByRole("tree", { name: /Markdown material tree/u })).toHaveCount(1);
+    await expect(sidebar.getByRole("tree", { name: fixtureUiCopy.materialFiles.materialTree(10) })).toHaveCount(1);
     await expect(sidebar.getByRole("treeitem")).toHaveCount(10);
     const accessibleHierarchy = await rows.evaluateAll((elements) => elements.map((row) => ({
       level: Number(row.getAttribute("aria-level")),
@@ -443,8 +508,12 @@ for (const viewport of [
     // the canvas or the working-context boundary.
     const disclosureBranch = rows.nth(1);
     const disclosure = disclosureBranch.locator(".material-file__structure-control");
+    const disclosureTitle = (await disclosureBranch.locator(".material-file__title").innerText()).trim();
     await expect(disclosure).toHaveAttribute("data-structure-action", "expanded");
-    await expect(disclosure).toHaveAttribute("aria-label", /^在材料目录中收起/u);
+    await expect(disclosure).toHaveAttribute(
+      "aria-label",
+      fixtureUiCopy.materialFiles.collapseBranch(disclosureTitle),
+    );
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("data-structure-action", "collapsed");
     await expect(rows).toHaveCount(8);
@@ -456,8 +525,8 @@ for (const viewport of [
     // The document title is metadata, not a selectable thought. Its control
     // opens the title editor without creating a material selection.
     await contextTitle.click();
-    await expect(sidebar.getByRole("textbox", { name: "Canvas title" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    await expect(sidebar.getByRole("textbox", { name: fixtureUiCopy.materialFiles.canvasTitle })).toBeVisible();
+    await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
 
     // One control owns both a compact index and the temporary model boundary:
     // holding a branch aside closes its descendants in this drawer but keeps the
@@ -474,7 +543,11 @@ for (const viewport of [
     await expect(branch.locator(".material-file__restore-plus")).toHaveCSS("opacity", "1");
     await expect(branch.locator(".material-file__disclosure-chevron")).toHaveCSS("opacity", "0");
     await expect(branch.locator(".material-file__restore-plus path")).toHaveCSS("stroke-width", "1px");
-    await expect(branch.locator(".material-file__context-control")).toHaveAttribute("aria-label", /^重新纳入画面里的材料/u);
+    const branchTitle = await branch.locator(".material-file__title").innerText();
+    await expect(branch.locator(".material-file__context-control")).toHaveAttribute(
+      "aria-label",
+      fixtureUiCopy.materialFiles.includeInWorkingContext(branchTitle),
+    );
     await expect(rows).toHaveCount(8);
     await expect(contextTitle).toHaveText(rootTitle);
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
@@ -495,15 +568,19 @@ for (const viewport of [
     await branch.hover();
     await branch.locator(".material-file__context-control--set-aside").click();
     await expect(rows).toHaveCount(8);
-    await sidebar.getByRole("button", { name: "Search thoughts" }).click();
-    const heldSearch = sidebar.getByRole("searchbox", { name: "Filter material files" });
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts }).click();
+    const heldSearch = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
     await heldSearch.fill(searchText.slice(0, 5));
     const heldResult = rows.first();
     await expect(heldResult).toHaveAttribute("data-context-excluded", "true");
-    await expect(heldResult.locator(".material-file__open")).toHaveAttribute("aria-label", /^重新纳入画面里的材料并查看/u);
+    const heldTitle = await heldResult.locator(".material-file__title").innerText();
+    await expect(heldResult.locator(".material-file__open")).toHaveAttribute(
+      "aria-label",
+      fixtureUiCopy.materialFiles.restoreAndView(heldTitle),
+    );
     await heldResult.locator(".material-file__open").click();
     await expect(heldResult).not.toHaveAttribute("data-context-excluded", "true");
-    await sidebar.getByRole("button", { name: "Close search" }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.closeSearch }).click();
     await expect(rows).toHaveCount(10);
 
     if (viewport.name === "narrow") await setSidebarOpen(false);
@@ -523,9 +600,9 @@ for (const viewport of [
     // Search is flat across the whole tree, and a result carries its position
     // as a path rather than as an indent.
     const controls = sidebar.locator(".material-files__controls");
-    const searchTrigger = sidebar.getByRole("button", { name: "Search thoughts" });
-    const selectTrigger = sidebar.getByRole("button", { name: "Select", exact: true });
-    const archiveTrigger = sidebar.getByRole("button", { name: "Archive", exact: true });
+    const searchTrigger = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts });
+    const selectTrigger = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true });
+    const archiveTrigger = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true });
     await page.evaluate(() => document.fonts.ready);
     const relativeX = async (locator: Locator): Promise<number> => locator.evaluate((element) => {
       const controls = element.closest<HTMLElement>(".material-files__controls");
@@ -540,21 +617,21 @@ for (const viewport of [
     await searchTrigger.click();
     await expect(sidebar).toHaveAttribute("data-mode", "search");
     await expect(rows).toHaveCount(0);
-    await expect(sidebar.locator(".material-files__empty")).toContainText("Type to find a thought.");
-    const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
+    await expect(sidebar.locator(".material-files__empty")).toContainText(fixtureUiCopy.materialFiles.emptyTypeToFind);
+    const search = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
     await expect(search).toBeFocused();
     await expect(search).toHaveCSS("outline-width", "2px");
-    await expect(search).toHaveAttribute("placeholder", "Find thought");
+    await expect(search).toHaveAttribute("placeholder", fixtureUiCopy.materialFiles.findThought);
     await expect(controls.locator(".material-files__search")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
     const controlAxesDuringSearch = {
       archive: await relativeX(archiveTrigger),
       search: await relativeX(sidebar.locator(".material-files__search svg")),
       select: await relativeX(selectTrigger),
     };
-    expect(controlAxesDuringSearch.search).toBeCloseTo(controlAxesBeforeSearch.search, 1);
+    expect(controlAxesDuringSearch.search).toBeCloseTo(controlAxesBeforeSearch.search, 3);
     if (viewport.name === "laptop") {
-      expect(controlAxesDuringSearch.select).toBeCloseTo(controlAxesBeforeSearch.select, 1);
-      expect(controlAxesDuringSearch.archive).toBeCloseTo(controlAxesBeforeSearch.archive, 1);
+      expect(controlAxesDuringSearch.select).toBeCloseTo(controlAxesBeforeSearch.select, 3);
+      expect(controlAxesDuringSearch.archive).toBeCloseTo(controlAxesBeforeSearch.archive, 3);
     }
     const searchFit = await search.evaluate((element: HTMLInputElement) => {
       const style = getComputedStyle(element, "::placeholder");
@@ -572,7 +649,7 @@ for (const viewport of [
     expect(searchFit.available).toBeGreaterThan(searchFit.required);
     await search.fill(searchText.slice(0, 5));
     await expect(rows).toHaveCount(1);
-    await expect(controls.locator("[aria-live='polite']")).toHaveText("1 material result");
+    await expect(controls.locator("[aria-live='polite']")).toHaveText(fixtureUiCopy.materialFiles.resultCount(1));
     await expect(rows.first().locator(".material-file__path")).toHaveCount(1);
     await search.dispatchEvent("keydown", { key: "Escape", isComposing: true });
     await expect(sidebar).toHaveAttribute("data-mode", "search");
@@ -598,7 +675,7 @@ for (const viewport of [
     const before = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-node-id")),
     );
-    await clickTool(page.getByRole("button", { name: "Extend related thought", exact: true }));
+    await clickTool(page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }));
     await expect(rows).toHaveCount(11);
     const after = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-node-id")),
@@ -609,9 +686,9 @@ for (const viewport of [
     await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
 
     // Selection spans the branch under the level, not only the level itself.
-    await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
     await expect(sidebar).toHaveAttribute("data-mode", "select");
-    const checks = sidebar.getByRole("checkbox", { name: /for copying/ });
+    const checks = sidebar.getByRole("checkbox");
     await expect(checks).toHaveCount(11);
     const selectedModeRow = sidebar.locator(`.material-file[data-node-id="${fixtureBranchId}"]`);
     await expect.poll(() => selectedModeRow.evaluate((row) => {
@@ -637,17 +714,17 @@ for (const viewport of [
     // Undoing the newest thought must take its selection with it, rather than
     // leave a count that counts a thought that is gone.
     await sidebar.locator(`.material-file[data-node-id="${admittedId}"]`).getByRole("checkbox").check();
-    await expect(sidebar).toContainText("2 selected");
-    await sidebar.getByRole("button", { name: "Copy 2 selected thoughts" }).click();
-    await expect(sidebar).toContainText("Copied");
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied.startsWith(firstBranchText)).toBe(true);
     expect(copied.split("\n\n")).toHaveLength(2);
-    await expect(sidebar).toContainText("2 selected");
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
 
-    await clickTool(page.getByRole("button", { name: "Undo last change" }));
+    await clickTool(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }));
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
-    await expect(sidebar).toContainText("1 selected");
+    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
     expect(rootTitle.length).toBeGreaterThan(0);
     expect(browserErrors).toEqual([]);
   });
@@ -685,9 +762,9 @@ test("the flat virtual DOM follows tree keyboard semantics", async ({ page }) =>
   await page.keyboard.press("Home");
   await expect(items.first()).toBeFocused();
 
-  const searchTrigger = sidebar.getByRole("button", { name: "Search thoughts" });
+  const searchTrigger = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts });
   await searchTrigger.click();
-  const search = sidebar.getByRole("searchbox", { name: "Filter material files" });
+  const search = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
   await search.fill("时间");
   const result = sidebar.getByRole("listitem").first();
   await expect(result).toBeVisible();
@@ -714,7 +791,7 @@ test("a mixed sibling group renders one directed arrow-to-terminal guide", async
   }
 
   await sidebar.locator(`[data-node-id="${firstLeafId}"] .material-file__open`).click();
-  await page.getByRole("button", { name: "Extend related thought", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
   await expect(rows).toHaveCount(11);
   const afterNestedInsert = await rows.evaluateAll((elements) =>
     elements.map((element) => element.dataset.nodeId ?? ""),
@@ -723,7 +800,7 @@ test("a mixed sibling group renders one directed arrow-to-terminal guide", async
   if (nestedLeafId === undefined) throw new Error("nested leaf was not admitted");
 
   await sidebar.locator(`[data-node-id="${parentId}"] .material-file__open`).click();
-  await page.getByRole("button", { name: "Extend related thought", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
   await expect(rows).toHaveCount(12);
   const finalIds = await rows.evaluateAll((elements) =>
     elements.map((element) => element.dataset.nodeId ?? ""),
@@ -781,23 +858,23 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   await page.locator(`[data-thought-id="${branchId}"] [data-thought-text-id]`).click();
   await page.keyboard.press("Delete");
   await expect(page.locator(`[data-thought-id="${branchId}"]`)).toHaveCount(0);
-  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
   await expect(page.locator(`[data-thought-id="${branchId}"]`)).toHaveCount(1);
   await expect(sidebar.locator(`[data-node-id="${branchId}"]`)).toHaveAttribute("data-expanded", "true");
   await expect(rows).toHaveCount(10);
 
-  await sidebar.getByRole("button", { name: "Select", exact: true }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
   const leaf = rows.last();
   const leafId = await leaf.getAttribute("data-node-id");
   if (leafId === null) throw new Error("transient selection leaf is missing");
   await leaf.getByRole("checkbox").check();
-  await expect(sidebar).toContainText("1 selected");
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
   await page.locator(`[data-thought-id="${leafId}"] [data-thought-text-id]`).click();
   await page.keyboard.press("Delete");
-  await expect(sidebar).toContainText("0 selected");
-  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(0));
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
   await expect(page.locator(`[data-thought-id="${leafId}"]`)).toHaveCount(1);
-  await expect(sidebar).toContainText("0 selected");
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(0));
   await expect(sidebar.locator(`[data-node-id="${leafId}"]`).getByRole("checkbox")).not.toBeChecked();
 });
 
@@ -813,7 +890,7 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
-  const toggle = page.getByRole("button", { name: "Show material files; saving needs attention" });
+  const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFilesSavingNeedsAttention });
   await expect(toggle).toHaveAttribute("data-persistence-error", "true");
   await toggle.click();
 
@@ -825,12 +902,12 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
   await expect(identity).toContainText("采石者");
   await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("仅存于这台设备");
   await expect(identity.getByRole("button")).toHaveCount(0);
-  await sidebar.getByRole("button", { name: "Archive" }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive }).click();
 
-  const archive = sidebar.getByRole("region", { name: "Material archive" });
-  await expect(archive).toContainText("Local storage is full");
-  await expect(archive.getByRole("button", { name: "Export a copy" })).toBeEnabled();
-  await expect(archive.getByRole("button", { name: "Retry saving" })).toBeEnabled();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteStorageFull);
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRetrySaving })).toBeEnabled();
 });
 
 test("corrupt local material is exported before an explicit atomic repair", async ({ page }) => {
@@ -869,19 +946,19 @@ test("corrupt local material is exported before an explicit atomic repair", asyn
 
   await page.reload();
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  await sidebar.getByRole("button", { name: "Archive", exact: true }).click();
-  const archive = sidebar.getByRole("region", { name: "Material archive" });
-  await expect(archive).toContainText("Export a recovery copy before Matter atomically replaces");
-  await expect(archive.getByRole("button", { name: "Repair local storage" })).toHaveCount(0);
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteCorrupt);
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRepairLocalStorage })).toHaveCount(0);
 
   const downloadReceipt = page.waitForEvent("download");
-  await archive.getByRole("button", { name: "Export a copy" }).click();
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy }).click();
   const download = await downloadReceipt;
   expect(download.suggestedFilename()).toMatch(/\.matter-recovery\.json$/u);
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  await expect(archive.getByRole("button", { name: "Repair local storage" })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRepairLocalStorage })).toBeEnabled();
 
-  await archive.getByRole("button", { name: "Repair local storage" }).click();
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRepairLocalStorage }).click();
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -960,7 +1037,7 @@ test("Undo does not revive a held-aside decision after its branch was deleted", 
   await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveCount(0);
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
   await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveCount(1);
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).toHaveCount(1);
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).not.toHaveAttribute("data-context-excluded", "true");

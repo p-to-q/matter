@@ -5,12 +5,10 @@ the complete generative product loop yet.
 
 Preview.40 first reached Production as merge commit `53f51a2`; that receipt
 proved the shared four-route admission perimeter, STT punctuation/expression
-work, and corrected public discovery copy. The later review-fix source is
-carried by PR #70. Its head changes whenever a finding is fixed, and merging may
-create another SHA, so the first Preview.40 receipt must not be cited as proof
-of those review fixes: the final release identity is the exact merge commit
-with a successful Production deployment and the immutable
-`v0.2.0-preview.40` tag.
+work, and corrected public discovery copy. The final review fixes then merged
+through PR #70 as `af4bcb9`, received their exact Production deployment receipt,
+and are the immutable `v0.2.0-preview.40` release. npm publication remains
+unauthorized.
 
 ## Current deployable slice
 
@@ -53,6 +51,62 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.41
+
+Preview.41 is the next source candidate after the immutable Preview.40 release.
+It does not expand model authority or make Elastic or Text Swap available. It
+finishes the five-locale control copy while preserving both equivalent Stop
+recording controls: the fixed rail remains reachable as the primary instrument,
+and material-local feedback keeps the same action next to the live recording.
+It also gives the privacy surface a truthful browser-recognition versus
+on-device-fallback disclosure. The fallback remains lazy, cancellable, and local
+for raw audio; its first fixed-model download is named rather than hidden.
+
+The candidate also centralizes Lasso accessibility copy rather than retaining a
+second locale conditional chain in the canvas owner. Starting Lasso now adopts
+the currently rendered index camera before a stroke begins. That is a
+pointer-authority correction: a person no longer starts a deliberate selection
+against a camera that is still travelling to a different coordinate. The
+browser proof repeats the formerly intermittent camera case rather than
+lengthening an animation or relaxing the lasso topology assertion.
+
+The three desktop corner groups retain the transparent two-depth optical
+grammar without acquiring a visible surface. Upper-right and lower-left use
+smaller footprint-specific guards, while bottom-right keeps its established
+baseline. Lower-left text alone owns the entry animation; its parent backdrop
+owner remains static, so ambient and material pixels can be sampled throughout
+hover, focus, active state, and camera motion.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor 21; 42 linked Markdown documents; Node 60/60;
+                       architecture 403 files across 7 layers with no outward
+                       edge, provider leak, or cycle; Vitest 159 files passed
+                       and 2 skipped, 1,836 cases passed and 4 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack
+                       production build of all 21 pages/routes passed
+browser proof          full Chromium: 96 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 111 total
+camera proof           the index-motion Lasso receipt passed six serial
+                       Chromium repetitions after activation takes the
+                       rendered camera; it still asserts live ink, closure,
+                       selected-language state, and both stretch grips
+runtime proof          static root; initial 1,191.0 KiB raw / 377.8 KiB gzip;
+                       one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
+                       visual media 350.8 KiB; 0 repository-only trace files
+production boundary    the owner has directed one Preview.41 promotion while
+                       #34/#68 remain open; label, repair, inquiry, and voice
+                       retain their current gates; Elastic and Text Swap stay off
+publication state      candidate only: do not describe Preview.41 as deployed
+                       or tagged until its exact Preview and Production receipts
+                       and immutable release record exist
+```
+
+Preview.41 retains the Preview.40-only operational exception only as a fresh,
+explicit owner direction for this one promotion. It does not prove a distributed
+rate limit, provider spend cap, alert delivery, or an operator rollback receipt.
+Those controls remain prerequisites for a later authority expansion.
 
 ## Candidate verification — 0.2.0-preview.40
 
@@ -130,17 +184,17 @@ punctuation bound      dense 2,000-code-unit / 333-marker corpus median:
 production boundary    fresh Preview.40-only owner exception; label, repair,
                        and inquiry stay live; Elastic and Text Swap stay off;
                        issues #34 and #68 remain open
-publication state      first Preview.40 Production receipt complete; review
-                       fixes require their own exact merge-SHA Production and
-                       origin receipts before immutable tag/release creation;
+publication state      final review-fix merge `af4bcb9` has its exact
+                       Production and public-origin receipts; annotated
+                       immutable tag `v0.2.0-preview.40` is published;
                        npm publication is not authorized
 ```
 
-The versioned local candidate is a source-level **GO**. Production promotion is
-authorized only as the fresh **Preview.40-only owner exception** above. The
-exception does not prove distributed rate limits, a provider spend cap, alert
-delivery, or an operator rollback receipt. The branch, deployment, and public
-origin must still prove one exact SHA before the prerelease tag is created.
+The versioned candidate completed its source, exact Production, public-origin,
+and immutable-release boundary at `af4bcb9`. The Preview.40-only owner exception
+does not prove distributed rate limits, a provider spend cap, alert delivery, or
+an operator rollback receipt; those remain the conditions for a later release
+or any expansion of model authority.
 
 ## Candidate verification — 0.2.0-preview.39
 

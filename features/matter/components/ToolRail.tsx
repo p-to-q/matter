@@ -5,6 +5,7 @@ import type {
 } from "react";
 import type { ToolIntent } from "../tools/model";
 import type { ProjectedToolSurface } from "../tools/project-tool-surface";
+import type { CanvasLanguage } from "./canvas-preferences";
 import {
   BranchIcon,
   LassoIcon,
@@ -12,11 +13,13 @@ import {
   UndoIcon,
   VoiceIcon,
 } from "./icons";
+import { toolRailCopy } from "./tool-rail-copy";
 
 export type ToolRailProps = {
   interactionPending: boolean;
   lassoActive: boolean;
   lassoAvailable: boolean;
+  locale: CanvasLanguage;
   onLasso: () => void;
   onMove: () => void;
   onIntent: (intent: ToolIntent) => void;
@@ -36,6 +39,7 @@ export function ToolRail({
   interactionPending,
   lassoActive,
   lassoAvailable,
+  locale,
   onIntent,
   onLasso,
   onMove,
@@ -47,10 +51,11 @@ export function ToolRail({
   voiceLabel,
 }: ToolRailProps) {
   const { branch, undo } = surface.main;
+  const copy = toolRailCopy(locale);
 
   return (
     <nav
-      aria-label="Editing tools"
+      aria-label={copy.editingTools}
       className="tool-rail"
       data-canvas-interactive
       onPointerDown={stopPointerPropagation}
@@ -63,7 +68,7 @@ export function ToolRail({
         icon={<VoiceIcon />}
         label={voiceLabel}
         onClick={voiceAvailable && (!interactionPending || voiceActive) ? onVoice : undefined}
-        shortLabel="Voice"
+        shortLabel={copy.voice}
         toolId="voice"
       />
       <ToolSeparator between="admission-material" />
@@ -72,23 +77,23 @@ export function ToolRail({
         disabled={!lassoAvailable || interactionPending}
         group="material"
         icon={<LassoIcon />}
-        label={lassoActive ? "Exit language selection" : "Circle-select language"}
+        label={lassoActive ? copy.exitLanguageSelection : copy.circleSelectLanguage}
         onClick={!interactionPending && lassoAvailable ? onLasso : undefined}
         pressed={lassoActive}
-        shortLabel="Lasso"
+        shortLabel={copy.lasso}
         toolId="lasso"
       />
       <ToolButton
         disabled={interactionPending || branch?.availability !== "available"}
         group="material"
         icon={<BranchIcon />}
-        label="Extend related thought"
+        label={copy.extendRelatedThought}
         onClick={
           branch?.availability === "available"
             ? () => onIntent(branch.intent)
             : undefined
         }
-        shortLabel="Branch"
+        shortLabel={copy.branch}
         toolId="branch"
       />
       <ToolButton
@@ -96,9 +101,9 @@ export function ToolRail({
         disabled={interactionPending}
         group="material"
         icon={<MoveIcon />}
-        label={lassoActive ? "Return to canvas pan" : panActive ? "Exit canvas pan" : "Canvas pan"}
+        label={lassoActive ? copy.returnToCanvasPan : panActive ? copy.exitCanvasPan : copy.canvasPan}
         onClick={!interactionPending ? onMove : undefined}
-        shortLabel="Pan"
+        shortLabel={copy.pan}
         toolId="move"
         pressed={panActive}
       />
@@ -107,13 +112,13 @@ export function ToolRail({
         disabled={interactionPending || undo?.availability !== "available"}
         group="history"
         icon={<UndoIcon />}
-        label="Undo last change"
+        label={copy.undoLastChange}
         onClick={
           undo?.availability === "available"
             ? () => onIntent(undo.intent)
             : undefined
         }
-        shortLabel="Undo"
+        shortLabel={copy.undo}
         toolId="undo"
       />
     </nav>

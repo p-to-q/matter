@@ -92,22 +92,45 @@ export async function transcribeLocally(input: Readonly<{
   if (typeof window === "undefined" || typeof Worker === "undefined") {
     throw new LocalTranscriptionError("unavailable");
   }
-  const audio = await decodeRecording(input.audio, input.signal);
-  throwIfAborted(input.signal);
-  // The protocol identity may be reused after a component remount. A local
-  // lease id must not be: a queued cancellation acknowledgement for an older
-  // turn otherwise aliases the new pending request and leaves it unresolved.
-  const id = `${input.interactionId}:${input.attempt}:${++requestSequence}`;
-  const target = localTranscriptionWorker();
+  const deadline = createLocalTranscriptionDeadline(input.signal);
+  try {
+    // The deadline begins before decoding. AudioContext decoding has no native
+    // timeout, so starting it only after decoding could leave a malformed
+    // recording in the visible transcribing state forever.
+    const audio = await decodeRecording(input.audio, deadline.signal);
+    throwIfAborted(deadline.signal);
+    // The protocol identity may be reused after a component remount. A local
+    // lease id must not be: a queued cancellation acknowledgement for an older
+    // turn otherwise aliases the new pending request and leaves it unresolved.
+    const id = `${input.interactionId}:${input.attempt}:${++requestSequence}`;
+    const target = localTranscriptionWorker();
+    return await transcribeDecodedLocally(input, audio, id, target, deadline);
+  } catch (error) {
+    if (deadline.didTimeout()) throw new LocalTranscriptionError("timeout");
+    throw error;
+  } finally {
+    deadline.dispose();
+  }
+}
+
+function transcribeDecodedLocally(
+  input: Readonly<{
+    purpose: TranscriptionPurpose;
+    locale: string;
+  }>,
+  audio: Float32Array,
+  id: string,
+  target: Worker,
+  deadline: LocalTranscriptionDeadline,
+): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    const abort = () => cancelRequest(id, target, new LocalTranscriptionError("failed"));
-    const timeout = window.setTimeout(
-      () => cancelRequest(id, target, new LocalTranscriptionError("timeout")),
-      LOCAL_TRANSCRIPTION_TIMEOUT_MS,
+    const abort = () => cancelRequest(
+      id,
+      target,
+      new LocalTranscriptionError(deadline.didTimeout() ? "timeout" : "failed"),
     );
     const dispose = () => {
-      window.clearTimeout(timeout);
-      input.signal.removeEventListener("abort", abort);
+      deadline.signal.removeEventListener("abort", abort);
     };
     pending.set(id, {
       resolve,
@@ -117,8 +140,8 @@ export async function transcribeLocally(input: Readonly<{
       started: false,
       purpose: input.purpose,
     });
-    input.signal.addEventListener("abort", abort, { once: true });
-    if (input.signal.aborted) {
+    deadline.signal.addEventListener("abort", abort, { once: true });
+    if (deadline.signal.aborted) {
       abort();
       return;
     }
@@ -134,6 +157,32 @@ export async function transcribeLocally(input: Readonly<{
     } catch {
       retireWorker(target, new LocalTranscriptionError("failed"));
     }
+  });
+}
+
+type LocalTranscriptionDeadline = Readonly<{
+  signal: AbortSignal;
+  didTimeout: () => boolean;
+  dispose: () => void;
+}>;
+
+function createLocalTranscriptionDeadline(parent: AbortSignal): LocalTranscriptionDeadline {
+  const controller = new AbortController();
+  let timedOut = false;
+  const abortFromParent = () => controller.abort(parent.reason);
+  if (parent.aborted) abortFromParent();
+  else parent.addEventListener("abort", abortFromParent, { once: true });
+  const timeout = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort(new DOMException("Local transcription timed out.", "TimeoutError"));
+  }, LOCAL_TRANSCRIPTION_TIMEOUT_MS);
+  return Object.freeze({
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    dispose: () => {
+      window.clearTimeout(timeout);
+      parent.removeEventListener("abort", abortFromParent);
+    },
   });
 }
 

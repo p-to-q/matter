@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
 
@@ -16,7 +17,7 @@ for (const viewport of [
     const before = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
       nodes.map((node) => node.getAttribute("data-thought-id")),
     );
-    await page.getByRole("button", { name: "Extend related thought", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
     const after = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
       nodes.map((node) => node.getAttribute("data-thought-id")),
     );
@@ -28,7 +29,7 @@ for (const viewport of [
 
     await page.keyboard.press("Delete");
     await expect(page.locator(`[data-thought-id="${childId}"]`)).toHaveCount(0);
-    await page.getByRole("button", { name: "Undo last change", exact: true }).click();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(page.locator(`[data-thought-id="${childId}"]`)).toHaveCount(1);
   });
 }
