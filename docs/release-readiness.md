@@ -56,12 +56,12 @@ dependency monitor.
 
 Preview.41 is the next source candidate after the immutable Preview.40 release.
 It does not expand model authority or make Elastic or Text Swap available. It
-finishes the five-locale control copy, makes the recording rail the one explicit
-**Finish recording** action while material-local feedback names only the
-consequence-specific discard or cancellation, and gives the privacy surface a
-truthful browser-recognition versus on-device-fallback disclosure. The fallback
-remains lazy, cancellable, and local for raw audio; its first fixed-model
-download is named rather than hidden.
+finishes the five-locale control copy while preserving both equivalent Stop
+recording controls: the fixed rail remains reachable as the primary instrument,
+and material-local feedback keeps the same action next to the live recording.
+It also gives the privacy surface a truthful browser-recognition versus
+on-device-fallback disclosure. The fallback remains lazy, cancellable, and local
+for raw audio; its first fixed-model download is named rather than hidden.
 
 The candidate also centralizes Lasso accessibility copy rather than retaining a
 second locale conditional chain in the canvas owner. Starting Lasso now adopts
@@ -71,12 +71,19 @@ against a camera that is still travelling to a different coordinate. The
 browser proof repeats the formerly intermittent camera case rather than
 lengthening an animation or relaxing the lasso topology assertion.
 
+The three desktop corner groups retain the transparent two-depth optical
+grammar without acquiring a visible surface. Upper-right and lower-left use
+smaller footprint-specific guards, while bottom-right keeps its established
+baseline. Lower-left text alone owns the entry animation; its parent backdrop
+owner remains static, so ambient and material pixels can be sampled throughout
+hover, focus, active state, and camera motion.
+
 ```text
 source proof           npm run check exited 0 on the versioned candidate:
                        doctor 21; 42 linked Markdown documents; Node 60/60;
                        architecture 403 files across 7 layers with no outward
                        edge, provider leak, or cycle; Vitest 159 files passed
-                       and 2 skipped, 1,837 cases passed and 3 skipped;
+                       and 2 skipped, 1,836 cases passed and 4 skipped;
                        typegen, typecheck, lint, and the Next 16.3 webpack
                        production build of all 21 pages/routes passed
 browser proof          full Chromium: 95 passed, 15 explicitly capability-
@@ -85,7 +92,7 @@ camera proof           the index-motion Lasso receipt passed six serial
                        Chromium repetitions after activation takes the
                        rendered camera; it still asserts live ink, closure,
                        selected-language state, and both stretch grips
-runtime proof          static root; initial 1,184.5 KiB raw / 375.8 KiB gzip;
+runtime proof          static root; initial 1,191.1 KiB raw / 377.8 KiB gzip;
                        one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
                        visual media 350.8 KiB; 0 repository-only trace files
 production boundary    the owner has directed one Preview.41 promotion while

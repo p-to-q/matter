@@ -210,12 +210,12 @@
   }
 
   .topRight {
-    --corner-optical-outer-radius: 18px;
-    --corner-optical-inner-radius: 11px;
+    --corner-optical-outer-radius: 12px;
+    --corner-optical-inner-radius: 7px;
   }
 
-  .topRight::before { inset: -24px -30px; }
-  .topRight::after { inset: -13px -17px; }
+  .topRight::before { inset: -14px -18px; }
+  .topRight::after { inset: -7px -10px; }
 
   .bottomRight {
     --corner-optical-outer-radius: 16px;

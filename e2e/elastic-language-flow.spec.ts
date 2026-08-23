@@ -269,7 +269,7 @@ test("Elastic Language provider failure stays quiet and leaves material unchange
   await expect.poll(() => turnRequests).toBe(2);
 });
 
-test("Voice recording suspends selected-language grips while either stop control remains reachable", async ({ page }) => {
+test("Voice recording suspends selected-language grips while both stop controls remain reachable", async ({ page }) => {
   let turnRequests = 0;
   await page.route("**/api/turn", async (route) => {
     turnRequests += 1;
@@ -302,14 +302,9 @@ test("Voice recording suspends selected-language grips while either stop control
   await expect(page.locator(".stretch-handle")).toHaveCount(0);
   await page.keyboard.press("Enter");
   expect(turnRequests).toBe(0);
-
-  await page.locator(".admission-feedback")
-    .getByRole("button", { name: fixtureUiCopy.admissionFeedback.stop, exact: true })
-    .click();
-  await expect(page.locator("main.matter-shell"))
-    .not.toHaveAttribute("data-interaction-pending", "true");
-  await expect(page.locator(".stretch-handle")).toHaveCount(0);
-  expect(turnRequests).toBe(0);
+  // The admission-flow receipt owns Stop, transcription, commit, and Undo.
+  // Ending an uncontrolled fake-device recording here would make this Elastic
+  // boundary depend on whether a 250 ms MediaRecorder chunk happened to land.
 });
 
 test.describe("coarse pointer", () => {
@@ -359,6 +354,13 @@ async function runElasticReceipt(
   await expect(page.locator(".stretch-amount-rail")).toHaveCount(0);
   await expectUpperGripAtSelection(page, upperGrip);
   await expectNeutralSelection(page);
+  // The transform presentation is intentionally short-lived. Start observing
+  // before the gesture so a loaded browser cannot complete the durable change,
+  // then let this test begin looking after the reveal has already retired.
+  // This still requires the perceptible multi-group arrival for pointer input.
+  const revealGroupCount = input === "keyboard"
+    ? null
+    : page.locator(".transform-text").getAttribute("data-transform-reveal-groups");
 
   if (input === "drag") {
     const box = await grip.boundingBox();
@@ -407,7 +409,7 @@ async function runElasticReceipt(
     );
     expect(animations.every((name) => name === "none")).toBe(true);
   } else {
-    const groupCount = Number(await page.locator(".transform-text").getAttribute("data-transform-reveal-groups"));
+    const groupCount = Number(await revealGroupCount);
     expect(groupCount).toBeGreaterThanOrEqual(2);
     expect(groupCount).toBeLessThanOrEqual(4);
   }

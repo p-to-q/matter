@@ -149,9 +149,10 @@ history, archive content, or later model context.
 On desktop, the upper-right About/settings pair, bottom-right utility row, and
 lower-left guidance each own the same transparent two-depth optical field. The
 bottom-right row keeps the `28px` inline / `22px` block outer and `15px` inline /
-`11px` block inner baseline; the other two groups add only a few pixels of air
-for their different footprints. The broad outer depth uses a capped `0.8px`
-backdrop sample and the smaller inner depth uses `3.25px`. Empty paper remains
+`11px` block inner baseline. The smaller upper-right pair uses `18/14` outer and
+`10/7` inner clearance; lower-left guidance uses `22/18` outer and `12/9` inner
+clearance. The broad outer depth uses a capped `0.8px` backdrop sample and the
+smaller inner depth uses `3.25px`. Empty paper remains
 visually empty. Both depths share a very short, exceptionally slow
 zero-foot from a fully transparent perimeter before their curves separate: the
 outer depth gathers gradually over a wide, deliberately shallow shoulder, while

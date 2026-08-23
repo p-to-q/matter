@@ -2268,9 +2268,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
           if (activeLayout !== null) {
             // Entering Lasso transfers control of the visible coordinate space
-            // to the person before their first stroke. Keeping an index-centre
-            // transition alive until pointer-down makes a deliberate tool
-            // choice race the camera the person is about to address.
+            // to the person before their first stroke. Cancel both a pending
+            // centre request and a transition already in flight: either one
+            // could otherwise move the coordinate space after the tool is
+            // chosen but before its first measured pointer event.
+            indexCenterRequestRef.current = null;
             interruptIndexCameraMotion();
             setCanvasMode("material");
             lasso.activate();

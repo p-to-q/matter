@@ -1,9 +1,63 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { fixtureMaterialFilesToggleName, fixtureUiCopy } from "./matter-ui-copy";
+import { CANVAS_PREFERENCES_STORAGE_KEY } from "../features/matter/components/canvas-preferences";
+import { MATTER_LOCALES } from "../features/matter/config/locales";
+import { materialFilesCopy } from "../features/matter/components/material-files-copy";
 
 const rootId = "matter_document_root_matter_fixture_rooted_01";
 const firstBranchText = "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
 const searchText = "被允许想象的生活";
+
+test("archive compact type compensates CJK glyph metrics without changing English density", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+
+  for (const locale of MATTER_LOCALES) {
+    await page.evaluate(({ key, language }) => {
+      localStorage.setItem(key, JSON.stringify({
+        version: 1,
+        language,
+        leafFx: true,
+        appearance: "auto",
+      }));
+    }, { key: CANVAS_PREFERENCES_STORAGE_KEY, language: locale });
+    await page.reload();
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+    const copy = materialFilesCopy(locale);
+    const sidebar = page.locator("aside.material-files");
+    await sidebar.getByRole("button", { name: copy.archive, exact: true }).click();
+    const expectedSize = locale === "en-US" || locale === "de-DE" ? "9px" : "10px";
+    await expect(sidebar.getByRole("button", { name: copy.archiveExportCopy, exact: true }))
+      .toHaveCSS("font-size", expectedSize);
+    await expect(sidebar.getByRole("button", { name: copy.archiveImportCopy, exact: true }))
+      .toHaveCSS("font-size", expectedSize);
+  }
+});
+
+async function expectIndexCameraMotion(
+  world: Locator,
+  action: () => Promise<void>,
+): Promise<void> {
+  await world.evaluate((element) => {
+    delete element.dataset.e2eIndexCameraTransition;
+    element.addEventListener("transitionrun", (event) => {
+      if (
+        event instanceof TransitionEvent &&
+        event.target === element &&
+        event.propertyName === "transform" &&
+        element.dataset.cameraMotion === "index"
+      ) {
+        element.dataset.e2eIndexCameraTransition = "transform";
+      }
+    }, { once: true });
+  });
+  await action();
+  // `data-camera-motion` is intentionally removed on transitionend. Record
+  // the matching transition before clicking so a loaded worker cannot make a
+  // correct short camera motion disappear between actionability and polling.
+  await expect(world).toHaveAttribute("data-e2e-index-camera-transition", "transform");
+}
 
 test("an index passage lands at the browser's visual centre, including a repeated click", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -14,8 +68,7 @@ test("an index passage lands at the browser's visual centre, including a repeate
   const world = page.locator(".matter-world");
   const nodeId = await row.getAttribute("data-node-id");
   if (nodeId === null) throw new Error("index centring fixture is missing");
-  await row.locator(".material-file__open").click();
-  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await expectIndexCameraMotion(world, () => row.locator(".material-file__open").click());
   await expectThoughtAtVisualCentre(page, nodeId);
   await expect(world).not.toHaveAttribute("data-camera-motion", "index");
 
@@ -30,8 +83,7 @@ test("an index passage lands at the browser's visual centre, including a repeate
   await expect.poll(async () => Number(await shell.getAttribute("data-viewport-x")))
     .not.toBe(0);
 
-  await row.locator(".material-file__open").click();
-  await expect(world).toHaveAttribute("data-camera-motion", "index");
+  await expectIndexCameraMotion(world, () => row.locator(".material-file__open").click());
   await expectThoughtAtVisualCentre(page, nodeId);
   await expect(world).not.toHaveAttribute("data-camera-motion", "index");
 

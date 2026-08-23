@@ -73,15 +73,21 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expectInset(paperBox!.y + paperBox!.height - guidanceBox!.y - guidanceBox!.height, 25);
   expect(await guidance.evaluate((element) => {
     const style = getComputedStyle(element);
+    const label = element.querySelector<HTMLElement>(".matter-guidance__next");
+    if (label === null) throw new Error("guidance label is missing");
     return {
+      containerAnimation: style.animationName,
       family: style.fontFamily,
       fontSize: style.fontSize,
+      labelAnimation: getComputedStyle(label).animationName,
       letterSpacing: style.letterSpacing,
       lineHeight: style.lineHeight,
     };
   })).toEqual({
+    containerAnimation: "none",
     family: expect.stringContaining("departureMono"),
     fontSize: "14px",
+    labelAnimation: "matter-guidance-in",
     letterSpacing: "0.7px",
     lineHeight: "20px",
   });
@@ -110,13 +116,13 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expect(topOptical).toMatchObject({
     outerBlur: bottomOptical.outerBlur,
     outerBackground: "rgba(0, 0, 0, 0)",
-    outerTop: "-24px",
-    outerRight: "-30px",
+    outerTop: "-14px",
+    outerRight: "-18px",
     outerMask: bottomOptical.outerMask,
     innerBlur: bottomOptical.innerBlur,
     innerBackground: "rgba(0, 0, 0, 0)",
-    innerTop: "-13px",
-    innerRight: "-17px",
+    innerTop: "-7px",
+    innerRight: "-10px",
     innerMask: bottomOptical.innerMask,
     outerPointerEvents: "none",
     innerPointerEvents: "none",
@@ -124,25 +130,55 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expect(guidanceOptical).toMatchObject({
     outerBlur: bottomOptical.outerBlur,
     outerBackground: "rgba(0, 0, 0, 0)",
-    outerTop: "-24px",
-    outerRight: "-32px",
+    outerTop: "-18px",
+    outerRight: "-22px",
     outerMask: bottomOptical.outerMask,
     innerBlur: bottomOptical.innerBlur,
     innerBackground: "rgba(0, 0, 0, 0)",
-    innerTop: "-12px",
-    innerRight: "-18px",
+    innerTop: "-9px",
+    innerRight: "-12px",
     innerMask: bottomOptical.innerMask,
     outerPointerEvents: "none",
     innerPointerEvents: "none",
+    outerZIndex: "0",
+    innerZIndex: "0",
   });
 
   await page.waitForTimeout(1100);
-  await guidance.evaluate((element) => { element.style.animation = "none"; });
+  await guidance.locator(".matter-guidance__next").evaluate((element) => {
+    (element as HTMLElement).style.animation = "none";
+  });
   await askMatter.evaluate((element) => { element.style.animation = "none"; });
   await guidance.hover();
   await page.waitForTimeout(200);
-  expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
-    .toContain(await guidance.evaluate((element) => getComputedStyle(element).backgroundColor));
+  // Hover belongs to the label, not to the corner's backdrop-sampling owner.
+  // The two optical planes keep treating the canvas behind the full group.
+  const canvasTheme = await paper.getAttribute("data-canvas-theme");
+  const expectedHoverBackground = canvasTheme === "dark"
+    ? "rgb(245, 245, 242)"
+    : canvasTheme === "light"
+      ? "rgb(22, 29, 39)"
+      : null;
+  if (expectedHoverBackground === null) {
+    throw new Error(`guidance has no resolved canvas theme: ${canvasTheme}`);
+  }
+  expect(await guidance.evaluate((element) => {
+    const label = element.querySelector<HTMLElement>(".matter-guidance__next");
+    if (label === null) throw new Error("guidance label is missing");
+    return {
+      containerBackground: getComputedStyle(element).backgroundColor,
+      hovered: element.matches(":hover"),
+      labelBackground: getComputedStyle(label, "::before").backgroundColor,
+      pointerEvents: getComputedStyle(element).pointerEvents,
+    };
+  })).toEqual({
+    containerBackground: "rgba(0, 0, 0, 0)",
+    hovered: true,
+    labelBackground: expectedHoverBackground,
+    pointerEvents: "auto",
+  });
+  expect(await readOpticalClearance(page.locator('[data-optical-clearance="guidance"]')))
+    .toEqual(guidanceOptical);
   await askMatter.hover();
   await page.waitForTimeout(200);
   expect(["rgb(22, 29, 39)", "rgb(245, 245, 242)"])
@@ -356,6 +392,8 @@ async function readOpticalClearance(element: Locator) {
       innerMask: inner.maskImage || inner.getPropertyValue("-webkit-mask-image"),
       outerPointerEvents: outer.pointerEvents,
       innerPointerEvents: inner.pointerEvents,
+      outerZIndex: outer.zIndex,
+      innerZIndex: inner.zIndex,
     };
   });
 }

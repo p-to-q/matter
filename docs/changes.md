@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-24 — corner optics stay transparent and keep a stable backdrop owner
+
+Changed: upper-right and lower-left desktop optical guards now fit their smaller
+copy footprints instead of inheriting an oversized clearance. Upper-right uses
+`18/14` outer and `10/7` inner inline/block clearance; lower-left uses `22/18`
+and `12/9`; bottom-right retains `28/22` and `15/11`. The lower-left container
+no longer owns the opacity entry animation. Only its label enters, leaving the
+two transparent backdrop planes in one stable paper sampling context while the
+label's hover, focus, and active fill remains independent.
+
+Why: a finished opacity animation still creates a compositing boundary in the
+target browser, which can prevent nested backdrop filters from sampling the
+paper. Adding a translucent carrier made the filters visible but changed the
+quiet visual language; moving animation ownership solves the rendering fault
+without inventing a panel.
+
+Forecloses: colored or always-visible corner surfaces, an oversized shared guard
+for every footprint, parent-level opacity animation around backdrop filters,
+and coupling the persistent optical field to label hover state.
+
 ## 2026-08-22 — spoken expression is one conservative undoable insertion
 
 Changed: the late human-admission repair may make at most one expression

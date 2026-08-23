@@ -113,8 +113,8 @@ describe("CanvasChrome", () => {
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);
-    expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-24px -30px;/s);
-    expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-13px -17px;/s);
+    expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-14px -18px;/s);
+    expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-7px -10px;/s);
     expect(css).toMatch(/\.bottomRight::before\s*{\s*inset:\s*-22px -28px;/s);
     expect(css).toMatch(/\.bottomRight::after\s*{\s*inset:\s*-11px -15px;/s);
     expect(css).toContain("backdrop-filter: var(--corner-optical-outer-filter)");
@@ -123,8 +123,13 @@ describe("CanvasChrome", () => {
     expect(globalCss).toMatch(/--corner-optical-inner-filter:\s*blur\(3\.25px\)/);
     expect(globalCss).toMatch(/--corner-optical-outer-mask:[^;]*\.72\) 30%[^;]*\.24\) 70%[^;]*\.03\) 89%[^;]*\.008\) 94%[^;]*\.004\) 97%[^;]*transparent 100%/s);
     expect(globalCss).toMatch(/--corner-optical-inner-mask:[^;]*\.9\) 72%[^;]*\.72\) 77%[^;]*\.32\) 81%[^;]*\.02\) 91%[^;]*\.004\) 96%[^;]*transparent 100%/s);
-    expect(globalCss).toMatch(/\.matter-guidance::before\s*{[^}]*inset:\s*-24px -32px;[^}]*--corner-optical-outer-mask/s);
-    expect(globalCss).toMatch(/\.matter-guidance::after\s*{[^}]*inset:\s*-12px -18px;[^}]*--corner-optical-inner-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance::before,\s*\.matter-guidance::after\s*{[^}]*z-index:\s*0/s);
+    expect(globalCss).toMatch(/\.matter-guidance::before\s*{[^}]*inset:\s*-18px -22px;[^}]*--corner-optical-outer-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance::after\s*{[^}]*inset:\s*-9px -12px;[^}]*--corner-optical-inner-mask/s);
+    expect(globalCss).toMatch(/\.matter-guidance\s*{[^}]*pointer-events:\s*auto;[^}]*transition:\s*color/s);
+    expect(globalCss).toMatch(/\.matter-guidance__next\s*{[^}]*animation:\s*matter-guidance-in/s);
+    expect(globalCss).toMatch(/\.matter-guidance__next::before\s*{[^}]*inset:\s*0 -4px;[^}]*background:\s*transparent/s);
+    expect(globalCss).toMatch(/\.matter-guidance:hover\s+\.matter-guidance__next::before[^}]*background:\s*var\(--chrome-hover-bg/s);
     expect(css).toMatch(/\.gearButton\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;/s);
     expect(css).toMatch(/\.gearButton svg\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;/s);
     expect(css).toContain("@media (max-width: 767px)");
