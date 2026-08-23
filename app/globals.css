@@ -182,7 +182,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__archive-confirm button:disabled { cursor: default; opacity: .45; }
 .material-files__archive-retry { width: 100%; min-height: 34px; margin-top: 7px; border: 1px solid var(--index-line); border-radius: 8px; background: transparent; color: var(--active); font: 9px/1 var(--mono); cursor: pointer; }
 .material-files__archive-retry:hover:not(:disabled),
-.material-files__archive-retry:focus-visible { border-color: currentColor; background: rgba(22,29,39,.04); }
+.material-files__archive-retry:focus-visible { border-color: currentcolor; background: rgba(22,29,39,.04); }
 .material-files__archive-retry:disabled { cursor: default; opacity: .45; }
 .material-files__archive-status,
 .material-files__archive-error { margin: 12px 0 0; font-size: 9px; line-height: 1.5; }

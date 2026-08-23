@@ -62,7 +62,7 @@ for (const viewport of [
       (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
     )).toEqual(["voice", "lasso", "branch", "move", "undo"]);
     await expect(page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator('[data-tool-id="focus"]')).toHaveCount(0);
-    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
     const ambientVideo = page.locator("video.matter-ambient__video");
     await expect(ambientVideo).toHaveCount(1);
     await expect(ambientVideo).toHaveCSS("object-fit", "cover");
@@ -171,7 +171,7 @@ for (const viewport of [
     await selectThought(rootId);
     await expect(guidance.locator(".matter-guidance__next"))
       .toHaveText("说话，让想法向下生长。");
-    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    await expect(page.locator("[data-node-action-lens]")).toBeVisible();
     const rootBeforeGrowth = await thought(rootId).evaluate((node) => {
       const rect = node.getBoundingClientRect();
       return { x: rect.x, y: rect.y };
@@ -344,7 +344,7 @@ test("compact workbench keeps material clear of coarse controls", async ({ page 
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
   await expectOneLineGuidance(page.locator(".matter-guidance"));
   await page.locator(`[data-thought-id="${rootId}"]`).locator("[data-thought-text-id]").click();
-  await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+  await expect(page.locator("[data-node-action-lens]")).toBeVisible();
   expect(browserErrors).toEqual([]);
 });
 

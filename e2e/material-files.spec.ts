@@ -508,8 +508,12 @@ for (const viewport of [
     // the canvas or the working-context boundary.
     const disclosureBranch = rows.nth(1);
     const disclosure = disclosureBranch.locator(".material-file__structure-control");
+    const disclosureTitle = (await disclosureBranch.locator(".material-file__title").innerText()).trim();
     await expect(disclosure).toHaveAttribute("data-structure-action", "expanded");
-    await expect(disclosure).toHaveAttribute("aria-label", /^在材料目录中收起/u);
+    await expect(disclosure).toHaveAttribute(
+      "aria-label",
+      fixtureUiCopy.materialFiles.collapseBranch(disclosureTitle),
+    );
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("data-structure-action", "collapsed");
     await expect(rows).toHaveCount(8);
@@ -522,7 +526,7 @@ for (const viewport of [
     // opens the title editor without creating a material selection.
     await contextTitle.click();
     await expect(sidebar.getByRole("textbox", { name: fixtureUiCopy.materialFiles.canvasTitle })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Selected thought actions" })).toHaveCount(0);
+    await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
 
     // One control owns both a compact index and the temporary model boundary:
     // holding a branch aside closes its descendants in this drawer but keeps the
