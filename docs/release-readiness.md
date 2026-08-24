@@ -1,9 +1,8 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.43 is the current source
-candidate; Preview.42 remains the latest completed public-origin receipt until
-the new `main` deployment settles.
+the complete generative product loop yet. Preview.43 is the current deployed
+public-origin release lineage; Preview.42 is its preceding immutable receipt.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -99,9 +98,11 @@ browser proof          full Chromium: 113 passed, 15 explicitly historical or
                        cover typed and Voice Point-and-Talk, late-response
                        revocation, coarse targets, compact and tablet drawer
                        return centring, and the straight unbordered drawer seam
-publication state      source candidate is ready for the final main push,
-                       Production settlement, public-origin probe, immutable
-                       annotated tag, and GitHub prerelease receipt
+publication state      source `d75f38a` passed CI run `32742182110` and exact
+                       Production deployment `6065375891`; matter.ptoq.io
+                       matched 0.2.0-preview.43 after two bounded probes; the
+                       final record-only main is the immutable annotated tag
+                       and GitHub prerelease target after identical settlement
 ```
 
 ## Release verification — 0.2.0-preview.42

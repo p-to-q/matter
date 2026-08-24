@@ -61,6 +61,16 @@ so topic `0eeb289` made that observed contract strict and passed Preview
 stacking walk all succeeded. The immutable tag and GitHub prerelease must point
 to the final release-record Production SHA.
 
+For Preview.43, the owner explicitly directed the passage-local Point-and-Talk,
+shared working-context control, responsive index seam, and return-centring work
+through main. This is a fresh Preview.43-only risk acceptance. It preserves the
+existing live label, repair, inquiry, and voice gates; the public profile keeps
+Elastic and Text Swap providers unavailable and leaves issues #34 and #68 open.
+Source `d75f38a` passed CI run `32742182110`, exact Production deployment
+`6065375891` succeeded, and `matter.ptoq.io` matched `0.2.0-preview.43` after
+two bounded probes. The immutable tag and GitHub prerelease point to the final
+release-record Production SHA after that record-only main settles.
+
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
 shared outside the deployment secret store must be rotated before use.
