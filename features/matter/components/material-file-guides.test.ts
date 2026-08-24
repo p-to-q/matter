@@ -139,6 +139,45 @@ describe("material file indentation guides", () => {
     ]);
   });
 
+  it("keeps control clearance when selection replaces terminal points with checkboxes", () => {
+    expect(projectMaterialFileGuideEdges([
+      row("branch", "root", 0, true),
+      row("branch-child", "branch", 1),
+      row("leaf", "root", 0),
+    ], {
+      sourceRowIndexes: new Set([0]),
+      structuralBranchRowIndexes: new Set([0]),
+      endpointPresentation: "selection-control",
+    })).toEqual([
+      { kind: "sibling", parentId: "root", laneDepth: -1, fromIndex: 0, toIndex: 2, toKind: "control" },
+    ]);
+    expect(projectMaterialFileGuideSegments({
+      edges: [
+        { kind: "sibling", parentId: "root", laneDepth: -1, fromIndex: 0, toIndex: 2, toKind: "control" },
+      ],
+      ranges: [{ start: 0, end: 3 }],
+      rowHeight: 40,
+    })).toEqual([
+      { kind: "sibling", parentId: "root", laneDepth: -1, fromIndex: 0, toIndex: 2, top: 28, height: 64 },
+    ]);
+  });
+
+  it("keeps a selection tail clear of its final checkbox", () => {
+    expect(projectMaterialFileGuideEdges([
+      row("leaf", "root", 0),
+      row("branch", "root", 0, true),
+      row("branch-child", "branch", 1),
+    ], {
+      sourceRowIndexes: new Set([1]),
+      structuralBranchRowIndexes: new Set([1]),
+      endpointPresentation: "selection-control",
+    })).toEqual([expect.objectContaining({
+      kind: "branch-tail",
+      branchId: "branch",
+      targetClearance: 8,
+    })]);
+  });
+
   it("clips a branch tail but turns only where its structural endpoint is mounted", () => {
     expect(projectMaterialFileGuideSegments({
       edges: [{

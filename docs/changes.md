@@ -17,6 +17,21 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-25 — selection keeps the material index's structure legible
+
+Changed: entering Select replaces disclosure marks with 11px checkboxes on the
+same indentation axis while retaining relationship guides derived from the
+complete subtree that Select actually presents. Every guide keeps control
+clearance around checkbox endpoints; Search and Archive remain unlined.
+
+Why: selection changes what a row does, not where it belongs. Removing the
+guides made one unchanged tree appear structurally flatter at the exact moment
+a person needed to choose across branches.
+
+Forecloses: mode-specific fake hierarchy, reusing a folded Browse projection
+behind a complete Select list, or decorative full-height rails unrelated to
+the current tree.
+
 ## 2026-08-25 — Point and Talk remains subordinate to visible material
 
 Changed: the passage-local direction field now uses a `264 × 38px` desktop

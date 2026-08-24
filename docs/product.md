@@ -219,8 +219,10 @@ It never reaches the descendant's mark or title. A singleton gets no tail, so a
 one-child lineage does not become a conventional file tree. Disclosure,
 terminal point, and blank space remain mutually exclusive; a held branch's
 restore `+` replaces all three.
-Search, selection, folding, and windowing may project or clip this grammar but
-never invent an endpoint.
+Selection replaces leading marks with checkboxes on the same structural axis
+and reprojects guides from its complete visible subtree, so changing the
+operation never erases hierarchy. Search omits the grammar; folding and
+windowing may project or clip it, but no mode may invent an endpoint.
 
 AI preserves the speaker's claims, vocabulary, tone, uncertainty, and meaningful
 emphasis. Admission repair may act forcefully on recognition echoes, filler

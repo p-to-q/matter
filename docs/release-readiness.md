@@ -1,9 +1,9 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.44 is the current deployed
-public-origin release lineage; Preview.43 is its preceding immutable receipt
-and Preview.42 is the release before that.
+the complete generative product loop yet. Preview.44 remains the current
+deployed public-origin release lineage while Preview.45 is verified and
+promoted; Preview.43 is Preview.44's preceding immutable receipt.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -56,6 +56,45 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Release verification — 0.2.0-preview.45
+
+Preview.45 restores the material index's local structural grammar while Select
+is active. Select still replaces every leading mark with an 11px checkbox, but
+the unchanged current tree retains its relationship guides on that same axis.
+The projection comes from the complete subtree Select actually presents, keeps
+eight pixels of air around checkbox endpoints, clips through the existing
+virtual window, and remains absent from Search and Archive.
+
+The guide projector now receives the visible endpoint presentation explicitly;
+React does not allocate a second all-row protection set merely because a
+2,000-row selection list paints controls. A time-dependent reduced-motion
+browser receipt found during the release audit now freezes its initial light
+preference before proving the light-to-dark transition. Neither correction
+changes the material document, tree engine, persistence, command history,
+protocol, model context, provider configuration, or public capability profile.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor found 28 repository files; 43 linked Markdown
+                       documents passed; architecture covered 405 files across
+                       7 layers with no outward edge, provider leak, or cycle;
+                       Vitest passed 160 files with 2 skipped, 1,864 cases with
+                       4 skipped; typegen, typecheck, lint, and the Next 16.3
+                       webpack production build of all 22 pages/routes passed
+runtime proof          static root; initial 1,194.0 KiB raw / 378.9 KiB gzip,
+                       below the 384 KiB release ceiling; no new dependency,
+                       route, provider path, or initial browser asset
+browser proof          full Chromium: 116 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 131 total; receipts
+                       include laptop and 390px selection-guide geometry,
+                       checkbox clearance, the bounded 2,000-row virtualized
+                       index, coarse targets, reduced motion, and all existing
+                       material mutation and cancellation paths
+publication state      candidate proof is complete; exact main, CI, Production,
+                       public-origin health, immutable tag, and prerelease
+                       receipts are recorded only after promotion settles
+```
 
 ## Release verification — 0.2.0-preview.44
 

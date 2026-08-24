@@ -255,8 +255,10 @@ Outcome:    every current same-parent group projects mutually exclusive
             expanded disclosure with visible interior material can start a guide
             to the next sibling's disclosure or point. A multi-item group's
             final expanded branch closes its own visible range with one short
-            indentation tail. The footer remains quiet identity and Archive
-            owns recovery.
+            indentation tail. Select replaces those marks with checkboxes on
+            the same axis and reprojects guides from its complete visible tree;
+            changing the operation does not erase hierarchy. The footer remains
+            quiet identity and Archive owns recovery.
 Boundary:   pure current-outline guide and terminal projection, its virtualized
             render receipt, localized identity copy, and existing Archive panel
 Invariants: tree, authored order, persistence state, archive protocol, and
@@ -271,7 +273,8 @@ Proof:      expanded branch/branch across the first subtree, then no rail when
             final expanded branch tail, singleton/collapse absence, compressed
             indentation clearance, held restore exclusivity; search/select/fold
             and virtual-window matrix; conflict, storage-full, save-failure, corrupt-row and
-            retry/reload Archive receipts; laptop and narrow visual/pointer checks
+            retry/reload Archive receipts; selection checkbox endpoint clearance;
+            2,000-row guide/window element budget; laptop and narrow visual/pointer checks
 Non-goals:  a new tree model, global-depth terminal inference, permanent status
             chrome, account identity, or automatic conflict choice
 ```

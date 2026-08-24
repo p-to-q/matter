@@ -377,6 +377,14 @@ test("native leaf media crosses quiet corners while active chrome rises above it
 test("reduced motion keeps the native poster without loading leaf video", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+  await page.addInitScript((key) => {
+    localStorage.setItem(key, JSON.stringify({
+      version: 1,
+      language: "zh-CN",
+      leafFx: true,
+      appearance: "light",
+    }));
+  }, PREFERENCES_KEY);
   await page.goto("/matter");
 
   const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
@@ -386,7 +394,6 @@ test("reduced motion keeps the native poster without loading leaf video", async 
   await expect(poster).toHaveCSS("z-index", "37");
   await expect(poster).toHaveCSS("opacity", "0.32");
 
-  await page.locator('[data-chrome-control="appearance"]').click();
   await page.locator('[data-chrome-control="appearance"]').click();
   await expect(page.getByRole("region", { name: "Thought material" }))
     .toHaveAttribute("data-canvas-theme", "dark");

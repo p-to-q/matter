@@ -91,6 +91,9 @@ test("windows the 2,000-row material index without losing deep selection or copy
   );
   expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
   expect(await page.locator("*").count()).toBeLessThanOrEqual(TOTAL_ELEMENT_BUDGET);
+  const selectionGuideCount = await sidebar.locator(".material-files__tree-guide").count();
+  expect(selectionGuideCount).toBeGreaterThan(0);
+  expect(selectionGuideCount).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
 
   // Roving tree authority can reach an unmounted endpoint without adding all
   // 1,999 rows to the tab sequence or DOM.

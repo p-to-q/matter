@@ -179,7 +179,10 @@ creates a visible interior row. That branch's sole all-leaf child stays blank.
 Collapsing the branch makes its point sibling immediately adjacent, so no short
 connector remains. In a branch / branch group, the first expanded branch may
 lead to the second across its descendants; if the second is expanded, its tail
-closes only the second branch's own visible range. Search, selection, local fold
+closes only the second branch's own visible range. Selection replaces every
+leading mark with a checkbox on the same axis and recomputes these guides from
+the complete subtree it actually presents; it does not erase structural
+relationships merely because the operation changed. Search, local fold
 projection, and virtual-window clipping may omit, recompute, or clip visible
 relationships, but cannot change their parent, bridge across a leaf,
 manufacture an endpoint, or turn geometry into structure. In particular, a

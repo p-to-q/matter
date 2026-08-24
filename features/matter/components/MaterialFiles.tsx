@@ -258,26 +258,32 @@ export function MaterialFiles(props: MaterialFilesProps) {
     [files, mode],
   );
   const effectiveFocusedRowId = focusedRowState.epoch === props.documentEpoch ? focusedRowState.nodeId : null;
+  const guideProjectionVisible = mode === "browse" || mode === "select";
   const structuralBranchRowIndexes = useMemo(() => {
     const indexes = new Set<number>();
-    if (mode !== "browse") return indexes;
-    for (const [index, file] of files.entries()) {
-      if (file.hasChildren && props.heldAsideRootIds?.has(file.nodeId) !== true) indexes.add(index);
-    }
-    return indexes;
-  }, [files, mode, props.heldAsideRootIds]);
-  const expandedGuideSourceRowIndexes = useMemo(() => {
-    const indexes = new Set<number>();
-    if (mode !== "browse") return indexes;
+    if (!guideProjectionVisible) return indexes;
     for (const [index, file] of files.entries()) {
       if (
         file.hasChildren &&
-        !compactedNodeIds.has(file.nodeId) &&
-        props.heldAsideRootIds?.has(file.nodeId) !== true
+        (mode === "select" || props.heldAsideRootIds?.has(file.nodeId) !== true)
       ) indexes.add(index);
     }
     return indexes;
-  }, [compactedNodeIds, files, mode, props.heldAsideRootIds]);
+  }, [files, guideProjectionVisible, mode, props.heldAsideRootIds]);
+  const expandedGuideSourceRowIndexes = useMemo(() => {
+    const indexes = new Set<number>();
+    if (!guideProjectionVisible) return indexes;
+    for (const [index, file] of files.entries()) {
+      if (
+        file.hasChildren &&
+        (mode === "select" || (
+          !compactedNodeIds.has(file.nodeId) &&
+          props.heldAsideRootIds?.has(file.nodeId) !== true
+        ))
+      ) indexes.add(index);
+    }
+    return indexes;
+  }, [compactedNodeIds, files, guideProjectionVisible, mode, props.heldAsideRootIds]);
   const protectedGuideControlRowIndexes = useMemo(() => {
     const indexes = new Set(structuralBranchRowIndexes);
     if (mode !== "browse" || props.heldAsideRootIds === undefined) return indexes;
@@ -287,7 +293,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
     return indexes;
   }, [files, mode, props.heldAsideRootIds, structuralBranchRowIndexes]);
   // A terminal is local to one visible sibling group. Search, selection, and
-  // restore-plus rows do not manufacture disclosure-tree syntax.
+  // restore-plus rows do not paint terminal dots; selection keeps the same
+  // structural projection underneath its checkboxes instead.
   const terminalMarkerIds = useMemo(
     () => mode === "browse"
       ? projectMaterialFileTerminalMarkerIds(files, structuralBranchRowIndexes)
@@ -295,16 +302,18 @@ export function MaterialFiles(props: MaterialFilesProps) {
     [files, mode, structuralBranchRowIndexes],
   );
   const guideEdges = useMemo(
-    () => mode === "browse"
+    () => guideProjectionVisible
       ? projectMaterialFileGuideEdges(files, {
         protectedControlRowIndexes: protectedGuideControlRowIndexes,
         sourceRowIndexes: expandedGuideSourceRowIndexes,
         structuralBranchRowIndexes,
+        endpointPresentation: mode === "select" ? "selection-control" : "structural",
       })
       : [],
     [
       expandedGuideSourceRowIndexes,
       files,
+      guideProjectionVisible,
       mode,
       protectedGuideControlRowIndexes,
       structuralBranchRowIndexes,

@@ -912,9 +912,47 @@ for (const viewport of [
     })).toBeCloseTo(browseTitleInset, 0);
     await expect(selectedModeRow.locator(".material-file__check-mark")).toHaveCSS("width", "11px");
     await expect(selectedModeRow.locator(".material-file__check-mark")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-    // Selection has checkboxes rather than structural arrows and must not
-    // manufacture arrow rails from that alternate projection.
-    await expect(sidebar.locator(".material-files__tree-guide")).toHaveCount(0);
+    // Selection changes the operation, not the tree. Its complete subtree
+    // reprojects the same structural rails onto checkboxes in the disclosure
+    // slot, with control clearance at both ends.
+    const selectionGuides = sidebar.locator(".material-files__tree-guide");
+    await expect(selectionGuides).not.toHaveCount(0);
+    const selectionGuideAlignment = await selectionGuides.evaluateAll((guides) => {
+      const rows = Array.from(document.querySelectorAll<HTMLElement>(".material-files .material-file"));
+      return guides.map((guide) => {
+        const from = Number(guide.getAttribute("data-guide-from"));
+        const to = Number(guide.getAttribute("data-guide-to"));
+        const fromMark = rows[from]?.querySelector<HTMLElement>(".material-file__check-mark");
+        const toMark = rows[to]?.querySelector<HTMLElement>(".material-file__check-mark");
+        if (fromMark === null || fromMark === undefined || toMark === null || toMark === undefined) {
+          throw new Error("selection guide checkbox endpoint is missing");
+        }
+        const guideRect = guide.getBoundingClientRect();
+        const guideStyle = getComputedStyle(guide);
+        const fromRect = fromMark.getBoundingClientRect();
+        const toRect = toMark.getBoundingClientRect();
+        const branchTail = guide.getAttribute("data-guide-kind") === "branch-tail";
+        return {
+          axis: branchTail
+            ? guideRect.left + Number.parseFloat(guideStyle.borderLeftWidth) / 2
+            : guideRect.left + guideRect.width / 2,
+          bottom: guideRect.bottom,
+          branchTail,
+          fromCenterX: fromRect.left + fromRect.width / 2,
+          fromClearance: guideRect.top - (fromRect.top + fromRect.height / 2),
+          toCenterX: toRect.left + toRect.width / 2,
+          toClearance: toRect.top + toRect.height / 2 - guideRect.bottom,
+        };
+      });
+    });
+    for (const guide of selectionGuideAlignment) {
+      expect(Math.abs(guide.axis - guide.fromCenterX)).toBeLessThanOrEqual(.25);
+      expect(guide.fromClearance).toBeCloseTo(8, 0);
+      if (!guide.branchTail) {
+        expect(Math.abs(guide.axis - guide.toCenterX)).toBeLessThanOrEqual(.25);
+        expect(guide.toClearance).toBeCloseTo(8, 0);
+      }
+    }
     if (viewport.name === "narrow") {
       const coarseTargets = await sidebar.locator(
         "button:not(:disabled), label.material-file__check",

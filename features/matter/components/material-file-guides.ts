@@ -10,7 +10,7 @@ export type MaterialFileGuideEdge =
     laneDepth: number;
     fromIndex: number;
     toIndex: number;
-    toKind: "branch" | "terminal";
+    toKind: "branch" | "control" | "terminal";
   }>
   | Readonly<{
     kind: "branch-tail";
@@ -78,8 +78,10 @@ export function projectMaterialFileGuideEdges(
     sourceRowIndexes: ReadonlySet<number>;
     /** Expanded or collapsed disclosure arrows that may receive one. */
     structuralBranchRowIndexes: ReadonlySet<number>;
-    /** Disclosure and held-restore controls a tail must not touch. */
+    /** Disclosure, restore, or selection controls a guide must not touch. */
     protectedControlRowIndexes?: ReadonlySet<number>;
+    /** The leading-slot grammar currently painted by this presentation. */
+    endpointPresentation?: "selection-control" | "structural";
   }>,
 ): readonly MaterialFileGuideEdge[] {
   const terminalMarkerIds = projectMaterialFileTerminalMarkerIds(
@@ -89,6 +91,7 @@ export function projectMaterialFileGuideEdges(
   const previousSiblingByParent = new Map<string | null, PreviousSibling>();
   const siblingGroupByParent = new Map<string | null, SiblingGroup>();
   const edges: MaterialFileGuideEdge[] = [];
+  const selectionControls = input.endpointPresentation === "selection-control";
   for (const [index, row] of rows.entries()) {
     const group = siblingGroupByParent.get(row.parentId);
     if (group === undefined || group.depth !== row.depth) {
@@ -98,9 +101,16 @@ export function projectMaterialFileGuideEdges(
       group.lastIndex = index;
     }
     const structuralBranch = input.structuralBranchRowIndexes.has(index);
+    const terminal = terminalMarkerIds.has(row.nodeId);
     const toKind = structuralBranch
       ? "branch"
-      : terminalMarkerIds.has(row.nodeId) ? "terminal" : null;
+      : terminal
+        ? input.protectedControlRowIndexes?.has(index) === true
+          ? "control"
+          : selectionControls
+            ? "control"
+            : "terminal"
+        : null;
     const previous = previousSiblingByParent.get(row.parentId);
     if (previous === undefined || previous.depth !== row.depth) {
       previousSiblingByParent.set(row.parentId, { depth: row.depth, index });
@@ -146,7 +156,8 @@ export function projectMaterialFileGuideEdges(
       fromIndex,
       toIndex,
       targetDepth: target.depth,
-      targetClearance: input.protectedControlRowIndexes?.has(toIndex) === true ||
+      targetClearance: selectionControls ||
+        input.protectedControlRowIndexes?.has(toIndex) === true ||
         input.structuralBranchRowIndexes.has(toIndex)
         ? CONTROL_ENDPOINT_CLEARANCE
         : terminalMarkerIds.has(target.nodeId)
@@ -175,8 +186,8 @@ export function projectMaterialFileGuideSegments(input: Readonly<{
       edge.kind === "branch-tail"
         ? 0
         : edge.toKind === "terminal"
-        ? terminalEndpointInset
-        : controlEndpointInset
+          ? terminalEndpointInset
+          : controlEndpointInset
     );
     for (const range of input.ranges) {
       const top = Math.max(edgeTop, range.start * input.rowHeight);

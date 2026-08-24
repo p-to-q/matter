@@ -82,6 +82,16 @@ record `54a258f` then passed CI run `32761201277`, exact Production deployment
 immutable tag and GitHub prerelease point to the final release-record Production
 SHA after that record-only main settles.
 
+For Preview.45, the owner explicitly directed the material-index selection
+grammar correction through main and into one prerelease. This is a fresh
+Preview.45-only risk acceptance, not an extension of Preview.44. It preserves
+the existing live label, repair, inquiry, and voice gates; Elastic and Text Swap
+providers remain unavailable, while issues #34 and #68 remain open. The change
+is confined to the client-side directory projection and its proof: Select keeps
+the current tree's bounded relationship guides behind its checkboxes, while
+Search and Archive stay unlined. It does not change material, persistence,
+history, protocol, provider, or model authority.
+
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
 shared outside the deployment secret store must be rotated before use.
