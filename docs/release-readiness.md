@@ -1,8 +1,9 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.43 is the current deployed
-public-origin release lineage; Preview.42 is its preceding immutable receipt.
+the complete generative product loop yet. Preview.44 is the current versioned
+source candidate; Preview.43 is the deployed public-origin release lineage and
+Preview.42 is its preceding immutable receipt.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -55,6 +56,41 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate verification — 0.2.0-preview.44
+
+Preview.44 keeps the complete Preview.43 Point-and-Talk authority and changes
+only its local rendering policy. The white direction field now has a smaller
+`264 × 38px` desktop basis, follows material zoom through a bounded asymmetric
+`.74–1.10` optical response, and retains the `48px` coarse-pointer target floor.
+Its fixed geometry intersects the visual viewport, clipped paper, and translated
+material plane, then clamps available width as well as position. Damaged,
+disjoint, or too-narrow geometry stays hidden and does not take focus or gain
+material authority.
+
+The public deployment profile remains unchanged: Text Swap stays unavailable
+without its independent live-provider gate. This release neither widens the
+`text-swap/2` contract nor changes model context, provider configuration,
+persistence, history, or the tree-engine commit path.
+
+```text
+source proof           exact source `2d3c710`; npm run check exited 0:
+                       doctor found 28 repository files; 43 linked Markdown
+                       documents passed; architecture covered 405 files across
+                       7 layers with no outward edge, provider leak, or cycle;
+                       Vitest passed 160 files with 2 skipped, 1,862 cases with
+                       4 skipped; typegen, typecheck, lint, and the Next 16.3
+                       webpack production build of all 22 pages/routes passed
+runtime proof          static root; initial 1,193.8 KiB raw / 378.8 KiB gzip,
+                       below the 384 KiB release ceiling; the Point-and-Talk
+                       request, Voice, and Text Swap graph remains lazy
+browser proof          full Chromium: 115 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 130 total; receipts
+                       cover zoom extrema, clipped index-edge placement, typed
+                       and Voice mutation, Undo, cancellation, and coarse bounds
+publication state      main promotion, Production settlement, public-origin
+                       parity, immutable tag, and GitHub prerelease are pending
+```
 
 ## Release verification — 0.2.0-preview.43
 
