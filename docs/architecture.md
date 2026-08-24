@@ -127,8 +127,9 @@ The rendering edge measures the addressed glyphs, clipped document, translated
 material plane, and visual viewport. A pure geometry policy intersects those
 surfaces, projects a bounded optical response from the current canvas zoom, and
 returns the fixed position plus usable width; damaged or unusably narrow
-geometry fails closed. No measured value enters the tree, store, protocol, or
-history.
+geometry fails closed. Resize, scroll, and observer invalidations coalesce into
+one animation-frame measurement. No measured value enters the tree, store,
+protocol, or history.
 Admission and Elastic share one client-side ownership gate: while admission is
 not idle, Elastic receives no actionable selection, renders no grips, and can
 send no turn. Returning to idle revalidates the transient lasso address before

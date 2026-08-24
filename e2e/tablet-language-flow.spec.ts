@@ -28,6 +28,23 @@ test.describe("tablet touch material language", () => {
     await actions.first().focus();
     await expect(actions.first()).toHaveCSS("outline-width", "2px");
     await actions.last().click();
+    await expect.poll(async () => await feedback.count() === 0
+      ? "closed"
+      : await feedback.getAttribute("data-phase"), {
+      message: "fake-device recording should either commit or expose its explicit no-audio recovery",
+    }).toMatch(/^(closed|error)$/u);
+    if (await feedback.count() > 0) {
+      const recoveryActions = feedback.locator("button");
+      expect(await recoveryActions.count()).toBeGreaterThan(0);
+      for (const box of await recoveryActions.evaluateAll((buttons) => buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      }))) {
+        expect(box.width).toBeGreaterThanOrEqual(48);
+        expect(box.height).toBeGreaterThanOrEqual(48);
+      }
+      await recoveryActions.last().click();
+    }
     await expect(feedback).toHaveCount(0);
   });
 

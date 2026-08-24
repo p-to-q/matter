@@ -53,6 +53,7 @@ export function PointTalkComposer({
 }>) {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const measurementFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const inputId = useId();
   const phase = controller.state.phase;
@@ -63,9 +64,8 @@ export function PointTalkComposer({
   const cancelAndRestoreFocus = useCallback(() => {
     onCancel();
     queueMicrotask(() => {
-      Array.from(canvasRef.current?.querySelectorAll<HTMLElement>("[data-thought-text-id]") ?? [])
-        .find((candidate) => candidate.dataset.thoughtTextId === nodeId)
-        ?.focus({ preventScroll: true });
+      const canvas = canvasRef.current;
+      if (canvas !== null) findPointTalkTarget(canvas, nodeId)?.focus({ preventScroll: true });
     });
   }, [canvasRef, nodeId, onCancel]);
 
@@ -74,15 +74,16 @@ export function PointTalkComposer({
     const canvas = canvasRef.current;
     const bubble = bubbleRef.current;
     const positioningSurface = positioningRef.current;
-    if (boundary === null || canvas === null || bubble === null || positioningSurface === null) {
-      setPlacement(null);
+    // The controller renders one idle pass before entering its usable phase;
+    // no bubble exists yet, so absence here is not damaged geometry.
+    if (bubble === null) return;
+    if (boundary === null || canvas === null || positioningSurface === null) {
+      onCancel();
       return;
     }
-    const target = Array.from(
-      canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]"),
-    ).find((candidate) => candidate.dataset.thoughtTextId === nodeId);
+    const target = findPointTalkTarget(canvas, nodeId);
     if (target === undefined) {
-      setPlacement(null);
+      onCancel();
       return;
     }
     const bounds = contentBounds(target);
@@ -93,7 +94,7 @@ export function PointTalkComposer({
       positioningSurface.getBoundingClientRect(),
     );
     if (viewport === null) {
-      setPlacement(null);
+      onCancel();
       return;
     }
     const width = bubbleRect.width || 264;
@@ -104,36 +105,50 @@ export function PointTalkComposer({
       viewport,
       gap: 14 * visualScale,
     });
-    setPlacement((current) => current !== null && next !== null &&
+    if (next === null) {
+      onCancel();
+      return;
+    }
+    setPlacement((current) => current !== null &&
       current.left === next.left && current.top === next.top
       && current.maxWidth === next.maxWidth
       ? current
       : next);
-  }, [boundaryRef, canvasRef, nodeId, positioningRef, visualScale]);
+  }, [boundaryRef, canvasRef, nodeId, onCancel, positioningRef, visualScale]);
+
+  const scheduleMeasure = useCallback(() => {
+    if (measurementFrameRef.current !== null) return;
+    measurementFrameRef.current = requestAnimationFrame(() => {
+      measurementFrameRef.current = null;
+      measure();
+    });
+  }, [measure]);
 
   useLayoutEffect(() => {
     measure();
-    const target = Array.from(
-      canvasRef.current?.querySelectorAll<HTMLElement>("[data-thought-text-id]") ?? [],
-    ).find((candidate) => candidate.dataset.thoughtTextId === nodeId);
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    const target = canvasRef.current === null
+      ? undefined
+      : findPointTalkTarget(canvasRef.current, nodeId);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
     if (target !== undefined) observer?.observe(target);
     if (bubbleRef.current !== null) observer?.observe(bubbleRef.current);
     if (boundaryRef.current !== null) observer?.observe(boundaryRef.current);
     if (positioningRef.current !== null) observer?.observe(positioningRef.current);
     const visual = window.visualViewport;
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-    visual?.addEventListener("resize", measure);
-    visual?.addEventListener("scroll", measure);
+    window.addEventListener("resize", scheduleMeasure);
+    window.addEventListener("scroll", scheduleMeasure, true);
+    visual?.addEventListener("resize", scheduleMeasure);
+    visual?.addEventListener("scroll", scheduleMeasure);
     return () => {
       observer?.disconnect();
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-      visual?.removeEventListener("resize", measure);
-      visual?.removeEventListener("scroll", measure);
+      if (measurementFrameRef.current !== null) cancelAnimationFrame(measurementFrameRef.current);
+      measurementFrameRef.current = null;
+      window.removeEventListener("resize", scheduleMeasure);
+      window.removeEventListener("scroll", scheduleMeasure, true);
+      visual?.removeEventListener("resize", scheduleMeasure);
+      visual?.removeEventListener("scroll", scheduleMeasure);
     };
-  }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef]);
+  }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -238,7 +253,6 @@ function PointTalkForm({
     >
       <label className="visually-hidden" htmlFor={inputId}>{copy.label}</label>
       <input
-        autoFocus
         dir="auto"
         id={inputId}
         maxLength={240}
@@ -263,6 +277,13 @@ function PointTalkForm({
       </button>
     </form>
   );
+}
+
+function findPointTalkTarget(canvas: HTMLElement, nodeId: string): HTMLElement | undefined {
+  for (const candidate of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
+    if (candidate.dataset.thoughtTextId === nodeId) return candidate;
+  }
+  return undefined;
 }
 
 function contentBounds(element: HTMLElement): Readonly<{

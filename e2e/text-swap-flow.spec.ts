@@ -279,6 +279,22 @@ test.describe("passage-local Point and Talk", () => {
         button.getBoundingClientRect().height >= 48
       ))).toBe(true);
     });
+
+    test("an unusably narrow paper revokes the local turn without hidden focus", async ({ page }) => {
+      await page.goto("/matter");
+      await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+      await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).click();
+      await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+      const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
+      await expect(direction).toBeFocused();
+
+      await page.setViewportSize({ width: 170, height: 844 });
+      await expect(page.locator(".point-talk")).toHaveCount(0);
+      await expect(page.locator("main.matter-shell"))
+        .not.toHaveAttribute("data-point-talk-node-id", /.+/u);
+      await expect(direction).toHaveCount(0);
+      expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("INPUT");
+    });
   });
 });
 
