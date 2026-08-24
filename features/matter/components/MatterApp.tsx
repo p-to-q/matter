@@ -11,7 +11,12 @@ import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/arc
 import { treeToBundle } from "../persistence/snapshot-codec";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
-import type { TransformCommittedChange } from "../store/matter-store";
+import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
+import type {
+  TextSwapCommittedChange,
+  TransformCommittedChange,
+} from "../store/matter-store";
+import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import {
   seededFallbackBranchTexts,
   type SeededBranchTextResolver,
@@ -28,6 +33,7 @@ export function MatterApp() {
   const undo = useMatterStore((state) => state.undo);
   const redo = useMatterStore((state) => state.redo);
   const commitTransform = useMatterStore((state) => state.commitTransform);
+  const commitTextSwap = useMatterStore((state) => state.commitTextSwap);
   const select = useMatterStore((state) => state.select);
   const clearSelection = useMatterStore((state) => state.clearSelection);
   const focus = useMatterStore((state) => state.focus);
@@ -209,6 +215,17 @@ export function MatterApp() {
       ? receipt.transformChange
       : null;
   }, [commitTransform]);
+  const commitTextSwapTurn = useCallback((
+    envelope: TextSwapEnvelope,
+    plan: TextSwapPlan,
+    expectedDocumentEpoch: number,
+  ): TextSwapCommitResult<TextSwapCommittedChange> => {
+    const receipt = commitTextSwap(envelope, plan, expectedDocumentEpoch, Date.now());
+    if (receipt.operation !== "commit" || receipt.status !== "committed" || !("textSwapChange" in receipt)) {
+      return Object.freeze({ status: receipt.status === "stale" ? "stale" : "rejected" });
+    }
+    return Object.freeze({ status: "committed", change: receipt.textSwapChange });
+  }, [commitTextSwap]);
   return (
     <RootedMaterial
       canUndo={history.entries.length > 0}
@@ -241,6 +258,7 @@ export function MatterApp() {
       onRenameDocument={renameCurrentDocument}
       onClearSelection={clearSelection}
       onTransformCommit={commitTransformTurn}
+      onTextSwapCommit={commitTextSwapTurn}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={extendChild}

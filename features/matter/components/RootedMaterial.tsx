@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { layoutColumnarTree } from "../layout/columnar-layout";
@@ -104,6 +105,9 @@ import {
 import { clientMatterBasePath } from "../config/base-path";
 import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
+import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
+import { deriveTextSwapLength } from "../protocol/text-swap-policy";
+import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
   isTransformPresentationCurrent,
@@ -111,12 +115,12 @@ import {
 } from "../interaction/use-transform-presentation";
 import type {
   MaterialTextCommittedChange,
+  TextSwapCommittedChange,
   TransformCommittedChange,
 } from "../store/matter-store";
 import { isRepairPresentationCurrent } from "../interaction/use-repair-presentation";
 import { RepairingMaterialText } from "./RepairingMaterialText";
 import { TransformingMaterialText } from "./TransformingMaterialText";
-import { isCurrentNodeActionIntent } from "../tools/project-node-actions";
 import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
@@ -124,6 +128,11 @@ import {
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
+
+const PointTalkTurn = dynamic(
+  () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
+  { ssr: false },
+);
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -149,6 +158,11 @@ export type RootedMaterialProps = {
     plan: TransformPlan,
     expectedDocumentEpoch: number,
   ) => TransformCommittedChange | null;
+  onTextSwapCommit: (
+    envelope: TextSwapEnvelope,
+    plan: TextSwapPlan,
+    expectedDocumentEpoch: number,
+  ) => TextSwapCommitResult<TextSwapCommittedChange>;
   onUndo: () => void;
   onRedo: () => void;
   tree: ThoughtTree;
@@ -291,6 +305,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const matterBasePath = clientMatterBasePath();
   const { canvasPreferences } = props;
   const inquiryRecord = useInquiryRecord(tree.id, props.performanceMarking !== true);
+  const [pointTalkNodeId, setPointTalkNodeId] = useState<string | null>(null);
+  const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
   // bootstrap so hydration can never discard a load-window edit.
@@ -582,6 +598,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const openIndexRect = shellRef.current
       ?.querySelector<HTMLElement>('.material-files[data-open="true"]')
       ?.getBoundingClientRect();
+    const returnCentering = shellRef.current === null
+      ? false
+      : readCssPixels(
+          getComputedStyle(shellRef.current),
+          "--index-navigation-return-centering",
+          0,
+        ) === 1;
     const basis = viewport;
     const visualRect = {
       left: visual.left,
@@ -607,6 +630,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
                 width: openIndexRect.width,
                 height: openIndexRect.height,
               },
+          returnCentering && openIndexRect !== undefined ? openIndexRect.width : 0,
         ) ?? undefined;
     const plan = planCanvasViewportForClientRect(
       basis,
@@ -905,6 +929,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
   }, [elasticPreviewSource, props.locale, publishLiveLanguageLayout, viewport.zoom]);
   const navigationKey = `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`;
+  const pointTalkEligibleNodeIds = useMemo(() => new Set(
+    Array.from(workingContext.activeNodeIds).filter((nodeId) => {
+      const node = tree.nodes[nodeId];
+      return node !== undefined && node.role !== "document-root" &&
+        deriveTextSwapLength(node.text, "", "") !== null;
+    }),
+  ), [tree, workingContext.activeNodeIds]);
+  const pointTalkSelectionCurrent = pointTalkNodeId !== null &&
+    pointTalkEligibleNodeIds.has(pointTalkNodeId);
+  const activePointTalkNodeId = pointTalkSelectionCurrent ? pointTalkNodeId : null;
+  if (pointTalkNodeId !== null && activePointTalkNodeId === null) {
+    // Reconcile before a removed or held target can reopen if it later returns.
+    // The derived target above keeps the current render fail-closed as well.
+    setPointTalkNodeId(null);
+  }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
       ? lasso.selection
@@ -926,6 +965,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const publishMaterialTextChange = useCallback((change: MaterialTextCommittedChange) => {
     publishTransformPresentation(change);
   }, [publishTransformPresentation]);
+  const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
+    publishMaterialTextChange(change);
+    setPointTalkNodeId(null);
+  }, [publishMaterialTextChange]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
   const admissionInteractionPending =
     props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
@@ -964,6 +1007,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
+  const closePointTalk = useCallback(() => {
+    setPointTalkNodeId(null);
+  }, []);
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
     transformState.phase !== "idle";
   const beginStretchAdjustment = useCallback(() => {
@@ -973,7 +1019,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (transformState.phase === "requesting") cancelTransform();
     stretch.keyDown("Escape");
   }, [cancelTransform, stretch, transformState.phase]);
-  const abortFixedExpansion = abortElasticExpansion;
+  const abortFixedExpansion = useCallback(() => {
+    closePointTalk();
+    abortElasticExpansion();
+  }, [abortElasticExpansion, closePointTalk]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
@@ -1280,18 +1329,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
-  const handleNodeActionIntent = useCallback((nodeId: string, intent: ToolIntent) => {
-    const context = {
-      activeNodeIds: workingContext.activeNodeIds,
-      interaction: interactionPending ? "pending" as const : "idle" as const,
-      navigation,
-      nodeId,
-      tree,
-    };
-    if (!isCurrentNodeActionIntent(context, intent)) return;
-    abortFixedExpansion();
-    applyToolIntent(intent, props);
-  }, [abortFixedExpansion, interactionPending, navigation, props, tree, workingContext.activeNodeIds]);
   const projectInquiryPayload = useCallback(
     () => projectInquiryContext(
       tree,
@@ -1931,6 +1968,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-canvas-mode={lasso.active ? "lasso" : canvasMode}
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
+      data-point-talk-node-id={activePointTalkNodeId ?? undefined}
       data-stretching={stretch.dragging || undefined}
       data-transform-phase={transformState.phase === "idle" ? undefined : transformState.phase}
       data-tree-revision={tree.revision}
@@ -2397,6 +2435,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               onSelectNode={selectNodeAfterAbort}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
+              heldAsideRootIds={heldAsideRootIds}
               heldAsideNodeIds={workingContext.heldAsideNodeIds}
               projection={renderedProjection}
               repairPresentations={props.admission.repairPresentations}
@@ -2430,10 +2469,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
             documentRef={documentRef}
             enabled
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
+            heldAsideRootIds={heldAsideRootIds}
             interaction="idle"
             key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
             navigation={navigation}
-            onIntent={handleNodeActionIntent}
+            onOpenPointTalk={(nodeId) => {
+              abortElasticExpansion();
+              props.admission.discardPendingRepairs();
+              setPointTalkOpeningId((current) => current + 1);
+              setPointTalkNodeId(nodeId);
+            }}
+            onToggleHeldAside={(nodeId) => {
+              abortFixedExpansion();
+              toggleHeldAside(nodeId);
+            }}
+            pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
             positioningRef={materialPlaneRef}
             tree={tree}
           />
@@ -2457,6 +2507,23 @@ export function RootedMaterial(props: RootedMaterialProps) {
           onInquiryOpen={abortFixedExpansion}
         />
       </section>
+      {activePointTalkNodeId === null ? null : (
+        <PointTalkTurn
+          canvasRef={canvasRef}
+          commit={props.onTextSwapCommit}
+          documentEpoch={props.documentEpoch}
+          enabled={pointTalkSelectionCurrent && !persistenceLoading}
+          geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
+          interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
+          key={`${props.documentEpoch}:${activePointTalkNodeId}:${pointTalkOpeningId}`}
+          locale={props.locale}
+          nodeId={activePointTalkNodeId}
+          onClose={closePointTalk}
+          onCommitted={publishPointTalkChange}
+          tree={tree}
+          voiceAvailable={voiceReadiness.status === "ready"}
+        />
+      )}
       <LassoOverlay
         active={lasso.active}
         drawing={lasso.drawing}
@@ -2511,6 +2578,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   onSelectNode,
   onSelectLassoSegment,
   activeNodeIds,
+  heldAsideRootIds,
   heldAsideNodeIds,
   projection,
   repairPresentations,
@@ -2531,6 +2599,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   onSelectNode: (nodeId: string) => void;
   onSelectLassoSegment: (nodeId: string, direction: "next" | "previous") => boolean;
   activeNodeIds: ReadonlySet<string>;
+  heldAsideRootIds: ReadonlySet<string>;
   heldAsideNodeIds: ReadonlySet<string>;
   projection: readonly LayoutProjectionItem[];
   repairPresentations: AdmissionController["repairPresentations"];
@@ -2566,6 +2635,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
       {projection.map(({ node, parentId }) => {
         const isSelected = node.id === navigation.selectedNodeId;
         const isHeldAside = heldAsideNodeIds.has(node.id);
+        const isHeldAsideRoot = heldAsideRootIds.has(node.id);
         const isFocused = navigation.mode === "focus" && node.id === navigation.focusNodeId;
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
         const isLassoSelected = lassoSelection?.nodeId === node.id;
@@ -2592,6 +2662,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             className="spatial-thought"
             data-focused={isFocused || undefined}
             data-context-excluded={isHeldAside || undefined}
+            data-context-restore-target={isHeldAsideRoot || undefined}
             data-layout-node-id={node.id}
             data-selected={isSelected || undefined}
             data-lasso-selected={isLassoSelected || undefined}
@@ -2612,7 +2683,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               className="spatial-thought__text"
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
-              disabled={isHeldAside}
+              aria-disabled={isHeldAsideRoot || undefined}
+              disabled={isHeldAside && !isHeldAsideRoot}
               onKeyDown={(event) => {
                 if (
                   !isLassoKeyboardEligible || event.altKey || event.ctrlKey ||
@@ -2626,6 +2698,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                 event.preventDefault();
                 event.stopPropagation();
               }}
+              tabIndex={isHeldAside ? -1 : undefined}
               type="button"
             >
               {isSelected

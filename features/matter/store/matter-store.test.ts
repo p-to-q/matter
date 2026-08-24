@@ -1014,7 +1014,7 @@ describe("Matter store", () => {
     const start = node.text.indexOf(source);
     const parsed = parseTextSwapEnvelope({
       protocolVersion: tree.protocolVersion,
-      requestVersion: "text-swap/1",
+      requestVersion: "text-swap/2",
       id: "text_swap_store",
       treeId: tree.id,
       mode: "transform",

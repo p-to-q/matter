@@ -17,8 +17,10 @@ the running product, not how ambitious a feature sounds.
 3. **Structure is restraint.** One rooted tree is simultaneously presentation,
    lineage, and the model's context boundary. Hidden retrieval is not context.
    Language and camera motion may reveal structure, but never author coordinates.
-   A transient camera may adapt to measured occlusion and readable fit; structure
-   never adapts itself to the camera. Local growth displaces material downward.
+   A transient camera may adapt to measured occlusion and readable fit; drawer
+   disclosure preserves the reading centre that will remain after its temporary
+   surface shift is removed. Structure never adapts itself to the camera. Local
+   growth displaces material downward.
 4. **Unfinished language stays unfinished.** Preserve vocabulary, intent,
    uncertainty, and meaningful emphasis. A short, separately undoable repair
    lease may aggressively remove recognizable transcription debris, abandoned
@@ -38,8 +40,9 @@ the running product, not how ambitious a feature sounds.
 A material interaction must declare reference + degree + direction + lineage
 without letting the model infer a missing signal. Elastic Language 2 takes
 reference and degree from gesture and fixes direction to `expand-in-place`.
-A future Text Swap may narrow the same lasso to one exact punctuation segment and one
-bounded transient direction from the person, but its dormant sibling grammar
-may not place a control in the current release or smuggle a field into Elastic.
-A new operation or channel remains an open product question before it becomes a
-control or protocol field.
+Point and Talk takes reference from an explicit passage-local AI click, direction
+from one bounded transient human instruction, degree from the closed near-source
+policy, and lineage from that exact node. `text-swap/2` also retains one exact
+punctuation segment as a valid address, but Lasso does not publish a second
+Rewrite control beside Elastic. A new operation or channel remains an open
+product question before it becomes a control or protocol field.

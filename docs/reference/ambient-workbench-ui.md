@@ -92,11 +92,15 @@ canvas appearance, or the right-rail editing tools.
 - One measured frosted action field prefers the upper-left clear space of a
   hovered or keyboard-focused passage, then tries the other above, below, and
   side positions in a fixed collision-safe order. The field and all available
-  actions reveal together. It reuses the existing Branch and Focus capabilities;
-  focus view offers only Show all. The field is a single render-edge instance,
-  yields to precise gestures and pending work, and disappears when no safe
-  adjacent position exists. It never introduces delete, fold, model, or
-  coordinate semantics.
+  actions reveal together. Its left control is the supplied AI placeholder and
+  opens the node-local Point-and-Talk direction field; its right control reuses the
+  material index's working-context transition: `−` sets the active branch aside
+  and `+` restores a held root. A held root keeps the AI mark but disables it,
+  because set-aside material cannot become a transformation target. The field is a single
+  render-edge instance, yields to precise gestures and pending work, and
+  disappears when no safe adjacent position exists. It never introduces delete,
+  fold or coordinate semantics; the AI result is one pointer-undoable material
+  replacement, never a local chat.
 
 The editing buttons use a `72 x 44px` desktop pointer box around the unchanged
 `44 x 44px` visible control. This exceeds the WCAG 2.2

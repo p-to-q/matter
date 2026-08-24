@@ -168,7 +168,7 @@ function body(overrides: Record<string, unknown> = {}) {
   const start = TEXT.indexOf(PASSAGE);
   return {
     protocolVersion: "0.2",
-    requestVersion: "text-swap/1",
+    requestVersion: "text-swap/2",
     id: "swap_route",
     treeId: "tree_route",
     mode: "transform",

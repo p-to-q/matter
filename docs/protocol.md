@@ -32,12 +32,12 @@ Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
 segment addressing, stretch degree, Markdown durability, and bounded inquiry
 are implemented. The strict `transform/2` Elastic Language contract accepts one
-contiguous run of current punctuation segments inside one node. The dormant
-`text-swap/1` sibling further narrows that shared selection shape to one exact
-current segment. The current interface mounts only Elastic; Text Swap has no
-Rewrite, typed, or Voice UI owner. The deleted
+contiguous run of current punctuation segments inside one node. The active
+`text-swap/2` sibling accepts one exact current segment or one exact whole node;
+the passage-local AI mark owns the whole-node Point-and-Talk entry while Lasso
+continues to mount only Elastic. The deleted
 Voice-direction `transform/1` path is historical trace only and its envelopes
-remain invalid. The Elastic production gate is off; the dormant Text Swap gate
+remain invalid. The Elastic production gate is off; the Text Swap live gate
 is independently off. Markdown
 archive export/import is available as a strict local return path.
 
@@ -123,10 +123,10 @@ Segment indices and screen geometry never cross the network. The shared
 pre-commit translation. It accepts only a contiguous run of complete current
 derived punctuation segments, never an arbitrary partial range or a run with a
 gap, and requires safe ordered integer bounds plus exact `selectedText`.
-`transform/2` accepts that range; dormant `text-swap/1` additionally requires
-the range to equal exactly one segment. Client locale never changes the address
-space. A whole one-node title remains valid even when it contains several
-adjacent segments.
+`transform/2` accepts that range. `text-swap/2` accepts either one exact derived
+segment or the exact `0..node.text.length` whole-node range created by a
+passage-local AI click; it rejects every other partial or multi-segment range.
+Client locale never changes the address space.
 
 ## Elastic Language transform/2 envelope
 
@@ -313,7 +313,7 @@ responses remain uncached. A future cost-level deduplicator would require a
 distributed, no-material TTL record containing only a hash of the interaction
 id and terminal state, and is not part of the first slice.
 
-## Text Swap text-swap/1
+## Text Swap text-swap/2
 
 Text Swap is a separate selected-language operation. It does not add a Voice
 field to `transform/2`, accept an Elastic amount, or reinterpret the superseded
@@ -322,7 +322,7 @@ field to `transform/2`, accept an Elastic amount, or reinterpret the superseded
 ```ts
 export type TextSwapEnvelope = {
   protocolVersion: typeof PROTOCOL_VERSION;
-  requestVersion: "text-swap/1";
+  requestVersion: "text-swap/2";
   id: string;
   treeId: string;
   mode: "transform";
@@ -402,7 +402,7 @@ export type TextSwapAction = {
 
 export type TextSwapPlan = {
   protocolVersion: typeof PROTOCOL_VERSION;
-  requestVersion: "text-swap/1";
+  requestVersion: "text-swap/2";
   id: string;
   treeId: string;
   treeRevision: number;
@@ -436,13 +436,12 @@ an old-text copy never become material.
 
 ### Lifecycle, failure, and gate
 
-The current interface cannot enter Text Swap; a lasso exposes only Elastic and
-Voice keeps its material-admission meaning. The following lifecycle is a dormant
-grammar contract exercised by regression tests, not current UI authority.
-
-If reactivated, exactly one current punctuation segment may enter Text Swap in
-Full or Focus; Focus additionally binds it to the exact Focus node. Entry makes
-both Elastic grips hidden and inert. Leaving the mode or changing selection,
+The passage-local AI mark enters Text Swap for the complete current node in Full
+or Focus; Lasso exposes only Elastic and Voice keeps its material-admission
+meaning outside the local Point-and-Talk field. The protocol also retains one
+exact current punctuation segment as a valid address for bounded integrations,
+but the current Lasso surface does not publish that second operation. Entry
+cancels Elastic and keeps both grips hidden and inert. Leaving the field or changing target,
 document basis, tree, history, import, page, or recording ownership aborts work
 and revokes every late result. The two grammars never share an in-flight basis.
 
@@ -458,7 +457,7 @@ candidate-health lane.
 
 `POST /api/text-swap` is the only Text Swap wire boundary; `/api/turn` remains
 the `transform/2` boundary and never accepts this envelope. Production
-`text-swap/1` is independently gated off and has no current promotion owner. It
+`text-swap/2` is independently gated off for live providers and has no current promotion owner. It
 cannot reuse a fixture as production fallback or open merely because
 `transform/2` is enabled. Any future promotion would require a frozen synthetic
 fixture, a dedicated multilingual corpus,
@@ -642,10 +641,11 @@ it. The twelve-second store lease remains the final authority.
 
 Ask Matter is a read-only orientation boundary, separate from transformation.
 It cannot name an action or create a tree command. Its context scope is
-`selection` when lasso passages exist, otherwise `tree` for the bounded active
-working projection. `tree` names the resulting material shape, not every node
-in the durable tree: held-aside branches are omitted before this envelope is
-constructed and their ids are never sent.
+`selection` when lasso passages exist or a passage-local inquiry explicitly
+addresses one passage, otherwise `tree` for the bounded active working
+projection. `tree` names the resulting material shape, not every node in the
+durable tree: held-aside branches are omitted before this envelope is constructed
+and their ids are never sent.
 
 An explicit lasso never widens silently. If its selected passages are held
 aside after selection but before submission, the browser keeps
@@ -716,8 +716,9 @@ failure message: the submitted question returns to the field. A legacy,
 malformed, oversized, unknown, or proxy-authored 429/503 fails closed the same
 way. No provider message, status, model, or relay identity crosses this boundary.
 
-The browser may project the one current lasso passage. With no lasso selection
-it projects the active working tree in authored preorder. Both scopes are
+The browser may project the current lasso passage or the one complete passage
+explicitly addressed by a local inquiry icon. With neither, it projects the
+active working tree in authored preorder. Both scopes are
 bounded; the server parses the request whole,
 reports a receipt,
 and returns `Cache-Control: no-store`. No question, context, answer, or turn list

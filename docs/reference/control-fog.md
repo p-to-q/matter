@@ -7,7 +7,8 @@ or where it sits.
 
 **Control fog** is the small blurred plate that carries a passage's local
 actions. It appears on hover, keyboard focus, or coarse selection, holds the
-two glyphs, and vanishes again. It is not a card, a toolbar, or a panel: it is
+left Point-and-Talk AI mark and the right working-context glyph, and vanishes again. It is
+not a card, a toolbar, or a panel: it is
 a patch of paper going quiet so a control can be read against arbitrary
 material.
 
@@ -39,11 +40,12 @@ does. The tint is greyed rather than pure paper so the plate is distinguishable
 from the paper it sits on. The recorded body is one grey-cast 80% surface over
 28px of backdrop blur. There is no second visible corner field or shadow.
 
-**The mask is what makes it fog.** One closed capsule carries both controls. Its
-restored field was slightly too wide for its depth, so three pixels of reach
-move from each horizontal side into each vertical side: the field now reaches
-12px vertically and 13px horizontally. The 999px radius and one `closest-side`
-radial falloff remain: fully present through 50%, then naturally absent at 100%.
+**The mask is what makes it fog.** One closed capsule carries both controls. The
+selected wide AI wordmark made the earlier 12px × 13px correction read
+horizontally compressed, so the field now keeps 12px of vertical reach and
+restores 16px on each horizontal side. The 999px radius and one `closest-side`
+radial falloff remain; its complete body now holds through 58%, then becomes
+naturally absent at 100%.
 A hard-edged rounded rectangle was tried and rejected: it is a more definite
 shape, but a definite shape is a card, and a card is exactly what this must not
 become.
@@ -57,11 +59,11 @@ baseline, not a shape to reinterpret:
 | parameter | recorded value |
 | --- | ---: |
 | restored reach | 9px vertical / 16px horizontal |
-| curvature correction | 12px vertical / 13px horizontal |
+| selected reach | 12px vertical / 16px horizontal |
 | corner radius | 999px |
 | grey-cast surface | 80% |
 | backdrop blur | 28px |
-| radial core / dissipation | 50% / 100% |
+| radial core / dissipation | 58% / 100% |
 | local text contact | 0.50 × button (22px at base) / 14% density reduction |
 
 At the attached placement only, the same pseudo-element subtracts a constant

@@ -22,7 +22,7 @@ body, button { font-family: var(--mono); -webkit-font-smoothing: antialiased; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
+.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
 .matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
@@ -314,6 +314,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell[data-view="full"][data-canvas-mode="material"] .spatial-thought[data-selected="true"][data-movable="true"] .spatial-thought__text { cursor: grab; }
 .spatial-thought[data-parent-id] .spatial-thought__text { --material-text-color: var(--muted); font-size: 17px; font-weight: 400; line-height: 1.72; letter-spacing: 0; }
 .spatial-thought[data-context-excluded="true"] .spatial-thought__text { opacity: .36; pointer-events: none; user-select: none; cursor: default; }
+/* A held root is still inert material, but it may carry the one pointer-only
+   recovery affordance. Descendants inherit exclusion without an exception. */
+.spatial-thought[data-context-restore-target="true"] .spatial-thought__text { pointer-events: auto; }
 .language-split-projection { --split-depth: 0px; --split-selected-top: 0px; --split-after-top: 0px; --split-pocket-top: 0px; --split-pocket-depth: 0px; position: absolute; z-index: 7; inset: 0 auto auto 0; width: 100%; height: 0; color: var(--ink); font: inherit; font-size: clamp(22px, 2.2vw, 34px); font-family: var(--matter-face); font-weight: 400; line-height: 1.62; letter-spacing: 0; opacity: 0; pointer-events: none; user-select: none; }
 .language-split-projection::before { position: absolute; z-index: -1; top: var(--split-pocket-top); left: 0; width: 100%; height: var(--split-pocket-depth); background: transparent; content: ""; opacity: 0; }
 .spatial-thought[data-parent-id] .language-split-projection { color: var(--muted); font-size: 17px; line-height: 1.72; letter-spacing: 0; }
@@ -343,18 +346,40 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .admission-feedback[data-phase="recording"] .admission-feedback__signal { box-shadow: 0 0 0 5px rgba(22,29,39,.11); }
 .admission-feedback button { min-height: 34px; padding: 0 9px; border: 1px solid rgba(22,29,39,.12); border-radius: 9px; background: rgba(255,255,255,.72); color: var(--ink); font: inherit; cursor: pointer; }
 .matter-shell[data-interaction-pending="true"] .spatial-thought__text { cursor: default; }
-.node-action-lens { --lens-button: 44px; --lens-glyph: calc(var(--lens-button) * .455); --lens-core-inset: calc(var(--lens-button) * .045); --lens-core-radius: calc(var(--lens-button) * .275); --lens-gap: 6px; --lens-pad-x: 12px; --lens-pad-y: 11px; --lens-fog-outset-x: 13px; --lens-fog-outset-y: 12px; --lens-fog-contact: calc(var(--lens-button) * .5); --lens-fog-contact-reduction: .14; --lens-material-x: var(--lens-pad-x); --lens-material-y: var(--lens-pad-y); --lens-fog: color-mix(in srgb, color-mix(in srgb, var(--paper-solid) 90%, var(--ink) 10%) 80%, transparent); isolation: isolate; position: absolute; z-index: 24; display: flex; width: max-content; box-sizing: border-box; flex-direction: row; gap: var(--lens-gap); padding: var(--lens-pad-y) var(--lens-pad-x); border: 0; background: transparent; box-shadow: none; color: var(--ink); animation: node-action-lens-in 120ms ease-out both; }
-/* Keep the restored capsule's material and construction, but give its field a rounder aspect:
-   three pixels move from horizontal reach into vertical depth. It must never carry
+.node-action-lens { --lens-button: 44px; --lens-glyph: calc(var(--lens-button) * .455); --lens-core-inset: calc(var(--lens-button) * .045); --lens-core-radius: calc(var(--lens-button) * .275); --lens-gap: 6px; --lens-pad-x: 12px; --lens-pad-y: 11px; --lens-fog-outset-x: 16px; --lens-fog-outset-y: 12px; --lens-fog-core: 58%; --lens-fog-contact: calc(var(--lens-button) * .5); --lens-fog-contact-reduction: .14; --lens-material-x: var(--lens-pad-x); --lens-material-y: var(--lens-pad-y); --lens-fog: color-mix(in srgb, color-mix(in srgb, var(--paper-solid) 90%, var(--ink) 10%) 80%, transparent); isolation: isolate; position: absolute; z-index: 24; display: flex; width: max-content; box-sizing: border-box; flex-direction: row; gap: var(--lens-gap); padding: var(--lens-pad-y) var(--lens-pad-x); border: 0; background: transparent; box-shadow: none; color: var(--ink); animation: node-action-lens-in 120ms ease-out both; }
+/* Keep the restored capsule's material and construction, but give its field enough horizontal
+   shoulder to hold one wide wordmark beside one structural glyph. It must never carry
    `filter`, which would make it a backdrop root and leave its own blur with nothing to sample. */
-.node-action-lens::before { position: absolute; z-index: 0; inset: calc(-1 * var(--lens-fog-outset-y)) calc(-1 * var(--lens-fog-outset-x)); border: 0; border-radius: 999px; background: var(--lens-fog); box-shadow: none; content: ""; pointer-events: none; -webkit-mask-image: radial-gradient(closest-side, #000 50%, transparent 100%); mask-image: radial-gradient(closest-side, #000 50%, transparent 100%); -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px); }
+.node-action-lens::before { position: absolute; z-index: 0; inset: calc(-1 * var(--lens-fog-outset-y)) calc(-1 * var(--lens-fog-outset-x)); border: 0; border-radius: 999px; background: var(--lens-fog); box-shadow: none; content: ""; pointer-events: none; -webkit-mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%); mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%); -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px); }
 /* The text contact is a uniformly quieter square within the same capsule, not a radial hole.
    Subtracting a constant 14% mask density keeps every covered stroke under the same treatment. */
 @supports (mask-composite: subtract) or (-webkit-mask-composite: source-out) {
-  .node-action-lens[data-relation="corner"]::before { -webkit-mask-image: radial-gradient(closest-side, #000 50%, transparent 100%), linear-gradient(rgba(0,0,0,var(--lens-fog-contact-reduction)) 0 0); -webkit-mask-position: 0 0, calc(var(--lens-material-x) + var(--lens-fog-outset-x)) calc(var(--lens-material-y) + var(--lens-fog-outset-y)); -webkit-mask-repeat: no-repeat; -webkit-mask-size: auto, var(--lens-fog-contact) var(--lens-fog-contact); -webkit-mask-composite: source-out; mask-image: radial-gradient(closest-side, #000 50%, transparent 100%), linear-gradient(rgba(0,0,0,var(--lens-fog-contact-reduction)) 0 0); mask-position: 0 0, calc(var(--lens-material-x) + var(--lens-fog-outset-x)) calc(var(--lens-material-y) + var(--lens-fog-outset-y)); mask-repeat: no-repeat; mask-size: auto, var(--lens-fog-contact) var(--lens-fog-contact); mask-composite: subtract; }
+  .node-action-lens[data-relation="corner"]::before { -webkit-mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%), linear-gradient(rgba(0,0,0,var(--lens-fog-contact-reduction)) 0 0); -webkit-mask-position: 0 0, calc(var(--lens-material-x) + var(--lens-fog-outset-x)) calc(var(--lens-material-y) + var(--lens-fog-outset-y)); -webkit-mask-repeat: no-repeat; -webkit-mask-size: auto, var(--lens-fog-contact) var(--lens-fog-contact); -webkit-mask-composite: source-out; mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%), linear-gradient(rgba(0,0,0,var(--lens-fog-contact-reduction)) 0 0); mask-position: 0 0, calc(var(--lens-material-x) + var(--lens-fog-outset-x)) calc(var(--lens-material-y) + var(--lens-fog-outset-y)); mask-repeat: no-repeat; mask-size: auto, var(--lens-fog-contact) var(--lens-fog-contact); mask-composite: subtract; }
 }
 .node-action-lens__button { position: relative; z-index: 1; display: grid; width: var(--lens-button); height: var(--lens-button); margin: 0; padding: 0; place-items: center; border: 0; border-radius: calc(var(--lens-button) * .3); background: transparent; color: inherit; cursor: pointer; transition: background-color 120ms ease, color 120ms ease, transform 260ms cubic-bezier(.34,1.4,.64,1); }
 .node-action-lens__button svg { width: var(--lens-glyph); height: var(--lens-glyph); stroke-width: 1.6; }
+.node-action-lens__button--ai svg { width: auto; height: calc(var(--lens-glyph) * .78); transform: translateY(.25px); }
+.node-action-lens__button[data-node-action="set-aside"] svg,
+.node-action-lens__button[data-node-action="restore"] svg { stroke-width: 2; }
+.node-action-lens__button--ai:disabled { opacity: .34; }
+.point-talk { position: fixed; z-index: 33; width: min(312px, calc(100vw - 24px)); color: var(--ink); pointer-events: auto; }
+.point-talk__composer,
+.point-talk__feedback { display: flex; width: 100%; min-height: 44px; box-sizing: border-box; align-items: center; gap: 5px; padding: 4px 5px 4px 10px; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--paper-solid) 97%, transparent); box-shadow: 0 8px 22px rgba(22,29,39,.07); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.point-talk__composer input { min-width: 0; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 12px/17px var(--mono); user-select: text; }
+.point-talk__composer input::placeholder { color: color-mix(in srgb, var(--ink) 46%, transparent); }
+.point-talk button { min-width: 34px; min-height: 34px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 400 11px/16px var(--mono); cursor: pointer; }
+.point-talk button:hover,
+.point-talk button:focus-visible { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
+.point-talk button:disabled { opacity: .28; cursor: default; }
+.point-talk__voice { display: grid; width: 34px; padding: 0 !important; place-items: center; }
+.point-talk__voice svg { width: 14px; height: 14px; stroke-width: 1.55; }
+.point-talk__submit { background: var(--ink) !important; color: var(--paper-solid) !important; font-weight: 500 !important; }
+.point-talk__submit:hover,
+.point-talk__submit:focus-visible { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
+.point-talk__feedback { justify-content: flex-end; padding-left: 9px; }
+.point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font: 400 11px/16px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.point-talk[data-phase="recording"] .point-talk__feedback { border-color: color-mix(in srgb, var(--ink) 25%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 7%, transparent), 0 8px 22px rgba(22,29,39,.08); }
+.point-talk[data-phase="recording"] .point-talk__feedback button { background: var(--ink); color: var(--paper-solid); }
 /* Hover is the fog growing denser under the glyph, not a tile laid on top of it. A radial wash
    is a rounded rectangle that stays crisp, with the spread carried by concentric shadows of the
    same ink. A shadow blurs the silhouette, so its falloff is even all the way round: corners and
@@ -457,9 +482,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    The clip owns the rounded paper boundary; the index and material plane use
    one width token so disclosure is an exact, reversible push. */
 @media (max-width: 959px) {
+  .matter-shell { --index-navigation-return-centering: 1; }
   .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
   .material-files__clip { position: fixed; z-index: 41; top: var(--narrow-paper-top); right: var(--narrow-paper-inset); bottom: var(--narrow-paper-inset); left: var(--narrow-paper-inset); display: block; overflow: clip; border-radius: var(--narrow-paper-radius); pointer-events: none; }
-  .material-files { --index-row: 48px; position: absolute; z-index: auto; top: 0; right: auto; bottom: 0; left: 0; width: var(--narrow-index-width); padding: 8px 10px 6px 8px; border: 0; border-right: 1px solid rgba(22,29,39,.09); border-radius: 0 var(--narrow-paper-radius) var(--narrow-paper-radius) 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(-100%); transform-origin: left center; }
+  .material-files { --index-row: 48px; position: absolute; z-index: auto; top: 0; right: auto; bottom: 0; left: 0; width: var(--narrow-index-width); padding: 8px 10px 6px 8px; border: 0; border-radius: 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(-100%); transform-origin: left center; }
   .material-files[data-open="true"] { transform: translateX(0); }
   .material-files[data-mode="search"] { --index-row: 60px; }
   .material-files__context { padding-bottom: 4px; }
@@ -494,6 +520,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @media (max-width: 767px) {
   :root { --instrument-size: 48px; }
   .matter-header { top: 25.5px; left: 18px; }
+  /* Compact disclosure is a paper cut entering from the left, not a floating
+     drawer card. The shared clip already owns the outer paper corners; the
+     narrowest seam additionally gives up its residual depth shadow. */
+  .material-files { box-shadow: none; }
   /* With the gear absent, the two mobile roles share a stronger 20px
      mark inside the same 48px target; the 768px handoff returns to quiet gear. */
   .material-files-toggle { top: 9px; right: 9px; left: auto; width: var(--compact-corner-target); height: var(--compact-corner-target); border-radius: 12px; }
@@ -535,6 +565,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (pointer: coarse) {
+  .point-talk { width: min(328px, calc(100vw - 24px)); }
+  .point-talk__composer,
+  .point-talk__feedback { min-height: 54px; padding-top: 3px; padding-bottom: 3px; }
+  .point-talk button { min-width: 48px; min-height: 48px; }
+  .point-talk__voice { width: 48px; }
   .admission-feedback button { min-width: 48px; min-height: 48px; }
   .material-files__context-title { min-height: 48px; }
   .material-files__controls { min-height: 56px; }
@@ -557,6 +592,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (forced-colors: active) {
+  .point-talk__composer,
+  .point-talk__feedback { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
   .canvas-ruling { display: none; }
   .matter-guidance::before,
   .matter-guidance::after { -webkit-backdrop-filter: none; backdrop-filter: none; -webkit-mask-image: none; mask-image: none; }

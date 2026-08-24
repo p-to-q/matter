@@ -92,15 +92,15 @@ creates no transform request, and never enters tree, history, persistence, or
 archive data. Clicking ordinary material or blank paper clears that state and
 exits Lasso; clicking the Lasso tool does the same.
 
-**Deferred material transformation — Text Swap.** The strict `text-swap/1`
-implementation remains a dormant sibling grammar, but it is outside the current
-release plan. Lasso selection exposes no Rewrite cue, typed direction, or Voice
-rewrite mode; only the two Elastic grips own selected language. Keeping the
-inactive grammar does not add direction to `transform/2` or authority to the
-current interface. If Text Swap is reconsidered, its frozen contract is:
+**Passage-local transformation — Point and Talk.** The AI mark in a passage's
+transient Control Fog opens one small local direction field. It is the current
+UI owner of strict `text-swap/2`; it does not open the lower-right Ask Matter
+bubble and does not create a chat. Lasso continues to expose only Elastic, so
+the two operations never compete around one visible selection. The frozen
+contract is:
 
 ```text
-reference   which material        one exact current punctuation segment
+reference   which material        clicked complete node, or one exact segment
 degree      how much              tool-owned near-source length policy
 direction   where to take it      one bounded transient human direction
 lineage     why it belongs here   authored root → selected node
@@ -108,26 +108,28 @@ lineage     why it belongs here   authored root → selected node
             one atomic in-place replacement
 ```
 
-Voice would be the primary direction path. A selection-local typed direction would use the
-same transient port. Before engagement it is only a small, left-aligned
-**Rewrite** cue above the selection; focus expands it into the complete field
-without moving focus there automatically. It is
-not a permanent prompt box, is not available without the eligible selection,
+Voice and the one-line field share the same transient direction port. Clicking
+the AI mark itself is the explicit whole-node reference; one restrained white
+field aligns to that material's upper-left edge and prefers the space above it.
+Its idle form carries only the muted Voice entry and the ink submit action—no
+separate Cancel button—and may take focus because the person explicitly requested
+it. A pointer outside the field, a mode or surface change, or `Escape` cancels
+the local turn. It is not a permanent prompt box, is not available without a current node,
 and is never material, history, persistence, archive content, model memory, or
 logged text. The direction is one trimmed line of at most 240 Unicode code
-points. The lasso fixes reference, the person fixes direction, and the closed
+points. The node click fixes reference, the person fixes direction, and the closed
 tool policy fixes a seed output band near the source length; the model may not
 choose another target, operation, or scope.
 
-Entering a future Text Swap mode would make both Elastic grips hidden and inert. One complete result
-atomically replaces the selected segment in place and is pointer-undoable.
-Closing, changing the selection, or losing its exact tree/revision basis clears
+Opening Point and Talk cancels any Elastic degree or pending Elastic turn. One complete result
+atomically replaces the addressed node or exact segment in place and is pointer-undoable.
+Closing, changing the target, or losing its exact tree/revision basis clears
 the transient direction and gives any late result no authority. Full-view Voice
-admission is unchanged when no eligible language segment is selected.
+admission remains a separate human-material channel.
 
 Provider, pool, timeout, and transport failures are operational events, not
-material. They leave the exact source intact and return the current Elastic or
-inquiry control to its prior usable state without drawing a model-error message
+material. They leave the exact source intact and return the current Elastic,
+Point-and-Talk, or inquiry control to its prior usable state without drawing a model-error message
 on the paper. Strict receipts and server-side observation remain available for
 diagnosis; only valid model output can become visible material.
 
@@ -178,10 +180,13 @@ never authors a coordinate.
 The material index is also navigation, not authored position. Opening one of
 its rows selects or focuses that node, then moves only the transient camera so
 the measured passage lands at the current visual-attention centre. That centre
-is normally the browser visual viewport centre. When an overlapping index takes
-most of a narrow viewport, it moves continuously toward the centre of the
-exposed canvas instead of switching at a device breakpoint. A fitting passage
-keeps the current zoom when its measured type is already readable. If the
+is normally the browser visual viewport centre. Across the complete drawer
+presentation below 960px, the open index preserves the eventual reading centre:
+navigation centres the unshifted material, then the drawer's exact presentation
+translation carries it right. Closing the drawer removes only that translation,
+so the passage returns to the browser centre without a second camera move. A
+fitting passage keeps the current zoom when its measured
+type is already readable. If the
 current camera makes that target smaller than 15 CSS pixels, index navigation
 raises only that camera scale to the readable floor; otherwise only an
 oversized passage may reduce it. Both directions remain inside the existing

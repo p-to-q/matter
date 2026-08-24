@@ -1,7 +1,9 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet.
+the complete generative product loop yet. Preview.43 is the current source
+candidate; Preview.42 remains the latest completed public-origin receipt until
+the new `main` deployment settles.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -24,12 +26,13 @@ The current online-safe claim is narrow:
   file outline, focus/fold, copy, lasso, stretch projection
   transient working-context subtraction without hiding or rewriting material
   explicit canvas-pan mode and undoable cross-branch structural reparenting
-  FX-off structural paper ruling and one passage-local control fog carrying + and −
+  FX-off structural paper ruling and one passage-local control fog carrying AI and − / +
+  local Point-and-Talk UI with one strict whole-node text-swap/2 turn and exact pointer Undo
   browser-native live voice admission (no fixture voice on the public origin)
   deterministic navigation labels, with an independently gated managed proposal
   immediate transcript admission, with local repair rules and an independently gated managed proposal
   lightweight Ask Matter boundary, with its server-side answer adapter independently gated
-  no live model transformation
+  no live material-transformation provider in the published preview profile
 ```
 
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
@@ -53,6 +56,53 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Release verification — 0.2.0-preview.43
+
+Preview.43 replaces the former passage-local Branch/Focus catalogue with one
+measured two-position control fog. The selected AI mark opens a small local
+Point-and-Talk field for the exact clicked node; the adjacent `−` / `+` reuses
+the material index's transient working-context transition. Point-and-Talk is
+not Ask Matter and creates no answer bubble or thread. Its strict
+`text-swap/2` address admits exactly one whole current node or the retained
+one-segment lasso grammar, and a valid server-built plan reaches the tree engine
+as one atomic, pointer-undoable material replacement.
+
+The same candidate restores the action fog's horizontal shoulder and glyph
+weight without enlarging its targets. Below the 960 px dock boundary the index
+now meets the canvas through one straight, unbordered right seam. Compact widths
+remove the residual depth shadow as well. Index navigation first centres the
+unshifted material and adds only the open drawer's temporary translation, so
+closing the drawer returns the addressed passage to the browser centre without
+mutating the camera.
+
+The public deployment profile still leaves the Text Swap provider unavailable.
+This release activates and proves the client, protocol, cancellation, strict
+adjudication, tree-engine, Undo, and local presentation boundaries; it does not
+claim live generative material transformation without the separate provider and
+origin-promotion evidence.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor and 43 linked Markdown documents passed;
+                       architecture covered 405 files across 7 layers with no
+                       outward edge, provider leak, or cycle; Vitest passed
+                       160 files with 2 skipped, 1,858 cases with 3 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack
+                       production build of all 22 pages/routes passed
+runtime proof          initial JavaScript is 1,202.3 KiB raw / 381.5 KiB gzip,
+                       below the 384 KiB release ceiling; the Point-and-Talk
+                       interaction and its local speech/transform graph stay
+                       behind one client-only lazy boundary
+browser proof          full Chromium: 113 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 128 total; receipts
+                       cover typed and Voice Point-and-Talk, late-response
+                       revocation, coarse targets, compact and tablet drawer
+                       return centring, and the straight unbordered drawer seam
+publication state      source candidate is ready for the final main push,
+                       Production settlement, public-origin probe, immutable
+                       annotated tag, and GitHub prerelease receipt
+```
 
 ## Release verification — 0.2.0-preview.42
 

@@ -17,6 +17,69 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-24 — drawer disclosure preserves the returning reading centre
+
+Changed: at every drawer width below 960px the opened material index keeps the shared paper
+clip's outer left corners but meets the exposed canvas through one straight,
+unbordered right seam while retaining the preceding index surface colour; only
+the 767px-and-below form also removes the trailing shadow. Clicking an index row centres the
+unshifted material, then applies the drawer's exact temporary right translation;
+closing the drawer removes only that translation and returns the passage to the
+browser centre without another camera move. The 768–959px drawer retains only
+its soft trailing depth, not a keyline or interior corner pair.
+
+Why: rounding the compact drawer's interior edge exposed two dark crescents and
+a separator inside an outer surface that was already rounded. Its former
+exposed-sliver centring also left the selected passage at the far left after the
+drawer withdrew. The index is a temporary piece of paper entering from the
+left, not a card or a new lasting reading coordinate.
+
+Forecloses: a floating-card silhouette, a dark trailing keyline, a second
+interior corner pair, or a second close-time camera correction.
+
+## 2026-08-24 — the selected AI mark gives Control Fog a wider shoulder
+
+Changed: the two-slot passage field keeps its measured interactive carrier but
+restores 16px of horizontal fog reach, holds its complete radial body through
+58%, and raises the `+` / `−` stroke from 1.6 to 2.0. Vertical reach remains
+12px and the AI wordmark keeps its selected optical height.
+
+Why: the selected filled wordmark made the later 12px × 13px rounder correction
+look compressed and left the structural glyph visually underweight. A wider,
+denser carrier reads as one stable material handle without enlarging its hit
+targets or stepping farther onto the passage.
+
+Forecloses: compensating with oversized buttons, a hard capsule edge, separate
+hover tiles, or a second visual-weight system for working-context controls.
+
+## 2026-08-24 — Point and Talk returns as a node-local material change
+
+Changed: the canvas control fog now has two fixed positions: the supplied
+left-side AI icon opens one small node-local Point-and-Talk direction field, while the right
+side `−` sets an active branch aside and becomes `+` on that held root to
+restore it, exactly reusing the material index's client-only working-context
+state. Point and Talk addresses the complete clicked node through strict
+`text-swap/2`, accepts one bounded typed or spoken direction, and commits one
+in-place pointer-undoable replacement. The lower-right Ask Matter remains a
+separate read-only inquiry. The icon inherits the same ink and fog-control
+states as `+` / `−`. Its lazily loaded white `312 × 44px` desktop field aligns
+to the passage's upper-left glyph edge, prefers the space above it, and carries
+only a muted Voice entry plus the ink submit action. It has no visible Cancel;
+outside pointer, mode or surface change, and `Escape` revoke the same transient
+turn and every late result.
+
+Why: local controls must describe the material state they actually change, not
+repeat growth or navigation vocabulary. The recovered Point-n-Talk grammar
+makes pointing own reference and human language own direction, while the only
+visible AI output is the material's one reversible change. Versioning the
+whole-node address separately prevents a silent widening of `text-swap/1`.
+
+Forecloses: a per-node add-child action, Focus/Show-all inside the fog, a
+second working-context store, independently restorable held descendants, a
+second chat surface, arbitrary substring authority, hidden retrieval, and an AI
+reply that sits beside rather than becoming material. It also forecloses loading
+the complete Text Swap/Voice graph into the initial canvas bundle.
+
 ## 2026-08-24 — one native media slot owns the calibrated leaf atmosphere
 
 Changed: the paper renders exactly one native poster or video media node. Its

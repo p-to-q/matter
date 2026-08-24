@@ -28,9 +28,11 @@ pointer starts at empty root / node / segment
 ```
 
 Raw audio is never written to storage or logs. Failure preserves the admission
-anchor and exposes a pointer retry. A transcript is not rendered as a message:
-it becomes human material. The dormant Text Swap grammar does not give Voice a
-selected-language or transform-direction mode in the current release.
+anchor and exposes a pointer retry. An admission transcript is not rendered as
+a message: it becomes human material. Point-and-Talk may instead lease the same
+bounded microphone capability for one transient transform direction attached to
+the explicitly addressed node; it never turns the fixed Voice rail into a
+selected-language mode and never stores that direction as material.
 
 The public preview uses browser-managed Web Speech for transient interim text
 and one final admission when available. Otherwise it records locally and lazily

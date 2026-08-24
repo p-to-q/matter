@@ -7,14 +7,11 @@ const imaginedLivesId = "thought_fixture_imagined_lives";
 const imaginedTimeId = "thought_fixture_imagined_time";
 const presentDistanceId = "thought_fixture_present_distance";
 
-async function focusRoot(page: Page, narrow: boolean): Promise<void> {
+async function selectRoot(page: Page): Promise<void> {
   const rootText = page.locator(`[data-thought-text-id="${rootId}"]`);
-  if (narrow) await rootText.click();
-  else await rootText.hover();
-  await page.getByRole("toolbar", { name: "Thought actions" })
-    .getByRole("button", { name: "Focus this thought" })
-    .click();
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
+  await rootText.click();
+  await expect(rootText).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
 }
 
 for (const viewport of [
@@ -54,7 +51,7 @@ for (const viewport of [
     }))).toEqual({ x: cameraBeforeMovePan.x + 24, y: cameraBeforeMovePan.y + 18 });
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan, exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
-    await focusRoot(page, viewport.name === "narrow");
+    await selectRoot(page);
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     const cameraBeforeWheel = await page.locator("main.matter-shell").evaluate((main) => ({
@@ -382,7 +379,7 @@ for (const viewport of [
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     await page.evaluate(async () => document.fonts.ready);
     await expect(page.getByRole("button", { name: /Apply v[123] fixture version/ })).toHaveCount(0);
-    await focusRoot(page, viewport.name === "narrow");
+    await selectRoot(page);
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText("圈住一段连续文字，边界停在标点处。");
@@ -454,7 +451,7 @@ test("keyboard addresses exact segments and Escape or the narrow index returns L
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, true);
+  await selectRoot(page);
 
   const shell = page.locator("main.matter-shell");
   await expect(shell).toHaveAttribute("lang", "zh-CN");
@@ -757,7 +754,7 @@ test("circling a few off-centre words snaps to their single punctuation segment"
   await expect(page.locator(".stretch-handle")).toHaveCount(2);
 });
 
-test("Focus lasso authority belongs only to the exact focused thought", async ({ page }) => {
+test("lasso authority belongs only to the directly traced thought", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -766,15 +763,7 @@ test("Focus lasso authority belongs only to the exact focused thought", async ({
   await selectThoughtThroughMaterialIndex(page, imaginedTimeId);
   await child.hover();
   await expect(child).toHaveAttribute("aria-pressed", "true");
-  const thoughtActions = page.locator(
-    `[data-node-action-lens][data-node-id="${imaginedTimeId}"]`,
-  );
-  // Selection state publishes before the shared render-edge lens finishes
-  // retargeting. The action's own node receipt is the authority for this click.
-  await expect(thoughtActions).toHaveAttribute("data-node-id", imaginedTimeId);
-  await thoughtActions.getByRole("button", { name: "Focus this thought" })
-    .evaluate((button: HTMLButtonElement) => button.click());
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
   await expect(page.locator(`[data-thought-text-id="${rootId}"]`)).toBeVisible();
   await expect(child).toBeVisible();
 
@@ -815,10 +804,7 @@ test("a non-root upper grip pulls upward while its fixed seam pushes the selecti
   await selectThoughtThroughMaterialIndex(page, imaginedTimeId);
   await child.hover();
   await expect(child).toHaveAttribute("aria-pressed", "true");
-  await page.locator(`[data-node-action-lens][data-node-id="${imaginedTimeId}"]`)
-    .getByRole("button", { name: "Focus this thought" })
-    .evaluate((button: HTMLButtonElement) => button.click());
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   await child.scrollIntoViewIfNeeded();
   await drawEarlyReleaseLoop(
@@ -883,7 +869,7 @@ test("a whole multi-segment main thought becomes one contiguous Elastic range", 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, false);
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
 
   const text = page.locator(`[data-thought-text-id="${rootId}"] .spatial-thought__label`);

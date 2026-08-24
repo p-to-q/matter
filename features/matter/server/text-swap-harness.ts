@@ -7,7 +7,7 @@ import {
 import type { MatterScenario } from "./harness";
 import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine";
 
-export const TEXT_SWAP_PROMPT_VERSION = "text-swap/1";
+export const TEXT_SWAP_PROMPT_VERSION = "text-swap/2";
 
 export type TextSwapScenarioInput = Readonly<{
   locale: MatterLocale;

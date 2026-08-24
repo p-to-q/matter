@@ -454,6 +454,15 @@ describe("project the visual attention centre", () => {
     )).toEqual({ height: 800, width: 88, x: 348, y: 400 });
   });
 
+  it("preserves the closed reading centre through a compact surface translation", () => {
+    expect(projectCanvasAttentionField(
+      visual,
+      canvas,
+      { left: 0, top: 0, width: 304, height: 800 },
+      304,
+    )).toEqual({ height: 800, width: 400, x: 504, y: 400 });
+  });
+
   it("blends continuously through an intermediate overlap", () => {
     const point = projectCanvasAttentionField(
       { left: 0, top: 0, width: 800, height: 800 },

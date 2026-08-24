@@ -79,7 +79,7 @@ function harness(options: Partial<{
   let requestSequence = 0;
   const buildEnvelope = vi.fn((basis: TextSwapBasis, direction: string, id: string) => ({
     protocolVersion: "0.2",
-    requestVersion: "text-swap/1",
+    requestVersion: "text-swap/2",
     id,
     treeId: basis.treeId,
     mode: "transform",
@@ -419,7 +419,7 @@ describe("TextSwapDriver", () => {
 function envelope(id: string): TextSwapEnvelope {
   return {
     protocolVersion: "0.2",
-    requestVersion: "text-swap/1",
+    requestVersion: "text-swap/2",
     id,
     treeId: "tree_1",
     mode: "transform",
@@ -435,7 +435,7 @@ function envelope(id: string): TextSwapEnvelope {
 function plan(value: TextSwapEnvelope): TextSwapPlan {
   return {
     protocolVersion: "0.2",
-    requestVersion: "text-swap/1",
+    requestVersion: "text-swap/2",
     id: value.id,
     treeId: value.treeId,
     treeRevision: value.treeRevision,

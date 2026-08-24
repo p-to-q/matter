@@ -14,9 +14,7 @@ import {
 } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
-import type { ProjectedTool, ToolIntent } from "../tools/model";
-import { projectNodeActions } from "../tools/project-node-actions";
-import { MinusIcon, PlusIcon, ShowAllIcon } from "./icons";
+import { MatterAiIcon, MinusIcon, PlusIcon } from "./icons";
 import {
   projectNodeHandleMetrics,
   projectNodeHandlePosition,
@@ -25,6 +23,7 @@ import {
 } from "./node-handle-position";
 
 type LensTarget = Readonly<{
+  kind: "active" | "held-root";
   nodeId: string;
   source: "focus" | "pointer" | "selection";
 }>;
@@ -43,9 +42,12 @@ export type NodeActionLensProps = Readonly<{
   documentRef: RefObject<HTMLElement | null>;
   enabled: boolean;
   geometryKey: string;
+  heldAsideRootIds: ReadonlySet<string>;
   interaction: "idle" | "pending";
   navigation: NavigationState;
-  onIntent: (nodeId: string, intent: ToolIntent) => void;
+  onOpenPointTalk: (nodeId: string) => void;
+  onToggleHeldAside: (nodeId: string) => void;
+  pointTalkEligibleNodeIds: ReadonlySet<string>;
   positioningRef: RefObject<HTMLElement | null>;
   tree: ThoughtTree;
 }>;
@@ -62,9 +64,12 @@ export function NodeActionLens({
   documentRef,
   enabled,
   geometryKey,
+  heldAsideRootIds,
   interaction,
   navigation,
-  onIntent,
+  onOpenPointTalk,
+  onToggleHeldAside,
+  pointTalkEligibleNodeIds,
   positioningRef,
   tree,
 }: NodeActionLensProps) {
@@ -136,17 +141,20 @@ export function NodeActionLens({
     const materialTarget = (eventTarget: EventTarget | null) => {
       if (!(eventTarget instanceof Element)) return null;
       const element = eventTarget.closest<HTMLElement>("[data-thought-text-id]");
-      if (element === null || !canvas.contains(element) || element.matches(":disabled")) return null;
+      if (element === null || !canvas.contains(element)) return null;
       const nodeId = element.dataset.thoughtTextId;
-      return nodeId !== undefined && activeNodeIds.has(nodeId) ? { element, nodeId } : null;
+      if (nodeId === undefined) return null;
+      if (activeNodeIds.has(nodeId)) return { element, kind: "active" as const, nodeId };
+      if (heldAsideRootIds.has(nodeId)) return { element, kind: "held-root" as const, nodeId };
+      return null;
     };
-    const reveal = (candidate: Readonly<{ element: HTMLElement; nodeId: string }>, source: LensTarget["source"]) => {
+    const reveal = (candidate: Readonly<{ element: HTMLElement; kind: LensTarget["kind"]; nodeId: string }>, source: LensTarget["source"]) => {
       clearCloseTimer();
       if (source === "pointer") dismissedFocusNodeIdRef.current = null;
       targetElementRef.current = candidate.element;
-      setTarget((current) => current?.nodeId === candidate.nodeId && current.source === source
+      setTarget((current) => current?.nodeId === candidate.nodeId && current.kind === candidate.kind && current.source === source
         ? current
-        : { nodeId: candidate.nodeId, source });
+        : { kind: candidate.kind, nodeId: candidate.nodeId, source });
     };
     const pointerOver = (event: PointerEvent) => {
       if (!enabled || chromeIsSuppressed() || event.pointerType === "touch") return;
@@ -209,15 +217,17 @@ export function NodeActionLens({
       canvas.removeEventListener("pointerdown", pointerDown);
       chromeObserver.disconnect();
     };
-  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, scheduleClose]);
+  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, heldAsideRootIds, scheduleClose]);
 
   const selectedTarget = useMemo<LensTarget | null>(
     () => coarse && navigation.selectedNodeId !== null && activeNodeIds.has(navigation.selectedNodeId)
-      ? { nodeId: navigation.selectedNodeId, source: "selection" }
+      ? { kind: "active", nodeId: navigation.selectedNodeId, source: "selection" }
       : null,
     [activeNodeIds, coarse, navigation.selectedNodeId],
   );
-  const retainedTarget = target !== null && activeNodeIds.has(target.nodeId) && tree.nodes[target.nodeId] !== undefined
+  const retainedTarget = target !== null && tree.nodes[target.nodeId] !== undefined && (
+    target.kind === "active" ? activeNodeIds.has(target.nodeId) : heldAsideRootIds.has(target.nodeId)
+  )
     ? target
     : null;
   const activeTarget = !enabled || chromeSuppressed || interaction === "pending"
@@ -226,20 +236,12 @@ export function NodeActionLens({
       ? retainedTarget?.source === "focus" ? retainedTarget : selectedTarget
       : retainedTarget;
 
-  const tools = useMemo(() => activeTarget === null
-    ? Object.freeze([]) as readonly ProjectedTool[]
-    : projectNodeActions({
-        activeNodeIds,
-        interaction,
-        navigation,
-        nodeId: activeTarget.nodeId,
-        tree,
-      }), [activeNodeIds, activeTarget, interaction, navigation, tree]);
+  const actionCount = activeTarget === null ? 0 : 2;
 
   useLayoutEffect(() => {
     const paper = documentRef.current;
     const canvas = canvasRef.current;
-    if (!enabled || activeTarget === null || paper === null || canvas === null || tools.length === 0) {
+    if (!enabled || activeTarget === null || paper === null || canvas === null || actionCount === 0) {
       setPlacement(null);
       return;
     }
@@ -270,7 +272,7 @@ export function NodeActionLens({
         railRect: paper.closest<HTMLElement>(".matter-shell")
           ?.querySelector<HTMLElement>(".tool-rail")?.getBoundingClientRect() ?? null,
         textRect,
-        toolCount: tools.length,
+        toolCount: actionCount,
         metrics,
       });
       const next = result === null
@@ -312,14 +314,14 @@ export function NodeActionLens({
       positioningElement?.removeEventListener("transitionend", finishPositioningTransition);
       window.removeEventListener("resize", update);
     };
-  }, [activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, positioningRef, tools.length]);
+  }, [actionCount, activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, positioningRef]);
 
   useLayoutEffect(() => {
     if (placement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
     focusPendingKeyboardEntry(activeTarget.nodeId);
   }, [activeTarget, focusPendingKeyboardEntry, placement]);
 
-  if (activeTarget === null || placement === null || tools.length === 0) return null;
+  if (activeTarget === null || placement === null || actionCount === 0) return null;
 
   const restoreTargetFocus = () => {
     canvasRef.current?.querySelector<HTMLElement>(
@@ -349,10 +351,12 @@ export function NodeActionLens({
     buttons[nextIndex]?.focus();
   };
   const stopPointer = (event: ReactPointerEvent<HTMLDivElement>) => event.stopPropagation();
+  const pointTalkEnabled = activeTarget.kind === "active" &&
+    pointTalkEligibleNodeIds.has(activeTarget.nodeId);
 
   return (
     <div
-      aria-label="Thought actions"
+      aria-label="Thought context"
       className="node-action-lens"
       data-canvas-interactive
       data-node-action-lens
@@ -384,54 +388,39 @@ export function NodeActionLens({
         "--lens-material-y": `${placement.materialCorner?.y ?? placement.metrics.paddingY}px`,
       } as CSSProperties}
     >
-      {tools.map((tool, index) => (
-        <NodeActionButton
-          key={tool.id}
-          tabIndex={index === tools.findIndex((candidate) => candidate.availability === "available") ? 0 : -1}
-          tool={tool}
-          onActivate={(intent) => {
-            onIntent(activeTarget.nodeId, intent);
-            close();
-          }}
-        />
-      ))}
+      <button
+        aria-label="Rewrite this material with AI"
+        aria-disabled={!pointTalkEnabled || undefined}
+        className="node-action-lens__button node-action-lens__button--ai"
+        data-node-action="point-talk"
+        disabled={!pointTalkEnabled}
+        onClick={() => {
+          onOpenPointTalk(activeTarget.nodeId);
+          close();
+        }}
+        title="Rewrite with AI"
+        tabIndex={pointTalkEnabled ? 0 : -1}
+        type="button"
+      >
+        <MatterAiIcon />
+      </button>
+      <button
+        aria-label={activeTarget.kind === "active"
+          ? "Set this material branch aside"
+          : "Include this material branch"}
+        className="node-action-lens__button"
+        data-node-action={activeTarget.kind === "active" ? "set-aside" : "restore"}
+        onClick={() => {
+          onToggleHeldAside(activeTarget.nodeId);
+          close();
+        }}
+        title={activeTarget.kind === "active" ? "Set aside" : "Include"}
+        tabIndex={pointTalkEnabled ? -1 : 0}
+        type="button"
+      >
+        {activeTarget.kind === "active" ? <MinusIcon /> : <PlusIcon />}
+      </button>
     </div>
-  );
-}
-
-function NodeActionButton({
-  onActivate,
-  tabIndex,
-  tool,
-}: Readonly<{
-  onActivate: (intent: ToolIntent) => void;
-  tabIndex: number;
-  tool: ProjectedTool;
-}>) {
-  const label = tool.id === "add-child"
-    ? "Extend from this thought"
-    : tool.id === "focus"
-      ? "Focus this thought"
-      : "Show all material";
-  // The pair reads as one degree control: + grows a branch, − narrows to this one.
-  const icon = tool.id === "add-child"
-    ? <PlusIcon />
-    : tool.id === "focus"
-      ? <MinusIcon />
-      : <ShowAllIcon />;
-  return (
-    <button
-      aria-label={label}
-      className="node-action-lens__button"
-      data-node-action={tool.id}
-      disabled={tool.availability !== "available"}
-      onClick={tool.availability === "available" ? () => onActivate(tool.intent) : undefined}
-      tabIndex={tabIndex}
-      title={label}
-      type="button"
-    >
-      {icon}
-    </button>
   );
 }
 

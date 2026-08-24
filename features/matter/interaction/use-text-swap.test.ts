@@ -33,14 +33,29 @@ describe("Text Swap basis and envelope", () => {
     expect(Object.isFrozen(basis?.selection)).toBe(true);
   });
 
-  it("rejects an adjacent run, stale text, and a missing selection", () => {
+  it("accepts the exact whole node addressed by the passage-local AI control", () => {
+    const wholeNode = Object.freeze({
+      type: "segment-range" as const,
+      nodeId: "thought_1",
+      start: 0,
+      end: TEXT.length,
+      selectedText: TEXT,
+    });
+    expect(createTextSwapBasis({
+      tree: tree(),
+      documentEpoch: 3,
+      selection: wholeNode,
+    })?.selection).toEqual(wholeNode);
+  });
+
+  it("rejects an arbitrary partial range, stale text, and a missing selection", () => {
     expect(createTextSwapBasis({
       tree: tree(),
       documentEpoch: 3,
       selection: {
         ...SELECTION,
-        end: TEXT.length,
-        selectedText: TEXT,
+        end: TEXT.length - 1,
+        selectedText: TEXT.slice(0, -1),
       },
     })).toBeNull();
     expect(createTextSwapBasis({
@@ -55,7 +70,7 @@ describe("Text Swap basis and envelope", () => {
     })).toBeNull();
   });
 
-  it("builds the stable text-swap/1 shape without audio or carrier metadata", () => {
+  it("builds the stable text-swap/2 shape without audio or carrier metadata", () => {
     const currentTree = tree();
     const basis = createTextSwapBasis({
       tree: currentTree,
@@ -74,7 +89,7 @@ describe("Text Swap basis and envelope", () => {
     });
 
     expect(envelope).toMatchObject({
-      requestVersion: "text-swap/1",
+      requestVersion: "text-swap/2",
       id: "text_swap_request_1",
       mode: "transform",
       operation: "paraphrase-in-place",

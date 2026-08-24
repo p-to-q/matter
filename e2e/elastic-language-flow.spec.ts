@@ -19,7 +19,7 @@ test("both literal grips stay visible in the paper's light and dark appearances"
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, false);
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
@@ -66,7 +66,7 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, false);
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 1));
@@ -110,7 +110,7 @@ test("the upper grip on the opening segment pushes every lower material row down
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, false);
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
@@ -188,7 +188,7 @@ test("Elastic Language cancels below-threshold and late turns without changing m
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, false);
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
@@ -245,7 +245,7 @@ test("Elastic Language provider failure stays quiet and leaves material unchange
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, false);
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
@@ -334,7 +334,7 @@ async function runElasticReceipt(
   if (input !== "touch") await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await focusRoot(page, input === "touch");
+  await selectRoot(page);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await expect(text).toContainText(SOURCE);
@@ -512,19 +512,12 @@ async function dragByTouch(
   }
 }
 
-async function focusRoot(page: Page, narrow: boolean): Promise<void> {
+async function selectRoot(page: Page): Promise<void> {
   const rootText = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
-  if (narrow) await rootText.click();
-  else await rootText.hover();
-  await page.getByRole("toolbar", { name: "Thought actions" })
-    .getByRole("button", { name: "Focus this thought" })
-    .click();
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
-  await expect(page.locator(`[data-thought-id="${ROOT_ID}"]`))
-    .toHaveAttribute("data-focused", "true");
-  // Focus publishes navigation before its render-edge measurement cache and
-  // Lasso target snapshot settle. Two frames cross that ownership boundary
-  // without a fixed delay or a production-only state hook.
+  await rootText.click();
+  await expect(rootText).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
+  // Canvas geometry and lasso target snapshots settle at the rendering edge.
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));

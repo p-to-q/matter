@@ -101,12 +101,13 @@ Text Swap is a sibling lifecycle and protocol, not an optional branch inside
 Elastic Language:
 
 ```text
-one exact segment  → SegmentSelection              reference
+whole node click   → SegmentSelection 0..length    reference
+exact lasso segment remains protocol-valid         reference
 selected Voice     → bounded transient direction  direction
 Text Swap policy   → near-source length band       degree
 selected lineage   → LineageContext                lineage
                        ↓
-             TextSwapEnvelope text-swap/1
+             TextSwapEnvelope text-swap/2
                        ↓
                POST /api/text-swap
                        ↓
@@ -117,20 +118,22 @@ selected lineage   → LineageContext                lineage
        planToTreeCommand → tree engine → exact inverse
 ```
 
-Text Swap is implemented as a dormant sibling grammar. No current UI projects
-its Rewrite cue, typed direction, or selected-language Voice authority; Voice
-continues material admission and an eligible lasso belongs only to Elastic.
+Point and Talk is Text Swap's current passage-local UI owner. The hover/focus AI
+mark freezes the complete current node as its explicit reference and lazily opens
+one viewport-fixed typed/Voice direction field aligned to that passage's upper-left
+glyph bounds; Lasso remains owned only by Elastic. The full driver, Voice, and
+request graph stays out of the initial canvas bundle until that explicit click.
 Admission and Elastic share one client-side ownership gate: while admission is
 not idle, Elastic receives no actionable selection, renders no grips, and can
 send no turn. Returning to idle revalidates the transient lasso address before
 re-arming the stretch lifecycle.
-The dormant reducer, effect, and `VoicePort` ownership remain isolated from
+The Text Swap reducer, effect, and `VoicePort` ownership remain isolated from
 admission and `transform/2`, so regression tests cannot dispatch into either
 document path.
 
-If Text Swap is reconsidered, its bounded direction remains local and transient.
+Its bounded direction remains local and transient.
 Provider or transport refusal restores that local field without visible error
-state; cancel, stale basis, mode exit, or commit clears it. The request carries
+state; outside pointer, `Escape`, stale basis, mode exit, or commit clears it. The request carries
 normalized one-line direction but no audio, partial transcript, carrier, or
 client-authored output target. Success may commit only one complete range
 replacement; no token, draft, old copy, or candidate becomes material.
@@ -153,9 +156,12 @@ Opening an index row publishes navigation first, then the render edge measures
 that exact node only after a layout publication newer than the click and initial
 font loading have both settled. One pure projection
 derives a visual-attention point from the visual viewport, canvas, and any
-overlapping open index. The point stays at the browser centre while overlap is
-small, then uses a smoothstep weight from 24% to 72% viewport coverage to move
-toward the exposed canvas centre without a device breakpoint. The render edge
+overlapping open index. The complete drawer presentation below 960px publishes
+one CSS-owned return-centring signal and the exact open index width: the pure
+projection adds that temporary surface translation to the browser centre, so
+removing the translation restores centred reading without mutating the camera.
+The ordinary projection retains its continuous exposed-canvas fallback for any
+overlapping edge instrument that does not publish this contract. The render edge
 also samples the target's computed CSS font size and gives that plain number to
 a second pure camera planner. The planner preserves a readable current zoom,
 raises undersized target type only to a 15 CSS-pixel screen-space floor, and
@@ -350,8 +356,8 @@ transform from one active contiguous run; Focus additionally binds that run to
 its exact Focus node. Full-view siblings remain visible but are not silently
 added to model context: the request carries the exact authored
 root-to-selected-node lineage. The current UI gives only the one-range address
-to Elastic. The dormant Text Swap grammar further narrows the shared selection
-shape to one exact current segment and owns no current interaction surface.
+to Elastic. Text Swap accepts one exact current segment or the exact complete
+node addressed by Point and Talk; only the latter has a current UI owner.
 
 Async effects are limited to recording, transcription, labelling, inquiry, planning,
 persistence, and archive transport. Every completion returns with
@@ -398,7 +404,7 @@ that terminal receipt; no per-candidate log or telemetry request is made. The
 logger rebuilds an allowlisted object, a failing sink cannot affect the scenario,
 and no cold/warm field exists because provider cache state is not provable inside
 Matter. Cache hits, missing adapters, and caller cancellations remain silent.
-Elastic and dormant Text Swap retain their separate route-owned
+Elastic and Text Swap retain their separate route-owned
 `matter.material-turn` receipt with closed scalar buckets; the harness ceiling is
 not a claim that it is the application's only log line. Deployment logs are not
 application persistence and cannot stand in for externally measured origin SLOs.
@@ -439,7 +445,7 @@ app/
   api/label/route.ts               implemented label boundary; live adapter gated
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
-  api/text-swap/route.ts           dormant strict text-swap/1 boundary; gate off
+  api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; live gate off
 
 features/matter/
   server/harness.ts                the only place a model is awaited; one scenario contract
@@ -516,14 +522,15 @@ first-release gates are available, fixture-only, unavailable, or not yet
 implemented. It never returns provider names, raw environment values, stored
 material, transcripts, or lineage.
 
-Elastic Language and Text Swap remain independent health surfaces even while
-Text Swap is dormant. The deployment receipt has two explicit profiles:
+Elastic Language and Text Swap remain independent health surfaces. Point-and-Talk
+now exposes Text Swap locally in the browser, while its live provider gate remains
+closed in the published deployment profiles. The deployment receipt has two explicit profiles:
 `browser-preview` requires both material-model gates to remain unavailable;
 `elastic-live` requires Elastic to be configured and Text Swap to remain
 unavailable. Health proves configuration only; a successful strict Elastic
 turn and the external rate/spend receipts are still required before a live
 claim. The superseded paired `material-live` profile is rejected rather than
-quietly reviving the dormant surface.
+quietly enabling a provider surface without its separate promotion evidence.
 
 The complete dependency choice and rejected foundations are in
 [`reference/foundation.md`](reference/foundation.md). The short version: Matter

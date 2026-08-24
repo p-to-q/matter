@@ -125,8 +125,9 @@ a mismatch clears the controls and revokes late work.
 
 `SegmentSelection` uses the strict discriminator `type: "segment-range"`.
 Offsets are UTF-16 code units, must start and end on a contiguous run of current
-derived segments, and must reproduce `selectedText` exactly. The dormant Text
-Swap grammar narrows this shared shape back to one exact segment.
+derived segments, and must reproduce `selectedText` exactly. `text-swap/2`
+accepts either one exact segment or the exact complete-node range created by a
+passage-local AI click; it never accepts an arbitrary partial substring.
 
 ## Punctuation segment
 
@@ -144,8 +145,8 @@ Other   newline, start of text, end of text
   the selected text and only the final segment's outer seam stays protected;
 - exactly one contiguous current `segment-range` may expose the two Elastic
   Language grips; two or more passage ranges become material selection mode;
-- the dormant Text Swap grammar accepts only one exact segment and has no
-  current UI owner;
+- Text Swap accepts one exact segment or one exact whole node; Control Fog owns
+  the whole-node Point-and-Talk entry while Lasso continues to expose Elastic;
 - offsets are UTF-16 code-unit offsets and must land on grapheme boundaries;
 - text changes, resize, or zoom invalidate selection geometry.
 
@@ -230,9 +231,9 @@ Starting Voice admission cancels any pending Elastic turn and passes a null
 selection to the stretch lifecycle until admission is idle again. The semantic
 lasso address may remain transiently available for revalidation, but its grips
 and network authority do not coexist with recording or transcription.
-Text Swap remains implemented as an inactive sibling grammar, but the current
-interface publishes no Text Swap address, direction control, or Voice rewrite
-authority. Full-view Voice admission is unchanged.
+Point and Talk publishes one whole-node Text Swap address from the passage-local
+AI mark. Its direction, recording, request, and status are transient; Full-view
+Voice admission remains separate and unchanged.
 
 The two grips own one degree and one downward presentation band. Pulling the
 lower grip down keeps prefix and selection fixed and moves the suffix down.
@@ -241,12 +242,14 @@ selection plus suffix down. The mirrored physical directions open the same
 non-negative material pocket. The resulting bottom extent is transient layout input; it never
 enters the document or a network envelope.
 
-If Text Swap is reconsidered, its audio, partial transcript, final direction,
+Text Swap audio, partial transcript, final direction,
 carrier choice, pending state, and presentation receipt remain transient
 interaction state. None enters the
 tree, command history, persistence, archive, routine logs, or later model
-context. An optional selection-local typed fallback feeds the same direction
-port and has the same lifetime. A successful swap contributes only the complete
+context. The local typed field feeds the same direction port as its Voice
+alternative and has the same lifetime; the current passage mark addresses the
+complete node, while the retained lasso grammar may address one exact segment.
+A successful swap contributes only the complete
 replacement text through one tree command; its exact inverse remains available
 to pointer Undo. The active working projection — rather than every faintly
 visible held-aside passage — is the exact context boundary for either model

@@ -14,7 +14,7 @@ import {
   validateTextSwapCandidate,
 } from "./text-swap-policy";
 
-export const TEXT_SWAP_REQUEST_VERSION = "text-swap/1" as const;
+export const TEXT_SWAP_REQUEST_VERSION = "text-swap/2" as const;
 export const MAX_TEXT_SWAP_REQUEST_BYTES = 32 * 1024;
 export const MAX_TEXT_SWAP_RESPONSE_BYTES = 8 * 1024;
 export const TEXT_SWAP_CLIENT_TIMEOUT_MS = 16_000;
@@ -83,7 +83,7 @@ export type TextSwapParseResult =
   | Readonly<{ ok: true; envelope: TextSwapEnvelope }>
   | Readonly<{ ok: false; message: string }>;
 
-/** Strict text-swap/1 parser. It does not accept gesture or legacy voice fields. */
+/** Strict text-swap/2 parser. It does not accept gesture or legacy voice fields. */
 export function parseTextSwapEnvelope(value: unknown): TextSwapParseResult {
   if (!isRecord(value) || !hasExactKeys(value, [
     "protocolVersion", "requestVersion", "id", "treeId", "mode", "operation", "treeRevision",
@@ -110,7 +110,7 @@ export function parseTextSwapEnvelope(value: unknown): TextSwapParseResult {
   const lineage = parseLineage(value.context);
   if (lineage === null) return invalid("The text swap lineage is invalid.");
   const selectedNode = lineage.at(-1)!;
-  const selection = parseSingleCurrentSegment(value.selection, selectedNode);
+  const selection = parseCurrentTextSwapReference(value.selection, selectedNode);
   if (selection === null) return invalid("The text swap selection is invalid.");
   if (deriveTextSwapLength(
     selection.selectedText,
@@ -234,7 +234,7 @@ export function planToTextSwapCommand(
   const node = currentTree.nodes[plan.action.nodeId];
   if (node === undefined || node.role === "document-root") return rejected("STALE");
   if (!sameVisibleLineage(currentTree, node.id, envelope.context.lineage)) return rejected("STALE");
-  const selection = parseSingleCurrentSegment(envelope.selection, node);
+  const selection = parseCurrentTextSwapReference(envelope.selection, node);
   if (selection === null) return rejected("STALE");
   const policy = validateTextSwapCandidate({
     sourceText: selection.selectedText,
@@ -305,7 +305,13 @@ function parseLineage(value: unknown): readonly TextSwapLineageNode[] | null {
   return Object.freeze(lineage);
 }
 
-function parseSingleCurrentSegment(
+/**
+ * Text Swap has two explicit pointing grammars: lasso owns one exact derived
+ * segment, while the passage-local AI control owns the complete current node.
+ * Accepting only those two shapes keeps a node click honest without turning an
+ * arbitrary substring into model authority.
+ */
+export function parseCurrentTextSwapReference(
   value: unknown,
   node: TextSwapLineageNode | { id: string; text: string },
 ): SegmentSelection | null {
@@ -317,11 +323,23 @@ function parseSingleCurrentSegment(
     !Number.isSafeInteger(value.start) ||
     !Number.isSafeInteger(value.end)
   ) return null;
+  if (
+    value.start === 0 &&
+    value.end === node.text.length &&
+    value.selectedText === node.text
+  ) return Object.freeze({
+    type: "segment-range",
+    nodeId: node.id,
+    start: 0,
+    end: node.text.length,
+    selectedText: node.text,
+  });
   const validated = validateSelection(node.text, value, node.id);
   if (!validated.ok) return null;
-  return segmentText(node.text).some((segment) =>
+  const exactSegment = segmentText(node.text).some((segment) =>
     segment.start === validated.selection.start && segment.end === validated.selection.end
-  ) ? Object.freeze({ ...validated.selection }) : null;
+  );
+  return exactSegment ? Object.freeze({ ...validated.selection }) : null;
 }
 
 function parseAction(value: unknown, envelope: TextSwapEnvelope): TextSwapAction | null {

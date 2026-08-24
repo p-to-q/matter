@@ -54,6 +54,16 @@ export function PlusIcon({ className, ...props }: IconProps) {
   );
 }
 
+/** The selected material-local inquiry mark. */
+export function MatterAiIcon({ className, ...props }: IconProps) {
+  return (
+    <svg aria-hidden="true" className={className} fill="currentColor" height="31" viewBox="0 0 42 31" width="42" {...props}>
+      <path d="M5.73431 15.1365L0 30.273L3.46125 30.5313C5.32103 30.6863 7.07749 30.6347 7.33579 30.428C7.59409 30.2214 8.21402 28.9299 8.67896 27.5867L9.50553 25.107L15.2915 24.952L21.0258 24.797L21.8524 27.69L22.679 30.5313H26.5535C28.6716 30.5313 30.3764 30.4797 30.3764 30.3764C30.3764 30.273 28.6199 25.5719 26.4502 19.8893C24.2804 14.2583 21.8007 7.49077 20.8708 4.95941L19.2177.309963L15.3432.154982L11.4686 0L5.73431 15.1365ZM17.2546 13.7417L18.9077 18.1328H15.2915C12.6052 18.1328 11.7269 17.9778 11.8819 17.4612C13.2767 13.4834 15.1365 8.93726 15.3432 9.14391C15.4981 9.29889 16.3247 11.3653 17.2546 13.7417Z" />
+      <path d="M33.9926 11.5203C33.9926 17.8746 34.1476 24.7971 34.3542 26.9152L34.6642 30.7897H38.3321H42V15.5499L41.9483.31001L37.9705.155029L33.9926 0V11.5203Z" />
+    </svg>
+  );
+}
+
 export function UndoIcon({ className, ...props }: IconProps) {
   return (
     <svg aria-hidden="true" className={className} fill="none" height="24" viewBox="0 0 24 24" width="24" {...props}>

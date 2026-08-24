@@ -60,7 +60,8 @@ State: implemented locally; focused source and browser proof complete; not relea
 ```text
 Outcome:    below 960px the index emerges from the paper's left edge, inherits
             both left paper corners, and pushes the complete material plane by
-            its exact exposed width; responsive corner controls remain quiet
+            its exact exposed width; compact row navigation returns to centred
+            reading when disclosure withdraws; responsive corner controls remain quiet
 Boundary:   MaterialFiles disclosure presentation, one paper clip wrapper, one
             render-edge material plane, NodeActionLens positioning, wheel origin,
             responsive CSS tokens, and focused browser/static proof
@@ -73,14 +74,21 @@ Invariants: paper geometry and viewport camera do not change on disclosure; tree
             while the gear-free mobile Sidebar/Menu pair shares a deliberate
             20px scale; all marks keep centred axes with no scale/pulse motion;
             mobile brand and upper target share the 66px top-band centre while
-            the brand keeps its 18px horizontal inset
+            the brand keeps its 18px horizontal inset; <=767 disclosure keeps
+            the outer paper clip but meets the canvas at one straight, unbordered,
+            shadowless seam using the existing index surface colour, while
+            768–959 retains the soft drawer edge; every drawer width plans from
+            the browser centre plus the exact temporary surface translation, so
+            close removes no camera state
 Proof:      320/390 narrow geometry, rounded-corner hit testing, exact plane/text
             displacement and inverse, unchanged camera, pointer-centred wheel
             origin, open/close lens bounds, reduced-motion-compatible transition,
             959/960 resize reset, preserved narrow attention centre; 390/740 and
             767/768/834/959 control target/axis receipts plus SVG getBBox/CTM/stroke
             painted-bounds comparison and explicit 20px-to-14px role handoff;
-            static shared-token and full type proof
+            compact inherited-surface/radius/border/shadow receipt; static shared-token
+            and full type proof; compact and tablet open-target offsets, unchanged
+            close-time cameras, and returned browser-centre receipts
 Non-goals:  index information architecture or theme, automatic close after row
             choice, camera recenter/reset, persisted disclosure, RTL mirroring,
             a new safe-area system, language content, favicon, or protocol work
@@ -217,7 +225,8 @@ Outcome:    one contiguous run of current punctuation segments inside one node
 Boundary:   pure lasso geometry/resolution, one transient semantic address,
             stretch reducer, pure vertical presentation band, disposable
             render-edge publication, transform/2, focused source and browser
-            proof. text-swap/1 stays dormant and outside UI.
+            proof. Point and Talk stays outside Lasso and owns its separate
+            whole-node text-swap/2 entry.
 Invariants: the gesture fixes the exact target; mixed authority is ambiguous;
             no lasso state enters tree/history/persistence; model returns only
             { text }; server constructs one plan; tree engine owns one atomic
@@ -299,8 +308,8 @@ Non-goals:  authored coordinates, scroll memory, per-node camera state,
 State: implemented locally; clean source/build and focused browser proof complete;
 not released.
 
-The passage-local +/− field remains one capsule. Its measured placement stays
-pure; CSS owns the final 12px/13px reach, uniform half-button text-contact
+The passage-local field remains one capsule. Its measured placement stays
+pure; CSS owns the final 12px/16px reach, uniform half-button text-contact
 reduction, blur and fallbacks. Actions, hit targets, material, tree, protocol and
 provider boundaries do not change. Focused geometry and browser checks cover
 attached/detached placement, fine/coarse pointers, light/dark, forced colors and
@@ -848,6 +857,44 @@ Proof:      navigation and context projection tests; component/browser proof of
             repository and Chromium suites.
 Non-goals:  a second durable document visibility model, a hidden-retrieval
             channel, a chat filter, or changing the existing structural fold.
+```
+
+### Active correction — passage-local working context and Point and Talk
+
+```text
+Outcome:    hovering an active canvas passage exposes the selected left AI mark
+            which opens one transient local direction field for that exact
+            complete node, and a right `−` to
+            hold its branch aside; a held root keeps the disabled AI mark
+            and replaces the right control with `+` to restore it.
+Boundary:   one shared NodeActionLens projection over the existing client-only
+            working-context state; one click-loaded PointTalkTurn and white
+            upper-left PointTalkComposer over the retained Text Swap
+            driver/route/store boundary; text-swap/2 makes the new whole-node
+            address explicit rather than weakening text-swap/1 in place.
+Invariants: canvas and index `−` / `+` call the same hold/restore transition;
+            inherited held descendants have no recovery exception; held material
+            cannot become an AI target; AI never opens Ask Matter; one valid
+            result becomes one tree-engine replacement with exact inverse;
+            outside pointer, Escape, mode/surface or target change, revision
+            change, or page suspension revokes
+            every late response.
+Proof:      strict whole-node/exact-segment protocol tests; retained driver and
+            store tests; laptop and coarse-pointer browser coverage of local
+            placement, one request, atomic replacement, Undo, `− → +`, and target sizing.
+Non-goals:  a local chat transcript, hidden retrieval, candidate carousel,
+            model-chosen scope or degree, Focus relocation, or a second visible
+            action catalogue.
+
+Selection receipt, 2026-08-24: the first supplied AI wordmark was selected from
+the three-candidate in-surface comparison. The research scaffold has been
+removed; the field is again exactly one AI slot followed by one `−` / `+` slot.
+
+Calibration receipt, 2026-08-24: git and browser evidence showed a `118 × 66px`
+base carrier scaling to approximately `99 × 55px` on the current root passage,
+while horizontal fog reach had fallen from 16px to 13px. The selected form keeps
+the measured carrier, restores 16px horizontal reach, expands the complete fog
+body from 50% to 58%, and raises only the working-context stroke to 2.0.
 ```
 
 ### Active sub-slice — structural paper and local node actions

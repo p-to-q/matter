@@ -126,7 +126,7 @@ describe("text swap client", () => {
 function fixtureEnvelope() {
   const parsed = parseTextSwapEnvelope({
     protocolVersion: "0.2",
-    requestVersion: "text-swap/1",
+    requestVersion: "text-swap/2",
     id: "swap_client",
     treeId: "tree_client",
     mode: "transform",

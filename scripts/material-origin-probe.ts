@@ -484,7 +484,7 @@ export function buildSyntheticEnvelope(
 
   const parsed = parseTextSwapEnvelope({
     protocolVersion: "0.2",
-    requestVersion: "text-swap/1",
+    requestVersion: "text-swap/2",
     id: `probe_text_swap_${suffix}`,
     treeId: "probe_text_swap_tree",
     mode: "transform",

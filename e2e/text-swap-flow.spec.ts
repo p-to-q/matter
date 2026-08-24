@@ -8,7 +8,188 @@ const SOURCE_TEXT = `${SOURCE_SEGMENT}，而是那个过去在今天仍然允许
 const REWRITTEN_TEXT = `${REWRITTEN_SEGMENT}，而是那个过去在今天仍然允许我们想象的其他生活。`;
 const DIRECTION = "换一种更凝练的说法";
 
-test.describe.skip("Text Swap UI is deferred while selected language exposes only Elastic", () => {
+test.describe("passage-local Point and Talk", () => {
+  test("the AI mark rewrites its exact node locally and keeps the result undoable", async ({ page }) => {
+    let requestSelection: Readonly<{
+      nodeId: string;
+      start: number;
+      end: number;
+      selectedText: string;
+    }> | null = null;
+    await page.route("**/api/text-swap", async (route) => {
+      const envelope = route.request().postDataJSON() as {
+        protocolVersion: "0.2";
+        requestVersion: "text-swap/2";
+        id: string;
+        treeId: string;
+        treeRevision: number;
+        selection: typeof requestSelection;
+      };
+      requestSelection = envelope.selection;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          protocolVersion: envelope.protocolVersion,
+          requestVersion: envelope.requestVersion,
+          id: envelope.id,
+          treeId: envelope.treeId,
+          treeRevision: envelope.treeRevision,
+          action: {
+            id: envelope.id,
+            type: "replace-text-range",
+            nodeId: ROOT_ID,
+            start: 0,
+            end: SOURCE_TEXT.length,
+            text: REWRITTEN_TEXT,
+            intent: "paraphrase",
+          },
+          presentation: { motionHint: "settle" },
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    await passage.hover();
+    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+
+    const composer = page.locator(".point-talk");
+    const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
+    await expect(composer).toBeVisible();
+    await expect(direction).toBeFocused();
+    expect(await page.evaluate((rootId) => {
+      const target = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
+      const field = document.querySelector<HTMLElement>(".point-talk");
+      if (target === null || field === null) return null;
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const targetRects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+      range.detach();
+      const fieldRect = field.getBoundingClientRect();
+      return {
+        fieldHeight: Math.round(fieldRect.height),
+        fieldWidth: Math.round(fieldRect.width),
+        leftDifference: Math.abs(fieldRect.left - Math.min(...targetRects.map((rect) => rect.left))),
+        upperGap: Math.min(...targetRects.map((rect) => rect.top)) - fieldRect.bottom,
+      };
+    }, ROOT_ID)).toEqual({
+      fieldHeight: 44,
+      fieldWidth: 312,
+      leftDifference: 0,
+      upperGap: 8,
+    });
+    await expect(composer.getByRole("button", { name: "取消", exact: true })).toHaveCount(0);
+    await direction.fill(DIRECTION);
+    await page.getByRole("button", { name: "改写", exact: true }).click();
+    await expect(composer).toHaveAttribute("data-phase", "pending");
+    await expect(passage).toContainText(REWRITTEN_TEXT);
+    expect(requestSelection).toEqual({
+      type: "segment-range",
+      nodeId: ROOT_ID,
+      start: 0,
+      end: SOURCE_TEXT.length,
+      selectedText: SOURCE_TEXT,
+    });
+    await expect(page.locator('.transform-text[data-transform-motion="settle"]')).toHaveCount(1);
+
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
+    await expect(passage).toContainText(SOURCE_TEXT);
+  });
+
+  test("stopping Voice submits one exact local direction without a keyboard", async ({ page }) => {
+    let requestedDirection: string | null = null;
+    await page.route("**/api/text-swap", async (route) => {
+      const envelope = route.request().postDataJSON() as {
+        protocolVersion: "0.2";
+        requestVersion: "text-swap/2";
+        id: string;
+        treeId: string;
+        treeRevision: number;
+        direction: { text: string };
+      };
+      requestedDirection = envelope.direction.text;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          protocolVersion: envelope.protocolVersion,
+          requestVersion: envelope.requestVersion,
+          id: envelope.id,
+          treeId: envelope.treeId,
+          treeRevision: envelope.treeRevision,
+          action: {
+            id: envelope.id,
+            type: "replace-text-range",
+            nodeId: ROOT_ID,
+            start: 0,
+            end: SOURCE_TEXT.length,
+            text: REWRITTEN_TEXT,
+            intent: "paraphrase",
+          },
+          presentation: { motionHint: "settle" },
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    await passage.hover();
+    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    await page.getByRole("button", { name: "说出改写方向", exact: true }).click();
+    await expect(page.locator('.point-talk[data-phase="recording"]')).toBeVisible();
+    await page.waitForTimeout(350);
+    await page.getByRole("button", { name: "完成", exact: true }).click();
+    await expect(passage).toContainText(REWRITTEN_TEXT);
+    expect(requestedDirection).toBe(`${DIRECTION}。`);
+  });
+
+  test("an outside canvas pointer cancels a pending local turn and its late result", async ({ page }) => {
+    await page.route("**/api/text-swap", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      await route.continue().catch(() => undefined);
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    await passage.hover();
+    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill(DIRECTION);
+    await page.getByRole("button", { name: "改写", exact: true }).click();
+    await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
+
+    await passage.click();
+    await expect(page.locator(".point-talk")).toBeHidden();
+    await page.waitForTimeout(650);
+    await expect(passage).toContainText(SOURCE_TEXT);
+  });
+
+  test.describe("coarse pointer", () => {
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+
+    test("the local composer stays inside a coarse visual viewport", async ({ page }) => {
+      await page.goto("/matter");
+      await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+      await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).click();
+      await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+      const composer = page.locator(".point-talk");
+      await expect(composer).toBeVisible();
+      expect(await composer.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= 11 && rect.right <= innerWidth - 11 && rect.top >= 11 && rect.bottom <= innerHeight - 11;
+      })).toBe(true);
+      expect(await composer.locator("button").evaluateAll((buttons) => buttons.every((button) =>
+        button.getBoundingClientRect().height >= 48
+      ))).toBe(true);
+    });
+  });
+});
+
+test.describe.skip("historical lasso Text Swap presenter", () => {
 
 test("Text Swap keeps Full-view admission, then Voice rewrites one Focus segment atomically", async ({ page }) => {
   const browserErrors: string[] = [];
@@ -150,7 +331,7 @@ test("Text Swap cancel revokes a late response without changing material", async
     swapRequests += 1;
     const envelope = route.request().postDataJSON() as {
       protocolVersion: "0.2";
-      requestVersion: "text-swap/1";
+      requestVersion: "text-swap/2";
       id: string;
       treeId: string;
       treeRevision: number;
@@ -237,10 +418,7 @@ async function focusRoot(page: Page, narrow: boolean): Promise<void> {
   const rootText = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
   if (narrow) await rootText.click();
   else await rootText.hover();
-  await page.getByRole("toolbar", { name: "Thought actions" })
-    .getByRole("button", { name: "Focus this thought" })
-    .click();
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
 }
 
 async function selectFirstSegment(

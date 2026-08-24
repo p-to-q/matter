@@ -8,8 +8,9 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { MatterLocale } from "../config/locales";
-import { segmentText, type SegmentSelection } from "../material/text-segments";
+import type { SegmentSelection } from "../material/text-segments";
 import {
+  parseCurrentTextSwapReference,
   parseTextSwapEnvelope,
   TEXT_SWAP_REQUEST_VERSION,
   type TextSwapEnvelope,
@@ -161,11 +162,8 @@ export function createTextSwapBasis(input: Readonly<{
   ) return null;
   const node = tree.nodes[selection.nodeId];
   if (node === undefined || node.role === "document-root") return null;
-  const exactSegment = segmentText(node.text).some(
-    (segment) => segment.start === selection.start && segment.end === selection.end,
-  );
   if (
-    !exactSegment ||
+    parseCurrentTextSwapReference(selection, node) === null ||
     node.text.slice(selection.start, selection.end) !== selection.selectedText ||
     deriveTextSwapLength(
       selection.selectedText,

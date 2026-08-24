@@ -461,17 +461,22 @@ export function planCanvasViewportForClientRect(
 /**
  * Blends the browser centre toward the still-visible canvas only when an
  * overlapping instrument consumes a material share of the visual viewport.
- * Smoothstep avoids a device breakpoint or a sudden jump at either boundary.
+ * A compact disclosure may instead publish its exact temporary surface shift:
+ * the open target then keeps the camera that will become browser-centred when
+ * that purely presentational shift is removed. Smoothstep avoids a sudden jump
+ * for the ordinary adaptive path.
  */
 export function projectCanvasAttentionField(
   visualViewport: ClientRectGeometry,
   canvas: ClientRectGeometry,
   occluder?: ClientRectGeometry,
+  returnTranslationX = 0,
 ): CanvasAttentionGeometry | null {
   if (
     !isValidClientRect(visualViewport) ||
     !isValidClientRect(canvas) ||
-    (occluder !== undefined && !isValidClientRect(occluder))
+    (occluder !== undefined && !isValidClientRect(occluder)) ||
+    !isFiniteNumber(returnTranslationX)
   ) return null;
   const browserCenter = Object.freeze({
     height: visualViewport.height,
@@ -501,6 +506,13 @@ export function projectCanvasAttentionField(
     !coversAttentionY ||
     (!touchesLeftEdge && !touchesRightEdge)
   ) return browserCenter;
+
+  if (returnTranslationX !== 0) {
+    return Object.freeze({
+      ...browserCenter,
+      x: roundClientValue(browserCenter.x + returnTranslationX),
+    });
+  }
 
   const visibleLeft = touchesLeftEdge ? Math.max(canvasLeft, overlapRight) : canvasLeft;
   const visibleRight = touchesLeftEdge ? canvasRight : Math.min(canvasRight, overlapLeft);

@@ -28,7 +28,7 @@ function input(overrides: Partial<TextSwapScenarioInput> = {}): TextSwapScenario
 }
 
 describe("text swap prompt harness", () => {
-  it("freezes text-swap/1, quotes the bounded direction, and keeps material fenced", () => {
+  it("freezes text-swap/2, quotes the bounded direction, and keeps material fenced", () => {
     const prompt = compileTextSwapPrompt(input());
     expect(prompt).toContain(`SCENARIO: matter-text-swap@${TEXT_SWAP_PROMPT_VERSION}`);
     expect(prompt).toContain('the person\'s bounded direction: "换一种更清楚但保留安静感的说法"');

@@ -20,11 +20,12 @@ is deliberately absent.
 | Derived thought labels | implemented | deterministic derivation, adjudication, staleness and cancellation tests; ordered relay pool with corpus evaluation; durable per-node store and manual rename proven by reload e2e |
 | Lightweight Matter inquiry | local bounded record and independently gated live adapter implemented | paper-contained questions, per-tree local completed-record behind the existing surface, no record-management control, material mutation, or model-memory retrieval |
 | Fixture-gated transform turn | implemented | strict `/api/turn`, server-built plan, client revalidation, tree-engine commit, and exact undo/redo; live provider remains separately gated |
+| Passage-local Point-and-Talk | implemented; live provider separately gated | one whole-node `text-swap/2` address, bounded typed/Voice direction, server-built plan, tree-engine replacement, exact pointer Undo, and no chat surface |
 | Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and per-surface gate status for voice, label, repair, inquiry, and transform |
 | Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
 | Transient working context | implemented | held branches stay legible while selection, lasso, and bounded inquiry omit them; disclosure remains independent |
-| Structural paper ruling + local node actions | implemented | FX-off-only one-layer ruling and one measured Branch/Focus lens; no document coordinates or per-node control mount |
+| Structural paper ruling + local node actions | implemented | FX-off-only one-layer ruling and one measured AI/working-context lens; no document coordinates or per-node control mount |
 
 ## Specified for `0.2`
 
@@ -45,8 +46,16 @@ foundation.
 The desktop presentation boundary is fixed: the left material field is 304 px,
 and the paper begins at that boundary with a 10 px outer gutter and 18 px radius.
 At desk widths the file index is permanently docked in that field and carries no
-open/close control; below 960 px it becomes a drawer with one. Either way the
-paper never enlarges. The root names the outline, descendant rows step right by
+open/close control; below 960 px it becomes a drawer with one. At 768–959 px the
+drawer retains only a soft trailing shadow. At every width below 960 px it
+enters with the existing index paper surface: the outer clip retains the paper's
+left corners while the interior right seam is straight and unbordered. At
+767 px and below that seam is also shadowless.
+At every drawer width below 960px, index navigation centres the unshifted
+material and lets disclosure carry it right; withdrawing the drawer returns the
+passage to the browser centre without another camera move. Either way the paper
+never enlarges. The root names the
+outline, descendant rows step right by
 structural depth, and each branch expands or closes in place without changing
 canvas fold state. Search is a flat result view whose rows carry ancestry paths.
 The tree shadow is the supplied decorative asset inside the paper, never document state.
@@ -84,8 +93,9 @@ Redo remains available through the platform keyboard conventions
 `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`; it is not a second visible rail tool.
 Focus and fold remain navigation capabilities but have no first-release fixed-rail
 presenter. One frosted local action field prefers the passage's upper-left edge
-and may expose Branch and Focus
-for the precise hovered or keyboard-focused passage, or Show all in focus view.
+and exposes the Point-and-Talk AI mark plus the same `−` / `+` working-context
+transition as the material index for the precise hovered, keyboard-focused, or
+coarse-selected passage.
 Its field and actions arrive in the same reveal. The disclosure control in the
 left material outline remains a separate file-tree affordance. The field is
 transient rendering state and never mounts one control set per node.

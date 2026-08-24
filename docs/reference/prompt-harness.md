@@ -298,18 +298,19 @@ lineage, tree/node/request/interaction identity, IP, provider identity,
 endpoint, credential, response text, or serialized errors. Synthetic eval text
 may be written only to a git-ignored local report.
 
-## Text Swap text-swap/1 freeze
+## Text Swap text-swap/2 freeze
 
 Text Swap is a fifth scenario behind `POST /api/text-swap` and a sibling to
-Elastic, not an Elastic prompt variant on `/api/turn`. Its reference is exactly
-one current punctuation segment, its direction is one transient person-authored
+Elastic, not an Elastic prompt variant on `/api/turn`. Its reference is either
+one exact punctuation segment or the exact complete node explicitly addressed
+by the passage-local AI mark. Its direction is one transient person-authored
 line, its degree is a closed near-source length policy, and its lineage is the
-visible Focus path. The carrier that produced the direction is deliberately
+visible authored path. The carrier that produced the direction is deliberately
 absent from the prompt.
 
 ```text
-SCENARIO  matter-text-swap@text-swap/1
-MATTER    canvas, not chat; lasso fixes scope; the person gives one bounded
+SCENARIO  matter-text-swap@text-swap/2
+MATTER    canvas, not chat; explicit pointing fixes scope; the person gives one bounded
           direction; the tool fixes paraphrase-in-place and near-source length
 MANDATE   restate only the passage according to the bounded direction
 FIXED     exact passage; inclusive grapheme band; source language; one result

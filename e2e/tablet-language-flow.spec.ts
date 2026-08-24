@@ -133,10 +133,7 @@ test.describe("tablet touch material language", () => {
 
 async function focusRootByTouch(page: Page): Promise<void> {
   await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).tap();
-  await page.getByRole("toolbar", { name: "Thought actions" })
-    .getByRole("button", { name: "Focus this thought" })
-    .tap();
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "focus");
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
 }
 
 async function selectFirstSegmentByTouch(page: Page, text: Locator): Promise<void> {

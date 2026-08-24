@@ -248,45 +248,66 @@ test("a manual Pan gesture takes over the camera at its rendered mid-flight posi
   await page.mouse.up();
 });
 
-test("a dominant narrow drawer shifts index attention into the exposed canvas", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/matter");
-  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
-  await page.locator(".matter-document").dispatchEvent("wheel", {
-    bubbles: true,
-    cancelable: true,
-    clientX: 200,
-    clientY: 430,
-    ctrlKey: true,
-    deltaMode: 0,
-    deltaY: 2_000,
-  });
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.6");
-  const sidebar = page.locator("aside.material-files");
-  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
-  await expect(sidebar).toHaveAttribute("data-open", "true");
-  const row = sidebar.locator(".material-file").nth(8);
-  const nodeId = await row.getAttribute("data-node-id");
-  if (nodeId === null) throw new Error("narrow attention fixture is missing");
-  await row.locator(".material-file__open").click();
-  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.883");
+for (const viewport of [
+  { name: "compact", width: 390, height: 844 },
+  { name: "tablet", width: 834, height: 1112 },
+]) {
+  test(`overlay index navigation returns to the reading centre at ${viewport.name} width`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
+    await page.locator(".matter-document").dispatchEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      clientX: 200,
+      clientY: 430,
+      ctrlKey: true,
+      deltaMode: 0,
+      deltaY: 2_000,
+    });
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.6");
+    const sidebar = page.locator("aside.material-files");
+    await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
+    await expect(sidebar).toHaveAttribute("data-open", "true");
+    const row = sidebar.locator(".material-file").nth(8);
+    const nodeId = await row.getAttribute("data-node-id");
+    if (nodeId === null) throw new Error("narrow attention fixture is missing");
+    await row.locator(".material-file__open").click();
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-viewport-zoom", "0.883");
 
-  await expect.poll(async () => page.locator(
-    `[data-layout-node-id="${nodeId}"] .spatial-thought__text`,
-  ).evaluate((element) => {
-    const target = element.getBoundingClientRect();
-    const drawer = document.querySelector("aside.material-files")!.getBoundingClientRect();
-    const canvas = document.querySelector(".matter-document")!.getBoundingClientRect();
-    const visual = window.visualViewport;
-    const expectedX = (Math.max(canvas.left, drawer.right) + canvas.right) / 2;
-    const expectedY = (visual?.offsetTop ?? 0) + (visual?.height ?? window.innerHeight) / 2;
-    return Math.max(
-      Math.abs(target.left + target.width / 2 - expectedX),
-      Math.abs(target.top + target.height / 2 - expectedY),
-    );
-  })).toBeLessThanOrEqual(1);
-});
+    await expect.poll(async () => page.locator(
+      `[data-layout-node-id="${nodeId}"] .spatial-thought__text`,
+    ).evaluate((element) => {
+      const target = element.getBoundingClientRect();
+      const drawer = document.querySelector("aside.material-files")!.getBoundingClientRect();
+      const visual = window.visualViewport;
+      const expectedX = (visual?.offsetLeft ?? 0) +
+        (visual?.width ?? window.innerWidth) / 2 + drawer.width;
+      const expectedY = (visual?.offsetTop ?? 0) + (visual?.height ?? window.innerHeight) / 2;
+      return Math.max(
+        Math.abs(target.left + target.width / 2 - expectedX),
+        Math.abs(target.top + target.height / 2 - expectedY),
+      );
+    })).toBeLessThanOrEqual(1);
+
+    const shell = page.locator("main.matter-shell");
+    const cameraBeforeClose = await shell.evaluate((element) => ({
+      x: element.getAttribute("data-viewport-x"),
+      y: element.getAttribute("data-viewport-y"),
+      zoom: element.getAttribute("data-viewport-zoom"),
+    }));
+    await page.getByRole("button", { name: fixtureUiCopy.materialFiles.hideMaterialFiles }).click();
+    await expect(sidebar).not.toHaveAttribute("data-open", "true");
+    await expectThoughtAtVisualCentre(page, nodeId);
+    expect(await shell.evaluate((element) => ({
+      x: element.getAttribute("data-viewport-x"),
+      y: element.getAttribute("data-viewport-y"),
+      zoom: element.getAttribute("data-viewport-zoom"),
+    }))).toEqual(cameraBeforeClose);
+  });
+}
 
 test("the narrow index is clipped by the paper and pushes material without mutating its camera", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
@@ -398,6 +419,11 @@ test("the shared drawer width adapts at 320px and clears cleanly at the dock bou
   }).toBeCloseTo(0, 1);
   expect((await sidebar.boundingBox())?.width).toBeCloseTo(256, 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+  await expect(sidebar).toHaveCSS("background-color", "rgba(245, 245, 242, 0.98)");
+  await expect(sidebar).toHaveCSS("border-right-width", "0px");
+  await expect(sidebar).toHaveCSS("border-top-right-radius", "0px");
+  await expect(sidebar).toHaveCSS("border-bottom-right-radius", "0px");
+  await expect(sidebar).toHaveCSS("box-shadow", "none");
 
   await page.setViewportSize({ width: 960, height: 700 });
   await expect(page.locator(".material-files-toggle")).toHaveCount(0);
@@ -407,6 +433,9 @@ test("the shared drawer width adapts at 320px and clears cleanly at the dock bou
   await page.setViewportSize({ width: 959, height: 700 });
   await expect(page.locator(".material-files-toggle")).toHaveCount(1);
   await expect(sidebar).not.toHaveAttribute("data-open", "true");
+  await expect(sidebar).toHaveCSS("border-right-width", "0px");
+  await expect(sidebar).toHaveCSS("border-top-right-radius", "0px");
+  await expect(sidebar).toHaveCSS("border-bottom-right-radius", "0px");
   await expect.poll(async () => {
     const [planeBox, paperBox] = await Promise.all([
       plane.boundingBox(),
@@ -752,6 +781,8 @@ for (const viewport of [
     await heldSearch.fill(searchText.slice(0, 5));
     const heldResult = rows.first();
     await expect(heldResult).toHaveAttribute("data-context-excluded", "true");
+    const heldResultNodeId = await heldResult.getAttribute("data-node-id");
+    if (heldResultNodeId === null) throw new Error("held search result is missing");
     const heldTitle = await heldResult.locator(".material-file__title").innerText();
     await expect(heldResult.locator(".material-file__open")).toHaveAttribute(
       "aria-label",
@@ -763,7 +794,11 @@ for (const viewport of [
     await expect(rows).toHaveCount(10);
 
     if (viewport.name === "narrow") await setSidebarOpen(false);
-    await page.locator(`[data-thought-id="${descendantId}"] [data-thought-text-id]`).click();
+    // The result just chosen from the drawer is the passage guaranteed to be
+    // returned to the reading centre. A different descendant can legitimately
+    // remain outside a compact viewport after its ancestor is addressed.
+    if (viewport.name === "narrow") await expectThoughtAtVisualCentre(page, heldResultNodeId);
+    await page.locator(`[data-thought-id="${heldResultNodeId}"] [data-thought-text-id]`).click();
     if (viewport.name === "narrow") await setSidebarOpen(true);
     await expect(rows).toHaveCount(10);
 

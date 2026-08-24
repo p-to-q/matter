@@ -144,7 +144,7 @@ These are hard ownership boundaries, not claimed production SLOs:
 | transcript repair | 6–8 s | 8.8 s / 8.8 s | deterministic repair rules | none |
 | Ask Matter | 16 s | 20 s / 20 s | restore the submitted question | none |
 | Elastic | 12 s | 14 s / 16 s | exact passage unchanged | none |
-| dormant Text Swap | 12 s | 14 s / 16 s | exact passage unchanged | none |
+| provider-gated Point-and-Talk / Text Swap | 12 s | 14 s / 16 s | exact passage unchanged | none |
 | server transcription | 30 s | 30 s / 35 s | browser-native or local capability remains separate | none |
 
 The platform allowances remain 20 s for labels, 15 s for repair, 25 s for
@@ -203,7 +203,7 @@ The event and field set is closed:
 | `candidateFailures` | integer `0..255` | Fast transport, HTTP, body-bound, decoding, or envelope failures; no body or status is logged. |
 
 This table is the complete schema only for `matter.scenario-performance`.
-Elastic and dormant Text Swap retain the separate existing
+Elastic and provider-gated Text Swap retain the separate existing
 `matter.material-turn` route receipt with closed locale, amount, length and byte
 buckets. The one-event harness ceiling therefore does not claim that a material
 turn produces only one application log line. `candidateTelemetry: "pool"` is
@@ -358,7 +358,7 @@ The default production gate remains completion of GitHub issue #34:
 
 The public production `browser-preview` profile is not credential-free. Labels,
 transcript repair, and Ask Matter retain their three existing live gates and
-server-only pool; only Elastic and the dormant Text Swap surface remain
+server-only pool; only Elastic and the Point-and-Talk Text Swap provider remain
 unavailable. The profile name describes the material-model boundary, not the
 state of every model-backed surface. A private credential-free staging build may
 turn the three existing gates off and use their deterministic, verbatim, or
@@ -389,8 +389,8 @@ and rollback receipts exist:
 npm run check:deployment -- https://matter.ptoq.io --profile=elastic-live --wait=120
 ```
 
-The live profile proves that Elastic is configured while the dormant Text Swap
-surface remains unavailable. It does not call the provider and is never a
+The live profile proves that Elastic is configured while the Point-and-Talk
+Text Swap provider remains unavailable. It does not call the provider and is never a
 substitute for one successful strict synthetic Elastic turn through the
 deployed route. The superseded paired `material-live` profile is rejected so a
 release cannot silently revive Text Swap.

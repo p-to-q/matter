@@ -73,8 +73,10 @@ range and therefore material selection mode rather than an Elastic target.
 
 The exact seam lexicon is contract in [`../material.md`](../material.md), not
 configurable punctuation. The shared `validateSelection` recomputes the current
-segments and accepts exactly one contiguous run. The dormant Text Swap contract
-adds its own exact-one-segment check. The envelope carries no segment ordinal;
+segments and accepts exactly one contiguous run. Text Swap `/2` accepts one
+exact derived segment from its retained lasso grammar or the exact complete
+current node from Point-and-Talk; it accepts no arbitrary partial substring.
+The envelope carries no segment ordinal;
 server and client derive the range from the final lineage text.
 
 **Geometry.** Prefer one plain Text node per passage. The interaction edge still
