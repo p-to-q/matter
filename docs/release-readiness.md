@@ -66,7 +66,9 @@ only its local rendering policy. The white direction field now has a smaller
 Its fixed geometry intersects the visual viewport, clipped paper, and translated
 material plane, then clamps available width as well as position. Damaged,
 disjoint, or too-narrow geometry stays hidden and does not take focus or gain
-material authority.
+material authority. Resize, scroll, and observer invalidations are coalesced to
+one animation-frame measurement; a revoked target or positioning surface closes
+the turn instead of leaving an invisible focused control.
 
 The public deployment profile remains unchanged: Text Swap stays unavailable
 without its independent live-provider gate. This release neither widens the
@@ -74,7 +76,7 @@ without its independent live-provider gate. This release neither widens the
 persistence, history, or the tree-engine commit path.
 
 ```text
-source proof           exact source `2d3c710`; npm run check exited 0:
+source proof           exact source `1847530`; npm run check exited 0:
                        doctor found 28 repository files; 43 linked Markdown
                        documents passed; architecture covered 405 files across
                        7 layers with no outward edge, provider leak, or cycle;
@@ -84,10 +86,11 @@ source proof           exact source `2d3c710`; npm run check exited 0:
 runtime proof          static root; initial 1,193.8 KiB raw / 378.8 KiB gzip,
                        below the 384 KiB release ceiling; the Point-and-Talk
                        request, Voice, and Text Swap graph remains lazy
-browser proof          full Chromium: 115 passed, 15 explicitly historical or
-                       capability-gated skipped, 0 failed, 130 total; receipts
+browser proof          full Chromium: 116 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 131 total; receipts
                        cover zoom extrema, clipped index-edge placement, typed
-                       and Voice mutation, Undo, cancellation, and coarse bounds
+                       and Voice mutation, Undo, cancellation, coarse bounds,
+                       unusably narrow revocation, and hidden-focus refusal
 publication state      main promotion, Production settlement, public-origin
                        parity, immutable tag, and GitHub prerelease are pending
 ```
