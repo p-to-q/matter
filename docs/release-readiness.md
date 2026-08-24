@@ -90,7 +90,7 @@ source proof           npm run check exited 0 on the versioned candidate:
                        160 files with 2 skipped, 1,858 cases with 3 skipped;
                        typegen, typecheck, lint, and the Next 16.3 webpack
                        production build of all 22 pages/routes passed
-runtime proof          initial JavaScript is 1,202.3 KiB raw / 381.5 KiB gzip,
+runtime proof          a cache-empty build emits 1,203.8 KiB raw / 381.9 KiB gzip,
                        below the 384 KiB release ceiling; the Point-and-Talk
                        interaction and its local speech/transform graph stay
                        behind one client-only lazy boundary
