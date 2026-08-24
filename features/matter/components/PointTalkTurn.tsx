@@ -67,8 +67,8 @@ export function PointTalkTurn({
   });
   const phase = controller.state.phase;
   useEffect(() => {
-    if (selection !== null && phase === "idle") controller.enter();
-  }, [controller, phase, selection]);
+    if (selection !== null && phase === "idle" && !controller.enter()) onClose();
+  }, [controller, onClose, phase, selection]);
   const close = useCallback(() => {
     controller.cancel();
     onClose();

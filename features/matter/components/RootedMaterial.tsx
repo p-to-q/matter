@@ -106,7 +106,7 @@ import { clientMatterBasePath } from "../config/base-path";
 import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
-import { deriveTextSwapLength } from "../protocol/text-swap-policy";
+import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
@@ -133,6 +133,10 @@ const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
   { ssr: false },
 );
+// Keep the complete grapheme and candidate policy behind the lazy turn. This
+// cheap bound admits every ordinary passage the exact policy can safely size;
+// the turn still owns the authoritative validation before it exposes input.
+const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -933,7 +937,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     Array.from(workingContext.activeNodeIds).filter((nodeId) => {
       const node = tree.nodes[nodeId];
       return node !== undefined && node.role !== "document-root" &&
-        deriveTextSwapLength(node.text, "", "") !== null;
+        node.text.length > 0 && node.text.length <= POINT_TALK_FAST_SOURCE_LIMIT;
     }),
   ), [tree, workingContext.activeNodeIds]);
   const pointTalkSelectionCurrent = pointTalkNodeId !== null &&
