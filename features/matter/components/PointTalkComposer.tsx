@@ -14,12 +14,16 @@ import type { TextSwapController } from "../interaction/use-text-swap";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
 import {
+  intersectPointTalkBounds,
   projectPointTalkPlacement,
+  projectPointTalkScale,
   type PointTalkPlacement,
 } from "./point-talk-placement";
 
 export function PointTalkComposer({
+  boundaryRef,
   canvasRef,
+  canvasZoom,
   controller,
   geometryKey,
   locale,
@@ -29,9 +33,12 @@ export function PointTalkComposer({
   onStartVoice,
   onStopVoice,
   onSubmit,
+  positioningRef,
   voiceAvailable,
 }: Readonly<{
+  boundaryRef: RefObject<HTMLElement | null>;
   canvasRef: RefObject<HTMLDivElement | null>;
+  canvasZoom: number;
   controller: TextSwapController;
   geometryKey: string;
   locale: CanvasLanguage;
@@ -41,6 +48,7 @@ export function PointTalkComposer({
   onStartVoice: () => void;
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
+  positioningRef: RefObject<HTMLElement | null>;
   voiceAvailable: boolean;
 }>) {
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -48,6 +56,8 @@ export function PointTalkComposer({
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const inputId = useId();
   const phase = controller.state.phase;
+  const placementReady = placement !== null;
+  const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
   const copy = pointTalkCopy(locale);
   const cancelAndRestoreFocus = useCallback(() => {
@@ -60,28 +70,46 @@ export function PointTalkComposer({
   }, [canvasRef, nodeId, onCancel]);
 
   const measure = useCallback(() => {
+    const boundary = boundaryRef.current;
     const canvas = canvasRef.current;
     const bubble = bubbleRef.current;
-    if (canvas === null || bubble === null) return;
+    const positioningSurface = positioningRef.current;
+    if (boundary === null || canvas === null || bubble === null || positioningSurface === null) {
+      setPlacement(null);
+      return;
+    }
     const target = Array.from(
       canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]"),
     ).find((candidate) => candidate.dataset.thoughtTextId === nodeId);
-    if (target === undefined) return;
+    if (target === undefined) {
+      setPlacement(null);
+      return;
+    }
     const bounds = contentBounds(target);
     const bubbleRect = bubble.getBoundingClientRect();
-    const viewport = visualViewportBounds();
-    const width = bubbleRect.width || 304;
-    const height = bubbleRect.height || 52;
+    const viewport = intersectPointTalkBounds(
+      visualViewportBounds(),
+      boundary.getBoundingClientRect(),
+      positioningSurface.getBoundingClientRect(),
+    );
+    if (viewport === null) {
+      setPlacement(null);
+      return;
+    }
+    const width = bubbleRect.width || 264;
+    const height = bubbleRect.height || 38;
     const next = projectPointTalkPlacement({
       target: bounds,
       bubble: { width, height },
       viewport,
+      gap: 14 * visualScale,
     });
     setPlacement((current) => current !== null && next !== null &&
       current.left === next.left && current.top === next.top
+      && current.maxWidth === next.maxWidth
       ? current
       : next);
-  }, [canvasRef, nodeId]);
+  }, [boundaryRef, canvasRef, nodeId, positioningRef, visualScale]);
 
   useLayoutEffect(() => {
     measure();
@@ -91,6 +119,8 @@ export function PointTalkComposer({
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     if (target !== undefined) observer?.observe(target);
     if (bubbleRef.current !== null) observer?.observe(bubbleRef.current);
+    if (boundaryRef.current !== null) observer?.observe(boundaryRef.current);
+    if (positioningRef.current !== null) observer?.observe(positioningRef.current);
     const visual = window.visualViewport;
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
@@ -103,7 +133,7 @@ export function PointTalkComposer({
       visual?.removeEventListener("resize", measure);
       visual?.removeEventListener("scroll", measure);
     };
-  }, [canvasRef, geometryKey, measure, nodeId, phase]);
+  }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -126,10 +156,10 @@ export function PointTalkComposer({
   }, [onCancel]);
 
   useEffect(() => {
-    if (!formVisible) return;
+    if (!formVisible || !placementReady) return;
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
-  }, [formVisible]);
+  }, [formVisible, placementReady]);
 
   const activeState = controller.state;
   if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
@@ -147,7 +177,12 @@ export function PointTalkComposer({
       role={formVisible ? undefined : "status"}
       style={placement === null
         ? { visibility: "hidden" }
-        : { left: placement.left, top: placement.top } as CSSProperties}
+        : {
+            left: placement.left,
+            top: placement.top,
+            "--point-talk-available-width": `${placement.maxWidth}px`,
+            "--point-talk-scale": visualScale,
+          } as CSSProperties}
       onPointerDown={(event) => event.stopPropagation()}
     >
       {formVisible ? (

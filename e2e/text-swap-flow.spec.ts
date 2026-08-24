@@ -76,10 +76,10 @@ test.describe("passage-local Point and Talk", () => {
         upperGap: Math.min(...targetRects.map((rect) => rect.top)) - fieldRect.bottom,
       };
     }, ROOT_ID)).toEqual({
-      fieldHeight: 44,
-      fieldWidth: 312,
+      fieldHeight: 38,
+      fieldWidth: 264,
       leftDifference: 0,
-      upperGap: 8,
+      upperGap: 14,
     });
     await expect(composer.getByRole("button", { name: "取消", exact: true })).toHaveCount(0);
     await direction.fill(DIRECTION);
@@ -97,6 +97,99 @@ test.describe("passage-local Point and Talk", () => {
 
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(passage).toContainText(SOURCE_TEXT);
+  });
+
+  test("the local field follows material zoom within one optical size range", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    const shell = page.locator("main.matter-shell");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const pan = page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+      .getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan });
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+    const setCanvasZoom = async (deltaY: number) => {
+      await pan.click();
+      const pivot = await passage.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 };
+      });
+      await shell.dispatchEvent("wheel", {
+        clientX: pivot.x,
+        clientY: pivot.y,
+        ctrlKey: true,
+        deltaMode: 0,
+        deltaY,
+      });
+      await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan }).click();
+    };
+    const openAndMeasure = async () => {
+      await passage.hover();
+      await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+      const composer = page.locator(".point-talk");
+      await expect(composer).toBeVisible();
+      return composer.evaluate((element) => {
+        const bounds = element.getBoundingClientRect();
+        return {
+          height: bounds.height,
+          scale: Number.parseFloat(getComputedStyle(element).getPropertyValue("--point-talk-scale")),
+          width: bounds.width,
+        };
+      });
+    };
+
+    await setCanvasZoom(-1e6);
+    const maximum = await openAndMeasure();
+    expect(maximum.scale).toBe(1.1);
+    expect(maximum.width).toBeCloseTo(264 * maximum.scale, 1);
+    expect(maximum.height).toBeCloseTo(38 * maximum.scale, 1);
+    await page.keyboard.press("Escape");
+
+    await setCanvasZoom(1e6);
+    const minimum = await openAndMeasure();
+    expect(minimum.scale).toBe(.74);
+    expect(minimum.width).toBeCloseTo(264 * minimum.scale, 1);
+    expect(minimum.height).toBeGreaterThanOrEqual(38 * minimum.scale);
+    expect(minimum.height).toBeLessThan(29);
+  });
+
+  test("the local field stays inside clipped material when its passage reaches the index edge", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const paper = page.locator(".matter-document");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+      .getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan }).click();
+    const paperBox = await paper.boundingBox();
+    if (paperBox === null) throw new Error("material paper must be measurable");
+    const pointer = {
+      x: paperBox.x + paperBox.width * .5,
+      y: paperBox.y + paperBox.height * .5,
+    };
+    await page.mouse.move(pointer.x, pointer.y);
+    await page.mouse.down();
+    await page.mouse.move(pointer.x - 160, pointer.y);
+    await page.mouse.up();
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan }).click();
+
+    await passage.hover();
+    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    const field = page.locator(".point-talk");
+    await expect(field).toBeVisible();
+    expect(await page.evaluate(() => {
+      const paperElement = document.querySelector<HTMLElement>(".matter-document");
+      const fieldElement = document.querySelector<HTMLElement>(".point-talk");
+      if (paperElement === null || fieldElement === null) return null;
+      const paperRect = paperElement.getBoundingClientRect();
+      const fieldRect = fieldElement.getBoundingClientRect();
+      return {
+        bottom: fieldRect.bottom <= paperRect.bottom - 11,
+        left: fieldRect.left >= paperRect.left + 11,
+        right: fieldRect.right <= paperRect.right - 11,
+        top: fieldRect.top >= paperRect.top + 11,
+      };
+    })).toEqual({ bottom: true, left: true, right: true, top: true });
   });
 
   test("stopping Voice submits one exact local direction without a keyboard", async ({ page }) => {

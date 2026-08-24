@@ -17,6 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-25 — Point and Talk remains subordinate to visible material
+
+Changed: the passage-local direction field now uses a `264 × 38px` desktop
+basis and follows material zoom through a bounded `.74–1.10` optical response,
+with stronger shrink than growth and the existing `48px` coarse-pointer floor.
+Its fixed-position projection intersects the visual viewport, clipped paper,
+and translated material plane, then clamps both position and available width;
+an overlap too narrow to preserve usable controls fails closed.
+
+Why: the preceding field remained visually heavier than the language it
+addressed, inherited too much presence from enlarged material, and treated the
+browser viewport as usable even where the docked or disclosed index occluded
+the paper. A local material tool must remain visibly attached without crossing
+into another surface or becoming the dominant object at either zoom extreme.
+
+Forecloses: literal canvas scaling, viewport-only clamping, painting across the
+material index, squeezing controls into an unusable exposed sliver, or storing
+responsive tool geometry outside the rendering edge.
+
 ## 2026-08-24 — drawer disclosure preserves the returning reading centre
 
 Changed: at every drawer width below 960px the opened material index keeps the shared paper

@@ -12,7 +12,9 @@ import { PointTalkComposer } from "./PointTalkComposer";
 
 /** The complete generative turn stays out of the initial canvas bundle. */
 export function PointTalkTurn({
+  boundaryRef,
   canvasRef,
+  canvasZoom,
   commit,
   documentEpoch,
   enabled,
@@ -22,10 +24,13 @@ export function PointTalkTurn({
   nodeId,
   onClose,
   onCommitted,
+  positioningRef,
   tree,
   voiceAvailable,
 }: Readonly<{
+  boundaryRef: RefObject<HTMLElement | null>;
   canvasRef: RefObject<HTMLDivElement | null>;
+  canvasZoom: number;
   commit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -39,6 +44,7 @@ export function PointTalkTurn({
   nodeId: string;
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
+  positioningRef: RefObject<HTMLElement | null>;
   tree: ThoughtTree;
   voiceAvailable: boolean;
 }>) {
@@ -77,7 +83,9 @@ export function PointTalkTurn({
   if (selection === null) return null;
   return (
     <PointTalkComposer
+      boundaryRef={boundaryRef}
       canvasRef={canvasRef}
+      canvasZoom={canvasZoom}
       controller={controller}
       geometryKey={geometryKey}
       locale={locale}
@@ -90,6 +98,7 @@ export function PointTalkTurn({
         if (!controller.acceptDirection(direction)) return;
         controller.submit();
       }}
+      positioningRef={positioningRef}
       voiceAvailable={voiceAvailable}
     />
   );

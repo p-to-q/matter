@@ -2516,7 +2516,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       </section>
       {activePointTalkNodeId === null ? null : (
         <PointTalkTurn
+          boundaryRef={documentRef}
           canvasRef={canvasRef}
+          canvasZoom={viewport.zoom}
           commit={props.onTextSwapCommit}
           documentEpoch={props.documentEpoch}
           enabled={pointTalkSelectionCurrent && !persistenceLoading}
@@ -2527,6 +2529,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           nodeId={activePointTalkNodeId}
           onClose={closePointTalk}
           onCommitted={publishPointTalkChange}
+          positioningRef={materialPlaneRef}
           tree={tree}
           voiceAvailable={voiceReadiness.status === "ready"}
         />

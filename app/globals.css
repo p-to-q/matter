@@ -362,22 +362,22 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .node-action-lens__button[data-node-action="set-aside"] svg,
 .node-action-lens__button[data-node-action="restore"] svg { stroke-width: 2; }
 .node-action-lens__button--ai:disabled { opacity: .34; }
-.point-talk { position: fixed; z-index: 33; width: min(312px, calc(100vw - 24px)); color: var(--ink); pointer-events: auto; }
+.point-talk { --point-talk-scale: 1; position: fixed; z-index: 33; width: min(calc(264px * var(--point-talk-scale)), calc(100vw - 24px), var(--point-talk-available-width, calc(100vw - 24px))); color: var(--ink); pointer-events: auto; }
 .point-talk__composer,
-.point-talk__feedback { display: flex; width: 100%; min-height: 44px; box-sizing: border-box; align-items: center; gap: 5px; padding: 4px 5px 4px 10px; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 8px; background: color-mix(in srgb, var(--paper-solid) 97%, transparent); box-shadow: 0 8px 22px rgba(22,29,39,.07); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
-.point-talk__composer input { min-width: 0; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font: 400 12px/17px var(--mono); user-select: text; }
+.point-talk__feedback { display: flex; width: 100%; min-height: calc(38px * var(--point-talk-scale)); box-sizing: border-box; align-items: center; gap: calc(4px * var(--point-talk-scale)); padding: calc(3px * var(--point-talk-scale)) calc(4px * var(--point-talk-scale)) calc(3px * var(--point-talk-scale)) calc(8px * var(--point-talk-scale)); border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); border-radius: calc(7px * var(--point-talk-scale)); background: color-mix(in srgb, var(--paper-solid) 97%, transparent); box-shadow: 0 6px 18px rgba(22,29,39,.065); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.point-talk__composer input { min-width: 0; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--mono); font-size: calc(11px * var(--point-talk-scale)); font-weight: 400; line-height: calc(16px * var(--point-talk-scale)); user-select: text; }
 .point-talk__composer input::placeholder { color: color-mix(in srgb, var(--ink) 46%, transparent); }
-.point-talk button { min-width: 34px; min-height: 34px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); font: 400 11px/16px var(--mono); cursor: pointer; }
+.point-talk button { min-width: calc(30px * var(--point-talk-scale)); min-height: calc(30px * var(--point-talk-scale)); padding: 0 calc(5px * var(--point-talk-scale)); border: 0; border-radius: calc(6px * var(--point-talk-scale)); background: transparent; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); cursor: pointer; }
 .point-talk button:hover,
 .point-talk button:focus-visible { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 .point-talk button:disabled { opacity: .28; cursor: default; }
-.point-talk__voice { display: grid; width: 34px; padding: 0 !important; place-items: center; }
-.point-talk__voice svg { width: 14px; height: 14px; stroke-width: 1.55; }
+.point-talk__voice { display: grid; width: calc(30px * var(--point-talk-scale)); padding: 0 !important; place-items: center; }
+.point-talk__voice svg { width: calc(12px * var(--point-talk-scale)); height: calc(12px * var(--point-talk-scale)); stroke-width: 1.55; }
 .point-talk__submit { background: var(--ink) !important; color: var(--paper-solid) !important; font-weight: 500 !important; }
 .point-talk__submit:hover,
 .point-talk__submit:focus-visible { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
-.point-talk__feedback { justify-content: flex-end; padding-left: 9px; }
-.point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font: 400 11px/16px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.point-talk__feedback { justify-content: flex-end; padding-left: calc(7px * var(--point-talk-scale)); }
+.point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); text-overflow: ellipsis; white-space: nowrap; }
 .point-talk[data-phase="recording"] .point-talk__feedback { border-color: color-mix(in srgb, var(--ink) 25%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 7%, transparent), 0 8px 22px rgba(22,29,39,.08); }
 .point-talk[data-phase="recording"] .point-talk__feedback button { background: var(--ink); color: var(--paper-solid); }
 /* Hover is the fog growing denser under the glyph, not a tile laid on top of it. A radial wash
@@ -565,7 +565,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (pointer: coarse) {
-  .point-talk { width: min(328px, calc(100vw - 24px)); }
+  .point-talk { width: min(calc(280px * var(--point-talk-scale)), calc(100vw - 24px), var(--point-talk-available-width, calc(100vw - 24px))); }
   .point-talk__composer,
   .point-talk__feedback { min-height: 54px; padding-top: 3px; padding-bottom: 3px; }
   .point-talk button { min-width: 48px; min-height: 48px; }
