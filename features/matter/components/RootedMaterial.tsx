@@ -77,7 +77,6 @@ import {
 } from "./admission-feedback-geometry";
 import { CanvasChrome } from "./CanvasChrome";
 import { CanvasRuling } from "./CanvasRuling";
-import { NodeActionLens } from "./NodeActionLens";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
@@ -131,6 +130,10 @@ import type { TypographyHeightAuthority } from "./typography-height-authority";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
+  { ssr: false },
+);
+const NodeActionLens = dynamic(
+  () => import("./NodeActionLens").then((module) => module.NodeActionLens),
   { ssr: false },
 );
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
