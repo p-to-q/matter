@@ -63,6 +63,8 @@ export type MaterialFilesProps = Readonly<{
   locale: MatterLocale;
   navigation: NavigationState;
   onFocusNode: (nodeId: string) => void;
+  /** Reports only the transient narrow disclosure; docked presentation is false. */
+  onOverlayChange?: (open: boolean) => void;
   /** Returns transient canvas tools before the narrow overlay takes focus. */
   onOpenOverlay?: () => void;
   /** Restores a held search result without unexpectedly narrowing full view. */
@@ -125,6 +127,7 @@ export type MaterialArchiveActions = Readonly<{
 
 export function MaterialFiles(props: MaterialFilesProps) {
   const copy = materialFilesCopy(props.locale);
+  const reportOverlayChange = props.onOverlayChange;
   const [open, setOpen] = useState(false);
   /**
    * At desk widths the index is simply part of the shell: the gutter is already
@@ -412,6 +415,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
     wide.addEventListener("change", applyViewportDefault);
     return () => wide.removeEventListener("change", applyViewportDefault);
   }, []);
+
+  useEffect(() => {
+    reportOverlayChange?.(!docked && open);
+  }, [docked, open, reportOverlayChange]);
 
   useEffect(() => () => {
     if (copyResetRef.current !== null) clearTimeout(copyResetRef.current);
@@ -849,6 +856,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
           <SidebarIcon />
         </button>
       )}
+      <div className="material-files__clip" data-open={open || undefined}>
       <aside
         aria-label={copy.materialFiles}
         aria-hidden={!open}
@@ -1365,6 +1373,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
           </div>
         </footer>
       </aside>
+      </div>
     </>
   );
 }

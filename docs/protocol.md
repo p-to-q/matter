@@ -14,6 +14,20 @@ Unknown or syntactically valid-but-unsupported locale values are rejected at
 the request boundary. A locale addition is a protocol change: update the
 shared allow-list, client copy, provider handling, and focused tests together.
 
+The built-in preview seed may follow this preference only through a strict
+provenance-gated material migration after local hydration: recognized seed tree
+and node ids, original timestamps, canonical copy, and the absence of a text
+replacement in either Undo or Redo must all agree. The migration uses ordinary
+validated tree mutations, rebases only structural mementos that contain the
+same proven seed, and publishes nothing unless both history stacks replay
+exactly. It never adds a locale field, tag, or value to `ThoughtTree`, history,
+or an export; the localized seed text itself is ordinary material and therefore
+does appear at those material boundaries. The migration never translates a
+Branch result, admitted transcript, model output, or person-edited material.
+Its revision increase deliberately invalidates old segment selections and
+pending turns; segment-boundary and address construction remain
+locale-independent.
+
 Status: document, tree engine, navigation, layout, local tool actions, browser
 native voice admission, fixture HTTP voice tests, derived thought labels, lasso
 segment addressing, stretch degree, Markdown durability, and bounded inquiry

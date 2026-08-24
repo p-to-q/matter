@@ -251,6 +251,36 @@ export function redoTreeHistory(
   };
 }
 
+/**
+ * Proves that both reversible stacks still agree with one current tree.
+ * Callers that migrate a journal may use this before publishing the migrated
+ * tree and history together; it never repairs or drops a person's inverses.
+ */
+export function canReplayTreeHistory(tree: ThoughtTree, history: TreeHistory): boolean {
+  let undoTree = tree;
+  let undoHistory = history;
+  while (undoHistory.entries.length > 0) {
+    const undone = undoTreeHistory(undoTree, undoHistory);
+    if (!undone.ok) return false;
+    undoTree = undone.tree;
+    undoHistory = undone.history;
+  }
+
+  let redoTree = tree;
+  const redoEntries = history.redoEntries ?? [];
+  for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
+    const entry = redoEntries[index];
+    if (entry === undefined) return false;
+    const redone = applyTreeCommand(redoTree, {
+      ...entry.inverse,
+      expectedRevision: redoTree.revision,
+    });
+    if (!redone.ok) return false;
+    redoTree = redone.tree;
+  }
+  return true;
+}
+
 function retainedBytes(entries: readonly TreeHistoryEntry[]): number {
   return entries.reduce((total, entry) => total + entry.retainedInverseBytes, 0);
 }

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
@@ -548,6 +549,7 @@ test("lasso keeps its echo through the paper's rounded corner", async ({ page })
   // so the two layers must share one boundary or the corner shows neither.
   await page.mouse.move(paper.x + 90, paper.y + 90);
   await page.mouse.down();
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
   for (let step = 1; step <= 14; step += 1) {
     const t = step / 14;
     await page.mouse.move(paper.x + 90 - t * 88, paper.y + 90 - t * 88);
@@ -578,7 +580,7 @@ test("a loop across two passages enters selection mode without Elastic grips", a
     y: top,
     width: right - left,
     height: bottom - top,
-  });
+  }, true);
 
   await expect(page.locator(".lasso-selection-count")).toHaveAttribute("data-selection-count", "2");
   await expect(page.locator(".lasso-selection-count")).toContainText("已选 2 段文字");
@@ -761,7 +763,8 @@ test("Focus lasso authority belongs only to the exact focused thought", async ({
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
   const child = page.locator(`[data-thought-text-id="${imaginedTimeId}"]`);
-  await child.click();
+  await selectThoughtThroughMaterialIndex(page, imaginedTimeId);
+  await child.hover();
   await expect(child).toHaveAttribute("aria-pressed", "true");
   const thoughtActions = page.locator(
     `[data-node-action-lens][data-node-id="${imaginedTimeId}"]`,
@@ -809,7 +812,8 @@ test("a non-root upper grip pulls upward while its fixed seam pushes the selecti
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
   const child = page.locator(`[data-thought-text-id="${imaginedTimeId}"]`);
-  await child.click();
+  await selectThoughtThroughMaterialIndex(page, imaginedTimeId);
+  await child.hover();
   await expect(child).toHaveAttribute("aria-pressed", "true");
   await page.locator(`[data-node-action-lens][data-node-id="${imaginedTimeId}"]`)
     .getByRole("button", { name: "Focus this thought" })
@@ -1189,10 +1193,14 @@ async function sourceGlyphReceipt(
 async function drawEarlyReleaseLoop(
   page: Page,
   rect: { x: number; y: number; width: number; height: number },
+  requireDrawing = false,
 ) {
   const margin = 9;
   await page.mouse.move(rect.x - margin, rect.y - margin);
   await page.mouse.down();
+  if (requireDrawing) {
+    await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
+  }
   await page.mouse.move(rect.x + rect.width + margin, rect.y - margin, { steps: 5 });
   await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
   await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });

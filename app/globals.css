@@ -22,7 +22,7 @@ body, button { font-family: var(--mono); -webkit-font-smoothing: antialiased; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
+.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
 .matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
@@ -46,6 +46,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); }
 .material-files-toggle[aria-expanded="true"] { color: var(--ink); }
 .material-files-toggle[data-persistence-error="true"] { background: rgba(173,74,54,.1); color: var(--active); }
+.material-files__clip { display: contents; }
 .material-files { --index-row: 40px; --index-ink: #161d27; --index-muted: rgba(22,29,39,.72); --index-faint: rgba(22,29,39,.66); --index-line: rgba(22,29,39,.09); position: fixed; z-index: 41; top: 62px; bottom: var(--shell-gutter); left: 10px; display: grid; width: calc(var(--sidebar-width) - 24px); grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: 6px 4px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; opacity: 0; overflow: hidden; pointer-events: none; touch-action: pan-y; transform: translateX(-9px); transition: opacity 150ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
 .material-files[data-open="true"] { opacity: 1; pointer-events: auto; transform: translateX(0); }
 .material-files[data-mode="search"] { --index-row: 50px; }
@@ -242,15 +243,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   to { opacity: 1; }
 }
 /* Atmosphere, utilities, and editing instruments belong to the paper only. */
-.matter-document { --matter-column-width: 520px; --matter-column-gap: 116px; --matter-sibling-gap: 42px; --matter-canvas-anchor-x: 0px; --matter-ruling-cell-height: 196px; position: absolute; z-index: 2; top: var(--shell-gutter); right: var(--shell-gutter); bottom: var(--shell-gutter); left: var(--sidebar-width); overflow: hidden; border: 1px solid rgba(22,29,39,.09); border-radius: 18px; background: var(--paper); box-shadow: 0 18px 52px rgba(22,29,39,.075), 0 1px 2px rgba(22,29,39,.06); }
+/* The paper is a camera boundary, not a scroll container. `clip` prevents
+   focus on bottom Chrome from shifting every absolute material plane. */
+.matter-document { --matter-column-width: 520px; --matter-column-gap: 116px; --matter-sibling-gap: 42px; --matter-canvas-anchor-x: 0px; --matter-ruling-cell-height: 196px; --paper-guidance-z: 9; --paper-corner-chrome-z: 36; --paper-leaf-pass-z: 37; --paper-active-chrome-z: 38; position: absolute; z-index: 2; top: var(--shell-gutter); right: var(--shell-gutter); bottom: var(--shell-gutter); left: var(--sidebar-width); overflow: clip; border: 1px solid rgba(22,29,39,.09); border-radius: 18px; background: var(--paper); box-shadow: 0 18px 52px rgba(22,29,39,.075), 0 1px 2px rgba(22,29,39,.06); }
 .matter-shell[data-node-drop-mode="top-level"] .matter-document { border-color: color-mix(in srgb, var(--ink) 24%, transparent); }
 .matter-document[data-canvas-theme="light"] { --canvas-chrome: #161d27; --chrome-hover-bg: #161d27; --chrome-hover-text: #f5f5f2; --canvas-ruling-line: #161d27; --canvas-ruling-opacity: .16; --canvas-ruling-peak-opacity: .2; --selection-bg: rgba(22,29,39,.08); --selection-ring: rgba(22,29,39,.13); --selection-shadow: none; color-scheme: light; }
 .matter-document[data-canvas-theme="dark"] { --paper: #202831; --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; --faint: #89929b; --line: rgba(240,242,243,.16); --canvas-chrome: #f0f2f3; --chrome-hover-bg: #f5f5f2; --chrome-hover-text: #161d27; --canvas-ruling-line: #f0f2f3; --canvas-ruling-opacity: .13; --canvas-ruling-peak-opacity: .16; --selection-bg: rgba(245,245,242,.15); --selection-ring: rgba(245,245,242,.16); --selection-shadow: 0 1px 12px rgba(0,0,0,.28); color-scheme: dark; }
 .matter-shell:has(.matter-document[data-canvas-modal-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
+.matter-material-plane { position: absolute; inset: 0; }
 .matter-document__empty { position: absolute; top: 43%; left: 50%; margin: 0; color: var(--muted); transform: translate(-50%, -50%); }
 .matter-guidance,
 .lasso-selection-count { font: 400 14px/20px var(--mono); letter-spacing: .7px; }
-.matter-guidance { isolation: isolate; position: absolute; z-index: 9; bottom: 24px; left: 24px; max-width: min(480px, calc(100% - 360px)); margin-inline: -4px; padding-inline: 4px; background: transparent; color: var(--canvas-chrome, #161d27); pointer-events: auto; transition: color 150ms ease; }
+.matter-guidance { isolation: isolate; position: absolute; z-index: var(--paper-guidance-z); bottom: 24px; left: 24px; max-width: min(480px, calc(100% - 360px)); margin-inline: -4px; padding-inline: 4px; background: transparent; color: var(--canvas-chrome, #161d27); pointer-events: auto; transition: color 150ms ease; }
 .lasso-selection-count { position: absolute; z-index: 34; top: 24px; left: 24px; padding: 4px 7px; border-radius: 7px; background: color-mix(in srgb, var(--paper) 64%, transparent); color: var(--muted); pointer-events: none; backdrop-filter: blur(8px); }
 /* Like the upper-right and lower-right groups, the atmospheric planes belong
    to the whole corner while a hover surface belongs only to its live label. */
@@ -449,13 +453,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   to { transform: translateY(-50%) scaleX(1); }
 }
 
-/* At tablet widths the material must keep its full field. The index becomes a
-   drawer before its fixed desk geometry could crowd the root column. */
-@media (min-width: 721px) and (max-width: 959px) {
-  .material-files-toggle { top: 14px; right: 16px; left: auto; width: 40px; height: 40px; border-radius: 10px; }
-  .material-files-toggle svg { width: 17px; height: 17px; }
+/* Below the docked shell the index and the material share one paper geometry.
+   The clip owns the rounded paper boundary; the index and material plane use
+   one width token so disclosure is an exact, reversible push. */
+@media (max-width: 959px) {
   .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
-  .material-files { --index-row: 48px; top: 66px; right: auto; bottom: 8px; left: 0; width: min(304px, calc(100vw - 56px)); padding: 8px 10px 6px 8px; border: 0; border-right: 1px solid rgba(22,29,39,.09); border-radius: 0 16px 16px 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(calc(-100% - 8px)); transform-origin: left center; }
+  .material-files__clip { position: fixed; z-index: 41; top: var(--narrow-paper-top); right: var(--narrow-paper-inset); bottom: var(--narrow-paper-inset); left: var(--narrow-paper-inset); display: block; overflow: clip; border-radius: var(--narrow-paper-radius); pointer-events: none; }
+  .material-files { --index-row: 48px; position: absolute; z-index: auto; top: 0; right: auto; bottom: 0; left: 0; width: var(--narrow-index-width); padding: 8px 10px 6px 8px; border: 0; border-right: 1px solid rgba(22,29,39,.09); border-radius: 0 var(--narrow-paper-radius) var(--narrow-paper-radius) 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(-100%); transform-origin: left center; }
   .material-files[data-open="true"] { transform: translateX(0); }
   .material-files[data-mode="search"] { --index-row: 60px; }
   .material-files__context { padding-bottom: 4px; }
@@ -470,46 +474,32 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .material-files__mode-action { min-width: 48px; min-height: 48px; }
   .material-files__search { height: 48px; }
   .material-files__copy { min-width: 48px; height: 48px; }
-  .material-files__profile { min-height: 70px; margin-top: 20px; padding-top: 12px; }
   .material-files__profile-action { width: 48px; height: 48px; }
   .material-files__archive-actions button,
   .material-files__archive-confirm button { min-height: 48px; }
+  .matter-material-plane { transform: translate3d(0,0,0); transition: transform 200ms cubic-bezier(.2,.8,.2,1); will-change: transform; }
+  .matter-shell:has(.material-files[data-open="true"]) .matter-material-plane { transform: translate3d(var(--narrow-index-width),0,0); }
   .matter-shell:has(.material-files[data-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
-  .matter-document,
-  .matter-shell:has(.material-files:not([data-open="true"])) .matter-document { top: 66px; right: 8px; bottom: 8px; left: 8px; border-radius: 16px; }
+  .matter-document { top: var(--narrow-paper-top); right: var(--narrow-paper-inset); bottom: var(--narrow-paper-inset); left: var(--narrow-paper-inset); border-radius: var(--narrow-paper-radius); }
 }
 
-@media (max-width: 720px) {
+/* At tablet widths the material must keep its full field. The index becomes a
+   drawer before its fixed desk geometry could crowd the root column. */
+@media (min-width: 768px) and (max-width: 959px) {
+  .material-files-toggle { top: 14px; right: 16px; left: auto; width: 40px; height: 40px; border-radius: 10px; }
+  .material-files-toggle svg { width: var(--corner-instrument-glyph); height: var(--corner-instrument-glyph); }
+  .material-files__profile { min-height: 70px; margin-top: 20px; padding-top: 12px; }
+}
+
+@media (max-width: 767px) {
   :root { --instrument-size: 48px; }
-  .matter-header { top: 21px; left: 18px; }
-  /* The index entry and the Matter menu below it share one right-hand axis.
-     Their 52px tracks and 20px marks read as one instrument family. */
-  .material-files-toggle { top: 7px; right: 9px; left: auto; width: 52px; height: 52px; border-radius: 12px; }
-  .material-files-toggle svg { width: 20px; height: 20px; }
-  .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
-  .material-files { --index-row: 48px; top: 66px; right: auto; bottom: 8px; left: 0; width: min(304px, calc(100vw - 56px)); padding: 8px 10px 6px 8px; border: 0; border-right: 1px solid rgba(22,29,39,.09); border-radius: 0 16px 16px 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(calc(-100% - 8px)); transform-origin: left center; }
-  .material-files[data-open="true"] { transform: translateX(0); }
-  .material-files[data-mode="search"] { --index-row: 60px; }
-  .material-files__context { padding-bottom: 4px; }
-  .material-files__search-close { width: 48px; height: 48px; }
-  .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }
-  .material-file__structure-control,
-  .material-file__context-control,
-  .material-file__context-space { height: 48px; }
-  .material-file { grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); }
-  .material-files__context-title { min-height: 48px; padding-left: 28px; }
-  .material-files__controls { height: 56px; padding-bottom: 6px; }
-  .material-files__mode-action { min-width: 48px; min-height: 48px; }
-  .material-files__search { height: 48px; }
-  .material-files__copy { min-width: 48px; height: 48px; }
+  .matter-header { top: 25.5px; left: 18px; }
+  /* With the gear absent, the two mobile roles share a stronger 20px
+     mark inside the same 48px target; the 768px handoff returns to quiet gear. */
+  .material-files-toggle { top: 9px; right: 9px; left: auto; width: var(--compact-corner-target); height: var(--compact-corner-target); border-radius: 12px; }
+  .material-files-toggle svg { width: var(--mobile-corner-glyph); height: var(--mobile-corner-glyph); }
   .material-files__identity { padding-top: 20px; }
   .material-files__profile { min-height: 68px; }
-  .material-files__profile-action { width: 48px; height: 48px; }
-  .material-files__archive-actions button,
-  .material-files__archive-confirm button { min-height: 48px; }
-  .matter-shell:has(.material-files[data-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
-  .matter-document,
-  .matter-shell:has(.material-files:not([data-open="true"])) .matter-document { top: 66px; right: 8px; bottom: 8px; left: 8px; border-radius: 16px; }
   .matter-guidance,
   .lasso-selection-count { font-size: 11px; line-height: 16px; letter-spacing: .45px; }
   .matter-guidance { bottom: 16px; left: 16px; max-width: calc(100% - 102px); }

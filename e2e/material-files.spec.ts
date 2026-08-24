@@ -194,6 +194,12 @@ test("a manual Pan gesture takes over the camera at its rendered mid-flight posi
 
   const row = page.locator("aside.material-files .material-file").nth(8);
   const world = page.locator(".matter-world");
+  // This proof must own a long enough transition to observe its handoff even
+  // when the full browser matrix is contending for CPU. Product timing is
+  // covered separately; this case verifies the interruption boundary.
+  await world.evaluate((element) => {
+    (element as HTMLElement).style.setProperty("--index-camera-duration", "1200ms");
+  });
   await row.locator(".material-file__open").click();
   await expect(world).toHaveAttribute("data-camera-motion", "index");
   await page.waitForTimeout(60);
@@ -280,6 +286,179 @@ test("a dominant narrow drawer shifts index attention into the exposed canvas", 
       Math.abs(target.top + target.height / 2 - expectedY),
     );
   })).toBeLessThanOrEqual(1);
+});
+
+test("the narrow index is clipped by the paper and pushes material without mutating its camera", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const shell = page.locator("main.matter-shell");
+  const paper = page.locator(".matter-document");
+  const clip = page.locator(".material-files__clip");
+  const sidebar = page.locator("aside.material-files");
+  const plane = page.locator(".matter-material-plane");
+  const text = page.locator(".spatial-thought__text").first();
+  const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
+  const cameraBefore = await shell.evaluate((element) => ({
+    x: element.getAttribute("data-viewport-x"),
+    y: element.getAttribute("data-viewport-y"),
+    zoom: element.getAttribute("data-viewport-zoom"),
+  }));
+  const paperBefore = await paper.boundingBox();
+  const planeBefore = await plane.boundingBox();
+  const textBefore = await text.boundingBox();
+  if (paperBefore === null || planeBefore === null || textBefore === null) {
+    throw new Error("narrow paper geometry is not visible");
+  }
+
+  await toggle.click();
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await expect.poll(async () => {
+    const [currentPlane, currentSidebar] = await Promise.all([plane.boundingBox(), sidebar.boundingBox()]);
+    if (currentPlane === null || currentSidebar === null) return Number.NaN;
+    return currentPlane.x - planeBefore.x - currentSidebar.width;
+  }).toBeCloseTo(0, 1);
+
+  const [paperOpen, clipOpen, sidebarOpen, planeOpen, textOpen] = await Promise.all([
+    paper.boundingBox(),
+    clip.boundingBox(),
+    sidebar.boundingBox(),
+    plane.boundingBox(),
+    text.boundingBox(),
+  ]);
+  if (paperOpen === null || clipOpen === null || sidebarOpen === null || planeOpen === null || textOpen === null) {
+    throw new Error("open narrow index geometry is not visible");
+  }
+  expect(paperOpen.x).toBeCloseTo(paperBefore.x, 1);
+  expect(paperOpen.y).toBeCloseTo(paperBefore.y, 1);
+  expect(paperOpen.width).toBeCloseTo(paperBefore.width, 1);
+  expect(paperOpen.height).toBeCloseTo(paperBefore.height, 1);
+  expect(clipOpen.x).toBeCloseTo(paperOpen.x, 1);
+  expect(clipOpen.y).toBeCloseTo(paperOpen.y, 1);
+  expect(clipOpen.width).toBeCloseTo(paperOpen.width, 1);
+  expect(clipOpen.height).toBeCloseTo(paperOpen.height, 1);
+  expect(sidebarOpen.x).toBeCloseTo(paperOpen.x, 1);
+  expect(sidebarOpen.y).toBeCloseTo(paperOpen.y, 1);
+  expect(sidebarOpen.height).toBeCloseTo(paperOpen.height, 1);
+  expect(sidebarOpen.width).toBeCloseTo(304, 1);
+  expect(planeOpen.x - planeBefore.x).toBeCloseTo(sidebarOpen.width, 1);
+  expect(textOpen.x - textBefore.x).toBeCloseTo(sidebarOpen.width, 1);
+  expect(await clip.evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe("16px");
+  expect(await paper.evaluate((element) => getComputedStyle(element).borderTopLeftRadius)).toBe("16px");
+  expect(await page.evaluate(({ x, y }) => {
+    return document.elementFromPoint(x, y)?.closest("aside.material-files") !== null;
+  }, { x: paperOpen.x + 1, y: paperOpen.y + 1 })).toBe(false);
+  expect(await shell.evaluate((element) => ({
+    x: element.getAttribute("data-viewport-x"),
+    y: element.getAttribute("data-viewport-y"),
+    zoom: element.getAttribute("data-viewport-zoom"),
+  }))).toEqual(cameraBefore);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+
+  await text.focus();
+  const lens = page.locator("[data-node-action-lens]");
+  await expect(lens).toBeVisible();
+  expect(await lens.evaluate((element) => {
+    const lensRect = element.getBoundingClientRect();
+    const paperRect = element.closest(".matter-document")!.getBoundingClientRect();
+    return lensRect.left >= paperRect.left - 1 && lensRect.right <= paperRect.right + 1;
+  })).toBe(true);
+
+  // Programmatic activation preserves text focus, keeping the render-edge lens
+  // alive across the inverse disclosure so its coordinate contract is proved.
+  await page.locator(".material-files-toggle").evaluate((button: HTMLButtonElement) => button.click());
+  await expect(sidebar).not.toHaveAttribute("data-open", "true");
+  await expect.poll(async () => (await plane.boundingBox())?.x ?? Number.NaN)
+    .toBeCloseTo(planeBefore.x, 1);
+  expect((await text.boundingBox())?.x ?? Number.NaN).toBeCloseTo(textBefore.x, 1);
+  await expect(lens).toBeVisible();
+  expect(await lens.evaluate((element) => {
+    const lensRect = element.getBoundingClientRect();
+    const paperRect = element.closest(".matter-document")!.getBoundingClientRect();
+    return lensRect.left >= paperRect.left - 1 && lensRect.right <= paperRect.right + 1;
+  })).toBe(true);
+});
+
+test("the shared drawer width adapts at 320px and clears cleanly at the dock boundary", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const plane = page.locator(".matter-material-plane");
+  const sidebar = page.locator("aside.material-files");
+  const planeClosed = await plane.boundingBox();
+  if (planeClosed === null) throw new Error("320px material plane is not visible");
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await expect.poll(async () => {
+    const [planeBox, sidebarBox] = await Promise.all([plane.boundingBox(), sidebar.boundingBox()]);
+    if (planeBox === null || sidebarBox === null) return Number.NaN;
+    return planeBox.x - planeClosed.x - sidebarBox.width;
+  }).toBeCloseTo(0, 1);
+  expect((await sidebar.boundingBox())?.width).toBeCloseTo(256, 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+
+  await page.setViewportSize({ width: 960, height: 700 });
+  await expect(page.locator(".material-files-toggle")).toHaveCount(0);
+  await expect(plane).toHaveCSS("transform", "none");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+
+  await page.setViewportSize({ width: 959, height: 700 });
+  await expect(page.locator(".material-files-toggle")).toHaveCount(1);
+  await expect(sidebar).not.toHaveAttribute("data-open", "true");
+  await expect.poll(async () => {
+    const [planeBox, paperBox] = await Promise.all([
+      plane.boundingBox(),
+      page.locator(".matter-document").boundingBox(),
+    ]);
+    return planeBox === null || paperBox === null ? Number.NaN : planeBox.x - paperBox.x;
+  }).toBeCloseTo(1, 1);
+});
+
+test("pointer-centred wheel zoom uses the translated material plane as its origin", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
+  const plane = page.locator(".matter-material-plane");
+  const planeClosed = await plane.boundingBox();
+  if (planeClosed === null) throw new Error("wheel anchor plane is not visible");
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
+  await expect.poll(async () => (await plane.boundingBox())?.x ?? Number.NaN)
+    .toBeCloseTo(planeClosed.x + 304, 1);
+
+  const paperBox = await page.locator(".matter-document").boundingBox();
+  if (paperBox === null) throw new Error("wheel anchor paper is not visible");
+  const anchor = {
+    x: paperBox.x + paperBox.width - 24,
+    y: paperBox.y + paperBox.height / 2,
+  };
+  const readAnchor = async () => page.locator("main.matter-shell").evaluate((shell, point) => {
+    const planeRect = document.querySelector(".matter-material-plane")!.getBoundingClientRect();
+    const x = Number((shell as HTMLElement).dataset.viewportX);
+    const y = Number((shell as HTMLElement).dataset.viewportY);
+    const zoom = Number((shell as HTMLElement).dataset.viewportZoom);
+    return {
+      worldX: (point.x - planeRect.left - x) / zoom,
+      worldY: (point.y - planeRect.top - y) / zoom,
+      zoom,
+    };
+  }, anchor);
+  const before = await readAnchor();
+  await page.locator(".matter-document").dispatchEvent("wheel", {
+    bubbles: true,
+    cancelable: true,
+    clientX: anchor.x,
+    clientY: anchor.y,
+    ctrlKey: true,
+    deltaMode: 0,
+    deltaY: -320,
+  });
+  await expect.poll(async () => (await readAnchor()).zoom).not.toBe(before.zoom);
+  const after = await readAnchor();
+  expect(after.worldX).toBeCloseTo(before.worldX, 5);
+  expect(after.worldY).toBeCloseTo(before.worldY, 5);
 });
 
 for (const viewport of [
@@ -855,7 +1034,10 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   if (branchId === null) throw new Error("transient disclosure branch is missing");
   await branch.locator(".material-file__structure-control").click();
   await expect(rows).toHaveCount(8);
-  await page.locator(`[data-thought-id="${branchId}"] [data-thought-text-id]`).click();
+  // Select through the index row this receipt already owns. The paper is a
+  // non-scrolling clip boundary, so a browser must not scroll hidden canvas
+  // material under the fixed tool rail merely to satisfy a synthetic click.
+  await branch.locator(".material-file__open").click();
   await page.keyboard.press("Delete");
   await expect(page.locator(`[data-thought-id="${branchId}"]`)).toHaveCount(0);
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
@@ -869,8 +1051,10 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   if (leafId === null) throw new Error("transient selection leaf is missing");
   await leaf.getByRole("checkbox").check();
   await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
-  await page.locator(`[data-thought-id="${leafId}"] [data-thought-text-id]`).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.done, exact: true }).click();
+  await leaf.locator(".material-file__open").click();
   await page.keyboard.press("Delete");
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.select, exact: true }).click();
   await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(0));
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
   await expect(page.locator(`[data-thought-id="${leafId}"]`)).toHaveCount(1);
@@ -1032,7 +1216,7 @@ test("Undo does not revive a held-aside decision after its branch was deleted", 
   await heldChildRow.locator(".material-file__context-control--set-aside").click();
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).toHaveAttribute("data-context-excluded", "true");
 
-  await page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`).click();
+  await rows.nth(1).locator(".material-file__open").click();
   await page.keyboard.press("Delete");
   await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveCount(0);
   await expect(page.locator(`[data-thought-id="${heldChildId}"]`)).toHaveCount(0);

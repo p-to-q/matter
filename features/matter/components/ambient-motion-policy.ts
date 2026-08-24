@@ -10,9 +10,10 @@ export type AmbientConnectionHint = Readonly<{
  */
 export function shouldPresentAmbientMotion(input: Readonly<{
   connection?: AmbientConnectionHint;
+  forcedColors?: boolean;
   reducedMotion: boolean;
 }>): boolean {
-  if (input.reducedMotion || input.connection?.saveData === true) return false;
+  if (input.forcedColors || input.reducedMotion || input.connection?.saveData === true) return false;
   const effectiveType = input.connection?.effectiveType?.toLowerCase();
   return effectiveType !== "slow-2g" && effectiveType !== "2g";
 }

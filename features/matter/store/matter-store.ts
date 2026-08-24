@@ -69,7 +69,9 @@ import {
   type TextSwapEnvelope,
   type TextSwapPlan,
 } from "../protocol/text-swap-contract";
-import { isMatterLocale, type MatterLocale } from "../config/locales";
+import { MATTER_LOCALE, isMatterLocale, type MatterLocale } from "../config/locales";
+import type { SeededBranchTextResolver } from "../material/seeded-material-core";
+import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   // Durable history must not silently discard an old inverse. Browser storage
@@ -130,6 +132,13 @@ export type DocumentSwitchReceipt =
       revision: number;
       errorCode: "TREE_INVARIANT_VIOLATION";
     };
+
+export type SeedLocalizationReceipt = Readonly<{
+  operation: "localize-seed";
+  status: "localized" | "unchanged" | "rejected";
+  revision: number;
+  errorCode?: "SEED_LOCALIZATION_INVALID_TREE" | "SEED_LOCALIZATION_INVALID_HISTORY";
+}>;
 
 export type AdmissionCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
   Readonly<{ repairLeaseId: string }>;
@@ -240,13 +249,23 @@ export type MatterStoreReceipt =
   | TransformCommitReceipt
   | TransformStaleReceipt
   | TextSwapCommitReceipt
-  | TextSwapStaleReceipt;
+  | TextSwapStaleReceipt
+  | SeedLocalizationReceipt;
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
   lastError: MatterStoreError | null;
   lastReceipt: ObservableMatterStoreReceipt | null;
-  extendMaterial: (parentId: string, values: BranchValues) => MatterStoreReceipt;
+  extendMaterial: (
+    parentId: string,
+    values: BranchValues,
+    locale?: MatterLocale,
+    resolveBranchTexts?: SeededBranchTextResolver,
+  ) => MatterStoreReceipt;
+  localizeSeededMaterial: (
+    locale: MatterLocale,
+    relocalize: SeededSessionRelocalizer,
+  ) => SeedLocalizationReceipt;
   admitHumanTranscript: (anchor: AdmissionAnchor, values: MatterAdmissionValues) => AdmissionStoreReceipt;
   settleHumanTranscriptRepair: (settlement: AdmissionRepairSettlement) => AdmissionRepairStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
@@ -339,7 +358,12 @@ export function createMatterStore(
     lastError: null,
     lastReceipt: null,
 
-    extendMaterial: (parentId, values) => {
+    extendMaterial: (
+      parentId,
+      values,
+      locale = MATTER_LOCALE.simplifiedChinese,
+      resolveBranchTexts,
+    ) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
         if (!Object.hasOwn(current.tree.nodes, parentId)) {
@@ -355,7 +379,14 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        const command = createBranchChildCommand(current.tree, parentId, values);
+        const command = createBranchChildCommand(
+          current.tree,
+          parentId,
+          values,
+          undefined,
+          locale,
+          resolveBranchTexts,
+        );
         const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
@@ -367,6 +398,44 @@ export function createMatterStore(
         });
       });
       return requireSynchronousReceipt(receipt);
+    },
+
+    localizeSeededMaterial: (locale, relocalize) => {
+      let receipt: SeedLocalizationReceipt | undefined;
+      set((current) => {
+        const localized = relocalize(current.tree, current.history, locale);
+        if (!localized.ok) {
+          receipt = Object.freeze({
+            operation: "localize-seed",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: localized.errorCode,
+          });
+          return current;
+        }
+        if (!localized.changed) {
+          receipt = Object.freeze({
+            operation: "localize-seed",
+            status: "unchanged",
+            revision: current.tree.revision,
+          });
+          return current;
+        }
+        receipt = Object.freeze({
+          operation: "localize-seed",
+          status: "localized",
+          revision: localized.tree.revision,
+        });
+        return freezeState({
+          ...current,
+          tree: protectValue(localized.tree),
+          history: protectValue(localized.history),
+        });
+      });
+      if (receipt === undefined) {
+        throw new Error("The Zustand state updater did not execute synchronously.");
+      }
+      return receipt;
     },
 
     admitHumanTranscript: (anchor, values) => {

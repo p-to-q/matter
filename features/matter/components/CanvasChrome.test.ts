@@ -104,7 +104,7 @@ describe("CanvasChrome", () => {
     expect(CANVAS_CHROME_INFO["de-DE"].privacy.body.join(" ")).toContain("zurückgestelltes Material wird nicht gesendet");
   });
 
-  it("pins the desktop corners, accessible gear target, and 767px mobile handoff", () => {
+  it("pins the desktop corners and shares compact instrument tokens across both responsive handoffs", () => {
     const css = readFileSync(
       new URL("./CanvasChrome.module.css", import.meta.url),
       "utf8",
@@ -132,8 +132,14 @@ describe("CanvasChrome", () => {
     expect(globalCss).toMatch(/\.matter-guidance:hover\s+\.matter-guidance__next::before[^}]*background:\s*var\(--chrome-hover-bg/s);
     expect(css).toMatch(/\.gearButton\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;/s);
     expect(css).toMatch(/\.gearButton svg\s*{[^}]*width:\s*14px;[^}]*height:\s*14px;/s);
+    expect(css).toMatch(/@media \(min-width:\s*768px\) and \(max-width:\s*959px\)\s*{[\s\S]*?\.gearButton\s*{[^}]*width:\s*40px;[^}]*height:\s*40px;[^}]*margin:\s*-13px -17px -13px -9px;/s);
+    expect(css).toMatch(/@media \(min-width:\s*768px\) and \(max-width:\s*959px\)\s*{[\s\S]*?\.gearButton svg\s*{[^}]*width:\s*var\(--corner-instrument-glyph\);[^}]*height:\s*var\(--corner-instrument-glyph\);/s);
     expect(css).toContain("@media (max-width: 767px)");
-    expect(css).toMatch(/\.mobileTrigger\s*{[^}]*width:\s*52px;[^}]*height:\s*56px;/s);
+    expect(globalCss).toMatch(/--compact-corner-target:\s*48px;\s*--corner-instrument-glyph:\s*14px;\s*--mobile-corner-glyph:\s*20px;/s);
+    expect(globalCss).toMatch(/@media \(min-width:\s*768px\) and \(max-width:\s*959px\)\s*{[\s\S]*?\.material-files-toggle svg\s*{[^}]*width:\s*var\(--corner-instrument-glyph\);[^}]*height:\s*var\(--corner-instrument-glyph\);/s);
+    expect(globalCss).toMatch(/@media \(max-width:\s*767px\)\s*{[\s\S]*?\.material-files-toggle svg\s*{[^}]*width:\s*var\(--mobile-corner-glyph\);[^}]*height:\s*var\(--mobile-corner-glyph\);/s);
+    expect(css).toMatch(/\.mobileTrigger\s*{[^}]*width:\s*var\(--compact-corner-target\);[^}]*height:\s*var\(--compact-corner-target\);/s);
+    expect(css).toMatch(/\.mobileTrigger svg\s*{[^}]*width:\s*var\(--mobile-corner-glyph\);[^}]*height:\s*var\(--mobile-corner-glyph\);/s);
     expect(css).toContain("width: min(320px, 85%);");
     expect(css).toMatch(/\.inquiryAnchor\s*{[^}]*right:\s*0;[^}]*bottom:\s*30px;/s);
   });

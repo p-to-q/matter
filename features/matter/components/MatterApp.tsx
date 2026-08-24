@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
 import { useMatterStore } from "../store/matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
@@ -12,6 +12,11 @@ import { treeToBundle } from "../persistence/snapshot-codec";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TransformCommittedChange } from "../store/matter-store";
+import {
+  seededFallbackBranchTexts,
+  type SeededBranchTextResolver,
+} from "../material/seeded-material-core";
+import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
 
 export function MatterApp() {
   const tree = useMatterStore((state) => state.tree);
@@ -19,6 +24,7 @@ export function MatterApp() {
   const history = useMatterStore((state) => state.history);
   const navigation = useMatterStore((state) => state.navigation);
   const extendMaterial = useMatterStore((state) => state.extendMaterial);
+  const localizeSeededMaterial = useMatterStore((state) => state.localizeSeededMaterial);
   const undo = useMatterStore((state) => state.undo);
   const redo = useMatterStore((state) => state.redo);
   const commitTransform = useMatterStore((state) => state.commitTransform);
@@ -36,6 +42,44 @@ export function MatterApp() {
   const switchDocument = useMatterStore((state) => state.switchDocument);
   const persistence = useMaterialPersistence(tree, history, documentEpoch, hydrateSnapshot, switchDocument);
   const canvasPreferences = useCanvasPreferences();
+  const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
+  const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
+    useState<SeededSessionRelocalizer | null>(null);
+  useEffect(() => {
+    let active = true;
+    void import("../material/seeded-branch-copy").then(
+      ({ seededBranchTexts }) => {
+        if (active) branchTextResolverRef.current = seededBranchTexts;
+      },
+      () => {
+        // Branch remains a synchronous, local action on the closed five-locale
+        // floor if its richer interaction-only copy chunk cannot be loaded.
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (seededSessionRelocalizer !== null) return;
+    let active = true;
+    void import("../material/seeded-session-localization").then(
+      ({ relocalizeSeededSession }) => {
+        if (active) setSeededSessionRelocalizer(() => relocalizeSeededSession);
+      },
+      () => {
+        // A missing optional chunk cannot authorize a partial tree/history
+        // migration. A later document or locale epoch may retry the import.
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [
+    canvasPreferences.preferences.language,
+    documentEpoch,
+    seededSessionRelocalizer,
+  ]);
   const exportArchive = useCallback(async () => {
     if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
       const recovery = await persistence.exportCorruptRecovery();
@@ -97,6 +141,24 @@ export function MatterApp() {
     locale: canvasPreferences.preferences.language,
     vocabulary: materialVocabulary,
   });
+  useLayoutEffect(() => {
+    if (
+      seededSessionRelocalizer === null ||
+      persistence.status.phase === "loading" ||
+      admission.state.phase !== "idle"
+    ) return;
+    localizeSeededMaterial(
+      canvasPreferences.preferences.language,
+      seededSessionRelocalizer,
+    );
+  }, [
+    admission.state.phase,
+    canvasPreferences.preferences.language,
+    documentEpoch,
+    localizeSeededMaterial,
+    persistence.status.phase,
+    seededSessionRelocalizer,
+  ]);
   const clearRepairPresentations = admission.clearRepairPresentations;
   const discardPendingRepairs = admission.discardPendingRepairs;
   const undoWithPresentationReset = useCallback(() => {
@@ -123,10 +185,15 @@ export function MatterApp() {
   }), [moveNode]);
   // Branch is the one durable mutation whose material the product composes
   // rather than the person speaking it. Its identity and time are still theirs.
-  const extendChild = useCallback((parentNodeId: string) => extendMaterial(parentNodeId, {
-    nodeId: `thought_${createOperationId()}`,
-    createdAt: new Date().toISOString(),
-  }), [extendMaterial]);
+  const extendChild = useCallback((parentNodeId: string) => extendMaterial(
+    parentNodeId,
+    {
+      nodeId: `thought_${createOperationId()}`,
+      createdAt: new Date().toISOString(),
+    },
+    canvasPreferences.preferences.language,
+    branchTextResolverRef.current,
+  ), [canvasPreferences.preferences.language, extendMaterial]);
   const renameCurrentDocument = useCallback((title: string) => renameDocument({
     commandId: `human_title_${createOperationId()}`,
     title,

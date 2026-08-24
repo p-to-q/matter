@@ -300,7 +300,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(rootThought.locator(".spatial-thought__label"))
     .toHaveCSS("background-color", "rgba(245, 245, 242, 0.15)");
   await expect(page.locator("[data-matter-ambient='leaf-shadows'] .matter-ambient__poster"))
-    .toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(0.9)");
+    .toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(1.31)");
 
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), PREFERENCES_KEY))
     .toEqual({ version: 1, language: "en-US", leafFx: false, appearance: "dark" });
@@ -311,103 +311,173 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });
 
-test("one leaf foreground stays stable while open chrome rises above it", async ({ page }) => {
+test("native leaf media crosses quiet corners while active chrome rises above it", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
 
   const paper = page.getByRole("region", { name: "Thought material" });
-  const foreground = page.locator("[data-matter-ambient-foreground-pass]");
-  await expect(foreground).toHaveAttribute("data-active", "true", { timeout: 8_000 });
+  const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
+  const media = ambient.locator(".matter-ambient__poster, .matter-ambient__video");
+  const wash = ambient.locator(".matter-ambient__wash");
+  const canvasChrome = page.locator("[data-canvas-chrome]");
+  const guidance = page.locator(".matter-guidance");
+  await expect(media).toHaveCount(1);
+  await expect(ambient).toHaveAttribute("data-presentation", /poster|video/);
+  await expect(ambient).toHaveCSS("z-index", "auto");
+  await expect(ambient).toHaveCSS("pointer-events", "none");
+  await expect(media).toHaveCSS("z-index", "37");
+  await expect(wash).toHaveCSS("z-index", "3");
+  await expect(canvasChrome).toHaveCSS("z-index", "36");
+  await expect(guidance).toHaveCSS("z-index", "9");
+  for (const control of ["appearance", "settings", "language", "inquiry"]) {
+    expect(await page.locator(`[data-chrome-control="${control}"]`).evaluate((element) => {
+      const bounds = element.getBoundingClientRect();
+      return document.elementFromPoint(
+        bounds.left + bounds.width / 2,
+        bounds.top + bounds.height / 2,
+      )?.closest("[data-chrome-control]")?.getAttribute("data-chrome-control");
+    })).toBe(control);
+  }
   await page.locator('[data-chrome-control="appearance"]').click();
   await expect(paper).toHaveAttribute("data-canvas-theme", "light");
-  expect(await foreground.evaluate((canvas) => {
-    const paper = canvas.closest<HTMLElement>(".matter-document");
-    const top = paper?.querySelector<HTMLElement>('[data-chrome-region="top"]');
-    const settings = paper?.querySelector<HTMLElement>('[data-chrome-control="settings"]');
-    if (!(canvas instanceof HTMLCanvasElement) || paper === null || top == null || settings == null) {
-      throw new Error("foreground projection anchors are missing");
-    }
-    const surface = canvas.getBoundingClientRect();
-    const paperBounds = paper.getBoundingClientRect();
-    const topBounds = top.getBoundingClientRect();
-    const settingsBounds = settings.getBoundingClientRect();
-    const baseMedia = paper.querySelector<HTMLElement>(".matter-ambient__poster");
-    const toolRail = document.querySelector<HTMLElement>(".tool-rail");
-    const context = canvas.getContext("2d");
-    if (baseMedia === null || toolRail === null || context === null || canvas.width === 0 || canvas.height === 0) {
-      throw new Error("foreground projection has no paint surface");
-    }
-    const alphaAt = (x: number, y: number) => {
-      const pixelX = Math.min(canvas.width - 1, Math.max(0, Math.floor((x - surface.left) / surface.width * canvas.width)));
-      const pixelY = Math.min(canvas.height - 1, Math.max(0, Math.floor((y - surface.top) / surface.height * canvas.height)));
-      return context.getImageData(pixelX, pixelY, 1, 1).data[3];
-    };
-    const hit = document.elementFromPoint(
-      settingsBounds.left + settingsBounds.width / 2,
-      settingsBounds.top + settingsBounds.height / 2,
-    );
-    return {
-      baseMediaMask: getComputedStyle(baseMedia).maskImage,
-      baseMediaOpacity: getComputedStyle(baseMedia).opacity,
-      topChromeAlpha: alphaAt(topBounds.left + topBounds.width / 2, topBounds.top + topBounds.height / 2),
-      elementAtSettings: hit?.closest("[data-chrome-control]")?.getAttribute("data-chrome-control"),
-      paperCenterAlpha: alphaAt(surface.left + surface.width / 2, surface.top + surface.height / 2),
-      paperZIndex: getComputedStyle(paper).zIndex,
-      passInsidePaper: surface.left >= paperBounds.left
-        && surface.top >= paperBounds.top
-        && surface.right <= paperBounds.right
-        && surface.bottom <= paperBounds.bottom,
-      pointerEvents: getComputedStyle(canvas).pointerEvents,
-      toolRailZIndex: getComputedStyle(toolRail).zIndex,
-      zIndex: getComputedStyle(canvas).zIndex,
-    };
-  })).toEqual({
-    baseMediaMask: "none",
-    baseMediaOpacity: "0",
-    topChromeAlpha: 255,
-    elementAtSettings: "settings",
-    paperCenterAlpha: 255,
-    paperZIndex: "2",
-    passInsidePaper: true,
-    pointerEvents: "none",
-    toolRailZIndex: "40",
-    zIndex: "37",
-  });
-
+  await expect.poll(() => paper.evaluate((element) => ({
+    overflow: getComputedStyle(element).overflow,
+    scrollTop: element.scrollTop,
+  }))).toEqual({ overflow: "clip", scrollTop: 0 });
   await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
   await expect(page.getByRole("menu", { name: "Matter 设置" })).toBeVisible();
-  await expect(foreground).toHaveAttribute("data-active", "true");
-  await expect(foreground).toHaveCSS("opacity", "0.32");
-  await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "38");
-  await expect(page.locator(".matter-ambient__poster")).toHaveCSS("opacity", "0");
+  await expect(media).toHaveCount(1);
+  await expect(media).toHaveCSS("filter", "grayscale(1) contrast(0.84) brightness(1.08)");
+  await expect(media).toHaveCSS("mix-blend-mode", "multiply");
+  await expect(media).toHaveCSS("opacity", "0.32");
+  await expect(canvasChrome).toHaveCSS("z-index", "38");
 
   await page.locator('[data-chrome-control="settings"]').click();
-  await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "36");
+  await expect(canvasChrome).toHaveCSS("z-index", "36");
   for (const control of ["language", "inquiry"]) {
     await page.locator(`[data-chrome-control="${control}"]`).click();
-    await expect(foreground).toHaveAttribute("data-active", "true");
-    await expect(foreground).toHaveCSS("opacity", "0.32");
-    await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "38");
-    await expect(page.locator(".matter-ambient__poster")).toHaveCSS("opacity", "0");
+    await expect(media).toHaveCount(1);
+    await expect(media).toHaveCSS("opacity", "0.32");
+    await expect(canvasChrome).toHaveCSS("z-index", "38");
     await page.locator(`[data-chrome-control="${control}"]`).click();
   }
 
   await page.locator('[data-chrome-control="appearance"]').click();
   await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
-  await expect(foreground).toHaveCSS("opacity", "0.46");
+  await expect(media).toHaveCount(1);
+  await expect(media).toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(1.31)");
+  await expect(media).toHaveCSS("mix-blend-mode", "normal");
+  await expect(media).toHaveCSS("opacity", "0.24");
   await page.locator('[data-chrome-control="language"]').click();
-  await expect(foreground).toHaveCSS("opacity", "0.46");
-  await expect(page.locator("[data-canvas-chrome]")).toHaveCSS("z-index", "38");
-  await expect(page.locator(".matter-ambient__poster")).toHaveCSS("opacity", "0");
+  await expect(media).toHaveCount(1);
+  await expect(media).toHaveCSS("opacity", "0.24");
+  await expect(canvasChrome).toHaveCSS("z-index", "38");
 });
 
-test("reduced motion keeps the single poster foreground without loading leaf video", async ({ page }) => {
+test("reduced motion keeps the native poster without loading leaf video", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto("/matter");
 
+  const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
+  const poster = ambient.locator(".matter-ambient__poster");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
-  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveAttribute("data-active", "true");
+  await expect(ambient).toHaveAttribute("data-presentation", "poster");
+  await expect(poster).toHaveCSS("z-index", "37");
+  await expect(poster).toHaveCSS("opacity", "0.32");
+
+  await page.locator('[data-chrome-control="appearance"]').click();
+  await page.locator('[data-chrome-control="appearance"]').click();
+  await expect(page.getByRole("region", { name: "Thought material" }))
+    .toHaveAttribute("data-canvas-theme", "dark");
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+  await expect(poster).toHaveCSS("mix-blend-mode", "normal");
+  await expect(poster).toHaveCSS("opacity", "0.24");
+});
+
+test("explicit network cost keeps the poster and never requests motion assets", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "connection", {
+      configurable: true,
+      value: {
+        addEventListener() {},
+        effectiveType: "4g",
+        removeEventListener() {},
+        saveData: true,
+      },
+    });
+  });
+  const motionRequests: string[] = [];
+  page.on("request", (request) => {
+    if (/shadows-loop\.(?:mp4|webm)$/.test(new URL(request.url()).pathname)) {
+      motionRequests.push(request.url());
+    }
+  });
+  await page.goto("/matter");
+  await page.waitForTimeout(1_500);
+
+  const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
+  await expect(ambient).toHaveAttribute("data-presentation", "poster");
+  await expect(ambient.locator(".matter-ambient__poster, .matter-ambient__video")).toHaveCount(1);
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+  expect(motionRequests).toEqual([]);
+});
+
+test("a rejected native play request returns to one static poster", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as Window & { __matterAmbientPlayAttempts?: number }).__matterAmbientPlayAttempts = 0;
+    HTMLMediaElement.prototype.play = function rejectAmbientPlay() {
+      const target = window as Window & { __matterAmbientPlayAttempts?: number };
+      target.__matterAmbientPlayAttempts = (target.__matterAmbientPlayAttempts ?? 0) + 1;
+      return Promise.reject(new DOMException("blocked for proof", "NotAllowedError"));
+    };
+  });
+  await page.goto("/matter");
+
+  await expect.poll(() => page.evaluate(() => (
+    window as Window & { __matterAmbientPlayAttempts?: number }
+  ).__matterAmbientPlayAttempts ?? 0)).toBeGreaterThan(0);
+  const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
+  await expect(ambient).toHaveAttribute("data-presentation", "poster");
+  await expect(ambient.locator(".matter-ambient__poster, .matter-ambient__video")).toHaveCount(1);
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+});
+
+test("failed native motion sources return to one static poster", async ({ page }) => {
+  const failedSources: string[] = [];
+  await page.route("**/matter-ui/shadows-loop.*", async (route) => {
+    failedSources.push(new URL(route.request().url()).pathname);
+    await route.abort("failed");
+  });
+  await page.goto("/matter");
+
+  await expect.poll(() => failedSources.length).toBeGreaterThan(0);
+  const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
+  await expect(ambient).toHaveAttribute("data-presentation", "poster");
+  await expect(ambient.locator(".matter-ambient__poster, .matter-ambient__video")).toHaveCount(1);
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+});
+
+test("forced colors removes ambient paint without covering material or controls", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.goto("/matter");
+
+  const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
+  await expect(ambient).toHaveAttribute("data-presentation", "poster");
+  await expect(ambient.locator(".matter-ambient__poster")).toHaveCSS("display", "none");
+  await expect(ambient.locator(".matter-ambient__wash")).toHaveCSS("display", "none");
+  await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
+  await expect(page.locator('[data-thought-id="thought_fixture_root"] [data-thought-text-id]')).toBeVisible();
+  const settings = page.locator('[data-chrome-control="settings"]');
+  await expect(settings).toBeVisible();
+  expect(await settings.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return document.elementFromPoint(
+      bounds.left + bounds.width / 2,
+      bounds.top + bounds.height / 2,
+    )?.closest("[data-chrome-control]")?.getAttribute("data-chrome-control");
+  })).toBe("settings");
 });
 
 test("mobile canvas menu stays inside the paper and restores focus", async ({ page }) => {
@@ -417,8 +487,12 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   const paper = page.getByRole("region", { name: "Thought material" });
   const trigger = page.getByRole("button", { name: "打开 Matter 菜单" });
   const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
-  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveCount(1);
-  await expect(page.locator("[data-matter-ambient-foreground-pass]")).toBeHidden();
+  const mobileMedia = page.locator(
+    "[data-matter-ambient='leaf-shadows'] .matter-ambient__poster, "
+    + "[data-matter-ambient='leaf-shadows'] .matter-ambient__video",
+  );
+  await expect(mobileMedia).toHaveCount(1);
+  await expect(mobileMedia).toHaveCSS("z-index", "3");
   await expect(page.getByRole("button", { name: "关于", exact: true })).toBeHidden();
   await expect(trigger).toBeVisible();
   await expect(indexTrigger).toBeVisible();
@@ -430,18 +504,41 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   if (indexTriggerBox === null || menuTriggerBox === null || indexIconBox === null || menuIconBox === null) {
     throw new Error("narrow instrument geometry is not visible");
   }
-  expect(indexTriggerBox.width).toBeCloseTo(52, 1);
-  expect(menuTriggerBox.width).toBeCloseTo(52, 1);
+  expect(indexTriggerBox.width).toBeCloseTo(48, 1);
+  expect(indexTriggerBox.height).toBeCloseTo(48, 1);
+  expect(menuTriggerBox.width).toBeCloseTo(48, 1);
+  expect(menuTriggerBox.height).toBeCloseTo(48, 1);
   expect(indexTriggerBox.x + indexTriggerBox.width)
     .toBeCloseTo(menuTriggerBox.x + menuTriggerBox.width, 1);
   expect(menuTriggerBox.y - indexTriggerBox.y - indexTriggerBox.height)
-    .toBeGreaterThanOrEqual(5);
+    .toBeGreaterThanOrEqual(9);
   expect(menuTriggerBox.y - indexTriggerBox.y - indexTriggerBox.height)
-    .toBeLessThanOrEqual(8);
+    .toBeLessThanOrEqual(11);
   expect(indexIconBox.width).toBeCloseTo(20, 1);
   expect(indexIconBox.height).toBeCloseTo(20, 1);
   expect(menuIconBox.width).toBeCloseTo(20, 1);
   expect(menuIconBox.height).toBeCloseTo(20, 1);
+  const [indexPaint, menuPaint] = await Promise.all([
+    readSvgPaintBounds(indexTrigger.locator("svg")),
+    readSvgPaintBounds(trigger.locator("svg")),
+  ]);
+  expect(Math.abs(indexPaint.width - menuPaint.width)).toBeLessThanOrEqual(1);
+  for (const [target, paint] of [[indexTriggerBox, indexPaint], [menuTriggerBox, menuPaint]] as const) {
+    expect(Math.abs(target.x + target.width / 2 - paint.centerX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(target.y + target.height / 2 - paint.centerY)).toBeLessThanOrEqual(1);
+  }
+  const header = page.locator(".matter-header");
+  const [headerBox, topPaperBox] = await Promise.all([header.boundingBox(), paper.boundingBox()]);
+  if (headerBox === null || topPaperBox === null) throw new Error("compact top-band geometry is not visible");
+  await expect(header).toHaveCSS("top", "25.5px");
+  await expect(header).toHaveCSS("left", "18px");
+  expect(headerBox.y).toBeCloseTo(25.5, 1);
+  expect(headerBox.x).toBeCloseTo(18, 1);
+  expect(headerBox.height).toBeCloseTo(15, 1);
+  const topBandCenter = topPaperBox.y / 2;
+  expect(headerBox.y + headerBox.height / 2).toBeCloseTo(topBandCenter, 1);
+  expect(indexTriggerBox.y + indexTriggerBox.height / 2).toBeCloseTo(topBandCenter, 1);
+  expect(indexPaint.centerY).toBeCloseTo(topBandCenter, 1);
 
   await trigger.click();
   const sheet = page.getByRole("dialog", { name: "Matter" });
@@ -475,8 +572,181 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
+test("compact corner controls keep one tokenized geometry through the former 721px seam", async ({ page }) => {
+  await page.setViewportSize({ width: 740, height: 844 });
+  await page.goto("/matter");
+
+  const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
+  const menuTrigger = page.getByRole("button", { name: "打开 Matter 菜单" });
+  const header = page.locator(".matter-header");
+  const [indexBox, menuBox, indexIcon, menuIcon, headerBox, paperBox] = await Promise.all([
+    indexTrigger.boundingBox(),
+    menuTrigger.boundingBox(),
+    indexTrigger.locator("svg").boundingBox(),
+    menuTrigger.locator("svg").boundingBox(),
+    header.boundingBox(),
+    page.locator(".matter-document").boundingBox(),
+  ]);
+  if (indexBox === null || menuBox === null || indexIcon === null || menuIcon === null || headerBox === null || paperBox === null) {
+    throw new Error("compact control geometry is not visible at 740px");
+  }
+  for (const box of [indexBox, menuBox]) {
+    expect(box.width).toBeCloseTo(48, 1);
+    expect(box.height).toBeCloseTo(48, 1);
+  }
+  for (const box of [indexIcon, menuIcon]) {
+    expect(box.width).toBeCloseTo(20, 1);
+    expect(box.height).toBeCloseTo(20, 1);
+  }
+  const [indexPaint, menuPaint] = await Promise.all([
+    readSvgPaintBounds(indexTrigger.locator("svg")),
+    readSvgPaintBounds(menuTrigger.locator("svg")),
+  ]);
+  expect(Math.abs(indexPaint.width - menuPaint.width)).toBeLessThanOrEqual(1);
+  for (const [target, paint] of [[indexBox, indexPaint], [menuBox, menuPaint]] as const) {
+    expect(Math.abs(target.x + target.width / 2 - paint.centerX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(target.y + target.height / 2 - paint.centerY)).toBeLessThanOrEqual(1);
+  }
+  expect(indexBox.x + indexBox.width).toBeCloseTo(menuBox.x + menuBox.width, 1);
+  await expect(header).toHaveCSS("top", "25.5px");
+  await expect(header).toHaveCSS("left", "18px");
+  expect(headerBox.y).toBeCloseTo(25.5, 1);
+  expect(headerBox.x).toBeCloseTo(18, 1);
+  expect(headerBox.height).toBeCloseTo(15, 1);
+  const topBandCenter = paperBox.y / 2;
+  expect(headerBox.y + headerBox.height / 2).toBeCloseTo(topBandCenter, 1);
+  expect(indexBox.y + indexBox.height / 2).toBeCloseTo(topBandCenter, 1);
+  expect(indexPaint.centerY).toBeCloseTo(topBandCenter, 1);
+});
+
+test("tablet index and settings controls share the 40px instrument scale", async ({ page }) => {
+  await page.setViewportSize({ width: 767, height: 844 });
+  await page.goto("/matter");
+
+  const mobileIndexTrigger = page.getByRole("button", {
+    name: fixtureUiCopy.materialFiles.showMaterialFiles,
+  });
+  const [mobileIndexBox, mobileIndexIcon] = await Promise.all([
+    mobileIndexTrigger.boundingBox(),
+    mobileIndexTrigger.locator("svg").boundingBox(),
+  ]);
+  const mobileMenuIcon = await page.getByRole("button", { name: "打开 Matter 菜单" }).locator("svg").boundingBox();
+  if (mobileIndexBox === null || mobileIndexIcon === null || mobileMenuIcon === null) {
+    throw new Error("767px mobile glyph handoff is not visible");
+  }
+  expect(mobileIndexIcon.width).toBeCloseTo(20, 1);
+  expect(mobileMenuIcon.width).toBeCloseTo(20, 1);
+  const mobileHeader = page.locator(".matter-header");
+  const [mobileHeaderBox, mobileIndexPaint, mobilePaperBox] = await Promise.all([
+    mobileHeader.boundingBox(),
+    readSvgPaintBounds(page.getByRole("button", {
+      name: fixtureUiCopy.materialFiles.showMaterialFiles,
+    }).locator("svg")),
+    page.locator(".matter-document").boundingBox(),
+  ]);
+  if (mobileHeaderBox === null || mobilePaperBox === null) throw new Error("767px top-band geometry is not visible");
+  await expect(mobileHeader).toHaveCSS("top", "25.5px");
+  await expect(mobileHeader).toHaveCSS("left", "18px");
+  expect(mobileHeaderBox.y).toBeCloseTo(25.5, 1);
+  expect(mobileHeaderBox.x).toBeCloseTo(18, 1);
+  expect(mobileHeaderBox.height).toBeCloseTo(15, 1);
+  const mobileTopBandCenter = mobilePaperBox.y / 2;
+  expect(mobileHeaderBox.y + mobileHeaderBox.height / 2).toBeCloseTo(mobileTopBandCenter, 1);
+  expect(mobileIndexBox.y + mobileIndexBox.height / 2).toBeCloseTo(mobileTopBandCenter, 1);
+  expect(mobileIndexPaint.centerY).toBeCloseTo(mobileTopBandCenter, 1);
+
+  for (const width of [768, 834, 959]) {
+    await page.setViewportSize({ width, height: 844 });
+    const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
+    const settingsTrigger = page.locator('[data-chrome-control="settings"]');
+    await expect(indexTrigger).toBeVisible();
+    await expect(settingsTrigger).toBeVisible();
+    const header = page.locator(".matter-header");
+    const [indexBox, settingsBox, indexIcon, settingsIcon, headerBox] = await Promise.all([
+      indexTrigger.boundingBox(),
+      settingsTrigger.boundingBox(),
+      indexTrigger.locator("svg").boundingBox(),
+      settingsTrigger.locator("svg").boundingBox(),
+      header.boundingBox(),
+    ]);
+    if (indexBox === null || settingsBox === null || indexIcon === null || settingsIcon === null || headerBox === null) {
+      throw new Error(`tablet control geometry is not visible at ${width}px`);
+    }
+    for (const box of [indexBox, settingsBox]) {
+      expect(box.width).toBeCloseTo(40, 1);
+      expect(box.height).toBeCloseTo(40, 1);
+    }
+    for (const box of [indexIcon, settingsIcon]) {
+      expect(box.width).toBeCloseTo(14, 1);
+      expect(box.height).toBeCloseTo(14, 1);
+    }
+    if (width === 768) {
+      expect(mobileIndexIcon.width - indexIcon.width).toBeCloseTo(6, 1);
+      await expect(page.getByRole("button", { name: "打开 Matter 菜单" })).toBeHidden();
+    }
+    const [indexPaint, settingsPaint] = await Promise.all([
+      readSvgPaintBounds(indexTrigger.locator("svg")),
+      readSvgPaintBounds(settingsTrigger.locator("svg")),
+    ]);
+    expect(Math.abs(indexPaint.width - settingsPaint.width)).toBeLessThanOrEqual(1);
+    for (const [target, paint] of [[indexBox, indexPaint], [settingsBox, settingsPaint]] as const) {
+      expect(Math.abs(target.x + target.width / 2 - paint.centerX)).toBeLessThanOrEqual(1);
+      expect(Math.abs(target.y + target.height / 2 - paint.centerY)).toBeLessThanOrEqual(1);
+    }
+    expect(Math.abs(indexBox.x + indexBox.width / 2 - (settingsBox.x + settingsBox.width / 2)))
+      .toBeLessThanOrEqual(1);
+    await expect(header).toHaveCSS("top", "27px");
+    expect(headerBox.y).toBeCloseTo(27, 1);
+    expect(headerBox.height).toBeCloseTo(15, 1);
+    expect(Math.abs(indexPaint.centerY - (headerBox.y + headerBox.height / 2)))
+      .toBeLessThanOrEqual(1);
+  }
+
+  await page.setViewportSize({ width: 960, height: 844 });
+  await expect(page.locator(".material-files-toggle")).toHaveCount(0);
+});
+
 function expectInset(actual: number, expected: number): void {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1.1);
+}
+
+async function readSvgPaintBounds(svg: Locator) {
+  return svg.evaluate((root) => {
+    const shapes = Array.from(root.querySelectorAll<SVGGraphicsElement>(
+      "path,rect,circle,ellipse,line,polyline,polygon",
+    ));
+    let left = Number.POSITIVE_INFINITY;
+    let top = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    let bottom = Number.NEGATIVE_INFINITY;
+    for (const shape of shapes) {
+      const box = shape.getBBox();
+      const matrix = shape.getScreenCTM();
+      if (matrix === null) continue;
+      const strokeOutset = (Number.parseFloat(getComputedStyle(shape).strokeWidth) || 0) / 2;
+      for (const point of [
+        new DOMPoint(box.x - strokeOutset, box.y - strokeOutset),
+        new DOMPoint(box.x + box.width + strokeOutset, box.y - strokeOutset),
+        new DOMPoint(box.x + box.width + strokeOutset, box.y + box.height + strokeOutset),
+        new DOMPoint(box.x - strokeOutset, box.y + box.height + strokeOutset),
+      ]) {
+        const projected = point.matrixTransform(matrix);
+        left = Math.min(left, projected.x);
+        top = Math.min(top, projected.y);
+        right = Math.max(right, projected.x);
+        bottom = Math.max(bottom, projected.y);
+      }
+    }
+    if (![left, top, right, bottom].every(Number.isFinite)) {
+      throw new Error("SVG has no measurable painted shapes");
+    }
+    return {
+      centerX: (left + right) / 2,
+      centerY: (top + bottom) / 2,
+      height: bottom - top,
+      width: right - left,
+    };
+  });
 }
 
 async function readOpticalClearance(element: Locator) {

@@ -14,17 +14,17 @@
       "file": "app/icon1.png",
       "role": "browser-icon",
       "size": 16,
-      "profile": "lanczos3-stone-luma-usm-0.04/1",
-      "sha256": "950c5edc6d6ff56e97854f22855870d065d97488507368a25deac2303695600e",
-      "pixelSha256": "de5e37bcdc3f30161269b534e15655f191109284f884fb41fea0223d911bf762"
+      "profile": "slate-bone-60-lanczos3-stone-luma-usm-0.04/1",
+      "sha256": "0a2a10da1d922952bf421eb456f7e0ef20617d04624d8b19e3d466e4205b21bc",
+      "pixelSha256": "76b7266479be5e973f0d5bf3ab691cf595e2e5630c258890f99113936a2ec5c9"
     },
     {
       "file": "app/icon2.png",
       "role": "browser-icon",
       "size": 32,
-      "profile": "lanczos3-restrained-usm/1",
-      "sha256": "f45eef60a39469b9ff279f262894d4ef064a6cc390745f8de9ef30c0d3c7b822",
-      "pixelSha256": "1cf6de7b62e770ca9521d2c76c3f931d4c12e46c635798de0c66ca637b26a574"
+      "profile": "slate-bone-60-lanczos3-restrained-usm/1",
+      "sha256": "892cdd1567942f6e9c23abffc8e284afa4a5cbb98e6570065f2948633c415327",
+      "pixelSha256": "2f8adfd65fd96577cc4f95340ed16ad603b3261d70846c9a258addecad05f31b"
     },
     {
       "file": "app/apple-icon.png",
