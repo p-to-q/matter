@@ -76,8 +76,11 @@ geometry refinement through main and into one prerelease. This is a fresh
 Preview.44-only risk acceptance, not an extension of Preview.43. It preserves
 the existing live label, repair, inquiry, and voice gates; Elastic and Text Swap
 providers remain unavailable, while issues #34 and #68 remain open. Exact
-source `1847530` passed the complete local source and browser gates; main,
-Production, public-origin, tag, and GitHub-release receipts remain to be recorded.
+source `1847530` passed the complete local source and browser gates. Proof
+record `54a258f` then passed CI run `32761201277`, exact Production deployment
+`6068655811`, and the public no-store `0.2.0-preview.44` health boundary. The
+immutable tag and GitHub prerelease point to the final release-record Production
+SHA after that record-only main settles.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was

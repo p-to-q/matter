@@ -1,9 +1,9 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.44 is the current versioned
-source candidate; Preview.43 is the deployed public-origin release lineage and
-Preview.42 is its preceding immutable receipt.
+the complete generative product loop yet. Preview.44 is the current deployed
+public-origin release lineage; Preview.43 is its preceding immutable receipt
+and Preview.42 is the release before that.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -57,7 +57,7 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Candidate verification — 0.2.0-preview.44
+## Release verification — 0.2.0-preview.44
 
 Preview.44 keeps the complete Preview.43 Point-and-Talk authority and changes
 only its local rendering policy. The white direction field now has a smaller
@@ -91,8 +91,12 @@ browser proof          full Chromium: 116 passed, 15 explicitly historical or
                        cover zoom extrema, clipped index-edge placement, typed
                        and Voice mutation, Undo, cancellation, coarse bounds,
                        unusably narrow revocation, and hidden-focus refusal
-publication state      main promotion, Production settlement, public-origin
-                       parity, immutable tag, and GitHub prerelease are pending
+publication state      proof record `54a258f` passed CI run `32761201277` and
+                       exact Production deployment `6068655811`;
+                       matter.ptoq.io returned no-store 0.2.0-preview.44 with
+                       the unchanged truthful surface profile; the final
+                       record-only main is the immutable annotated tag and
+                       GitHub prerelease target after identical settlement
 ```
 
 ## Release verification — 0.2.0-preview.43
