@@ -21,7 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Restore Next build cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ github.workspace }}/.next/cache
           # Hash repository-owned inputs only. A workspace-wide glob here would
