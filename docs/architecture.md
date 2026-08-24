@@ -254,6 +254,33 @@ the wire contract. Server boundaries reject values outside that allow-list
 rather than accepting an arbitrary locale string. Adding a locale therefore
 requires one config entry, UI copy, and focused server/client tests.
 
+The preview seed is a narrow composition exception, not a second locale owner.
+The initial graph contains the simplified-Chinese seed and five short Branch
+floors; the other visible seed copy and its journal migrator share one hashed
+post-mount loading path. After that path is ready, persistence hydration has settled,
+and admission is idle, the application may re-encode only product-owned seed
+passages whose tree id, durable node id, original timestamps, canonical copy,
+and untouched text history prove their provenance. The Store invokes the pure
+migrator against its current state, the tree engine applies the material
+change, and structural Undo/Redo mementos are rebased and replay-validated
+before tree and journal are published together. An edited seed, a Branch
+result, admitted speech, model output, or any other added material fails closed
+and remains byte-for-byte unchanged. No locale field, tag, or value is
+persisted; the localized seed text is ordinary material and therefore appears
+in the tree, structural history mementos, and exports. The resulting revision
+also makes every pre-change layout, lasso, and turn address stale; segmentation
+and address construction remain locale-independent.
+
+Branch composition has one explicit delivery tier. A small deterministic
+five-locale floor is present in the initial client graph and keeps the Store
+action synchronous and undoable. Parent-specific alternatives are an
+interaction-only enhancement loaded after mount; before they arrive, or if the
+resolver fails or returns invalid copy, the same click commits exactly one floor
+sentence in the locale active at that click. Availability may therefore change
+which closed sentence a first Branch receives, even for the same tree and
+locale. Once committed, that sentence is ordinary material and never changes
+when the enhancement or another locale later arrives.
+
 | Lifetime | Owned state |
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |

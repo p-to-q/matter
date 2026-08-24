@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import styles from "./AmbientWorkbench.module.css";
 import { clientMatterBasePath } from "../config/base-path";
-import { AmbientForegroundPass } from "./AmbientForegroundPass";
 import {
   shouldPresentAmbientMotion,
   type AmbientConnectionHint,
@@ -26,22 +25,24 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
   const [motionAllowed, setMotionAllowed] = useState(false);
   const [motionFailed, setMotionFailed] = useState(false);
   const [motionReady, setMotionReady] = useState(false);
-  const [poster, setPoster] = useState<HTMLImageElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const basePath = clientMatterBasePath();
   const assetPath = (name: string) => `${basePath}/matter-ui/${name}`;
   const posterSource = assetPath("shadows-poster.jpg");
+  const motionPresented = enabled && motionAllowed && motionReady && !motionFailed;
   const rootClassName = ["matter-ambient", styles.root, className]
     .filter(Boolean)
     .join(" ");
 
   useEffect(() => {
     const motionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const forcedColorsPreference = window.matchMedia("(forced-colors: active)");
     const connection = (navigator as Navigator & {
       connection?: AmbientConnectionHint & Partial<EventTarget>;
     }).connection;
     const update = () => setMotionAllowed(shouldPresentAmbientMotion({
       connection,
+      forcedColors: forcedColorsPreference.matches,
       reducedMotion: motionPreference.matches,
     }));
     update();
@@ -49,17 +50,25 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
       addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
       removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
     };
+    const legacyForcedColorsPreference = forcedColorsPreference as MediaQueryList & {
+      addListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+      removeListener?: (listener: (event: MediaQueryListEvent) => void) => void;
+    };
     if (typeof motionPreference.addEventListener === "function") {
       motionPreference.addEventListener("change", update);
+      forcedColorsPreference.addEventListener("change", update);
     } else {
       legacyMotionPreference.addListener?.(update);
+      legacyForcedColorsPreference.addListener?.(update);
     }
     connection?.addEventListener?.("change", update);
     return () => {
       if (typeof motionPreference.removeEventListener === "function") {
         motionPreference.removeEventListener("change", update);
+        forcedColorsPreference.removeEventListener("change", update);
       } else {
         legacyMotionPreference.removeListener?.(update);
+        legacyForcedColorsPreference.removeListener?.(update);
       }
       connection?.removeEventListener?.("change", update);
     };
@@ -83,79 +92,69 @@ export function AmbientWorkbench({ className, enabled = true, navigationActive =
   }, [enabled, motionAllowed, motionFailed, motionReady]);
 
   useEffect(() => {
-    if (!enabled || !motionAllowed || !motionReady) return;
+    if (!motionPresented) return;
     const video = videoRef.current;
     if (video === null) return;
+    let disposed = false;
     const followVisibility = () => {
       if (!enabled || document.hidden) video.pause();
-      else void video.play().catch(() => undefined);
+      else void video.play().catch((error: unknown) => {
+        // A visibility pause may abort an in-flight play request. Any other
+        // rejection hands ownership back to the static poster for this mount.
+        if (disposed || videoRef.current !== video) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setMotionFailed(true);
+        setMotionReady(false);
+      });
     };
     followVisibility();
     document.addEventListener("visibilitychange", followVisibility);
-    return () => document.removeEventListener("visibilitychange", followVisibility);
-  }, [enabled, motionAllowed, motionReady]);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const posterImage = new Image();
-    posterImage.decoding = "async";
-    posterImage.onload = () => {
-      setPoster(posterImage);
-    };
-    posterImage.src = posterSource;
     return () => {
-      posterImage.onload = null;
+      disposed = true;
+      document.removeEventListener("visibilitychange", followVisibility);
     };
-  }, [enabled, posterSource]);
+  }, [enabled, motionPresented]);
 
   useEffect(() => {
     const video = videoRef.current;
     if (video === null) return;
     video.playbackRate = navigationActive ? NAVIGATION_PLAYBACK_RATE : BASE_PLAYBACK_RATE;
-  }, [motionReady, navigationActive]);
+  }, [motionPresented, navigationActive]);
 
   return (
-    <>
-      <div
-        aria-hidden="true"
-        className={rootClassName}
-        data-fx={enabled ? "on" : "off"}
-        data-matter-ambient="leaf-shadows"
-      >
+    <div
+      aria-hidden="true"
+      className={rootClassName}
+      data-fx={enabled ? "on" : "off"}
+      data-matter-ambient="leaf-shadows"
+      data-presentation={motionPresented ? "video" : "poster"}
+    >
+      {motionPresented ? (
+        <video
+          aria-hidden="true"
+          className={`matter-ambient__video ${styles.video}`}
+          loop
+          muted
+          playsInline
+          poster={posterSource}
+          preload="none"
+          ref={videoRef}
+          tabIndex={-1}
+          onError={() => {
+            setMotionFailed(true);
+            setMotionReady(false);
+          }}
+        >
+          <source src={assetPath("shadows-loop.webm")} type="video/webm" />
+          <source src={assetPath("shadows-loop.mp4")} type="video/mp4" />
+        </video>
+      ) : (
         <div
           className={`matter-ambient__poster ${styles.poster}`}
           style={{ backgroundImage: `url("${posterSource}")` }}
         />
-        {enabled && motionAllowed && motionReady ? (
-          <video
-            aria-hidden="true"
-            autoPlay
-            className={`matter-ambient__video ${styles.video}`}
-            loop
-            muted
-            playsInline
-            poster={posterSource}
-            preload="none"
-            ref={videoRef}
-            tabIndex={-1}
-            onError={() => {
-              setMotionFailed(true);
-              setMotionReady(false);
-            }}
-          >
-            <source src={assetPath("shadows-loop.webm")} type="video/webm" />
-            <source src={assetPath("shadows-loop.mp4")} type="video/mp4" />
-          </video>
-        ) : null}
-        <div className={`matter-ambient__wash ${styles.wash}`} />
-      </div>
-      {enabled ? (
-        <AmbientForegroundPass
-          motionReady={motionReady}
-          poster={poster}
-          videoRef={videoRef}
-        />
-      ) : null}
-    </>
+      )}
+      <div className={`matter-ambient__wash ${styles.wash}`} />
+    </div>
   );
 }

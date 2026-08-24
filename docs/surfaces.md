@@ -61,10 +61,13 @@ master in [`../features/matter/brand/assets/`](../features/matter/brand/assets/)
 owns the silhouette, 68% scale, palette, mineral background, and quiet internal
 relief. Numbered static PNGs under `app/` publish exact 16, 32, 192, and 512 px
 browser and installation sizes; `app/apple-icon.png` publishes the exact 180 px
-Apple size. A smaller output may receive bounded raster-only treatment for its
-declared pixel grid, but it cannot redraw or recolour the mark, alter its scale,
-or become a second master. The `p → q / matter` footer lockup remains the
-separate parent identity. The manifest keeps `theme_color` on the field grey
+Apple size. The browser-only 16 and 32 px outputs use the same silhouette at a
+target-specific 60% composition; larger Apple and installation assets retain
+the master's 68%. A smaller output may receive bounded raster-only treatment
+for its declared pixel grid, but it cannot redraw or recolour the mark, become
+a second master, or change any larger platform asset. The `p → q / matter`
+footer lockup remains the separate parent identity. The manifest keeps
+`theme_color` on the field grey
 rather than the icon's ink: it colours the mobile address bar, which must meet
 the top of the page, not the tab strip.
 

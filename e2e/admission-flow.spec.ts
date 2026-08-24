@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import {
+  clickExposedMaterial,
+} from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const parentId = "thought_fixture_imagined_lives";
@@ -42,10 +45,14 @@ for (const viewport of [
       });
     });
 
-    await page
-      .locator(`[data-thought-id="${parentId}"]`)
-      .locator("[data-thought-text-id]")
-      .click();
+    if (viewport.width < 960) {
+      await page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`).click();
+    } else {
+      await clickExposedMaterial(
+        page,
+        page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`),
+      );
+    }
     await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveAttribute(
       "data-selected",
       "true",
@@ -220,10 +227,10 @@ test("reduced motion presents repaired text whole without a reveal sequence", as
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page
-    .locator(`[data-thought-id="${parentId}"]`)
-    .locator("[data-thought-text-id]")
-    .click();
+  await clickExposedMaterial(
+    page,
+    page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`),
+  );
   await page.getByRole("button", {
     name: fixtureUiCopy.voiceTool.recordBelowSelectedMaterial,
     exact: true,

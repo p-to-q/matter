@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
@@ -24,7 +25,7 @@ for (const viewport of [
     const childId = after.find((nodeId) => nodeId !== null && !before.includes(nodeId));
     if (childId === undefined || childId === null) throw new Error("fixture child was not created");
     const child = page.locator(`[data-thought-id="${childId}"]`);
-    await child.locator("[data-thought-text-id]").click();
+    await selectThoughtThroughMaterialIndex(page, childId);
     await expect(child).toHaveAttribute("data-selected", "true");
 
     await page.keyboard.press("Delete");

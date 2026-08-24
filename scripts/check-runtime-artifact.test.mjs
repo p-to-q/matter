@@ -23,6 +23,8 @@ function validMetrics() {
     initialAssets: ["chunks/app/page.12345678.js", "css/app.12345678.css"],
     wasmAssets: ["media/ort-wasm.12345678.wasm"],
     fontAssets: ["media/12345678-s.woff2", "media/abcdef12-s.p.woff2"],
+    seedLocalizationAssets: ["chunks/seed-localization.12345678.js"],
+    seedMaterialCopyAssets: ["chunks/seed-localization.12345678.js"],
     rootStatic: true,
     prerenderedApiRoutes: [],
     forbiddenTraceFiles: [],
@@ -80,6 +82,44 @@ test("requires cache-safe hashed WASM and next/font output", () => {
   assert.match(failures, /not emitted through next\/font/u);
 });
 
+test("keeps seed localization in exactly one lazy browser chunk", () => {
+  const missing = validMetrics();
+  missing.seedLocalizationAssets = [];
+  assert.match(
+    inspectRuntimeArtifact(missing).failures.join("\n"),
+    /Expected one lazy seed-localization asset/u,
+  );
+
+  const initial = validMetrics();
+  initial.initialAssets.push(initial.seedLocalizationAssets[0]);
+  assert.match(
+    inspectRuntimeArtifact(initial).failures.join("\n"),
+    /Seed localization entered the initial graph/u,
+  );
+
+  const missingCopy = validMetrics();
+  missingCopy.seedMaterialCopyAssets = [];
+  assert.match(
+    inspectRuntimeArtifact(missingCopy).failures.join("\n"),
+    /Expected one lazy seed-material-copy asset/u,
+  );
+
+  const splitCopy = validMetrics();
+  splitCopy.seedMaterialCopyAssets = ["chunks/seed-copy.abcdef12.js"];
+  assert.match(
+    inspectRuntimeArtifact(splitCopy).failures.join("\n"),
+    /must share one lazy browser asset/u,
+  );
+
+  const unhashed = validMetrics();
+  unhashed.seedLocalizationAssets = ["chunks/seed-localization.js"];
+  unhashed.seedMaterialCopyAssets = ["chunks/seed-localization.js"];
+  assert.match(
+    inspectRuntimeArtifact(unhashed).failures.join("\n"),
+    /not content-hashed for immutable caching/u,
+  );
+});
+
 test("reads root and server traces while budgeting every public asset", async () => {
   const root = await mkdtemp(join(tmpdir(), "matter-runtime-artifact-"));
   try {
@@ -106,6 +146,10 @@ test("reads root and server traces while budgeting every public asset", async ()
         '<script src="/_next/static/chunks/app.12345678.js"></script>',
       ),
       writeFile(join(root, ".next/static/chunks/app.12345678.js"), "console.log('matter')"),
+      writeFile(
+        join(root, ".next/static/chunks/seed-localization.12345678.js"),
+        "matter-seeded-session-localization matter-seeded-material-copy",
+      ),
       writeFile(join(root, ".next/static/media/ort.12345678.wasm"), "wasm"),
       writeFile(join(root, ".next/static/media/12345678-s.woff2"), "font"),
       writeFile(join(root, ".next/server/app/icon1.png.body"), "tab-icon"),
@@ -151,6 +195,10 @@ test("reads root and server traces while budgeting every public asset", async ()
       false,
       ".next/cache must not become a runtime-trace input",
     );
+    assert.deepEqual(metrics.seedLocalizationAssets, [
+      "chunks/seed-localization.12345678.js",
+    ]);
+    assert.deepEqual(metrics.seedMaterialCopyAssets, metrics.seedLocalizationAssets);
     const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
     assert.match(failures, /docs\/root\.md/u);
     assert.match(failures, /\.env\.local/u);

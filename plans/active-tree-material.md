@@ -40,8 +40,9 @@ Outcome:    browser tabs, Apple touch surfaces, and installed Matter windows
             use one recognisable Slate / Bone stone identity
 Boundary:   one frozen 1024 px raster master, exact platform PNG outputs,
             Next metadata conventions, manifest references, and asset checks
-Invariants: the stone remains 68% of the square; master background and stone
-            interior are not sharpened; small-size raster treatment cannot
+Invariants: the frozen master and 180/192/512 outputs remain at 68%; browser-only
+            16/32 outputs use the same silhouette at 60%; master background and
+            stone interior are not sharpened; small-size raster treatment cannot
             redraw the mark or change its palette; p → q remains the separate
             parent identity; no runtime component, document, or interaction moves
 Proof:      exact PNG type/dimension/digest checks; production metadata and
@@ -50,6 +51,76 @@ Proof:      exact PNG type/dimension/digest checks; production metadata and
             dedicated-domain root shape
 Non-goals:  page chrome, the p → q footer lockup, social cards, a dependency,
             runtime image filtering, or a new responsive or product surface
+```
+
+## Active correction — paper-bounded narrow index disclosure
+
+State: implemented locally; focused source and browser proof complete; not released.
+
+```text
+Outcome:    below 960px the index emerges from the paper's left edge, inherits
+            both left paper corners, and pushes the complete material plane by
+            its exact exposed width; responsive corner controls remain quiet
+Boundary:   MaterialFiles disclosure presentation, one paper clip wrapper, one
+            render-edge material plane, NodeActionLens positioning, wheel origin,
+            responsive CSS tokens, and focused browser/static proof
+Invariants: paper geometry and viewport camera do not change on disclosure; tree,
+            pure layout, history and persistence never receive drawer state;
+            CanvasChrome remains paper-anchored; NodeActionLens receives exactly
+            one plane transform; Escape/inert/focus return and desktop docking
+            remain unchanged; 768–959 uses paired 40px targets and <=767 paired
+            48px targets; tablet Sidebar/Gear keep the existing 14px gear scale,
+            while the gear-free mobile Sidebar/Menu pair shares a deliberate
+            20px scale; all marks keep centred axes with no scale/pulse motion;
+            mobile brand and upper target share the 66px top-band centre while
+            the brand keeps its 18px horizontal inset
+Proof:      320/390 narrow geometry, rounded-corner hit testing, exact plane/text
+            displacement and inverse, unchanged camera, pointer-centred wheel
+            origin, open/close lens bounds, reduced-motion-compatible transition,
+            959/960 resize reset, preserved narrow attention centre; 390/740 and
+            767/768/834/959 control target/axis receipts plus SVG getBBox/CTM/stroke
+            painted-bounds comparison and explicit 20px-to-14px role handoff;
+            static shared-token and full type proof
+Non-goals:  index information architecture or theme, automatic close after row
+            choice, camera recenter/reset, persisted disclosure, RTL mirroring,
+            a new safe-area system, language content, favicon, or protocol work
+```
+
+## Active correction — system seed follows the five-locale interface
+
+State: implemented locally; focused source and browser proof complete; not released.
+
+```text
+Outcome:    changing among zh-CN, en-US, ja-JP, de-DE, and zh-TW immediately
+            re-encodes the untouched built-in example and its subtitles in the
+            selected language; human, voice, model, imported, and created Branch
+            material keeps the exact text with which it entered the document
+Boundary:   one exhaustive five-locale seed-copy catalog, strict seed provenance,
+            one atomic tree/history relocalization boundary, hydration/admission
+            coordination, a lazy visible-copy/history-migrator chunk,
+            locale-at-creation Branch copy, one initial-graph locale floor plus
+            lazy parent-specific alternatives, and focused proof
+Invariants: no locale field, tag, or value enters ThoughtTree, history, archive,
+            or export; localized seed text is ordinary material at those
+            boundaries; only the tree engine changes durable text; ambiguous,
+            edited, or non-canonical provenance fails closed; structural Undo
+            and Redo replay exactly after rebase; a new revision invalidates
+            pre-change selections and turns; address construction remains
+            locale-independent; Branch remains one synchronous undoable Store
+            action before, after, or without the optional interaction chunk;
+            resolver failure or invalid copy falls back without partial commit;
+            enhancement timing may choose a different closed sentence, but a
+            committed sentence never changes
+Proof:      exhaustive catalog and canonical-copy tests; pristine/idempotent/
+            corrupt-history matrix; move and removed-subtree Undo/Redo replay;
+            title-history protection; old IndexedDB hydration and document-epoch
+            relocalization; byte-exact user/model/voice preservation; real-browser
+            five-language root/subtitle switch and reload receipt; absent and
+            throwing Branch resolver floor proofs; production initial-graph budget;
+            one shared hashed seed-copy/localization chunk proven absent from initial assets
+Non-goals:  translating person-authored material, adding a sixth locale,
+            locale-tagged document nodes, render-only translated facades,
+            machine translation, or native-language editorial certification
 ```
 
 ## Current delivery lens
@@ -94,32 +165,37 @@ Non-goals:  a card or gradient, material filtering, per-glyph fading, a new
             responsive breakpoint, or any Ask Matter protocol/state change
 ```
 
-## Active correction — paper-bounded foreground leaf pass
+## Active correction — native leaf media across quiet corner Chrome
 
 State: implemented locally; focused source and browser proof complete; not released.
 
 ```text
-Outcome:    one continuous leaf atmosphere passes over the paper's upper-right,
-            bottom-right, and lower-left copy without rectangular seams or a
-            second shadow exposure
-Boundary:   one paper-sized render-edge canvas receives the already-decoded leaf
-            frame and temporarily replaces the lower media presentation; it
-            owns no document, preference, pointer, camera, or Chrome state
+Outcome:    one continuous native leaf atmosphere passes over the paper's
+            upper-right, bottom-right, and lower-left quiet Chrome without
+            a second shadow exposure; the complete paper and its generated
+            text retain the calibrated 3000 energy; active sheets rise above it
+Boundary:   one paper-contained native poster or video owns the ambient media
+            slot; its wash remains at the base plane while the media alone is a
+            pointer-transparent desktop plane; neither owns document,
+            preference, pointer, camera, or Chrome state; the paper clips but
+            never scrolls
 Invariants: the paper remains the clipping and stacking boundary; the material
             index, header, tool rail, lasso, and mobile sheet remain outside the
-            foreground pass; an open menu or dialog raises the one canvas-chrome
-            context above the pass without replacing the media presentation;
-            the two existing backdrop-blur planes remain unchanged and are not
-            sampled through
-Proof:      pure cover-crop matrix; browser proof that one full-paper frame
-            replaces rather than duplicates base media, remains paper-contained
-            and pointer-transparent, stays stable across settings, language,
-            inquiry, and light/dark changes while open chrome rises above it,
-            falls back to the poster under reduced motion, and disappears at
-            the mobile handoff
-Non-goals:  a second video decoder, a global shadow layer, blur or filter over
-            external workbench chrome, new persisted state, a new preference,
-            or changed corner control geometry
+            native media plane; the pointer-transparent media crosses quiet
+            corner Chrome and lower-left guidance without owning their input;
+            an open menu or dialog raises the complete Chrome context above it;
+            focus cannot scroll absolute paper planes; forced colors hides all
+            ambient paint; existing backdrop-blur planes remain transparent
+Proof:      browser proof that poster plus video count is always one, remains
+            paper-contained and pointer-transparent, and is stable across
+            settings, language, inquiry, light/dark and media failure; quiet
+            controls remain hit-testable while active sheets rise; fixed-frame
+            comparison uses the archived Canvas calibration as the reference;
+            mobile restores the low media plane, focus keeps scrollTop at zero,
+            and motion or network-cost preferences keep the poster
+Non-goals:  a canvas frame copy, a second video decoder, a global shadow layer,
+            blur or filter over external workbench chrome, new persisted state,
+            a new preference, or changed corner control geometry
 ```
 
 ## Active correction — one local language interaction

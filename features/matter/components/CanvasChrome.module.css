@@ -11,7 +11,7 @@
   --chrome-answer: rgb(245 245 242 / 76%);
   --chrome-answer-fg: #161d27;
   position: absolute;
-  z-index: 36;
+  z-index: var(--paper-corner-chrome-z);
   inset: 0;
   color: var(--chrome-text);
   font: 400 14px/20px var(--mono);
@@ -32,8 +32,10 @@
   --chrome-answer-fg: #f0f2f3;
 }
 
+/* Quiet corner controls stay inside the texture. Open sheets rise as one
+   interaction surface; the pointer-transparent leaf pass never owns input. */
 .root:not([data-overlay="none"]) {
-  z-index: 38;
+  z-index: var(--paper-active-chrome-z);
 }
 
 .root button {
@@ -803,18 +805,18 @@
     z-index: 5;
     top: 0;
     right: 0;
-    display: flex;
-    width: 52px;
-    height: 56px;
-    align-items: center;
-    padding: 0 16px;
+    display: grid;
+    width: var(--compact-corner-target);
+    height: var(--compact-corner-target);
+    padding: 0;
+    place-items: center;
     color: var(--chrome-muted) !important;
     cursor: pointer;
   }
 
   .mobileTrigger svg {
-    width: 20px;
-    height: 20px;
+    width: var(--mobile-corner-glyph);
+    height: var(--mobile-corner-glyph);
   }
 
   .infoDialog {
@@ -833,6 +835,22 @@
 @media (min-width: 768px) {
   .mobileSheet {
     display: none;
+  }
+}
+
+/* In the drawer-width shell, the external index entry and this internal corner
+   action use one compact instrument scale. Negative margin preserves the
+   established About/settings group axis while enlarging only the hit target. */
+@media (min-width: 768px) and (max-width: 959px) {
+  .gearButton {
+    width: 40px;
+    height: 40px;
+    margin: -13px -17px -13px -9px;
+  }
+
+  .gearButton svg {
+    width: var(--corner-instrument-glyph);
+    height: var(--corner-instrument-glyph);
   }
 }
 

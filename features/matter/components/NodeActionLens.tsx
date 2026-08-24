@@ -46,6 +46,7 @@ export type NodeActionLensProps = Readonly<{
   interaction: "idle" | "pending";
   navigation: NavigationState;
   onIntent: (nodeId: string, intent: ToolIntent) => void;
+  positioningRef: RefObject<HTMLElement | null>;
   tree: ThoughtTree;
 }>;
 
@@ -64,6 +65,7 @@ export function NodeActionLens({
   interaction,
   navigation,
   onIntent,
+  positioningRef,
   tree,
 }: NodeActionLensProps) {
   const [coarse, setCoarse] = useState(false);
@@ -254,6 +256,7 @@ export function NodeActionLens({
 
     const update = () => {
       const paperRect = paper.getBoundingClientRect();
+      const positioningRect = positioningRef.current?.getBoundingClientRect() ?? paperRect;
       const textRect = measureFirstLineInkRect(text);
       // The field belongs to this passage, so it is sized from this passage's
       // own type rather than one fixed control size for the whole tree.
@@ -273,8 +276,11 @@ export function NodeActionLens({
       const next = result === null
         ? null
         : {
-            left: result.left - paperRect.left,
-            top: result.top - paperRect.top,
+            // The lens is rendered inside the translated material plane. Its
+            // placement is constrained in paper/client space, then expressed
+            // in that plane's local space so the transform is applied once.
+            left: result.left - positioningRect.left,
+            top: result.top - positioningRect.top,
             metrics,
             relation: result.relation,
             materialCorner: result.materialCorner,
@@ -293,12 +299,20 @@ export function NodeActionLens({
     const resizeObserver = new ResizeObserver(update);
     resizeObserver.observe(paper);
     resizeObserver.observe(text);
+    const positioningElement = positioningRef.current;
+    const finishPositioningTransition = (event: TransitionEvent) => {
+      if (event.target === positioningElement && event.propertyName === "transform") update();
+    };
+    positioningElement?.addEventListener("transitioncancel", finishPositioningTransition);
+    positioningElement?.addEventListener("transitionend", finishPositioningTransition);
     window.addEventListener("resize", update);
     return () => {
       resizeObserver.disconnect();
+      positioningElement?.removeEventListener("transitioncancel", finishPositioningTransition);
+      positioningElement?.removeEventListener("transitionend", finishPositioningTransition);
       window.removeEventListener("resize", update);
     };
-  }, [activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, tools.length]);
+  }, [activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, positioningRef, tools.length]);
 
   useLayoutEffect(() => {
     if (placement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;

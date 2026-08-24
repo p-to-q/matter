@@ -380,8 +380,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [props, tree]);
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
+  const materialPlaneRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [indexOverlayOpen, setIndexOverlayOpen] = useState(false);
   const layoutEpochRef = useRef(0);
   const typographyAuthorityRef = useRef<TypographyHeightAuthority | null>(null);
   const viewportWindowEpochRef = useRef(0);
@@ -1885,9 +1887,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
       if (canvasMode !== "pan") return;
       event.preventDefault();
-      const paper = documentRef.current;
-      if (paper === null) return;
-      const paperRect = paper.getBoundingClientRect();
+      const materialPlane = materialPlaneRef.current;
+      if (materialPlane === null) return;
+      const materialPlaneRect = materialPlane.getBoundingClientRect();
       // Wheel navigation has no persistent gesture state, so give atmosphere
       // one short pulse and let repeated events extend it without polling.
       indexCenterRequestRef.current = null;
@@ -1901,8 +1903,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
       setViewport((current) => {
         const result = reduceCanvasViewport(current, {
           type: "wheel",
-          surfaceX: event.clientX - paperRect.left - paper.clientLeft,
-          surfaceY: event.clientY - paperRect.top - paper.clientTop,
+          // The narrow drawer translates material without mutating its camera.
+          // Sample the translated render plane so pointer-centred zoom remains
+          // anchored to the material people can actually see.
+          surfaceX: event.clientX - materialPlaneRect.left,
+          surfaceY: event.clientY - materialPlaneRect.top,
           deltaX: event.deltaX,
           deltaY: event.deltaY,
           deltaMode: normalizeDeltaMode(event.deltaMode),
@@ -2235,8 +2240,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         onOpenOverlay={() => {
           abortFixedExpansion();
+          indexCenterRequestRef.current = null;
+          interruptIndexCameraMotion();
           if (lasso.active) exitLasso();
         }}
+        onOverlayChange={setIndexOverlayOpen}
         onRenameNode={labels.rename}
         onRenameDocument={(title) => {
           abortFixedExpansion();
@@ -2328,6 +2336,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         data-leaf-fx={canvasPreferences.preferences.leafFx ? "on" : "off"}
         ref={documentRef}
       >
+        <div
+          className="matter-material-plane"
+          data-index-disclosure={indexOverlayOpen ? "open" : "closed"}
+          ref={materialPlaneRef}
+        >
         {lasso.selections.length > 1 ? (
           <div
             aria-live="polite"
@@ -2416,11 +2429,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
             canvasRef={canvasRef}
             documentRef={documentRef}
             enabled
-            geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}`}
+            geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
             interaction="idle"
             key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
             navigation={navigation}
             onIntent={handleNodeActionIntent}
+            positioningRef={materialPlaneRef}
             tree={tree}
           />
         ) : null}
@@ -2435,6 +2449,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         >
           <p className="matter-guidance__next">{guidance.text}</p>
         </footer>
+        </div>
         <CanvasChrome
           {...canvasPreferences}
           inquiryContext={projectInquiryPayload}

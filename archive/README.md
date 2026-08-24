@@ -50,6 +50,14 @@ interaction. Both carry completion receipts. They are the record of how the
 Superseded by:
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
 
+### `canvas-foreground-2026-08-24/`
+
+A short recovery index for the superseded Canvas foreground experiment. The
+complete runnable state remains in Git rather than being duplicated here.
+
+Superseded by: the single-source native ambient media path on
+`codex/native-ambient-foreground`.
+
 ## Rule
 
 Archive rather than delete when the reasoning is worth keeping. Delete when the

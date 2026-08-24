@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import {
+  hoverExposedMaterial,
+  selectThoughtThroughMaterialIndex,
+} from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 import { CORNER_GLYPH_DESCENT } from "../features/matter/components/node-handle-position";
 
@@ -435,6 +439,7 @@ test("held-aside material never exposes local actions", async ({ page }) => {
   if (heldId === null) throw new Error("fixture held-aside branch is missing");
   const heldThought = page.locator(`[data-thought-id="${heldId}"]`);
   const heldText = heldThought.locator("[data-thought-text-id]");
+  await selectThoughtThroughMaterialIndex(page, heldId);
   await heldText.hover();
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
   await heldRow.hover();
@@ -471,15 +476,17 @@ test("the 2,000-node canvas still mounts one ruling and one delegated action len
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter/performance");
   await expect(page.locator("[data-thought-id]")).toHaveCount(2_000);
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await expect(page.locator("[data-canvas-ruling]")).toHaveCount(1);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
 
   const first = page.locator('[data-thought-id="perf_thought_0000"] [data-thought-text-id]');
   const next = page.locator('[data-thought-id="perf_thought_0001"] [data-thought-text-id]');
-  await first.hover();
+  await hoverExposedMaterial(page, first);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
   await expect(page.locator("[data-node-action-lens] button")).toHaveCount(2);
-  await next.hover();
+  await expect(page.locator("[data-node-action-lens]")).toHaveAttribute("data-node-id", "perf_thought_0000");
+  await hoverExposedMaterial(page, next);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
   await expect(page.locator("[data-node-action-lens]")).toHaveAttribute("data-node-id", "perf_thought_0001");
 });

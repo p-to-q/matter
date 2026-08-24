@@ -31,6 +31,8 @@ const VISUAL_MEDIA = Object.freeze([
   "public/matter-ui/shadows-loop.webm",
   "public/matter-ui/shadows-poster.jpg",
 ]);
+const SEED_LOCALIZATION_CHUNK_SENTINEL = "matter-seeded-session-localization";
+const SEED_MATERIAL_COPY_CHUNK_SENTINEL = "matter-seeded-material-copy";
 
 export function inspectRuntimeArtifact(metrics) {
   const failures = [];
@@ -56,6 +58,39 @@ export function inspectRuntimeArtifact(metrics) {
     if (/matter-local-transcription|\.wasm(?:$|\?)/u.test(asset)) {
       failures.push(`The local speech fallback entered the initial graph through ${asset}.`);
     }
+  }
+  if (metrics.seedLocalizationAssets.length !== 1) {
+    failures.push(
+      `Expected one lazy seed-localization asset; found ${metrics.seedLocalizationAssets.length}.`,
+    );
+  }
+  for (const asset of metrics.seedLocalizationAssets) {
+    if (metrics.initialAssets.includes(asset)) {
+      failures.push(`Seed localization entered the initial graph through ${asset}.`);
+    }
+    if (!isHashedJavaScriptAsset(asset)) {
+      failures.push(`Seed localization asset ${asset} is not content-hashed for immutable caching.`);
+    }
+  }
+  if (metrics.seedMaterialCopyAssets.length !== 1) {
+    failures.push(
+      `Expected one lazy seed-material-copy asset; found ${metrics.seedMaterialCopyAssets.length}.`,
+    );
+  }
+  for (const asset of metrics.seedMaterialCopyAssets) {
+    if (metrics.initialAssets.includes(asset)) {
+      failures.push(`Seed material copy entered the initial graph through ${asset}.`);
+    }
+    if (!isHashedJavaScriptAsset(asset)) {
+      failures.push(`Seed material copy asset ${asset} is not content-hashed for immutable caching.`);
+    }
+  }
+  if (
+    metrics.seedLocalizationAssets.length === 1 &&
+    metrics.seedMaterialCopyAssets.length === 1 &&
+    metrics.seedLocalizationAssets[0] !== metrics.seedMaterialCopyAssets[0]
+  ) {
+    failures.push("Seed material copy and its relocalizer must share one lazy browser asset.");
   }
   if (metrics.wasmAssets.length !== 1) {
     failures.push(`Expected one lazy WASM runtime asset; found ${metrics.wasmAssets.length}.`);
@@ -114,6 +149,18 @@ export async function readRuntimeArtifact(root = process.cwd()) {
   const fontAssets = staticFiles
     .filter((file) => extname(file) === ".woff2")
     .map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
+  const seedLocalizationAssets = (
+    await filesContaining(
+      staticFiles.filter((file) => extname(file) === ".js"),
+      SEED_LOCALIZATION_CHUNK_SENTINEL,
+    )
+  ).map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
+  const seedMaterialCopyAssets = (
+    await filesContaining(
+      staticFiles.filter((file) => extname(file) === ".js"),
+      SEED_MATERIAL_COPY_CHUNK_SENTINEL,
+    )
+  ).map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
   const prerendered = Object.keys(prerender.routes ?? {});
   const metadataImageAssets = serverFiles.filter((file) => (
     /\/app\/(?:icon\d+|apple-icon)\.(?:ico|jpe?g|png|svg)\.body$/u.test(file)
@@ -132,6 +179,8 @@ export async function readRuntimeArtifact(root = process.cwd()) {
     initialAssets,
     wasmAssets: Object.freeze(wasmAssets),
     fontAssets: Object.freeze(fontAssets),
+    seedLocalizationAssets: Object.freeze(seedLocalizationAssets),
+    seedMaterialCopyAssets: Object.freeze(seedMaterialCopyAssets),
     metadataImageAssets: Object.freeze(
       metadataImageAssets.map((file) => relative(nextRoot, file).split(sep).join("/")),
     ),
@@ -161,6 +210,14 @@ async function totalBytes(files) {
   return total;
 }
 
+async function filesContaining(files, needle) {
+  const matching = [];
+  for (const file of files) {
+    if ((await readFile(file, "utf8")).includes(needle)) matching.push(file);
+  }
+  return matching;
+}
+
 async function totalGzipBytes(files) {
   let total = 0;
   for (const file of files) total += await gzipBytes(file);
@@ -186,6 +243,10 @@ function isRepositoryOnlyTrace(file) {
   return /(^|\/)(?:docs|e2e|archive|tmp)\//u.test(file) ||
     /(^|\/)\.env(?:\.|$)/u.test(file) ||
     /\.test\.[cm]?[jt]sx?$/u.test(file);
+}
+
+function isHashedJavaScriptAsset(file) {
+  return /(?:^|\/)[^/]*[.-][a-f0-9]{8,}\.js$/u.test(file);
 }
 
 function formatKiB(value) {

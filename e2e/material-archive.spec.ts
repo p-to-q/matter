@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
+import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 
@@ -174,7 +175,7 @@ test("an explicitly restored older backup survives reload without reviving prior
   if (backupPath === null) throw new Error("Archive download did not produce a local file.");
   await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.close, exact: true }).click();
 
-  await page.locator(`[data-thought-id="${removedId}"] [data-thought-text-id]`).click();
+  await selectThoughtThroughMaterialIndex(page, removedId);
   await page.keyboard.press("Delete");
   await expect(page.locator(`[data-thought-id="${removedId}"]`)).toHaveCount(0);
   await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true })).toBeEnabled();

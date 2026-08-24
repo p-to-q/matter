@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const SOURCE = "thought_fixture_imagined_time";
@@ -15,7 +16,7 @@ test("selected material reparents by pointer while canvas pan remains an explici
 
   const shell = page.locator("main.matter-shell");
   const source = page.locator(`[data-thought-id="${SOURCE}"]`);
-  await source.locator("[data-thought-text-id]").click();
+  await selectThoughtThroughMaterialIndex(page, SOURCE);
   await expect(source).toHaveAttribute("data-selected", "true");
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
 

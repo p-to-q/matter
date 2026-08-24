@@ -63,7 +63,7 @@ describe("rooted material fixture", () => {
 
     expect(first.tree.nodes[secondLevelId]?.text).toContain("生活");
     expect(second.tree.nodes[thirdLevelId]?.parentId).toBe(secondLevelId);
-    expect(second.tree.nodes[thirdLevelId]?.text).toContain("想法");
+    expect(second.tree.nodes[thirdLevelId]?.text).toContain("生活");
   });
 
   it("is deterministic, valid, and opens with a three-level source lineage", () => {

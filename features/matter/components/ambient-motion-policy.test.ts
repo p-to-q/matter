@@ -29,12 +29,19 @@ describe("ambient motion policy", () => {
       reducedMotion: false,
       connection: { effectiveType: "2G" },
     })).toBe(false);
+    expect(shouldPresentAmbientMotion({
+      forcedColors: true,
+      reducedMotion: false,
+    })).toBe(false);
   });
 
-  it("keeps base media and the bounded foreground pass color treatment aligned", () => {
+  it("keeps one native media presentation on the calibrated composition path", () => {
     const css = readFileSync(new URL("./AmbientWorkbench.module.css", import.meta.url), "utf8");
-    expect(css.match(/filter:\s*grayscale\(1\) contrast\(0\.84\) brightness\(1\.08\);/g)).toHaveLength(3);
-    expect(css).toMatch(/:global\([^)]*dark[^)]*\) \.poster,\s*:global\([^)]*dark[^)]*\) \.video\s*\{[^}]*filter:\s*grayscale\(1\) contrast\(0\.9\) brightness\(0\.9\)/s);
-    expect(css).toMatch(/:global\([^)]*dark[^)]*\) \.foregroundPass\s*\{[^}]*filter:\s*grayscale\(1\) contrast\(0\.9\) brightness\(0\.9\)/s);
+    expect(css.match(/filter:\s*grayscale\(1\) contrast\(0\.84\) brightness\(1\.08\);/g)).toHaveLength(1);
+    expect(css).toMatch(/\.poster,\s*\.video\s*\{[^}]*z-index:\s*var\(--paper-leaf-pass-z\)[^}]*mix-blend-mode:\s*multiply[^}]*opacity:\s*0\.32/s);
+    expect(css).toMatch(/\.wash\s*\{[^}]*z-index:\s*3/s);
+    expect(css).toMatch(/:global\([^)]*dark[^)]*\) \.poster,\s*:global\([^)]*dark[^)]*\) \.video\s*\{[^}]*filter:\s*grayscale\(1\) contrast\(0\.9\) brightness\(1\.31\)[^}]*mix-blend-mode:\s*normal[^}]*opacity:\s*0\.24/s);
+    expect(css).not.toMatch(/\.root\s*\{[^}]*(?:z-index|isolation):/s);
+    expect(css).not.toContain("foregroundPass");
   });
 });

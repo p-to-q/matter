@@ -17,23 +17,95 @@ Forecloses: what this makes harder or impossible
 
 ---
 
-## 2026-08-24 — open chrome rises without replacing the leaf atmosphere
+## 2026-08-24 — one native media slot owns the calibrated leaf atmosphere
 
-Changed: the desktop foreground leaf pass remains the paper's one active media
-presentation while a language, settings, inquiry, or modal overlay is open.
-The canvas-chrome stacking context rises from 36 to 38 only for that bounded
-open interval; the foreground stays at 37, while the external tool rail and
-material index retain 40–42. Closing the overlay returns chrome to 36 so the
-same leaf frame again passes over the quiet corner copy.
+Changed: the paper renders exactly one native poster or video media node. Its
+wash remains at the base paper plane while the pointer-transparent media sits
+at 37 on desktop, crossing quiet Chrome at 36 and lower-left guidance at 9;
+opened Chrome rises to 38. The light composition is the measured
+`multiply + .32` path and the dark composition is the measured ordinary-alpha
+`.24` path. The paper clips without becoming a scroll container, and reduced
+motion, explicit network-cost signals, media failure, and forced colors retain
+the static or untextured fallback without creating another media owner.
 
-Why: replacing the foreground canvas (`0.32` light / `0.46` dark) with the
-lower poster (`0.18` / `0.24`) whenever chrome opened changed the whole paper's
-tone. The lower poster also sits beneath the wash, so opacity calibration could
-not make those two rendering paths continuous.
+Why: the Canvas experiment established the desired energy but changed browser
+composition by moving a copied frame above the wash. The former native path
+also kept a poster beneath its video, so transitions could expose two copies of
+the same shadow. Separating wash from one native media slot preserves the
+browser rendering path, reproduces the measured whole-paper tone, and keeps
+visual overlap independent from pointer ownership.
 
-Forecloses: tuning two theme-specific opacity pairs by eye, masking rectangular
-holes around each overlay, letting leaf media enter the external workbench
-chrome, or treating a global paper-color jump as interaction feedback.
+Forecloses: a Canvas frame-copy loop, simultaneous poster and video nodes,
+separate quiet/open opacity pairs, rectangular masks around controls, media
+pointer ownership, and implicit paper scrolling.
+
+## 2026-08-24 — The narrow index discloses inside the paper
+
+Changed: below the `960px` dock boundary, the material index now enters through
+the paper's left edge and is clipped by the paper's two left corners. One shared
+width moves the index and the paper's material plane by exactly the same
+distance; the paper shell and camera stay fixed. At `768–959px` the index and
+settings targets share `40px`, and below `768px` the index and Matter-menu
+targets share `48px`. Sidebar, gear, and menu artwork keep one quiet `14px`
+optical box through the tablet family. Below `768px`, where the gear disappears,
+the remaining Sidebar/Menu pair shares a deliberate `20px` optical box, with
+the upper target and visible parent-product composition sharing the `66px`
+top band's centre; the mobile brand keeps its `18px` left inset.
+
+Why: an edge-to-edge overlay read as a second application panel and covered the
+material without acknowledging its paper boundary. A single translated render
+plane makes disclosure spatially legible without turning responsive layout into
+document or camera state. Shared targets preserve reach. The explicit
+`20px → 14px` role handoff gives the two mobile-only marks enough presence
+without enlarging the tablet gear or leaving an accidental breakpoint residue.
+
+Forecloses: a viewport-left drawer, mutating tree/layout coordinates or camera
+state to simulate disclosure, independently sized drawer and content offsets,
+one glyph size across roles where the gear is absent, and any scale or pulse
+animation used to disguise the responsive handoff.
+
+## 2026-08-24 — preview seed follows locale without translating human material
+
+Changed: the five-locale closed copy catalog may re-encode only strictly proven,
+untouched product seed passages after hydration and while admission is idle.
+The tree engine advances the material revision; structural Undo/Redo mementos
+are rebased and replay-validated atomically. Branch chooses the active locale at
+creation and then freezes as ordinary material. Its deterministic five-locale
+floor stays in the initial graph; parent-specific alternatives load only as an
+interaction enhancement. Before or without that enhancement, one click still
+commits one valid, undoable floor sentence synchronously. Locale remains absent
+from the tree, history, and archive as a field or tag; localized seed text
+remains ordinary exported material, while the address algorithm stays
+locale-independent. The initial graph keeps only the simplified-Chinese seed
+and five Branch floors; the remaining seed catalog and its atomic history
+migrator load together after mount, fail closed if unavailable, and are guarded
+from re-entering the initial asset graph by the runtime artifact check.
+
+Why: changing the interface language should immediately localize the examples a
+person is evaluating, while their edits, speech, model output, and added branches
+must retain the exact words that entered the material.
+
+Forecloses: document-wide auto-translation, locale-tagged material, rewriting a
+seed after any text/title provenance is ambiguous, partial history repair,
+reusing a pre-localization selection or turn address, and treating optional
+parent-specific Branch prose as a prerequisite for the synchronous action.
+
+## 2026-08-24 — browser tabs give the stone a quieter field
+
+Changed: the approved 16 px and 32 px browser icons place the existing Slate /
+Bone stone silhouette at 60% of their square. Their target-specific raster
+profiles and decoded-pixel baselines are recorded separately. The 1024 px master,
+page identity, Apple touch icon, and 192/512 installed-app icons retain the
+approved 68% composition and original material treatment.
+
+Why: at actual tab size the 68% mark read crowded even though the larger brand
+assets were balanced. A browser-only composition gives the stone enough field
+without turning a tiny target into a second master or making larger platform
+assets inherit favicon compromises.
+
+Forecloses: resizing the page logo, silently deriving launch icons from a tab
+bitmap, runtime filters, or allowing a small-target profile to redefine the
+authoritative master.
 
 ## 2026-08-24 — corner optics stay transparent and keep a stable backdrop owner
 
@@ -2673,8 +2745,6 @@ white or pure black fills, and reusing the Matter mark to replace the separate
 `p → q` parent identity. It also forecloses a green release receipt with the
 old favicon, lexical ambiguity from an unapproved numbered icon, and immutable
 caching on a stable metadata filename.
-
----
 
 ## 2026-08-07 — Lasso selection favors a forgiving hand
 

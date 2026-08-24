@@ -2,7 +2,18 @@ import { describe, expect, it } from "vitest";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
   SEEDED_ROOT_ONLY_TREE_ID,
+  createSeededDocument,
 } from "../material/seeded-document";
+import {
+  seededNodeText,
+} from "../material/seeded-material-copy";
+import {
+  seededFallbackBranchTexts,
+  type SeededBranchTextResolver,
+} from "../material/seeded-material-core";
+import { seededBranchTexts } from "../material/seeded-branch-copy";
+import { relocalizeSeededSession } from "../material/seeded-session-localization";
+import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
 import { buildTransformPlan, parseTransformEnvelope } from "../protocol/transform-contract";
@@ -743,6 +754,165 @@ describe("Matter store", () => {
     expect(store.getState().navigation.selectedNodeId).toBe(SEEDED_DOCUMENT_NODE_IDS.imaginedTime);
     expect(store.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(store.getState().tree.nodes).toEqual(before.nodes);
+  });
+
+  it("relocalizes structural mementos without adding a language change to Undo", () => {
+    const store = createMatterStore();
+    store.getState().select(SEEDED_DOCUMENT_NODE_IDS.imaginedTime);
+    expect(store.getState().moveNode({
+      commandId: "human_move_before_locale",
+      nodeId: SEEDED_DOCUMENT_NODE_IDS.imaginedTime,
+      targetParentId: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
+      createdAt: "2026-08-24T01:00:00.000Z",
+    })).toMatchObject({ status: "committed" });
+    const historyLength = store.getState().history.entries.length;
+
+    expect(store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession))
+      .toMatchObject({ operation: "localize-seed", status: "localized" });
+    expect(store.getState().history.entries).toHaveLength(historyLength);
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime].text)
+      .toBe(seededNodeText("en-US", "imaginedTime"));
+
+    expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]).toMatchObject({
+      parentId: SEEDED_DOCUMENT_NODE_IDS.imaginedLives,
+      text: seededNodeText("en-US", "imaginedTime"),
+    });
+    expect(store.getState().redo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]).toMatchObject({
+      parentId: SEEDED_DOCUMENT_NODE_IDS.presentDistance,
+      text: seededNodeText("en-US", "imaginedTime"),
+    });
+  });
+
+  it("localizes a removed seeded subtree across Undo and Redo", () => {
+    const store = createMatterStore();
+    store.getState().select(SEEDED_DOCUMENT_NODE_IDS.imaginedLives);
+    expect(store.getState().removeSelected({
+      commandId: "human_remove_before_locale",
+      createdAt: "2026-08-24T01:01:00.000Z",
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedLives]).toBeUndefined();
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]).toBeUndefined();
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedRelations]).toBeUndefined();
+
+    expect(store.getState().localizeSeededMaterial("de-DE", relocalizeSeededSession))
+      .toMatchObject({ status: "localized" });
+    expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedLives].text)
+      .toBe(seededNodeText("de-DE", "imaginedLives"));
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime].text)
+      .toBe(seededNodeText("de-DE", "imaginedTime"));
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedRelations].text)
+      .toBe(seededNodeText("de-DE", "imaginedRelations"));
+    expect(store.getState().redo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedLives]).toBeUndefined();
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]).toBeUndefined();
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedRelations]).toBeUndefined();
+  });
+
+  it("chooses Branch copy from the active locale and never relocalizes the committed node", () => {
+    const store = createMatterStore();
+    const values = branchValues();
+    expect(store.getState().extendMaterial(
+      SEEDED_DOCUMENT_NODE_IDS.imaginedRelations,
+      values,
+      "ja-JP",
+      seededBranchTexts,
+    )).toMatchObject({ status: "committed" });
+    const text = store.getState().tree.nodes[values.nodeId].text;
+    expect(text).toBe(seededBranchTexts("ja-JP", "imaginedRelations")[0]);
+
+    store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    expect(store.getState().tree.nodes[values.nodeId].text).toBe(text);
+  });
+
+  it.each([
+    ["throws", (() => { throw new Error("interaction copy chunk unavailable"); })],
+    ["returns no options", (() => [])],
+    ["returns blank copy", (() => ["   "])],
+    ["returns oversized copy", (() => ["x".repeat(MAX_NODE_TEXT_CODE_UNITS + 1)])],
+  ] satisfies readonly (readonly [string, SeededBranchTextResolver])[])(
+    "commits one undoable locale-floor Branch when an optional resolver $0",
+    (_condition, failingResolver) => {
+    const store = createMatterStore();
+    const values = branchValues();
+
+    expect(() => store.getState().extendMaterial(
+      SEEDED_DOCUMENT_NODE_IDS.root,
+      values,
+      "de-DE",
+      failingResolver,
+    )).not.toThrow();
+    expect(store.getState().tree.nodes[values.nodeId].text)
+      .toBe(seededFallbackBranchTexts("de-DE")[0]);
+    expect(store.getState().history.entries).toHaveLength(1);
+    expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes[values.nodeId]).toBeUndefined();
+    },
+  );
+
+  it("localizes only an untouched default title", () => {
+    const untouched = createMatterStore("expanded", {
+      documentRoot: true,
+      initialTitle: "被允许想象的其他生活",
+    });
+    untouched.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    expect(untouched.getState().tree.title).toBe("Other lives we are still allowed to imagine");
+
+    const renamed = createMatterStore("expanded", {
+      documentRoot: true,
+      initialTitle: "被允许想象的其他生活",
+    });
+    expect(renamed.getState().renameDocument({
+      commandId: "human_title_before_locale",
+      title: "我自己的标题",
+      createdAt: "2026-08-24T01:02:00.000Z",
+    })).toMatchObject({ status: "committed" });
+    renamed.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    expect(renamed.getState().tree.title).toBe("我自己的标题");
+    expect(renamed.getState().undo()).toMatchObject({ status: "committed" });
+    expect(renamed.getState().tree.title).toBe("被允许想象的其他生活");
+    renamed.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    expect(renamed.getState().tree.title).toBe("被允许想象的其他生活");
+    expect(renamed.getState().redo()).toMatchObject({ status: "committed" });
+    expect(renamed.getState().tree.title).toBe("我自己的标题");
+  });
+
+  it("relocalizes an older hydrated seed snapshot and preserves every non-seed word", () => {
+    const oldSnapshot = structuredClone(createSeededDocument().tree) as ThoughtTree;
+    const root = oldSnapshot.nodes[SEEDED_DOCUMENT_NODE_IDS.root];
+    const protectedNodes = [
+      ["human_written_material", "We wrote this ourselves, word for word."],
+      ["agent_committed_material", "This committed model passage must stay exact."],
+      ["voice_admitted_material", "语音录入的这一句也不能被自动翻译。"],
+    ] as const;
+    for (const [id, text] of protectedNodes) {
+      root.children.push(id);
+      oldSnapshot.nodes[id] = {
+        id,
+        text,
+        parentId: root.id,
+        children: [],
+        createdAt: "2026-08-24T01:03:00.000Z",
+        updatedAt: "2026-08-24T01:03:00.000Z",
+      };
+    }
+    oldSnapshot.revision += 1;
+
+    const store = createMatterStore();
+    store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    const beforeEpoch = store.getState().documentEpoch;
+    expect(store.getState().hydrateSnapshot(oldSnapshot)).toMatchObject({ status: "hydrated" });
+    expect(store.getState().documentEpoch).toBe(beforeEpoch + 1);
+
+    expect(store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession))
+      .toMatchObject({ status: "localized" });
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root].text)
+      .toBe(seededNodeText("en-US", "root"));
+    for (const [id, text] of protectedNodes) {
+      expect(store.getState().tree.nodes[id].text).toBe(text);
+    }
   });
 
   it("returns one private transform arrival receipt while Undo and Redo stay ordinary history", () => {
