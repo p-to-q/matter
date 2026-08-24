@@ -247,7 +247,7 @@ separate live promotion boundary is satisfied.
 
 ## Active correction — the material index keeps one local structural grammar
 
-State: implemented locally; focused source and browser proof complete.
+State: released in Preview.45; complete source, browser, and public-origin proof.
 
 ```text
 Outcome:    every current same-parent group projects mutually exclusive

@@ -90,7 +90,10 @@ providers remain unavailable, while issues #34 and #68 remain open. The change
 is confined to the client-side directory projection and its proof: Select keeps
 the current tree's bounded relationship guides behind its checkboxes, while
 Search and Archive stay unlined. It does not change material, persistence,
-history, protocol, provider, or model authority.
+history, protocol, provider, or model authority. Source `b0cbad6` passed CI run
+`32784091448`, exact Vercel deployment `7YhTAqHt7hUg5m6YVsjAEvXS45zY`, and
+the first public-origin `0.2.0-preview.45` probe. The immutable tag and GitHub
+prerelease point to the final record-only main after that record settles.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
