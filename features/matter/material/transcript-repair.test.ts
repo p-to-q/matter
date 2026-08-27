@@ -6,6 +6,7 @@ import {
   normalizeRepairInput,
   repairBudget,
   repairDeadlineMs,
+  repairMaxOutputTokens,
   repairSkeleton,
 } from "./transcript-repair";
 
@@ -65,6 +66,15 @@ describe("repairDeadlineMs", () => {
   it("gives the live relay a usable floor, scales, and stays inside the lease", () => {
     expect(repairDeadlineMs(zh("短句子而已"))).toBe(6_040);
     expect(repairDeadlineMs(zh("字".repeat(600)))).toBe(8_000);
+  });
+});
+
+describe("repairMaxOutputTokens", () => {
+  it("keeps the proven floor, proportional budget, and shared ceiling", () => {
+    expect(repairMaxOutputTokens(zh("字"))).toBe(96);
+    expect(repairMaxOutputTokens(zh("字".repeat(17)))).toBe(98);
+    expect(repairMaxOutputTokens(zh("字".repeat(568)))).toBe(1_200);
+    expect(repairMaxOutputTokens(zh("字".repeat(569)))).toBe(1_200);
   });
 });
 

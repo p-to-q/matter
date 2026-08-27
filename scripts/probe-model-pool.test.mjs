@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   classifyResponse,
+  eligiblePoolSurfaces,
+  POOL_COOLDOWN_MS,
   formatReport,
   inquiryRequest,
   labelRequest,
   normalizeOrigin,
   parseArguments,
   probeModelPool,
+  probeGateFailures,
   REPAIR_PROMPT_VERSION,
+  LABEL_PROMPT_VERSION,
+  readPoolCapabilities,
   repairRequest,
+  pacingCaveat,
   summarize,
 } from "./probe-model-pool.mjs";
 
@@ -19,12 +26,58 @@ test("uses the deployed transcript-repair prompt contract", () => {
   assert.equal(repairRequest(1).promptVersion, REPAIR_PROMPT_VERSION);
 });
 
+test("keeps the deployed thought-label probe on the browser's prompt/cache identity", async () => {
+  assert.equal(labelRequest(1).promptVersion, LABEL_PROMPT_VERSION);
+  const source = await readFile(
+    new URL("../features/matter/material/semantic-label.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    source,
+    new RegExp(`SEMANTIC_LABEL_PROMPT_VERSION\\s*=\\s*"${LABEL_PROMPT_VERSION}"`, "u"),
+  );
+});
+
 test("accepts a deployed HTTPS origin and a loopback one", () => {
   assert.equal(normalizeOrigin("https://matter.ptoq.io/"), "https://matter.ptoq.io");
   assert.equal(normalizeOrigin("http://localhost:3000"), "http://localhost:3000");
+  assert.equal(normalizeOrigin("http://localhost:3000/matter/"), "http://localhost:3000/matter");
   assert.throws(() => normalizeOrigin("http://matter.ptoq.io"), /HTTPS/);
   assert.throws(() => normalizeOrigin("https://user:key@matter.ptoq.io"), /credentials/);
-  assert.throws(() => normalizeOrigin("https://matter.ptoq.io/api"), /path/);
+  assert.throws(() => normalizeOrigin("https://matter.ptoq.io?debug=1"), /query/);
+});
+
+test("uses health to keep fixtures out of model-pool evidence", async () => {
+  const payload = {
+    surfaces: {
+      transcriptRepair: "fixture",
+      thoughtLabel: "available",
+      inquiry: "available",
+    },
+  };
+  assert.deepEqual(eligiblePoolSurfaces(payload), {
+    live: ["label", "inquiry"],
+    skipped: [{ surface: "repair", state: "fixture" }],
+  });
+  let requested = null;
+  const capabilities = await readPoolCapabilities(
+    "http://127.0.0.1:3210/matter/",
+    async (url, init) => {
+      requested = { url, method: init.method, cache: init.cache, redirect: init.redirect };
+      return new Response(JSON.stringify(payload), { status: 200 });
+    },
+  );
+  assert.deepEqual(capabilities.live, ["label", "inquiry"]);
+  assert.deepEqual(requested, {
+    url: "http://127.0.0.1:3210/matter/api/health",
+    method: "GET",
+    cache: "no-store",
+    redirect: "manual",
+  });
+  assert.throws(
+    () => eligiblePoolSurfaces({ surfaces: { transcriptRepair: "available" } }),
+    /thoughtLabel/,
+  );
 });
 
 test("reads a floor answer as a pool failure even though it is HTTP 200", () => {
@@ -199,6 +252,30 @@ test("runs every surface each round and paces itself between rounds", async () =
   assert.equal(result.summary.verdict, "pool-healthy");
 });
 
+test("keeps a deployment base path out of the browser Origin header", async () => {
+  const calls = [];
+  await probeModelPool({
+    origin: "http://127.0.0.1:3210/matter/",
+    rounds: 1,
+    paceMs: 0,
+    now: () => 0,
+    sleep: async () => undefined,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, origin: init.headers.origin });
+      return new Response(JSON.stringify({ source: "model", status: "answered", text: "…" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+  assert.deepEqual(calls.map((call) => call.url), [
+    "http://127.0.0.1:3210/matter/api/repair",
+    "http://127.0.0.1:3210/matter/api/label",
+    "http://127.0.0.1:3210/matter/api/inquiry",
+  ]);
+  assert.ok(calls.every((call) => call.origin === "http://127.0.0.1:3210"));
+});
+
 test("records an unreachable origin instead of throwing out of the run", async () => {
   const result = await probeModelPool({
     origin: "https://matter.ptoq.io",
@@ -231,11 +308,22 @@ test("reports each surface with its reasons on one line", () => {
 });
 
 test("bounds the run so a probe cannot become a load test", () => {
-  assert.deepEqual(parseArguments([]), { origin: undefined, rounds: 6, paceMs: 6_000 });
-  assert.deepEqual(parseArguments(["https://matter.ptoq.io", "--rounds=3", "--pace=10"]), {
+  assert.deepEqual(parseArguments([]), {
+    origin: undefined,
+    rounds: 6,
+    paceMs: 6_000,
+    requireInquiryAnswer: false,
+  });
+  assert.deepEqual(parseArguments([
+    "https://matter.ptoq.io",
+    "--rounds=3",
+    "--pace=10",
+    "--require-inquiry-answer",
+  ]), {
     origin: "https://matter.ptoq.io",
     rounds: 3,
     paceMs: 10_000,
+    requireInquiryAnswer: true,
   });
   assert.throws(() => parseArguments(["--rounds=0"]), /--rounds/);
   assert.throws(() => parseArguments(["--rounds=61"]), /--rounds/);
@@ -243,6 +331,63 @@ test("bounds the run so a probe cannot become a load test", () => {
   assert.throws(() => parseArguments(["one", "two"]), /one origin/);
 });
 
+test("release gate requires every Inquiry sample to contain a real answer", () => {
+  const answered = summarize([
+    sample("repair", "rejected", "MODEL_REJECTED"),
+    sample("label", "rejected", "MODEL_REJECTED"),
+    sample("inquiry", "model", null),
+  ]);
+  assert.deepEqual(probeGateFailures(answered, { requireInquiryAnswer: true }), []);
+
+  const rejected = summarize([
+    sample("repair", "model", null),
+    sample("label", "model", null),
+    sample("inquiry", "rejected", "MODEL_REJECTED"),
+  ]);
+  assert.equal(rejected.verdict, "pool-healthy");
+  assert.match(probeGateFailures(rejected, { requireInquiryAnswer: true })[0], /0\/1/u);
+  assert.deepEqual(probeGateFailures(rejected), []);
+});
+
 function sample(surface, outcome, reason, durationMs = 1_000) {
   return Object.freeze({ round: 1, surface, status: 200, durationMs, outcome, reason });
 }
+
+test("marks attribution risk inside the process-local health window", () => {
+  // Two failures cool a candidate for a minute. A run paced under that reports
+  // its own cooldown back to the operator as if it were the relay — the exact
+  // shape of misdiagnosis this probe exists to prevent.
+  const failing = summarize([
+    sample("inquiry", "refused", "MODEL_TIMEOUT"),
+    sample("inquiry", "refused", "MODEL_TIMEOUT"),
+    sample("repair", "model", null),
+  ]);
+  const caveat = pacingCaveat(failing, 6_000);
+  assert.ok(caveat !== null);
+  assert.match(caveat, /inquiry/u);
+  assert.match(caveat, /--pace=/u);
+  // Above the cooldown there is nothing to warn about.
+  assert.equal(pacingCaveat(failing, POOL_COOLDOWN_MS), null);
+  // Nor when nothing has failed often enough to cool anything.
+  const healthy = summarize([sample("inquiry", "model", null), sample("repair", "model", null)]);
+  assert.equal(pacingCaveat(healthy, 6_000), null);
+  // An operator who did not state a pace is not told a number they did not use.
+  assert.equal(pacingCaveat(failing, undefined), null);
+});
+
+test("carries the pacing caveat into the printed report", () => {
+  const report = formatReport(
+    "https://matter.test",
+    summarize([
+      sample("inquiry", "refused", "MODEL_TIMEOUT"),
+      sample("inquiry", "refused", "MODEL_TIMEOUT"),
+    ]),
+    { paceMs: 6_000 },
+  );
+  assert.match(report, /candidate-health window/u);
+  // And stays silent when the caller says nothing about pacing.
+  assert.doesNotMatch(
+    formatReport("https://matter.test", summarize([sample("inquiry", "model", null)])),
+    /candidate-health window/u,
+  );
+});

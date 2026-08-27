@@ -127,6 +127,14 @@ Closing, changing the target, or losing its exact tree/revision basis clears
 the transient direction and gives any late result no authority. Full-view Voice
 admission remains a separate human-material channel.
 
+The paper has one transient AI-operation slot. Point and Talk, an Elastic grip
+adjustment or pending turn, and the corner Inquiry cannot remain active behind
+one another. Opening one revokes the prior operation synchronously. A neutral
+lasso is not itself an AI operation: it may remain visible as the person's
+explicit Inquiry context until a grip actually begins an Elastic adjustment.
+This keeps selection available without letting two generators compete for the
+same material or focus.
+
 Provider, pool, timeout, and transport failures are operational events, not
 material. They leave the exact source intact and return the current Elastic,
 Point-and-Talk, or inquiry control to its prior usable state without drawing a model-error message
@@ -147,7 +155,12 @@ questions and answers do not become later model context. The bubble is
 transient: each opening begins clean and no exchange is replayed after closing
 or reload. A bounded local completed-record may remain separately for passive
 look-back, but it is not a resumed inquiry surface and is never material,
-history, archive content, or later model context.
+history, archive content, or later model context. Closing the surface, changing
+its projected material, replacing the document, or suspending the page revokes
+the current request before a late answer may enter either the bubble or that
+record. Once an exchange has already been accepted, its record write remains
+owned by the addressed tree even if the person navigates elsewhere before
+local storage settles.
 On desktop, the upper-right About/settings pair, bottom-right utility row, and
 lower-left guidance each own the same transparent two-depth optical field. The
 bottom-right row keeps the `28px` inline / `22px` block outer and `15px` inline /

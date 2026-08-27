@@ -95,6 +95,17 @@ history, protocol, provider, or model authority. Source `b0cbad6` passed CI run
 the first public-origin `0.2.0-preview.45` probe. The immutable tag and GitHub
 prerelease point to the final record-only main after that record settles.
 
+For Preview.46, the owner has explicitly directed one further production
+promotion and prerelease after the model-harness hardening passes the complete
+source, browser, Preview, and public-origin proof. This is a fresh
+Preview.46-only risk acceptance, not a continuing waiver. It preserves the
+existing live label, repair, inquiry, and voice gates; Elastic and Text Swap
+remain unavailable, while issues #34 and #68 remain open. The change may
+improve prompt standing, completion settlement, anonymous telemetry, and late
+transport cleanup, but it is not evidence of a distributed rate limit,
+provider spend cap, alert delivery, or operator-owned rollback. Exact commit,
+CI, deployment, probe, and release identifiers stay pending until observed.
+
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
 shared outside the deployment secret store must be rotated before use.
@@ -207,9 +218,11 @@ must not carry prompt, material, audio, provider identity, endpoint, key, reques
 identity, or response text. The distributed admission, spend ceiling and alert
 ownership for those SLO measurements remains the external issue #34 boundary.
 
-### Content-zero model performance receipt — Preview.39
+### Content-zero model performance receipt — current contract
 
-This section describes the Preview.39 production contract. Health proves the
+Preview.39 introduced this receipt; Preview.46 extends its closed schema with
+completion-settlement counters. This table is the complete current contract,
+not a retroactive claim about older log lines. Health proves the
 deployed version and configured capability only; the deployment operator must
 inspect the retained server-log receipt before claiming that this event was
 emitted. A production model-scenario invocation with a non-null adapter writes
@@ -235,6 +248,10 @@ The event and field set is closed:
 | `candidateAttempts` | integer `0..255` | Anonymous candidate attempts that settled before the scenario terminal. |
 | `candidateTimeouts` | integer `0..255` | Those attempts that exhausted their pool-owned attempt boundary. |
 | `candidateFailures` | integer `0..255` | Fast transport, HTTP, body-bound, decoding, or envelope failures; no body or status is logged. |
+| `candidateTruncations` | integer `0..255` | Attempts whose explicit terminator says the returned text was incomplete. |
+| `candidateRefusals` | integer `0..255` | Attempts ending in a guardrail/refusal, tool/continuation state, or unknown explicit terminator. A conflict containing a known truncation and otherwise complete metadata is counted as truncation. |
+| `candidateUnknownTerminators` | integer `0..255` | Modifier count for explicit stop vocabulary this build does not recognize; it accompanies a refused attempt. |
+| `candidateMissingTerminators` | integer `0..255` | Modifier count for accepted compatibility responses that omitted stop metadata; it accompanies an answered attempt. |
 
 This table is the complete schema only for `matter.scenario-performance`.
 Elastic and provider-gated Text Swap retain the separate existing
@@ -251,7 +268,11 @@ text, answer, transcript, audio, locale, byte content, node/tree/request id,
 IP, provider/station/model/endpoint/key, and error text are impossible receipt
 fields. A metrics sink failure is swallowed outside scenario settlement.
 
-Attribution is deliberately narrow. `timeout` proves the scenario deadline;
+Attribution is deliberately narrow. The four completion fields describe only
+the pool's closed classification; they do not identify a relay or prove why it
+produced that state. `candidateUnknownTerminators` and
+`candidateMissingTerminators` modify an already counted attempt rather than
+adding another one. `timeout` proves the scenario deadline;
 `candidateTimeouts` counts only pool attempts whose own boundary settled before
 that terminal, so it may be zero when the parent deadline won the race. `busy`
 proves process-local governor shedding, not edge saturation. `unavailable` may
@@ -459,8 +480,10 @@ npm run eval:language
 ```
 
 The run reloads the plan and recomputes its digest from the current scenario,
-candidate station/model, prompt and corpus versions, complete corpus content,
-axes, repeats, and aggregate call/output-token ceilings. Any mismatch stops
+candidate station/model/thinking mode and endpoint digest, prompt and corpus versions, exact
+compiled prompts, deterministic adjudication and completion-policy identities,
+pool limits, per-case budgets, complete corpus content, axes, repeats, and
+aggregate call/output-token ceilings. Any mismatch stops
 before an adapter exists. Run Text Swap separately with
 `MATTER_LANGUAGE_EVAL_SCENARIO=text-swap`. Raw synthetic inputs/answers, the
 private plan, and the two blinded review packets stay only below the gitignored

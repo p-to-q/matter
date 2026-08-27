@@ -75,7 +75,7 @@ import {
   findAdmissionFeedbackParentBox,
   projectAdmissionFeedbackPresentation,
 } from "./admission-feedback-geometry";
-import { CanvasChrome } from "./CanvasChrome";
+import { CanvasChrome, type CanvasChromeHandle } from "./CanvasChrome";
 import { CanvasRuling } from "./CanvasRuling";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
@@ -312,6 +312,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const matterBasePath = clientMatterBasePath();
   const { canvasPreferences } = props;
   const inquiryRecord = useInquiryRecord(tree.id, props.performanceMarking !== true);
+  const canvasChromeRef = useRef<CanvasChromeHandle>(null);
   const [pointTalkNodeId, setPointTalkNodeId] = useState<string | null>(null);
   const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
   // A revision orders one known lineage; it cannot reconcile edits made before
@@ -999,6 +1000,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     state: transformState,
   } = transform;
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
+    canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
   }, [startTransform]);
   const stretch = useStretch({
@@ -1020,6 +1022,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
     transformState.phase !== "idle";
   const beginStretchAdjustment = useCallback(() => {
+    canvasChromeRef.current?.closeInquiry();
     if (transformState.phase === "requesting") cancelTransform();
   }, [cancelTransform, transformState.phase]);
   const abortElasticExpansion = useCallback(() => {
@@ -2481,6 +2484,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
             navigation={navigation}
             onOpenPointTalk={(nodeId) => {
+              canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
               props.admission.discardPendingRepairs();
               setPointTalkOpeningId((current) => current + 1);
@@ -2512,6 +2516,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryContext={projectInquiryPayload}
           inquiryRecord={inquiryRecord}
           onInquiryOpen={abortFixedExpansion}
+          ref={canvasChromeRef}
         />
       </section>
       {activePointTalkNodeId === null ? null : (

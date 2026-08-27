@@ -1,3 +1,8 @@
+import {
+  PoolDrainingError,
+  UnusableCompletionError,
+  type UnusableCompletionCode,
+} from "./completion-outcome";
 import type {
   MatterScenarioId,
   ScenarioAdapter,
@@ -58,9 +63,10 @@ export const DEFAULT_POOL_LIMITS: PoolLimits = Object.freeze({
   minimumAttemptMs: 400,
   maxAttemptShare: 0.5,
   /**
-   * The pool's own ceiling, not a scenario's. It sits above the longest answer
-   * any scenario asks for, so a scenario that forgets to state a bound is still
-   * bounded, and a scenario that states one always gets the smaller number.
+   * The pool's own ceiling, not a scenario's. It sits at or above the longest
+   * answer any current scenario asks for, so a scenario that forgets to state a
+   * bound is still bounded, and a scenario that states one always gets the
+   * smaller number.
    */
   maxOutputTokens: 1_200,
   maxResponseBytes: 32 * 1_024,
@@ -82,9 +88,19 @@ const MAX_HEALTH_ENTRIES = 256;
  * relay for a label that may use a different budget and prompt shape.
  */
 const health = new Map<string, CandidateHealth>();
+/**
+ * Raw fetches that ignored their attempt abort. A scenario/candidate may own
+ * several only when healthy concurrent calls time out together; while any
+ * remain, later calls skip that candidate rather than multiplying the drain.
+ */
+const drainingAttempts = new Map<string, Set<Promise<void>>>();
+let drainingAttemptCount = 0;
+const MAX_DRAINING_ATTEMPTS = 256;
 
 export function resetPoolHealth(): void {
   health.clear();
+  // Drain leases describe resources that still exist. Clearing them would let
+  // a caller multiply a transport precisely because it ignored cancellation.
 }
 
 /**
@@ -180,16 +196,25 @@ export function createPoolAdapter(
       limits.minimumAttemptMs,
       Math.round(input.deadlineMs * limits.maxAttemptShare),
     );
+    let attempted = false;
+    let skippedDraining = false;
     for (let index = 0; index < ordered.length; index += 1) {
       const candidate = ordered[index]!;
+      if (hasDrainingAttempt(healthKey(input.scenario, candidate))) {
+        skippedDraining = true;
+        continue;
+      }
+      if (drainingAttemptCount >= MAX_DRAINING_ATTEMPTS) throw new PoolDrainingError();
       const remaining = deadlineAtMs - now();
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       // Starting an attempt that cannot finish spends the caller's deadline on
       // a request nobody will read.
       if (remaining < limits.minimumAttemptMs) break;
-      const isLast = index === ordered.length - 1;
+      const isLast = !ordered.slice(index + 1).some((later) => (
+        !hasDrainingAttempt(healthKey(input.scenario, later))
+      ));
       const attemptMs = isLast ? remaining : Math.min(remaining, attemptCeilingMs);
-      const startedAt = now();
+      attempted = true;
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
         recordOutcome(candidate, input.scenario, "answered", limits, now);
@@ -197,6 +222,16 @@ export function createPoolAdapter(
         return { text };
       } catch (error) {
         if (signal.aborted) throw error;
+        if (error instanceof UnusableCompletionError) {
+          // A relay that repeatedly returns no usable final text is demoted for
+          // this scenario, while the surface-wide governor stays neutral. A
+          // second relay may complete the same request with different model
+          // behaviour, so fallback remains useful rather than deterministic.
+          recordOutcome(candidate, input.scenario, "incomplete", limits, now);
+          noteCandidate(input, error.code === "truncated" ? "truncated" : "refused");
+          lastError = error;
+          continue;
+        }
         // A relay that spends its whole attempt and says nothing is worse than
         // one that refuses in 200 ms, and the two used to be recorded
         // identically. The difference is what the next caller pays: a fast
@@ -204,7 +239,7 @@ export function createPoolAdapter(
         // again before the pool can even reach a working relay. Grading the
         // hang harder is what stops one stalled relay from spending every
         // caller's deadline until it happens to fail twice.
-        const outcome = now() - startedAt >= attemptMs ? "stalled" : "failed";
+        const outcome = error instanceof CandidateAttemptTimeoutError ? "stalled" : "failed";
         recordOutcome(
           candidate,
           input.scenario,
@@ -216,6 +251,7 @@ export function createPoolAdapter(
         lastError = error;
       }
     }
+    if (!attempted && skippedDraining) throw new PoolDrainingError();
     throw lastError;
   };
 }
@@ -250,17 +286,30 @@ async function completeOnce(
   fetchImpl: typeof fetch,
 ): Promise<string> {
   const attempt = new AbortController();
-  const timer = setTimeout(() => attempt.abort(), attemptMs);
+  let attemptTimedOut = false;
+  const timer = setTimeout(() => {
+    attemptTimedOut = true;
+    attempt.abort();
+  }, attemptMs);
   const forward = () => attempt.abort();
   signal.addEventListener("abort", forward, { once: true });
   const boundary = rejectOnAbort(attempt.signal);
+  const drainKey = healthKey(input.scenario, candidate);
+  let request: Promise<Response> | undefined;
+  let response: Response | undefined;
+  let responseBodyConsumed = false;
+  let responseBodyHandedOff = false;
+  const handOffResponseBody = (disposer: Promise<void>): void => {
+    if (responseBodyHandedOff) return;
+    responseBodyHandedOff = true;
+    registerDrainLease(drainKey, disposer);
+  };
   try {
     // Fetch cancellation is advisory even in server runtimes and third-party
     // adapters. The hard race is what preserves time for the next relay when a
     // transport ignores AbortSignal; the signal still performs best-effort
     // socket and response-body cleanup underneath it.
-    const response = await Promise.race([
-      fetchImpl(`${candidate.baseUrl}/chat/completions`, {
+    request = fetchImpl(`${candidate.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
           accept: "application/json",
@@ -273,9 +322,11 @@ async function completeOnce(
           // must not rename itself on a cache miss, and one utterance must not be
           // repaired differently on a retry. Sampling has nothing to offer here.
           temperature: 0,
-          // The scenario's own ceiling wins when it asked for one. A short thought
-          // must not buy a long generation, and a long one must not be cut off
-          // mid-sentence and then rejected for it.
+          // The scenario's own ceiling wins when it asked for one. A short
+          // thought must not buy a long generation, and a long one must be
+          // given room to finish: a completion the relay reports as cut off is
+          // refused below, so a ceiling set too low costs the scenario its
+          // floor rather than delivering half a sentence.
           max_tokens: Math.min(
             limits.maxOutputTokens,
             Number.isSafeInteger(input.maxOutputTokens) && input.maxOutputTokens > 0
@@ -291,26 +342,180 @@ async function completeOnce(
         cache: "no-store",
         redirect: "error",
         signal: attempt.signal,
-      }),
-      boundary.promise,
-    ]);
+      });
+    response = await Promise.race([request, boundary.promise]);
     if (!response.ok) {
       // Error bodies are neither surfaced nor diagnostic input. Do not let a
       // relay that has already refused hold the fallback lane open by streaming
       // or withholding an irrelevant body.
-      void response.body?.cancel().catch(() => undefined);
+      handOffResponseBody(cancelResponseBody(response));
       throw new Error(`Model provider returned HTTP ${response.status}.`);
     }
-    const body = await readBounded(response, limits.maxResponseBytes, attempt.signal);
-    return extractContent(JSON.parse(body) as unknown);
+    const body = await readBounded(
+      response,
+      limits.maxResponseBytes,
+      attempt.signal,
+      handOffResponseBody,
+    );
+    responseBodyConsumed = true;
+    const completion = extractCompletion(JSON.parse(body) as unknown);
+    const disposition = classifyTerminators(completion.terminators);
+    if (disposition === "unknown-terminator") noteCandidate(input, "unknown-terminator");
+    if (completion.unusable !== undefined) throw new UnusableCompletionError(completion.unusable);
+    if (disposition !== "complete" && disposition !== "missing") {
+      throw new UnusableCompletionError(disposition);
+    }
+    if (typeof completion.content !== "string") {
+      throw new Error("The model provider response had no text.");
+    }
+    if (disposition === "missing") noteCandidate(input, "missing-terminator");
+    return completion.content;
+  } catch (error) {
+    if (attemptTimedOut && !signal.aborted) throw new CandidateAttemptTimeoutError();
+    throw error;
   } finally {
+    if (response === undefined && attempt.signal.aborted && request !== undefined) {
+      registerDrainingAttempt(drainKey, request);
+    } else if (response !== undefined && !responseBodyConsumed && !responseBodyHandedOff) {
+      registerDrainingResponse(drainKey, response);
+    }
     clearTimeout(timer);
     signal.removeEventListener("abort", forward);
     boundary.dispose();
   }
 }
 
-function extractContent(payload: unknown): string {
+function hasDrainingAttempt(key: string): boolean {
+  return (drainingAttempts.get(key)?.size ?? 0) > 0;
+}
+
+/**
+ * Owns a raw request only after its attempt has lost authority. The lease stays
+ * present until a late response body has actually accepted cancellation, so a
+ * relay that ignores AbortSignal cannot be multiplied by later requests.
+ */
+function registerDrainingAttempt(key: string, request: Promise<Response>): void {
+  registerDrainLease(key, request.then(
+    async (response) => {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // A rejected disposer is still settled; no response text is observed.
+      }
+    },
+    () => undefined,
+  ));
+}
+
+function registerDrainingResponse(key: string, response: Response): void {
+  registerDrainLease(key, cancelResponseBody(response));
+}
+
+function cancelResponseBody(response: Response): Promise<void> {
+  return Promise.resolve().then(async () => {
+    try {
+      await response.body?.cancel();
+    } catch {
+      // A rejected disposer is settled and therefore no longer owns a lease.
+    }
+  });
+}
+
+function registerDrainLease(key: string, disposer: Promise<void>): void {
+  const set = drainingAttempts.get(key) ?? new Set<Promise<void>>();
+  if (!drainingAttempts.has(key)) drainingAttempts.set(key, set);
+  const cleanup = disposer.finally(() => {
+    set.delete(cleanup);
+    drainingAttemptCount = Math.max(0, drainingAttemptCount - 1);
+    if (set.size === 0 && drainingAttempts.get(key) === set) drainingAttempts.delete(key);
+  });
+  set.add(cleanup);
+  drainingAttemptCount += 1;
+  void cleanup;
+}
+
+class CandidateAttemptTimeoutError extends Error {
+  constructor() {
+    super("The model relay did not answer inside its attempt window.");
+    this.name = "CandidateAttemptTimeoutError";
+  }
+}
+
+/**
+ * Every explicit stop reason is fail-closed. Only a known complete value may
+ * authorize text; truncation, block/refusal, tool continuation, conflict,
+ * malformed metadata, and unknown vocabulary all lose to the product floor.
+ * A genuinely absent field remains a counted compatibility path for relays
+ * that predate this boundary.
+ */
+const TRUNCATED_TERMINATORS: ReadonlySet<string> = new Set([
+  "length",                        // OpenAI chat completions
+  "max_tokens",                    // Anthropic, and relays that forward it
+  "max_output_tokens",             // Responses-shaped relays
+  "model_context_window_exceeded", // Anthropic
+]);
+
+/** Terminators that mean the model finished; anything else is worth counting. */
+const COMPLETE_TERMINATORS: ReadonlySet<string> = new Set([
+  "stop", "end_turn", "stop_sequence", "eos", "eos_token", "complete", "completed",
+]);
+
+const BLOCKED_TERMINATORS: ReadonlySet<string> = new Set([
+  "blocked", "content_filter", "guardrail_intervened", "refusal", "safety",
+]);
+
+const TOOL_TERMINATORS: ReadonlySet<string> = new Set([
+  "function_call", "pause_turn", "tool_calls", "tool_use",
+]);
+
+/**
+ * Reads both common fields independently. An empty `finish_reason` cannot hide
+ * a non-empty `stop_reason`, and two conflicting reports fail closed.
+ */
+type TerminatorReport = Readonly<{ values: readonly string[]; invalid: boolean }>;
+
+function readTerminators(choice: Record<string, unknown>): TerminatorReport {
+  const values: string[] = [];
+  let invalid = false;
+  for (const key of ["finish_reason", "stop_reason"] as const) {
+    const reason = choice[key];
+    if (reason === undefined || reason === null) continue;
+    if (typeof reason !== "string") {
+      invalid = true;
+      continue;
+    }
+    const normalized = reason.trim().toLowerCase();
+    if (normalized.length === 0) {
+      invalid = true;
+      continue;
+    }
+    if (!values.includes(normalized)) values.push(normalized);
+  }
+  return Object.freeze({ values: Object.freeze(values), invalid });
+}
+
+function classifyTerminators(report: TerminatorReport): "complete" | "missing" | UnusableCompletionCode {
+  if (report.invalid) return "unknown-terminator";
+  if (report.values.length === 0) return "missing";
+  const kinds = report.values.map((reason) => {
+    if (COMPLETE_TERMINATORS.has(reason)) return "complete" as const;
+    if (TRUNCATED_TERMINATORS.has(reason)) return "truncated" as const;
+    if (BLOCKED_TERMINATORS.has(reason)) return "blocked-or-refused" as const;
+    if (TOOL_TERMINATORS.has(reason)) return "tool-or-continuation" as const;
+    return "unknown-terminator" as const;
+  });
+  if (kinds.every((kind) => kind === "complete")) return "complete";
+  if (kinds.includes("unknown-terminator")) return "unknown-terminator";
+  if (kinds.includes("blocked-or-refused")) return "blocked-or-refused";
+  if (kinds.includes("tool-or-continuation")) return "tool-or-continuation";
+  return "truncated";
+}
+
+function extractCompletion(payload: unknown): Readonly<{
+  content: unknown;
+  terminators: TerminatorReport;
+  unusable?: UnusableCompletionCode;
+}> {
   if (typeof payload !== "object" || payload === null) {
     throw new Error("The model provider response was not an object.");
   }
@@ -318,26 +523,54 @@ function extractContent(payload: unknown): string {
   if (!Array.isArray(choices) || choices.length === 0) {
     throw new Error("The model provider response had no choice.");
   }
-  const message = (choices[0] as { message?: unknown }).message;
-  const content = typeof message === "object" && message !== null
-    ? (message as { content?: unknown }).content
-    : undefined;
-  if (typeof content !== "string") {
-    throw new Error("The model provider response had no text.");
+  const choice = choices[0];
+  if (typeof choice !== "object" || choice === null) {
+    throw new Error("The model provider response had no choice object.");
   }
-  return content;
+  const record = choice as Record<string, unknown>;
+  const message = record.message;
+  const messageRecord = typeof message === "object" && message !== null
+    ? message as Record<string, unknown>
+    : null;
+  const unusable = hasRefusal(messageRecord?.refusal)
+    ? "blocked-or-refused" as const
+    : hasToolCalls(messageRecord?.tool_calls) || hasToolCalls(record.tool_calls)
+      ? "tool-or-continuation" as const
+      : hasFunctionCall(messageRecord?.function_call) || hasFunctionCall(record.function_call)
+        ? "tool-or-continuation" as const
+        : undefined;
+  return Object.freeze({
+    content: messageRecord?.content,
+    terminators: readTerminators(record),
+    ...(unusable === undefined ? {} : { unusable }),
+  });
+}
+
+function hasRefusal(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  return typeof value !== "string" || value.trim().length > 0;
+}
+
+function hasToolCalls(value: unknown): boolean {
+  if (value === undefined || value === null) return false;
+  return !Array.isArray(value) || value.length > 0;
+}
+
+function hasFunctionCall(value: unknown): boolean {
+  return value !== undefined && value !== null;
 }
 
 async function readBounded(
   response: Response,
   maxBytes: number,
   signal: AbortSignal,
+  handOffDrain: (disposer: Promise<void>) => void,
 ): Promise<string> {
   const body = response.body;
   if (body === null) return "";
   const declared = response.headers.get("content-length");
   if (declared !== null && /^\d+$/u.test(declared) && Number(declared) > maxBytes) {
-    void body.cancel().catch(() => undefined);
+    handOffDrain(cancelResponseBody(response));
     throw new Error("The model provider response was too large.");
   }
   signal.throwIfAborted();
@@ -346,8 +579,11 @@ async function readBounded(
   let total = 0;
   let oversized = false;
   const boundary = rejectOnAbort(signal);
+  let cancellation: Promise<void> | undefined;
   const cancel = () => {
-    void reader.cancel(signal.reason).catch(() => undefined);
+    if (cancellation !== undefined) return;
+    cancellation = reader.cancel(signal.reason).catch(() => undefined);
+    handOffDrain(cancellation);
   };
   signal.addEventListener("abort", cancel, { once: true });
   try {
@@ -394,7 +630,7 @@ function rejectOnAbort(signal: AbortSignal): {
   return { promise, dispose: () => signal.removeEventListener("abort", reject) };
 }
 
-export type CandidateOutcome = "answered" | "failed" | "stalled";
+export type CandidateOutcome = "answered" | "failed" | "stalled" | "incomplete";
 
 function noteCandidate(input: ScenarioCall, event: ScenarioCandidateEvent): void {
   try {

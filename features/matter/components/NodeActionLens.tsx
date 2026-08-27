@@ -191,10 +191,19 @@ export function NodeActionLens({
       focusPendingKeyboardEntry(candidate.nodeId);
     };
     const pointerDown = () => close();
+    const reconcileCurrentTarget = () => {
+      const focused = materialTarget(document.activeElement);
+      const hovered = window.matchMedia("(pointer: coarse)").matches
+        ? null
+        : materialTarget(canvas.querySelector<HTMLElement>("[data-thought-text-id]:hover"));
+      if (focused !== null && focused.nodeId !== dismissedFocusNodeIdRef.current) reveal(focused, "focus");
+      else if (hovered !== null && hovered.nodeId !== dismissedFocusNodeIdRef.current) reveal(hovered, "pointer");
+    };
     const syncChromeSuppression = () => {
       const suppressed = chromeIsSuppressed();
       setChromeSuppressed(suppressed);
       if (suppressed) close();
+      else reconcileCurrentTarget();
     };
     const chromeObserver = new MutationObserver(syncChromeSuppression);
 
@@ -208,14 +217,6 @@ export function NodeActionLens({
     // A secondary lens may finish loading after the pointer or keyboard focus
     // already entered its passage. Reconcile that current browser state once
     // so lazy delivery never requires an artificial leave-and-reenter gesture.
-    if (!chromeIsSuppressed()) {
-      const focused = materialTarget(document.activeElement);
-      const hovered = window.matchMedia("(pointer: coarse)").matches
-        ? null
-        : materialTarget(canvas.querySelector<HTMLElement>("[data-thought-text-id]:hover"));
-      if (focused !== null) reveal(focused, "focus");
-      else if (hovered !== null) reveal(hovered, "pointer");
-    }
     chromeObserver.observe(paper, { attributes: true, attributeFilter: ["data-canvas-modal-open"] });
     if (chrome !== null) chromeObserver.observe(chrome, { attributes: true, attributeFilter: ["data-overlay"] });
     if (shell !== null) chromeObserver.observe(shell, { attributes: true, attributeFilter: ["data-node-dragging"] });

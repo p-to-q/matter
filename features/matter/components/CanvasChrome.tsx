@@ -1,8 +1,10 @@
 "use client";
 
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useReducer,
   useRef,
@@ -38,7 +40,7 @@ import {
 } from "./inquiry-composer";
 import { useInquiryDictation } from "./use-inquiry-dictation";
 import { shouldSubmitInquiryOnEnter } from "./inquiry-submit-key";
-import { askInquiry } from "../interaction/inquiry-client";
+import { askInquiry, createInquiryRequestId } from "../interaction/inquiry-client";
 import {
   sameInquiryContext,
   type InquiryContextPayload,
@@ -56,6 +58,11 @@ export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
   inquiryRecord?: InquiryRecordBinding;
   onInquiryOpen?: () => void;
+}>;
+
+export type CanvasChromeHandle = Readonly<{
+  /** Synchronously revokes Ask Matter before another material AI surface opens. */
+  closeInquiry: () => void;
 }>;
 
 export type CanvasChromeOverlay =
@@ -547,7 +554,7 @@ const FOCUSABLE_SELECTOR = [
   "[tabindex]:not([tabindex='-1'])",
 ].join(",");
 
-export function CanvasChrome({
+export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(function CanvasChrome({
   inquiryContext,
   inquiryRecord,
   onInquiryOpen,
@@ -556,7 +563,7 @@ export function CanvasChrome({
   setAppearance,
   setLanguage,
   setLeafFx,
-}: CanvasChromeProps) {
+}: CanvasChromeProps, forwardedRef) {
   const [overlay, setOverlay] = useState<CanvasChromeOverlay>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
@@ -566,6 +573,7 @@ export function CanvasChrome({
   const mobileTriggerRef = useRef<HTMLButtonElement>(null);
   const askButtonRef = useRef<HTMLButtonElement>(null);
   const inquiryAnchorRef = useRef<HTMLDivElement>(null);
+  const inquiryBubbleRef = useRef<InquiryBubbleHandle>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const copy = CANVAS_CHROME_COPY[preferences.language];
@@ -576,28 +584,39 @@ export function CanvasChrome({
   const appearanceLabel = copy.appearance[preferences.appearance];
   const modalOpen = MODAL_OVERLAYS.has(overlay);
 
+  const dismissInquiry = useCallback(() => {
+    inquiryBubbleRef.current?.invalidate();
+    returnFocusRef.current = null;
+    setOverlay((current) => current === "inquiry" ? null : current);
+  }, []);
+
+  useImperativeHandle(forwardedRef, () => ({ closeInquiry: dismissInquiry }), [dismissInquiry]);
+
   const closeOverlay = useCallback((restoreFocus = true) => {
+    if (overlay === "inquiry") inquiryBubbleRef.current?.invalidate();
     setOverlay(null);
     const returnTarget = returnFocusRef.current;
     returnFocusRef.current = null;
     if (restoreFocus && returnTarget?.isConnected) {
       requestAnimationFrame(() => focusWithoutScroll(returnTarget));
     }
-  }, []);
+  }, [overlay]);
 
   const openOverlay = useCallback((
     next: Exclude<CanvasChromeOverlay, null>,
     trigger: HTMLElement | null,
   ) => {
+    if (overlay === "inquiry" && next !== "inquiry") inquiryBubbleRef.current?.invalidate();
     if (next === "inquiry") onInquiryOpen?.();
     returnFocusRef.current = trigger;
     setOverlay(next);
-  }, [onInquiryOpen]);
+  }, [onInquiryOpen, overlay]);
 
   const toggleMenu = useCallback((
     next: "settings" | "language" | "inquiry",
     trigger: HTMLElement | null,
   ) => {
+    if (overlay === "inquiry") inquiryBubbleRef.current?.invalidate();
     if (next === "inquiry" && overlay !== "inquiry") onInquiryOpen?.();
     setOverlay((current) => {
       if (current === next) {
@@ -649,6 +668,7 @@ export function CanvasChrome({
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
     const onBreakpointChange = () => {
+      inquiryBubbleRef.current?.invalidate();
       returnFocusRef.current = null;
       setOverlay(null);
     };
@@ -825,6 +845,7 @@ export function CanvasChrome({
                 hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
                 language={preferences.language}
                 record={inquiryRecord}
+                ref={inquiryBubbleRef}
               />
             </div>
           </div>
@@ -1018,28 +1039,32 @@ export function CanvasChrome({
       ) : null}
     </div>
   );
-}
+});
 
-function InquiryBubble({
-  context,
-  copy,
-  hidden,
-  hint,
-  language,
-  record,
-}: {
+type InquiryBubbleHandle = Readonly<{ invalidate: () => void }>;
+
+const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   context?: () => InquiryContextPayload;
   copy: CanvasChromeCopy;
   hidden: boolean;
   hint: string;
   language: CanvasLanguage;
   record?: InquiryRecordBinding;
-}) {
+}>(function InquiryBubble({
+  context,
+  copy,
+  hidden,
+  hint,
+  language,
+  record,
+}, forwardedRef) {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
   const submittingRef = useRef(false);
+  const authorityRef = useRef(0);
+  const pendingSubmissionRef = useRef<Readonly<{ answerId: number; question: string }> | null>(null);
   const contextRef = useRef(context);
   const contextSnapshotRef = useRef<InquiryContextPayload | undefined>(undefined);
   const hasContextSnapshotRef = useRef(false);
@@ -1068,20 +1093,52 @@ function InquiryBubble({
     cancelLabel: copy.dictateCancel,
   });
 
-  useEffect(() => () => requestRef.current?.abort(), []);
+  const invalidate = useCallback(() => {
+    authorityRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    submittingRef.current = false;
+    pendingSubmissionRef.current = null;
+    cancelDictation();
+    dispatch({ type: "close" });
+  }, [cancelDictation]);
+
+  useImperativeHandle(forwardedRef, () => ({ invalidate }), [invalidate]);
+
+  useEffect(() => () => {
+    authorityRef.current += 1;
+    requestRef.current?.abort();
+  }, []);
 
   useEffect(() => subscribePageSuspension(() => {
     // Keep completed local turns, but return an in-flight question to its
     // editable draft through the request's existing abort/fallback path.
+    authorityRef.current += 1;
     requestRef.current?.abort(new DOMException("Page suspended", "AbortError"));
+    requestRef.current = null;
+    submittingRef.current = false;
+    const pending = pendingSubmissionRef.current;
+    pendingSubmissionRef.current = null;
+    if (pending !== null) {
+      dispatch({
+        type: "withdraw-unavailable",
+        id: pending.answerId,
+        question: pending.question,
+      });
+    }
   }), []);
 
   useEffect(() => {
     if (!hasPendingAnswer) submittingRef.current = false;
   }, [hasPendingAnswer]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     contextRef.current = context;
+    if (hidden) {
+      hasContextSnapshotRef.current = false;
+      contextSnapshotRef.current = undefined;
+      return;
+    }
     const nextContext = context?.();
     if (!hasContextSnapshotRef.current) {
       hasContextSnapshotRef.current = true;
@@ -1094,9 +1151,11 @@ function InquiryBubble({
     // A parent render may replace this callback without changing the bounded
     // material it projects. Any real change ends the request in flight, because
     // its answer would describe material that has moved.
+    authorityRef.current += 1;
     requestRef.current?.abort();
     requestRef.current = null;
     submittingRef.current = false;
+    pendingSubmissionRef.current = null;
     cancelDictation();
     if (inquiryContextScopeChanged(previousContext, nextContext)) {
       dispatch({ type: "scope-changed" });
@@ -1105,20 +1164,16 @@ function InquiryBubble({
     // Same material, new revision. The record is kept; only the unanswerable
     // turn settles.
     dispatch({ type: "settle-pending", outcome: UNREACHABLE });
-  }, [cancelDictation, context]);
+  }, [cancelDictation, context, hidden]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (hidden) {
-      cancelDictation();
-      requestRef.current?.abort();
-      requestRef.current = null;
-      submittingRef.current = false;
-      dispatch({ type: "close" });
+      invalidate();
       return;
     }
     const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
     return () => cancelAnimationFrame(frame);
-  }, [cancelDictation, hidden]);
+  }, [hidden, invalidate]);
 
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
@@ -1130,34 +1185,48 @@ function InquiryBubble({
     submittingRef.current = true;
     followThreadRef.current = true;
     const answerId = pendingAnswerId(state);
+    const exchangeId = createInquiryRequestId();
     const askedAt = new Date().toISOString();
     dispatch({ type: "ask" });
+    pendingSubmissionRef.current = { answerId, question };
     const payload = context?.();
     if (payload === undefined) {
       dispatch({ type: "answer", id: answerId, outcome: NO_MATERIAL });
+      pendingSubmissionRef.current = null;
       return;
     }
     requestRef.current?.abort();
     const request = new AbortController();
     requestRef.current = request;
-    void askInquiry({ question, locale: language, context: payload, signal: request.signal })
+    const authority = authorityRef.current;
+    void askInquiry({
+      question,
+      locale: language,
+      context: payload,
+      requestId: exchangeId,
+      signal: request.signal,
+    })
       .then((outcome) => {
         const currentContext = contextRef.current?.();
         if (
+          authorityRef.current !== authority ||
           requestRef.current !== request ||
           currentContext === undefined ||
           !sameInquiryContext(payload, currentContext)
         ) return;
         if (outcome.status === "unavailable" && outcome.reason !== "NO_MATERIAL") {
           dispatch({ type: "withdraw-unavailable", id: answerId, question });
+          pendingSubmissionRef.current = null;
           return;
         }
         dispatch({ type: "answer", id: answerId, outcome });
-        appendInquiryRecord(record, answerId, askedAt, question, payload, outcome);
+        pendingSubmissionRef.current = null;
+        appendInquiryRecord(record, exchangeId, askedAt, question, payload, outcome);
       })
       .catch(() => {
         if (requestRef.current !== request) return;
         dispatch({ type: "withdraw-unavailable", id: answerId, question });
+        pendingSubmissionRef.current = null;
       })
       .finally(() => {
         if (requestRef.current === request) {
@@ -1275,7 +1344,7 @@ function InquiryBubble({
       ) : null}
     </div>
   );
-}
+});
 
 function InquiryTurn({ copy, turn }: Readonly<{ copy: CanvasChromeCopy; turn: ReturnType<typeof createInquiryState>["turns"][number] }>) {
   const [beganPending] = useState(
@@ -1353,7 +1422,7 @@ function AnimatedInquiryAnswer({ answer }: Readonly<{ answer: string }>) {
 
 function appendInquiryRecord(
   record: InquiryRecordBinding | undefined,
-  answerId: number,
+  exchangeId: string,
   askedAt: string,
   question: string,
   context: InquiryContextPayload,
@@ -1361,7 +1430,7 @@ function appendInquiryRecord(
 ) {
   if (record === undefined) return;
   record.append(Object.freeze({
-    id: `inquiry_${answerId}`,
+    id: exchangeId,
     askedAt,
     question,
     outcome,

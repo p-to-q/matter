@@ -37,6 +37,16 @@ future system/account adapter or recovery flow, but the first-release inquiry
 does not expose a record-management action. There is no per-message deletion
 shape.
 
+The writer serializes load, append, conflict rebase, and clear work outside the
+React view lifecycle. An accepted exchange remains assigned to its addressed
+`treeId` when the visible document changes before an initial load or save
+settles. UI state may ignore that old-tree completion, but storage work does not
+change owners or disappear. Clear advances the record epoch; an append that was
+based before that boundary is discarded rather than resurrected, while an
+answer accepted after clear queues behind its tombstone as a new record. A
+replaceable repository adapter that rejects instead of returning a typed result
+is normalized to the same unavailable/write-failed seam.
+
 ## Export and migration
 
 Matter `0.2` ZIP remains material-only. It does not silently include questions
@@ -49,6 +59,9 @@ they never infer a record from a current transient composer.
 
 - completed record reloads only for its own document, while the inquiry itself
   still opens without an exchange and draft and pending work do not reload;
+- an exchange accepted while its initial load is pending persists to its own
+  tree even if the view switches first; rapid appends serialize against the
+  latest durable version, and clear ordering cannot resurrect a stale epoch;
 - a changed material revision preserves an old record but never gives it
   authority over a new request; the transient visible record follows the same
   rule, and is discarded only on a move to different material — another

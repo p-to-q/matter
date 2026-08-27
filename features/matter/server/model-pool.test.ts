@@ -7,6 +7,12 @@ import {
   resolvePoolAdapter,
   type PoolCandidate,
 } from "./model-pool";
+import {
+  ScenarioGovernor,
+  runScenario,
+  type MatterScenario,
+  type ScenarioPerformanceObservation,
+} from "./harness";
 
 const ENVIRONMENT = Object.freeze({
   MATTER_LABEL_POOL: "abc,backup",
@@ -37,7 +43,7 @@ function adapterInput(
 }
 
 function chatResponse(text: string, status = 200): Response {
-  return new Response(JSON.stringify({ choices: [{ message: { content: text } }] }), {
+  return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: text } }] }), {
     status,
     headers: { "content-type": "application/json" },
   });
@@ -47,6 +53,28 @@ beforeEach(() => resetPoolHealth());
 afterEach(() => resetPoolHealth());
 
 describe("readModelPool", () => {
+  it("keeps the shared output ceiling even when a caller asks for more", async () => {
+    expect(DEFAULT_POOL_LIMITS.maxOutputTokens).toBe(1_200);
+    let maxTokens: unknown;
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        maxTokens = (JSON.parse(String((init as RequestInit).body)) as { max_tokens?: unknown })
+          .max_tokens;
+        return chatResponse("完整");
+      },
+    );
+
+    await adapter(
+      { ...adapterInput(), maxOutputTokens: 2_600 },
+      new AbortController().signal,
+    );
+
+    expect(maxTokens).toBe(1_200);
+  });
+
   it("uses the scenario-neutral model namespace for new deployments", () => {
     expect(readModelPool({
       MATTER_MODEL_POOL: "primary",
@@ -266,12 +294,213 @@ describe("pool adapter", () => {
     }
   });
 
+  it("drains a late response and never lets it replace the fallback winner", async () => {
+    vi.useFakeTimers();
+    try {
+      let resolveLate!: (response: Response) => void;
+      let releaseCancel!: () => void;
+      let cancelSettled!: Promise<void>;
+      const cancelled = vi.fn();
+      const tried: string[] = [];
+      const events: string[] = [];
+      let lateCalls = 0;
+      const adapter = createPoolAdapter(
+        [candidate("late"), candidate("steady")],
+        { ...DEFAULT_POOL_LIMITS, cooldownMs: 0 },
+        Date.now,
+        async (_url, init) => {
+          const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+          tried.push(model);
+          if (model === "steady") return chatResponse("SECOND");
+          lateCalls += 1;
+          if (lateCalls > 1) return chatResponse("RECOVERED");
+          return new Promise<Response>((resolve) => {
+            resolveLate = resolve;
+          });
+        },
+      );
+
+      const first = adapter(
+        { ...adapterInput(1_000), observeCandidate: (event) => events.push(event) },
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(first).resolves.toEqual({ text: "SECOND" });
+      expect(tried).toEqual(["late", "steady"]);
+
+      // Even with a zero cooldown, the unresolved transport owns a lease and is
+      // not multiplied by the next request.
+      tried.length = 0;
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "SECOND" });
+      expect(tried).toEqual(["steady"]);
+
+      resolveLate(new Response(new ReadableStream<Uint8Array>({
+        cancel: () => {
+          cancelled();
+          cancelSettled = new Promise<void>((resolve) => {
+            releaseCancel = resolve;
+          });
+          return cancelSettled;
+        },
+      })));
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(cancelled).toHaveBeenCalledOnce();
+
+      // A resolved Response is still a live resource until its body disposer
+      // settles. The lease must not open a multiplication window in between.
+      tried.length = 0;
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "SECOND" });
+      expect(tried).toEqual(["steady"]);
+
+      releaseCancel();
+      await cancelSettled;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      tried.length = 0;
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "RECOVERED" });
+      expect(tried).toEqual(["late"]);
+      expect(events).toEqual(["pool", "stalled", "answered"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a lease for a claimed response whose body cancellation has not settled", async () => {
+    vi.useFakeTimers();
+    try {
+      let releaseCancel!: () => void;
+      let cancelSettled!: Promise<void>;
+      let firstBody = true;
+      const tried: string[] = [];
+      const adapter = createPoolAdapter(
+        [candidate("body-stalls"), candidate("steady")],
+        { ...DEFAULT_POOL_LIMITS, cooldownMs: 0 },
+        Date.now,
+        async (_url, init) => {
+          const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+          tried.push(model);
+          if (model === "steady") return chatResponse("SECOND");
+          if (!firstBody) return chatResponse("RECOVERED");
+          firstBody = false;
+          return new Response(new ReadableStream<Uint8Array>({
+            pull: () => new Promise(() => undefined),
+            cancel: () => {
+              cancelSettled = new Promise<void>((resolve) => {
+                releaseCancel = resolve;
+              });
+              return cancelSettled;
+            },
+          }));
+        },
+      );
+
+      const first = adapter(adapterInput(1_000), new AbortController().signal);
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(first).resolves.toEqual({ text: "SECOND" });
+      expect(tried).toEqual(["body-stalls", "steady"]);
+
+      tried.length = 0;
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "SECOND" });
+      expect(tried).toEqual(["steady"]);
+
+      releaseCancel();
+      await cancelSettled;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      tried.length = 0;
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "RECOVERED" });
+      expect(tried).toEqual(["body-stalls"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives the full remaining budget to the last non-draining candidate", async () => {
+    vi.useFakeTimers();
+    let releaseDrain: ((response: Response) => void) | undefined;
+    try {
+      let slowCalls = 0;
+      let drainingCalls = 0;
+      const adapter = createPoolAdapter(
+        [candidate("slow"), candidate("already-draining")],
+        DEFAULT_POOL_LIMITS,
+        Date.now,
+        async (_url, init) => {
+          const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+          if (model === "already-draining") {
+            drainingCalls += 1;
+            if (drainingCalls > 1) return chatResponse("DRAIN-CLEARED");
+            return new Promise<Response>((resolve) => { releaseDrain = resolve; });
+          }
+          slowCalls += 1;
+          if (slowCalls === 1 || slowCalls === 3) return chatResponse("", 503);
+          return new Promise<Response>((resolve) => {
+            setTimeout(() => resolve(chatResponse("LATE-BUT-IN-BOUNDS")), 700);
+          });
+        },
+      );
+
+      const seedDrain = adapter(adapterInput(1_000), new AbortController().signal);
+      const seedAssertion = expect(seedDrain).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(1_000);
+      await seedAssertion;
+
+      const next = adapter(adapterInput(1_000), new AbortController().signal);
+      await vi.advanceTimersByTimeAsync(700);
+      await expect(next).resolves.toEqual({ text: "LATE-BUT-IN-BOUNDS" });
+
+      releaseDrain?.(chatResponse("STALE"));
+      releaseDrain = undefined;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "DRAIN-CLEARED" });
+    } finally {
+      releaseDrain?.(chatResponse("STALE"));
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not mistake healthy concurrent requests for abandoned transport", async () => {
+    const releases: Array<(response: Response) => void> = [];
+    let calls = 0;
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => {
+        calls += 1;
+        return new Promise<Response>((resolve) => releases.push(resolve));
+      },
+    );
+    const first = adapter(adapterInput(), new AbortController().signal);
+    const second = adapter(adapterInput(), new AbortController().signal);
+    await Promise.resolve();
+    expect(calls).toBe(2);
+    releases[0]?.(chatResponse("FIRST"));
+    releases[1]?.(chatResponse("SECOND"));
+    await expect(first).resolves.toEqual({ text: "FIRST" });
+    await expect(second).resolves.toEqual({ text: "SECOND" });
+  });
+
   it("cools a stalled relay after one hang, not after two", async () => {
     // The production failure this exists for: one relay stops answering
     // without refusing. Graded like a fast error it stays first in order for a
     // second full-ceiling attempt, so the next caller pays the same stall
     // again before the pool ever reaches a working relay.
-    let clock = 1_000;
+    const clock = 1_000;
     const tried: string[] = [];
     const adapter = createPoolAdapter(
       [candidate("stalling"), candidate("steady")],
@@ -286,8 +515,6 @@ describe("pool adapter", () => {
           request.signal?.addEventListener(
             "abort",
             () => {
-              // The stall consumed the whole attempt ceiling.
-              clock += 500;
               reject(new DOMException("Aborted", "AbortError"));
             },
             { once: true },
@@ -574,6 +801,335 @@ describe("pool adapter", () => {
     await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
   });
 
+  it.each([
+    ["length", "openai chat completions"],
+    ["max_tokens", "anthropic and relays that forward it"],
+    ["MAX_TOKENS", "a relay that shouts its terminators"],
+    ["model_context_window_exceeded", "anthropic context overflow"],
+  ])("refuses a %s completion so a half answer loses to the floor", async (terminator) => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: terminator, message: { content: "半句话" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toContain("truncated");
+  });
+
+  it("demotes a relay that truncates while still trying the next one", async () => {
+    // The clock never advances: cooling would have to come from grading,
+    // not from time passing.
+    const clock = 1_000;
+    const tried: string[] = [];
+    const respond = async (_url: unknown, init: unknown) => {
+      const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+      tried.push(model);
+      return model === "cuts"
+        ? new Response(
+            JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "半句" } }] }),
+            { headers: { "content-type": "application/json" } },
+          )
+        : chatResponse("完整");
+    };
+    const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 60_000 };
+    const adapter = createPoolAdapter(
+      [candidate("cuts"), candidate("steady")],
+      limits,
+      () => clock,
+      respond,
+    );
+
+    // The truncating relay is skipped over, not used, and the next one answers.
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .resolves.toEqual({ text: "完整" });
+    expect(tried).toEqual(["cuts", "steady"]);
+
+    // Candidate-local demotion keeps the repeatedly incomplete relay from
+    // charging every later request; it does not cool the whole surface.
+    tried.length = 0;
+    await adapter(adapterInput(), new AbortController().signal);
+    expect(tried).toEqual(["steady"]);
+  });
+
+  it("settles on the floor when every relay truncates", async () => {
+    const adapter = createPoolAdapter(
+      [candidate("one"), candidate("two")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "半句" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+  });
+
+  it("records every truncated relay as one terminal attempt", async () => {
+    const observations: ScenarioPerformanceObservation[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("one"), candidate("two")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "半句" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      locale: () => "zh-CN",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 32 }),
+      adjudicate: (answer) => typeof answer === "string"
+        ? { ok: true, value: answer }
+        : { ok: false, reason: "empty" },
+    });
+    const outcome = await runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+      observePerformance: (observation) => observations.push(observation),
+    });
+    expect(outcome).toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+    expect(observations).toEqual([expect.objectContaining({
+      outcome: "unavailable",
+      candidateAttempts: 2,
+      candidateTruncations: 2,
+      candidateRefusals: 0,
+    })]);
+  });
+
+  it.each([
+    ["stop", "openai"],
+    ["end_turn", "anthropic"],
+    ["eos", "together"],
+  ])("accepts a %s completion without counting it as unknown", async (terminator) => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: terminator, message: { content: "完整" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).resolves.toEqual({ text: "完整" });
+    expect(events).not.toContain("unknown-terminator");
+  });
+
+  it("fails closed on an explicitly empty terminator", async () => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: "", message: { content: "半句" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toEqual(["pool", "unknown-terminator", "refused"]);
+  });
+
+  it("accepts a relay that reports no terminator at all", async () => {
+    // Several OpenAI-compatible relays omit the field. Absent must never read
+    // as bad: an allowlist here would silently settle every scenario on its
+    // floor, and a floor does not announce itself.
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ message: { content: "完整" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).resolves.toEqual({ text: "完整" });
+    expect(events).not.toContain("unknown-terminator");
+    expect(events).not.toContain("truncated");
+    expect(events).toContain("missing-terminator");
+  });
+
+  it.each([
+    "content_filter",
+    "guardrail_intervened",
+    "refusal",
+    "tool_calls",
+    "function_call",
+    "tool_use",
+    "pause_turn",
+  ])("refuses an explicit non-complete %s terminator", async (terminator) => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: terminator, message: { content: "不应显示" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toContain("refused");
+  });
+
+  it.each([
+    ["a structured refusal", { finish_reason: "stop", message: { content: "不应显示", refusal: "blocked" } }],
+    ["a structured tool call", { finish_reason: "stop", message: { content: "不应显示", tool_calls: [{ id: "call_1" }] } }],
+    ["an object-shaped refusal", { finish_reason: "stop", message: { content: "不应显示", refusal: { reason: "blocked" } } }],
+    ["a malformed tool call", { finish_reason: "stop", message: { content: "不应显示", tool_calls: { id: "call_1" } } }],
+    ["a malformed function call", { finish_reason: "stop", message: { content: "不应显示", function_call: "pending" } }],
+    ["a choice tool call hidden by an empty message field", {
+      finish_reason: "stop",
+      tool_calls: [{ id: "call_1" }],
+      message: { content: "不应显示", tool_calls: [] },
+    }],
+  ])("refuses %s even when the terminator says complete", async (_name, choice) => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(JSON.stringify({ choices: [choice] }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toContain("refused");
+  });
+
+  it("does not count a missing terminator until the response carries text", async () => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(JSON.stringify({ choices: [{ message: {} }] }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toEqual(["pool", "failed"]);
+  });
+
+  it("fails closed on an unknown explicit terminator and counts it anonymously", async () => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: "new_relay_state", message: { content: "不应显示" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toEqual(["pool", "unknown-terminator", "refused"]);
+  });
+
+  it("counts an unknown explicit terminator even when a structured refusal also rejects the choice", async () => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({
+          choices: [{
+            finish_reason: "future_provider_state",
+            message: { content: "不应显示", refusal: "blocked" },
+          }],
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toEqual(["pool", "unknown-terminator", "refused"]);
+  });
+
+  it("treats a complete and truncating terminator conflict as truncated", async () => {
+    const events: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({
+          choices: [{
+            finish_reason: "stop",
+            stop_reason: "length",
+            message: { content: "半句" },
+          }],
+        }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(
+      { ...adapterInput(), observeCandidate: (event) => events.push(event) },
+      new AbortController().signal,
+    )).rejects.toThrow();
+    expect(events).toEqual(["pool", "truncated"]);
+  });
+
+  it("does not let an empty finish_reason hide a truncating stop_reason", async () => {
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ finish_reason: "", stop_reason: "max_tokens", message: { content: "半句" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+  });
+
+  it("reads an anthropic-shaped stop_reason when finish_reason is absent", async () => {
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(
+        JSON.stringify({ choices: [{ stop_reason: "max_tokens", message: { content: "半句" } }] }),
+        { headers: { "content-type": "application/json" } },
+      ),
+    );
+    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+  });
+
   it("refuses a response beyond the byte bound", async () => {
     const adapter = createPoolAdapter(
       [candidate("only")],
@@ -585,17 +1141,42 @@ describe("pool adapter", () => {
   });
 
   it("fast-fails a declared oversize without waiting for body cancellation", async () => {
+    let releaseCancel: (() => void) | undefined;
+    let cancelSettled: Promise<void> | undefined;
     const body = new ReadableStream<Uint8Array>({
-      cancel: () => new Promise(() => undefined),
+      cancel: () => {
+        cancelSettled = new Promise<void>((resolve) => { releaseCancel = resolve; });
+        return cancelSettled;
+      },
     });
+    let calls = 0;
     const adapter = createPoolAdapter(
-      [candidate("only")],
-      { ...DEFAULT_POOL_LIMITS, maxResponseBytes: 64 },
+      [candidate("oversize-never-cancels")],
+      { ...DEFAULT_POOL_LIMITS, maxResponseBytes: 128 },
       Date.now,
-      async () => new Response(body, { headers: { "content-length": "65" } }),
+      async () => {
+        calls += 1;
+        return calls === 1
+          ? new Response(body, { headers: { "content-length": "129" } })
+          : chatResponse("RECOVERED");
+      },
     );
-    await expect(adapter(adapterInput(), new AbortController().signal))
-      .rejects.toThrow("too large");
+    try {
+      await expect(adapter(adapterInput(), new AbortController().signal))
+        .rejects.toThrow("too large");
+      releaseCancel?.();
+      releaseCancel = undefined;
+      await cancelSettled;
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await expect(adapter(adapterInput(), new AbortController().signal))
+        .resolves.toEqual({ text: "RECOVERED" });
+    } finally {
+      releaseCancel?.();
+      await cancelSettled;
+    }
   });
 
   it("never puts the key in a thrown message", async () => {

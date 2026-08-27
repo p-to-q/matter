@@ -26,14 +26,32 @@ import { pathToFileURL } from "node:url";
 
 export const PROTOCOL_VERSION = "0.2";
 export const REPAIR_PROMPT_VERSION = "transcript-repair/4";
-export const LABEL_PROMPT_VERSION = "thought-label/2";
+export const LABEL_PROMPT_VERSION = "thought-label/3";
 export const SURFACES = Object.freeze(["repair", "label", "inquiry"]);
+const HEALTH_SURFACE = Object.freeze({
+  repair: "transcriptRepair",
+  label: "thoughtLabel",
+  inquiry: "inquiry",
+});
 
 /**
  * Inquiry admits twelve requests per minute per source, and a probe that trips
  * its own rate limit measures the limiter rather than the pool.
  */
 export const DEFAULT_PACE_MS = 6_000;
+
+/**
+ * `DEFAULT_POOL_LIMITS.cooldownMs` in features/matter/server/model-pool.ts owns
+ * this conservative attribution window; it is restated because an operator
+ * script cannot import the TypeScript module.
+ *
+ * It matters here because the default pace is well inside it. That is the right
+ * trade while the pool answers — nothing cools, and a run stays short — and the
+ * wrong one the moment it does not, which is the only time anybody runs this.
+ * Rather than make every run wait a minute between rounds, the report says when
+ * later samples may be measuring this probe's own effect.
+ */
+export const POOL_COOLDOWN_MS = 60_000;
 export const DEFAULT_ROUNDS = 6;
 
 /**
@@ -206,7 +224,7 @@ function verdictOf(attempted, bySurface) {
     : "pool-degraded";
 }
 
-export function formatReport(origin, summary) {
+export function formatReport(origin, summary, options = {}) {
   const lines = [`pool: ${origin} — ${summary.verdict}`];
   for (const surface of SURFACES) {
     const entry = summary.bySurface[surface];
@@ -223,7 +241,44 @@ export function formatReport(origin, summary) {
     );
   }
   for (const failure of summary.failures) lines.push(`  ! ${failure}`);
+  for (const failure of probeGateFailures(summary, options)) lines.push(`  ! ${failure}`);
+  const caveat = pacingCaveat(summary, options.paceMs);
+  if (caveat !== null) lines.push(`  ! ${caveat}`);
   return lines.join("\n");
+}
+
+/** Release-only assertions layered on top of the diagnostic pool verdict. */
+export function probeGateFailures(summary, options = {}) {
+  if (options.requireInquiryAnswer !== true) return Object.freeze([]);
+  const inquiry = summary.bySurface.inquiry;
+  if (inquiry !== undefined && inquiry.calls > 0 && inquiry.model === inquiry.calls) {
+    return Object.freeze([]);
+  }
+  return Object.freeze([
+    `release gate requires a real Inquiry answer on every call; observed ${inquiry?.model ?? 0}/${inquiry?.calls ?? 0}.`,
+  ]);
+}
+
+/**
+ * Names the one way this probe can lie to the person running it.
+ *
+ * An origin probe cannot prove instance affinity or which internal candidate was
+ * attempted. Repeated failures inside this window therefore create an
+ * attribution caveat, not proof that a candidate entered cooldown.
+ */
+export function pacingCaveat(summary, paceMs) {
+  if (typeof paceMs !== "number" || paceMs >= POOL_COOLDOWN_MS) return null;
+  const cooled = SURFACES.filter((surface) => {
+    const entry = summary.bySurface[surface];
+    return entry !== undefined && entry.calls - entry.reached >= 2;
+  });
+  if (cooled.length === 0) return null;
+  return `${cooled.join(", ")} had repeated non-model results while rounds were `
+    + `paced ${Math.round(paceMs / 1_000)}s apart, inside the process-local `
+    + `${POOL_COOLDOWN_MS / 1_000}s candidate-health window. If later requests `
+    + `hit the same warm instance, local ordering or governor state may affect `
+    + `them; correlate server receipts before attributing the result to a relay. `
+    + `Use --pace=${Math.ceil(POOL_COOLDOWN_MS / 1_000) + 5} for a cleaner retry window.`;
 }
 
 export async function probeModelPool({
@@ -238,6 +293,7 @@ export async function probeModelPool({
   onSample = () => undefined,
 }) {
   const target = normalizeOrigin(origin);
+  const requestOrigin = new URL(target).origin;
   const samples = [];
   for (let round = 1; round <= rounds; round += 1) {
     for (const surface of surfaces) {
@@ -251,7 +307,7 @@ export async function probeModelPool({
             "content-type": "application/json",
             // Inquiry admission requires a same-origin browser shape in
             // production. A probe that omits it measures the origin check.
-            origin: target,
+            origin: requestOrigin,
             "sec-fetch-site": "same-origin",
           },
           body: JSON.stringify(requestFor(surface, round)),
@@ -285,6 +341,7 @@ export function parseArguments(args) {
   let origin;
   let rounds = DEFAULT_ROUNDS;
   let paceMs = DEFAULT_PACE_MS;
+  let requireInquiryAnswer = false;
   for (const value of args) {
     if (value.startsWith("--rounds=")) {
       rounds = wholeNumber(value.slice("--rounds=".length), 1, 60, "--rounds");
@@ -294,12 +351,16 @@ export function parseArguments(args) {
       paceMs = wholeNumber(value.slice("--pace=".length), 0, 300, "--pace") * 1_000;
       continue;
     }
+    if (value === "--require-inquiry-answer") {
+      requireInquiryAnswer = true;
+      continue;
+    }
     if (origin !== undefined) {
-      throw new Error("Pool probe accepts one origin, --rounds=<n>, and --pace=<seconds>.");
+      throw new Error("Pool probe accepts one origin, --rounds=<n>, --pace=<seconds>, and --require-inquiry-answer.");
     }
     origin = value;
   }
-  return Object.freeze({ origin, rounds, paceMs });
+  return Object.freeze({ origin, rounds, paceMs, requireInquiryAnswer });
 }
 
 export function normalizeOrigin(value) {
@@ -311,10 +372,51 @@ export function normalizeOrigin(value) {
   if (url.username !== "" || url.password !== "") {
     throw new Error("Pool probe origin must not carry credentials.");
   }
-  if (url.pathname !== "/" || url.search !== "" || url.hash !== "") {
-    throw new Error("Pool probe origin must not include a path, query, or fragment.");
+  if (url.search !== "" || url.hash !== "") {
+    throw new Error("Pool probe origin must not include a query or fragment.");
   }
-  return url.origin;
+  // A local or shared deployment may use Next's basePath. Keep that path in
+  // the request target while the browser-shaped Origin header remains the
+  // scheme/host/port tuple; an Origin value is never allowed to carry a path.
+  const basePath = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/u, "");
+  return `${url.origin}${basePath}`;
+}
+
+/**
+ * A fixture can return the same public `source: "model"` shape as a live
+ * adapter. Health is therefore the authority for whether a probe result says
+ * anything about the external pool at all.
+ */
+export function eligiblePoolSurfaces(payload) {
+  if (!isRecord(payload) || !isRecord(payload.surfaces)) {
+    throw new Error("Pool probe health response was malformed.");
+  }
+  const live = [];
+  const skipped = [];
+  for (const surface of SURFACES) {
+    const healthName = HEALTH_SURFACE[surface];
+    const state = payload.surfaces[healthName];
+    if (state === "available") live.push(surface);
+    else if (state === "fixture" || state === "unavailable" || state === "not-implemented") {
+      skipped.push(Object.freeze({ surface, state }));
+    } else {
+      throw new Error(`Pool probe health omitted the ${healthName} capability.`);
+    }
+  }
+  return Object.freeze({ live: Object.freeze(live), skipped: Object.freeze(skipped) });
+}
+
+export async function readPoolCapabilities(target, fetchImpl = fetch) {
+  const response = await fetchImpl(`${normalizeOrigin(target)}/api/health`, {
+    method: "GET",
+    headers: { accept: "application/json" },
+    cache: "no-store",
+    redirect: "manual",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error("Pool probe health request failed.");
+  const payload = await response.json().catch(() => null);
+  return eligiblePoolSurfaces(payload);
 }
 
 function requestFor(surface, round) {
@@ -381,11 +483,20 @@ function delay(milliseconds) {
 }
 
 async function main() {
-  const { origin, rounds, paceMs } = parseArguments(process.argv.slice(2));
+  const { origin, rounds, paceMs, requireInquiryAnswer } = parseArguments(process.argv.slice(2));
+  const target = normalizeOrigin(origin ?? process.env.MATTER_DEPLOYMENT_ORIGIN ?? "https://matter.ptoq.io");
+  const capabilities = await readPoolCapabilities(target);
+  for (const entry of capabilities.skipped) {
+    console.log(`pool: skip ${entry.surface} — health reports ${entry.state}`);
+  }
+  if (capabilities.live.length === 0) {
+    throw new Error("health reports no live model-pool surface to probe.");
+  }
   const result = await probeModelPool({
-    origin: origin ?? process.env.MATTER_DEPLOYMENT_ORIGIN ?? "https://matter.ptoq.io",
+    origin: target,
     rounds,
     paceMs,
+    surfaces: capabilities.live,
     onSample: (sample) => {
       const reason = sample.reason === null ? "" : ` ${sample.reason}`;
       console.log(
@@ -394,8 +505,11 @@ async function main() {
       );
     },
   });
-  console.log(formatReport(result.origin, result.summary));
-  if (result.summary.failures.length > 0) process.exitCode = 1;
+  console.log(formatReport(result.origin, result.summary, { paceMs, requireInquiryAnswer }));
+  if (
+    result.summary.failures.length > 0 ||
+    probeGateFailures(result.summary, { requireInquiryAnswer }).length > 0
+  ) process.exitCode = 1;
 }
 
 const entryUrl = process.argv[1] === undefined ? null : pathToFileURL(resolve(process.argv[1])).href;

@@ -41,7 +41,7 @@ export const MAX_PARENT_EXCERPT_CODE_UNITS = 240;
  * Bumping this invalidates every cached label without a schema change, because
  * it participates in the label fingerprint on both sides of the boundary.
  */
-export const SEMANTIC_LABEL_PROMPT_VERSION = "thought-label/2";
+export const SEMANTIC_LABEL_PROMPT_VERSION = "thought-label/3";
 
 export type SemanticLabelSource = "provisional" | "model";
 
