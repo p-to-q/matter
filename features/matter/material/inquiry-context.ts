@@ -1,4 +1,10 @@
 import type { ThoughtTree } from "../tree/model";
+import {
+  MAX_INQUIRY_CONTEXT_CODE_POINTS,
+  MAX_INQUIRY_CONTEXT_NODES,
+  MAX_INQUIRY_NODE_CODE_POINTS,
+  type InquiryContextScope,
+} from "../config/inquiry";
 import type { SegmentSelection } from "./text-segments";
 import type { WorkingContextNode } from "./working-context";
 
@@ -6,10 +12,17 @@ import type { WorkingContextNode } from "./working-context";
  * The material an inquiry may carry: transient lasso passages or the bounded
  * active working projection. It is reference material, never instruction or
  * hidden memory.
+ *
+ * Projection and wire validation consume one neutral bound definition. Keeping
+ * the values outside either implementation avoids a protocol→material or
+ * material→protocol dependency while still preventing silent drift.
  */
-export const MAX_INQUIRY_NODE_CODE_POINTS = 480;
-export const MAX_INQUIRY_CONTEXT_CODE_POINTS = 4_000;
-export const MAX_INQUIRY_CONTEXT_NODES = 64;
+export {
+  MAX_INQUIRY_CONTEXT_CODE_POINTS,
+  MAX_INQUIRY_CONTEXT_NODES,
+  MAX_INQUIRY_NODE_CODE_POINTS,
+} from "../config/inquiry";
+export type { InquiryContextScope } from "../config/inquiry";
 
 export type InquiryContextNode = Readonly<{
   nodeId: string;
@@ -17,8 +30,6 @@ export type InquiryContextNode = Readonly<{
   text: string;
   truncated: boolean;
 }>;
-
-export type InquiryContextScope = "selection" | "tree";
 
 export type InquiryContext = Readonly<{
   treeId: string;

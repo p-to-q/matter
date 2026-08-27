@@ -5,17 +5,21 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { segmentText } from "../features/matter/material/text-segments";
 import {
+  EXPAND_IN_PLACE_POLICY_VERSION,
   deriveExpandInPlaceLength,
 } from "../features/matter/protocol/expand-in-place-policy";
 import {
+  TEXT_SWAP_POLICY_VERSION,
   deriveTextSwapLength,
   normalizeTextSwapDirection,
 } from "../features/matter/protocol/text-swap-policy";
+import { COMPLETION_OUTCOME_POLICY_VERSION } from "../features/matter/server/completion-outcome";
 import {
   ScenarioGovernor,
   runScenario,
 } from "../features/matter/server/harness";
 import {
+  DEFAULT_POOL_LIMITS,
   createPoolAdapter,
   readModelPool,
   resetPoolHealth,
@@ -243,7 +247,12 @@ describe("material language evaluation core", () => {
       { ...localPlan, scenario: "text-swap" },
       { ...localPlan, candidate: { ...localPlan.candidate, station: "changed-station" } },
       { ...localPlan, candidate: { ...localPlan.candidate, model: "changed-model" } },
+      { ...localPlan, candidate: { ...localPlan.candidate, enableThinking: true } },
+      { ...localPlan, candidate: { ...localPlan.candidate, endpointDigest: "0".repeat(64) } },
       { ...localPlan, promptVersion: "transform/changed" },
+      { ...localPlan, compiledPromptDigest: "0".repeat(64) },
+      { ...localPlan, executionContract: { ...localPlan.executionContract, completionPolicyVersion: "changed" } },
+      { ...localPlan, executionContract: { ...localPlan.executionContract, caseBudgetsDigest: "0".repeat(64) } },
       { ...localPlan, corpusVersion: "transform-live-corpus/changed" },
       { ...localPlan, corpus: [{ ...localPlan.corpus[0], passage: "changed material" }] },
       { ...localPlan, axes: [{ id: "amount-03", amount: 0.3 }] },
@@ -276,12 +285,14 @@ describe("material language evaluation core", () => {
       definition,
       buildEvaluationMatrix(definition.corpus, definition.axes),
     );
-    const candidate = Object.freeze({ station: "private-station", model: "private-model" });
+    const candidate = evaluationCandidate({ station: "private-station", model: "private-model" });
     const plan = Object.freeze({
-      schemaVersion: "material-language-eval-authority/1",
+      schemaVersion: "material-language-eval-authority/3",
       scenario: definition.id,
-      candidate,
+      candidate: evaluationCandidate(candidate),
       promptVersion: definition.promptVersion,
+      compiledPromptDigest: compiledPromptDigest(definition, prepared),
+      executionContract: evaluationExecutionContract(definition, prepared),
       corpusVersion: definition.corpusVersion,
       corpus: definition.corpus,
       axes: definition.axes,
@@ -615,10 +626,12 @@ function prepareLiveEvaluation() {
   if (candidate === undefined) throw new Error("The selected candidate is not configured in the local model pool.");
   const tokenCeiling = expectedEvaluationOutputTokenCeiling(definition, prepared);
   const plan = Object.freeze({
-    schemaVersion: "material-language-eval-authority/1",
+    schemaVersion: "material-language-eval-authority/3",
     scenario: definition.id,
-    candidate: Object.freeze({ station: candidate.station, model: candidate.model }),
+    candidate: evaluationCandidate(candidate),
     promptVersion: definition.promptVersion,
+    compiledPromptDigest: compiledPromptDigest(definition, prepared),
+    executionContract: evaluationExecutionContract(definition, prepared),
     corpusVersion: definition.corpusVersion,
     corpus: definition.corpus,
     axes: definition.axes,
@@ -810,6 +823,7 @@ function scenarioDefinition(id) {
       id,
       scenario: TRANSFORM_SCENARIO,
       promptVersion: TRANSFORM_PROMPT_VERSION,
+      policyVersion: EXPAND_IN_PLACE_POLICY_VERSION,
       corpusVersion: TRANSFORM_CORPUS_VERSION,
       corpus: TRANSFORM_LIVE_CORPUS,
       axes: TRANSFORM_AMOUNTS,
@@ -841,6 +855,7 @@ function scenarioDefinition(id) {
       id,
       scenario: TEXT_SWAP_SCENARIO,
       promptVersion: TEXT_SWAP_PROMPT_VERSION,
+      policyVersion: TEXT_SWAP_POLICY_VERSION,
       corpusVersion: TEXT_SWAP_CORPUS_VERSION,
       corpus: TEXT_SWAP_LIVE_CORPUS,
       axes: TEXT_SWAP_DIRECTION_FAMILIES,
@@ -870,6 +885,43 @@ function scenarioDefinition(id) {
 
 function prepareEvaluationMatrix(definition, matrix) {
   return matrix.map((item) => Object.freeze({ ...item, input: definition.prepare(item) }));
+}
+
+/**
+ * Binds paid authority to the exact prompts the prepared matrix will send.
+ * A scenario version remains human-readable identity; this digest prevents a
+ * shared-spine edit from silently reusing evidence for different model input.
+ */
+function compiledPromptDigest(definition, prepared) {
+  const prompts = prepared.map((item) => Object.freeze({
+    id: item.id,
+    prompt: definition.scenario.compile(item.input),
+  }));
+  return createHash("sha256").update(JSON.stringify(prompts)).digest("hex");
+}
+
+function evaluationCandidate(candidate) {
+  return Object.freeze({
+    station: candidate.station,
+    model: candidate.model,
+    enableThinking: candidate.enableThinking ?? null,
+    endpointDigest: createHash("sha256").update(candidate.baseUrl ?? "").digest("hex"),
+  });
+}
+
+function evaluationExecutionContract(definition, prepared) {
+  const caseBudgets = prepared.map((item) => Object.freeze({
+    id: item.id,
+    ...definition.scenario.budget(item.input),
+  }));
+  return Object.freeze({
+    temperature: 0,
+    stream: false,
+    scenarioPolicyVersion: definition.policyVersion,
+    completionPolicyVersion: COMPLETION_OUTCOME_POLICY_VERSION,
+    poolLimits: Object.freeze({ ...DEFAULT_POOL_LIMITS }),
+    caseBudgetsDigest: createHash("sha256").update(JSON.stringify(caseBudgets)).digest("hex"),
+  });
 }
 
 async function writeRunArtifacts({
@@ -948,7 +1000,7 @@ async function initializeRunArtifacts({
     })),
     writeJson(resolve(directory, "run.private.json"), Object.freeze({
       schemaVersion: "material-language-run-private/1",
-      candidate: Object.freeze({ station: candidate.station, model: candidate.model }),
+      candidate: evaluationCandidate(candidate),
       planDigest,
       plan,
     })),
@@ -1143,9 +1195,13 @@ function verifyPrivateRunAuthority(runPrivate, run, definition) {
     evaluationPlanDigest(plan) !== run.planDigest ||
     typeof candidate?.station !== "string" || candidate.station.length < 1 ||
     typeof candidate?.model !== "string" || candidate.model.length < 1 ||
-    plan?.schemaVersion !== "material-language-eval-authority/1" ||
+    !(candidate.enableThinking === null || typeof candidate.enableThinking === "boolean") ||
+    typeof candidate.endpointDigest !== "string" || !/^[a-f0-9]{64}$/u.test(candidate.endpointDigest) ||
+    plan?.schemaVersion !== "material-language-eval-authority/3" ||
     plan.scenario !== definition.id ||
     plan.promptVersion !== definition.promptVersion ||
+    plan.compiledPromptDigest !== compiledPromptDigest(definition, prepared) ||
+    JSON.stringify(plan.executionContract) !== JSON.stringify(evaluationExecutionContract(definition, prepared)) ||
     plan.corpusVersion !== definition.corpusVersion ||
     JSON.stringify(plan.corpus) !== JSON.stringify(definition.corpus) ||
     JSON.stringify(plan.axes) !== JSON.stringify(definition.axes) ||
@@ -1414,11 +1470,18 @@ function completeReviewRows(rows) {
 }
 
 function testEvaluationPlan() {
+  const definition = scenarioDefinition("transform");
+  const prepared = prepareEvaluationMatrix(
+    definition,
+    buildEvaluationMatrix(definition.corpus, definition.axes),
+  );
   return Object.freeze({
-    schemaVersion: "material-language-eval-authority/1",
+    schemaVersion: "material-language-eval-authority/3",
     scenario: "transform",
-    candidate: Object.freeze({ station: "private-station", model: "private-model" }),
-    promptVersion: "transform/2",
+    candidate: evaluationCandidate({ station: "private-station", model: "private-model" }),
+    promptVersion: "transform/3",
+    compiledPromptDigest: "b".repeat(64),
+    executionContract: evaluationExecutionContract(definition, prepared),
     corpusVersion: "transform-live-corpus/2",
     corpus: Object.freeze([Object.freeze({
       id: "en-us-ordinary-claim",

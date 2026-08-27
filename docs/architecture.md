@@ -209,7 +209,11 @@ the scenario-neutral `MATTER_MODEL_*` namespace; the complete deployed
 `MATTER_LABEL_*` namespace remains a non-merged compatibility fallback. One
 candidate owns only its bounded share of the scenario deadline even when its
 transport ignores cancellation, so ordered fallback retains actual delivery
-time rather than only receiving an advisory signal.
+time rather than only receiving an advisory signal. Healthy concurrent calls
+remain independent. Only a raw request that outlives timeout or cancellation
+becomes a drain lease; later calls skip that one scenario/candidate until its
+late body accepts cancellation. A process-wide drain threshold sheds new model
+work neutrally instead of misreporting a provider attempt or cooling a surface.
 
 The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
@@ -459,6 +463,7 @@ features/matter/
   server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
   server/*-harness.ts              one scenario each: repair, label, inquiry, transform, text swap
   server/model-pool.ts             the only place an endpoint, model name, or key appears
+  config/inquiry.ts                neutral inquiry bounds and current scope vocabulary
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules
   material/inquiry-context.ts      bounded visible-lineage inquiry projection
@@ -487,9 +492,11 @@ them:
 
 1. `material/*-context.ts` projects the visible document or explicit lasso
    address into bounded reference material. It knows tree semantics, not models.
-2. `server/*-contract.ts` validates the versioned network envelope and repeats
-   every hard bound. It carries data only; prompts and scenarios do not belong
-   to protocol.
+2. `protocol/*-contract.ts` validates the versioned network envelope against
+   shared neutral context bounds plus protocol-owned wire bounds. It carries
+   data only; prompts and scenarios do not belong to protocol. A stored
+   exchange keeps its own versioned scope vocabulary and does not silently
+   follow a future wire union.
 3. `server/*-harness.ts` owns a named scenario's prompt, context allocation,
    deadline, output budget, and response validation. It receives already
    bounded material and returns only the scenario result.

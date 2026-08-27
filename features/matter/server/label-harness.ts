@@ -6,7 +6,7 @@ import {
   type NormalizedLabelInput,
 } from "../material/semantic-label";
 import type { MatterScenario } from "./harness";
-import { composePrompt, fence } from "./prompt-spine";
+import { composePrompt, fence, fenceJson } from "./prompt-spine";
 
 /**
  * Naming one thought so its author recognises it at a glance.
@@ -25,7 +25,7 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
     deadlineMs: LABEL_SCENARIO_DEADLINE_MS,
     // A label is a phrase. A ceiling near its own length stops a model from
     // spending the deadline explaining the name it chose.
-    maxOutputTokens: Math.max(24, input.maxGraphemes * 2),
+    maxOutputTokens: Math.max(192, input.maxGraphemes * 4 + 64),
   }),
   adjudicate: (answer, input) => {
     if (typeof answer !== "string") return reject("not-text");
@@ -78,7 +78,7 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
       "the language: name it in the language of the material.",
       `the length: aim for ${preferred} to ${input.maxGraphemes} graphemes. Go shorter only when a shorter phrase genuinely says it better.`,
       ...(context.siblingLabels.length === 0 ? [] : [
-        `the names already in this list, which yours must differ from: ${context.siblingLabels.join(" / ")}`,
+        "the name must differ from every name inside <sibling-names>.",
       ]),
     ],
     keep: [
@@ -96,6 +96,9 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
         fence("parent-name", context.parentLabel, "The node this one hangs under is named:"),
       ]),
       ...(context.parentExcerpt === null ? [] : [fence("parent", context.parentExcerpt)]),
+      ...(context.siblingLabels.length === 0 ? [] : [
+        fenceJson("sibling-names", context.siblingLabels, "Names already used beside this node:"),
+      ]),
       fence("material", input.text, "The thought to name:"),
     ],
   });

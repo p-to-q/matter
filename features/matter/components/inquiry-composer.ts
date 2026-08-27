@@ -1,6 +1,7 @@
 import type { InquiryClientReason } from "../interaction/inquiry-client";
+import { MAX_INQUIRY_QUESTION_CODE_POINTS } from "../protocol/spoken-text-limits";
 
-export const INQUIRY_MAX_CODE_POINTS = 500;
+export const INQUIRY_MAX_CODE_POINTS = MAX_INQUIRY_QUESTION_CODE_POINTS;
 export const INQUIRY_MAX_TURNS = 40;
 
 export type InquiryPhase = "idle" | "listening" | "transcribing";

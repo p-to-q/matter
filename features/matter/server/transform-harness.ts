@@ -7,7 +7,8 @@ import {
 import type { MatterScenario } from "./harness";
 import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine";
 
-export const TRANSFORM_PROMPT_VERSION = "transform/2";
+/** Prompt artifact version; the public material protocol remains `transform/2`. */
+export const TRANSFORM_PROMPT_VERSION = "transform/3";
 
 export type TransformScenarioInput = Readonly<{
   locale: MatterLocale;
@@ -29,7 +30,7 @@ export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> 
   compile: compileTransformPrompt,
   budget: (input) => Object.freeze({
     deadlineMs: 12_000,
-    maxOutputTokens: Math.min(1_200, Math.max(96, 2 * input.length.targetGraphemes + 96)),
+    maxOutputTokens: Math.min(1_200, Math.max(256, 2 * input.length.targetGraphemes + 128)),
   }),
   adjudicate: (answer, input) => adjudicateTransform(answer, input),
 });
@@ -40,15 +41,16 @@ export function adjudicateTransform(
   input: TransformScenarioInput,
 ): Readonly<{ ok: true; value: string }> | Readonly<{ ok: false; reason: TransformRejection }> {
   if (typeof answer !== "string") return Object.freeze({ ok: false, reason: "EMPTY" });
+  const text = answer.trim();
   const verdict = validateExpandInPlaceCandidate({
     sourceText: input.passage,
-    candidateText: answer,
+    candidateText: text,
     beforeText: input.surrounding.before,
     afterText: input.surrounding.after,
     amount: input.amount,
   });
   return verdict.ok
-    ? Object.freeze({ ok: true, value: answer })
+    ? Object.freeze({ ok: true, value: text })
     : Object.freeze({ ok: false, reason: verdict.code });
 }
 

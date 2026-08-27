@@ -70,6 +70,7 @@ export type StoredInquiryExchange = Readonly<{
   basis: Readonly<{
     treeId: string;
     revision: number;
+    /** Frozen v1 look-back vocabulary; a future address kind needs migration. */
     scope: "selection" | "tree";
   }>;
 }>;

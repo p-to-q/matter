@@ -88,17 +88,13 @@ export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
 };
 
 /**
- * Repair keeps the pool's defaults except for one: a relay may hold almost the
- * whole budget rather than half of it.
- *
- * The other scenarios can afford to reserve a second turn, because their
- * budgets are several times one relay's answer. This one is deliberately short
- * — a person is holding still while it runs — so splitting two seconds in half
- * does not buy a fallback, it buys two attempts neither of which can finish,
- * and every short utterance is admitted as heard. The floor here is already
- * correct, so one real attempt is worth more than two doomed ones.
+ * Repair reserves a real fallback window. Production showed that one stalled
+ * relay could consume a 0.95 share of the six-to-eight-second budget and leave
+ * every healthy candidate unreachable. A 0.6 ceiling still gives the first
+ * relay several times the measured healthy latency while preserving one useful
+ * second attempt inside the same person-visible deadline.
  */
-const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.95 });
+const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.6 });
 
 export function resolveRepairAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,

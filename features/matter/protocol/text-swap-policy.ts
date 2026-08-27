@@ -5,6 +5,8 @@ import {
 import { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "./spoken-text-limits";
 export { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "./spoken-text-limits";
 
+/** Human-readable identity for the deterministic Text Swap adjudication rules. */
+export const TEXT_SWAP_POLICY_VERSION = "text-swap-policy/1";
 
 export type TextSwapPolicyCode =
   | "EMPTY"

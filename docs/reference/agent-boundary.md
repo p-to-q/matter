@@ -34,6 +34,21 @@ notes are exactly this kind of content, and "it is the user's own text" is not a
 reason to relax it — the text may have been pasted, dictated from something
 read aloud, or written months earlier.
 
+The rule is about a channel, not about an author, and that distinction is what
+lets a question or a Text Swap direction be answered at all. Material is what a
+person wrote on their page; an intent is the one bounded value they addressed to
+Matter for this operation. Same author, different channel, and only the second is
+allowed to direct anything — within the operation the gesture already fixed,
+never over a rule. A Text Swap direction is bounded before it becomes a value,
+by a normalizer that rejects control characters and more than one line; an
+Inquiry question may use the bounded multiline form its composer exposes.
+Neither becomes material.
+The prompt renderer gives those blocks distinct labels and constructors so a
+scenario cannot mix them accidentally. They still travel in one provider
+message; this is prompt-level discipline, not a privilege boundary. Exact
+scope, output shape, and mutation authority remain server-owned and
+adjudicated. See `prompt-harness.md`.
+
 **Capability-bounded action vocabularies.** Give an agent the smallest set of
 verbs that can express the task. Everything not in the set is unreachable by
 construction rather than blocked by a check.

@@ -1,3 +1,5 @@
+import { NeutralProviderError } from "./completion-outcome";
+
 /**
  * The one place Matter talks to a model.
  *
@@ -17,10 +19,12 @@
  *    label, a stated unavailability, the passage unchanged — and adjudication
  *    decides whether the suggestion beats the floor. Nothing here can fail in a
  *    way a person has to handle.
- * 2. **A person's material is reference, never instruction.** It enters a
- *    prompt only through `fence`, which names it, escapes it, and carries the
- *    refusal sentence with it. A scenario cannot forget the line, because the
- *    scenario does not write it.
+ * 2. **A person's material is reference; a person's instruction is bounded.**
+ *    Both enter through dedicated tagged constructors, which name and escape
+ *    them, and both arrive under a sentence fixing what they may do — the
+ *    refusal for material, the bounded grant for an instruction the person
+ *    addressed to Matter. This is prompt discipline, not a permission system:
+ *    scenario adjudication remains the boundary that decides what may be used.
  */
 
 export type MatterScenarioId =
@@ -30,8 +34,21 @@ export type MatterScenarioId =
   | "matter-transform"
   | "matter-text-swap";
 
-/** Provider-pool transport facts, deliberately stripped of candidate identity. */
-export type ScenarioCandidateEvent = "pool" | "answered" | "failed" | "stalled";
+/**
+ * Provider-pool transport facts, deliberately stripped of candidate identity.
+ *
+ * Completion events describe only whether an anonymous attempt produced usable
+ * final text. The relay's raw vocabulary never enters this closed seam.
+ */
+export type ScenarioCandidateEvent =
+  | "pool"
+  | "answered"
+  | "failed"
+  | "stalled"
+  | "truncated"
+  | "refused"
+  | "missing-terminator"
+  | "unknown-terminator";
 
 /** What a scenario asks a provider for, once its prompt is compiled. */
 export type ScenarioCall = Readonly<{
@@ -227,6 +244,14 @@ export type ScenarioPerformanceObservation = Readonly<{
   candidateAttempts: number;
   candidateTimeouts: number;
   candidateFailures: number;
+  /** Attempts refused because the relay said it stopped early. */
+  candidateTruncations: number;
+  /** Attempts that ended in a guardrail, refusal, tool call, or unknown state. */
+  candidateRefusals: number;
+  /** Explicit stop vocabulary this build cannot name, for compatibility audits. */
+  candidateUnknownTerminators: number;
+  /** Accepted compatibility responses whose relay omitted a stop reason. */
+  candidateMissingTerminators: number;
 }>;
 
 /**
@@ -234,8 +259,11 @@ export type ScenarioPerformanceObservation = Readonly<{
  * below so one failed invocation never creates two operational log records.
  */
 export function recordScenarioFallback(observation: ScenarioObservation): void {
+  const rejection = observation.reason === "MODEL_REJECTED" && observation.rejectionReason !== undefined
+    ? ` ${observation.rejectionReason}`
+    : "";
   console.warn(
-    `matter.scenario ${observation.scenario} ${observation.reason} ${Math.round(observation.elapsedMs)}ms`,
+    `matter.scenario ${observation.scenario} ${observation.reason}${rejection} ${Math.round(observation.elapsedMs)}ms`,
   );
 }
 
@@ -254,6 +282,10 @@ export function recordScenarioPerformance(observation: ScenarioPerformanceObserv
     candidateAttempts: boundedScalar(observation.candidateAttempts, 255),
     candidateTimeouts: boundedScalar(observation.candidateTimeouts, 255),
     candidateFailures: boundedScalar(observation.candidateFailures, 255),
+    candidateTruncations: boundedScalar(observation.candidateTruncations, 255),
+    candidateRefusals: boundedScalar(observation.candidateRefusals, 255),
+    candidateUnknownTerminators: boundedScalar(observation.candidateUnknownTerminators, 255),
+    candidateMissingTerminators: boundedScalar(observation.candidateMissingTerminators, 255),
   });
   console.info(`matter.scenario-performance ${JSON.stringify(receipt)}`);
 }
@@ -277,14 +309,30 @@ export async function runScenario<Input, Value>(
   let candidateAttempts = 0;
   let candidateTimeouts = 0;
   let candidateFailures = 0;
+  let candidateTruncations = 0;
+  let candidateRefusals = 0;
+  let candidateUnknownTerminators = 0;
+  let candidateMissingTerminators = 0;
   const noteCandidate = (event: ScenarioCandidateEvent): void => {
     if (event === "pool") {
       candidateTelemetry = "pool";
       return;
     }
+    // These two modify an attempt rather than ending one. Every other event is
+    // exactly one terminal candidate attempt.
+    if (event === "unknown-terminator") {
+      candidateUnknownTerminators = boundedIncrement(candidateUnknownTerminators);
+      return;
+    }
+    if (event === "missing-terminator") {
+      candidateMissingTerminators = boundedIncrement(candidateMissingTerminators);
+      return;
+    }
     candidateAttempts = boundedIncrement(candidateAttempts);
     if (event === "stalled") candidateTimeouts = boundedIncrement(candidateTimeouts);
     if (event === "failed") candidateFailures = boundedIncrement(candidateFailures);
+    if (event === "truncated") candidateTruncations = boundedIncrement(candidateTruncations);
+    if (event === "refused") candidateRefusals = boundedIncrement(candidateRefusals);
   };
   const notePerformance = (outcome: ScenarioPerformanceOutcome): void => {
     if (performanceSettled || observePerformance === undefined) return;
@@ -297,6 +345,10 @@ export async function runScenario<Input, Value>(
       candidateAttempts,
       candidateTimeouts,
       candidateFailures,
+      candidateTruncations,
+      candidateRefusals,
+      candidateUnknownTerminators,
+      candidateMissingTerminators,
     });
     try {
       observePerformance(observation);
@@ -392,11 +444,14 @@ export async function runScenario<Input, Value>(
     governor.succeeded();
     notePerformance("answered");
     return Object.freeze({ ok: true, value: verdict.value });
-  } catch {
-    // An adjudicator that throws is a defect, not a provider failure, but it
-    // reaches the person the same way: the floor. Distinguishing them here
-    // would only add a code nothing branches on.
+  } catch (error) {
     if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
+    if (error instanceof NeutralProviderError) {
+      // An unusable completion or a pool-owned drain lease is unavailable, not
+      // scenario-policy rejection. Both are already bounded below the harness
+      // and neither is evidence that the whole surface should enter cooldown.
+      return settle("MODEL_UNAVAILABLE");
+    }
     governor.failed(now(), limits);
     return settle(deadline.signal.aborted ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
   } finally {

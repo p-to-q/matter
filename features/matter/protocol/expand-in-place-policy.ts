@@ -3,6 +3,9 @@ import {
   MAX_REPLACEMENT_TEXT_CODE_UNITS,
 } from "../tree/invariants";
 
+/** Human-readable identity for the deterministic transform adjudication rules. */
+export const EXPAND_IN_PLACE_POLICY_VERSION = "expand-in-place-policy/1";
+
 export const EXPAND_IN_PLACE_MAX_DELTA_GRAPHEMES = 2;
 
 export type ExpandInPlacePolicyCode =
