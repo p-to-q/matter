@@ -299,11 +299,15 @@ answer becomes an HTTP cache entry or follows a redirect to another origin.
 Unavailable, timeout, busy, rejected, malformed, no-op, and cancelled turns all
 leave the passage unchanged. Provider, pool, timeout, and transport failures do
 not create visible error material: the browser returns the control to its prior
-usable selection state while operational receipts remain server-side. A new selection, stretch, document epoch, revision,
-undo/redo, import, unmount, or page hide aborts the current request and makes a
-late answer inert. Pre-commit validation repeats request version, interaction,
-tree, revision, node text/timestamp, selection, grapheme, adjudication, and
-composed-node checks synchronously before the tree engine sees one command.
+usable selection state while operational receipts remain server-side. A new
+selection or stretch, a document/tree switch, a change anywhere in the exact
+visible lineage addressed by the turn, import, unmount, or page hide aborts the
+request and makes a late answer inert. Global revision is a receipt, not the
+read set: an unrelated sibling edit may settle while the addressed lineage is
+still exact. Pre-commit validation repeats request version, interaction, tree,
+current target text/timestamp, selection, complete visible lineage, grapheme,
+adjudication, and composed-node checks synchronously, then gives the tree engine
+one command against the current revision.
 
 One pointer release creates one immutable interaction id and one POST. Neither
 client nor route automatically retries it. A successful commit increments the
@@ -428,10 +432,13 @@ direction cannot authorize a new topic, fact, example, reason, conclusion,
 advice, certainty, translation, or answer to the person.
 
 Immediately before commit, the browser synchronously revalidates request
-version, id, tree, revision, selected node text and timestamp, exact
-selection, direction bounds, answer policy, echoed action, and the complete
-composed node. Only the tree engine receives one whole-node `replace-text`
-command and constructs its exact inverse. Candidate text, streamed tokens, and
+version, id, tree, the selected node text and timestamp, exact selection,
+complete visible lineage, direction bounds, answer policy, echoed action, and
+the complete composed node. Global revision is a receipt rather than the read
+set: an unrelated sibling edit may settle, while an ancestor edit or reparent
+revokes the direction before request and makes a late plan stale. Only the tree
+engine receives one whole-node `replace-text` command against the current
+revision and constructs its exact inverse. Candidate text, streamed tokens, and
 an old-text copy never become material.
 
 ### Lifecycle, failure, and gate
@@ -441,9 +448,11 @@ or Focus; Lasso exposes only Elastic and Voice keeps its material-admission
 meaning outside the local Point-and-Talk field. The protocol also retains one
 exact current punctuation segment as a valid address for bounded integrations,
 but the current Lasso surface does not publish that second operation. Entry
-cancels Elastic and keeps both grips hidden and inert. Leaving the field or changing target,
-document basis, tree, history, import, page, or recording ownership aborts work
-and revokes every late result. The two grammars never share an in-flight basis.
+cancels Elastic and keeps both grips hidden and inert. Leaving the field or
+changing target, document basis, tree, addressed visible lineage or selection,
+import, page, or recording ownership aborts work and revokes every late result.
+An unrelated history edit does not reinterpret the frozen direction. The two
+grammars never share an in-flight basis.
 
 One valid Voice finalization or typed submit creates one immutable request.
 There is no automatic retry, candidate carousel, streaming mutation, or
@@ -523,7 +532,8 @@ answers badly, the response carries the deterministic label with a
 stored label without a schema change.
 
 Bounds: request 8 KiB, response 4 KiB, label 32 graphemes (Chinese material asks
-for 14, Japanese for 20), browser deadline 13,000 ms, provider deadline 12,000 ms. There is no
+for 14, Japanese for 20), provider deadline 12,000 ms, route deadline 14,000 ms,
+and browser deadline 16,000 ms. There is no
 retry. Nothing waits on those deadlines — a label is already on screen — so
 they are set from measured relay latency rather than from a perceived-response
 budget.
@@ -634,8 +644,9 @@ vocabulary is refused or ignored, and repair proceeds without it.
 
 Bounds: transcript 2,000 code units, vocabulary 24 terms of 32 code units,
 request and response 12 KiB, provider deadline scaled to the utterance with a
-six-second floor and eight-second ceiling, and a browser deadline 800 ms above
-it. The twelve-second store lease remains the final authority.
+six-second floor and eight-second ceiling, a 9,500 ms route deadline, and an
+11,000 ms browser deadline. The twelve-second store lease remains the final
+authority.
 
 ## Inquiry envelope
 
@@ -703,10 +714,13 @@ export type InquiryAnswer =
 ```
 
 Both request and response reject unknown fields whole. The response echoes the
-request id and exact tree/revision/scope basis; the browser accepts it only while
-that operation and complete projected context are still current. Closing the
-surface, changing documents, committing material, or changing the selection
-aborts the request and makes a late completion inert.
+request id and exact tree/revision/scope basis that the model read. The browser
+parses that network receipt strictly against the original request, then presents
+the read-only answer while the operation and local `{ treeId, documentEpoch }`
+owner remain current. Later edits or selections do not reinterpret the captured
+question and snapshot. Closing the surface, switching AI operations, page exit,
+unmount, or owner replacement aborts the request and makes a late completion
+inert.
 
 An error response is also parsed as an exact Matter envelope. Its server message
 is validated and discarded; the closed `fallbackReason` remains an operational
@@ -727,9 +741,10 @@ The browser may retain a completed exchange in its separate bounded Ask Matter
 record, without copied material context and never as later model input; see
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
-Bounds: question 500 code points, request 24 KiB, response 8 KiB, lineage 64 nodes, each projected
+Bounds: question 500 code points, request 24 KiB, response 16 KiB, lineage 64 nodes, each projected
 node 480 code points, total projected context 4,000 code points, and browser
-deadline 20 seconds. Answer text is bounded to 1,201 code points. The response is either one text answer or an explicit
+deadline 20 seconds. Answer text is one complete value bounded to 3,200 code
+points; Matter does not manufacture a partial answer with a local ellipsis. The response is either one text answer or an explicit
 unavailable reason; no fallback prose is invented. The live answer adapter is
 independently server-gated. Its optional local completed record is not an answer
 adapter or model memory and never changes this visible-context, non-mutation

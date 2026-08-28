@@ -1,12 +1,17 @@
 # Preview deployment-owner handoff
 
-Status: Preview.45 is the current immutable public release. Preview.46 is an
-authorized candidate only: its exact source, CI, Preview, Production,
-public-origin, and final record-only receipts do not exist yet and must not be
-invented here. The candidate preserves the current process-local admission
-perimeter and live label, transcript-repair, and Ask Matter gates. Elastic and
-Text Swap remain unavailable. This is an operator checklist, not a place to
-record token values.
+Status: Preview.46 source `cf5d7dfa892552bfc2c615dc1059194142a1025a`
+is the current deployed public-origin version through successful automatic
+Production deployment `6138461045`, but it has no immutable tag or GitHub
+prerelease. Preview.47 is authorized through the repository's GitHub-triggered
+delivery path: its
+exact source, CI, automatic Preview/Production, tag, and prerelease receipts are
+pending and none may be inferred from another. The repository maintainer pushes
+only GitHub and observes the linked deployment; the deployment owner retains
+Vercel configuration and credential authority. The
+candidate preserves the current process-local admission perimeter and live
+label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
+unavailable. This is an operator checklist, not a place to record token values.
 
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
@@ -19,15 +24,14 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The owner has directed one Preview.46 production promotion and prerelease after
-the exact candidate passes the repository, browser, Preview, and public-origin
-gates. Treat that direction as a Preview.46-only risk acceptance, not a
-continuing waiver and not evidence that external controls exist. Issues #34 and
-#68 remain open; label, repair, inquiry, and browser/local voice stay as
-configured, while Elastic and Text Swap remain unavailable. The source
-admission ceilings below are per warm instance only. Any later release requires
-a fresh owner decision or the distributed-rate, provider-spend, alert, and
-rollback receipts.
+The repository owner has directed one Preview.47 prerelease after the exact
+candidate passes repository, browser, GitHub CI, and the automatically triggered
+deployment gates. This is not authority for the repository maintainer to run a
+manual Vercel command or edit Vercel configuration. The automatic promotion
+does not prove that external controls exist. Issues #34 and #68 remain open;
+label, repair, inquiry, and browser/local voice stay as configured, while
+Elastic and Text Swap remain unavailable. The source admission ceilings below
+are per warm instance only.
 
 ## Resolved-by-itself incident — inquiry reached no model on Production
 
@@ -125,21 +129,24 @@ that exists, every occurrence of this will be found the same way.
 
 ### How to know it is fixed
 
-`npm run probe:pool -- --rounds=3 --pace=65 --require-inquiry-answer` reports
-`pool-healthy`, with Inquiry producing a real answer on every call. Healthy
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.47`
+reports `pool-healthy` and `surface-usable`, with repair, label, and Inquiry
+producing a real accepted result on every call. Healthy
 inquiry latency has been under two
 seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
 
-As of the last run this criterion is met. It was also met before the outage, so
-meeting it once is not evidence that the intermittency is gone.
+No exact strict-pool receipt is retained for the deployed Preview.46 source.
+Health and deployment success do not substitute for it. Preview.47 must produce
+its own closed-count release receipt, and even one successful run is not
+evidence that the intermittency is gone.
 
 ### Incident-time source boundary
 
 At the time of the incident the working tree carried uncommitted prompt work
 with no evaluation receipt, so it was not a valid vehicle for an environment
-repair. That historical constraint does not evaluate the later Preview.46
+repair. That historical constraint does not evaluate the later Preview.47
 candidate; every release still requires its own exact source and behavior
 receipts.
 
@@ -163,60 +170,41 @@ light settings transitions. The annotated immutable `v0.2.0-preview.42` tag
 must peel to the final release-record Production SHA; the remote tag and GitHub
 prerelease are the authority for that last identity check.
 
-## Exact source-preview and production sequence
-
-Matter deploys through the repository's Vercel Git integration. A pushed topic
-branch creates a protected Vercel Preview deployment; updating `main` creates a
-Production deployment. This checkout has no committed or local `.vercel`
-project binding, so a maintainer must not substitute an ad-hoc `vercel` CLI
-deployment for that auditable path or risk selecting another project or
-environment.
+## Exact GitHub-triggered publication and deployment sequence
 
 Every candidate records one version in `package.json` and both root package
-entries in `package-lock.json`. Its health route, Preview, and Production must
-agree on that identity. The immutable tag must agree before a release is
-complete.
+entries in `package-lock.json`. GitHub is the repository maintainer's only
+delivery control; Vercel's Git integration observes it automatically.
 
-The source change and its proof record are two auditable commits; the immutable
-release identity belongs to the second one:
-
-1. Create a `codex/` topic branch before committing the reviewed working tree.
-   Confirm no `.env*`, recording, transcript, private evaluation artifact, or
+1. Confirm no `.env*`, recording, transcript, private evaluation artifact, or
    ignored `tmp/` content is staged. Run `git diff --check`, `npm run check`, and
    `npm run test:e2e` on the exact versioned candidate.
-2. Push the topic branch and open a pull request. Wait for GitHub CI and the
-   Vercel Preview deployment for the same commit SHA. Vercel Preview URLs are
-   deployment-protected and return an SSO redirect to anonymous probes, so use
-   the Vercel deployment success receipt plus an authenticated browser walk;
-   never print or pass a protection-bypass secret through a command or log.
-3. Reconfirm the pull request head SHA, then merge without allowing another
-   source change into the release boundary. Read back remote `main` and use its
-   resulting exact SHA as the production identity; do not assume a merge method
-   preserves the topic-branch SHA.
-4. Wait for the Vercel **Production** deployment recorded for that exact `main`
-   SHA, then run `npm run check:deployment -- https://matter.ptoq.io --wait=120`.
-   Complete the manual voice and model-surface receipts below and run the paced
-   pool probe with a required real Inquiry answer. This proves the source
-   candidate is live; it does not yet create the tag target.
-5. On a new proof-only topic, record the exact source SHA, CI run, Preview and
-   Production deployment, public check, browser walk, and pool receipt in the
-   release documents. Open and merge that record-only pull request, then wait
-   for its exact final `main` SHA to reach Production and repeat the bounded
-   public deployment check. No source behaviour may change in this step.
-6. Only after the final record-only Production receipt succeeds, require the repository's
-   Immutable Releases setting to report `enabled: true`. Create the annotated
-   tag for the exact candidate version on that final production SHA, push it, and
-   verify the remote annotated tag peels to the same SHA. Create the prerelease
-   as a draft, publish it only after its metadata is complete, then require
-   `gh release verify <candidate-tag>` to validate GitHub's release
-   attestation. Immutable Releases prevents the published tag from being moved
-   or deleted while the release exists. npm publication remains unauthorized.
+2. Push the `codex/` topic, open a pull request, and wait for GitHub CI on that
+   exact head and for the automatically created protected Vercel Preview tied to
+   the same SHA. Browser proof must address that source. Never print or pass a
+   protection-bypass secret through a command or log.
+3. Reconfirm the pull request head, merge without another source change, and
+   read back the exact remote `main` SHA. Wait for the Vercel Production status
+   automatically created for that SHA; do not substitute an ad-hoc CLI deploy.
+   Run the bounded public check and strict pool probe below without changing
+   configuration or handling credentials.
+4. On a proof-only topic, record the exact source, CI, automatic Preview and
+   Production, public check, browser, and pool receipts. Merge it and require
+   its exact final `main` SHA to finish the same automatic Production path.
+   Repeat `npm run check:deployment -- https://matter.ptoq.io --wait=120` for
+   that final SHA and retain its no-store version/public-alias receipt before
+   tagging. The paid pool and browser behaviour proofs need not repeat because
+   no source behaviour may change in this step.
+5. Require Immutable Releases to report enabled, create and push the annotated
+   version tag on that final deployed proof SHA, verify its remote peel, then
+   create, inspect, publish, and verify the GitHub prerelease. npm publication
+   remains unauthorized.
 
 The GitHub deployment API is the neutral SHA-to-Vercel receipt when dashboard
 access is unavailable: list deployments filtered by the exact SHA, require one
 successful `Preview` record before merge and one successful `Production`
-record after merge, then read each deployment's status URL. A generic green
-commit status without its environment and SHA is insufficient.
+record after merge, then read each status URL. A generic green commit status
+without its environment and SHA is insufficient.
 
 ## Vercel configuration
 

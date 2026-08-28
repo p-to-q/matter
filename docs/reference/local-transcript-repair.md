@@ -77,15 +77,20 @@ managed proposal → local adjudication → store lease + exact revalidation
 ```
 
 The managed request carries operation identity, locale, one utterance, and a
-bounded vocabulary hint. It carries no material address. It has one 8.8-second
+bounded vocabulary hint. It carries no material address. It has one 11-second
 client ceiling covering headers and the bounded body, no retry, and no response
-cache. The server grants six to eight seconds according to utterance length and
-reserves almost all of it for one relay; production evidence showed the former
-2.6-second short floor expired before that relay could answer. The server still
-applies the shared prompt, pool, load shedding, and adjudicator. The browser and
-store recompute the deterministic floor and judge only the model's additional
-delta from it, so a safe restart removal is not charged twice. The store is
-still the only owner allowed to create the repair tree command.
+cache. Inquiry dictation keeps its previously shipped 8.8-second visible-draft
+override because, unlike admitted material, its baseline is not yet readable
+while repair runs. The server grants six to eight seconds according to utterance length and
+shares that budget across two candidates; the 9.5-second route boundary leaves
+the server time to translate the terminal result. Each candidate therefore has
+three to four seconds. That is above the former 2.6-second short floor that
+expired before a relay could answer, while preventing one stalled relay from
+making the configured fallback unreachable. The server still applies the
+shared prompt, pool, load shedding, and adjudicator. The browser and store
+recompute the deterministic floor and judge only the model's additional delta
+from it, so a safe restart removal is not charged twice. The store is still the
+only owner allowed to create the repair tree command.
 
 ## Future worker and fallback
 

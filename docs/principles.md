@@ -37,6 +37,14 @@ the running product, not how ambitious a feature sounds.
    closed until the person explicitly opens it. Provider availability is kept
    in operational receipts, never rendered as another message inside material.
 
+**Submission authority stays strict; result delivery stays resilient.** A
+read-only Inquiry answer belongs to the question and bounded snapshot that were
+submitted, so ordinary edits, selection changes, and a temporarily hidden tab
+do not erase it. A result that changes material may rebase across unrelated
+history, but it must still revalidate the exact material it read and will write
+before the tree engine creates one undoable commit. A real target conflict is
+never permission to overwrite newer human material silently.
+
 A material interaction must declare reference + degree + direction + lineage
 without letting the model infer a missing signal. Elastic Language 2 takes
 reference and degree from gesture and fixes direction to `expand-in-place`.

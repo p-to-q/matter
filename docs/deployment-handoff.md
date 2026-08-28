@@ -95,16 +95,24 @@ history, protocol, provider, or model authority. Source `b0cbad6` passed CI run
 the first public-origin `0.2.0-preview.45` probe. The immutable tag and GitHub
 prerelease point to the final record-only main after that record settles.
 
-For Preview.46, the owner has explicitly directed one further production
-promotion and prerelease after the model-harness hardening passes the complete
-source, browser, Preview, and public-origin proof. This is a fresh
-Preview.46-only risk acceptance, not a continuing waiver. It preserves the
-existing live label, repair, inquiry, and voice gates; Elastic and Text Swap
-remain unavailable, while issues #34 and #68 remain open. The change may
-improve prompt standing, completion settlement, anonymous telemetry, and late
-transport cleanup, but it is not evidence of a distributed rate limit,
-provider spend cap, alert delivery, or operator-owned rollback. Exact commit,
-CI, deployment, probe, and release identifiers stay pending until observed.
+Preview.46 source `cf5d7dfa892552bfc2c615dc1059194142a1025a`
+reached automatic Production deployment `6138461045`; deployment status
+`17452502171` succeeded and the public no-store health receipt reports
+`0.2.0-preview.46`. It is therefore the current public-origin version, but no
+annotated `v0.2.0-preview.46` tag or GitHub prerelease exists. Those missing
+identities must not be invented retroactively or reused for a second source.
+
+For Preview.47, the repository owner has directed the reviewed source through
+GitHub `main` and one prerelease. Topic and `main` pushes automatically trigger
+the configured Vercel Preview and Production deployments; the repository
+maintainer observes those GitHub-linked receipts but does **not** run a manual
+Vercel deployment, bind a project, edit its environment, or handle credentials.
+The automatic deployment must preserve the existing live label, repair,
+inquiry, and voice gates; Elastic and Text Swap remain unavailable, while
+issues #34 and #68 remain open. Source hardening is not evidence of a
+distributed rate limit, provider spend cap, alert delivery, or operator-owned
+rollback. Exact source, CI, tag, release, deployment, and probe identifiers
+stay pending until each is observed.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
@@ -185,9 +193,9 @@ These are hard ownership boundaries, not claimed production SLOs:
 
 | Surface | Scenario/provider | Route/browser | Safe floor | Shared answer cache |
 | --- | ---: | ---: | --- | --- |
-| thought label | 12 s | 13 s / 13 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
-| transcript repair | 6–8 s | 8.8 s / 8.8 s | deterministic repair rules | none |
-| Ask Matter | 16 s | 20 s / 20 s | restore the submitted question | none |
+| thought label | 12 s | 14 s / 16 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
+| transcript repair | 6–8 s | 9.5 s / 11 s | deterministic repair rules | none |
+| Ask Matter | 16 s | 18 s / 20 s | restore the submitted question | none |
 | Elastic | 12 s | 14 s / 16 s | exact passage unchanged | none |
 | provider-gated Point-and-Talk / Text Swap | 12 s | 14 s / 16 s | exact passage unchanged | none |
 | server transcription | 30 s | 30 s / 35 s | browser-native or local capability remains separate | none |
@@ -198,6 +206,12 @@ happens only inside one scenario call: it never resamples an adjudicator
 rejection and never retries a completed browser action. A candidate that ignores
 cancellation still loses its bounded attempt when the timer expires, preserving
 the remaining deadline for the next configured candidate.
+
+All five scenarios request visible answer text rather than hidden reasoning.
+`enable_thinking` remains a provider-specific extension: Matter sends it only
+for a candidate whose station explicitly declares `ENABLE_THINKING=true|false`.
+The scenario may narrow that declaration to `false`, but an undeclared relay
+receives no extra field and must not be assumed to have disabled thinking.
 
 The label cache stores only an adjudicated label behind two 32-bit FNV-style
 digests plus the exact serialized byte length; this is a non-cryptographic cache
@@ -220,7 +234,7 @@ ownership for those SLO measurements remains the external issue #34 boundary.
 
 ### Content-zero model performance receipt — current contract
 
-Preview.39 introduced this receipt; Preview.46 extends its closed schema with
+Preview.39 introduced this receipt; Preview.47 extends its closed schema with
 completion-settlement counters. This table is the complete current contract,
 not a retroactive claim about older log lines. Health proves the
 deployed version and configured capability only; the deployment operator must

@@ -1,10 +1,17 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.45 is the current deployed
-public-origin release. Preview.46 is a provisional candidate until the exact
-source, browser, Preview, Production, and final record-only receipts below have
-all settled; a package version is not itself a release receipt.
+the complete generative product loop yet. Preview.46 at source
+`cf5d7dfa892552bfc2c615dc1059194142a1025a` is the current deployed
+public-origin version through automatic Production deployment `6138461045`;
+it has no immutable tag or GitHub prerelease. Preview.47 is a provisional
+candidate until its exact
+repository, browser, GitHub CI, automatically triggered Vercel deployment, tag,
+and prerelease receipts settle. The repository maintainer operates only through
+GitHub: a topic push triggers Preview and a `main` update triggers Production.
+No manual Vercel command, project binding, credential, or environment edit is
+part of this release. A package version alone proves neither source nor live
+identity.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -58,9 +65,9 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Provisional release boundary — 0.2.0-preview.46
+## Provisional release boundary — 0.2.0-preview.47
 
-Preview.46 hardens the shared model execution boundary without creating one
+Preview.47 hardens the shared model execution boundary without creating one
 generic AI protocol. Transform, Point-and-Talk / Text Swap, and Ask Matter keep
 their own public contracts, context projectors, prompts, adjudicators, and
 settlement paths. They share only the typed prompt spine, provider pool,
@@ -90,20 +97,40 @@ the five scenario-owned governors (label 4, repair 4, inquiry 3, Transform 2,
 Text Swap 2; aggregate 15 per instance), as frozen in the architecture
 contract.
 
-This candidate does not enable a new model surface or widen existing live
+The five provider, route, browser, lease, and platform deadlines now form one
+explicit lattice, and provider-specific thinking flags are sent only to a
+candidate that declared support. The release probe distinguishes pool
+reachability from real per-surface usability, rejects cache/fixture/floor and
+browser-invalid envelopes, and binds the expected source version. Repair now
+gives both ordered candidates a real three-to-four-second window instead of
+letting the first hold 95 percent of the budget.
+
+AI settlement is strict about ownership rather than incidental global revision.
+Elastic and Point-and-Talk may rebase across unrelated edits only while their
+exact selection and visible-lineage read set remains unchanged; Lasso retains
+semantic selection across an unrelated revision while discarding stale DOM
+geometry. Ask Matter is read-only: it retains the submitted context snapshot
+through ordinary edits, selection changes, and a hidden tab, then admits the
+complete answer only while the same `{treeId, documentEpoch}` owner still
+exists. Its quiet-prose answer boundary is 3,200 code points through a 16 KiB
+envelope, with no locally manufactured clipping.
+
+This candidate does not enable a new model surface or widen material-mutation
 authority. Labels, transcript repair, and Ask Matter retain their current
 gates. Elastic and Text Swap remain unavailable to a live provider, issues #34
-and #68 remain open, and no distributed rate, spend, alert, or rollback receipt
-is inferred from source hardening.
+and #68 remain open, and no distributed rate, spend, alert, rollback, or public
+deployment receipt is inferred from source hardening. The larger read-only
+Inquiry envelope does not change its 720-token provider budget.
 
 ```text
 source proof           pending on the exact versioned candidate
 runtime proof          pending on the exact versioned candidate
 browser proof          pending on the exact versioned candidate
-Preview proof          pending on the exact versioned candidate
-Production proof       pending after merge; the final record-only Production
-                       SHA, not the source topic SHA, will own the immutable tag
-publication state      not released; no tag or GitHub prerelease exists yet
+GitHub CI proof         pending on the exact topic and merged main identities
+automatic deploy proof pending from the GitHub-triggered Preview and Production
+                       statuses for those exact identities
+publication state      pending; the annotated tag and GitHub prerelease will
+                       identify the final exact deployed main proof SHA
 ```
 
 ## Release verification — 0.2.0-preview.45

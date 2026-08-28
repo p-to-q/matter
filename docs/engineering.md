@@ -119,8 +119,12 @@ behavior.
 
 Every external resource has one lifecycle owner. A microphone, worker, request,
 timer, animation frame, database handle, or subscription has an explicit start,
-cancel or stop, and idempotent cleanup. A late completion is a no-op unless its
-operation, document, revision, and addressed material still match.
+cancel or stop, and idempotent cleanup. Late-completion authority follows the
+operation's effect: a read-only result may settle against its captured basis
+while the same document owner remains, whereas a durable material result also
+revalidates the exact read/write set it will commit. Revision is a receipt, not
+a blanket cancellation token. Explicit cancellation, owner replacement, or an
+addressed-material conflict still makes the completion inert.
 
 Every cache states its owner, authority class, key, size or time bound,
 invalidation trigger, read-time revalidation, and failure fallback. A snapshot,
