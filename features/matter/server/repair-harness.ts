@@ -6,6 +6,7 @@ import {
   type NormalizedRepairInput,
 } from "../material/transcript-repair";
 import type { MatterScenario } from "./harness";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { composePrompt, fence } from "./prompt-spine";
 
 /**
@@ -22,8 +23,9 @@ export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string> = Ob
   locale: (input) => input.locale,
   compile: compileRepairPrompt,
   budget: (input) => Object.freeze({
-    deadlineMs: repairDeadlineMs(input),
+    deadlineMs: Math.min(repairDeadlineMs(input), MODEL_DEADLINES.repair.providerMs),
     maxOutputTokens: repairMaxOutputTokens(input),
+    disableThinking: true,
   }),
   adjudicate: (answer, input) => {
     const verdict = adjudicateRepair(input, answer);

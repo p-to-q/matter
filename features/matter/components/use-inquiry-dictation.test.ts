@@ -1,6 +1,46 @@
 import { describe, expect, it } from "vitest";
 import { MAX_INQUIRY_QUESTION_CODE_POINTS } from "../protocol/inquiry-contract";
-import { settleInquiryDictationRepair } from "./use-inquiry-dictation";
+import { REPAIR_CLIENT_TIMEOUT_MS } from "../protocol/repair-contract";
+import {
+  INQUIRY_DICTATION_REPAIR_TIMEOUT_MS,
+  requestInquiryDictationRepair,
+  settleInquiryDictationRepair,
+  withInquiryDictationRepairDeadline,
+} from "./use-inquiry-dictation";
+
+describe("Inquiry dictation repair deadline", () => {
+  it("keeps the visible draft wait below background material repair", () => {
+    const controller = new AbortController();
+    const request = withInquiryDictationRepairDeadline({
+      operationId: "dictation-1",
+      attempt: 1,
+      locale: "zh-CN",
+      text: "这份材料在说什么",
+      signal: controller.signal,
+    });
+
+    expect(request.timeoutMs).toBe(INQUIRY_DICTATION_REPAIR_TIMEOUT_MS);
+    expect(request.timeoutMs).toBe(8_800);
+    expect(request.timeoutMs).toBeLessThan(REPAIR_CLIENT_TIMEOUT_MS);
+    expect(request.signal).toBe(controller.signal);
+  });
+
+  it("passes that bound to the repair request rather than only declaring it", async () => {
+    let received: ReturnType<typeof withInquiryDictationRepairDeadline> | undefined;
+    await expect(requestInquiryDictationRepair({
+      operationId: "dictation-2",
+      attempt: 1,
+      locale: "zh-CN",
+      text: "这份材料在说什么",
+      signal: new AbortController().signal,
+    }, async (input) => {
+      received = input;
+      throw new Error("proof stop");
+    })).rejects.toThrow("proof stop");
+
+    expect(received?.timeoutMs).toBe(INQUIRY_DICTATION_REPAIR_TIMEOUT_MS);
+  });
+});
 
 describe("settleInquiryDictationRepair", () => {
   it("keeps one usable repaired draft", () => {

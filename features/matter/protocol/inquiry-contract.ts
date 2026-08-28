@@ -1,5 +1,6 @@
 import { PROTOCOL_VERSION } from "../tree/model";
 import { isMatterLocale } from "../config/locales";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import {
   MAX_INQUIRY_ANSWER_CODE_POINTS,
   MAX_INQUIRY_CONTEXT_CODE_POINTS,
@@ -9,7 +10,7 @@ import {
   type InquiryContextScope,
 } from "../config/inquiry";
 import { MAX_INQUIRY_QUESTION_CODE_POINTS } from "./spoken-text-limits";
-import { isInquiryAnswerProse } from "./inquiry-answer-policy";
+import { isInquiryAnswerProse } from "./inquiry-answer-policy.mjs";
 export { MAX_INQUIRY_QUESTION_CODE_POINTS } from "./spoken-text-limits";
 
 /**
@@ -26,10 +27,11 @@ export type { InquiryContextScope } from "../config/inquiry";
 
 /** A bounded, non-mutating question about visible material. */
 export const MAX_INQUIRY_REQUEST_BYTES = 24 * 1_024;
-export const MAX_INQUIRY_RESPONSE_BYTES = 8 * 1_024;
+export const MAX_INQUIRY_RESPONSE_BYTES = 16 * 1_024;
 export const MAX_INQUIRY_LOCALE_LENGTH = 35;
 export const MAX_INQUIRY_ID_LENGTH = 128;
-export const INQUIRY_CLIENT_TIMEOUT_MS = 20_000;
+export const INQUIRY_CLIENT_TIMEOUT_MS = MODEL_DEADLINES.inquiry.clientMs;
+export const INQUIRY_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.inquiry.routeMs;
 
 export type InquiryContextNodePayload = Readonly<{
   nodeId: string;

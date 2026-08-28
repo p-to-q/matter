@@ -7,8 +7,17 @@ import {
   compileInquiryPrompt,
 } from "./inquiry-harness";
 import type { InquiryRequest } from "../protocol/inquiry-contract";
+import { MAX_INQUIRY_ANSWER_CODE_POINTS } from "../config/inquiry";
 
 describe("inquiry provider", () => {
+  it("uses the bounded foreground lane and suppresses declared provider thinking", () => {
+    expect(INQUIRY_SCENARIO.budget(request("材料"))).toEqual({
+      deadlineMs: 16_000,
+      maxOutputTokens: 720,
+      disableThinking: true,
+    });
+  });
+
   it("keeps inquiry independently gated", () => {
     expect(resolveInquiryAdapter({ MATTER_INQUIRY_ADAPTER: "off" })).toBeNull();
   });
@@ -80,12 +89,17 @@ describe("inquiry provider", () => {
     expect(prompt).not.toContain("complete selected passages");
   });
 
-  it("trims and visibly bounds provider text", () => {
-    const verdict = INQUIRY_SCENARIO.adjudicate(`  ${"答".repeat(1_300)}  `, request("材料"));
-    expect(verdict.ok).toBe(true);
-    if (!verdict.ok) return;
-    expect(Array.from(verdict.value)).toHaveLength(1_201);
-    expect(verdict.value.endsWith("…")).toBe(true);
+  it.each(["a", "答", "🎉"])("keeps one complete %s answer at the exact bound", (unit) => {
+    const answer = unit.repeat(MAX_INQUIRY_ANSWER_CODE_POINTS);
+    const verdict = INQUIRY_SCENARIO.adjudicate(`  ${answer}  `, request("材料"));
+    expect(verdict).toEqual({ ok: true, value: answer });
+  });
+
+  it("refuses an over-bound answer instead of manufacturing a partial one", () => {
+    expect(INQUIRY_SCENARIO.adjudicate(
+      "答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS + 1),
+      request("材料"),
+    )).toMatchObject({ ok: false, reason: "too-long" });
   });
 
   it("refuses an empty answer rather than showing one", () => {
@@ -133,7 +147,10 @@ describe("inquiry provider", () => {
   it.each(["\u0000", "\u061C", "\u200E", "\u200F", "\u202E", "\u2066", "\uD800"])(
     "refuses an unsafe suffix before applying the visible answer ceiling: %s",
     (suffix) => {
-      expect(INQUIRY_SCENARIO.adjudicate(`${"答".repeat(1_200)}${suffix}`, request("材料")))
+      expect(INQUIRY_SCENARIO.adjudicate(
+        `${"答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS)}${suffix}`,
+        request("材料"),
+      ))
         .toMatchObject({ ok: false, reason: "invalid-format" });
     },
   );

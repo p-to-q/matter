@@ -14,6 +14,11 @@ creation time, and a compact receipt of the context that was used. Drafts, speec
 partials, pending requests, provider messages, raw audio, and a copy of the
 material context are never retained.
 
+An answered outcome retains at most one complete 3,200-code-point value. The
+same bound is enforced before presentation, at the wire, and when a record is
+decoded; a longer provider value becomes unavailable rather than a stored
+fragment.
+
 The compact receipt names only `{ treeId, revision, scope }`; it is not a way to
 reconstruct or silently retrieve material. A record may never be supplied as
 context to `/api/inquiry` or a generative material turn. Asking again always
@@ -62,11 +67,10 @@ they never infer a record from a current transient composer.
 - an exchange accepted while its initial load is pending persists to its own
   tree even if the view switches first; rapid appends serialize against the
   latest durable version, and clear ordering cannot resurrect a stale epoch;
-- a changed material revision preserves an old record but never gives it
-  authority over a new request; the transient visible record follows the same
-  rule, and is discarded only on a move to different material — another
-  document, scope, or lineage — while a revision change settles the one turn
-  that can no longer be answered and keeps the completed exchanges;
+- each request writes only its original `{ treeId, revision, scope }` receipt;
+  ordinary material, scope, lineage, selection, and tab-visibility changes do
+  not erase that captured read-only answer, while a different local document
+  owner, explicit close, AI-surface switch, page exit, or unmount revokes it;
 - internal clear, quota, malformed data, and cross-tab generation conflict
   cannot modify material or command history;
 - only bounded, terminal outcomes are encoded; provider content and material

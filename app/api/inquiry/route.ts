@@ -4,6 +4,7 @@ export const runtime = "nodejs";
 // An inquiry may spend 16 s with the pool and the browser waits 20 s;
 // the platform bound has to sit above both or it truncates the answer into a
 // transport failure the paper cannot attribute.
+// Next statically extracts this value and does not accept imported expressions.
 export const maxDuration = 25;
 
 export async function POST(request: Request): Promise<Response> {

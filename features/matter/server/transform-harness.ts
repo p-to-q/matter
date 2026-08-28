@@ -5,10 +5,12 @@ import {
   type ExpandInPlacePolicyCode,
 } from "../protocol/expand-in-place-policy";
 import type { MatterScenario } from "./harness";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine";
 
 /** Prompt artifact version; the public material protocol remains `transform/2`. */
 export const TRANSFORM_PROMPT_VERSION = "transform/3";
+export const TRANSFORM_PROVIDER_TIMEOUT_MS = MODEL_DEADLINES.transform.providerMs;
 
 export type TransformScenarioInput = Readonly<{
   locale: MatterLocale;
@@ -29,8 +31,9 @@ export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> 
   locale: (input) => input.locale,
   compile: compileTransformPrompt,
   budget: (input) => Object.freeze({
-    deadlineMs: 12_000,
+    deadlineMs: TRANSFORM_PROVIDER_TIMEOUT_MS,
     maxOutputTokens: Math.min(1_200, Math.max(256, 2 * input.length.targetGraphemes + 128)),
+    disableThinking: true,
   }),
   adjudicate: (answer, input) => adjudicateTransform(answer, input),
 });

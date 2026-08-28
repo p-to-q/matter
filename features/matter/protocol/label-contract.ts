@@ -8,6 +8,7 @@ import {
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { isMatterLocale } from "../config/locales";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 
 /**
  * The wire shape of the thought-label boundary. Both sides parse against this
@@ -40,9 +41,10 @@ export const MAX_LOCALE_LENGTH = 35;
  * and is reading a working name the entire time this runs. A late label is
  * invisible; an absent one costs the row its name for the session.
  */
-export const LABEL_CLIENT_TIMEOUT_MS = 13_000;
+export const LABEL_CLIENT_TIMEOUT_MS = MODEL_DEADLINES.label.clientMs;
 /** Server deadline, kept under the browser's so a timeout is attributable. */
-export const LABEL_PROVIDER_TIMEOUT_MS = 12_000;
+export const LABEL_PROVIDER_TIMEOUT_MS = MODEL_DEADLINES.label.providerMs;
+export const LABEL_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.label.routeMs;
 
 export type LabelBasis = Readonly<{
   treeId: string;

@@ -17,24 +17,61 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-28 — Repair keeps two real relay windows
+
+Changed: transcript repair now uses the shared half-deadline candidate ceiling.
+Its six-to-eight-second provider budget gives both the first and second relay a
+three-to-four-second attempt instead of letting the first hold 95 percent.
+Material repair retains its 11-second background client ceiling; Inquiry
+dictation retains the previously shipped 8.8-second visible-draft ceiling.
+
+Why: the larger repair deadline already superseded the old 2.6-second window
+that proved too short. Keeping the later 95-percent exception left only
+300–400 ms for a second relay, so a stalled first relay still made ordered
+fallback nominal. The person's admitted words remain the immediate floor while
+the bounded repair runs, while a dictated question never inherits the longer
+background-only wait.
+
+Forecloses: extending the total wait to hide a candidate-allocation bug, and a
+configured backup relay that cannot be reached during the failure it exists to
+cover.
+
+## 2026-08-28 — Inquiry keeps a complete answer or none
+
+Changed: Ask Matter accepts one complete answer up to 3,200 code points through
+a 16 KiB response envelope. The 720-token provider budget and quiet-prose
+policy remain unchanged. A longer value is unavailable; the server no longer
+cuts a known-complete answer to 1,200 code points and manufactures an ellipsis.
+
+Why: the old character ceiling clipped ordinary English answers well before
+the model's already bounded output budget, so Matter discarded information
+after paying for a complete result. Provider-declared token truncation is a
+different failure and remains unusable.
+
+Forecloses: presenting a server-authored fragment as the model's complete
+answer, raising model spend merely to compensate for a local clip, and allowing
+the operational probe or stored record to use a different answer bound from the
+browser.
+
 ## 2026-08-28 — one visible AI operation owns one current basis
 
 Changed: Point and Talk, an active Elastic adjustment or turn, and the corner
 Inquiry now close one another through the material root's single transient
 operation boundary. A neutral lasso may remain visible as Inquiry context until
-an Elastic grip actually moves. Inquiry close, context change, page suspension,
-and document replacement revoke request authority synchronously; accepted
-record writes serialize under their addressed tree rather than the currently
-rendered view.
+an Elastic grip actually moves. Explicit close, AI-surface switch, page exit,
+unmount, and local document-owner replacement revoke Inquiry authority
+synchronously. Same-owner context changes and a hidden tab retain the submitted
+snapshot answer; accepted record writes serialize under their addressed tree
+rather than the currently rendered view.
 
 Why: a pointer outside the Inquiry happened to hide it before another material
 operation, but keyboard and programmatic paths could bypass that accident. The
 same render-to-effect window could also accept a delayed answer after its
-surface or material basis had already changed, while a completed answer could
+surface or document owner had already changed, while a completed answer could
 be lost if IndexedDB was still loading when the view moved to another tree.
 
 Forecloses: two simultaneous AI controls with different focus owners, treating
-selection itself as generation, late answers entering UI or records, record ids
+selection itself as generation, revoked answers entering UI or records, record ids
 colliding across clean openings, and durable exchanges changing owners with the
 view.
 

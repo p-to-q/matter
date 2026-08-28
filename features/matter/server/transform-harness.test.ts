@@ -85,7 +85,11 @@ describe("adjudicateTransform", () => {
   });
 
   it("exposes the 12s scenario budget and grapheme-derived token ceiling", () => {
-    expect(TRANSFORM_SCENARIO.budget(input())).toEqual({ deadlineMs: 12_000, maxOutputTokens: 256 });
+    expect(TRANSFORM_SCENARIO.budget(input())).toEqual({
+      deadlineMs: 12_000,
+      maxOutputTokens: 256,
+      disableThinking: true,
+    });
     expect(TRANSFORM_SCENARIO.locale(input())).toBe("zh-CN");
   });
 });

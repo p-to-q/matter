@@ -1,5 +1,5 @@
 import {
-  LABEL_CLIENT_TIMEOUT_MS,
+  LABEL_ROUTE_TIMEOUT_MS,
   MAX_LABEL_REQUEST_BYTES,
   parseLabelRequest,
 } from "../protocol/label-contract";
@@ -53,7 +53,7 @@ export function labelErrorResponse(error: unknown): Response {
 
 const LABEL_REQUEST_POLICY: BoundedRequestPolicy = Object.freeze({
   maxBytes: MAX_LABEL_REQUEST_BYTES,
-  timeoutMs: LABEL_CLIENT_TIMEOUT_MS,
+  timeoutMs: LABEL_ROUTE_TIMEOUT_MS,
   fail: labelBoundaryError,
 });
 

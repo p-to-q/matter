@@ -1,4 +1,5 @@
 import { isMatterLocale, type MatterLocale } from "../config/locales";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { segmentText, validateSelection, type SegmentSelection } from "../material/text-segments";
 import {
   MAX_NODE_TEXT_CODE_UNITS,
@@ -17,7 +18,7 @@ import {
 export const TEXT_SWAP_REQUEST_VERSION = "text-swap/2" as const;
 export const MAX_TEXT_SWAP_REQUEST_BYTES = 32 * 1024;
 export const MAX_TEXT_SWAP_RESPONSE_BYTES = 8 * 1024;
-export const TEXT_SWAP_CLIENT_TIMEOUT_MS = 16_000;
+export const TEXT_SWAP_CLIENT_TIMEOUT_MS = MODEL_DEADLINES.textSwap.clientMs;
 export const MAX_TEXT_SWAP_ID_LENGTH = 128;
 export const MAX_TEXT_SWAP_CONTEXT_CODE_POINTS = 8_000;
 
@@ -230,7 +231,7 @@ export function planToTextSwapCommand(
   const envelope = parsedEnvelope.envelope;
   const plan = parseTextSwapPlan(rawPlan, envelope);
   if (plan === null || !validateThoughtTree(currentTree).ok) return rejected("INVALID_PLAN");
-  if (currentTree.id !== envelope.treeId || currentTree.revision !== envelope.treeRevision) return rejected("STALE");
+  if (currentTree.id !== envelope.treeId) return rejected("STALE");
   const node = currentTree.nodes[plan.action.nodeId];
   if (node === undefined || node.role === "document-root") return rejected("STALE");
   if (!sameVisibleLineage(currentTree, node.id, envelope.context.lineage)) return rejected("STALE");

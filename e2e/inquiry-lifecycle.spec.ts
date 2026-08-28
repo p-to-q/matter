@@ -100,31 +100,18 @@ test("closing Inquiry revokes a delayed answer before UI or durable record", asy
   await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 });
 
-test("page suspension restores the pending question and keeps its late answer inert", async ({ page }) => {
+test("a hidden tab still accepts the bounded answer it already requested", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();
   const routeSettled = deferred<void>();
   const question = "这里为什么还没有结束？";
   const lateText = "悬停后的迟到回答。";
-  const freshQuestion = "这里现在为什么还没有结束？";
-  const freshText = "这是恢复后当前请求的回答。";
-  let requestCount = 0;
   await page.route("**/api/inquiry", async (route) => {
     const request = inquiryRequest(route);
-    requestCount += 1;
-    if (requestCount > 1) {
-      await fulfillInquiry(route, request, freshText);
-      return;
-    }
     received.resolve();
     await gate.promise;
-    try {
-      await fulfillInquiry(route, request, lateText);
-    } catch {
-      // Page suspension may abort the transport before this late fulfillment.
-    } finally {
-      routeSettled.resolve();
-    }
+    await fulfillInquiry(route, request, lateText);
+    routeSettled.resolve();
   });
   await page.goto("/matter");
   await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
@@ -135,21 +122,14 @@ test("page suspension restores the pending question and keeps its late answer in
   await received.promise;
 
   await setDocumentVisibility(page, "hidden");
-  await expect(field).toHaveValue(question);
-  await expect(inquiry.locator("[data-inquiry-thread]")).toHaveCount(0);
   gate.resolve();
-  await setDocumentVisibility(page, "visible");
   await routeSettled.promise;
-  await expect(inquiry).not.toContainText(lateText);
-  await expect(field).toHaveValue(question);
-  await field.fill(freshQuestion);
-  await field.press("Enter");
-  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(freshText);
-  await expect(inquiry).not.toContainText(lateText);
+  await setDocumentVisibility(page, "visible");
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(lateText);
   await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 });
 
-test("a real context change revokes the request before a delayed answer can settle", async ({ page }) => {
+test("a material-context change keeps the answer tied to its captured question", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();
   const routeSettled = deferred<void>();
@@ -165,13 +145,8 @@ test("a real context change revokes the request before a delayed answer can sett
     }
     received.resolve();
     await gate.promise;
-    try {
-      await fulfillInquiry(route, request, lateText);
-    } catch {
-      // A context change may abort the old browser request before fulfillment.
-    } finally {
-      routeSettled.resolve();
-    }
+    await fulfillInquiry(route, request, lateText);
+    routeSettled.resolve();
   });
   await page.goto("/matter");
   await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
@@ -181,19 +156,19 @@ test("a real context change revokes the request before a delayed answer can sett
   await field.press("Enter");
   await received.promise;
 
-  // Invoke the index action without a pointer-down outside Inquiry. This makes
-  // the bounded working context itself — not generic outside-click dismissal —
-  // own the invalidation being proved.
+  // Invoke the index action without a pointer-down outside Inquiry. This proves
+  // a real projected-context change does not masquerade as an explicit close.
   await page.getByRole("button", { name: /暂时不纳入画面里的材料/u }).first()
     .evaluate((button: HTMLButtonElement) => button.click());
   await expect(inquiry).toBeVisible();
   gate.resolve();
   await routeSettled.promise;
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(lateText);
   await field.fill("新上下文现在在说什么？");
   await field.press("Enter");
-  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(freshText);
-  await expect(inquiry).not.toContainText(lateText);
-  await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
+  await expect(inquiry.locator('[data-inquiry-role="matter"]').last()).toContainText(freshText);
+  await expect(inquiry).toContainText(lateText);
+  await expect.poll(() => inquiryExchangeCount(page)).toBe(2);
 });
 
 test("chrome restoration preserves ordinary hover and an explicit Escape dismissal", async ({ page }) => {

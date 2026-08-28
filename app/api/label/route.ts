@@ -2,6 +2,7 @@ import { handleLabelRequest, labelErrorResponse } from "@/features/matter/server
 
 export const runtime = "nodejs";
 // A label may spend 12 s with the pool, and nothing on screen waits for it.
+// Next statically extracts this value and does not accept imported expressions.
 export const maxDuration = 20;
 
 export async function POST(request: Request): Promise<Response> {

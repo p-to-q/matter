@@ -1,4 +1,5 @@
 import { isMatterLocale, type MatterLocale } from "../config/locales";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { validateSelection, type SegmentSelection } from "../material/text-segments";
 import {
   MAX_NODE_TEXT_CODE_UNITS,
@@ -7,12 +8,12 @@ import {
   isMaterialId,
   validateThoughtTree,
 } from "../tree/invariants";
-import { PROTOCOL_VERSION, type ThoughtTree, type TreeCommand } from "../tree/model";
+import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree, type TreeCommand } from "../tree/model";
 import { deriveExpandInPlaceLength, validateExpandInPlaceCandidate } from "./expand-in-place-policy";
 
 export const MAX_TRANSFORM_REQUEST_BYTES = 32 * 1024;
 export const MAX_TRANSFORM_RESPONSE_BYTES = 8 * 1024;
-export const TRANSFORM_CLIENT_TIMEOUT_MS = 16_000;
+export const TRANSFORM_CLIENT_TIMEOUT_MS = MODEL_DEADLINES.transform.clientMs;
 export const MAX_TRANSFORM_ID_LENGTH = 128;
 export const MAX_TRANSFORM_CONTEXT_CODE_POINTS = 8_000;
 export const TRANSFORM_REQUEST_VERSION = "transform/2" as const;
@@ -241,10 +242,11 @@ export function planToTreeCommand(
   const envelope = parsedEnvelope.envelope;
   const plan = parseTransformPlan(rawPlan, envelope);
   if (plan === null || !validateThoughtTree(currentTree).ok) return rejected("INVALID_PLAN");
-  if (currentTree.id !== envelope.treeId || currentTree.revision !== envelope.treeRevision) return rejected("STALE");
+  if (currentTree.id !== envelope.treeId) return rejected("STALE");
   const originalNode = envelope.context.lineage.at(-1)!;
   const node = currentTree.nodes[plan.action.nodeId];
   if (node === undefined || node.text !== originalNode.text || node.updatedAt !== originalNode.updatedAt) return rejected("STALE");
+  if (!sameVisibleLineage(currentTree, node.id, envelope.context.lineage)) return rejected("STALE");
   const selection = parseCurrentSegmentRange(envelope.selection, node);
   if (selection === null) return rejected("STALE");
   const policy = validateExpandInPlaceCandidate({
@@ -274,6 +276,29 @@ export function planToTreeCommand(
     }),
     createdAt: updatedAt,
   }) });
+}
+
+function sameVisibleLineage(
+  tree: ThoughtTree,
+  nodeId: string,
+  expected: readonly TransformLineageNode[],
+): boolean {
+  const lineage: ThoughtNode[] = [];
+  let current: ThoughtNode | undefined = tree.nodes[nodeId];
+  while (current !== undefined && current.role !== "document-root") {
+    lineage.push(current);
+    current = current.parentId === null ? undefined : tree.nodes[current.parentId];
+  }
+  lineage.reverse();
+  return lineage.length === expected.length && lineage.every((node, index) => {
+    const entry = expected[index]!;
+    const parentId = index === 0 ? null : lineage[index - 1]!.id;
+    return node.id === entry.id &&
+      node.text === entry.text &&
+      parentId === entry.parentId &&
+      node.createdAt === entry.createdAt &&
+      node.updatedAt === entry.updatedAt;
+  });
 }
 
 function parseGesture(value: unknown): TransformEnvelope["gesture"] | null {

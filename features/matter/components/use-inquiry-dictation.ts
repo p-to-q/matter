@@ -11,6 +11,7 @@ import { useVoiceReadiness } from "../interaction/use-voice-readiness";
 import {
   requestTranscriptRepair,
   transcriptRepairEnabled,
+  type RepairRequestInput,
 } from "../interaction/repair-client";
 import {
   requestTranscription,
@@ -35,6 +36,30 @@ export type InquiryDictationCallbacks = Readonly<{
   onSettled: () => void;
   onFailed: (notice: InquiryVoiceNotice) => void;
 }>;
+
+/**
+ * Unlike material admission, a dictated Inquiry question is not visible until
+ * repair settles. Keep its interaction ceiling at the previously shipped
+ * bound even though background material repair has a larger delivery window.
+ */
+export const INQUIRY_DICTATION_REPAIR_TIMEOUT_MS = 8_800;
+
+export function withInquiryDictationRepairDeadline(
+  input: Omit<RepairRequestInput, "timeoutMs">,
+): RepairRequestInput {
+  return Object.freeze({ ...input, timeoutMs: INQUIRY_DICTATION_REPAIR_TIMEOUT_MS });
+}
+
+type InquiryRepairRequest = (
+  input: RepairRequestInput,
+) => ReturnType<typeof requestTranscriptRepair>;
+
+export function requestInquiryDictationRepair(
+  input: Omit<RepairRequestInput, "timeoutMs">,
+  request: InquiryRepairRequest = requestTranscriptRepair,
+): ReturnType<typeof requestTranscriptRepair> {
+  return request(withInquiryDictationRepairDeadline(input));
+}
 
 /** Dictation substitutes for the keyboard; it never admits or mutates material. */
 export function useInquiryDictation(
@@ -130,7 +155,7 @@ export function useInquiryDictation(
     repairRef.current = controller;
     let settled = baseline;
     try {
-      const result = await requestTranscriptRepair({
+      const result = await requestInquiryDictationRepair({
         operationId: current.interactionId,
         attempt: current.attempt,
         locale,

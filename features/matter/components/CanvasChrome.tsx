@@ -41,21 +41,19 @@ import {
 import { useInquiryDictation } from "./use-inquiry-dictation";
 import { shouldSubmitInquiryOnEnter } from "./inquiry-submit-key";
 import { askInquiry, createInquiryRequestId } from "../interaction/inquiry-client";
+import type { InquiryContextPayload } from "../protocol/inquiry-contract";
 import {
-  sameInquiryContext,
-  type InquiryContextPayload,
-} from "../protocol/inquiry-contract";
-import {
-  inquiryContextChanged,
-  inquiryContextScopeChanged,
+  sameInquiryContextOwner,
+  type InquiryContextOwner,
 } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
-import { subscribePageSuspension } from "../interaction/page-suspension";
+import { subscribePageExit } from "../interaction/page-suspension";
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
+  inquiryOwner: InquiryContextOwner;
   inquiryRecord?: InquiryRecordBinding;
   onInquiryOpen?: () => void;
 }>;
@@ -556,6 +554,7 @@ const FOCUSABLE_SELECTOR = [
 
 export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(function CanvasChrome({
   inquiryContext,
+  inquiryOwner,
   inquiryRecord,
   onInquiryOpen,
   preferences,
@@ -844,6 +843,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
                 hidden={overlay !== "inquiry"}
                 hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
                 language={preferences.language}
+                owner={inquiryOwner}
                 record={inquiryRecord}
                 ref={inquiryBubbleRef}
               />
@@ -1049,6 +1049,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   hidden: boolean;
   hint: string;
   language: CanvasLanguage;
+  owner: InquiryContextOwner;
   record?: InquiryRecordBinding;
 }>(function InquiryBubble({
   context,
@@ -1056,6 +1057,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   hidden,
   hint,
   language,
+  owner,
   record,
 }, forwardedRef) {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
@@ -1065,9 +1067,8 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   const submittingRef = useRef(false);
   const authorityRef = useRef(0);
   const pendingSubmissionRef = useRef<Readonly<{ answerId: number; question: string }> | null>(null);
-  const contextRef = useRef(context);
-  const contextSnapshotRef = useRef<InquiryContextPayload | undefined>(undefined);
-  const hasContextSnapshotRef = useRef(false);
+  const ownerRef = useRef(owner);
+  const ownerSnapshotRef = useRef<InquiryContextOwner | undefined>(undefined);
   const followThreadRef = useRef(true);
   const listening = state.phase === "listening";
   const transcribing = state.phase === "transcribing";
@@ -1110,7 +1111,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     requestRef.current?.abort();
   }, []);
 
-  useEffect(() => subscribePageSuspension(() => {
+  useEffect(() => subscribePageExit(() => {
     // Keep completed local turns, but return an in-flight question to its
     // editable draft through the request's existing abort/fallback path.
     authorityRef.current += 1;
@@ -1133,38 +1134,27 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   }, [hasPendingAnswer]);
 
   useLayoutEffect(() => {
-    contextRef.current = context;
+    ownerRef.current = owner;
     if (hidden) {
-      hasContextSnapshotRef.current = false;
-      contextSnapshotRef.current = undefined;
+      ownerSnapshotRef.current = undefined;
       return;
     }
-    const nextContext = context?.();
-    if (!hasContextSnapshotRef.current) {
-      hasContextSnapshotRef.current = true;
-      contextSnapshotRef.current = nextContext;
+    const previousOwner = ownerSnapshotRef.current;
+    ownerSnapshotRef.current = owner;
+    if (previousOwner === undefined || sameInquiryContextOwner(previousOwner, owner)) {
       return;
     }
-    const previousContext = contextSnapshotRef.current;
-    contextSnapshotRef.current = nextContext;
-    if (!inquiryContextChanged(previousContext, nextContext)) return;
-    // A parent render may replace this callback without changing the bounded
-    // material it projects. Any real change ends the request in flight, because
-    // its answer would describe material that has moved.
+    // Content and selection may change while an answer is in flight: the turn
+    // still names its captured question and basis. Only a different loaded
+    // document instance revokes presentation and durable-record authority.
     authorityRef.current += 1;
     requestRef.current?.abort();
     requestRef.current = null;
     submittingRef.current = false;
     pendingSubmissionRef.current = null;
     cancelDictation();
-    if (inquiryContextScopeChanged(previousContext, nextContext)) {
-      dispatch({ type: "scope-changed" });
-      return;
-    }
-    // Same material, new revision. The record is kept; only the unanswerable
-    // turn settles.
-    dispatch({ type: "settle-pending", outcome: UNREACHABLE });
-  }, [cancelDictation, context, hidden]);
+    dispatch({ type: "scope-changed" });
+  }, [cancelDictation, context, hidden, owner]);
 
   useLayoutEffect(() => {
     if (hidden) {
@@ -1199,6 +1189,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     const request = new AbortController();
     requestRef.current = request;
     const authority = authorityRef.current;
+    const requestOwner = owner;
     void askInquiry({
       question,
       locale: language,
@@ -1207,12 +1198,10 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
       signal: request.signal,
     })
       .then((outcome) => {
-        const currentContext = contextRef.current?.();
         if (
           authorityRef.current !== authority ||
           requestRef.current !== request ||
-          currentContext === undefined ||
-          !sameInquiryContext(payload, currentContext)
+          !sameInquiryContextOwner(requestOwner, ownerRef.current)
         ) return;
         if (outcome.status === "unavailable" && outcome.reason !== "NO_MATERIAL") {
           dispatch({ type: "withdraw-unavailable", id: answerId, question });
@@ -1234,7 +1223,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           submittingRef.current = false;
         }
       });
-  }, [canAsk, context, language, record, state]);
+  }, [canAsk, context, language, owner, record, state]);
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -1441,7 +1430,6 @@ function appendInquiryRecord(
 const INQUIRY_FIELD_MAX_HEIGHT = 95;
 type TerminalInquiryOutcome = Exclude<InquiryTurnOutcome, Readonly<{ status: "pending" }>>;
 const NO_MATERIAL: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
-const UNREACHABLE: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "UNREACHABLE" });
 
 function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string {
   if (outcome.status === "answered") return outcome.text;

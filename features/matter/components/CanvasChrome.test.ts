@@ -276,6 +276,7 @@ describe("canvas chrome info parity", () => {
 
 function renderChrome(overrides: Partial<CanvasChromeProps> = {}): string {
   const props: CanvasChromeProps = {
+    inquiryOwner: { treeId: "test-tree", documentEpoch: 1 },
     preferences: DEFAULT_CANVAS_PREFERENCES,
     resolvedAppearance: "light",
     setAppearance: vi.fn(),

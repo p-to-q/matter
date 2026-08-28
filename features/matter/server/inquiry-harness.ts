@@ -1,7 +1,8 @@
 import type { InquiryRequest } from "../protocol/inquiry-contract";
-import { isInquiryAnswerProse } from "../protocol/inquiry-answer-policy";
-import { MAX_INQUIRY_ANSWER_BODY_CODE_POINTS } from "../config/inquiry";
+import { isInquiryAnswerProse } from "../protocol/inquiry-answer-policy.mjs";
+import { MAX_INQUIRY_ANSWER_CODE_POINTS } from "../config/inquiry";
 import type { MatterScenario } from "./harness";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { boundedIntent, composePrompt, fenceJson } from "./prompt-spine";
 
 export const INQUIRY_SCENARIO_ID = "matter-inquiry";
@@ -14,7 +15,7 @@ export const INQUIRY_PROMPT_VERSION = "inquiry/3";
  * after it, so a server timeout reaches the paper as a stated unavailability
  * rather than as a dead socket.
  */
-const INQUIRY_PROVIDER_DEADLINE_MS = 16_000;
+export const INQUIRY_PROVIDER_DEADLINE_MS = MODEL_DEADLINES.inquiry.providerMs;
 
 /**
  * Answering one question about material a person is already looking at.
@@ -36,18 +37,21 @@ export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.f
   budget: () => Object.freeze({
     deadlineMs: INQUIRY_PROVIDER_DEADLINE_MS,
     maxOutputTokens: 720,
+    disableThinking: true,
   }),
   adjudicate: (answer) => {
     if (typeof answer !== "string") return Object.freeze({ ok: false as const, reason: "not-text" });
     const text = answer.trim();
     if (text.length === 0) return Object.freeze({ ok: false as const, reason: "empty" });
-    // Validate the provider's complete value before clipping. Otherwise an
-    // unsafe suffix just beyond the visible ceiling would disappear and turn
-    // an invalid answer into an accepted one.
+    // Validate the provider's complete value before length admission. Unsafe
+    // or over-bound values are rejected whole, never clipped into a new answer.
     if (!isInquiryAnswerProse(text)) {
       return Object.freeze({ ok: false as const, reason: "invalid-format" });
     }
-    return Object.freeze({ ok: true as const, value: clip(text) });
+    if (Array.from(text).length > MAX_INQUIRY_ANSWER_CODE_POINTS) {
+      return Object.freeze({ ok: false as const, reason: "too-long" });
+    }
+    return Object.freeze({ ok: true as const, value: text });
   },
 });
 
@@ -118,11 +122,4 @@ export function compileInquiryPrompt(request: InquiryRequest): string {
     // continued over several lines is theirs to write that way.
     intent: boundedIntent("question", request.question, "What they asked:"),
   });
-}
-
-function clip(text: string): string {
-  const codePoints = Array.from(text);
-  return codePoints.length <= MAX_INQUIRY_ANSWER_BODY_CODE_POINTS
-    ? text
-    : `${codePoints.slice(0, MAX_INQUIRY_ANSWER_BODY_CODE_POINTS).join("").trimEnd()}…`;
 }

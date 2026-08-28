@@ -740,11 +740,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const presentationDamage = admissionPresentationDamage ?? languagePresentationDamage;
   const stretchInvalidationRef = useRef<() => void>(() => undefined);
   const invalidateStretchGeometry = useCallback((pointerId: number | null) => {
-    stretchInvalidationRef.current();
     const shell = shellRef.current;
     if (pointerId !== null && shell?.hasPointerCapture(pointerId)) {
       shell.releasePointerCapture(pointerId);
     }
+    stretchInvalidationRef.current();
   }, []);
   const labels = useThoughtLabels({
     tree,
@@ -1346,6 +1346,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       lasso.selections,
     ),
     [activeWorkingProjection, lasso.selections, tree],
+  );
+  const inquiryOwner = useMemo(
+    () => ({ treeId: tree.id, documentEpoch: props.documentEpoch }),
+    [props.documentEpoch, tree.id],
   );
   const materialGuidance: CanvasMaterialGuidanceState = tree.rootId === null
     ? { kind: "empty" }
@@ -2514,6 +2518,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <CanvasChrome
           {...canvasPreferences}
           inquiryContext={projectInquiryPayload}
+          inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
           onInquiryOpen={abortFixedExpansion}
           ref={canvasChromeRef}

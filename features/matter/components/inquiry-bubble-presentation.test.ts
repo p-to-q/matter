@@ -31,6 +31,6 @@ describe("inquiry bubble presentation", () => {
     const family = revealSteps("a👨‍👩‍👧‍👦b");
     expect(family.at(-1)).toBe("a👨‍👩‍👧‍👦b");
     expect(family).not.toContain("a👨");
-    expect(revealSteps("字".repeat(500)).length).toBeLessThanOrEqual(42);
+    expect(revealSteps("字".repeat(3_200)).length).toBeLessThanOrEqual(42);
   });
 });

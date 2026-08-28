@@ -1,5 +1,5 @@
 import {
-  INQUIRY_CLIENT_TIMEOUT_MS,
+  INQUIRY_ROUTE_TIMEOUT_MS,
   MAX_INQUIRY_REQUEST_BYTES,
   inquiryBasis,
   inquiryReceipt,
@@ -105,7 +105,7 @@ export function inquiryErrorResponse(error: unknown): Response {
 
 const INQUIRY_REQUEST_POLICY: BoundedRequestPolicy = Object.freeze({
   maxBytes: MAX_INQUIRY_REQUEST_BYTES,
-  timeoutMs: INQUIRY_CLIENT_TIMEOUT_MS,
+  timeoutMs: INQUIRY_ROUTE_TIMEOUT_MS,
   fail: inquiryBoundaryError,
 });
 

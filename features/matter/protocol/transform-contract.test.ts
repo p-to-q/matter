@@ -121,7 +121,7 @@ describe("transform/2 contract", () => {
     expect(parseTransformPlan({ ...plan, action: { ...plan.action, text: "source" } }, parsed.envelope)).toBeNull();
   });
 
-  it("revalidates policy, current segment, revision, and tree memento immediately before commit", () => {
+  it("rebases over unrelated material while revalidating the exact target", () => {
     const parsed = parseTransformEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");
     const plan = buildTransformPlan(parsed.envelope, "source more");
@@ -132,10 +132,66 @@ describe("transform/2 contract", () => {
     expect(command.ok).toBe(true);
     if (!command.ok) throw new Error("plan must become command");
     expect(applyTreeCommand(tree(), command.command).ok).toBe(true);
-    expect(planToTreeCommand({ ...tree(), revision: 5 }, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
+    const unrelated = tree();
+    unrelated.revision = 5;
+    unrelated.nodes.document!.children.push("sibling");
+    unrelated.nodes.sibling = {
+      id: "sibling",
+      text: "unrelated change",
+      parentId: "document",
+      children: [],
+      createdAt: TIME,
+      updatedAt: TIME,
+    };
+    const rebased = planToTreeCommand(unrelated, parsed.envelope, plan);
+    expect(rebased.ok).toBe(true);
+    if (rebased.ok) expect(rebased.command.expectedRevision).toBe(5);
+    const changed = tree();
+    changed.revision = 5;
+    changed.nodes.thought!.text = "changed. next";
+    expect(planToTreeCommand(changed, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
     expect(planToTreeCommand(tree(), parsed.envelope, {
       ...plan,
       action: { ...plan.action, text: "source\u202Emore" },
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
+
+  it("rejects an ancestor edit or reparent even when the target text is unchanged", () => {
+    const source = envelope({
+      context: { lineage: [
+        { id: "parent", text: "context", parentId: null, createdAt: TIME, updatedAt: TIME },
+        { id: "thought", text: TEXT, parentId: "parent", createdAt: TIME, updatedAt: TIME },
+      ] },
+    });
+    const parsed = parseTransformEnvelope(source);
+    if (!parsed.ok) throw new Error("lineage fixture must parse");
+    const plan = buildTransformPlan(parsed.envelope, "source more");
+
+    const edited = lineageTree();
+    edited.revision = 5;
+    edited.nodes.parent!.text = "changed context";
+    expect(planToTreeCommand(edited, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
+
+    const reparented = lineageTree();
+    reparented.revision = 5;
+    reparented.nodes.parent!.children = [];
+    reparented.nodes.document!.children = ["parent", "thought"];
+    reparented.nodes.thought!.parentId = "document";
+    expect(planToTreeCommand(reparented, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
+  });
 });
+
+function lineageTree(): ThoughtTree {
+  const current = tree();
+  current.nodes.document!.children = ["parent"];
+  current.nodes.parent = {
+    id: "parent",
+    text: "context",
+    parentId: "document",
+    children: ["thought"],
+    createdAt: TIME,
+    updatedAt: TIME,
+  };
+  current.nodes.thought!.parentId = "parent";
+  return current;
+}

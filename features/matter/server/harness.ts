@@ -68,6 +68,8 @@ export type ScenarioCall = Readonly<{
    */
   deadlineMs: number;
   maxOutputTokens: number;
+  /** A scenario may suppress relay thinking, but can never enable it. */
+  disableThinking?: true;
   /**
    * A server-local scalar seam. Pool adapters report only that a pool was used
    * and how an anonymous candidate attempt settled; no station, model, host,
@@ -100,7 +102,11 @@ export type ScenarioOutcome<Value> =
   | Readonly<{ ok: true; value: Value }>
   | Readonly<{ ok: false; fallback: ScenarioFallback }>;
 
-export type ScenarioBudget = Readonly<{ deadlineMs: number; maxOutputTokens: number }>;
+export type ScenarioBudget = Readonly<{
+  deadlineMs: number;
+  maxOutputTokens: number;
+  disableThinking?: true;
+}>;
 
 /**
  * A scenario owns its prompt, its budget, and its judgement of an answer — and
@@ -405,6 +411,7 @@ export async function runScenario<Input, Value>(
       input,
       deadlineMs: budget.deadlineMs,
       maxOutputTokens: budget.maxOutputTokens,
+      ...(budget.disableThinking === true ? { disableThinking: true as const } : {}),
       observeCandidate: noteCandidate,
     });
     timer = setTimeout(() => deadline.abort(), budget.deadlineMs);

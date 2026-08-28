@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
-import { INQUIRY_CONTEXT_SCOPES, isInquiryContextScope } from "../config/inquiry";
+import {
+  INQUIRY_CONTEXT_SCOPES,
+  MAX_INQUIRY_ANSWER_CODE_POINTS,
+  isInquiryContextScope,
+} from "../config/inquiry";
 import {
   MAX_INQUIRY_CONTEXT_CODE_POINTS as MATERIAL_CONTEXT_CODE_POINTS,
   MAX_INQUIRY_CONTEXT_NODES,
@@ -155,6 +159,20 @@ describe("inquiry answer admission", () => {
   ])("keeps literal material vocabulary: %s", (text) => {
     expect(parseInquiryAnswer(answerBody(text), "inq_1", ANSWER_CONTEXT))
       .toMatchObject({ status: "answered", text });
+  });
+
+  it.each(["a", "答", "🎉"])("accepts one complete %s answer at the wire bound", (unit) => {
+    const text = unit.repeat(MAX_INQUIRY_ANSWER_CODE_POINTS);
+    expect(parseInquiryAnswer(answerBody(text), "inq_1", ANSWER_CONTEXT))
+      .toMatchObject({ status: "answered", text });
+  });
+
+  it("rejects one code point beyond the complete answer bound", () => {
+    expect(parseInquiryAnswer(
+      answerBody("答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS + 1)),
+      "inq_1",
+      ANSWER_CONTEXT,
+    )).toBeNull();
   });
 });
 

@@ -735,7 +735,7 @@ Non-goals:  deployed-origin p95, edge latency, distributed retention/alerting,
 Historical receipt, 2026-08-22: the five-scenario and five-outcome enums,
 two-value candidate provenance, the original attempt/timeout/failure counters,
 and 0–120000 ms numeric duration introduced the
-`matter.scenario-performance` schema. Preview.46 extends its current closed
+`matter.scenario-performance` schema. Preview.47 extends its current closed
 schema with truncation/refusal and unknown/missing-terminator counters; the last
 two modify an already counted attempt rather than inventing one. Source sampling is off and
 Matter retains nothing; one such line per non-null scenario-adapter terminal is
@@ -967,6 +967,18 @@ Execution order is deliberately narrow; the first three steps are complete:
 5. Measure long-session history serialization and the complete layout path.
    Replace either only when the receipt shows a real limit; the likely history
    response is a segmented reversible journal, not a premature CRDT.
+
+Open recovery risk, 2026-08-28: durable history intentionally remains complete
+until storage refuses the atomic row, while corrupt-row export currently admits
+at most 32 MiB and replacement requires that exact exported basis. A sufficiently
+long corrupt session can therefore outgrow the recovery carrier even when the
+normal persistence path previously accepted it. Do not raise the cap, drop old
+inverses, or introduce a journal in the AI reliability release. Reopen this as
+one persistence slice only after a legal 2,000-node/maximum-text history corpus
+measures row growth, quota behaviour, corrupt export, and replacement on target
+browsers. Any solution must preserve exact-basis replacement, stream or bound
+recovery memory, validate the complete recovered history, and keep one atomic
+generation owner.
 
 ## Archived preview implementation notes
 

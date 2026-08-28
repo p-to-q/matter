@@ -26,6 +26,14 @@ const BASIS: TextSwapBasis = Object.freeze({
     selectedText: "Rain is near",
   }),
   sourceText: "Rain is near",
+  locale: "en-US",
+  lineage: Object.freeze([Object.freeze({
+    id: "thought_1",
+    text: "Rain is near. Next",
+    parentId: null,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+  })]),
 });
 
 const SCOPE: TextSwapScope = Object.freeze({
@@ -33,6 +41,7 @@ const SCOPE: TextSwapScope = Object.freeze({
   revision: 4,
   documentEpoch: 2,
   selection: BASIS.selection,
+  lineage: BASIS.lineage,
   enabled: true,
   interactionScopeKey: "focus:thought_1",
 });
@@ -87,8 +96,8 @@ function harness(options: Partial<{
     treeRevision: basis.baseRevision,
     selection: basis.selection,
     direction: { text: direction },
-    locale: "en-US",
-    context: { lineage: [] },
+    locale: basis.locale,
+    context: { lineage: basis.lineage },
   }) as TextSwapEnvelope);
   const transcribe = options.transcribe ?? vi.fn(async (input) => ({
     protocolVersion: "0.2" as const,
@@ -109,7 +118,6 @@ function harness(options: Partial<{
     createInteractionId: () => "text_swap_interaction_1",
     createRequestId: () => `text_swap_request_${++requestSequence}`,
     monotonicNow: () => 20,
-    locale: "en-US",
   });
   driver.updateScope(SCOPE);
   driver.retain();
@@ -147,6 +155,54 @@ async function completeVoice(
 }
 
 describe("TextSwapDriver", () => {
+  it("freezes Voice and transcription locale in the entered basis", async () => {
+    const h = harness();
+    const basis = Object.freeze({ ...BASIS, locale: "zh-CN" as const });
+    h.driver.updateScope({ ...SCOPE, lineage: basis.lineage, selection: basis.selection });
+    expect(h.driver.enter(basis)).toBe(true);
+    expect(h.driver.startRecording()).toBe(true);
+    expect(h.voice.starts[0]?.callbacks.locale).toBe("zh-CN");
+    const operation = h.voice.starts[0]!.operation;
+    h.voice.grantPermission();
+    await settle(2);
+    h.driver.stopRecording();
+    h.voice.finish(operation);
+    await settle(30);
+
+    expect(h.transcribe).toHaveBeenCalledWith(expect.objectContaining({ locale: "zh-CN" }));
+    expect(h.request).toHaveBeenCalledWith(
+      expect.objectContaining({ locale: "zh-CN" }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it("uses the latest committed React bindings without replacing the driver", async () => {
+    const h = harness();
+    const buildEnvelope = vi.fn((basis: TextSwapBasis, direction: string, id: string) => ({
+      ...envelope(id),
+      treeId: basis.treeId,
+      selection: basis.selection,
+      direction: { text: direction },
+      locale: basis.locale,
+      context: { lineage: basis.lineage },
+    }));
+    const commit = vi.fn(() => ({ status: "committed", change: "change_2" }) as const);
+    const onCommitted = vi.fn();
+    h.driver.updateBindings({ buildEnvelope, commit, onCommitted });
+
+    expect(h.driver.enter(BASIS)).toBe(true);
+    expect(h.driver.acceptDirection("Use a calmer rhythm")).toBe(true);
+    expect(h.driver.submit()).toBe(true);
+    await settle();
+
+    expect(h.buildEnvelope).not.toHaveBeenCalled();
+    expect(buildEnvelope).toHaveBeenCalledTimes(1);
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(h.onCommitted).not.toHaveBeenCalled();
+    expect(onCommitted).toHaveBeenCalledWith("change_2");
+  });
+
   it("uses swap-direction transcription and commits one immutable request", async () => {
     const h = harness();
     const operation = await completeVoice(h);
@@ -215,7 +271,7 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState()).not.toHaveProperty("carrier");
   });
 
-  it("aborts transcription on revision change and ignores its late result", async () => {
+  it("keeps an unrelated revision but aborts when the addressed lineage changes", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";
       interactionId: string;
@@ -238,7 +294,14 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState().phase).toBe("transcribing");
 
     h.driver.updateScope({ ...SCOPE, revision: 5 });
-    expect(h.driver.getState()).toMatchObject({ phase: "stale", reason: "scope-change" });
+    expect(h.driver.getState().phase).toBe("transcribing");
+    expect(observedSignal.current?.aborted).toBe(false);
+    h.driver.updateScope({
+      ...SCOPE,
+      revision: 6,
+      lineage: Object.freeze([{ ...BASIS.lineage[0]!, text: "Rain was near. Next" }]),
+    });
+    expect(h.driver.getState()).toMatchObject({ phase: "stale", reason: "selection-change" });
     expect(observedSignal.current?.aborted).toBe(true);
     resolveTranscript({
       protocolVersion: "0.2",
@@ -428,7 +491,7 @@ function envelope(id: string): TextSwapEnvelope {
     selection: BASIS.selection,
     direction: { text: "Use a calmer rhythm" },
     locale: "en-US",
-    context: { lineage: [] },
+    context: { lineage: BASIS.lineage },
   };
 }
 

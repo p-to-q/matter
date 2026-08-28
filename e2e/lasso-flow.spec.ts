@@ -471,7 +471,15 @@ test("keyboard addresses exact segments and Escape or the narrow index returns L
   await rootText.press("ArrowLeft");
   await expect(selectedStatus).toHaveText(firstAnnouncement ?? "");
 
-  await page.keyboard.press("Escape");
+  // Queue a deferred viewport remeasure and revoke Lasso in the same browser
+  // task. Neither the outer nor inner stale frame may restore old grips.
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("resize"));
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
   await expect(shell).not.toHaveAttribute("data-lasso-mode", "true");
   await expect(page.locator(".stretch-handle")).toHaveCount(0);
 

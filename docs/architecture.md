@@ -236,10 +236,13 @@ short question + lassoed passages, or bounded active-working projection when no 
 The canvas root owns one transient AI-operation slot. Point and Talk, an active
 Elastic adjustment or turn, and Inquiry close one another synchronously; a
 neutral lasso may coexist with Inquiry because it is an address and may be that
-request's explicit context, not yet a model operation. Closing a surface or
-changing its bounded basis increments client authority before a delayed promise
-can settle. A late answer therefore cannot render or append a record even in
-the render-to-effect interval.
+request's explicit context, not yet a model operation. Inquiry captures its
+bounded basis at submit time and may settle that read-only answer across later
+material or selection changes. Closing the surface, switching AI operations,
+page exit, unmount, or a different local `{ treeId, documentEpoch }` owner
+increments client authority before a delayed promise can settle. A revoked
+answer therefore cannot render or append a record even in the render-to-effect
+interval.
 
 Inquiry projection is bounded while it walks the working tree: it stops reading
 node text once the 64-node or 4,000-code-point wire ceiling is full instead of
@@ -360,8 +363,11 @@ carries its operation identity, attempt, document, and revision basis.
 Pointer cancel, lost capture, unmount, and a newer interaction interrupt the
 relevant owner and clean up audio, ranges, highlights, workers, and timers.
 `visibilitychange:hidden` and `pagehide` are the same interruption boundary for
-transient capture, model workers, and browser requests: returning visible may
-offer a new pointer action, but never resumes or eagerly recreates old work.
+transient capture, model workers, and material-writing requests: returning
+visible may offer a new pointer action, but never resumes or eagerly recreates
+old work. Read-only Inquiry is narrower: its bounded snapshot request may finish
+while a tab is hidden, and only page exit, explicit close, surface switch,
+unmount, or document-owner replacement revokes it.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.
 
@@ -391,6 +397,11 @@ added to model context: the request carries the exact authored
 root-to-selected-node lineage. The current UI gives only the one-range address
 to Elastic. Text Swap accepts one exact current segment or the exact complete
 node addressed by Point and Talk; only the latter has a current UI owner.
+
+`baseRevision` remains part of each request receipt, but it is not a blanket
+read set. A material operation may rebase onto the current revision only while
+its scenario-owned selection and complete visible-lineage mementos remain
+exact; the tree engine still receives and validates the final current revision.
 
 Async effects are limited to recording, transcription, labelling, inquiry, planning,
 persistence, and archive transport. Every completion returns with

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createIndexedDbInquiryRecordRepository } from "./inquiry-record-repository";
 import { isStoredInquiryExchange } from "./inquiry-record-policy";
+import { MAX_INQUIRY_ANSWER_CODE_POINTS } from "../config/inquiry";
 
 vi.mock("idb", () => ({ openDB: vi.fn() }));
 
@@ -126,4 +127,15 @@ describe("IndexedDB Ask Matter record repository", () => {
       })).toBe(true);
     },
   );
+
+  it("stores one complete maximum answer and rejects one code point more", () => {
+    expect(isStoredInquiryExchange({
+      ...RECORD.exchanges[0],
+      outcome: { status: "answered", text: "🎉".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS) },
+    })).toBe(true);
+    expect(isStoredInquiryExchange({
+      ...RECORD.exchanges[0],
+      outcome: { status: "answered", text: "答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS + 1) },
+    })).toBe(false);
+  });
 });

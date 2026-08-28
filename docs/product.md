@@ -123,9 +123,11 @@ choose another target, operation, or scope.
 
 Opening Point and Talk cancels any Elastic degree or pending Elastic turn. One complete result
 atomically replaces the addressed node or exact segment in place and is pointer-undoable.
-Closing, changing the target, or losing its exact tree/revision basis clears
-the transient direction and gives any late result no authority. Full-view Voice
-admission remains a separate human-material channel.
+Closing, changing the target, or losing its exact document, tree, selection, or
+visible-lineage basis clears the transient direction and gives any late result
+no authority. An unrelated history revision does not reinterpret or revoke that
+frozen direction. Full-view Voice admission remains a separate human-material
+channel.
 
 The paper has one transient AI-operation slot. Point and Talk, an Elastic grip
 adjustment or pending turn, and the corner Inquiry cannot remain active behind
@@ -151,14 +153,17 @@ lassoed passages or, when no passages are selected, the bounded active working
 projection of the material tree, and receive orientation that never edits
 material. Within that one opening, the person may continue with further short
 questions one at a time. Each request projects current material afresh; earlier
-questions and answers do not become later model context. The bubble is
+questions and answers do not become later model context. Each submitted
+question retains its own bounded snapshot, so an ordinary material edit, a
+later selection, or a temporarily hidden tab does not discard the answer when
+it arrives. The bubble is
 transient: each opening begins clean and no exchange is replayed after closing
 or reload. A bounded local completed-record may remain separately for passive
 look-back, but it is not a resumed inquiry surface and is never material,
-history, archive content, or later model context. Closing the surface, changing
-its projected material, replacing the document, or suspending the page revokes
-the current request before a late answer may enter either the bubble or that
-record. Once an exchange has already been accepted, its record write remains
+history, archive content, or later model context. Closing the surface, switching
+to another AI operation, replacing the local document owner, leaving the page,
+or unmounting revokes the current request before a late answer may enter either
+the bubble or that record. Once an exchange has already been accepted, its record write remains
 owned by the addressed tree even if the person navigates elsewhere before
 local storage settles.
 On desktop, the upper-right About/settings pair, bottom-right utility row, and

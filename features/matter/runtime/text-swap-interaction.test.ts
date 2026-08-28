@@ -19,6 +19,14 @@ const BASIS: TextSwapBasis = Object.freeze({
     selectedText: "Rain is near",
   }),
   sourceText: "Rain is near",
+  locale: "en-US",
+  lineage: Object.freeze([Object.freeze({
+    id: "thought_1",
+    text: "Rain is near. Next",
+    parentId: null,
+    createdAt: "2026-08-20T00:00:00.000Z",
+    updatedAt: "2026-08-20T00:00:00.000Z",
+  })]),
 });
 
 function enter(basis: TextSwapBasis = BASIS) {
@@ -315,6 +323,7 @@ describe("text swap interaction reducer", () => {
     const nextBasis = Object.freeze({
       ...BASIS,
       selection: Object.freeze({ ...BASIS.selection, nodeId: "thought_2" }),
+      lineage: Object.freeze([Object.freeze({ ...BASIS.lineage[0]!, id: "thought_2" })]),
     });
     const superseded = reduceTextSwapInteraction(pending(), {
       type: "enter",

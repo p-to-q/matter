@@ -84,7 +84,7 @@ different shape because each scenario withholds something different:
 - labelling re-runs the browser's own validation, then requires the answer to
   beat the deterministic label it would replace, so a model cannot rename a node
   merely differently ([`thought-label.md`](thought-label.md));
-- inquiry trims and visibly bounds, refuses empty or unsafe control text, and
+- inquiry trims and enforces one complete answer bound, refuses empty or unsafe control text, and
   refuses answer chrome that would turn its quiet prose into a panel;
 - Elastic Language transform cannot prove every implication of generated
   language, but it deterministically checks what can be withheld: exactly one
@@ -207,10 +207,10 @@ stopped, not only what it said. A terminator that positively means the text ran
 out — `length`, `max_tokens`, `max_output_tokens`,
 `model_context_window_exceeded` — fails the attempt, so the remaining relays get
 their turn and the scenario otherwise settles on its floor. Adjudication already
-caught most of this for the scenarios that measure their answer, but the inquiry
-only checks that its answer is a non-empty string, and it is the one scenario
-with no deterministic floor and a person waiting on it — so a half sentence
-reached the paper as an answer.
+caught most of this for the scenarios that measure their answer. Inquiry now
+also validates quiet prose and a complete 3,200-code-point ceiling, but it still
+has no deterministic floor and a person is waiting on it; provider truncation
+therefore cannot be reinterpreted as a locally short answer.
 
 The boundary is fail-closed for every explicit terminator. Known complete values
 may return text; truncation, guardrail/refusal, tool/continuation, conflicting
@@ -233,6 +233,15 @@ Mutable candidate health is keyed by scenario, because a stall is a judgement
 made against that scenario's deadline: a relay that is too slow for foreground
 repair may still be healthy for a background label. Governors, cache policy,
 and adjudication are scenario-local; health follows the same ownership boundary.
+
+Every current narrow scenario asks for visible output without hidden reasoning,
+but `enable_thinking` is not part of the OpenAI-compatible base contract. A
+scenario therefore owns only a one-way suppression policy. The pool sends that
+provider-specific field only when a candidate explicitly declares support with
+`ENABLE_THINKING=true|false`; an undeclared candidate receives no extra field.
+When support is declared, the scenario may force the value to `false` but may
+never turn thinking on. Paid evaluation binds both the candidate declaration
+and the scenario budget, so changing either invalidates prior authority.
 
 **Observation is a scalar side channel, never a second model protocol.** The
 harness emits one production terminal receipt for a provider-backed invocation;
