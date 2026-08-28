@@ -5,6 +5,7 @@ import {
   type TextSwapEnvelope,
   type TextSwapPlan,
 } from "../protocol/text-swap-contract";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { deriveTextSwapLength } from "../protocol/text-swap-policy";
 import {
   withBoundedJsonRequest,
@@ -35,7 +36,7 @@ const TURN_LIMITS = Object.freeze({
   failuresBeforeCooldown: 3,
   cooldownMs: 15_000,
 });
-export const TEXT_SWAP_ROUTE_TIMEOUT_MS = 14_000;
+export const TEXT_SWAP_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.textSwap.routeMs;
 
 export async function handleTextSwapRequest(
   request: Request,

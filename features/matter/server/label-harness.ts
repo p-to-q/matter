@@ -6,6 +6,7 @@ import {
   type NormalizedLabelInput,
 } from "../material/semantic-label";
 import type { MatterScenario } from "./harness";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { composePrompt, fence, fenceJson } from "./prompt-spine";
 
 /**
@@ -22,10 +23,11 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
   locale: (input) => input.locale,
   compile: buildLabelPrompt,
   budget: (input) => Object.freeze({
-    deadlineMs: LABEL_SCENARIO_DEADLINE_MS,
+    deadlineMs: MODEL_DEADLINES.label.providerMs,
     // A label is a phrase. A ceiling near its own length stops a model from
     // spending the deadline explaining the name it chose.
     maxOutputTokens: Math.max(24, input.maxGraphemes * 2),
+    disableThinking: true,
   }),
   adjudicate: (answer, input) => {
     if (typeof answer !== "string") return reject("not-text");
@@ -54,7 +56,7 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
  * two attempts each survive that cold connection — which nothing on screen is
  * waiting for. See `label-contract.ts` for the measurement.
  */
-export const LABEL_SCENARIO_DEADLINE_MS = 12_000;
+export const LABEL_SCENARIO_DEADLINE_MS = MODEL_DEADLINES.label.providerMs;
 
 /**
  * The length range matters more than the ceiling. Asked only for a maximum, a

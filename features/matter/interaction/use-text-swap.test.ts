@@ -21,6 +21,7 @@ describe("Text Swap basis and envelope", () => {
       tree: tree(),
       documentEpoch: 3,
       selection: SELECTION,
+      locale: "en-US",
     });
 
     expect(basis).toEqual({
@@ -29,6 +30,14 @@ describe("Text Swap basis and envelope", () => {
       documentEpoch: 3,
       selection: SELECTION,
       sourceText: "Rain is near",
+      locale: "en-US",
+      lineage: [{
+        id: "thought_1",
+        text: TEXT,
+        parentId: null,
+        createdAt: TIME,
+        updatedAt: TIME,
+      }],
     });
     expect(Object.isFrozen(basis?.selection)).toBe(true);
   });
@@ -45,6 +54,7 @@ describe("Text Swap basis and envelope", () => {
       tree: tree(),
       documentEpoch: 3,
       selection: wholeNode,
+      locale: "en-US",
     })?.selection).toEqual(wholeNode);
   });
 
@@ -57,16 +67,19 @@ describe("Text Swap basis and envelope", () => {
         end: TEXT.length - 1,
         selectedText: TEXT.slice(0, -1),
       },
+      locale: "en-US",
     })).toBeNull();
     expect(createTextSwapBasis({
       tree: tree(),
       documentEpoch: 3,
       selection: { ...SELECTION, selectedText: "Other source" },
+      locale: "en-US",
     })).toBeNull();
     expect(createTextSwapBasis({
       tree: tree(),
       documentEpoch: 3,
       selection: null,
+      locale: "en-US",
     })).toBeNull();
   });
 
@@ -76,13 +89,13 @@ describe("Text Swap basis and envelope", () => {
       tree: currentTree,
       documentEpoch: 3,
       selection: SELECTION,
+      locale: "en-US",
     });
     if (basis === null) throw new Error("basis missing");
     const envelope = createTextSwapEnvelope({
       tree: currentTree,
       documentEpoch: 3,
       selection: SELECTION,
-      locale: "en-US",
       basis,
       direction: "Use a more tentative rhythm",
       id: "text_swap_request_1",
@@ -104,19 +117,19 @@ describe("Text Swap basis and envelope", () => {
     expect(envelope?.context.lineage.some((node) => node.id === "document")).toBe(false);
   });
 
-  it("refuses a changed document epoch, revision, selection, or invalid direction", () => {
+  it("rebases an unrelated revision and refuses a changed epoch, lineage, selection, or direction", () => {
     const currentTree = tree();
     const basis = createTextSwapBasis({
       tree: currentTree,
       documentEpoch: 3,
       selection: SELECTION,
+      locale: "en-US",
     });
     if (basis === null) throw new Error("basis missing");
     const common = {
       tree: currentTree,
       documentEpoch: 3,
       selection: SELECTION,
-      locale: "en-US" as const,
       basis,
       direction: "Use a more tentative rhythm",
       id: "text_swap_request_1",
@@ -126,6 +139,17 @@ describe("Text Swap basis and envelope", () => {
     expect(createTextSwapEnvelope({
       ...common,
       tree: { ...currentTree, revision: 5 },
+    })?.treeRevision).toBe(5);
+    expect(createTextSwapEnvelope({
+      ...common,
+      tree: {
+        ...currentTree,
+        revision: 5,
+        nodes: {
+          ...currentTree.nodes,
+          thought_1: { ...currentTree.nodes.thought_1!, text: "Rain was near. Next" },
+        },
+      },
     })).toBeNull();
     expect(createTextSwapEnvelope({
       ...common,
@@ -135,6 +159,57 @@ describe("Text Swap basis and envelope", () => {
       ...common,
       direction: "line one\nline two",
     })).toBeNull();
+  });
+
+  it("does not reinterpret one direction after an ancestor edit or reparent", () => {
+    const currentTree = nestedTree();
+    const basis = createTextSwapBasis({
+      tree: currentTree,
+      documentEpoch: 3,
+      selection: SELECTION,
+      locale: "en-US",
+    });
+    if (basis === null) throw new Error("basis missing");
+    const common = {
+      documentEpoch: 3,
+      selection: SELECTION,
+      basis,
+      direction: "Use a more tentative rhythm",
+      id: "text_swap_request_1",
+    };
+    const ancestorChanged: ThoughtTree = {
+      ...currentTree,
+      revision: 5,
+      nodes: {
+        ...currentTree.nodes,
+        parent_1: {
+          ...currentTree.nodes.parent_1!,
+          text: "A different frame",
+          updatedAt: "2026-08-20T00:00:01.000Z",
+        },
+      },
+    };
+    expect(createTextSwapEnvelope({ ...common, tree: ancestorChanged })).toBeNull();
+
+    const reparented: ThoughtTree = {
+      ...currentTree,
+      revision: 5,
+      nodes: {
+        ...currentTree.nodes,
+        document: { ...currentTree.nodes.document!, children: ["parent_1", "parent_2"] },
+        parent_1: { ...currentTree.nodes.parent_1!, children: [] },
+        parent_2: {
+          id: "parent_2",
+          text: "Another frame",
+          parentId: "document",
+          children: ["thought_1"],
+          createdAt: TIME,
+          updatedAt: TIME,
+        },
+        thought_1: { ...currentTree.nodes.thought_1!, parentId: "parent_2" },
+      },
+    };
+    expect(createTextSwapEnvelope({ ...common, tree: reparented })).toBeNull();
   });
 });
 
@@ -163,6 +238,26 @@ function tree(): ThoughtTree {
         createdAt: TIME,
         updatedAt: TIME,
       },
+    },
+  };
+}
+
+function nestedTree(): ThoughtTree {
+  const current = tree();
+  return {
+    ...current,
+    nodes: {
+      ...current.nodes,
+      document: { ...current.nodes.document!, children: ["parent_1"] },
+      parent_1: {
+        id: "parent_1",
+        text: "The weather frame",
+        parentId: "document",
+        children: ["thought_1"],
+        createdAt: TIME,
+        updatedAt: TIME,
+      },
+      thought_1: { ...current.nodes.thought_1!, parentId: "parent_1" },
     },
   };
 }

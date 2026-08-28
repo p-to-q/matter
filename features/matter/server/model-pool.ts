@@ -334,9 +334,12 @@ async function completeOnce(
               : limits.maxOutputTokens,
           ),
           stream: false,
+          // `enable_thinking` is a provider extension, not an OpenAI-compatible
+          // field. Omit it unless this candidate explicitly declared support;
+          // a scenario may only narrow that declared capability to `false`.
           ...(candidate.enableThinking === undefined
             ? {}
-            : { enable_thinking: candidate.enableThinking }),
+            : { enable_thinking: input.disableThinking === true ? false : candidate.enableThinking }),
           messages: [{ role: "user", content: input.prompt }],
         }),
         cache: "no-store",

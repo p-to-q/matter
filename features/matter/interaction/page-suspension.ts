@@ -41,3 +41,15 @@ export function subscribePageSuspension(
     pageDocument.removeEventListener("visibilitychange", syncVisibility);
   };
 }
+
+/**
+ * Releases work only when the page itself leaves its usable lifetime. A hidden
+ * tab is still allowed to finish bounded, non-recording network work; this is
+ * intentionally narrower than subscribePageSuspension.
+ */
+export function subscribePageExit(onExit: () => void): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const pageWindow = window;
+  pageWindow.addEventListener("pagehide", onExit);
+  return () => pageWindow.removeEventListener("pagehide", onExit);
+}

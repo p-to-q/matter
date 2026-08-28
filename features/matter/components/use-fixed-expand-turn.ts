@@ -209,16 +209,25 @@ export function createFixedExpandEnvelope(input: Readonly<{
 
 function scopeSignature(input: FixedExpandInput): string {
   const selection = input.selection;
+  const lineage = selection === null
+    ? null
+    : selectLineage(input.tree, selection.nodeId)?.map((node) => [
+        node.id,
+        node.text,
+        node.parentId,
+        node.createdAt,
+        node.updatedAt,
+      ]) ?? null;
   return JSON.stringify([
     input.documentEpoch,
     input.tree.id,
-    input.tree.revision,
     input.enabled ? "enabled" : "disabled",
     input.interactionScopeKey,
     selection?.nodeId ?? "",
     selection?.start ?? "",
     selection?.end ?? "",
     selection?.selectedText ?? "",
+    lineage,
   ]);
 }
 

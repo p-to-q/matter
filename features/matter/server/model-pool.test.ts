@@ -199,6 +199,41 @@ describe("pool adapter", () => {
     expect(body.enable_thinking).toBe(false);
   });
 
+  it.each([
+    { candidateMode: undefined, disabled: false, expected: undefined },
+    { candidateMode: undefined, disabled: true, expected: undefined },
+    { candidateMode: false, disabled: false, expected: false },
+    { candidateMode: false, disabled: true, expected: false },
+    { candidateMode: true, disabled: false, expected: true },
+    { candidateMode: true, disabled: true, expected: false },
+  ] as const)(
+    "keeps the provider-specific thinking field capability-scoped ($candidateMode, $disabled)",
+    async ({ candidateMode, disabled, expected }) => {
+      let body: Record<string, unknown> = {};
+      const base = candidate("thinking-capability");
+      const configured = candidateMode === undefined
+        ? base
+        : { ...base, enableThinking: candidateMode };
+      const adapter = createPoolAdapter(
+        [configured],
+        DEFAULT_POOL_LIMITS,
+        Date.now,
+        async (_url, init) => {
+          body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          return chatResponse("bounded answer");
+        },
+      );
+
+      await adapter({
+        ...adapterInput(),
+        ...(disabled ? { disableThinking: true as const } : {}),
+      }, new AbortController().signal);
+
+      expect(body.enable_thinking).toBe(expected);
+      expect(Object.hasOwn(body, "enable_thinking")).toBe(expected !== undefined);
+    },
+  );
+
   it("falls through to the next candidate on failure", async () => {
     const tried: string[] = [];
     const events: string[] = [];

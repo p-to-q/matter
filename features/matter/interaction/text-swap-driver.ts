@@ -1,6 +1,7 @@
 import type { MatterLocale } from "../config/locales";
 import type { SegmentSelection } from "../material/text-segments";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
+import type { TextSwapLineageNode } from "../protocol/text-swap-contract";
 import {
   createTextSwapInteractionState,
   reduceTextSwapInteraction,
@@ -27,6 +28,7 @@ export type TextSwapScope = Readonly<{
   revision: number;
   documentEpoch: number;
   selection: SegmentSelection | null;
+  lineage: readonly TextSwapLineageNode[] | null;
   enabled: boolean;
   interactionScopeKey: string;
 }>;
@@ -56,12 +58,17 @@ export type TextSwapDriverDependencies<TCommitted> = Readonly<{
   createInteractionId: () => string;
   createRequestId: () => string;
   monotonicNow: () => number;
-  locale: MatterLocale;
 }>;
+
+export type TextSwapDriverBindings<TCommitted> = Pick<
+  TextSwapDriverDependencies<TCommitted>,
+  "buildEnvelope" | "commit" | "onCommitted"
+>;
 
 type VoiceResources = {
   operation: VoiceOperation;
   generation: number;
+  locale: MatterLocale;
   recording?: VoiceRecording;
   transcription?: AbortController;
 };
@@ -83,7 +90,7 @@ type RequestResources = {
 export class TextSwapDriver<TCommitted> {
   private state: TextSwapInteractionState = createTextSwapInteractionState();
   private scope: TextSwapScope | null = null;
-  private readonly dependencies: TextSwapDriverDependencies<TCommitted>;
+  private dependencies: TextSwapDriverDependencies<TCommitted>;
   private readonly listeners = new Set<(state: TextSwapInteractionState) => void>();
   private readonly events: TextSwapInteractionEvent[] = [];
   private voice: VoicePort | null = null;
@@ -97,6 +104,12 @@ export class TextSwapDriver<TCommitted> {
 
   constructor(dependencies: TextSwapDriverDependencies<TCommitted>) {
     this.dependencies = dependencies;
+  }
+
+  /** Refreshes React-owned callbacks at the committed-material boundary. */
+  updateBindings(bindings: TextSwapDriverBindings<TCommitted>): void {
+    if (this.disposed) return;
+    this.dependencies = Object.freeze({ ...this.dependencies, ...bindings });
   }
 
   getState(): TextSwapInteractionState {
@@ -266,9 +279,9 @@ export class TextSwapDriver<TCommitted> {
       attempt: effect.attempt,
     });
     const generation = ++this.abortGeneration;
-    this.voiceResources = { operation, generation };
+    this.voiceResources = { operation, generation, locale: effect.basis.locale };
     void voice.start(operation, {
-      locale: this.dependencies.locale,
+      locale: effect.basis.locale,
       maxTranscriptCodePoints: MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
       onTranscript: (text) => {
         if (!this.ownsVoice(operation, generation)) return;
@@ -345,7 +358,7 @@ export class TextSwapDriver<TCommitted> {
     }
     const nativeTranscript = resources.recording.transcript;
     if (nativeTranscript !== undefined) {
-      this.completeVoiceDirection(operation, nativeTranscript);
+      this.completeVoiceDirection(operation, nativeTranscript, resources.locale);
       return;
     }
     const controller = new AbortController();
@@ -354,7 +367,7 @@ export class TextSwapDriver<TCommitted> {
       interactionId: effect.interactionId,
       attempt: effect.attempt,
       purpose: "swap-direction",
-      locale: this.dependencies.locale,
+      locale: resources.locale,
       durationMs: resources.recording.durationMs,
       audio: resources.recording.audio,
       signal: controller.signal,
@@ -373,7 +386,7 @@ export class TextSwapDriver<TCommitted> {
           });
           return;
         }
-        this.completeVoiceDirection(operation, result.transcript);
+        this.completeVoiceDirection(operation, result.transcript, resources.locale);
       },
       (error) => {
         if (
@@ -385,10 +398,14 @@ export class TextSwapDriver<TCommitted> {
     );
   }
 
-  private completeVoiceDirection(operation: VoiceOperation, text: string): void {
+  private completeVoiceDirection(
+    operation: VoiceOperation,
+    text: string,
+    locale: MatterLocale,
+  ): void {
     const direction = normalizeSpokenTranscript({
       text,
-      locale: this.dependencies.locale,
+      locale,
       maxOutputCodePoints: MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
     });
     if (
@@ -573,9 +590,9 @@ export class TextSwapDriver<TCommitted> {
     const scope = this.scope;
     return scope !== null && scope.enabled &&
       scope.treeId === basis.treeId &&
-      scope.revision === basis.baseRevision &&
       scope.documentEpoch === basis.documentEpoch &&
       sameSelection(scope.selection, basis.selection) &&
+      sameLineage(scope.lineage, basis.lineage) &&
       basis.sourceText === basis.selection.selectedText;
   }
 
@@ -594,6 +611,9 @@ function ownScope(scope: TextSwapScope): TextSwapScope {
   return Object.freeze({
     ...scope,
     selection: scope.selection === null ? null : Object.freeze({ ...scope.selection }),
+    lineage: scope.lineage === null
+      ? null
+      : Object.freeze(scope.lineage.map((node) => Object.freeze({ ...node }))),
   });
 }
 
@@ -601,15 +621,31 @@ function sameScope(left: TextSwapScope, right: TextSwapScope): boolean {
   return sameDocumentScope(left, right) &&
     left.enabled === right.enabled &&
     left.interactionScopeKey === right.interactionScopeKey &&
-    sameSelection(left.selection, right.selection);
+    sameSelection(left.selection, right.selection) &&
+    sameLineage(left.lineage, right.lineage);
 }
 
 function sameDocumentScope(left: TextSwapScope, right: TextSwapScope): boolean {
   return left.treeId === right.treeId &&
-    left.revision === right.revision &&
     left.documentEpoch === right.documentEpoch &&
     left.enabled === right.enabled &&
     left.interactionScopeKey === right.interactionScopeKey;
+}
+
+function sameLineage(
+  left: readonly TextSwapLineageNode[] | null,
+  right: readonly TextSwapLineageNode[] | null,
+): boolean {
+  return left === right || (left !== null && right !== null &&
+    left.length === right.length && left.every((node, index) => {
+      const other = right[index];
+      return other !== undefined &&
+        node.id === other.id &&
+        node.text === other.text &&
+        node.parentId === other.parentId &&
+        node.createdAt === other.createdAt &&
+        node.updatedAt === other.updatedAt;
+    }));
 }
 
 function sameSelection(

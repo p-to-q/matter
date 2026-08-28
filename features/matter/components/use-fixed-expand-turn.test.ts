@@ -279,6 +279,82 @@ describe("useFixedExpandTurn", () => {
     },
   );
 
+  it("keeps an in-flight expansion through an unrelated tree revision", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) =>
+      new Promise<TransformPlan>((resolve) => {
+        pending = { envelope, resolve };
+      }));
+    const commit = vi.fn(() => ({
+      id: "change-1",
+      treeId: "tree_fixed",
+      documentEpoch: BASIS.documentEpoch,
+      nodeId: "thought",
+      committedRevision: 6,
+      motionHint: "grow" as const,
+      before: { text: TEXT, updatedAt: TIME },
+      after: { text: "source more. next", updatedAt: "2026-08-11T00:00:01.000Z" },
+    }));
+    const input = {
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US" as const,
+      enabled: true,
+      interactionScopeKey: "focus:thought",
+      commit,
+      onCommitted: vi.fn(),
+    };
+    const turn = useFixedExpandTurn(input);
+
+    expect(turn.start(BASIS)).toBe(true);
+    input.tree = { ...input.tree, revision: 5 };
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledOnce());
+  });
+
+  it("revokes an in-flight expansion when its addressed material changes", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) =>
+      new Promise<TransformPlan>((resolve) => {
+        pending = { envelope, resolve };
+      }));
+    const commit = vi.fn();
+    const input = {
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US" as const,
+      enabled: true,
+      interactionScopeKey: "focus:thought",
+      commit,
+      onCommitted: vi.fn(),
+    };
+    const turn = useFixedExpandTurn(input);
+
+    expect(turn.start(BASIS)).toBe(true);
+    input.tree = {
+      ...input.tree,
+      revision: 5,
+      nodes: {
+        ...input.tree.nodes,
+        thought: {
+          ...input.tree.nodes.thought!,
+          text: `${TEXT} changed context`,
+          updatedAt: "2026-08-28T00:00:00.000Z",
+        },
+      },
+    };
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith({
+      phase: "idle",
+      basis: null,
+    }));
+    expect(commit).not.toHaveBeenCalled();
+  });
+
   it.each(["pagehide", "unmount"] as const)(
     "aborts on %s and makes a late plan inert",
     async (exit) => {

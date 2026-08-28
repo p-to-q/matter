@@ -76,6 +76,7 @@ describe("text swap prompt harness", () => {
   it("exposes a 12 second model deadline and bounded output tokens", () => {
     expect(TEXT_SWAP_SCENARIO.budget(input())).toMatchObject({ deadlineMs: 12_000 });
     expect(TEXT_SWAP_SCENARIO.budget(input()).maxOutputTokens).toBeLessThanOrEqual(1_200);
+    expect(TEXT_SWAP_SCENARIO.budget(input()).disableThinking).toBe(true);
     expect(TEXT_SWAP_SCENARIO.locale(input())).toBe("zh-CN");
   });
 });

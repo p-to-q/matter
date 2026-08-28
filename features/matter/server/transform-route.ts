@@ -5,6 +5,7 @@ import {
   type TransformEnvelope,
   type TransformPlan,
 } from "../protocol/transform-contract";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { deriveExpandInPlaceLength } from "../protocol/expand-in-place-policy";
 import {
   withBoundedJsonRequest,
@@ -35,7 +36,7 @@ const TURN_LIMITS = Object.freeze({
   failuresBeforeCooldown: 3,
   cooldownMs: 15_000,
 });
-export const TRANSFORM_ROUTE_TIMEOUT_MS = 14_000;
+export const TRANSFORM_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.transform.routeMs;
 
 /**
  * One strict material-turn endpoint. It accepts an envelope, lets the model

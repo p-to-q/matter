@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { subscribePageSuspension } from "./page-suspension";
+import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -98,5 +98,25 @@ describe("subscribePageSuspension", () => {
     pageWindow.dispatchEvent(new Event("pageshow"));
     expect(secondResume).toHaveBeenCalledTimes(1);
     unsubscribeSecond();
+  });
+});
+
+describe("subscribePageExit", () => {
+  it("ignores ordinary tab visibility but releases on pagehide", () => {
+    const pageWindow = new EventTarget();
+    const pageDocument = new EventTarget();
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+    const exit = vi.fn();
+    const unsubscribe = subscribePageExit(exit);
+
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    expect(exit).not.toHaveBeenCalled();
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    expect(exit).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    expect(exit).toHaveBeenCalledTimes(1);
   });
 });

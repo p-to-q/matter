@@ -1,9 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { TRANSCRIPT_REPAIR_PROMPT_VERSION } from "../material/transcript-repair";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  TRANSCRIPT_REPAIR_PROMPT_VERSION,
+  normalizeRepairInput,
+} from "../material/transcript-repair";
 import { PROTOCOL_VERSION } from "../tree/model";
 import type { RepairRequest } from "../protocol/repair-contract";
 import type { ScenarioAdapter } from "./harness";
 import { compileRepairPrompt } from "./repair-harness";
+import { REPAIR_SCENARIO } from "./repair-harness";
 import {
   DEFAULT_REPAIR_LIMITS,
   REPAIR_POOL_LIMITS,
@@ -33,6 +37,14 @@ beforeEach(() => resetRepairGeneratorState());
 afterEach(() => resetRepairGeneratorState());
 
 describe("repairTranscript", () => {
+  it("uses its dynamic provider ceiling and suppresses declared provider thinking", () => {
+    const input = normalizeRepairInput(repairRequest());
+    const budget = REPAIR_SCENARIO.budget(input);
+    expect(budget.deadlineMs).toBeGreaterThanOrEqual(6_000);
+    expect(budget.deadlineMs).toBeLessThanOrEqual(8_000);
+    expect(budget.disableThinking).toBe(true);
+  });
+
   it("echoes the request identity on every answer", async () => {
     const result = await repairTranscript(repairRequest(), idle(), null);
     expect(result.protocolVersion).toBe(PROTOCOL_VERSION);
@@ -188,11 +200,66 @@ describe("fixtureRepairAdapter", () => {
 });
 
 describe("resolveRepairAdapter", () => {
-  it("keeps one proven near-complete relay window", () => {
+  it("reserves a real second-candidate window", () => {
     expect(REPAIR_POOL_LIMITS).toMatchObject({
-      maxAttemptShare: 0.95,
+      maxAttemptShare: 0.5,
+      minimumAttemptMs: 400,
       maxOutputTokens: 1_200,
     });
+    expect(6_000 * (1 - REPAIR_POOL_LIMITS.maxAttemptShare))
+      .toBeGreaterThan(REPAIR_POOL_LIMITS.minimumAttemptMs);
+  });
+
+  it("reaches a healthy second candidate after the first stalls", async () => {
+    vi.useFakeTimers();
+    const tried: string[] = [];
+    try {
+      vi.stubGlobal("fetch", vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const request = init as RequestInit;
+        const model = (JSON.parse(String(request.body)) as { model: string }).model;
+        tried.push(model);
+        if (model === "stalled") {
+          return new Promise<Response>((_resolve, reject) => {
+            request.signal?.addEventListener(
+              "abort",
+              () => reject(new DOMException("Aborted", "AbortError")),
+              { once: true },
+            );
+          });
+        }
+        return new Response(JSON.stringify({
+          choices: [{ finish_reason: "stop", message: { content: "完整修复。" } }],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }));
+      const adapter = resolveRepairAdapter({
+        MATTER_REPAIR_ADAPTER: "live",
+        MATTER_MODEL_POOL: "primary,backup",
+        MATTER_MODEL_PRIMARY_BASE_URL: "https://primary.example/v1",
+        MATTER_MODEL_PRIMARY_API_KEY: "primary-key",
+        MATTER_MODEL_PRIMARY_MODELS: "stalled",
+        MATTER_MODEL_BACKUP_BASE_URL: "https://backup.example/v1",
+        MATTER_MODEL_BACKUP_API_KEY: "backup-key",
+        MATTER_MODEL_BACKUP_MODELS: "healthy",
+      });
+      expect(adapter).not.toBeNull();
+
+      const pending = adapter!({
+        scenario: "matter-transcript-repair",
+        prompt: "repair it",
+        locale: "zh-CN",
+        input: normalizeRepairInput(repairRequest()),
+        deadlineMs: 6_000,
+        maxOutputTokens: 128,
+        disableThinking: true,
+      }, idle());
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      await expect(pending).resolves.toEqual({ text: "完整修复。" });
+      expect(tried).toEqual(["stalled", "healthy"]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
   });
 
   it("is off when the deployment says so", () => {

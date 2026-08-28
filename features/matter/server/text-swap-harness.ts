@@ -5,9 +5,11 @@ import {
   type TextSwapPolicyCode,
 } from "../protocol/text-swap-policy";
 import type { MatterScenario } from "./harness";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { KEEP_UNFINISHED, boundedIntent, composePrompt, fence, fenceJson } from "./prompt-spine";
 
 export const TEXT_SWAP_PROMPT_VERSION = "text-swap/3";
+export const TEXT_SWAP_PROVIDER_TIMEOUT_MS = MODEL_DEADLINES.textSwap.providerMs;
 
 export type TextSwapScenarioInput = Readonly<{
   locale: MatterLocale;
@@ -27,8 +29,9 @@ export const TEXT_SWAP_SCENARIO: MatterScenario<TextSwapScenarioInput, string> =
   locale: (input) => input.locale,
   compile: compileTextSwapPrompt,
   budget: (input) => Object.freeze({
-    deadlineMs: 12_000,
+    deadlineMs: TEXT_SWAP_PROVIDER_TIMEOUT_MS,
     maxOutputTokens: Math.min(1_200, Math.max(256, 2 * input.length.maximumAcceptedGraphemes + 128)),
+    disableThinking: true,
   }),
   adjudicate: (answer, input) => adjudicateTextSwap(answer, input),
 });

@@ -137,7 +137,7 @@ describe("text-swap/2 contract", () => {
     expect(parseTextSwapPlan({ ...plan, action: { ...plan.action, intent: "expand" } }, parsed.envelope)).toBeNull();
   });
 
-  it("translates through the tree boundary and rejects stale tree or lineage", () => {
+  it("rebases an unrelated revision and rejects a stale tree or addressed lineage", () => {
     const parsed = parseTextSwapEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");
     const plan = buildTextSwapPlan(parsed.envelope, SWAP);
@@ -148,8 +148,8 @@ describe("text-swap/2 contract", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("plan must become command");
     expect(applyTreeCommand(tree(), result.command).ok).toBe(true);
-    expect(planToTextSwapCommand({ ...tree(), revision: 5 }, parsed.envelope, plan))
-      .toEqual({ ok: false, reason: "STALE" });
+    const rebased = planToTextSwapCommand({ ...tree(), revision: 5 }, parsed.envelope, plan);
+    expect(rebased.ok && rebased.command.expectedRevision).toBe(5);
     const changed = tree();
     changed.nodes.thought.text = "Changed. Next";
     expect(planToTextSwapCommand(changed, parsed.envelope, plan))

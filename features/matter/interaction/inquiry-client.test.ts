@@ -58,6 +58,16 @@ describe("inquiry client", () => {
     }
   });
 
+  it("reads a complete astral answer that needs the expanded response envelope", async () => {
+    const text = "🎉".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS);
+    const payload = answer({ status: "answered", text });
+    const bytes = new TextEncoder().encode(JSON.stringify(payload)).byteLength;
+    expect(bytes).toBeGreaterThan(8 * 1_024);
+    expect(bytes).toBeLessThan(MAX_INQUIRY_RESPONSE_BYTES);
+    await expect(askInquiry({ ...INPUT, fetchImpl: respondWith(payload) }))
+      .resolves.toEqual({ status: "answered", text });
+  });
+
   it("separates a refused question from an unsent one", async () => {
     // A rate-limited or shed question was received. Reporting it as never sent
     // is untrue and invites an immediate retry into the same limiter.

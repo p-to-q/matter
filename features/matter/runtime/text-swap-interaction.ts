@@ -1,4 +1,6 @@
+import { isMatterLocale, type MatterLocale } from "../config/locales";
 import type { SegmentSelection } from "../material/text-segments";
+import type { TextSwapLineageNode } from "../protocol/text-swap-contract";
 import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 
 /**
@@ -13,6 +15,8 @@ export type TextSwapBasis = Readonly<{
   documentEpoch: number;
   selection: SegmentSelection;
   sourceText: string;
+  locale: MatterLocale;
+  lineage: readonly TextSwapLineageNode[];
 }>;
 
 type SessionState = Readonly<{
@@ -403,6 +407,8 @@ function requestEffect(
 
 function isValidBasis(basis: TextSwapBasis): boolean {
   const selection = basis.selection;
+  const lineage = basis.lineage;
+  const selectedNode = lineage.at(-1);
   return isValidIdentity(basis.treeId) &&
     Number.isSafeInteger(basis.baseRevision) && basis.baseRevision >= 0 &&
     Number.isSafeInteger(basis.documentEpoch) && basis.documentEpoch >= 0 &&
@@ -413,7 +419,18 @@ function isValidBasis(basis: TextSwapBasis): boolean {
     selection.start >= 0 &&
     selection.end > selection.start &&
     selection.selectedText.length > 0 &&
-    selection.selectedText === basis.sourceText;
+    selection.selectedText === basis.sourceText &&
+    isMatterLocale(basis.locale) &&
+    lineage.length > 0 &&
+    selectedNode !== undefined &&
+    selectedNode.id === selection.nodeId &&
+    selectedNode.text.slice(selection.start, selection.end) === basis.sourceText &&
+    new Set(lineage.map((node) => node.id)).size === lineage.length &&
+    lineage.every((node, index) =>
+      isValidIdentity(node.id) &&
+      node.text.trim().length > 0 &&
+      (index === 0 ? node.parentId === null : node.parentId === lineage[index - 1]?.id)
+    );
 }
 
 function isValidIdentity(value: string): boolean {
@@ -427,6 +444,8 @@ function ownBasis(basis: TextSwapBasis): TextSwapBasis {
     documentEpoch: basis.documentEpoch,
     selection: Object.freeze({ ...basis.selection }),
     sourceText: basis.sourceText,
+    locale: basis.locale,
+    lineage: Object.freeze(basis.lineage.map((node) => Object.freeze({ ...node }))),
   });
 }
 

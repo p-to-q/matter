@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
-import { MAX_INQUIRY_REQUEST_BYTES } from "../protocol/inquiry-contract";
+import {
+  MAX_INQUIRY_ANSWER_CODE_POINTS,
+  MAX_INQUIRY_REQUEST_BYTES,
+} from "../protocol/inquiry-contract";
 import { handleInquiryRequest, inquiryErrorResponse } from "./inquiry-route";
 import { resetInquiryAdmissionForTests } from "./inquiry-admission";
 
@@ -29,6 +32,29 @@ describe("inquiry route", () => {
       status: "answered",
       text: "它怀念的是仍然能够想象其他生活的余地。",
       receipt: { scope: "tree", lineageNodes: 2, contextCodePoints: 8, clipped: false, thoughtCount: 7 },
+    });
+  });
+
+  it("returns one complete maximum answer and refuses one code point more", async () => {
+    const complete = "🎉".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS);
+    const accepted = await post(body(), {}, async () => ({ text: complete }));
+    expect(accepted.status).toBe(200);
+    await expect(accepted.json()).resolves.toMatchObject({ status: "answered", text: complete });
+
+    const refused = await post(body(), {}, async () => ({
+      text: "答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS + 1),
+    }));
+    expect(refused.status).toBe(503);
+    expect(refused.headers.get("cache-control")).toBe("no-store");
+    const refusalText = await refused.text();
+    expect(refusalText).not.toContain("答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS));
+    expect(JSON.parse(refusalText)).toEqual({
+      error: {
+        code: "INQUIRY_FAILED",
+        message: "Matter could not answer just now.",
+        retryable: true,
+        fallbackReason: "MODEL_REJECTED",
+      },
     });
   });
 

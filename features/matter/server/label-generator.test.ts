@@ -12,6 +12,7 @@ import {
 } from "./label-generator";
 import type { ScenarioAdapter } from "./harness";
 import { normalizeLabelInput } from "../material/semantic-label";
+import { LABEL_SCENARIO } from "./label-harness";
 
 const SPOKEN = "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。";
 
@@ -37,6 +38,14 @@ beforeEach(() => resetLabelGeneratorState());
 afterEach(() => resetLabelGeneratorState());
 
 describe("generateLabel", () => {
+  it("uses the background provider lane and suppresses declared provider thinking", () => {
+    const input = normalizeLabelInput(labelRequest());
+    expect(LABEL_SCENARIO.budget(input)).toMatchObject({
+      deadlineMs: 12_000,
+      disableThinking: true,
+    });
+  });
+
   it("echoes the request identity on every answer", async () => {
     const request = labelRequest();
     const result = await generateLabel(request, new AbortController().signal, null);

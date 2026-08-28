@@ -1,4 +1,5 @@
 import { isMatterLocale } from "../config/locales";
+import { MODEL_DEADLINES } from "../config/model-deadlines";
 import {
   MAX_VOCABULARY_TERMS,
   MAX_VOCABULARY_TERM_CODE_UNITS,
@@ -33,9 +34,9 @@ export const MAX_LOCALE_LENGTH = 35;
  * attributable answer instead of a dead socket, and admission continues with the
  * transcript it already has either way.
  */
-export const REPAIR_PROVIDER_CEILING_MS = 8_000;
-export const REPAIR_TRANSPORT_GRACE_MS = 800;
-export const REPAIR_CLIENT_TIMEOUT_MS = REPAIR_PROVIDER_CEILING_MS + REPAIR_TRANSPORT_GRACE_MS;
+export const REPAIR_PROVIDER_CEILING_MS = MODEL_DEADLINES.repair.providerMs;
+export const REPAIR_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.repair.routeMs;
+export const REPAIR_CLIENT_TIMEOUT_MS = MODEL_DEADLINES.repair.clientMs;
 
 export type RepairRequest = Readonly<{
   protocolVersion: typeof PROTOCOL_VERSION;

@@ -4,7 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
 import type { MatterLocale } from "../config/locales";
@@ -64,31 +64,16 @@ export type TextSwapController = Readonly<{
 export function useTextSwap<TCommitted>(
   input: UseTextSwapInput<TCommitted>,
 ): TextSwapController {
-  const { commit, documentEpoch, locale, onCommitted, selection, tree } = input;
-  const driver = useMemo(() => new TextSwapDriver<TCommitted>({
+  const { documentEpoch, locale, selection, tree } = input;
+  const [driver] = useState(() => new TextSwapDriver<TCommitted>({
     createVoice: createBrowserVoicePort,
     transcribe: requestTranscription,
     request: requestTextSwap,
-    buildEnvelope: (basis, direction, requestId) => createTextSwapEnvelope({
-      tree,
-      documentEpoch,
-      selection,
-      locale,
-      basis,
-      direction,
-      id: requestId,
-    }),
-    commit: (envelope, plan, basis) => commit(
-      envelope,
-      plan,
-      basis.documentEpoch,
-    ),
-    onCommitted,
+    ...toDriverBindings(input),
     createInteractionId: () => createTextSwapId("interaction"),
     createRequestId: () => createTextSwapId("request"),
     monotonicNow,
-    locale,
-  }), [commit, documentEpoch, locale, onCommitted, selection, tree]);
+  }));
 
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -98,6 +83,7 @@ export function useTextSwap<TCommitted>(
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   useLayoutEffect(() => {
+    driver.updateBindings(toDriverBindings(input));
     driver.updateScope(toScope(input));
   }, [driver, input]);
 
@@ -132,6 +118,7 @@ export function useTextSwap<TCommitted>(
         tree,
         documentEpoch,
         selection,
+        locale,
       });
       return basis !== null && driver.enter(basis);
     },
@@ -145,6 +132,23 @@ export function useTextSwap<TCommitted>(
   };
 }
 
+function toDriverBindings<TCommitted>(input: UseTextSwapInput<TCommitted>) {
+  return {
+    buildEnvelope: (basis: TextSwapBasis, direction: string, requestId: string) =>
+      createTextSwapEnvelope({
+        tree: input.tree,
+        documentEpoch: input.documentEpoch,
+        selection: input.selection,
+        basis,
+        direction,
+        id: requestId,
+      }),
+    commit: (envelope: TextSwapEnvelope, plan: TextSwapPlan, basis: TextSwapBasis) =>
+      input.commit(envelope, plan, basis.documentEpoch),
+    onCommitted: input.onCommitted,
+  };
+}
+
 function monotonicNow(): number {
   return performance.now();
 }
@@ -153,6 +157,7 @@ export function createTextSwapBasis(input: Readonly<{
   tree: ThoughtTree;
   documentEpoch: number;
   selection: SegmentSelection | null;
+  locale: MatterLocale;
 }>): TextSwapBasis | null {
   const { selection, tree } = input;
   if (
@@ -171,12 +176,16 @@ export function createTextSwapBasis(input: Readonly<{
       node.text.slice(selection.end),
     ) === null
   ) return null;
+  const lineage = currentTextSwapLineage(tree, selection.nodeId);
+  if (lineage === null) return null;
   return Object.freeze({
     treeId: tree.id,
     baseRevision: tree.revision,
     documentEpoch: input.documentEpoch,
     selection: Object.freeze({ ...selection }),
     sourceText: selection.selectedText,
+    locale: input.locale,
+    lineage,
   });
 }
 
@@ -184,7 +193,6 @@ export function createTextSwapEnvelope(input: Readonly<{
   tree: ThoughtTree;
   documentEpoch: number;
   selection: SegmentSelection | null;
-  locale: MatterLocale;
   basis: TextSwapBasis;
   direction: string;
   id: string;
@@ -193,10 +201,9 @@ export function createTextSwapEnvelope(input: Readonly<{
     tree: input.tree,
     documentEpoch: input.documentEpoch,
     selection: input.selection,
+    locale: input.basis.locale,
   });
   if (currentBasis === null || !sameBasis(currentBasis, input.basis)) return null;
-  const lineage = selectLineage(input.tree, input.basis.selection.nodeId);
-  if (lineage === null || lineage.length === 0) return null;
   const parsed = parseTextSwapEnvelope({
     protocolVersion: input.tree.protocolVersion,
     requestVersion: TEXT_SWAP_REQUEST_VERSION,
@@ -207,15 +214,9 @@ export function createTextSwapEnvelope(input: Readonly<{
     treeRevision: input.tree.revision,
     selection: input.basis.selection,
     direction: { text: input.direction },
-    locale: input.locale,
+    locale: input.basis.locale,
     context: {
-      lineage: lineage.map((node, index) => ({
-        id: node.id,
-        text: node.text,
-        parentId: index === 0 ? null : node.parentId,
-        createdAt: node.createdAt,
-        updatedAt: node.updatedAt,
-      })),
+      lineage: input.basis.lineage,
     },
   });
   return parsed.ok ? parsed.envelope : null;
@@ -227,6 +228,9 @@ function toScope<TCommitted>(input: UseTextSwapInput<TCommitted>): TextSwapScope
     revision: input.tree.revision,
     documentEpoch: input.documentEpoch,
     selection: input.selection,
+    lineage: input.selection === null
+      ? null
+      : currentTextSwapLineage(input.tree, input.selection.nodeId),
     enabled: input.enabled,
     interactionScopeKey: input.interactionScopeKey,
   };
@@ -234,14 +238,39 @@ function toScope<TCommitted>(input: UseTextSwapInput<TCommitted>): TextSwapScope
 
 function sameBasis(left: TextSwapBasis, right: TextSwapBasis): boolean {
   return left.treeId === right.treeId &&
-    left.baseRevision === right.baseRevision &&
     left.documentEpoch === right.documentEpoch &&
     left.sourceText === right.sourceText &&
+    left.locale === right.locale &&
+    sameLineage(left.lineage, right.lineage) &&
     left.selection.type === right.selection.type &&
     left.selection.nodeId === right.selection.nodeId &&
     left.selection.start === right.selection.start &&
     left.selection.end === right.selection.end &&
     left.selection.selectedText === right.selection.selectedText;
+}
+
+function currentTextSwapLineage(tree: ThoughtTree, nodeId: string) {
+  const lineage = selectLineage(tree, nodeId);
+  if (lineage === null || lineage.length === 0) return null;
+  return Object.freeze(lineage.map((node, index) => Object.freeze({
+    id: node.id,
+    text: node.text,
+    parentId: index === 0 ? null : node.parentId,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
+  })));
+}
+
+function sameLineage(left: TextSwapBasis["lineage"], right: TextSwapBasis["lineage"]): boolean {
+  return left.length === right.length && left.every((node, index) => {
+    const other = right[index];
+    return other !== undefined &&
+      node.id === other.id &&
+      node.text === other.text &&
+      node.parentId === other.parentId &&
+      node.createdAt === other.createdAt &&
+      node.updatedAt === other.updatedAt;
+  });
 }
 
 function createTextSwapId(kind: "interaction" | "request"): string {

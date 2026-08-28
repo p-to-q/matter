@@ -21,12 +21,26 @@
  * round so the label cache cannot answer for the pool.
  */
 
+import { randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { isInquiryAnswerProse } from "../features/matter/protocol/inquiry-answer-policy.mjs";
 
 export const PROTOCOL_VERSION = "0.2";
 export const REPAIR_PROMPT_VERSION = "transcript-repair/4";
 export const LABEL_PROMPT_VERSION = "thought-label/3";
+export const APP_VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
+export const MAX_REPAIR_TEXT_CODE_UNITS = 2_000;
+export const MAX_INQUIRY_ANSWER_CODE_POINTS = 3_200;
+export const MAX_REPAIR_RESPONSE_BYTES = 12 * 1_024;
+export const MAX_LABEL_RESPONSE_BYTES = 4 * 1_024;
+export const MAX_INQUIRY_RESPONSE_BYTES = 16 * 1_024;
+export const LABEL_CANARY_MATERIAL = Object.freeze(JSON.parse(
+  readFileSync(new URL("./probe-model-pool-canaries.json", import.meta.url), "utf8"),
+));
 export const SURFACES = Object.freeze(["repair", "label", "inquiry"]);
 const HEALTH_SURFACE = Object.freeze({
   repair: "transcriptRepair",
@@ -52,7 +66,8 @@ export const DEFAULT_PACE_MS = 6_000;
  * later samples may be measuring this probe's own effect.
  */
 export const POOL_COOLDOWN_MS = 60_000;
-export const DEFAULT_ROUNDS = 6;
+export const DEFAULT_ROUNDS = LABEL_CANARY_MATERIAL.length;
+export const MAX_ROUNDS = LABEL_CANARY_MATERIAL.length;
 
 /**
  * What one call proves about the pool, independent of which surface made it.
@@ -86,12 +101,17 @@ export function repairRequest(round) {
   });
 }
 
-export function labelRequest(round) {
+export function labelRequest(round, runId = "standalone") {
+  const safeRunId = normalizeRunId(runId);
   return Object.freeze({
     protocolVersion: PROTOCOL_VERSION,
     promptVersion: LABEL_PROMPT_VERSION,
-    operationId: `probe-label-${round}`,
-    basis: Object.freeze({ treeId: "probe-tree", nodeId: `probe-node-${round}`, revision: round }),
+    operationId: `probe-label-${safeRunId}-${round}`,
+    basis: Object.freeze({
+      treeId: "probe-tree",
+      nodeId: `probe-node-${safeRunId}-${round}`,
+      revision: round,
+    }),
     locale: "en-US",
     // Roomy on purpose. A tight bound makes the label adjudicator refuse
     // answers a working pool produced, and the probe would report
@@ -100,11 +120,13 @@ export function labelRequest(round) {
     // Varied per round on purpose. The label generator caches by a fingerprint
     // of the material, so a fixed string would measure the cache from the
     // second round on and report a healthy pool that was never asked.
-    text: `probe round ${round}: a room that keeps its shape after everyone has left it`,
-    // No parent label or excerpt: the probe measures the pool, and every field
-    // it omits is one fewer reason for a request to be refused before a model
-    // is ever asked.
-    reference: Object.freeze({ siblingLabels: [] }),
+    text: LABEL_CANARY_MATERIAL[round - 1],
+    // Operation identity is deliberately absent from the server cache key.
+    // This synthetic sibling is therefore the per-run nonce: it participates
+    // in the real prompt/cache fingerprint without carrying user material.
+    reference: Object.freeze({
+      siblingLabels: Object.freeze([`Canary ${safeRunId}`]),
+    }),
   });
 }
 
@@ -143,8 +165,13 @@ export function inquiryRequest(round) {
  * decides and `fallbackReason` explains. Inquiry has no floor: it answers or it
  * refuses, and its refusal carries the same vocabulary.
  */
-export function classifyResponse(surface, status, payload) {
+export function classifyResponse(surface, status, payload, expectedRequest = null) {
   if (status === 0) return outcome("unreachable", "TRANSPORT");
+  if (
+    status === 200 &&
+    expectedRequest !== null &&
+    !matchesProbeResponse(surface, payload, expectedRequest)
+  ) return outcome("refused", "INVALID_ENVELOPE");
   if (surface === "inquiry") {
     if (status === 200 && isRecord(payload) && payload.status === "answered") return outcome("model");
     if (status === 200 && isRecord(payload) && payload.status === "unavailable") {
@@ -202,8 +229,17 @@ export function summarize(samples) {
     // The verdict a reader needs first, and the one #52 could not reach from a
     // single surface: is this the pool, or is it one scenario?
     verdict: verdictOf(attempted, bySurface),
+    usabilityVerdict: usabilityVerdictOf(attempted, bySurface),
     failures: Object.freeze(failures),
   });
+}
+
+function usabilityVerdictOf(attempted, bySurface) {
+  if (attempted.length === 0) return "no-samples";
+  const usable = attempted.filter((surface) => bySurface[surface].model === bySurface[surface].calls);
+  if (usable.length === attempted.length) return "surface-usable";
+  if (usable.length === 0) return "surface-unusable";
+  return "surface-degraded";
 }
 
 /**
@@ -225,7 +261,10 @@ function verdictOf(attempted, bySurface) {
 }
 
 export function formatReport(origin, summary, options = {}) {
-  const lines = [`pool: ${origin} — ${summary.verdict}`];
+  const lines = [
+    `pool: ${origin} — ${summary.verdict}`,
+    `surfaces: ${origin} — ${summary.usabilityVerdict}`,
+  ];
   for (const surface of SURFACES) {
     const entry = summary.bySurface[surface];
     if (entry.calls === 0) continue;
@@ -249,14 +288,24 @@ export function formatReport(origin, summary, options = {}) {
 
 /** Release-only assertions layered on top of the diagnostic pool verdict. */
 export function probeGateFailures(summary, options = {}) {
-  if (options.requireInquiryAnswer !== true) return Object.freeze([]);
-  const inquiry = summary.bySurface.inquiry;
-  if (inquiry !== undefined && inquiry.calls > 0 && inquiry.model === inquiry.calls) {
-    return Object.freeze([]);
+  const failures = [];
+  if (options.requireInquiryAnswer === true) {
+    const inquiry = summary.bySurface.inquiry;
+    if (inquiry === undefined || inquiry.calls === 0 || inquiry.model !== inquiry.calls) {
+      failures.push(
+        `release gate requires a real Inquiry answer on every call; observed ${inquiry?.model ?? 0}/${inquiry?.calls ?? 0}.`,
+      );
+    }
   }
-  return Object.freeze([
-    `release gate requires a real Inquiry answer on every call; observed ${inquiry?.model ?? 0}/${inquiry?.calls ?? 0}.`,
-  ]);
+  for (const surface of options.requiredUsableSurfaces ?? []) {
+    const entry = summary.bySurface[surface];
+    if (entry === undefined || entry.calls === 0 || entry.model !== entry.calls) {
+      failures.push(
+        `release gate requires a real ${surface} result on every call; observed ${entry?.model ?? 0}/${entry?.calls ?? 0}.`,
+      );
+    }
+  }
+  return Object.freeze(failures);
 }
 
 /**
@@ -291,6 +340,7 @@ export async function probeModelPool({
   now = () => Date.now(),
   sleep = delay,
   onSample = () => undefined,
+  runId = createProbeRunId(),
 }) {
   const target = normalizeOrigin(origin);
   const requestOrigin = new URL(target).origin;
@@ -298,6 +348,7 @@ export async function probeModelPool({
   for (let round = 1; round <= rounds; round += 1) {
     for (const surface of surfaces) {
       const startedAt = now();
+      const expectedRequest = requestFor(surface, round, runId);
       let status = 0;
       let payload = null;
       try {
@@ -310,17 +361,17 @@ export async function probeModelPool({
             origin: requestOrigin,
             "sec-fetch-site": "same-origin",
           },
-          body: JSON.stringify(requestFor(surface, round)),
+          body: JSON.stringify(expectedRequest),
           cache: "no-store",
           redirect: "manual",
           signal: AbortSignal.timeout(timeoutMs),
         });
         status = response.status;
-        payload = await response.json().catch(() => null);
+        payload = await readProbePayload(response, surface);
       } catch {
         status = 0;
       }
-      const classified = classifyResponse(surface, status, payload);
+      const classified = classifyResponse(surface, status, payload, expectedRequest);
       const sample = Object.freeze({
         round,
         surface,
@@ -342,9 +393,11 @@ export function parseArguments(args) {
   let rounds = DEFAULT_ROUNDS;
   let paceMs = DEFAULT_PACE_MS;
   let requireInquiryAnswer = false;
+  let profile = "diagnostic";
+  let expectedVersion = APP_VERSION;
   for (const value of args) {
     if (value.startsWith("--rounds=")) {
-      rounds = wholeNumber(value.slice("--rounds=".length), 1, 60, "--rounds");
+      rounds = wholeNumber(value.slice("--rounds=".length), 1, MAX_ROUNDS, "--rounds");
       continue;
     }
     if (value.startsWith("--pace=")) {
@@ -355,12 +408,26 @@ export function parseArguments(args) {
       requireInquiryAnswer = true;
       continue;
     }
+    if (value.startsWith("--profile=")) {
+      profile = value.slice("--profile=".length);
+      if (profile !== "diagnostic" && profile !== "release") {
+        throw new Error("--profile must be diagnostic or release.");
+      }
+      continue;
+    }
+    if (value.startsWith("--expected-version=")) {
+      expectedVersion = value.slice("--expected-version=".length);
+      if (!/^0\.2\.0-preview\.\d+$/u.test(expectedVersion)) {
+        throw new Error("--expected-version must name one Matter preview version.");
+      }
+      continue;
+    }
     if (origin !== undefined) {
-      throw new Error("Pool probe accepts one origin, --rounds=<n>, --pace=<seconds>, and --require-inquiry-answer.");
+      throw new Error("Pool probe accepts one origin and its documented flags.");
     }
     origin = value;
   }
-  return Object.freeze({ origin, rounds, paceMs, requireInquiryAnswer });
+  return Object.freeze({ origin, rounds, paceMs, requireInquiryAnswer, profile, expectedVersion });
 }
 
 export function normalizeOrigin(value) {
@@ -387,7 +454,7 @@ export function normalizeOrigin(value) {
  * adapter. Health is therefore the authority for whether a probe result says
  * anything about the external pool at all.
  */
-export function eligiblePoolSurfaces(payload) {
+export function eligiblePoolSurfaces(payload, requiredSurfaces = []) {
   if (!isRecord(payload) || !isRecord(payload.surfaces)) {
     throw new Error("Pool probe health response was malformed.");
   }
@@ -403,11 +470,18 @@ export function eligiblePoolSurfaces(payload) {
       throw new Error(`Pool probe health omitted the ${healthName} capability.`);
     }
   }
+  for (const surface of requiredSurfaces) {
+    if (!live.includes(surface)) {
+      throw new Error(`Pool probe requires live ${surface}; health did not report it available.`);
+    }
+  }
   return Object.freeze({ live: Object.freeze(live), skipped: Object.freeze(skipped) });
 }
 
-export async function readPoolCapabilities(target, fetchImpl = fetch) {
-  const response = await fetchImpl(`${normalizeOrigin(target)}/api/health`, {
+export async function readPoolCapabilities(target, options = {}) {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const normalizedTarget = normalizeOrigin(target);
+  const response = await fetchImpl(`${normalizedTarget}/api/health`, {
     method: "GET",
     headers: { accept: "application/json" },
     cache: "no-store",
@@ -415,14 +489,185 @@ export async function readPoolCapabilities(target, fetchImpl = fetch) {
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) throw new Error("Pool probe health request failed.");
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) {
+    throw new Error("Pool probe health did not declare JSON.");
+  }
+  const cacheControl = response.headers.get("cache-control")?.toLowerCase() ?? "";
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "no-store")) {
+    throw new Error("Pool probe health was not marked no-store.");
+  }
   const payload = await response.json().catch(() => null);
-  return eligiblePoolSurfaces(payload);
+  if (!isRecord(payload) || payload.status !== "ok") {
+    throw new Error("Pool probe health status was not ok.");
+  }
+  if (payload.protocolVersion !== PROTOCOL_VERSION) {
+    throw new Error("Pool probe health protocol version did not match.");
+  }
+  const expectedVersion = options.expectedVersion ?? APP_VERSION;
+  if (payload.appVersion !== expectedVersion) {
+    throw new Error(`Pool probe expected app ${expectedVersion}, received ${String(payload.appVersion)}.`);
+  }
+  const expectedBasePath = new URL(normalizedTarget).pathname.replace(/\/$/u, "");
+  if (payload.basePath !== expectedBasePath) {
+    throw new Error(`Pool probe expected basePath ${expectedBasePath || "<empty>"}.`);
+  }
+  return eligiblePoolSurfaces(payload, options.requiredSurfaces ?? []);
 }
 
-function requestFor(surface, round) {
+function requestFor(surface, round, runId) {
   if (surface === "repair") return repairRequest(round);
-  if (surface === "label") return labelRequest(round);
+  if (surface === "label") return labelRequest(round, runId);
   return inquiryRequest(round);
+}
+
+function matchesProbeResponse(surface, payload, request) {
+  if (!isRecord(payload) || payload.protocolVersion !== PROTOCOL_VERSION) return false;
+  if (surface === "repair") {
+    return hasOnlyKeys(payload, [
+      "protocolVersion", "promptVersion", "operationId", "attempt", "text", "source", "fallbackReason",
+    ]) &&
+      payload.promptVersion === request.promptVersion &&
+      payload.operationId === request.operationId &&
+      payload.attempt === request.attempt &&
+      typeof payload.text === "string" &&
+      payload.text.trim().length > 0 &&
+      payload.text.length <= MAX_REPAIR_TEXT_CODE_UNITS &&
+      (payload.source === "model" || payload.source === "verbatim") &&
+      (payload.fallbackReason === undefined || asReason(payload.fallbackReason) !== null) &&
+      (payload.source !== "model" || payload.fallbackReason === undefined);
+  }
+  if (surface === "label") {
+    return hasOnlyKeys(payload, [
+      "protocolVersion", "promptVersion", "operationId", "basis", "label", "source", "fallbackReason",
+    ]) &&
+      payload.promptVersion === request.promptVersion &&
+      payload.operationId === request.operationId &&
+      isRecord(payload.basis) &&
+      hasExactKeys(payload.basis, ["treeId", "nodeId", "revision"]) &&
+      payload.basis.treeId === request.basis.treeId &&
+      payload.basis.nodeId === request.basis.nodeId &&
+      payload.basis.revision === request.basis.revision &&
+      isUsableProbeLabel(payload.label, request.maxGraphemes) &&
+      (payload.source === "model" || payload.source === "provisional") &&
+      (payload.fallbackReason === undefined || asReason(payload.fallbackReason) !== null) &&
+      (payload.source !== "model" || payload.fallbackReason === undefined);
+  }
+  const expectedKeys = payload.status === "answered"
+    ? ["protocolVersion", "basis", "status", "text", "receipt"]
+    : ["protocolVersion", "basis", "status", "reason", "receipt"];
+  const expectedReceipt = {
+    scope: request.context.scope,
+    lineageNodes: request.context.lineage.length,
+    contextCodePoints: request.context.lineage.reduce(
+      (total, node) => total + Array.from(node.text).length,
+      0,
+    ),
+    clipped: request.context.clipped,
+    thoughtCount: request.context.thoughtCount,
+  };
+  return hasExactKeys(payload, expectedKeys) &&
+    (payload.status === "answered" || payload.status === "unavailable") &&
+    isRecord(payload.basis) &&
+    hasExactKeys(payload.basis, ["requestId", "treeId", "revision", "scope"]) &&
+    payload.basis.requestId === request.requestId &&
+    payload.basis.treeId === request.context.treeId &&
+    payload.basis.revision === request.context.revision &&
+    payload.basis.scope === request.context.scope &&
+    isRecord(payload.receipt) &&
+    hasExactKeys(payload.receipt, ["scope", "lineageNodes", "contextCodePoints", "clipped", "thoughtCount"]) &&
+    Object.entries(expectedReceipt).every(([key, value]) => payload.receipt[key] === value) &&
+    (payload.status === "answered"
+      ? typeof payload.text === "string" &&
+        payload.text.trim().length > 0 &&
+        Array.from(payload.text).length <= MAX_INQUIRY_ANSWER_CODE_POINTS &&
+        isInquiryAnswerProse(payload.text)
+      : payload.reason === "NO_PROVIDER" || payload.reason === "NO_MATERIAL");
+}
+
+function isUsableProbeLabel(value, maxGraphemes) {
+  if (typeof value !== "string" || value.trim().length === 0) return false;
+  if (/[\u0000-\u001F\u007F]/u.test(value)) return false;
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  return Array.from(segmenter.segment(value.trim())).length <= maxGraphemes;
+}
+
+async function readProbePayload(response, surface) {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  const cacheControl = response.headers.get("cache-control")?.toLowerCase() ?? "";
+  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) return null;
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "no-store")) return null;
+  const byteLimit = surface === "repair"
+    ? MAX_REPAIR_RESPONSE_BYTES
+    : surface === "label"
+      ? MAX_LABEL_RESPONSE_BYTES
+      : MAX_INQUIRY_RESPONSE_BYTES;
+  const declaredLength = response.headers.get("content-length");
+  if (declaredLength !== null) {
+    const parsedLength = Number(declaredLength);
+    if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > byteLimit) {
+      await response.body?.cancel().catch(() => undefined);
+      return null;
+    }
+  }
+  const bytes = await readBoundedBytes(response, byteLimit);
+  if (bytes === null) return null;
+  let text;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+async function readBoundedBytes(response, byteLimit) {
+  if (response.body === null) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) break;
+      total += next.value.byteLength;
+      if (total > byteLimit) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(next.value);
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined);
+    return null;
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+function createProbeRunId() {
+  return randomBytes(8).toString("hex");
+}
+
+function normalizeRunId(value) {
+  if (typeof value !== "string" || !/^[a-z0-9]{1,24}$/u.test(value)) {
+    throw new Error("Pool probe run id must contain 1 to 24 lowercase letters or digits.");
+  }
+  return value;
+}
+
+function hasOnlyKeys(value, allowed) {
+  const accepted = new Set(allowed);
+  return Object.keys(value).every((key) => accepted.has(key));
+}
+
+function hasExactKeys(value, expected) {
+  return Object.keys(value).length === expected.length && hasOnlyKeys(value, expected);
 }
 
 function outcome(name, reason = null) {
@@ -483,9 +728,10 @@ function delay(milliseconds) {
 }
 
 async function main() {
-  const { origin, rounds, paceMs, requireInquiryAnswer } = parseArguments(process.argv.slice(2));
+  const { origin, rounds, paceMs, requireInquiryAnswer, profile, expectedVersion } = parseArguments(process.argv.slice(2));
   const target = normalizeOrigin(origin ?? process.env.MATTER_DEPLOYMENT_ORIGIN ?? "https://matter.ptoq.io");
-  const capabilities = await readPoolCapabilities(target);
+  const requiredSurfaces = profile === "release" ? SURFACES : [];
+  const capabilities = await readPoolCapabilities(target, { expectedVersion, requiredSurfaces });
   for (const entry of capabilities.skipped) {
     console.log(`pool: skip ${entry.surface} — health reports ${entry.state}`);
   }
@@ -505,10 +751,15 @@ async function main() {
       );
     },
   });
-  console.log(formatReport(result.origin, result.summary, { paceMs, requireInquiryAnswer }));
+  const requiredUsableSurfaces = profile === "release" ? SURFACES : [];
+  console.log(formatReport(result.origin, result.summary, {
+    paceMs,
+    requireInquiryAnswer,
+    requiredUsableSurfaces,
+  }));
   if (
     result.summary.failures.length > 0 ||
-    probeGateFailures(result.summary, { requireInquiryAnswer }).length > 0
+    probeGateFailures(result.summary, { requireInquiryAnswer, requiredUsableSurfaces }).length > 0
   ) process.exitCode = 1;
 }
 
