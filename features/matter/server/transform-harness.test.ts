@@ -64,6 +64,7 @@ describe("compileTransformPrompt", () => {
 describe("adjudicateTransform", () => {
   it("accepts one policy-valid insertive expansion", () => {
     expect(adjudicateTransform(EXPANSION, input())).toEqual({ ok: true, value: EXPANSION });
+    expect(adjudicateTransform(`\n${EXPANSION}\n`, input())).toEqual({ ok: true, value: EXPANSION });
   });
 
   it("rejects no-op, degree drift, removed source material, and semantic anchors", () => {
@@ -84,7 +85,7 @@ describe("adjudicateTransform", () => {
   });
 
   it("exposes the 12s scenario budget and grapheme-derived token ceiling", () => {
-    expect(TRANSFORM_SCENARIO.budget(input())).toEqual({ deadlineMs: 12_000, maxOutputTokens: 136 });
+    expect(TRANSFORM_SCENARIO.budget(input())).toEqual({ deadlineMs: 12_000, maxOutputTokens: 256 });
     expect(TRANSFORM_SCENARIO.locale(input())).toBe("zh-CN");
   });
 });

@@ -6,13 +6,23 @@ import {
   sameInquiryContext,
 } from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
-import { askInquiry } from "./inquiry-client";
+import { askInquiry, createInquiryRequestId } from "./inquiry-client";
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("inquiry client", () => {
+  it("keeps request identities distinct when no Web Crypto primitive exists", () => {
+    vi.stubGlobal("crypto", undefined);
+    vi.spyOn(Date, "now").mockReturnValue(1_777_777_777_777);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    expect(createInquiryRequestId()).not.toBe(createInquiryRequestId());
+  });
+
   it("sends the bounded question and reads a stated result", async () => {
     const fetchImpl = respondWith(answer({ status: "unavailable", reason: "NO_PROVIDER" }));
     await expect(askInquiry({ ...INPUT, fetchImpl })).resolves.toEqual({

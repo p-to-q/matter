@@ -38,6 +38,27 @@ describe("inquiry context", () => {
     expect(inquiryContextWeight(context)).toBeLessThanOrEqual(30);
   });
 
+  it("does not read node text beyond the wire node ceiling", () => {
+    const material = breadthTree(2_000);
+    let textReads = 0;
+    for (const value of Object.values(material.nodes)) {
+      Object.defineProperty(value, "text", {
+        configurable: true,
+        get() {
+          textReads += 1;
+          return "字".repeat(2_000);
+        },
+      });
+    }
+
+    const context = projectInquiryContext(material, working(material));
+
+    expect(context).toMatchObject({ thoughtCount: 2_000, clipped: true });
+    expect(context.lineage.length).toBeLessThanOrEqual(64);
+    expect(inquiryContextWeight(context)).toBeLessThanOrEqual(4_000);
+    expect(textReads).toBeLessThanOrEqual(64);
+  });
+
   it("never falls back to the tree when a selected passage has been set aside", () => {
     const context = projectInquiryContext(TREE, working(TREE, new Set(["child"])), [
       { type: "segment-range", nodeId: "grandchild", start: 0, end: 2, selectedText: "孙段" },
@@ -71,6 +92,17 @@ function chain(length: number): ThoughtTree {
     );
   }
   return { ...TREE, id: "tree_chain", rootId: "n0", nodes };
+}
+
+function breadthTree(length: number): ThoughtTree {
+  const nodes: ThoughtTree["nodes"] = {};
+  for (let index = 0; index < length; index += 1) {
+    const id = `b${index}`;
+    const parentIndex = index === 0 ? null : Math.floor((index - 1) / 64);
+    nodes[id] = node(id, parentIndex === null ? null : `b${parentIndex}`, [], "字".repeat(2_000));
+    if (parentIndex !== null) nodes[`b${parentIndex}`]?.children.push(id);
+  }
+  return { ...TREE, id: "tree_breadth", rootId: "b0", nodes };
 }
 
 function node(id: string, parentId: string | null, children: string[], text = id) {

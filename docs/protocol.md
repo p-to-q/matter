@@ -207,7 +207,7 @@ upper       = ceil(1.25 * D)
 Only `lower <= actualDelta <= upper` is admissible. This replaces the
 `transform/1` whole-target ±45% band, which could accept an unchanged passage at
 small stretch amounts. The provider output ceiling is
-`min(1200, max(96, 2 * T + 96))` tokens; truncation falls to the unchanged floor
+`min(1200, max(256, 2 * T + 128))` tokens; truncation falls to the unchanged floor
 rather than changing `T`.
 
 ## Model output and plan

@@ -732,9 +732,12 @@ Non-goals:  deployed-origin p95, edge latency, distributed retention/alerting,
             provider cold attribution, sampling, or issue #34 controls
 ```
 
-Receipt, 2026-08-22: the five-scenario and five-outcome enums, two-value
-candidate provenance, 0–255 counters, and 0–120000 ms numeric duration are the
-entire `matter.scenario-performance` event schema. Source sampling is off and
+Historical receipt, 2026-08-22: the five-scenario and five-outcome enums,
+two-value candidate provenance, the original attempt/timeout/failure counters,
+and 0–120000 ms numeric duration introduced the
+`matter.scenario-performance` schema. Preview.46 extends its current closed
+schema with truncation/refusal and unknown/missing-terminator counters; the last
+two modify an already counted attempt rather than inventing one. Source sampling is off and
 Matter retains nothing; one such line per non-null scenario-adapter terminal is
 the harness volume ceiling, including a governor-shed terminal with zero
 candidate attempts. Cache hits, missing adapters, and caller cancellation emit
@@ -3011,6 +3014,165 @@ Proof:      pure URL/config tests; typecheck and lint; production build; direct
 Non-goals:  a marketing page, analytics, cookies, paid SEO tooling, external
             verification tokens, IndexNow submission, or claiming gated AI turns
 ```
+
+### Shared model kernel — common execution, scenario-owned meaning
+
+State: Built. Exact release proof pending.
+
+```text
+Outcome:    one typed prompt and provider-execution kernel serves the existing
+            model scenarios without collapsing their product semantics
+Boundary:   prompt spine, scenario harnesses, provider-pool completion outcome,
+            anonymous terminal observation, language-evaluation authority, and
+            neutral inquiry bounds
+Invariants: reference material is never instruction; bounded human intent cannot
+            widen scope or output authority; each scenario keeps its own public
+            protocol, projector, adjudicator, governor, gate, and settlement;
+            late output never rebases, merges, records, or mutates material
+Proof:      focused prompt-order and escaping tests; exact compiled-prompt and
+            execution-contract reconstruction; completion-terminator matrix; candidate fallback,
+            timeout, cancellation, late-drain, and closed telemetry tests; full
+            source and browser receipts on the versioned candidate
+Non-goals:  a generic /api/ai route, a session or retrieval layer, model-authored
+            tree commands, provider streaming into material, or enabling the
+            currently closed Elastic and Text Swap live gates
+```
+
+One request may fall through ordered provider candidates, but it still has one
+scenario deadline, one active basis, and at most one accepted result. A result
+that arrives after an attempt boundary may have its response body cancelled for
+resource cleanup; it cannot be combined with the winning candidate. A result
+that arrives after overall timeout, surface close, target or revision change,
+document replacement, or explicit retry is inert even when its text looks
+useful. Material mutations are never silently rebased: the current tree engine
+and pointer Undo remain the only durable settlement path.
+
+The prompt artifact versions advance independently of the public wire versions.
+That separation is deliberate: the wire describes client/server syntax, while
+the prompt artifact identifies the exact model-readable program. Paid language
+authority binds every compiled prompt plus candidate thinking mode,
+deterministic policy/completion identities, pool limits, and per-case budgets,
+so a prompt or execution edit cannot inherit an older receipt under an
+unchanged scenario label.
+
+### Inquiry authority and record ownership — one operation, one basis
+
+State: Built. Exact release proof pending.
+
+```text
+Outcome:    Ask Matter can be closed, suspended or displaced without a delayed
+            answer entering UI or storage; completed exchanges survive a later
+            view change in the record of the tree that accepted them
+Boundary:   CanvasChrome inquiry authority, the material-root AI-operation
+            coordinator, bounded working-context projection, request identity,
+            and the serialized InquiryRecordWriter
+Invariants: neutral lasso may remain Inquiry context; Point and Talk, active
+            Elastic and Inquiry own one transient AI-operation slot; close,
+            context change, page suspension and document replacement revoke
+            request authority synchronously; late answers never render or
+            persist; accepted durable work never changes tree owners; clear
+            epochs cannot be resurrected
+Proof:      request-received delayed close, suspension and context-change
+            browser tests; Point-and-Talk and keyboard Elastic ownership; clean
+            reopen identities; deferred-load tree switch, rapid append,
+            clear/append and stale-epoch unit tests; 2,000-node bounded-read
+            projection proof
+Non-goals:  chat memory, a cross-tree session, automatic late-result merging,
+            hidden retrieval, one generic AI state machine, or putting record
+            writes in material history
+```
+
+The coordinator starts at the product root because exclusivity is a surface
+fact, not a provider abstraction. The three business lifecycles remain
+separate: Elastic and Point and Talk may settle one pointer-undoable tree
+mutation; Inquiry may settle only one read-only exchange. A selection by itself
+does not take the slot because it is still valid as Inquiry's explicit context.
+Elastic takes it at the first accepted grip adjustment, when generation is
+actually about to own that address.
+
+### Inquiry context address — one field is answering four questions
+
+State: Specified. Blocked on a product decision about stored records.
+
+```text
+Outcome:    the model is told which part of the tree a person addressed, in the
+            person's own terms, and the type stops carrying a number that means
+            something different depending on a sibling field
+Boundary:   InquiryContext, the inquiry wire contract, the stored exchange
+            basis, the two E2E inquiry mocks, the pool probe, and docs/protocol.md
+Invariants: material is still projected exactly as it is today — focus already
+            narrows to the root-to-focus lineage and held-aside and folded
+            material is already absent; only the naming changes. No new address
+            may be inferred by a model; every one comes from a gesture
+Proof:      per-kind projection tests, expanded contract parse/roundtrip tests,
+            a stored-record migration
+            receipt, and both E2E mocks reproducing inquiryReceipt exactly
+Non-goals:  a subtree address, retrieval, a session or context-set layer, or
+            any change to what material is sent
+```
+
+`scope: "selection" | "tree"` is one field standing for three real addresses. A
+person in focus asked along one authored path; a person in full view asked
+against the working projection; a person with a lasso asked about exact
+passages. Two of those arrive as `"tree"` and are described to the model in the
+same sentence, so it cannot tell a deliberately narrowed thread — where siblings
+and cousins are absent *because the person said so* — from a complete projection
+where absence means something else.
+
+The type is already accreting the difference elsewhere: `parseContext` forbids
+duplicate node ids only in tree scope, requires an empty lineage to agree with a
+zero thought count only in tree scope, and requires the first node to be at depth
+zero. Those are three per-address laws maintained by hand on a flat shape.
+
+Three addresses exist and no more: `selection`, `lineage`, `working-tree`.
+`subtree` is not among them — it appears in this repository only as a tree
+*mutation* (`remove-subtree`), never as something a person addresses, and adding
+it would be designing past the roadmap.
+
+What makes this a separate change rather than part of the `inquiry/3` freeze:
+`matter-database.ts` persists `basis.scope` in IndexedDB, and
+`isStoredInquiryExchange` rejects a row whose scope it does not recognize. A new
+vocabulary therefore silently discards a person's saved inquiry record unless it
+is migrated or mapped. That is a durability question with its own proof
+obligation, and it does not belong inside a prompt freeze.
+
+The one model-visible harm has already been removed without touching any of
+this: a selection no longer reports `depth` to a model, because there it only
+ever meant visible material order. The wire still carries the field; the stored
+look-back record keeps coarse scope only, with no lineage or depth.
+
+Open decision for the owner: migrate stored rows to the new vocabulary, or keep
+the stored basis on the current two values and map the three addresses onto them
+for look-back only. The second keeps every saved record and costs one documented
+lossy mapping; the first is cleaner and needs a migration receipt.
+
+### Attempt window versus answer length — a latent asymmetry, not today's fault
+
+State: Recorded. No change proposed; recorded so it is not mistaken for a cause.
+
+The surface whose answer is longest is given the shortest single attempt. Inquiry
+asks for up to 720 output tokens and takes `maxAttemptShare: 0.5` of a 16s
+deadline, so no one relay ever gets more than 8s. Repair asks for roughly 124
+and takes 0.95, so its relay gets one nearly-complete window. Label asks for tens
+of tokens against the default share.
+
+Inquiry's split buys two attempts, which is the right trade when a bad relay
+fails fast: the second candidate still gets a real turn. It is the wrong trade
+when a bad relay *hangs*, because two 8s hangs spend the whole budget and the
+person waits the full sixteen seconds for nothing.
+
+The hazard worth writing down is not the split but what it would look like. If a
+healthy inquiry answer ever grew past 8s — a longer material bound, a slower
+relay, a model that reasons before answering — inquiry would fail permanently
+and would present as `MODEL_TIMEOUT`, which is indistinguishable in the receipt
+from a relay that is simply down. The condition is real and invisible.
+
+**This is not the 2026-08-28 Production incident.** Measured healthy inquiry
+latency is 915ms, so 8s is roughly eight times the headroom actually needed;
+widening the window would have changed nothing, and doing it would have been a
+change that looked responsive while fixing nothing. See the incident section in
+`docs/deployment-owner-handoff.md`. Reopen this only with a measurement showing
+a healthy answer approaching the window, not after a timeout.
 
 ## Current risks
 

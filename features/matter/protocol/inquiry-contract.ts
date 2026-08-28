@@ -1,15 +1,32 @@
 import { PROTOCOL_VERSION } from "../tree/model";
 import { isMatterLocale } from "../config/locales";
+import {
+  MAX_INQUIRY_ANSWER_CODE_POINTS,
+  MAX_INQUIRY_CONTEXT_CODE_POINTS,
+  MAX_INQUIRY_CONTEXT_NODES as MAX_INQUIRY_LINEAGE_NODES,
+  MAX_INQUIRY_NODE_CODE_POINTS as MAX_INQUIRY_NODE_TEXT_CODE_POINTS,
+  isInquiryContextScope,
+  type InquiryContextScope,
+} from "../config/inquiry";
 import { MAX_INQUIRY_QUESTION_CODE_POINTS } from "./spoken-text-limits";
+import { isInquiryAnswerProse } from "./inquiry-answer-policy";
 export { MAX_INQUIRY_QUESTION_CODE_POINTS } from "./spoken-text-limits";
+
+/**
+ * Projection and wire validation share neutral limits, while each layer keeps
+ * ownership of its own work. The aliases preserve the public wire names.
+ */
+export {
+  MAX_INQUIRY_CONTEXT_CODE_POINTS,
+  MAX_INQUIRY_CONTEXT_NODES as MAX_INQUIRY_LINEAGE_NODES,
+  MAX_INQUIRY_NODE_CODE_POINTS as MAX_INQUIRY_NODE_TEXT_CODE_POINTS,
+  MAX_INQUIRY_ANSWER_CODE_POINTS,
+} from "../config/inquiry";
+export type { InquiryContextScope } from "../config/inquiry";
 
 /** A bounded, non-mutating question about visible material. */
 export const MAX_INQUIRY_REQUEST_BYTES = 24 * 1_024;
 export const MAX_INQUIRY_RESPONSE_BYTES = 8 * 1_024;
-export const MAX_INQUIRY_ANSWER_CODE_POINTS = 1_201;
-export const MAX_INQUIRY_LINEAGE_NODES = 64;
-export const MAX_INQUIRY_NODE_TEXT_CODE_POINTS = 480;
-export const MAX_INQUIRY_CONTEXT_CODE_POINTS = 4_000;
 export const MAX_INQUIRY_LOCALE_LENGTH = 35;
 export const MAX_INQUIRY_ID_LENGTH = 128;
 export const INQUIRY_CLIENT_TIMEOUT_MS = 20_000;
@@ -20,8 +37,6 @@ export type InquiryContextNodePayload = Readonly<{
   text: string;
   truncated: boolean;
 }>;
-
-export type InquiryContextScope = "selection" | "tree";
 
 export type InquiryContextPayload = Readonly<{
   treeId: string;
@@ -124,7 +139,10 @@ export function parseInquiryRequest(payload: unknown): InquiryParseResult {
   const requestId = boundedId(payload.requestId);
   if (requestId === null) return invalid("The inquiry request id is invalid.");
   const question = boundedText(payload.question, MAX_INQUIRY_QUESTION_CODE_POINTS);
-  if (question === null || question.trim().length === 0) {
+  if (
+    question === null
+    || question.trim().length === 0
+  ) {
     return invalid("The inquiry request has no question.");
   }
   const locale = typeof payload.locale === "string"
@@ -181,7 +199,7 @@ export function parseInquiryAnswer(
   if (receipt === null || !sameReceipt(receipt, expectedReceipt)) return null;
   if (payload.status === "answered") {
     const text = boundedText(payload.text, MAX_INQUIRY_ANSWER_CODE_POINTS);
-    if (text === null || text.trim().length === 0) return null;
+    if (text === null || text.trim().length === 0 || !isInquiryAnswerProse(text)) return null;
     return Object.freeze({ protocolVersion: PROTOCOL_VERSION, basis, status: "answered", text, receipt });
   }
   if (payload.reason !== "NO_PROVIDER" && payload.reason !== "NO_MATERIAL") return null;
@@ -269,7 +287,7 @@ function parseContext(value: unknown): InquiryContextPayload | null {
     value.treeId.length === 0 ||
     value.treeId.length > MAX_INQUIRY_ID_LENGTH
   ) return null;
-  if (value.scope !== "selection" && value.scope !== "tree") return null;
+  if (!isInquiryContextScope(value.scope)) return null;
   if (!Number.isSafeInteger(value.revision) || (value.revision as number) < 0) return null;
   if (!Number.isSafeInteger(value.thoughtCount) || (value.thoughtCount as number) < 0) return null;
   if (typeof value.clipped !== "boolean") return null;
@@ -331,7 +349,7 @@ function parseBasis(value: unknown): InquiryBasis | null {
     treeId === null ||
     !Number.isSafeInteger(value.revision) ||
     (value.revision as number) < 0 ||
-    (value.scope !== "selection" && value.scope !== "tree")
+    !isInquiryContextScope(value.scope)
   ) return null;
   return Object.freeze({
     requestId,
@@ -345,7 +363,7 @@ function parseReceipt(value: unknown): InquiryReceipt | null {
   if (!isRecord(value) || !hasExactKeys(value, ["scope", "lineageNodes", "contextCodePoints", "clipped", "thoughtCount"])) {
     return null;
   }
-  if (value.scope !== "selection" && value.scope !== "tree") return null;
+  if (!isInquiryContextScope(value.scope)) return null;
   if (typeof value.clipped !== "boolean") return null;
   for (const key of ["lineageNodes", "contextCodePoints", "thoughtCount"] as const) {
     if (!Number.isSafeInteger(value[key]) || (value[key] as number) < 0) return null;

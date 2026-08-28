@@ -6,6 +6,7 @@ import type { ScenarioAdapter } from "./harness";
 import { compileRepairPrompt } from "./repair-harness";
 import {
   DEFAULT_REPAIR_LIMITS,
+  REPAIR_POOL_LIMITS,
   fixtureRepairAdapter,
   repairTranscript,
   resetRepairGeneratorState,
@@ -187,6 +188,13 @@ describe("fixtureRepairAdapter", () => {
 });
 
 describe("resolveRepairAdapter", () => {
+  it("keeps one proven near-complete relay window", () => {
+    expect(REPAIR_POOL_LIMITS).toMatchObject({
+      maxAttemptShare: 0.95,
+      maxOutputTokens: 1_200,
+    });
+  });
+
   it("is off when the deployment says so", () => {
     expect(resolveRepairAdapter({ MATTER_REPAIR_ADAPTER: "off" })).toBeNull();
   });

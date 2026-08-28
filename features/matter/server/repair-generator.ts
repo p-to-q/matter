@@ -91,14 +91,13 @@ export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
  * Repair keeps the pool's defaults except for one: a relay may hold almost the
  * whole budget rather than half of it.
  *
- * The other scenarios can afford to reserve a second turn, because their
- * budgets are several times one relay's answer. This one is deliberately short
- * — a person is holding still while it runs — so splitting two seconds in half
- * does not buy a fallback, it buys two attempts neither of which can finish,
- * and every short utterance is admitted as heard. The floor here is already
- * correct, so one real attempt is worth more than two doomed ones.
+ * The 6–8 second parent deadline therefore gives one relay 5.7–7.6 seconds.
+ * This deliberately favours one usable repair attempt over two shorter ones:
+ * the person's heard words are already the correct floor, and provider failure
+ * admits them unchanged. Revisit the share only with measured evidence that a
+ * shorter healthy attempt can finish; fallback count alone is not that proof.
  */
-const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.95 });
+export const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.95 });
 
 export function resolveRepairAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,

@@ -209,7 +209,17 @@ the scenario-neutral `MATTER_MODEL_*` namespace; the complete deployed
 `MATTER_LABEL_*` namespace remains a non-merged compatibility fallback. One
 candidate owns only its bounded share of the scenario deadline even when its
 transport ignores cancellation, so ordered fallback retains actual delivery
-time rather than only receiving an advisory signal.
+time rather than only receiving an advisory signal. Healthy concurrent calls
+remain independent. Only a raw request that outlives timeout or cancellation
+becomes a drain lease; later calls skip that one scenario/candidate until its
+late body accepts cancellation. A process-wide drain threshold sheds new model
+work neutrally instead of misreporting a provider attempt or cooling a surface.
+That process threshold is an overload-shedding threshold after abandoned work,
+not a strict cap on active healthy attempts. Current production entry paths are
+bounded upstream by five scenario-owned governors: label 4, repair 4, inquiry
+3, Transform 2, and Text Swap 2, for an aggregate per-instance ceiling of 15.
+Direct adapter calls in tests remain intentionally outside that product
+admission boundary.
 
 The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
@@ -222,6 +232,22 @@ short question + lassoed passages, or bounded active-working projection when no 
     bounded local inquiry record, never a tree command or model context;
     reopening begins with a clean exchange
 ```
+
+The canvas root owns one transient AI-operation slot. Point and Talk, an active
+Elastic adjustment or turn, and Inquiry close one another synchronously; a
+neutral lasso may coexist with Inquiry because it is an address and may be that
+request's explicit context, not yet a model operation. Closing a surface or
+changing its bounded basis increments client authority before a delayed promise
+can settle. A late answer therefore cannot render or append a record even in
+the render-to-effect interval.
+
+Inquiry projection is bounded while it walks the working tree: it stops reading
+node text once the 64-node or 4,000-code-point wire ceiling is full instead of
+materialising text that cannot cross the boundary. A completed exchange is
+then handed to a serialized record writer bound to the addressed `treeId`, not
+to the currently rendered document. View changes gate UI updates but do not
+cancel already accepted durable work; generation/epoch reconciliation still
+prevents a pre-clear exchange from being resurrected.
 
 Only the tree engine applies durable mutations. Pointer, audio level, partial
 transcript, selection geometry, focus, and fold remain transient. Derived labels
@@ -459,6 +485,7 @@ features/matter/
   server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
   server/*-harness.ts              one scenario each: repair, label, inquiry, transform, text swap
   server/model-pool.ts             the only place an endpoint, model name, or key appears
+  config/inquiry.ts                neutral inquiry bounds and current scope vocabulary
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules
   material/inquiry-context.ts      bounded visible-lineage inquiry projection
@@ -487,9 +514,11 @@ them:
 
 1. `material/*-context.ts` projects the visible document or explicit lasso
    address into bounded reference material. It knows tree semantics, not models.
-2. `server/*-contract.ts` validates the versioned network envelope and repeats
-   every hard bound. It carries data only; prompts and scenarios do not belong
-   to protocol.
+2. `protocol/*-contract.ts` validates the versioned network envelope against
+   shared neutral context bounds plus protocol-owned wire bounds. It carries
+   data only; prompts and scenarios do not belong to protocol. A stored
+   exchange keeps its own versioned scope vocabulary and does not silently
+   follow a future wire union.
 3. `server/*-harness.ts` owns a named scenario's prompt, context allocation,
    deadline, output budget, and response validation. It receives already
    bounded material and returns only the scenario result.

@@ -1,15 +1,12 @@
 # Preview deployment-owner handoff
 
-Status: Preview.42 source work merged through PR #73 as `738d077`; its bounded
-public-cache receipt merged through PR #74 as `776b003`. Exact Production
-deployment `6053793739` completed and `matter.ptoq.io` matched
-`0.2.0-preview.42`, including the approved favicon bytes and metadata contract,
-on the first final public-origin probe. Its final release-record commit is the
-target of the annotated immutable `v0.2.0-preview.42` tag. The release preserves
-the four-route process-local admission perimeter, adds the reviewed Slate / Bone
-identity and ambient stacking correction, and keeps labels, transcript repair,
-and Ask Matter live. Elastic and Text Swap remain unavailable. This is an
-operator checklist, not a place to record token values.
+Status: Preview.45 is the current immutable public release. Preview.46 is an
+authorized candidate only: its exact source, CI, Preview, Production,
+public-origin, and final record-only receipts do not exist yet and must not be
+invented here. The candidate preserves the current process-local admission
+perimeter and live label, transcript-repair, and Ask Matter gates. Elastic and
+Text Swap remain unavailable. This is an operator checklist, not a place to
+record token values.
 
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
@@ -22,16 +19,131 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The owner has directed one Preview.42 production promotion while the external
-receipts remain outstanding. Treat that direction as a Preview.42-only risk
-acceptance, not a continuing waiver and not evidence that the controls exist.
-Issues #34 and #68 remain open; label, repair, inquiry, and browser/local voice
-stay as configured, while Elastic and Text Swap remain unavailable. The source
-admission ceilings below are per warm instance only. Before any later release,
-obtain a fresh owner decision or the distributed-rate, provider-spend, alert,
-and rollback receipts.
+The owner has directed one Preview.46 production promotion and prerelease after
+the exact candidate passes the repository, browser, Preview, and public-origin
+gates. Treat that direction as a Preview.46-only risk acceptance, not a
+continuing waiver and not evidence that external controls exist. Issues #34 and
+#68 remain open; label, repair, inquiry, and browser/local voice stay as
+configured, while Elastic and Text Swap remain unavailable. The source
+admission ceilings below are per warm instance only. Any later release requires
+a fresh owner decision or the distributed-rate, provider-spend, alert, and
+rollback receipts.
 
-## Preview.42 release and authorization
+## Resolved-by-itself incident — inquiry reached no model on Production
+
+Observed 2026-08-28 against `https://matter.ptoq.io` running `0.2.0-preview.45`,
+by `npm run probe:pool` across two runs, the second paced 70s apart so no sample
+sat inside a cooldown this probe caused:
+
+```text
+label    4/4 reached a model    0.76-1.1s
+repair   3/4 reached a model    0.99-1.1s   (one TRANSPORT unreachable)
+inquiry  0/8 reached a model    16.08-16.17s, MODEL_TIMEOUT every time
+```
+
+Every inquiry call spent its complete 16s budget and returned 503. A person saw
+Ask Matter fail after about sixteen seconds; label and repair failed into their
+deterministic floors without saying anything, which is why the product read as
+"the AI stopped working" rather than as one surface being down.
+
+**It then recovered with no change on our side.** About fifteen minutes later
+the same probe reported `pool-healthy`, inquiry reaching a model 3/3 in
+854-1723ms — in line with the 915ms recorded at Preview.23. No deploy, no
+environment edit, and no code change happened between the two runs.
+
+That recovery is the most informative result. A static missing environment
+variable does not heal itself, so a dropped `ENABLE_THINKING` cannot be the whole
+story. The event is consistent with transient provider, intermediary, or
+warm-instance pool degradation; the origin probe cannot distinguish those
+owners. It matches the intermittence this repository recorded at Preview.23 and
+Preview.26 in `release-readiness.md` without proving the same cause.
+
+**Narrowed, with evidence.** A source regression is unlikely: between
+`v0.2.0-preview.40` and the deployed commit, `model-pool.ts`,
+`inquiry-provider.ts`, `inquiry-harness.ts`, `inquiry-route.ts`, and
+`harness.ts` each have zero commits. It is not missing configuration: the health
+route reports `inquiry: available`, which means an adapter resolved, not that a
+relay was reachable. Repair's larger input prompt answering in one second makes
+input size alone unlikely; it does not rule out output ceiling, model reasoning,
+candidate order, or process-local state.
+
+**What the failure correlated with was output length.** Label asks for tens of
+tokens and answers; repair asks for about 124 and answers; inquiry asks for 720
+and never returns. The configured surfaces produced short answers in those
+samples; the probe did not establish candidate or warm-instance affinity.
+
+This repository already anticipated that shape. `docs/changes.md`, 2026-08-07:
+low-latency inquiry and naming "should not pay for hidden reasoning", and the
+entry explicitly forecloses "relying on a provider's changing default thinking
+mode". If the station serving Production is not being sent
+`enable_thinking: false`, a model whose upstream default has since turned
+thinking on will spend inquiry's larger budget reasoning and return nothing
+inside the attempt window, while repair's tight ceiling forces it to stop early
+and still answer.
+
+### Deployment owner — check in this order
+
+1. In the Matter Vercel project, Production scope, confirm **exactly one** of
+   `MATTER_MODEL_POOL` and `MATTER_LABEL_POOL` is non-empty. Both non-empty is
+   refused by design and would take the pool down entirely, so this is a
+   check, not the expected cause.
+2. In whichever namespace is the live one, confirm every station has its
+   matching `..._ENABLE_THINKING=false`. The variable is namespaced with the
+   pool, so `MATTER_LABEL_AIPING_ENABLE_THINKING` and
+   `MATTER_MODEL_AIPING_ENABLE_THINKING` are different variables and a partial
+   migration silently drops it. This is a worthwhile hardening check, not the
+   established incident cause. It needs no source change, only a redeploy if the
+   environment is corrected.
+3. Confirm the station's `..._MODELS` names still exist at that gateway. A
+   renamed or retired model is a fast 4xx, not a hang, so this is unlikely to
+   be the cause here, but it is cheap to confirm.
+
+### Provider owner — check in this order
+
+1. Whether the account is rate-limited or over budget. A gateway that queues
+   instead of returning 429 presents exactly as this hang.
+2. Whether the default thinking mode for the configured models changed
+   upstream. Run the same request twice against the station, once with
+   `"max_tokens": 124` and once with `"max_tokens": 720`, then once more at 720
+   with `"enable_thinking": false`. If the third is fast, item 2 above is the
+   fix. Keep the key and the responses out of this repository.
+
+### The durable gap this exposed
+
+Nobody knew. The product lost its one interactive model surface for at least ten
+minutes and the detection path was a person opening the site. Health does not
+help here and says so: it reports configured capability, not whether a relay
+answered. Repair and label make it worse by design — their floors are correct,
+so a pool outage is invisible on those surfaces by construction.
+
+This is direct evidence for the alert-delivery control already tracked as open
+under issue #34, and it should be cited there rather than filed again. What is
+missing is not a dashboard: it is a scheduled `probe:pool` against Production
+whose failure reaches a person, and a recorded expectation for inquiry latency
+so that "slow" is distinguishable from "down" without reading this file. Until
+that exists, every occurrence of this will be found the same way.
+
+### How to know it is fixed
+
+`npm run probe:pool -- --rounds=3 --pace=65 --require-inquiry-answer` reports
+`pool-healthy`, with Inquiry producing a real answer on every call. Healthy
+inquiry latency has been under two
+seconds, so a correct result is fast, not marginal. Pacing beyond the local
+health window reduces one attribution ambiguity; it does not prove requests hit
+the same instance or that provider intermittence is gone.
+
+As of the last run this criterion is met. It was also met before the outage, so
+meeting it once is not evidence that the intermittency is gone.
+
+### Incident-time source boundary
+
+At the time of the incident the working tree carried uncommitted prompt work
+with no evaluation receipt, so it was not a valid vehicle for an environment
+repair. That historical constraint does not evaluate the later Preview.46
+candidate; every release still requires its own exact source and behavior
+receipts.
+
+## Historical Preview.42 release and authorization
 
 The owner has directed one Preview.42 production promotion after the current
 review and hardening work. This is a fresh, one-preview exception: it keeps the
@@ -60,13 +172,13 @@ project binding, so a maintainer must not substitute an ad-hoc `vercel` CLI
 deployment for that auditable path or risk selecting another project or
 environment.
 
-The completed Preview.42 candidate records `0.2.0-preview.42` in `package.json`
-and both root package entries in `package-lock.json`. Its health route, Preview,
-and Production agree on that identity. The immutable tag must agree before this
-release is complete; future candidates must make the same source-to-receipt
-comparison before promotion.
+Every candidate records one version in `package.json` and both root package
+entries in `package-lock.json`. Its health route, Preview, and Production must
+agree on that identity. The immutable tag must agree before a release is
+complete.
 
-The release sequence is atomic at one candidate commit:
+The source change and its proof record are two auditable commits; the immutable
+release identity belongs to the second one:
 
 1. Create a `codex/` topic branch before committing the reviewed working tree.
    Confirm no `.env*`, recording, transcript, private evaluation artifact, or
@@ -83,11 +195,17 @@ The release sequence is atomic at one candidate commit:
    preserves the topic-branch SHA.
 4. Wait for the Vercel **Production** deployment recorded for that exact `main`
    SHA, then run `npm run check:deployment -- https://matter.ptoq.io --wait=120`.
-   Complete the manual voice and model-surface receipts below before saying the
-   candidate is live.
-5. Only after the production receipt succeeds, require the repository's
+   Complete the manual voice and model-surface receipts below and run the paced
+   pool probe with a required real Inquiry answer. This proves the source
+   candidate is live; it does not yet create the tag target.
+5. On a new proof-only topic, record the exact source SHA, CI run, Preview and
+   Production deployment, public check, browser walk, and pool receipt in the
+   release documents. Open and merge that record-only pull request, then wait
+   for its exact final `main` SHA to reach Production and repeat the bounded
+   public deployment check. No source behaviour may change in this step.
+6. Only after the final record-only Production receipt succeeds, require the repository's
    Immutable Releases setting to report `enabled: true`. Create the annotated
-   tag for the exact candidate version on that production SHA, push it, and
+   tag for the exact candidate version on that final production SHA, push it, and
    verify the remote annotated tag peels to the same SHA. Create the prerelease
    as a draft, publish it only after its metadata is complete, then require
    `gh release verify <candidate-tag>` to validate GitHub's release

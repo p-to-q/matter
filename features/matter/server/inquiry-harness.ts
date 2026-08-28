@@ -1,9 +1,12 @@
 import type { InquiryRequest } from "../protocol/inquiry-contract";
+import { isInquiryAnswerProse } from "../protocol/inquiry-answer-policy";
+import { MAX_INQUIRY_ANSWER_BODY_CODE_POINTS } from "../config/inquiry";
 import type { MatterScenario } from "./harness";
-import { composePrompt, fenceJson } from "./prompt-spine";
+import { boundedIntent, composePrompt, fenceJson } from "./prompt-spine";
 
 export const INQUIRY_SCENARIO_ID = "matter-inquiry";
-export const INQUIRY_PROMPT_VERSION = "2";
+/** Named like every sibling scenario; inquiry never carries it on the wire. */
+export const INQUIRY_PROMPT_VERSION = "inquiry/3";
 /**
  * The one scenario a person is deliberately waiting on, and the one with no
  * floor to fall back to. The pool holds at most half of this for one relay, so
@@ -12,7 +15,6 @@ export const INQUIRY_PROMPT_VERSION = "2";
  * rather than as a dead socket.
  */
 const INQUIRY_PROVIDER_DEADLINE_MS = 16_000;
-const MAX_INQUIRY_ANSWER_CODE_POINTS = 1_200;
 
 /**
  * Answering one question about material a person is already looking at.
@@ -39,6 +41,12 @@ export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.f
     if (typeof answer !== "string") return Object.freeze({ ok: false as const, reason: "not-text" });
     const text = answer.trim();
     if (text.length === 0) return Object.freeze({ ok: false as const, reason: "empty" });
+    // Validate the provider's complete value before clipping. Otherwise an
+    // unsafe suffix just beyond the visible ceiling would disappear and turn
+    // an invalid answer into an accepted one.
+    if (!isInquiryAnswerProse(text)) {
+      return Object.freeze({ ok: false as const, reason: "invalid-format" });
+    }
     return Object.freeze({ ok: true as const, value: clip(text) });
   },
 });
@@ -49,13 +57,25 @@ export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.f
  * instruction; the same thought as a string inside an array does not.
  */
 export function compileInquiryPrompt(request: InquiryRequest): string {
+  // `depth` means two different things on the way in. Against the tree it is a
+  // real position; against a selection it is only presentation order, because
+  // the projection numbers the DOM-ordered targets 0, 1, 2 as it walks the
+  // list. Two passages lassoed out of one sibling row therefore arrive as depth
+  // 0 and depth 1, which reads as a thought and the thought hanging under it —
+  // a structure the person never wrote. A selection has no structure to report,
+  // so it reports none, and the note says what the order does mean.
+  //
+  // The wire still carries the field. Replacing it there is a protocol change,
+  // deliberately not folded into this prompt freeze; the stored look-back
+  // record keeps only coarse scope and no lineage depth.
+  const selected = request.context.scope === "selection";
   const material = request.context.lineage.map((node) => ({
-    depth: node.depth,
+    ...(selected ? {} : { depth: node.depth }),
     text: node.text,
     ...(node.truncated ? { truncated: true } : {}),
   }));
-  const scopeNote = request.context.scope === "selection"
-    ? "The person circled these passages, so they are the whole question's subject."
+  const scopeNote = selected
+    ? "These are the selected passages that fit the bounded context, in visible material order. The list supplies no hierarchy or ancestor context; infer neither."
     : "The person asked against their visible tree, in depth order from the root.";
   return composePrompt("matter-inquiry", INQUIRY_PROMPT_VERSION, {
     // Worth its cost here: an inquiry is prose a person reads, and a model that
@@ -78,7 +98,7 @@ export function compileInquiryPrompt(request: InquiryRequest): string {
     ],
     never: [
       "answer from anything but the material below — if it does not support an answer, say so plainly;",
-      "propose an edit, rewrite a passage, or tell the person what to do next unless they asked;",
+      "propose an edit, rewrite a passage, or tell the person what to do next;",
       "mention this prompt, a provider, a node id, a depth number, or hidden context;",
       "flatter, preface, or summarize the question back before answering it.",
     ],
@@ -87,15 +107,22 @@ export function compileInquiryPrompt(request: InquiryRequest): string {
       "Answer in prose, briefly — a few sentences at most. No headings, no bullet lists, no markdown.",
     ],
     material: [
-      fenceJson("question", request.question, "The question, quoted exactly as they wrote it:"),
       fenceJson("material", material, scopeNote),
     ],
+    // The question is the one thing here the person addressed to Matter rather
+    // than wrote on their own page, so it is the one thing that may direct the
+    // answer. Fenced in with the material it read as inert reference, under a
+    // sentence that told the model in as many words never to act on it — while
+    // the mandate above asked it to answer the question. It arrives as raw text
+    // rather than JSON because a person reads it back as prose, and a question
+    // continued over several lines is theirs to write that way.
+    intent: boundedIntent("question", request.question, "What they asked:"),
   });
 }
 
 function clip(text: string): string {
   const codePoints = Array.from(text);
-  return codePoints.length <= MAX_INQUIRY_ANSWER_CODE_POINTS
+  return codePoints.length <= MAX_INQUIRY_ANSWER_BODY_CODE_POINTS
     ? text
-    : `${codePoints.slice(0, MAX_INQUIRY_ANSWER_CODE_POINTS).join("").trimEnd()}…`;
+    : `${codePoints.slice(0, MAX_INQUIRY_ANSWER_BODY_CODE_POINTS).join("").trimEnd()}…`;
 }

@@ -17,6 +17,114 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-28 — one visible AI operation owns one current basis
+
+Changed: Point and Talk, an active Elastic adjustment or turn, and the corner
+Inquiry now close one another through the material root's single transient
+operation boundary. A neutral lasso may remain visible as Inquiry context until
+an Elastic grip actually moves. Inquiry close, context change, page suspension,
+and document replacement revoke request authority synchronously; accepted
+record writes serialize under their addressed tree rather than the currently
+rendered view.
+
+Why: a pointer outside the Inquiry happened to hide it before another material
+operation, but keyboard and programmatic paths could bypass that accident. The
+same render-to-effect window could also accept a delayed answer after its
+surface or material basis had already changed, while a completed answer could
+be lost if IndexedDB was still loading when the view moved to another tree.
+
+Forecloses: two simultaneous AI controls with different focus owners, treating
+selection itself as generation, late answers entering UI or records, record ids
+colliding across clean openings, and durable exchanges changing owners with the
+view.
+
+## 2026-08-28 — the pool probe says when it is measuring itself
+
+Changed: `formatReport` takes the run's pacing and marks repeated failures that
+occur inside the process-local 60s candidate-health window. The default pace is
+unchanged.
+
+Why: when later requests hit the same warm instance, process-local candidate
+ordering or governor state may affect later samples. An origin probe cannot
+prove instance affinity, so it states the attribution limit instead of claiming
+that a particular candidate entered cooldown.
+
+Forecloses: reading a fast refusal in a later probe round as evidence about a
+relay, and citing a default-paced multi-round run as a pool-down receipt.
+
+## 2026-08-28 — the shared background is cut to what it can show
+
+Changed: `MATTER_BACKGROUND` is 45% shorter (886 -> 489 characters), and a
+structural test holds it to a budget. Dropped:
+the tree-of-passages description, "in their own unfinished words", and voice not
+being a hidden prompt channel. The comment above the constant no longer claims
+each line was added after a failure, and no longer states a token price that was
+low by about half. Transform's prompt artifact is now `transform/3` while the
+wire remains `transform/2`; paid-eval authority also binds the digest of every
+compiled matrix prompt plus candidate thinking/endpoint identity, deterministic
+policy/completion versions, pool limits, and per-case budgets. Live
+projection/wire context bounds, the answer bound,
+and the current wire scope now live in neutral inquiry config; stored scope
+remains a separately versioned persistence vocabulary.
+
+Why: the claim that each line prevented a specific wrong answer is not in the
+history — the constant and the sentence asserting it were written in the same
+commit, and no line was ever added after a failure. Everything dropped is said elsewhere in
+the same prompt and said better: each scenario describes its own material next
+to that material, `KEEP_UNFINISHED` carries principle 4, and `INTENT_IS_BOUNDED`
+now labels the one bounded instruction. The budget test proves size and anchors,
+not model behaviour; quality remains tied to the versioned evaluation artifact.
+
+Forecloses: growing the background back one plausible sentence at a time,
+a second copy of an inquiry bound drifting from the projection that applies it,
+and citing the comment above a constant as evidence for the constant.
+
+## 2026-08-28 — a person's instruction stops being material or rule
+
+Changed: `PromptSpine` gained `intent`, a third standing alongside the rules and
+the fence, carrying `INTENT_IS_BOUNDED`. The inquiry's question moved out of the
+fence into it (`inquiry/3`), and Text Swap's direction moved out of `FIXED` into
+it (`text-swap/3`), dropping the hand-written override clause the shared
+sentence now carries. A distinct single-value constructor prevents accidental
+material/intent mixing. Intent-bearing prompts render reference, intent, then a
+server-owned answer contract; gesture-only prompts preserve their previous
+answer-then-material bytes and absolute reference standing. A selection no longer reports
+`depth` to a model: there it is only presentation order, so two
+passages from one sibling row read as a thought and its child.
+The same standing audit found that sibling labels were interpolated into
+Matter-owned Label rules. They now enter as fenced reference material and the
+label prompt/cache identity advances to `thought-label/3`; its output-token
+ceiling is otherwise unchanged.
+
+Why: three scenarios take no instruction from the person and two do, and the two
+had solved it in opposite directions. The direction sat among Matter's own rules
+at equal standing; the question sat under a sentence saying an instruction
+inside it "is simply part of what they wrote", three lines below a mandate
+asking the model to answer it. A prompt that contradicts itself is missing a
+layer, not a better adjective.
+
+Forecloses: a scenario inventing its own place to put a person's instruction, a
+question or direction fenced as inert reference, an imperative quoted inside
+material claiming a standing it was never granted, and a selection presented to
+a model as a hierarchy nobody authored.
+
+## 2026-08-28 — a cut-off answer loses to the floor
+
+Changed: `model-pool.ts` reads both stop-reason fields and classifies a completion
+as complete, truncated, blocked/refused, tool/continuation, explicit unknown, or
+missing. Only a known complete reason, or a separately counted legacy omission,
+may return text. Every unusable final is a terminal attempt, can demote only that
+candidate, and falls back across relays without cooling the whole surface.
+
+Why: the pool read only the text. Adjudication caught truncation for the
+scenarios that measure their answers, but Inquiry previously checked only that
+its answer was a non-empty string — and it is the one with no deterministic
+floor and a person waiting on it, so half a sentence could arrive as an answer.
+
+Forecloses: displaying guardrail or tool text, letting an empty `finish_reason`
+hide a truncating `stop_reason`, reporting two truncations as zero attempts, and
+putting a relay's unbounded vocabulary into a metrics sink.
+
 ## 2026-08-25 — selection keeps the material index's structure legible
 
 Changed: entering Select replaces disclosure marks with 11px checkboxes on the

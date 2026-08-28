@@ -2,8 +2,9 @@
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. Preview.45 is the current deployed
-public-origin release lineage; Preview.44 is its preceding immutable receipt
-and Preview.43 is the release before that.
+public-origin release. Preview.46 is a provisional candidate until the exact
+source, browser, Preview, Production, and final record-only receipts below have
+all settled; a package version is not itself a release receipt.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -56,6 +57,54 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Provisional release boundary — 0.2.0-preview.46
+
+Preview.46 hardens the shared model execution boundary without creating one
+generic AI protocol. Transform, Point-and-Talk / Text Swap, and Ask Matter keep
+their own public contracts, context projectors, prompts, adjudicators, and
+settlement paths. They share only the typed prompt spine, provider pool,
+deadline and cancellation grammar, and content-zero observation seam.
+
+The candidate separates bounded human intent from reference material, keeps
+the previously optimized shorter Matter background, and binds
+language-evaluation authority to every exact compiled prompt plus its candidate
+thinking mode and endpoint digest, deterministic adjudication/completion versions, pool limits,
+and per-case budgets. Prompt artifacts advance to `thought-label/3`,
+`transform/3`, `text-swap/3`, and `inquiry/3`; the public material wires remain
+`transform/2` and `text-swap/2`. A neutral inquiry configuration now owns the
+context and answer ceilings instead of either the material projector or wire
+parser.
+
+Provider completions fail closed when an explicit stop reason says the answer
+was truncated, blocked, refused, delegated to a tool, contradictory, or
+unknown. Missing stop metadata remains a counted compatibility path rather than
+an implicit claim that the relay is conformant. Anonymous terminal receipts
+distinguish those outcomes without storing prompt, material, answer, provider,
+or request identity. A relay that ignores cancellation may finish draining, but
+its late value cannot enter adjudication, UI, record, history, or material; a
+lease per abandoned attempt prevents later requests from multiplying that
+scenario/candidate. The process threshold sheds after abandoned work; it is not
+a strict cap on active healthy attempts. Product admission remains bounded by
+the five scenario-owned governors (label 4, repair 4, inquiry 3, Transform 2,
+Text Swap 2; aggregate 15 per instance), as frozen in the architecture
+contract.
+
+This candidate does not enable a new model surface or widen existing live
+authority. Labels, transcript repair, and Ask Matter retain their current
+gates. Elastic and Text Swap remain unavailable to a live provider, issues #34
+and #68 remain open, and no distributed rate, spend, alert, or rollback receipt
+is inferred from source hardening.
+
+```text
+source proof           pending on the exact versioned candidate
+runtime proof          pending on the exact versioned candidate
+browser proof          pending on the exact versioned candidate
+Preview proof          pending on the exact versioned candidate
+Production proof       pending after merge; the final record-only Production
+                       SHA, not the source topic SHA, will own the immutable tag
+publication state      not released; no tag or GitHub prerelease exists yet
+```
 
 ## Release verification — 0.2.0-preview.45
 
