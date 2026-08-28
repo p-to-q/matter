@@ -3017,7 +3017,7 @@ Non-goals:  a marketing page, analytics, cookies, paid SEO tooling, external
 
 ### Shared model kernel — common execution, scenario-owned meaning
 
-State: Built. Exact release proof pending.
+State: Proven for the Preview.46 GitHub source prerelease.
 
 ```text
 Outcome:    one typed prompt and provider-execution kernel serves the existing
@@ -3057,7 +3057,7 @@ unchanged scenario label.
 
 ### Inquiry authority and record ownership — one operation, one basis
 
-State: Built. Exact release proof pending.
+State: Proven for the Preview.46 GitHub source prerelease.
 
 ```text
 Outcome:    Ask Matter can be closed, suspended or displaced without a delayed

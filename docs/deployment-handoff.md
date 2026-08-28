@@ -95,16 +95,16 @@ history, protocol, provider, or model authority. Source `b0cbad6` passed CI run
 the first public-origin `0.2.0-preview.45` probe. The immutable tag and GitHub
 prerelease point to the final record-only main after that record settles.
 
-For Preview.46, the owner has explicitly directed one further production
-promotion and prerelease after the model-harness hardening passes the complete
-source, browser, Preview, and public-origin proof. This is a fresh
-Preview.46-only risk acceptance, not a continuing waiver. It preserves the
-existing live label, repair, inquiry, and voice gates; Elastic and Text Swap
-remain unavailable, while issues #34 and #68 remain open. The change may
-improve prompt standing, completion settlement, anonymous telemetry, and late
-transport cleanup, but it is not evidence of a distributed rate limit,
-provider spend cap, alert delivery, or operator-owned rollback. Exact commit,
-CI, deployment, probe, and release identifiers stay pending until observed.
+For Preview.46, the owner narrowed the release after source review to a
+GitHub-only prerelease. Vercel and Production promotion are not owned by this
+release and are not gates or implied receipts. Exact source `46d93d0` passed
+the complete local source and browser suites and GitHub CI run `33127699089` /
+job `98709662499`; PR #79 merged it as `cf5d7df`. Preview.45 therefore remains
+the last public-origin release. Preview.46 preserves the configured live label,
+repair, inquiry, and voice gates in source; Elastic and Text Swap remain
+unavailable, while issues #34 and #68 remain open. The source hardening is not
+evidence of a distributed rate limit, provider spend cap, alert delivery,
+operator-owned rollback, Vercel deployment, or public-origin behavior.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was

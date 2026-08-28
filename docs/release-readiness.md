@@ -1,10 +1,11 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.45 is the current deployed
-public-origin release. Preview.46 is a provisional candidate until the exact
-source, browser, Preview, Production, and final record-only receipts below have
-all settled; a package version is not itself a release receipt.
+the complete generative product loop yet. Preview.45 remains the current
+deployed public-origin release. Preview.46 is a GitHub-only source prerelease:
+the owner explicitly removed Vercel and Production promotion from this release
+scope. Its tag therefore proves the reviewed source and GitHub boundary only;
+it must not be read as a deployed-origin receipt.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -58,7 +59,7 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Provisional release boundary — 0.2.0-preview.46
+## GitHub source release boundary — 0.2.0-preview.46
 
 Preview.46 hardens the shared model execution boundary without creating one
 generic AI protocol. Transform, Point-and-Talk / Text Swap, and Ask Matter keep
@@ -90,20 +91,25 @@ the five scenario-owned governors (label 4, repair 4, inquiry 3, Transform 2,
 Text Swap 2; aggregate 15 per instance), as frozen in the architecture
 contract.
 
-This candidate does not enable a new model surface or widen existing live
+This source release does not enable a new model surface or widen existing live
 authority. Labels, transcript repair, and Ask Matter retain their current
 gates. Elastic and Text Swap remain unavailable to a live provider, issues #34
 and #68 remain open, and no distributed rate, spend, alert, or rollback receipt
 is inferred from source hardening.
 
 ```text
-source proof           pending on the exact versioned candidate
-runtime proof          pending on the exact versioned candidate
-browser proof          pending on the exact versioned candidate
-Preview proof          pending on the exact versioned candidate
-Production proof       pending after merge; the final record-only Production
-                       SHA, not the source topic SHA, will own the immutable tag
-publication state      not released; no tag or GitHub prerelease exists yet
+source proof           exact source 46d93d0 passed npm run check
+                       (69 Node/TAP; 1,979 Vitest pass, 4 skip; docs,
+                       architecture, lint, types, build and runtime budget pass)
+browser proof          exact source 46d93d0 passed npm run test:e2e
+                       (122 pass, 15 capability skip, 0 fail) plus the bounded
+                       local wide/narrow interaction walk
+GitHub proof           CI run 33127699089 / job 98709662499 passed on
+                       46d93d0; PR #79 merged that source as cf5d7df
+deployment proof       deliberately out of scope; Preview.45 remains the last
+                       public-origin release and no Production claim is made
+publication state      pending the release-record PR and annotated GitHub
+                       prerelease tag; npm publication remains unauthorized
 ```
 
 ## Release verification — 0.2.0-preview.45

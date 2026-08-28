@@ -1,12 +1,14 @@
 # Preview deployment-owner handoff
 
-Status: Preview.45 is the current immutable public release. Preview.46 is an
-authorized candidate only: its exact source, CI, Preview, Production,
-public-origin, and final record-only receipts do not exist yet and must not be
-invented here. The candidate preserves the current process-local admission
-perimeter and live label, transcript-repair, and Ask Matter gates. Elastic and
-Text Swap remain unavailable. This is an operator checklist, not a place to
-record token values.
+Status: Preview.45 remains the current immutable public-origin release.
+Preview.46 is authorized as a GitHub-only source prerelease; Vercel and
+Production promotion are explicitly outside this release scope. Exact source
+`46d93d0` passed the local source/browser gates and GitHub CI run `33127699089`
+/ job `98709662499`; PR #79 merged it as `cf5d7df`. These receipts do not prove
+a deployed origin. The source preserves the current process-local admission
+perimeter and configured label, transcript-repair, and Ask Matter gates.
+Elastic and Text Swap remain unavailable. This is an operator checklist, not a
+place to record token values.
 
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
@@ -19,15 +21,15 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The owner has directed one Preview.46 production promotion and prerelease after
-the exact candidate passes the repository, browser, Preview, and public-origin
-gates. Treat that direction as a Preview.46-only risk acceptance, not a
-continuing waiver and not evidence that external controls exist. Issues #34 and
-#68 remain open; label, repair, inquiry, and browser/local voice stay as
-configured, while Elastic and Text Swap remain unavailable. The source
-admission ceilings below are per warm instance only. Any later release requires
-a fresh owner decision or the distributed-rate, provider-spend, alert, and
-rollback receipts.
+The owner has directed one Preview.46 GitHub prerelease after the exact source
+passes repository, browser, and GitHub CI gates. This is not authorization for
+Vercel configuration or Production promotion, and it is not evidence that
+external controls exist. Issues #34 and #68 remain open; label, repair,
+inquiry, and browser/local voice stay as configured in source, while Elastic
+and Text Swap remain unavailable. The source admission ceilings below are per
+warm instance only. Any later deployed release requires a fresh owner decision
+and its own deployment, public-origin, distributed-rate, provider-spend, alert,
+and rollback receipts.
 
 ## Resolved-by-itself incident — inquiry reached no model on Production
 
