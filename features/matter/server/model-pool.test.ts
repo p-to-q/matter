@@ -126,6 +126,7 @@ describe("readModelPool", () => {
     ["a missing key", { ...ENVIRONMENT, MATTER_LABEL_ABC_API_KEY: undefined }],
     ["a missing base URL", { ...ENVIRONMENT, MATTER_LABEL_ABC_BASE_URL: undefined }],
     ["no models", { ...ENVIRONMENT, MATTER_LABEL_ABC_MODELS: "" }],
+    ["a malformed thinking capability", { ...ENVIRONMENT, MATTER_LABEL_ABC_ENABLE_THINKING: "flase" }],
     ["plain HTTP off the loopback", { ...ENVIRONMENT, MATTER_LABEL_ABC_BASE_URL: "http://relay.example/v1" }],
     ["a malformed base URL", { ...ENVIRONMENT, MATTER_LABEL_ABC_BASE_URL: "relay.example" }],
   ])("drops a station with %s without losing the rest", (_name, environment) => {
