@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-29 — quiet controls stay operable at their full bounds
+
+Changed: a long Ask Matter answer becomes a named, keyboard-focusable scroll
+region only when it actually overflows. Its two compact actions keep their
+visual size while gaining a 48px coarse-pointer target. The one held-aside root
+that can restore its branch remains locally addressable by touch and keyboard;
+held descendants remain inert. Malformed explicit provider thinking flags now
+drop that station, and the production health probe reads its JSON through a
+declared and streamed byte ceiling with fatal UTF-8 decoding.
+
+Why: the larger complete-answer boundary made previously harmless hidden
+overflow inaccessible without a wheel, while mobile visual restraint had been
+mistaken for a small hit target. A held root's local `+` was visible to a mouse
+but unreachable on a touch-only path. Configuration and probe boundaries should
+fail closed before ambiguous input can be mistaken for evidence of a healthy
+deployment.
+
+Forecloses: permanent tab stops on short answers, visually enlarging the quiet
+Inquiry surface to solve hit testing, restoring held descendants locally,
+silently ignoring a misspelled boolean, and buffering an unbounded or malformed
+health response before rejecting it.
+
 ## 2026-08-28 — Repair keeps two real relay windows
 
 Changed: transcript repair now uses the shared half-deadline candidate ceiling.

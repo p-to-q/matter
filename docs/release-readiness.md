@@ -1,11 +1,12 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.46 at source
-`cf5d7dfa892552bfc2c615dc1059194142a1025a` is the current deployed
-public-origin version through automatic Production deployment `6138461045`;
-it has no immutable tag or GitHub prerelease. Preview.47 is a provisional
-candidate until its exact
+the complete generative product loop yet. Preview.47 at source
+`25a0ea0f7e99b0f9323b23bc2054488b8ed5bbac` is the current deployed
+public-origin version. Its repository, browser, CI, and automatic deployment
+gates passed, but the strict deployed-origin model-surface probe did not; no
+immutable tag or GitHub prerelease was created. Preview.48 is a provisional
+hardening candidate until its exact
 repository, browser, GitHub CI, automatically triggered Vercel deployment, tag,
 and prerelease receipts settle. The repository maintainer operates only through
 GitHub: a topic push triggers Preview and a `main` update triggers Production.
@@ -65,7 +66,37 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Provisional release boundary — 0.2.0-preview.47
+## Provisional release boundary — 0.2.0-preview.48
+
+Preview.48 is a narrow operability patch over the deployed Preview.47 source.
+It does not change a model prompt, context projector, public wire, material
+mutation, provider budget, capability gate, or persistence format.
+
+The patch makes a long Inquiry answer keyboard-scrollable only when measured
+overflow exists, preserves the restrained visual controls while giving both
+mobile actions a 48px coarse-pointer target, and lets the root of a held-aside
+branch expose its existing local restore action to touch and keyboard. Held
+descendants remain inert and the restore still changes working context rather
+than material or history. A malformed explicit `ENABLE_THINKING` station value
+is now refused instead of being treated as absence, and the deployment probe
+bounds and strictly decodes the health body before parsing it.
+
+The patch intentionally leaves the measured initial-bundle headroom, long
+history/IndexedDB recovery work, Inquiry semantic evaluation corpus, distributed
+rate/spend/alert controls, and unknown provider-terminator compatibility policy
+as separately owned follow-up. None is disguised as a UI patch.
+
+```text
+source proof           pending on the exact versioned candidate
+runtime proof          pending on the exact versioned candidate
+browser proof          pending on the exact versioned candidate
+GitHub CI proof         pending on the exact topic and merged main identities
+automatic deploy proof pending from GitHub-triggered Preview and Production
+publication state      pending; no tag or prerelease unless the strict
+                       deployed-origin surface probe also passes
+```
+
+## Deployed source boundary — 0.2.0-preview.47
 
 Preview.47 hardens the shared model execution boundary without creating one
 generic AI protocol. Transform, Point-and-Talk / Text Swap, and Ask Matter keep
@@ -115,7 +146,7 @@ complete answer only while the same `{treeId, documentEpoch}` owner still
 exists. Its quiet-prose answer boundary is 3,200 code points through a 16 KiB
 envelope, with no locally manufactured clipping.
 
-This candidate does not enable a new model surface or widen material-mutation
+This source does not enable a new model surface or widen material-mutation
 authority. Labels, transcript repair, and Ask Matter retain their current
 gates. Elastic and Text Swap remain unavailable to a live provider, issues #34
 and #68 remain open, and no distributed rate, spend, alert, rollback, or public
@@ -123,14 +154,13 @@ deployment receipt is inferred from source hardening. The larger read-only
 Inquiry envelope does not change its 720-token provider budget.
 
 ```text
-source proof           pending on the exact versioned candidate
-runtime proof          pending on the exact versioned candidate
-browser proof          pending on the exact versioned candidate
-GitHub CI proof         pending on the exact topic and merged main identities
-automatic deploy proof pending from the GitHub-triggered Preview and Production
-                       statuses for those exact identities
-publication state      pending; the annotated tag and GitHub prerelease will
-                       identify the final exact deployed main proof SHA
+source proof           exact candidate and full repository gate passed
+runtime proof          production build and bounded artifact gate passed
+browser proof          full Chromium suite passed
+GitHub/deploy proof    exact PR, CI, merge, Production and public version passed
+live model proof       failed: label, repair and Inquiry produced no accepted
+                       model result in the strict paced release probe
+publication state      withheld; no annotated tag or GitHub prerelease exists
 ```
 
 ## Release verification — 0.2.0-preview.45
