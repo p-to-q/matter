@@ -613,7 +613,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .language-pocket { border: 1px solid Highlight; background: transparent; }
   .stretch-handle { color: ButtonText; }
   .spatial-thought[data-transform-phase] .spatial-thought__text::after { background: CanvasText; }
-  .spatial-thought[data-context-restore-target="true"] .spatial-thought__text { opacity: 1; }
+  .spatial-thought[data-context-restore-target="true"] .spatial-thought__text,
+  .spatial-thought[data-context-restore-target="true"] .spatial-thought__text:is(:hover, :focus) { opacity: 1; }
   .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; }
   .language-split-projection { color: CanvasText; }
   .language-split-projection::before { outline: none; background: transparent; }
