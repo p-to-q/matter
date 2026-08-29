@@ -610,6 +610,11 @@
   height: 0;
 }
 
+.inquiryThread:focus-visible {
+  outline: 1px solid var(--chrome-muted);
+  outline-offset: 2px;
+}
+
 .inquiryTurn {
   max-width: 84%;
   margin: 0;
@@ -747,6 +752,18 @@
   color: var(--chrome-muted);
   opacity: .5;
   cursor: default;
+}
+
+@media (pointer: coarse), (max-width: 767px) {
+  .inquiryDictate,
+  .inquiryAsk {
+    min-width: 48px;
+    height: 48px;
+  }
+
+  .inquiryAsk {
+    padding-inline: 10px;
+  }
 }
 
 @keyframes inquiryListening {

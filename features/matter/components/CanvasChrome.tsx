@@ -1061,6 +1061,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   record,
 }, forwardedRef) {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
+  const [threadScrollable, setThreadScrollable] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -1234,7 +1235,23 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
 
   useLayoutEffect(() => {
     const thread = threadRef.current;
-    if (thread !== null && followThreadRef.current) thread.scrollTop = thread.scrollHeight;
+    if (thread === null) {
+      setThreadScrollable(false);
+      return;
+    }
+    const sync = () => {
+      if (followThreadRef.current) thread.scrollTop = thread.scrollHeight;
+      setThreadScrollable(thread.scrollHeight - thread.clientHeight > 1);
+    };
+    sync();
+    const resizeObserver = new ResizeObserver(sync);
+    const mutationObserver = new MutationObserver(sync);
+    resizeObserver.observe(thread);
+    mutationObserver.observe(thread, { childList: true, characterData: true, subtree: true });
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+    };
   }, [state.turns]);
 
   const trackThreadScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
@@ -1253,11 +1270,15 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     >
       {state.turns.length === 0 ? null : (
         <div
+          aria-label={copy.inquiry}
           aria-live="off"
           className={styles.inquiryThread}
           data-inquiry-thread
+          data-scrollable={threadScrollable || undefined}
           onScroll={trackThreadScroll}
           ref={threadRef}
+          role="region"
+          tabIndex={threadScrollable ? 0 : -1}
         >
           {state.turns.map((turn) => <InquiryTurn copy={copy} key={turn.id} turn={turn} />)}
         </div>

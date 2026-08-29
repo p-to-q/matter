@@ -314,9 +314,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell[data-view="full"][data-canvas-mode="material"] .spatial-thought[data-selected="true"][data-movable="true"] .spatial-thought__text { cursor: grab; }
 .spatial-thought[data-parent-id] .spatial-thought__text { --material-text-color: var(--muted); font-size: 17px; font-weight: 400; line-height: 1.72; letter-spacing: 0; }
 .spatial-thought[data-context-excluded="true"] .spatial-thought__text { opacity: .36; pointer-events: none; user-select: none; cursor: default; }
-/* A held root is still inert material, but it may carry the one pointer-only
-   recovery affordance. Descendants inherit exclusion without an exception. */
+/* A held root is still inert material, but it remains the one locally
+   addressable recovery target. Descendants inherit exclusion without an exception. */
 .spatial-thought[data-context-restore-target="true"] .spatial-thought__text { pointer-events: auto; }
+.spatial-thought[data-context-restore-target="true"] .spatial-thought__text:is(:hover, :focus) { opacity: .72; }
 .language-split-projection { --split-depth: 0px; --split-selected-top: 0px; --split-after-top: 0px; --split-pocket-top: 0px; --split-pocket-depth: 0px; position: absolute; z-index: 7; inset: 0 auto auto 0; width: 100%; height: 0; color: var(--ink); font: inherit; font-size: clamp(22px, 2.2vw, 34px); font-family: var(--matter-face); font-weight: 400; line-height: 1.62; letter-spacing: 0; opacity: 0; pointer-events: none; user-select: none; }
 .language-split-projection::before { position: absolute; z-index: -1; top: var(--split-pocket-top); left: 0; width: 100%; height: var(--split-pocket-depth); background: transparent; content: ""; opacity: 0; }
 .spatial-thought[data-parent-id] .language-split-projection { color: var(--muted); font-size: 17px; line-height: 1.72; letter-spacing: 0; }
@@ -612,6 +613,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .language-pocket { border: 1px solid Highlight; background: transparent; }
   .stretch-handle { color: ButtonText; }
   .spatial-thought[data-transform-phase] .spatial-thought__text::after { background: CanvasText; }
+  .spatial-thought[data-context-restore-target="true"] .spatial-thought__text { opacity: 1; }
   .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; }
   .language-split-projection { color: CanvasText; }
   .language-split-projection::before { outline: none; background: transparent; }

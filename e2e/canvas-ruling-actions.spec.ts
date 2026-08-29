@@ -448,6 +448,14 @@ test("a held root exposes only local recovery", async ({ page }) => {
   const lens = page.getByRole("toolbar", { name: "Thought context" });
   await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeVisible();
   await expect(lens.getByRole("button", { name: "Rewrite this material with AI" })).toBeDisabled();
+  await page.mouse.move(0, 0);
+  await heldText.focus();
+  await expect(heldText).toBeFocused();
+  await expect(heldText).toHaveCSS("opacity", "0.72");
+  await heldText.press("ArrowRight");
+  await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeFocused();
+  await page.emulateMedia({ forcedColors: "active" });
+  await expect(heldText).toHaveCSS("opacity", "1");
 });
 
 test.describe("coarse pointer action lens", () => {
@@ -469,6 +477,35 @@ test.describe("coarse pointer action lens", () => {
       const rect = button.getBoundingClientRect();
       return Math.round(rect.width) === 48 && Math.round(rect.height) === 48;
     }))).toBe(true);
+
+    await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).click();
+    const heldRow = page.locator("aside.material-files .material-file").nth(1);
+    const heldId = await heldRow.getAttribute("data-node-id");
+    if (heldId === null) throw new Error("fixture held-aside branch is missing");
+    const heldThought = page.locator(`[data-thought-id="${heldId}"]`);
+    await heldRow.locator(".material-file__open").click();
+    await expect(page.locator(".matter-world")).not.toHaveAttribute("data-camera-motion", "index");
+    await expect(heldThought).toHaveAttribute("data-selected", "true");
+    await heldRow.locator(".material-file__context-control--set-aside")
+      .evaluate((button: HTMLButtonElement) => button.click());
+    await expect(heldThought).toHaveAttribute("data-context-excluded", "true");
+    await expect(heldThought).toHaveAttribute("data-context-restore-target", "true");
+    await page.locator(".material-files-toggle").evaluate((button: HTMLButtonElement) => button.click());
+    await expect(page.locator("aside.material-files")).not.toHaveAttribute("data-open", "true");
+    await expect.poll(() => page.locator(".matter-material-plane").evaluate((element) => {
+      const transform = getComputedStyle(element).transform;
+      if (transform === "none") return 0;
+      return new DOMMatrixReadOnly(transform).m41;
+    })).toBeCloseTo(0, 1);
+    const heldText = heldThought.locator("[data-thought-text-id]");
+    await expect.poll(() => heldText.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return Math.abs(rect.left + rect.width / 2 - innerWidth / 2);
+    })).toBeLessThan(2);
+    await heldText.tap();
+    await expect(heldText).toBeFocused();
+    await expect(lens).toHaveAttribute("data-node-id", heldId);
+    await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeVisible();
   });
 });
 

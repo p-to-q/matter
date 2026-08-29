@@ -75,6 +75,12 @@ describe("CanvasChrome", () => {
     expect(css).toContain("50%, 100% { clip-path: inset(0 0 0 0); }");
   });
 
+  it("keeps long answers keyboard-readable and coarse actions touch-sized", () => {
+    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.inquiryThread:focus-visible\s*{[^}]*outline:/s);
+    expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 767px\)\s*{[\s\S]*?\.inquiryDictate,[\s\S]*?\.inquiryAsk\s*{[^}]*min-width:\s*48px;[^}]*height:\s*48px;/s);
+  });
+
   it("keeps pre-release information honest and task-oriented", () => {
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input, transcript repair, and Ask Matter are available");

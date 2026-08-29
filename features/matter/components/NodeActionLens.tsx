@@ -245,7 +245,9 @@ export function NodeActionLens({
   const activeTarget = !enabled || chromeSuppressed || interaction === "pending"
     ? null
     : coarse
-      ? retainedTarget?.source === "focus" ? retainedTarget : selectedTarget
+      ? retainedTarget?.kind === "held-root" || retainedTarget?.source === "focus"
+        ? retainedTarget
+        : selectedTarget
       : retainedTarget;
 
   const actionCount = activeTarget === null ? 0 : 2;

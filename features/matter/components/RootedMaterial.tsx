@@ -2641,8 +2641,16 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
       ? event.target.closest<HTMLElement>("[data-thought-text-id]")
       : null;
     const nodeId = target?.dataset.thoughtTextId;
-    if (nodeId !== undefined && activeNodeIds.has(nodeId) && event.currentTarget.contains(target)) onSelectNode(nodeId);
-  }, [activeNodeIds, interactionPending, onSelectNode]);
+    if (nodeId === undefined || target === null || !event.currentTarget.contains(target)) return;
+    // Keep a held root's address in the always-loaded material layer. The
+    // secondary lens may arrive later on a slow connection and can reconcile
+    // this focus without asking a touch-only person to tap the passage twice.
+    if (heldAsideRootIds.has(nodeId)) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    if (activeNodeIds.has(nodeId)) onSelectNode(nodeId);
+  }, [activeNodeIds, heldAsideRootIds, interactionPending, onSelectNode]);
 
   return (
     <>
@@ -2698,12 +2706,11 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               aria-describedby={isLassoKeyboardEligible ? lassoKeyboardDescriptionId : undefined}
               aria-pressed={isSelected}
               aria-keyshortcuts={isHeldAside
-                ? undefined
+                ? isHeldAsideRoot ? "ArrowRight" : undefined
                 : isLassoKeyboardEligible ? "ArrowLeft ArrowRight" : "ArrowRight"}
               className="spatial-thought__text"
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
-              aria-disabled={isHeldAsideRoot || undefined}
               disabled={isHeldAside && !isHeldAsideRoot}
               onKeyDown={(event) => {
                 if (
@@ -2718,7 +2725,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                 event.preventDefault();
                 event.stopPropagation();
               }}
-              tabIndex={isHeldAside ? -1 : undefined}
+              tabIndex={isHeldAside && !isHeldAsideRoot ? -1 : undefined}
               type="button"
             >
               {isSelected
