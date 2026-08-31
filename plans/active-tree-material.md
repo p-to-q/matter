@@ -661,16 +661,19 @@ header-only.
 
 ```text
 Outcome:    leaving Matter or moving it into the background promptly releases
-            voice capture, transient voice requests, derived-label requests,
-            and the lazy local speech worker instead of carrying microphone,
-            model memory, network work, or background compute through a long
-            browser session
+            voice capture, material-writing voice requests, derived-label
+            requests, and the lazy local speech worker instead of carrying
+            microphone, model memory, or background compute through a long
+            browser session; a submitted read-only Inquiry may finish against
+            its captured snapshot while the same document owner remains
 Boundary:   one page-suspension adapter, admission/inquiry/material-turn/label
             adapters, and the local Whisper/readiness leases; no tree, provider,
             persistence, or interface changes
-Invariants: hidden work cannot commit material or a question draft; returning
-            visible never restarts capture, a request, or model loading; raw
-            audio and transcript remain transient and uncached
+Invariants: hidden work cannot commit material or alter a question draft;
+            returning visible never restarts capture, a request, or model
+            loading; a retained Inquiry result cannot cross document owner,
+            explicit close, AI-surface switch, page exit, or unmount; raw audio
+            and transcript remain transient and uncached
 Proof:      focused pagehide/visibility coalescing, BFCache re-entry,
             request cancellation and worker-retirement tests, existing voice
             lifecycle tests, typecheck and lint
@@ -684,7 +687,10 @@ derived-label release and eligibility re-arming, and the existing
 recorder/AudioContext release paths
 pass 117 focused tests. Typecheck, target lint, documentation links, and diff
 whitespace checks pass. Returning visible recreates nothing until a new intent;
-no user material or raw voice data gained a cache.
+no user material or raw voice data gained a cache. Superseding Inquiry
+ownership work on 2026-08-28 retained only an already-submitted, read-only
+snapshot request through `visibilitychange:hidden`; `pagehide` and every owner
+boundary still revoke it synchronously.
 
 ### Completed sub-slice — bounded model transport and external pool configuration
 
@@ -3158,15 +3164,18 @@ the stored basis on the current two values and map the three addresses onto them
 for look-back only. The second keeps every saved record and costs one documented
 lossy mapping; the first is cleaner and needs a migration receipt.
 
-### Attempt window versus answer length — a latent asymmetry, not today's fault
+### Attempt window versus answer length — measured, then corrected
 
-State: Recorded. No change proposed; recorded so it is not mistaken for a cause.
+State: Closed for current source on 2026-08-28; reopen only with new latency
+evidence.
 
-The surface whose answer is longest is given the shortest single attempt. Inquiry
-asks for up to 720 output tokens and takes `maxAttemptShare: 0.5` of a 16s
-deadline, so no one relay ever gets more than 8s. Repair asks for roughly 124
-and takes 0.95, so its relay gets one nearly-complete window. Label asks for tens
-of tokens against the default share.
+Inquiry asks for up to 720 output tokens and takes `maxAttemptShare: 0.5` of a
+16s deadline, so two ordered candidates may each receive a real window. Repair
+previously kept a 0.95 exception even after its provider deadline grew to
+6–8s. That gave the first relay 5.7–7.6s and left only 0.3–0.4s for fallback —
+at or below the pool's minimum useful attempt. Repair now uses the same 0.5
+ceiling, giving both candidates a real three-to-four-second window. Label asks
+for tens of tokens against the default share.
 
 Inquiry's split buys two attempts, which is the right trade when a bad relay
 fails fast: the second candidate still gets a real turn. It is the wrong trade
@@ -3179,12 +3188,14 @@ relay, a model that reasons before answering — inquiry would fail permanently
 and would present as `MODEL_TIMEOUT`, which is indistinguishable in the receipt
 from a relay that is simply down. The condition is real and invisible.
 
-**This is not the 2026-08-28 Production incident.** Measured healthy inquiry
+**This was not the 2026-08-28 Production incident.** Measured healthy inquiry
 latency is 915ms, so 8s is roughly eight times the headroom actually needed;
-widening the window would have changed nothing, and doing it would have been a
-change that looked responsive while fixing nothing. See the incident section in
-`docs/deployment-owner-handoff.md`. Reopen this only with a measurement showing
-a healthy answer approaching the window, not after a timeout.
+widening the Inquiry window would have changed nothing, and doing it would have
+been a change that looked responsive while fixing nothing. Repair's correction
+instead restores the fallback the existing ordered pool already claims. See
+the incident section in `docs/deployment-owner-handoff.md`. Reopen Inquiry's
+share only with a measurement showing a healthy answer approaching the window,
+not after a timeout.
 
 ## Current risks
 

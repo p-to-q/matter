@@ -147,6 +147,102 @@ test("binds a probe to the expected deployment identity and health headers", asy
   await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
     fetchImpl: async () => response({}, { "content-type": "text/plain" }),
   }), /declare JSON/);
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response({}, { "content-length": "8193" }),
+  }), /status was not ok/);
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => new Response(new Uint8Array([0xff]), {
+      headers: { "content-type": "application/json", "cache-control": "no-store" },
+    }),
+  }), /status was not ok/);
+});
+
+test("health rejection releases its body without awaiting an uncooperative cancel", async () => {
+  const cases = [
+    { ok: false, headers: {} },
+    { ok: true, headers: { "content-type": "text/plain", "cache-control": "no-store" } },
+    { ok: true, headers: { "content-type": "application/json" } },
+    {
+      ok: true,
+      headers: {
+        "content-type": "application/json",
+        "cache-control": "no-store",
+        "content-length": "8193",
+      },
+    },
+  ];
+  for (const entry of cases) {
+    let canceled = 0;
+    const response = {
+      ok: entry.ok,
+      headers: new Headers(entry.headers),
+      body: {
+        cancel: () => {
+          canceled += 1;
+          return new Promise(() => undefined);
+        },
+      },
+    };
+    await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+      fetchImpl: async () => response,
+      timeoutMs: 20,
+    }));
+    assert.equal(canceled, 1);
+  }
+});
+
+test("health body reading obeys the request deadline when a stream ignores cancellation", async () => {
+  let canceled = 0;
+  const response = {
+    ok: true,
+    headers: new Headers({
+      "content-type": "application/json",
+      "cache-control": "no-store",
+    }),
+    body: {
+      getReader: () => ({
+        read: () => new Promise(() => undefined),
+        cancel: () => {
+          canceled += 1;
+          return new Promise(() => undefined);
+        },
+      }),
+    },
+  };
+  const startedAt = performance.now();
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response,
+    timeoutMs: 10,
+  }), /status was not ok/);
+  assert.ok(performance.now() - startedAt < 250);
+  assert.equal(canceled, 1);
+});
+
+test("an immediate empty-chunk stream cannot starve the body deadline", async () => {
+  let reads = 0;
+  let canceled = 0;
+  const response = {
+    ok: true,
+    headers: new Headers({
+      "content-type": "application/json",
+      "cache-control": "no-store",
+    }),
+    body: {
+      getReader: () => ({
+        read: async () => {
+          reads += 1;
+          return { done: false, value: new Uint8Array() };
+        },
+        cancel: async () => { canceled += 1; },
+      }),
+    },
+  };
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response,
+    timeoutMs: 1,
+  }), /status was not ok/);
+  assert.ok(reads < 50_000);
+  assert.equal(canceled, 1);
 });
 
 test("reads a floor answer as a pool failure even though it is HTTP 200", () => {

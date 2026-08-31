@@ -97,13 +97,18 @@ prerelease point to the final record-only main after that record settles.
 
 Preview.46 source `cf5d7dfa892552bfc2c615dc1059194142a1025a`
 reached automatic Production deployment `6138461045`; deployment status
-`17452502171` succeeded and the public no-store health receipt reports
-`0.2.0-preview.46`. It is therefore the current public-origin version, but no
+`17452502171` succeeded and the public no-store health receipt reported
+`0.2.0-preview.46`. It was then the current public-origin version, but no
 annotated `v0.2.0-preview.46` tag or GitHub prerelease exists. Those missing
 identities must not be invented retroactively or reused for a second source.
 
-For Preview.47, the repository owner has directed the reviewed source through
-GitHub `main` and one prerelease. Topic and `main` pushes automatically trigger
+Preview.47 source `25a0ea0f7e99b0f9323b23bc2054488b8ed5bbac`
+reached the public origin through the automatic GitHub-linked Production path.
+Its strict paced model-surface probe failed, so it has no immutable tag or
+GitHub prerelease. For Preview.48, the repository owner has directed the narrow
+hardening patch through GitHub `main` and one prerelease only if every release
+gate, including that strict deployed-origin probe, passes. Topic and `main`
+pushes automatically trigger
 the configured Vercel Preview and Production deployments; the repository
 maintainer observes those GitHub-linked receipts but does **not** run a manual
 Vercel deployment, bind a project, edit its environment, or handle credentials.

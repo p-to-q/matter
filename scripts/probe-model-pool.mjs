@@ -38,6 +38,7 @@ export const MAX_INQUIRY_ANSWER_CODE_POINTS = 3_200;
 export const MAX_REPAIR_RESPONSE_BYTES = 12 * 1_024;
 export const MAX_LABEL_RESPONSE_BYTES = 4 * 1_024;
 export const MAX_INQUIRY_RESPONSE_BYTES = 16 * 1_024;
+export const MAX_HEALTH_RESPONSE_BYTES = 8 * 1_024;
 export const LABEL_CANARY_MATERIAL = Object.freeze(JSON.parse(
   readFileSync(new URL("./probe-model-pool-canaries.json", import.meta.url), "utf8"),
 ));
@@ -352,6 +353,8 @@ export async function probeModelPool({
       let status = 0;
       let payload = null;
       try {
+        const deadlineAt = performance.now() + timeoutMs;
+        const signal = AbortSignal.timeout(timeoutMs);
         const response = await fetchImpl(`${target}/api/${surface}`, {
           method: "POST",
           headers: {
@@ -364,10 +367,10 @@ export async function probeModelPool({
           body: JSON.stringify(expectedRequest),
           cache: "no-store",
           redirect: "manual",
-          signal: AbortSignal.timeout(timeoutMs),
+          signal,
         });
         status = response.status;
-        payload = await readProbePayload(response, surface);
+        payload = await readProbePayload(response, surface, deadlineAt);
       } catch {
         status = 0;
       }
@@ -481,23 +484,31 @@ export function eligiblePoolSurfaces(payload, requiredSurfaces = []) {
 export async function readPoolCapabilities(target, options = {}) {
   const fetchImpl = options.fetchImpl ?? fetch;
   const normalizedTarget = normalizeOrigin(target);
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  const deadlineAt = performance.now() + timeoutMs;
+  const signal = AbortSignal.timeout(timeoutMs);
   const response = await fetchImpl(`${normalizedTarget}/api/health`, {
     method: "GET",
     headers: { accept: "application/json" },
     cache: "no-store",
     redirect: "manual",
-    signal: AbortSignal.timeout(10_000),
+    signal,
   });
-  if (!response.ok) throw new Error("Pool probe health request failed.");
+  if (!response.ok) {
+    cancelResponseBody(response);
+    throw new Error("Pool probe health request failed.");
+  }
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   if (!/^application\/json(?:\s*;|$)/u.test(contentType)) {
+    cancelResponseBody(response);
     throw new Error("Pool probe health did not declare JSON.");
   }
   const cacheControl = response.headers.get("cache-control")?.toLowerCase() ?? "";
   if (!cacheControl.split(",").some((directive) => directive.trim() === "no-store")) {
+    cancelResponseBody(response);
     throw new Error("Pool probe health was not marked no-store.");
   }
-  const payload = await response.json().catch(() => null);
+  const payload = await readBoundedJson(response, MAX_HEALTH_RESPONSE_BYTES, deadlineAt);
   if (!isRecord(payload) || payload.status !== "ok") {
     throw new Error("Pool probe health status was not ok.");
   }
@@ -592,25 +603,35 @@ function isUsableProbeLabel(value, maxGraphemes) {
   return Array.from(segmenter.segment(value.trim())).length <= maxGraphemes;
 }
 
-async function readProbePayload(response, surface) {
+async function readProbePayload(response, surface, deadlineAt) {
   const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
   const cacheControl = response.headers.get("cache-control")?.toLowerCase() ?? "";
-  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) return null;
-  if (!cacheControl.split(",").some((directive) => directive.trim() === "no-store")) return null;
+  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) {
+    cancelResponseBody(response);
+    return null;
+  }
+  if (!cacheControl.split(",").some((directive) => directive.trim() === "no-store")) {
+    cancelResponseBody(response);
+    return null;
+  }
   const byteLimit = surface === "repair"
     ? MAX_REPAIR_RESPONSE_BYTES
     : surface === "label"
       ? MAX_LABEL_RESPONSE_BYTES
       : MAX_INQUIRY_RESPONSE_BYTES;
+  return readBoundedJson(response, byteLimit, deadlineAt);
+}
+
+async function readBoundedJson(response, byteLimit, deadlineAt) {
   const declaredLength = response.headers.get("content-length");
   if (declaredLength !== null) {
     const parsedLength = Number(declaredLength);
     if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > byteLimit) {
-      await response.body?.cancel().catch(() => undefined);
+      cancelResponseBody(response);
       return null;
     }
   }
-  const bytes = await readBoundedBytes(response, byteLimit);
+  const bytes = await readBoundedBytes(response, byteLimit, deadlineAt);
   if (bytes === null) return null;
   let text;
   try {
@@ -621,25 +642,51 @@ async function readProbePayload(response, surface) {
   }
 }
 
-async function readBoundedBytes(response, byteLimit) {
+async function readBoundedBytes(response, byteLimit, deadlineAt) {
   if (response.body === null) return new Uint8Array();
   const reader = response.body.getReader();
   const chunks = [];
   let total = 0;
+  let timeoutId;
+  const interrupted = new Promise((resolve) => {
+    timeoutId = setTimeout(
+      () => resolve({ kind: "interrupted" }),
+      Math.max(0, deadlineAt - performance.now()),
+    );
+  });
   try {
     while (true) {
-      const next = await reader.read();
-      if (next.done) break;
-      total += next.value.byteLength;
-      if (total > byteLimit) {
-        await reader.cancel().catch(() => undefined);
+      // A hostile reader can resolve an endless sequence of empty chunks in
+      // microtasks and starve the timer task. Check the same absolute deadline
+      // synchronously before every read so that path is bounded too.
+      if (performance.now() >= deadlineAt) {
+        void reader.cancel().catch(() => undefined);
         return null;
       }
-      chunks.push(next.value);
+      const next = await Promise.race([
+        reader.read().then(
+          (value) => ({ kind: "read", value }),
+          () => ({ kind: "error" }),
+        ),
+        interrupted,
+      ]);
+      if (next.kind !== "read") {
+        void reader.cancel().catch(() => undefined);
+        return null;
+      }
+      if (next.value.done) break;
+      total += next.value.value.byteLength;
+      if (total > byteLimit) {
+        void reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(next.value.value);
     }
   } catch {
-    await reader.cancel().catch(() => undefined);
+    void reader.cancel().catch(() => undefined);
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
   const bytes = new Uint8Array(total);
   let offset = 0;
@@ -648,6 +695,10 @@ async function readBoundedBytes(response, byteLimit) {
     offset += chunk.byteLength;
   }
   return bytes;
+}
+
+function cancelResponseBody(response) {
+  void response.body?.cancel().catch(() => undefined);
 }
 
 function createProbeRunId() {

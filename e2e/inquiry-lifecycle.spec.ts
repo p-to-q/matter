@@ -223,6 +223,34 @@ test("two separate Inquiry openings persist two distinct exchange identities", a
   expect(new Set(ids).size).toBe(2);
 });
 
+test("a maximum-length Inquiry answer stays keyboard-readable at 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longText = Array.from("这段材料保留原意，也保留尚未结束的停顿。".repeat(200))
+    .slice(0, 3_200)
+    .join("");
+  expect(Array.from(longText)).toHaveLength(3_200);
+  await page.route("**/api/inquiry", async (route) => {
+    await fulfillInquiry(route, inquiryRequest(route), longText);
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "打开 Matter 菜单" }).click();
+  await page.getByRole("dialog", { name: "Matter" })
+    .getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill("这段材料的停顿在哪里？");
+  await field.press("Enter");
+  const thread = inquiry.locator("[data-inquiry-thread]");
+  await expect(thread).toHaveAttribute("data-scrollable", "true");
+  await field.focus();
+  await page.keyboard.press("Shift+Tab");
+  await expect(thread).toBeFocused();
+  await thread.evaluate((element) => { element.scrollTop = 0; });
+  await thread.press("End");
+  await expect.poll(() => thread.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  await expect(inquiry).toBeInViewport();
+});
+
 type InquiryWireRequest = Readonly<{
   protocolVersion: string;
   requestId: string;

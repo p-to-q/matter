@@ -1,10 +1,10 @@
 # Preview deployment-owner handoff
 
-Status: Preview.46 source `cf5d7dfa892552bfc2c615dc1059194142a1025a`
-is the current deployed public-origin version through successful automatic
-Production deployment `6138461045`, but it has no immutable tag or GitHub
-prerelease. Preview.47 is authorized through the repository's GitHub-triggered
-delivery path: its
+Status: Preview.47 source `25a0ea0f7e99b0f9323b23bc2054488b8ed5bbac`
+is the current deployed public-origin version through the automatic
+GitHub-linked Production path. Its strict paced model-surface probe failed, so
+it has no immutable tag or GitHub prerelease. Preview.48 is authorized through
+the repository's GitHub-triggered delivery path: its
 exact source, CI, automatic Preview/Production, tag, and prerelease receipts are
 pending and none may be inferred from another. The repository maintainer pushes
 only GitHub and observes the linked deployment; the deployment owner retains
@@ -24,7 +24,7 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.47 prerelease after the exact
+The repository owner has directed one Preview.48 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
 deployment gates. This is not authority for the repository maintainer to run a
 manual Vercel command or edit Vercel configuration. The automatic promotion
@@ -129,7 +129,7 @@ that exists, every occurrence of this will be found the same way.
 
 ### How to know it is fixed
 
-`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.47`
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.48`
 reports `pool-healthy` and `surface-usable`, with repair, label, and Inquiry
 producing a real accepted result on every call. Healthy
 inquiry latency has been under two
@@ -137,16 +137,18 @@ seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
 
-No exact strict-pool receipt is retained for the deployed Preview.46 source.
-Health and deployment success do not substitute for it. Preview.47 must produce
-its own closed-count release receipt, and even one successful run is not
-evidence that the intermittency is gone.
+The exact Preview.47 strict-pool release probe failed after its successful
+deployment and public version check. Health and deployment success did not
+substitute for it, so publication was withheld. Preview.48 must produce its own
+closed-count release receipt; neither the failure nor any later success may be
+borrowed across source versions, and one successful run is not evidence that
+the intermittency is gone.
 
 ### Incident-time source boundary
 
 At the time of the incident the working tree carried uncommitted prompt work
 with no evaluation receipt, so it was not a valid vehicle for an environment
-repair. That historical constraint does not evaluate the later Preview.47
+repair. That historical constraint does not evaluate the later Preview.48
 candidate; every release still requires its own exact source and behavior
 receipts.
 

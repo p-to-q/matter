@@ -564,6 +564,7 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
   await expect(inquiry).toBeVisible();
   await expect(inquiry).toBeInViewport();
+  expect(await measureControlFloor(page, "[data-inquiry-control]", 48)).toEqual([]);
   await page.keyboard.press("Escape");
   await expect(inquiry).toBeHidden();
   await expect(trigger).toBeFocused();
@@ -779,8 +780,8 @@ async function readOpticalClearance(element: Locator) {
   });
 }
 
-/** Reports every matched control that falls below the 24 CSS px pointer floor. */
-async function measureControlFloor(page: Page, selector: string) {
+/** Reports every matched control that falls below its CSS pixel pointer floor. */
+async function measureControlFloor(page: Page, selector: string, floor = 24) {
   const boxes = await page.locator(selector).evaluateAll((elements) => elements.map((element) => {
     const rect = element.getBoundingClientRect();
     return {
@@ -790,5 +791,5 @@ async function measureControlFloor(page: Page, selector: string) {
     };
   }));
   if (boxes.length === 0) throw new Error(`no controls matched ${selector}`);
-  return boxes.filter((box) => box.width < 24 || box.height < 24);
+  return boxes.filter((box) => box.width < floor || box.height < floor);
 }

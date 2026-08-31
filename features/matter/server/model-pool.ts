@@ -140,10 +140,15 @@ export function readModelPool(
         .map((model) => model.trim())
         .filter((model) => model.length > 0),
     )];
-    const enableThinking = parseOptionalBoolean(environment[`${prefix}_ENABLE_THINKING`]);
+    const enableThinkingValue = environment[`${prefix}_ENABLE_THINKING`];
+    const enableThinking = parseOptionalBoolean(enableThinkingValue);
     if (baseUrl === undefined || apiKey === undefined) continue;
     if (!isHttpsOrLocal(baseUrl)) continue;
     if (apiKey.length === 0 || models.length === 0) continue;
+    // A present but misspelled capability must not silently become absence:
+    // strict relays can reject an unsupported field, while thinking-capable
+    // models can change latency and output shape when the reviewed value drifts.
+    if (enableThinkingValue !== undefined && enableThinking === null) continue;
     for (const model of models) {
       candidates.push(Object.freeze({
         station,
