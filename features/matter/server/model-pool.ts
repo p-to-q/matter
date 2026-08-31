@@ -333,9 +333,9 @@ async function completeOnce(
               : limits.maxOutputTokens,
           ),
           stream: false,
-          ...(candidate.enableThinking === undefined
+          ...((input.enableThinking ?? candidate.enableThinking) === undefined
             ? {}
-            : { enable_thinking: candidate.enableThinking }),
+            : { enable_thinking: input.enableThinking ?? candidate.enableThinking }),
           messages: [{ role: "user", content: input.prompt }],
         }),
         cache: "no-store",
@@ -423,8 +423,7 @@ function cancelResponseBody(response: Response): Promise<void> {
 function registerDrainLease(key: string, disposer: Promise<void>): void {
   const set = drainingAttempts.get(key) ?? new Set<Promise<void>>();
   if (!drainingAttempts.has(key)) drainingAttempts.set(key, set);
-  let cleanup!: Promise<void>;
-  cleanup = disposer.finally(() => {
+  const cleanup = disposer.finally(() => {
     set.delete(cleanup);
     drainingAttemptCount = Math.max(0, drainingAttemptCount - 1);
     if (set.size === 0 && drainingAttempts.get(key) === set) drainingAttempts.delete(key);

@@ -28,7 +28,8 @@ export const MAX_INQUIRY_REQUEST_BYTES = 24 * 1_024;
 export const MAX_INQUIRY_RESPONSE_BYTES = 16 * 1_024;
 export const MAX_INQUIRY_LOCALE_LENGTH = 35;
 export const MAX_INQUIRY_ID_LENGTH = 128;
-export const INQUIRY_CLIENT_TIMEOUT_MS = 20_000;
+export const INQUIRY_ROUTE_TIMEOUT_MS = 19_000;
+export const INQUIRY_CLIENT_TIMEOUT_MS = 22_000;
 
 export type InquiryContextNodePayload = Readonly<{
   nodeId: string;

@@ -6,6 +6,7 @@ import type { ScenarioAdapter } from "./harness";
 import { compileRepairPrompt } from "./repair-harness";
 import {
   DEFAULT_REPAIR_LIMITS,
+  REPAIR_POOL_LIMITS,
   fixtureRepairAdapter,
   repairTranscript,
   resetRepairGeneratorState,
@@ -187,6 +188,11 @@ describe("fixtureRepairAdapter", () => {
 });
 
 describe("resolveRepairAdapter", () => {
+  it("reserves a real second-candidate window", () => {
+    expect(REPAIR_POOL_LIMITS.maxAttemptShare).toBe(0.6);
+    expect(REPAIR_POOL_LIMITS.minimumAttemptMs).toBeLessThan(6_000 * (1 - REPAIR_POOL_LIMITS.maxAttemptShare));
+  });
+
   it("is off when the deployment says so", () => {
     expect(resolveRepairAdapter({ MATTER_REPAIR_ADAPTER: "off" })).toBeNull();
   });

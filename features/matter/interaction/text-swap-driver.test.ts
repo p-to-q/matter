@@ -187,6 +187,70 @@ describe("TextSwapDriver", () => {
     expect(h.request).toHaveBeenCalledTimes(1);
   });
 
+  it("settles work through the latest committed driver bindings", async () => {
+    let resolveRequest!: (value: TextSwapPlan) => void;
+    let requestedEnvelope: TextSwapEnvelope | undefined;
+    const h = harness({
+      request: (value) => {
+        requestedEnvelope = value;
+        return new Promise((resolve) => {
+          resolveRequest = resolve;
+        });
+      },
+    });
+    const committedBuild = vi.fn((
+      basis: TextSwapBasis,
+      direction: string,
+      id: string,
+    ) => ({
+      ...envelope(id),
+      treeId: basis.treeId,
+      treeRevision: basis.baseRevision,
+      selection: basis.selection,
+      direction: { text: direction },
+      locale: "zh-CN" as const,
+    }));
+    const supersededCommit = vi.fn(() => ({
+      status: "committed" as const,
+      change: "superseded_change",
+    }));
+    const supersededPresentation = vi.fn();
+    h.driver.updateBindings({
+      buildEnvelope: committedBuild,
+      commit: supersededCommit,
+      onCommitted: supersededPresentation,
+      locale: "zh-CN",
+    });
+
+    const operation = await reachRecording(h);
+    expect(h.voice.starts[0]?.callbacks).toMatchObject({ locale: "zh-CN" });
+    h.driver.stopRecording();
+    h.voice.finish(operation, "语气更平静");
+    await settle(4);
+    expect(h.driver.getState().phase).toBe("pending");
+    expect(h.buildEnvelope).not.toHaveBeenCalled();
+    expect(committedBuild).toHaveBeenCalledOnce();
+
+    const latestCommit = vi.fn(() => ({
+      status: "committed" as const,
+      change: "latest_change",
+    }));
+    const latestPresentation = vi.fn();
+    h.driver.updateBindings({
+      buildEnvelope: committedBuild,
+      commit: latestCommit,
+      onCommitted: latestPresentation,
+      locale: "en-US",
+    });
+    resolveRequest(plan(requestedEnvelope!));
+    await settle();
+
+    expect(supersededCommit).not.toHaveBeenCalled();
+    expect(supersededPresentation).not.toHaveBeenCalled();
+    expect(latestCommit).toHaveBeenCalledOnce();
+    expect(latestPresentation).toHaveBeenCalledWith("latest_change");
+  });
+
   it("does not let provider expression become a dormant transform direction", async () => {
     const h = harness();
     const operation = await reachRecording(h);
@@ -215,7 +279,7 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState()).not.toHaveProperty("carrier");
   });
 
-  it("aborts transcription on revision change and ignores its late result", async () => {
+  it("keeps transcription through an unrelated revision change", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";
       interactionId: string;
@@ -238,8 +302,8 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState().phase).toBe("transcribing");
 
     h.driver.updateScope({ ...SCOPE, revision: 5 });
-    expect(h.driver.getState()).toMatchObject({ phase: "stale", reason: "scope-change" });
-    expect(observedSignal.current?.aborted).toBe(true);
+    expect(h.driver.getState().phase).toBe("transcribing");
+    expect(observedSignal.current?.aborted).toBe(false);
     resolveTranscript({
       protocolVersion: "0.2",
       interactionId: operation.interactionId,
@@ -248,8 +312,8 @@ describe("TextSwapDriver", () => {
     });
     await settle();
 
-    expect(h.driver.getState().phase).toBe("stale");
-    expect(h.request).not.toHaveBeenCalled();
+    expect(h.driver.getState().phase).not.toBe("stale");
+    expect(h.request).toHaveBeenCalledOnce();
   });
 
   it("releases a revoked shared Voice lease and makes its transcription inert", async () => {

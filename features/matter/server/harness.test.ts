@@ -28,7 +28,7 @@ const ECHO: MatterScenario<string, string> = Object.freeze({
   promptVersion: "test/1",
   locale: () => "zh-CN",
   compile: (input) => `say: ${input}`,
-  budget: () => ({ deadlineMs: 40, maxOutputTokens: 16 }),
+  budget: () => ({ deadlineMs: 40, maxOutputTokens: 16, enableThinking: false }),
   adjudicate: (answer) => typeof answer === "string" && answer.length > 0
     ? { ok: true, value: answer }
     : { ok: false, reason: "empty" },
@@ -57,6 +57,7 @@ describe("runScenario", () => {
       input: "hello",
       deadlineMs: 40,
       maxOutputTokens: 16,
+      enableThinking: false,
     });
   });
 

@@ -2510,6 +2510,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <CanvasChrome
           {...canvasPreferences}
           inquiryContext={projectInquiryPayload}
+          inquiryOwner={{ treeId: tree.id, documentEpoch: props.documentEpoch }}
           inquiryRecord={inquiryRecord}
           onInquiryOpen={abortFixedExpansion}
         />

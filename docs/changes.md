@@ -17,6 +17,41 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-08-28 — authority stays strict while AI delivery becomes persistent
+
+Changed: all five scenarios disable hidden thinking and carry output headroom;
+repair reserves a second-candidate window; provider, route, browser, and platform
+deadlines are ordered. Inquiry keeps an accepted question across ordinary edits
+but revokes it on close or local document-epoch replacement. Elastic and Text
+Swap revalidate exact target, selection, and visible lineage instead of rejecting
+an unrelated tree revision, then ask the tree engine to commit once at the
+current revision. Hidden pages keep active label and inquiry work where safe.
+
+Why: production-like failures were dominated by work Matter discarded itself:
+one relay consumed the fallback window, complete inquiry prose was locally cut,
+hidden reasoning consumed visible tokens, and global revision checks revoked
+results whose actual material capability had not changed.
+
+Forecloses: using whole-tree revision as a universal AI lock, cancelling paid
+read-only work merely because a tab became hidden, enabling thinking per relay
+against a narrow scenario's budget, accepting a cut-off mutation, or weakening
+target authority to improve a success-rate number.
+
+## 2026-08-28 — the release probe proves usable surfaces, not only a reachable pool
+
+Changed: the pool probe binds health to protocol, app version, base path,
+JSON/no-store headers, required live surfaces, exact response identity and
+receipt, and the browser's text bounds. It reports reachability separately from
+surface usability; release mode requires a real client-acceptable model result
+from label, repair, and inquiry.
+
+Why: a fixture, an older deployment, or a model answer rejected by Matter could
+previously end in `pool-healthy` even though a normal person still received no AI
+result.
+
+Forecloses: treating `available` environment variables, `MODEL_REJECTED`, a
+malformed success envelope, or one remaining live surface as release evidence.
+
 ## 2026-08-28 — the pool probe says when it is measuring itself
 
 Changed: `formatReport` takes the run's pacing and marks repeated failures that

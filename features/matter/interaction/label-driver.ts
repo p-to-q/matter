@@ -268,14 +268,12 @@ export class LabelDriver {
     this.listeners.clear();
   }
 
-  /** Hidden documents release derived model work without touching durable names. */
+  /** Hidden documents pause new work while preserving already-paid requests. */
   suspend(): void {
     if (this.disposed || this.paused) return;
     this.paused = true;
-    const pending = [...this.active.values(), ...this.queue];
-    this.active.clear();
-    this.queue.length = 0;
-    for (const request of pending) {
+    const queued = this.queue.splice(0);
+    for (const request of queued) {
       request.controller.abort();
       const released = reduceLabelSession(this.state, {
         type: "failed",

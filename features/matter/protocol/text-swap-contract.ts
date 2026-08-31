@@ -230,7 +230,7 @@ export function planToTextSwapCommand(
   const envelope = parsedEnvelope.envelope;
   const plan = parseTextSwapPlan(rawPlan, envelope);
   if (plan === null || !validateThoughtTree(currentTree).ok) return rejected("INVALID_PLAN");
-  if (currentTree.id !== envelope.treeId || currentTree.revision !== envelope.treeRevision) return rejected("STALE");
+  if (currentTree.id !== envelope.treeId) return rejected("STALE");
   const node = currentTree.nodes[plan.action.nodeId];
   if (node === undefined || node.role === "document-root") return rejected("STALE");
   if (!sameVisibleLineage(currentTree, node.id, envelope.context.lineage)) return rejected("STALE");

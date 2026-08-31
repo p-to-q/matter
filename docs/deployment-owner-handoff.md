@@ -75,11 +75,12 @@ samples; the probe did not establish candidate or warm-instance affinity.
 This repository already anticipated that shape. `docs/changes.md`, 2026-08-07:
 low-latency inquiry and naming "should not pay for hidden reasoning", and the
 entry explicitly forecloses "relying on a provider's changing default thinking
-mode". If the station serving Production is not being sent
-`enable_thinking: false`, a model whose upstream default has since turned
-thinking on will spend inquiry's larger budget reasoning and return nothing
-inside the attempt window, while repair's tight ceiling forces it to stop early
-and still answer.
+mode". That was a valid incident hypothesis for Preview.45. Preview.46 closes
+it in source: all five Matter scenarios explicitly send
+`enable_thinking: false`, which overrides a station's environment default.
+Missing or true `..._ENABLE_THINKING` can therefore no longer explain a failure
+on these five surfaces. The environment value remains defense in depth for any
+future scenario that does not declare its own policy.
 
 ### Deployment owner — check in this order
 
@@ -87,13 +88,10 @@ and still answer.
    `MATTER_MODEL_POOL` and `MATTER_LABEL_POOL` is non-empty. Both non-empty is
    refused by design and would take the pool down entirely, so this is a
    check, not the expected cause.
-2. In whichever namespace is the live one, confirm every station has its
-   matching `..._ENABLE_THINKING=false`. The variable is namespaced with the
-   pool, so `MATTER_LABEL_AIPING_ENABLE_THINKING` and
-   `MATTER_MODEL_AIPING_ENABLE_THINKING` are different variables and a partial
-   migration silently drops it. This is a worthwhile hardening check, not the
-   established incident cause. It needs no source change, only a redeploy if the
-   environment is corrected.
+2. In whichever namespace is the live one, keep matching
+   `..._ENABLE_THINKING=false` values as station-default hardening. Do not treat
+   a missing value, or changing it followed by a redeploy, as a Preview.46 fix:
+   the five current scenario policies already override it in source.
 3. Confirm the station's `..._MODELS` names still exist at that gateway. A
    renamed or retired model is a fast 4xx, not a hang, so this is unlikely to
    be the cause here, but it is cheap to confirm.
@@ -103,10 +101,10 @@ and still answer.
 1. Whether the account is rate-limited or over budget. A gateway that queues
    instead of returning 429 presents exactly as this hang.
 2. Whether the default thinking mode for the configured models changed
-   upstream. Run the same request twice against the station, once with
-   `"max_tokens": 124` and once with `"max_tokens": 720`, then once more at 720
-   with `"enable_thinking": false`. If the third is fast, item 2 above is the
-   fix. Keep the key and the responses out of this repository.
+   upstream. Comparing requests with and without `"enable_thinking": false`
+   can still characterize the provider, but it is not the Preview.46 product
+   fix: production requests from all five Matter scenarios already force false.
+   Keep the key and the responses out of this repository.
 
 ### The durable gap this exposed
 

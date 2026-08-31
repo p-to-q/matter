@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { InquiryContextPayload } from "../protocol/inquiry-contract";
 import {
-  inquiryContextChanged,
+  inquiryContextOwnerChanged,
   inquiryContextScopeChanged,
+  type InquiryContextOwner,
 } from "./inquiry-context-lifecycle";
 
 function context(overrides: Partial<InquiryContextPayload> = {}): InquiryContextPayload {
@@ -46,10 +47,16 @@ describe("inquiryContextScopeChanged", () => {
   });
 });
 
-describe("inquiryContextChanged", () => {
-  it("still notices a revision bump, so a reply cannot outlive its material", () => {
-    expect(inquiryContextChanged(context(), context())).toBe(false);
-    expect(inquiryContextChanged(context(), context({ revision: 4 }))).toBe(true);
-    expect(inquiryContextChanged(context(), undefined)).toBe(true);
+describe("inquiryContextOwnerChanged", () => {
+  it("keeps an answer for its captured snapshot until the document owner changes", () => {
+    const owner = (overrides: Partial<InquiryContextOwner> = {}): InquiryContextOwner => ({
+      treeId: "tree-1",
+      documentEpoch: 7,
+      ...overrides,
+    });
+    expect(inquiryContextOwnerChanged(owner(), owner())).toBe(false);
+    expect(inquiryContextOwnerChanged(owner(), owner({ treeId: "tree-2" }))).toBe(true);
+    expect(inquiryContextOwnerChanged(owner(), owner({ documentEpoch: 8 }))).toBe(true);
+    expect(inquiryContextOwnerChanged(owner(), undefined)).toBe(true);
   });
 });

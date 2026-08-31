@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  APP_VERSION,
   classifyResponse,
   eligiblePoolSurfaces,
   POOL_COOLDOWN_MS,
   formatReport,
   inquiryRequest,
   labelRequest,
+  MAX_INQUIRY_ANSWER_CODE_POINTS,
+  MAX_REPAIR_TEXT_CODE_UNITS,
   normalizeOrigin,
   parseArguments,
   probeModelPool,
@@ -34,24 +37,34 @@ test("accepts a deployed HTTPS origin and a loopback one", () => {
 });
 
 test("uses health to keep fixtures out of model-pool evidence", async () => {
-  const payload = {
-    surfaces: {
-      transcriptRepair: "fixture",
-      thoughtLabel: "available",
-      inquiry: "available",
-    },
+  const surfaces = {
+    transcriptRepair: "fixture",
+    thoughtLabel: "available",
+    inquiry: "available",
   };
-  assert.deepEqual(eligiblePoolSurfaces(payload), {
+  assert.deepEqual(eligiblePoolSurfaces({ surfaces }), {
     live: ["label", "inquiry"],
     skipped: [{ surface: "repair", state: "fixture" }],
   });
+  const payload = {
+    status: "ok",
+    protocolVersion: "0.2",
+    appVersion: APP_VERSION,
+    basePath: "/matter",
+    surfaces: {
+      ...surfaces,
+    },
+  };
   let requested = null;
   const capabilities = await readPoolCapabilities(
     "http://127.0.0.1:3210/matter/",
-    async (url, init) => {
+    { fetchImpl: async (url, init) => {
       requested = { url, method: init.method, cache: init.cache, redirect: init.redirect };
-      return new Response(JSON.stringify(payload), { status: 200 });
-    },
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { "content-type": "application/json", "cache-control": "no-store" },
+      });
+    } },
   );
   assert.deepEqual(capabilities.live, ["label", "inquiry"]);
   assert.deepEqual(requested, {
@@ -64,6 +77,45 @@ test("uses health to keep fixtures out of model-pool evidence", async () => {
     () => eligiblePoolSurfaces({ surfaces: { transcriptRepair: "available" } }),
     /thoughtLabel/,
   );
+  assert.throws(
+    () => eligiblePoolSurfaces({ surfaces }, ["repair"]),
+    /requires live repair/,
+  );
+});
+
+test("binds a probe to the expected deployment identity and health headers", async () => {
+  const health = {
+    status: "ok",
+    protocolVersion: "0.2",
+    appVersion: APP_VERSION,
+    basePath: "",
+    surfaces: {
+      transcriptRepair: "available",
+      thoughtLabel: "available",
+      inquiry: "available",
+    },
+  };
+  const response = (overrides = {}, headers = {}) => new Response(
+    JSON.stringify({ ...health, ...overrides }),
+    { headers: { "content-type": "application/json", "cache-control": "no-store", ...headers } },
+  );
+  await assert.doesNotReject(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response(),
+    expectedVersion: APP_VERSION,
+    requiredSurfaces: ["repair", "label", "inquiry"],
+  }));
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response({ appVersion: "0.2.0-preview.45" }),
+  }), /expected app/);
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response({ basePath: "/matter" }),
+  }), /basePath/);
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response({}, { "cache-control": "public" }),
+  }), /no-store/);
+  await assert.rejects(() => readPoolCapabilities("https://matter.ptoq.io", {
+    fetchImpl: async () => response({}, { "content-type": "text/plain" }),
+  }), /declare JSON/);
 });
 
 test("reads a floor answer as a pool failure even though it is HTTP 200", () => {
@@ -215,7 +267,7 @@ test("runs every surface each round and paces itself between rounds", async () =
     sleep: async (ms) => void slept.push(ms),
     fetchImpl: async (url, init) => {
       calls.push({ url, origin: init.headers.origin, site: init.headers["sec-fetch-site"] });
-      return new Response(JSON.stringify({ source: "model", status: "answered", text: "…" }), {
+      return new Response(JSON.stringify(successfulProbePayload(url, init)), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -248,7 +300,7 @@ test("keeps a deployment base path out of the browser Origin header", async () =
     sleep: async () => undefined,
     fetchImpl: async (url, init) => {
       calls.push({ url, origin: init.headers.origin });
-      return new Response(JSON.stringify({ source: "model", status: "answered", text: "…" }), {
+      return new Response(JSON.stringify(successfulProbePayload(url, init)), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -299,21 +351,29 @@ test("bounds the run so a probe cannot become a load test", () => {
     rounds: 6,
     paceMs: 6_000,
     requireInquiryAnswer: false,
+    profile: "diagnostic",
+    expectedVersion: APP_VERSION,
   });
   assert.deepEqual(parseArguments([
     "https://matter.ptoq.io",
     "--rounds=3",
     "--pace=10",
     "--require-inquiry-answer",
+    "--profile=release",
+    "--expected-version=0.2.0-preview.45",
   ]), {
     origin: "https://matter.ptoq.io",
     rounds: 3,
     paceMs: 10_000,
     requireInquiryAnswer: true,
+    profile: "release",
+    expectedVersion: "0.2.0-preview.45",
   });
   assert.throws(() => parseArguments(["--rounds=0"]), /--rounds/);
   assert.throws(() => parseArguments(["--rounds=61"]), /--rounds/);
   assert.throws(() => parseArguments(["--pace=301"]), /--pace/);
+  assert.throws(() => parseArguments(["--profile=unknown"]), /--profile/);
+  assert.throws(() => parseArguments(["--expected-version=latest"]), /--expected-version/);
   assert.throws(() => parseArguments(["one", "two"]), /one origin/);
 });
 
@@ -335,8 +395,143 @@ test("release gate requires every Inquiry sample to contain a real answer", () =
   assert.deepEqual(probeGateFailures(rejected), []);
 });
 
+test("release profile separates pool reachability from every surface being usable", () => {
+  const rejected = summarize([
+    sample("repair", "model", null),
+    sample("label", "rejected", "MODEL_REJECTED"),
+    sample("inquiry", "model", null),
+  ]);
+  assert.equal(rejected.verdict, "pool-healthy");
+  assert.equal(rejected.usabilityVerdict, "surface-degraded");
+  assert.deepEqual(
+    probeGateFailures(rejected, { requiredUsableSurfaces: ["repair", "label", "inquiry"] }),
+    ["release gate requires a real label result on every call; observed 0/1."],
+  );
+});
+
+test("does not call an empty or stale success envelope usable", () => {
+  const request = inquiryRequest(4);
+  const basis = {
+    requestId: request.requestId,
+    treeId: request.context.treeId,
+    revision: request.context.revision,
+    scope: request.context.scope,
+  };
+  assert.deepEqual(
+    classifyResponse("inquiry", 200, {
+      protocolVersion: "0.2",
+      basis,
+      status: "answered",
+      text: "",
+      receipt: inquiryProbeReceipt(request),
+    }, request),
+    { outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+  assert.deepEqual(
+    classifyResponse("inquiry", 200, {
+      protocolVersion: "0.2",
+      basis,
+      status: "answered",
+      text: "界".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS + 1),
+      receipt: inquiryProbeReceipt(request),
+    }, request),
+    { outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+  const repair = repairRequest(9);
+  assert.deepEqual(
+    classifyResponse("repair", 200, {
+      protocolVersion: repair.protocolVersion,
+      promptVersion: repair.promptVersion,
+      operationId: repair.operationId,
+      attempt: repair.attempt,
+      text: "x".repeat(MAX_REPAIR_TEXT_CODE_UNITS + 1),
+      source: "model",
+    }, repair),
+    { outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+  assert.deepEqual(
+    classifyResponse("inquiry", 200, {
+      protocolVersion: "0.1",
+      basis,
+      status: "answered",
+      text: "answer",
+      receipt: inquiryProbeReceipt(request),
+    }, request),
+    { outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+  assert.deepEqual(
+    classifyResponse("inquiry", 200, {
+      protocolVersion: "0.2",
+      basis,
+      status: "answered",
+      text: "answer",
+    }, request),
+    { outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+  assert.deepEqual(
+    classifyResponse("inquiry", 200, {
+      protocolVersion: "0.2",
+      basis,
+      status: "answered",
+      text: "answer",
+      receipt: inquiryProbeReceipt(request),
+      extra: true,
+    }, request),
+    { outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+});
+
 function sample(surface, outcome, reason, durationMs = 1_000) {
   return Object.freeze({ round: 1, surface, status: 200, durationMs, outcome, reason });
+}
+
+function successfulProbePayload(url, init) {
+  const request = JSON.parse(String(init.body));
+  if (String(url).endsWith("/api/repair")) {
+    return {
+      protocolVersion: request.protocolVersion,
+      promptVersion: request.promptVersion,
+      operationId: request.operationId,
+      attempt: request.attempt,
+      text: "Probe round repaired.",
+      source: "model",
+    };
+  }
+  if (String(url).endsWith("/api/label")) {
+    return {
+      protocolVersion: request.protocolVersion,
+      promptVersion: request.promptVersion,
+      operationId: request.operationId,
+      basis: request.basis,
+      label: "A room remembers",
+      source: "model",
+    };
+  }
+  return {
+    protocolVersion: request.protocolVersion,
+    basis: {
+      requestId: request.requestId,
+      treeId: request.context.treeId,
+      revision: request.context.revision,
+      scope: request.context.scope,
+    },
+    status: "answered",
+    text: "The arrangement persists after its makers leave.",
+    receipt: inquiryProbeReceipt(request),
+  };
+}
+
+function inquiryProbeReceipt(request) {
+  return {
+    scope: request.context.scope,
+    lineageNodes: request.context.lineage.length,
+    contextCodePoints: request.context.lineage.reduce(
+      (total, node) => total + Array.from(node.text).length,
+      0,
+    ),
+    clipped: request.context.clipped,
+    thoughtCount: request.context.thoughtCount,
+  };
 }
 
 test("marks attribution risk inside the process-local health window", () => {

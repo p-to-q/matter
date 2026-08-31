@@ -5,7 +5,7 @@ import {
 } from "./bounded-json-request";
 import {
   MAX_REPAIR_REQUEST_BYTES,
-  REPAIR_CLIENT_TIMEOUT_MS,
+  REPAIR_ROUTE_TIMEOUT_MS,
   parseRepairRequest,
 } from "../protocol/repair-contract";
 import { RepairServerError, invalidRepairRequest } from "./repair-errors";
@@ -53,7 +53,7 @@ export function repairErrorResponse(error: unknown): Response {
 
 const REPAIR_REQUEST_POLICY: BoundedRequestPolicy = Object.freeze({
   maxBytes: MAX_REPAIR_REQUEST_BYTES,
-  timeoutMs: REPAIR_CLIENT_TIMEOUT_MS,
+  timeoutMs: REPAIR_ROUTE_TIMEOUT_MS,
   fail: repairBoundaryError,
 });
 

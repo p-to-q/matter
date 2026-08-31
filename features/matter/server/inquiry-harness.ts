@@ -9,11 +9,11 @@ export const INQUIRY_PROMPT_VERSION = "inquiry/3";
 /**
  * The one scenario a person is deliberately waiting on, and the one with no
  * floor to fall back to. The pool holds at most half of this for one relay, so
- * this budget buys two attempts; the browser's own 20 s bound still arrives
+ * this budget buys two attempts; the browser's own 22 s bound still arrives
  * after it, so a server timeout reaches the paper as a stated unavailability
  * rather than as a dead socket.
  */
-const INQUIRY_PROVIDER_DEADLINE_MS = 16_000;
+export const INQUIRY_PROVIDER_DEADLINE_MS = 16_000;
 
 /**
  * Answering one question about material a person is already looking at.
@@ -35,6 +35,7 @@ export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.f
   budget: () => Object.freeze({
     deadlineMs: INQUIRY_PROVIDER_DEADLINE_MS,
     maxOutputTokens: 720,
+    enableThinking: false,
   }),
   adjudicate: (answer) => {
     if (typeof answer !== "string") return Object.freeze({ ok: false as const, reason: "not-text" });

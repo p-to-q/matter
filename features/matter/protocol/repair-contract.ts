@@ -34,8 +34,8 @@ export const MAX_LOCALE_LENGTH = 35;
  * transcript it already has either way.
  */
 export const REPAIR_PROVIDER_CEILING_MS = 8_000;
-export const REPAIR_TRANSPORT_GRACE_MS = 800;
-export const REPAIR_CLIENT_TIMEOUT_MS = REPAIR_PROVIDER_CEILING_MS + REPAIR_TRANSPORT_GRACE_MS;
+export const REPAIR_ROUTE_TIMEOUT_MS = 9_500;
+export const REPAIR_CLIENT_TIMEOUT_MS = 11_000;
 
 export type RepairRequest = Readonly<{
   protocolVersion: typeof PROTOCOL_VERSION;

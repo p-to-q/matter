@@ -26,6 +26,7 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
     // A label is a phrase. A ceiling near its own length stops a model from
     // spending the deadline explaining the name it chose.
     maxOutputTokens: Math.max(192, input.maxGraphemes * 4 + 64),
+    enableThinking: false,
   }),
   adjudicate: (answer, input) => {
     if (typeof answer !== "string") return reject("not-text");
@@ -34,7 +35,7 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
       maxGraphemes: input.maxGraphemes,
       siblingLabels: input.context.siblingLabels,
     });
-    if (!validation.ok) return reject("invalid-label");
+    if (!validation.ok) return reject(`invalid-label-${validation.code.toLowerCase()}`);
     // The model competes against the deterministic label rather than replacing
     // it: an answer that is not better than what a person is already reading is
     // churn, and a renamed node they did not ask to rename.
@@ -64,6 +65,7 @@ export const LABEL_SCENARIO_DEADLINE_MS = 12_000;
  */
 export function buildLabelPrompt(input: NormalizedLabelInput): string {
   const preferred = Math.max(3, Math.round(input.maxGraphemes * 0.6));
+  const spacedWordLimit = Math.max(2, Math.floor(input.maxGraphemes / 6));
   const context = input.context;
   return composePrompt("matter-thought-label", SEMANTIC_LABEL_PROMPT_VERSION, {
     // No MATTER background either: once per visible node is the highest volume
@@ -77,6 +79,7 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
     fixed: [
       "the language: name it in the language of the material.",
       `the length: aim for ${preferred} to ${input.maxGraphemes} graphemes. Go shorter only when a shorter phrase genuinely says it better.`,
+      `when the name uses spaces, use no more than ${spacedWordLimit} words.`,
       ...(context.siblingLabels.length === 0 ? [] : [
         "the name must differ from every name inside <sibling-names>.",
       ]),
@@ -90,7 +93,10 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
       "name a topic. A bare topic word is a failure: it could label anything. Name what the material actually claims or asks.",
     ],
     unsure: "When the material resists compression, keep its most specific phrase rather than inventing a general one.",
-    answer: ["Answer with the name only."],
+    answer: [
+      `Return exactly one plain-text line of at most ${input.maxGraphemes} characters, counting spaces.`,
+      "Return the name only: no explanation, prefix, label, or alternatives.",
+    ],
     material: [
       ...(context.parentLabel === null ? [] : [
         fence("parent-name", context.parentLabel, "The node this one hangs under is named:"),

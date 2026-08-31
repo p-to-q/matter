@@ -4,7 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
 import type { MatterLocale } from "../config/locales";
@@ -64,31 +64,16 @@ export type TextSwapController = Readonly<{
 export function useTextSwap<TCommitted>(
   input: UseTextSwapInput<TCommitted>,
 ): TextSwapController {
-  const { commit, documentEpoch, locale, onCommitted, selection, tree } = input;
-  const driver = useMemo(() => new TextSwapDriver<TCommitted>({
+  const { documentEpoch, selection, tree } = input;
+  const [driver] = useState(() => new TextSwapDriver<TCommitted>({
     createVoice: createBrowserVoicePort,
     transcribe: requestTranscription,
     request: requestTextSwap,
-    buildEnvelope: (basis, direction, requestId) => createTextSwapEnvelope({
-      tree,
-      documentEpoch,
-      selection,
-      locale,
-      basis,
-      direction,
-      id: requestId,
-    }),
-    commit: (envelope, plan, basis) => commit(
-      envelope,
-      plan,
-      basis.documentEpoch,
-    ),
-    onCommitted,
+    ...toDriverBindings(input),
     createInteractionId: () => createTextSwapId("interaction"),
     createRequestId: () => createTextSwapId("request"),
     monotonicNow,
-    locale,
-  }), [commit, documentEpoch, locale, onCommitted, selection, tree]);
+  }));
 
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -98,6 +83,9 @@ export function useTextSwap<TCommitted>(
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
   useLayoutEffect(() => {
+    // Driver effects must observe the last committed React material, never a
+    // speculative render. Refresh its bindings at the same boundary as scope.
+    driver.updateBindings(toDriverBindings(input));
     driver.updateScope(toScope(input));
   }, [driver, input]);
 
@@ -142,6 +130,32 @@ export function useTextSwap<TCommitted>(
     retry: () => driver.retry(),
     dismiss: () => driver.dismiss(),
     cancel: () => driver.cancel(),
+  };
+}
+
+function toDriverBindings<TCommitted>(
+  input: UseTextSwapInput<TCommitted>,
+): Pick<
+  import("./text-swap-driver").TextSwapDriverDependencies<TCommitted>,
+  "buildEnvelope" | "commit" | "onCommitted" | "locale"
+> {
+  return {
+    buildEnvelope: (basis, direction, requestId) => createTextSwapEnvelope({
+      tree: input.tree,
+      documentEpoch: input.documentEpoch,
+      selection: input.selection,
+      locale: input.locale,
+      basis,
+      direction,
+      id: requestId,
+    }),
+    commit: (envelope, plan, basis) => input.commit(
+      envelope,
+      plan,
+      basis.documentEpoch,
+    ),
+    onCommitted: input.onCommitted,
+    locale: input.locale,
   };
 }
 
@@ -234,7 +248,6 @@ function toScope<TCommitted>(input: UseTextSwapInput<TCommitted>): TextSwapScope
 
 function sameBasis(left: TextSwapBasis, right: TextSwapBasis): boolean {
   return left.treeId === right.treeId &&
-    left.baseRevision === right.baseRevision &&
     left.documentEpoch === right.documentEpoch &&
     left.sourceText === right.sourceText &&
     left.selection.type === right.selection.type &&

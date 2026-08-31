@@ -104,7 +104,7 @@ describe("Text Swap basis and envelope", () => {
     expect(envelope?.context.lineage.some((node) => node.id === "document")).toBe(false);
   });
 
-  it("refuses a changed document epoch, revision, selection, or invalid direction", () => {
+  it("rebases before dispatch but refuses a changed document, selection, or direction", () => {
     const currentTree = tree();
     const basis = createTextSwapBasis({
       tree: currentTree,
@@ -126,7 +126,7 @@ describe("Text Swap basis and envelope", () => {
     expect(createTextSwapEnvelope({
       ...common,
       tree: { ...currentTree, revision: 5 },
-    })).toBeNull();
+    })).toMatchObject({ treeRevision: 5 });
     expect(createTextSwapEnvelope({
       ...common,
       selection: { ...SELECTION, selectedText: "Other source" },

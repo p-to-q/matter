@@ -36,6 +36,13 @@ the running product, not how ambitious a feature sounds.
    Status, AI, and infrastructure do not become permanent chrome; inquiry stays
    closed until the person explicitly opens it. Provider availability is kept
    in operational receipts, never rendered as another message inside material.
+7. **Authority is strict; delivery is persistent.** Reference, direction,
+   degree, lineage, and the final material commit fail closed. Once a valid
+   request has been accepted, an unrelated material revision or the first
+   replay-safe transport failure does not immediately erase it. One intent may
+   use several bounded delivery attempts, but exhausted attempts still return
+   the safe floor, and the intent may produce at most one visible answer or one
+   pointer-undoable material change.
 
 A material interaction must declare reference + degree + direction + lineage
 without letting the model infer a missing signal. Elastic Language 2 takes

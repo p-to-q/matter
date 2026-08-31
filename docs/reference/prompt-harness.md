@@ -210,6 +210,21 @@ compatibility path while deployed relays are measured. Production receipts keep
 only closed counts — attempt, timeout, failure, truncation, refusal, unknown, and
 missing — never the relay's raw vocabulary.
 
+The output ceiling is transport capacity, not a second product degree. Each
+scenario leaves headroom above the largest answer its adjudicator may accept,
+and these five narrow text tasks explicitly disable hidden model thinking so
+reasoning tokens cannot consume the visible answer budget. A relay-reported
+cut-off may fall through to another candidate inside the same immutable request;
+partial text never authorizes a plan or inquiry answer.
+
+**Staleness follows what the model read and what the command will write.** A
+global tree revision is not itself a material dependency. Inquiry may return an
+answer for its captured snapshot. Repair, label, Elastic, and Text Swap may
+settle after an unrelated branch changes only when their exact target,
+selection, visible lineage, direction, document epoch, and operation owner still
+validate. The tree engine receives the current revision only after those checks;
+changed target material still loses without a merge.
+
 **One provider foundation, five execution lanes.** `model-pool.ts` is the only
 file where an endpoint, a model name, or a key appears. Each scenario has its
 own server-only authority switch, so permission is granted per surface rather

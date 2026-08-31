@@ -1,20 +1,22 @@
-import {
-  sameInquiryContext,
-  type InquiryContextPayload,
-} from "../protocol/inquiry-contract";
+import type { InquiryContextPayload } from "../protocol/inquiry-contract";
+
+export type InquiryContextOwner = Readonly<{
+  treeId: string;
+  documentEpoch: number;
+}>;
 
 /**
- * Any difference at all, including a revision bump. This is the question a
- * reply must answer before it may be shown: an answer describes the material
- * it was asked about, not whatever the material became while it was in flight.
+ * Only a document-owner change revokes an already submitted inquiry. The
+ * response is signed against and recorded with the exact request snapshot, so
+ * a later revision, selection, or projection cannot make that older answer
+ * claim to describe the new material.
  */
-export function inquiryContextChanged(
-  previous: InquiryContextPayload | undefined,
-  next: InquiryContextPayload | undefined,
+export function inquiryContextOwnerChanged(
+  previous: InquiryContextOwner | undefined,
+  next: InquiryContextOwner | undefined,
 ): boolean {
-  return previous !== undefined && next !== undefined
-    ? !sameInquiryContext(previous, next)
-    : previous !== next;
+  if (previous === undefined || next === undefined) return previous !== next;
+  return previous.treeId !== next.treeId || previous.documentEpoch !== next.documentEpoch;
 }
 
 /**

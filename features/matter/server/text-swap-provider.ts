@@ -44,7 +44,7 @@ export function resolveTextSwapAdapter(
     return resolvePoolAdapter(environment, {
       minimumAttemptMs: 700,
       maxAttemptShare: 0.6,
-      maxOutputTokens: 1_200,
+      maxOutputTokens: 3_000,
       maxResponseBytes: 40 * 1_024,
       failuresBeforeCooldown: 2,
       cooldownMs: 60_000,

@@ -123,8 +123,9 @@ choose another target, operation, or scope.
 
 Opening Point and Talk cancels any Elastic degree or pending Elastic turn. One complete result
 atomically replaces the addressed node or exact segment in place and is pointer-undoable.
-Closing, changing the target, or losing its exact tree/revision basis clears
-the transient direction and gives any late result no authority. Full-view Voice
+Closing, changing the document owner, target, selection, or visible-lineage
+basis clears the transient direction and gives any late result no authority.
+An unrelated tree revision does not. Full-view Voice
 admission remains a separate human-material channel.
 
 Provider, pool, timeout, and transport failures are operational events, not

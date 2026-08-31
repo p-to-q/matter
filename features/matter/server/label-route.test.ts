@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
 import {
-  LABEL_CLIENT_TIMEOUT_MS,
+  LABEL_ROUTE_TIMEOUT_MS,
   MAX_LABEL_REQUEST_BYTES,
   isLabelSuccess,
   parseLabelRequest,
@@ -124,7 +124,7 @@ describe("label route", () => {
         duplex: "half",
       } as RequestInit & { duplex: "half" });
       const pending = respond(request);
-      await vi.advanceTimersByTimeAsync(LABEL_CLIENT_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(LABEL_ROUTE_TIMEOUT_MS);
       const response = await pending;
       expect(response.status).toBe(504);
       await expect(response.json()).resolves.toMatchObject({

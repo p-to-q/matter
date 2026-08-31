@@ -120,7 +120,8 @@ behavior.
 Every external resource has one lifecycle owner. A microphone, worker, request,
 timer, animation frame, database handle, or subscription has an explicit start,
 cancel or stop, and idempotent cleanup. A late completion is a no-op unless its
-operation, document, revision, and addressed material still match.
+operation, document owner, and actual addressed read/write material still match.
+Global revision is a receipt, not a universal cancellation key.
 
 Every cache states its owner, authority class, key, size or time bound,
 invalidation trigger, read-time revalidation, and failure fallback. A snapshot,

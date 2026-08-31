@@ -121,7 +121,7 @@ describe("transform/2 contract", () => {
     expect(parseTransformPlan({ ...plan, action: { ...plan.action, text: "source" } }, parsed.envelope)).toBeNull();
   });
 
-  it("revalidates policy, current segment, revision, and tree memento immediately before commit", () => {
+  it("rebases an unchanged material capability and rejects changed target material", () => {
     const parsed = parseTransformEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");
     const plan = buildTransformPlan(parsed.envelope, "source more");
@@ -132,7 +132,13 @@ describe("transform/2 contract", () => {
     expect(command.ok).toBe(true);
     if (!command.ok) throw new Error("plan must become command");
     expect(applyTreeCommand(tree(), command.command).ok).toBe(true);
-    expect(planToTreeCommand({ ...tree(), revision: 5 }, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
+    const rebased = planToTreeCommand({ ...tree(), revision: 5 }, parsed.envelope, plan);
+    expect(rebased.ok).toBe(true);
+    if (rebased.ok) expect(rebased.command.expectedRevision).toBe(5);
+    const changed = tree();
+    changed.revision = 5;
+    changed.nodes.thought.text = "changed. next";
+    expect(planToTreeCommand(changed, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
     expect(planToTreeCommand(tree(), parsed.envelope, {
       ...plan,
       action: { ...plan.action, text: "source\u202Emore" },

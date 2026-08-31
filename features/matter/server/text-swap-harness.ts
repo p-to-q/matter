@@ -28,7 +28,8 @@ export const TEXT_SWAP_SCENARIO: MatterScenario<TextSwapScenarioInput, string> =
   compile: compileTextSwapPrompt,
   budget: (input) => Object.freeze({
     deadlineMs: 12_000,
-    maxOutputTokens: Math.min(1_200, Math.max(256, 2 * input.length.maximumAcceptedGraphemes + 128)),
+    maxOutputTokens: Math.min(3_000, Math.max(256, 2 * input.length.maximumAcceptedGraphemes + 128)),
+    enableThinking: false,
   }),
   adjudicate: (answer, input) => adjudicateTextSwap(answer, input),
 });

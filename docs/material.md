@@ -119,9 +119,10 @@ navigates, hides surrounding material, chooses a nearby sentence, or promotes a
 convenient first hit.
 
 The address contains node id, exact UTF-16 bounds, and selected text. Request
-start freezes tree id, revision, and document epoch around it. Both are transient
-render/domain state, not tree, history, persistence, archive, or model context;
-a mismatch clears the controls and revokes late work.
+start freezes tree id, revision, document epoch, and the visible lineage it read.
+These are transient render/domain state, not tree, history, persistence, archive,
+or model context. Tree/document ownership or addressed selection/lineage mismatch
+clears the controls and revokes late work; an unrelated revision does not.
 
 `SegmentSelection` uses the strict discriminator `type: "segment-range"`.
 Offsets are UTF-16 code units, must start and end on a contiguous run of current

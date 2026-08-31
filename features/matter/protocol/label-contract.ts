@@ -40,9 +40,10 @@ export const MAX_LOCALE_LENGTH = 35;
  * and is reading a working name the entire time this runs. A late label is
  * invisible; an absent one costs the row its name for the session.
  */
-export const LABEL_CLIENT_TIMEOUT_MS = 13_000;
-/** Server deadline, kept under the browser's so a timeout is attributable. */
 export const LABEL_PROVIDER_TIMEOUT_MS = 12_000;
+/** Route and browser leave separate margins for attribution and transport. */
+export const LABEL_ROUTE_TIMEOUT_MS = 14_000;
+export const LABEL_CLIENT_TIMEOUT_MS = 16_000;
 
 export type LabelBasis = Readonly<{
   treeId: string;

@@ -177,6 +177,21 @@ describe("pool adapter", () => {
     expect(body.enable_thinking).toBe(false);
   });
 
+  it("lets a narrow scenario disable thinking on a thinking-capable candidate", async () => {
+    let body: Record<string, unknown> = {};
+    const adapter = createPoolAdapter(
+      [{ ...candidate("Qwen3.5-Flash"), enableThinking: true }],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return chatResponse("visible answer");
+      },
+    );
+    await adapter({ ...adapterInput(), enableThinking: false }, new AbortController().signal);
+    expect(body.enable_thinking).toBe(false);
+  });
+
   it("falls through to the next candidate on failure", async () => {
     const tried: string[] = [];
     const events: string[] = [];
@@ -385,6 +400,11 @@ describe("pool adapter", () => {
       expect(tried).toEqual(["steady"]);
 
       releaseCancel();
+      await Promise.resolve();
+      await Promise.resolve();
+      // Response-stream cancellation is promise-assimilated by the platform
+      // before the pool's lease cleanup runs. Let both ownership layers settle
+      // before asserting that a later request may reclaim the candidate.
       await Promise.resolve();
       await Promise.resolve();
       tried.length = 0;
@@ -1053,7 +1073,10 @@ describe("pool adapter", () => {
       cancel: () => new Promise(() => undefined),
     });
     const adapter = createPoolAdapter(
-      [candidate("only")],
+      // This test intentionally creates a permanent drain lease. Give it a
+      // unique transport identity so the realistic process-wide lease cannot
+      // make an unrelated assertion depend on test order.
+      [candidate("declared-oversize-never-drains")],
       { ...DEFAULT_POOL_LIMITS, maxResponseBytes: 64 },
       Date.now,
       async () => new Response(body, { headers: { "content-length": "65" } }),

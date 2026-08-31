@@ -59,6 +59,11 @@ export type TextSwapDriverDependencies<TCommitted> = Readonly<{
   locale: MatterLocale;
 }>;
 
+export type TextSwapDriverBindings<TCommitted> = Pick<
+  TextSwapDriverDependencies<TCommitted>,
+  "buildEnvelope" | "commit" | "onCommitted" | "locale"
+>;
+
 type VoiceResources = {
   operation: VoiceOperation;
   generation: number;
@@ -83,7 +88,7 @@ type RequestResources = {
 export class TextSwapDriver<TCommitted> {
   private state: TextSwapInteractionState = createTextSwapInteractionState();
   private scope: TextSwapScope | null = null;
-  private readonly dependencies: TextSwapDriverDependencies<TCommitted>;
+  private dependencies: TextSwapDriverDependencies<TCommitted>;
   private readonly listeners = new Set<(state: TextSwapInteractionState) => void>();
   private readonly events: TextSwapInteractionEvent[] = [];
   private voice: VoicePort | null = null;
@@ -97,6 +102,12 @@ export class TextSwapDriver<TCommitted> {
 
   constructor(dependencies: TextSwapDriverDependencies<TCommitted>) {
     this.dependencies = dependencies;
+  }
+
+  /** Refreshes callbacks and locale at React's committed-material boundary. */
+  updateBindings(bindings: TextSwapDriverBindings<TCommitted>): void {
+    if (this.disposed) return;
+    this.dependencies = Object.freeze({ ...this.dependencies, ...bindings });
   }
 
   getState(): TextSwapInteractionState {
@@ -573,7 +584,6 @@ export class TextSwapDriver<TCommitted> {
     const scope = this.scope;
     return scope !== null && scope.enabled &&
       scope.treeId === basis.treeId &&
-      scope.revision === basis.baseRevision &&
       scope.documentEpoch === basis.documentEpoch &&
       sameSelection(scope.selection, basis.selection) &&
       basis.sourceText === basis.selection.selectedText;
@@ -606,7 +616,6 @@ function sameScope(left: TextSwapScope, right: TextSwapScope): boolean {
 
 function sameDocumentScope(left: TextSwapScope, right: TextSwapScope): boolean {
   return left.treeId === right.treeId &&
-    left.revision === right.revision &&
     left.documentEpoch === right.documentEpoch &&
     left.enabled === right.enabled &&
     left.interactionScopeKey === right.interactionScopeKey;

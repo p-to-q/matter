@@ -171,7 +171,9 @@ this source release.
 
 External configuration owns only the station order, each OpenAI-compatible base
 URL and key, the ordered model names within that station, and the optional
-station-level `ENABLE_THINKING=true|false` transport flag. Scenario gates remain
+station-level `ENABLE_THINKING=true|false` transport default. All five current
+Matter scenarios override that default to `false`; an environment value cannot
+turn reasoning on for them. Scenario gates remain
 independent (`LABEL`, `REPAIR`, `INQUIRY`, `TRANSFORM`, `TEXT_SWAP`), but every
 live gate resolves the same candidate registry. Environment values cannot change
 prompt policy, temperature zero, response-byte ceilings, scenario deadlines,
@@ -185,9 +187,9 @@ These are hard ownership boundaries, not claimed production SLOs:
 
 | Surface | Scenario/provider | Route/browser | Safe floor | Shared answer cache |
 | --- | ---: | ---: | --- | --- |
-| thought label | 12 s | 13 s / 13 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
-| transcript repair | 6–8 s | 8.8 s / 8.8 s | deterministic repair rules | none |
-| Ask Matter | 16 s | 20 s / 20 s | restore the submitted question | none |
+| thought label | 12 s | 14 s / 16 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
+| transcript repair | 6–8 s | 9.5 s / 11 s | deterministic repair rules | none |
+| Ask Matter | 16 s | 19 s / 22 s | restore the submitted question | none |
 | Elastic | 12 s | 14 s / 16 s | exact passage unchanged | none |
 | provider-gated Point-and-Talk / Text Swap | 12 s | 14 s / 16 s | exact passage unchanged | none |
 | server transcription | 30 s | 30 s / 35 s | browser-native or local capability remains separate | none |
@@ -432,9 +434,10 @@ does not relax a failing version or surface check.
 
 ```bash
 npm run check:deployment -- https://matter.ptoq.io --wait=120
+npm run probe:pool -- https://matter.ptoq.io --profile=release --rounds=1 --pace=0
 ```
 
-That command defaults to `--profile=browser-preview`: it requires both
+The deployment check defaults to `--profile=browser-preview`: it requires both
 `transformTurn` and `textSwap` to report `unavailable`. A reviewed Elastic
 promotion uses the explicit profile below only after the Elastic corpus,
 distributed rate rule, owner-approved spend cap/alerts, isolated credential,
@@ -553,7 +556,10 @@ Manually verify, with a normal browser and no repository secrets:
   on-device or reports a truthful limitation;
 - one bounded synthetic call per existing live surface proves the relay rather
   than merely its configuration: labels and repair report `model`, and inquiry
-  reports `answered`; and
+  reports `answered`. The release pool probe binds this claim to the local
+  package version, exact health/base-path response, every required live surface,
+  and the complete client-accepted success envelope; `MODEL_REJECTED` proves
+  reachability but does not pass surface usability; and
 - no provider identity or response error leaks into the page. The deterministic,
   verbatim, and stated-unavailable floors remain rollback behavior, not the
   expected production receipt while those gates are live.

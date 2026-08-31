@@ -94,7 +94,7 @@ export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
  * relay several times the measured healthy latency while preserving one useful
  * second attempt inside the same person-visible deadline.
  */
-const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.6 });
+export const REPAIR_POOL_LIMITS = Object.freeze({ ...DEFAULT_POOL_LIMITS, maxAttemptShare: 0.6 });
 
 export function resolveRepairAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,

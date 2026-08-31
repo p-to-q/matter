@@ -24,6 +24,7 @@ export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string> = Ob
   budget: (input) => Object.freeze({
     deadlineMs: repairDeadlineMs(input),
     maxOutputTokens: repairMaxOutputTokens(input),
+    enableThinking: false,
   }),
   adjudicate: (answer, input) => {
     const verdict = adjudicateRepair(input, answer);

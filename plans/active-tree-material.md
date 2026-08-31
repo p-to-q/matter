@@ -148,6 +148,29 @@ language. System files, accounts, sync, collaboration, and native shells may
 arrive only after this loop has a live deployed receipt and a separate ownership
 contract.
 
+### Active hardening — AI delivery obligation
+
+State: built and deterministically proven locally; the three enabled release
+surfaces need a live receipt, and the two disabled mutation surfaces need a
+separate local five-scenario proof before any future promotion.
+
+```text
+Outcome:    a valid model request normally reaches one complete answer or one
+            safely adjudicated material result despite an unrelated tree change
+Boundary:   scenario budgets/thinking policy, ordered pool fallback, inquiry
+            ownership, target-scoped Transform/Text Swap settlement, and the
+            deployment canary; no new assistant surface or retrieval layer
+Invariants: authority stays exact at document/operation/read-set/write-set and
+            tree-engine boundaries; explicit truncation/refusal never reaches
+            the paper; one request may attempt several candidates but commits once
+Proof:      deadline lattice; completion/refusal/drain matrix; exact local owner
+            and lineage revalidation; hidden-page read-only settlement; strict
+            deployment identity plus client-envelope canary; independent review
+Non-goals:  accepting partial mutation output, generic semantic rebasing,
+            unconditional hedging, background chat, or claiming a provider SLO
+            before repeated deployed-origin evidence
+```
+
 ## Active correction — desktop corner optical clearance
 
 State: implemented and proven locally; not released.
@@ -3028,7 +3051,9 @@ Boundary:   prompt spine, scenario harnesses, provider-pool completion outcome,
 Invariants: reference material is never instruction; bounded human intent cannot
             widen scope or output authority; each scenario keeps its own public
             protocol, projector, adjudicator, governor, gate, and settlement;
-            late output never rebases, merges, records, or mutates material
+            late output never merges or widens authority; an unchanged exact
+            material capability may settle against the current tree revision,
+            while changed target or lineage remains inert
 Proof:      focused prompt-order and escaping tests; exact compiled-prompt and
             execution-contract reconstruction; completion-terminator matrix; candidate fallback,
             timeout, cancellation, late-drain, and closed telemetry tests; full
@@ -3042,10 +3067,11 @@ One request may fall through ordered provider candidates, but it still has one
 scenario deadline, one active basis, and at most one accepted result. A result
 that arrives after an attempt boundary may have its response body cancelled for
 resource cleanup; it cannot be combined with the winning candidate. A result
-that arrives after overall timeout, surface close, target or revision change,
+that arrives after overall timeout, surface close, target/read-set change,
 document replacement, or explicit retry is inert even when its text looks
-useful. Material mutations are never silently rebased: the current tree engine
-and pointer Undo remain the only durable settlement path.
+useful. An unrelated revision may revalidate against an unchanged exact
+capability, but generated text is never semantically merged; the current tree
+engine and pointer Undo remain the only durable settlement path.
 
 The prompt artifact versions advance independently of the public wire versions.
 That separation is deliberate: the wire describes client/server syntax, while
@@ -3118,8 +3144,9 @@ State: Recorded. No change proposed; recorded so it is not mistaken for a cause.
 The surface whose answer is longest is given the shortest single attempt. Inquiry
 asks for up to 720 output tokens and takes `maxAttemptShare: 0.5` of a 16s
 deadline, so no one relay ever gets more than 8s. Repair asks for roughly 124
-and takes 0.95, so its relay gets one nearly-complete window. Label asks for tens
-of tokens against the default share.
+and takes `maxAttemptShare: 0.6`, so its first relay gets 3.6–4.8 seconds of the
+6–8 second scenario window while preserving a real fallback attempt. Label asks
+for tens of tokens against the default share.
 
 Inquiry's split buys two attempts, which is the right trade when a bad relay
 fails fast: the second candidate still gets a real turn. It is the wrong trade

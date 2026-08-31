@@ -30,7 +30,8 @@ export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> 
   compile: compileTransformPrompt,
   budget: (input) => Object.freeze({
     deadlineMs: 12_000,
-    maxOutputTokens: Math.min(1_200, Math.max(256, 2 * input.length.targetGraphemes + 128)),
+    maxOutputTokens: Math.min(3_000, Math.max(256, 2 * input.length.targetGraphemes + 128)),
+    enableThinking: false,
   }),
   adjudicate: (answer, input) => adjudicateTransform(answer, input),
 });

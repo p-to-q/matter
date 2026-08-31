@@ -241,8 +241,10 @@ state or `ThoughtTree`; pointer release commits one parent/index command.
 Matter is local-first. The server never owns the current tree: it validates the
 envelope, derives surrounding text from the supplied lineage, and returns a plan
 for the revision it received. When that plan returns, the client checks the
-tree id, revision, interaction identity, node, range, selected slice, and grapheme
-boundaries again immediately before commit. A stale response changes nothing.
+tree/document owner, interaction identity, addressed node, exact visible lineage,
+range, selected slice, and grapheme boundaries again immediately before commit.
+If those still match, an unrelated revision may be rebased into the current
+synchronous tree command; a stale addressed response changes nothing.
 
 ## Boundaries
 

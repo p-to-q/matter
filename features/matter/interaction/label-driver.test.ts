@@ -237,7 +237,7 @@ describe("LabelDriver", () => {
     expect(recorded.calls).toHaveLength(1);
   });
 
-  it("aborts bounded derived-label work while hidden and rearms without eager work", () => {
+  it("lets active label work settle while hidden and rearms only queued work", async () => {
     const recorded = recorder();
     const instance = driver(recorded.request, {
       limits: {
@@ -252,10 +252,14 @@ describe("LabelDriver", () => {
 
     instance.suspend();
     instance.suspend();
-    expect(firstSignal?.aborted).toBe(true);
-    expect(instance.getState().entries.get("root")?.pendingOperationId).toBeNull();
+    expect(firstSignal?.aborted).toBe(false);
+    expect(instance.getState().entries.get("root")?.pendingOperationId).not.toBeNull();
     expect(instance.getState().entries.get("child")?.pendingOperationId).toBeNull();
     expect(recorded.calls).toHaveLength(1);
+
+    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "A remembered room"));
+    await settle();
+    expect(instance.getState().entries.get("root")?.pendingOperationId).toBeNull();
 
     instance.resume();
     instance.resume();

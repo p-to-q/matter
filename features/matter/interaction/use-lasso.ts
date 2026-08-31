@@ -35,6 +35,7 @@ import { measureTextRange, type ClientTextRect } from "./range-measurement";
 import { clearMeasuredSelectionRects } from "./selection-rects-state";
 import { isCurrentLassoStroke, type LassoMeasurementEpoch } from "./lasso-stroke-epoch";
 import { projectOutsideLassoParticles } from "../material/lasso-particles";
+import { planLassoMaterialTransition } from "./lasso-material-validity";
 
 export type LassoController = Readonly<{
   active: boolean;
@@ -249,6 +250,39 @@ export function useLasso(input: {
     const previous = previousMaterialRef.current;
     previousMaterialRef.current = { treeId: input.tree.id, revision: input.tree.revision, documentEpoch: input.documentEpoch ?? 0 };
     if (previous.treeId === input.tree.id && previous.revision === input.tree.revision && previous.documentEpoch === (input.documentEpoch ?? 0)) return;
+    const ownerChanged = previous.treeId !== input.tree.id ||
+      previous.documentEpoch !== (input.documentEpoch ?? 0);
+    const interrupted = stateRef.current;
+    const retainedSelections = interrupted.mode === "drawing"
+      ? startSelectionsRef.current
+      : selectionsRef.current;
+    const transition = planLassoMaterialTransition({
+      tree: input.tree,
+      selections: retainedSelections,
+      ownerChanged,
+      drawingPointerId: interrupted.mode === "drawing" ? interrupted.pointerId : null,
+    });
+    if (transition.releasePointerId !== null) {
+      // Material ownership and geometry can change along either branch below.
+      // Return DOM pointer capture before semantic state leaves drawing mode.
+      onGeometryInvalidated?.(transition.releasePointerId);
+    }
+    if (transition.retainSelections) {
+      // A revision changes geometry, but an unrelated mutation does not revoke
+      // an already-addressed passage. An active stroke still loses its frozen
+      // measurement snapshot and returns to the selection it began from.
+      if (interrupted.mode === "drawing") {
+        dispatch({ type: "layout-invalidated" });
+        commitSelections(retainedSelections);
+        startSelectionsRef.current = Object.freeze([]);
+      }
+      sampledPointsRef.current = [];
+      strokeEpochRef.current = null;
+      targetSnapshotRef.current = null;
+      targetSnapshotKeyRef.current = null;
+      writeInk([]);
+      return;
+    }
     dispatch({ type: "material-invalidated" });
     sampledPointsRef.current = [];
     strokeEpochRef.current = null;
@@ -260,7 +294,7 @@ export function useLasso(input: {
     setSelectionSetRects(clearMeasuredSelectionRects);
     setSelectionColumn(null);
     commitSelections(Object.freeze([]));
-  }, [commitSelections, dispatch, input.documentEpoch, input.tree.id, input.tree.revision, writeInk]);
+  }, [commitSelections, dispatch, input.documentEpoch, input.tree, onGeometryInvalidated, writeInk]);
 
   const previousNavigationRef = useRef(input.navigationKey);
   useLayoutEffect(() => {
