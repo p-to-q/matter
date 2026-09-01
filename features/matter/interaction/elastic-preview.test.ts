@@ -60,7 +60,7 @@ describe("elastic preview geometry", () => {
     expect(preview.addressProjection).toMatchObject({
       attachmentProgress: 1,
       direction: "slot-then-selection",
-      slot: { blockStart: 128, blockEnd: 200 },
+      slot: { blockStart: 200, blockEnd: 272 },
     });
     expect(preview.fragments).toEqual(stepped);
   });

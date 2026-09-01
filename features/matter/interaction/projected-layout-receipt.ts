@@ -208,7 +208,10 @@ export function projectMaterialAddress(input: Readonly<{
     metrics: input.receipt.metrics,
     rows: shiftedRows,
     run: input.receipt.run,
-    slot: Object.freeze({ blockStart: rounded(first.blockStart - depth), blockEnd: first.blockStart }),
+    slot: Object.freeze({
+      blockStart: first.blockStart,
+      blockEnd: rounded(first.blockStart + depth),
+    }),
     textDirection: input.receipt.textDirection,
     writingMode: input.receipt.writingMode,
   });

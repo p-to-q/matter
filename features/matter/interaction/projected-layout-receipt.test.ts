@@ -69,6 +69,7 @@ describe("projected layout receipt", () => {
     expect(lower.direction).toBe("selection-then-slot");
     expect(lower.slot).toEqual({ blockStart: 152, blockEnd: 224 });
     expect(lower.rows).toBe(RECEIPT.rows);
+    expect(lower.slot?.blockStart).toBe(lower.rows.at(-1)?.blockEnd);
 
     const upper = projectMaterialAddress({
       amount: .5,
@@ -77,9 +78,10 @@ describe("projected layout receipt", () => {
       receipt: RECEIPT,
     })!;
     expect(upper.direction).toBe("slot-then-selection");
-    expect(upper.slot).toEqual({ blockStart: 28, blockEnd: 100 });
+    expect(upper.slot).toEqual({ blockStart: 100, blockEnd: 172 });
     expect(upper.rows[0]).toMatchObject({ blockStart: 172, blockEnd: 192 });
     expect(upper.rows[1]).toMatchObject({ blockStart: 204, blockEnd: 224 });
+    expect(upper.slot?.blockEnd).toBe(upper.rows[0]?.blockStart);
   });
 
   it("derives engagement from amount so pointer and keyboard geometry cannot diverge", () => {
