@@ -7,16 +7,35 @@ import type { MaterialAddressProjection } from "../interaction/projected-layout-
 export type MaterialAddressVariant = "actionable" | "native" | "structural";
 
 /**
- * A whole-node structural selection is a softer optical object than a precise
- * material address, so it keeps the older label pill's rounding instead of the
- * receipt's tight radius. The scale lives here, once, because React and the
- * pointer hot path have to reach the same decision for one projection.
+ * The whole-node state keeps the label pill's `.44em` rounding, so it is taken
+ * from the rows this projection actually measured rather than from a multiple
+ * of the precise address radius. The receipt's corner radius is itself a
+ * clamped `4 * scale`, so scaling it drifts away from the pill at small type
+ * or high zoom; the median row extent tracks the type at every zoom instead.
+ *
+ * It reads only cached row geometry, so it stays pure and costs no layout.
  */
-const VARIANT_CORNER_SCALE: Readonly<Record<MaterialAddressVariant, number>> = {
-  actionable: 1,
-  native: 1,
-  structural: 2.7,
-};
+const STRUCTURAL_ROW_RATIO = 0.44;
+
+export function materialAddressVariantCornerRadius(
+  projection: MaterialAddressProjection,
+  variant: MaterialAddressVariant,
+): number {
+  if (variant !== "structural") return projection.metrics.cornerRadius;
+  const first = Math.max(0, Math.min(projection.run.startRow, projection.rows.length - 1));
+  const last = Math.max(first, Math.min(projection.run.endRow, projection.rows.length - 1));
+  const extents = projection.rows
+    .slice(first, last + 1)
+    .map((row) => row.blockEnd - row.blockStart)
+    .filter((extent) => Number.isFinite(extent) && extent > 0)
+    .sort((left, right) => left - right);
+  if (extents.length === 0) return projection.metrics.cornerRadius;
+  const middle = Math.floor(extents.length / 2);
+  const median = extents.length % 2 === 1
+    ? extents[middle]!
+    : (extents[middle - 1]! + extents[middle]!) / 2;
+  return median * STRUCTURAL_ROW_RATIO;
+}
 
 export function materialAddressVariantOutline(
   projection: MaterialAddressProjection | null,
@@ -24,7 +43,7 @@ export function materialAddressVariantOutline(
 ) {
   if (projection === null) return null;
   return materialAddressOutline(projection, {
-    cornerRadius: projection.metrics.cornerRadius * (VARIANT_CORNER_SCALE[variant] ?? 1),
+    cornerRadius: materialAddressVariantCornerRadius(projection, variant),
   });
 }
 

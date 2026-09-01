@@ -2,7 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ELASTIC_PREVIEW_METRICS, elasticPreviewGeometry } from "../interaction/elastic-preview";
 import { materialAddressOutline } from "../interaction/material-address-outline";
-import { materialAddressVariantOutline } from "./MaterialAddressLayer";
+import {
+  materialAddressVariantCornerRadius,
+  materialAddressVariantOutline,
+} from "./MaterialAddressLayer";
 import type { MaterialAddressProjection } from "../interaction/projected-layout-receipt";
 
 const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
@@ -200,18 +203,52 @@ describe("selected material address", () => {
     expect(base![1]).toMatch(/transition: opacity 120ms/);
   });
 
-  it("gives the whole-node state a softer rounding than a precise address", () => {
-    // The structural state is the old label pill's optical object, so it keeps
-    // that rounding instead of the receipt's tight material-address radius.
-    const projection = addressProjection();
-    const radius = (variant: "actionable" | "native" | "structural") => {
-      const path = materialAddressVariantOutline(projection, variant)!.path;
-      return Number(path.match(/A([\d.]+) /)![1]);
-    };
-    expect(radius("structural")).toBeGreaterThan(radius("actionable"));
-    expect(radius("actionable")).toBe(projection.metrics.cornerRadius);
-    expect(radius("native")).toBe(projection.metrics.cornerRadius);
-    expect(radius("structural")).toBeCloseTo(projection.metrics.cornerRadius * 2.7, 5);
+  it("takes the whole-node rounding from its own rows, not the precise radius", () => {
+    const rowsOfHeight = (extent: number) => Object.freeze([0, 1, 2].map((index) =>
+      Object.freeze({
+        blockEnd: 100 + (index + 1) * extent,
+        blockStart: 100 + index * extent,
+        inlineEnd: index === 2 ? 260 : 600,
+        inlineStart: index === 0 ? 300 : 100,
+      })));
+    const requested = (extent: number, cornerRadius: number) =>
+      materialAddressVariantCornerRadius(
+        addressProjection({
+          metrics: { blockOutset: 3, cornerRadius, inlineOutset: 3 },
+          rows: rowsOfHeight(extent),
+        }),
+        "structural",
+      );
+
+    // The receipt radius is a clamped `4 * scale`, so a multiple of it drifts
+    // from the pill's `.44em` at small type or high zoom. The row extent does
+    // not: structural tracks the rows even where the receipt radius is pinned
+    // to its lower and upper clamps.
+    expect(requested(28, 3)).toBeCloseTo(28 * 0.44, 5);
+    expect(requested(60, 3)).toBeCloseTo(60 * 0.44, 5);
+    expect(requested(28, 12)).toBeCloseTo(28 * 0.44, 5);
+    expect(requested(60, 12)).toBeCloseTo(60 * 0.44, 5);
+    // Pinned receipt radius, different rows: structural must still differ.
+    expect(requested(28, 12)).not.toBeCloseTo(requested(60, 12), 5);
+    // And the same rows under different receipt radii must not move it.
+    expect(requested(28, 3)).toBeCloseTo(requested(28, 12), 5);
+
+    // A precise address keeps the receipt radius exactly.
+    for (const variant of ["actionable", "native"] as const) {
+      const projection = addressProjection({
+        metrics: { blockOutset: 3, cornerRadius: 7, inlineOutset: 3 },
+      });
+      expect(materialAddressVariantCornerRadius(projection, variant)).toBe(7);
+    }
+
+    // The emitted path uses the requested radius where the edges allow it.
+    const outline = materialAddressVariantOutline(
+      addressProjection({ rows: rowsOfHeight(60) }),
+      "structural",
+    )!;
+    const emitted = [...outline.path.matchAll(/A([\d.]+) /g)].map((match) => Number(match[1]));
+    expect(Math.max(...emitted)).toBeCloseTo(60 * 0.44, 1);
+
     // One decision serves React and the pointer hot path.
     expect((layer.match(/materialAddressVariantOutline\(/g) ?? []).length).toBe(3);
     expect(layer).not.toMatch(/\bmaterialAddressOutline\(projection\)/);
