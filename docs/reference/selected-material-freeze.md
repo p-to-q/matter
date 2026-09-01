@@ -209,7 +209,7 @@ neutral palette are unchanged.
 | lasso eligible | per-line impression at `held` | shown, from first/last line | none |
 | lasso ineligible | same impression at `held` | hidden | none |
 | grip press, degree zero | **stays visible, density unchanged** | press form | pocket depth 0 |
-| dragging | **stays visible**; upper grip displaces it with the language, lower grip leaves it in place | follow per-line anchors | pocket at the surface's own density |
+| dragging | **stays visible**; upper grip displaces it with the language, lower grip leaves it in place | follow per-line anchors | vessel at the surface's own density; the body appears at full column width, and low-amount continuity comes from it entering at zero height rather than from interpolating width |
 | pending | same impression, same density, same place | present, non-interactive | no spinner, toast, or panel |
 | result | atomic handoff to the settle receipt | removed | existing settle |
 | failure | impression and degree return to a usable phase | interactive again | no error chrome |
@@ -272,15 +272,28 @@ decisions, not preferences, and are not reopened without both owners.
    lose contrast without it. Grip shape, size, colour, and the existing
    physical rules are unchanged.
 
-4. **Proportional geometry.** Radius, outset, and the pocket shoulder derive
-   from the measured line height, with safe upper and lower bounds, so the mark
-   stays proportional to the material it marks across the zoom range instead of
-   reading tight and square when magnified.
+4. **Proportional geometry.** Radius, outset, and the shoulder derive from
+   measured line metrics with safe bounds, so the mark stays proportional to
+   the material it marks across the zoom range instead of reading tight and
+   square when magnified. `shoulderDepth` is the median real line gap, clamped
+   to `[2 x dynamicRadius, medianLineHeight]`, and **must not grow with
+   `pocketDepth`**. A transition whose depth scales with the vessel keeps the
+   same slope at every amount, so the whole vessel stays transition and never
+   becomes a block: that failure was measured once at a constant 73.8 degrees
+   with 100% of the depth in transition.
 
-5. **Pocket source and seam.** The pocket shoulder runs from the real first or
-   last line to the owning text column's edge. The upper grip moves the
-   selected language and its address together; the lower grip leaves the
-   selected language fixed. Every seam is zero-gap, per invariant 6.
+5. **Vessel composition and seam.** The vessel is two full-alpha sub-surfaces
+   inside the address surface's single opacity group: a **neck** spanning
+   exactly the anchor line, and a **body** at the owning text column's width.
+   They overlap by `seamOverlap`, so they neither compound density nor leave a
+   gap. While `depth <= shoulderDepth` only the neck grows; beyond it the
+   neck's depth is fixed and the body enters at zero height and grows, so the
+   widening is continuous without becoming instant. The upper grip places the
+   body above and the neck below, meeting the first line; the lower grip
+   mirrors it against the last line. **A sheared trapezoid spanning the full
+   depth is forbidden**, in the same terms already frozen for connectors: a
+   large horizontal run may not be absorbed by a slope. Every seam is
+   zero-gap, per invariant 6.
 
 ### Known non-blocking
 
@@ -304,6 +317,19 @@ breakpoints.
 
 Three transitions must be reviewed as recordings, not stills: lasso to press to
 drag to release; Control Fog to field; pending to result handoff.
+
+The vessel is proven at the extreme fixture, where the anchor line is far
+narrower than the column. Neck width and offset match the anchor line exactly;
+the body reaches both column edges; every seam is within `0.01px`; and the
+body's share of the depth rises monotonically with amount toward the whole
+vessel. The acceptance contract is the shoulder itself: **it never exceeds one
+measured visual line and never grows with `pocketDepth`**. It is deliberately
+not a fixed percentage, because the achievable share depends on the fixture's
+line gap; the same contract is what the high-zoom end-to-end proof passes
+across magnifications. Measured against a `36.7px` anchor line in a `548.5px`
+column, the body's share ran 0% / 40.6% / 76.2% / 88.1% at amounts
+0.1 / 0.2 / 0.5 / 1, with a neck depth constant at `18.53px` once the body
+existed, and the upper grip mirrored it to the same figures.
 
 Slice 0.5 locks, at minimum: press-at-zero opacity is not zero; the fragment is
 still visible during expand and pending; per-line centres are used on first
