@@ -261,6 +261,20 @@ test("the upper moving partition reflows in the full column and never splits a l
 
   await upper.press("End");
   await expect(projection).toHaveAttribute("data-stretch-handle", "top");
+  const rendererHandoff = await projection.evaluate((node) => {
+    const canonical = node.parentElement?.querySelector<HTMLElement>(".spatial-thought__text");
+    const tail = node.querySelector<HTMLElement>(".language-split-witness-tail");
+    return {
+      canonicalColor: canonical === undefined || canonical === null
+        ? null
+        : getComputedStyle(canonical).color,
+      tailVisibility: tail === null ? null : getComputedStyle(tail).visibility,
+    };
+  });
+  expect(rendererHandoff).toEqual({
+    canonicalColor: "rgba(0, 0, 0, 0)",
+    tailVisibility: "hidden",
+  });
 
   const geometry = await projection.evaluate((node) => {
     const column = node.closest(".spatial-thought")!

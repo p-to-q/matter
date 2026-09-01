@@ -334,7 +334,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 /* The witness carries the canonical remainder invisibly, so the fixed
    partition's last line breaks and centres exactly as it does in the source.
    Its height is clipped to that line, which is where the slot opens. */
-.language-split-witness { height: var(--witness-block-size, auto); }
+.language-split-witness { height: var(--witness-block-size, auto); overflow: clip; }
 .language-split-witness-tail { visibility: hidden; }
 .language-split-slot { display: block; width: 100%; height: var(--split-depth); }
 .language-split-seam { background: transparent; }
@@ -343,8 +343,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .language-split-projection:not([data-preview-mode="expand"]) .language-split-witness { height: auto; }
 .language-split-projection[data-preview-mode="expand"] { opacity: 1; }
 .language-split-projection[data-preview-mode="expand"]::before { opacity: 1; }
-.language-split-projection[data-preview-mode="expand"] ~ *,
-.spatial-thought__text[data-visual-projection="true"] { transition: color 90ms ease, text-decoration-color 90ms ease; }
+/* Renderer ownership changes atomically. A colour transition here makes the
+   canonical line and the real-flow projection readable at once for 90ms,
+   which looks like duplicated text and breaks the material's identity. */
+.spatial-thought__text[data-visual-projection="true"] { transition: none; }
 .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; text-decoration-color: transparent; }
 .admission-feedback { position: absolute; z-index: 6; display: flex; width: min(var(--matter-column-width), calc(100vw - 44px)); max-width: calc(100vw - 44px); min-height: 40px; box-sizing: border-box; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); flex-wrap: wrap; pointer-events: auto; }
 .admission-feedback__signal { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--active); opacity: .72; }

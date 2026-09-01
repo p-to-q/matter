@@ -1309,61 +1309,123 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     const projectionElement = splitProjectionRef.current;
     const selected = projectionElement?.querySelector<HTMLElement>(".language-split-block--selected");
+    const flowRoot = projectionElement?.querySelector<HTMLElement>(".language-split-flow");
     const witness = projectionElement?.querySelector<HTMLElement>(".language-split-witness");
     const moving = projectionElement?.querySelector<HTMLElement>(".language-split-moving");
+    const slot = projectionElement?.querySelector<HTMLElement>(".language-split-slot");
     const seam = projectionElement?.querySelector<HTMLElement>(".language-split-seam");
-    if (projectionElement == null || selected == null || witness == null || moving == null) {
+    const clearReceipts = () => {
       projectionHandleReceiptRef.current = null;
       projectedLayoutReceiptRef.current = null;
       setProjectedLayoutReceipt(null);
+    };
+    if (
+      projectionElement == null || selected == null || flowRoot == null ||
+      witness == null || moving == null || slot == null
+    ) {
+      clearReceipts();
       return;
     }
-    const projectionRect = projectionElement.getBoundingClientRect();
-    const selectedRange = rangeBoundsAroundContents(selected);
     const currentHandle = stretch.activeHandle ?? stretch.lastHandle;
-    // Witness, slot, and moving partition sit in real flow, so a measured rect
-    // is already the truth. There is no presentation shift left to undo.
-    const sourceOffsetClient = 0;
     const ownerText = projectionElement.closest<HTMLElement>(".spatial-thought")
       ?.querySelector<HTMLElement>(".spatial-thought__text") ?? null;
-    const selectedRects = rangeClientRectsAroundContents(selected).map((rect) => Object.freeze({
-      ...rect,
-      y: rect.y - sourceOffsetClient,
-    }));
     const columnRect = ownerText?.getBoundingClientRect() ?? null;
     const currentSelection = stretchSelectionRef.current;
     const ownerTextStyle = ownerText === null ? null : getComputedStyle(ownerText);
-    const nextProjectedLayoutReceipt = ownerText === null || columnRect === null || currentSelection === null || ownerTextStyle === null
+    const canonicalText = currentSelection === null
       ? null
-      : createProjectedLayoutReceipt({
-          basis: {
-            addressKey: `${currentSelection.nodeId}:${currentSelection.start}:${currentSelection.end}`,
-            documentEpoch: props.documentEpoch,
-            layoutEpoch: activeLayout?.layoutEpoch ?? 0,
-            nodeId: currentSelection.nodeId,
-            partitionKey: selectionPreviewMode === "expand"
-              ? `projected-${currentHandle ?? "bottom"}`
-              : "selection",
-            treeId: tree.id,
-            viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}`,
-          },
-          column: {
-            left: columnRect.left,
-            top: columnRect.top - sourceOffsetClient,
-            right: columnRect.right,
-            bottom: columnRect.bottom - sourceOffsetClient,
-          },
-          rects: selectedRects,
-          textDirection: ownerTextStyle.direction,
-          writingMode: ownerTextStyle.writingMode,
+      : props.tree.nodes[currentSelection.nodeId]?.text ?? null;
+    if (
+      ownerText === null || columnRect === null || currentSelection === null ||
+      ownerTextStyle === null || canonicalText === null
+    ) {
+      clearReceipts();
+      return;
+    }
+
+    // The witness ends on the fixed partition's last canonical line, so the
+    // slot opens on a line boundary and never splits a line. Its hidden tail
+    // preserves the original line breaking and centring of that last line.
+    const seamLength = seam?.textContent?.length ?? 0;
+    const fixedLength = Math.min(
+      currentHandle === "top"
+        ? currentSelection.start
+        : currentSelection.end + seamLength,
+      canonicalText.length,
+    );
+    // An empty fixed partition is not a failed measurement: the slot opens at
+    // the very top and the witness must take no room at all.
+    const witnessMeasurement = fixedLength === 0
+      ? null
+      : measureTextRange(ownerText, canonicalText, {
+          start: 0,
+          end: fixedLength,
+          selectedText: canonicalText.slice(0, fixedLength),
         });
+    if (fixedLength > 0 && witnessMeasurement?.ok !== true) {
+      clearReceipts();
+      return;
+    }
+    const witnessBottomClient = fixedLength === 0
+      ? columnRect.top
+      : witnessMeasurement?.ok === true
+        ? Math.max(...witnessMeasurement.rects.map((rect) => rect.y + rect.height))
+        : columnRect.top;
+    const witnessBlockSizeWorld = fixedLength === 0
+      ? 0
+      : clientDepthToWorld(Math.max(0, witnessBottomClient - columnRect.top), viewport.zoom);
+    if (witnessBlockSizeWorld === null) {
+      clearReceipts();
+      return;
+    }
+
+    // A receipt freezes the partition's closed-slot line grid. Hot pointer
+    // frames add the current depth with pure arithmetic; measuring an already
+    // open slot here would apply the same depth twice after release or resize.
+    const previousDepth = projectionElement.style.getPropertyValue("--split-depth");
+    projectionElement.style.setProperty("--witness-block-size", `${witnessBlockSizeWorld}px`);
+    projectionElement.style.setProperty("--split-depth", "0px");
+    const projectionRect = projectionElement.getBoundingClientRect();
+    const flowRect = flowRoot.getBoundingClientRect();
+    const selectedRange = rangeBoundsAroundContents(selected);
+    const selectedRects = rangeClientRectsAroundContents(selected);
+    const naturalProjectedHeightWorld = clientDepthToWorld(flowRect.height, viewport.zoom);
+    const sourceHeightWorld = clientDepthToWorld(columnRect.height, viewport.zoom);
+    const nextProjectedLayoutReceipt = createProjectedLayoutReceipt({
+      basis: {
+        addressKey: `${currentSelection.nodeId}:${currentSelection.start}:${currentSelection.end}`,
+        documentEpoch: props.documentEpoch,
+        layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+        nodeId: currentSelection.nodeId,
+        partitionKey: selectionPreviewMode === "expand"
+          ? `projected-${currentHandle ?? "bottom"}`
+          : "selection",
+        treeId: tree.id,
+        viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}`,
+      },
+      column: {
+        left: columnRect.left,
+        top: columnRect.top,
+        right: columnRect.right,
+        bottom: Math.max(columnRect.bottom, flowRect.bottom),
+      },
+      rects: selectedRects,
+      textDirection: ownerTextStyle.direction,
+      writingMode: ownerTextStyle.writingMode,
+    });
+    if (
+      nextProjectedLayoutReceipt === null || selectedRange === null ||
+      naturalProjectedHeightWorld === null || sourceHeightWorld === null
+    ) {
+      if (previousDepth.length === 0) projectionElement.style.removeProperty("--split-depth");
+      else projectionElement.style.setProperty("--split-depth", previousDepth);
+      clearReceipts();
+      return;
+    }
     projectedLayoutReceiptRef.current = nextProjectedLayoutReceipt;
     setProjectedLayoutReceipt(nextProjectedLayoutReceipt);
-    const canonicalRect = ownerText?.getBoundingClientRect() ?? null;
-    const selectedTopClient = (selectedRange?.top ?? canonicalRect?.top ?? projectionRect.top) -
-      sourceOffsetClient;
-    const selectedBottomClient = (selectedRange?.bottom ?? canonicalRect?.bottom ?? projectionRect.top) -
-      sourceOffsetClient;
+    const selectedTopClient = selectedRange.top;
+    const selectedBottomClient = selectedRange.bottom;
     const selectedTop = clientDepthToWorld(
       Math.max(0, selectedTopClient - projectionRect.top),
       viewport.zoom,
@@ -1372,46 +1434,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
       Math.max(0, selectedBottomClient - projectionRect.top),
       viewport.zoom,
     ) ?? selectedTop;
-    const sourceHeightWorld = clientDepthToWorld(canonicalRect?.height ?? 0, viewport.zoom) ?? 0;
-    // The witness ends on the fixed partition's last canonical line, so the
-    // slot opens on a line boundary and never splits a line. Measuring it from
-    // the canonical text keeps this one pass and keeps the witness identical.
-    const seamLength = seam?.textContent?.length ?? 0;
-    const fixedLength = currentHandle === "top"
-      ? currentSelection?.start ?? 0
-      : (currentSelection?.end ?? 0) + seamLength;
-    const canonicalText = currentSelection === null
-      ? null
-      : props.tree.nodes[currentSelection.nodeId]?.text ?? null;
-    // An empty fixed partition is not a failed measurement: the slot opens at
-    // the very top and the witness must take no room at all.
-    const emptyFixedPartition = fixedLength <= 0;
-    const witnessMeasurement = ownerText === null || canonicalText === null || emptyFixedPartition
-      ? null
-      : measureTextRange(ownerText, canonicalText, {
-          start: 0,
-          end: Math.min(fixedLength, canonicalText.length),
-          selectedText: canonicalText.slice(0, Math.min(fixedLength, canonicalText.length)),
-        });
-    const witnessBottomClient = witnessMeasurement?.ok === true
-      ? Math.max(...witnessMeasurement.rects.map((rect: { y: number; height: number }) => rect.y + rect.height))
-      : null;
-    const witnessBlockSizeWorld = emptyFixedPartition
-      ? 0
-      : witnessBottomClient === null || canonicalRect === null
-        ? null
-        : clientDepthToWorld(Math.max(0, witnessBottomClient - canonicalRect.top), viewport.zoom);
-    // A missing size fails closed: the projection keeps its natural height
-    // rather than guessing where the fixed partition ends.
-    if (witnessBlockSizeWorld === null) {
-      projectionElement.style.removeProperty("--witness-block-size");
-    } else {
-      projectionElement.style.setProperty("--witness-block-size", `${witnessBlockSizeWorld}px`);
-    }
-    // Natural height with the slot closed: the witness plus the moving block,
-    // whose own wrapping does not depend on the witness's clipped height.
-    const naturalProjectedHeightWorld = (witnessBlockSizeWorld ?? 0) +
-      (clientDepthToWorld(moving.offsetHeight, viewport.zoom) ?? 0);
     projectionHandleReceiptRef.current = Object.freeze({
       selectedTopClient,
       selectedBottomClient,
