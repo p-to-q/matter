@@ -229,10 +229,59 @@ regression net for the receipt and lease refactor.
   Exact-segment Point Talk stays blocked throughout, with no CSS branch
   reserved for it.
 
+Slice 0.5 is closed. The questions below were only visible once the impression
+was painting again, so they belong to Slice 1 UI rather than to an amendment of
+the slice that revealed them.
+
+## Open visual questions
+
+These are the acceptance criteria for Slice 1 UI. Each states a defect that is
+currently observable, not a preference.
+
+**The revealing fixture.** High canvas zoom, dark appearance, a wrapped stepped
+range, upper grip engaged. It is added to the six proof fixtures because every
+question below is invisible at default zoom in light appearance, which is why
+they survived Slice 0.5. Any answer must be reviewed at this fixture and at the
+default one.
+
+1. **Fragment topology.** The impression is one rectangle per Range rect, drawn
+   without any relationship between rects. What should its topology be when the
+   selection is a single continuous run of language?
+
+2. **Cross-line joining.** A stepped range leaves a hard step between the tail
+   of one line and the head of the next, so the mark reads as separate labels
+   rather than one continuous piece of material. What, if anything, joins them?
+
+3. **Grip seam.** The grip's visible bar carries an opaque paper-coloured halo
+   so it stays legible on arbitrary material, and sits five pixels outside its
+   anchor. On its own impression that halo punches a hole in the mark it
+   belongs to. How does a grip take contrast from the impression when it is on
+   one, without losing legibility when it is not?
+
+4. **Proportional outset and radius.** The `3px` outset and `4px` radius are
+   client-space constants while the material scales with canvas zoom, so the
+   mark is tight and square when zoomed in and loose and over-rounded when
+   zoomed out. It does not scale with the thing it marks. Should both derive
+   from the line box instead?
+
+5. **Pocket and impression source.** The pocket is derived from the text column
+   with a `10px` inline outset; the impression is derived from the Range rects
+   with a `3px` outset, and the pocket carries no radius at all. A narrow
+   stepped mark therefore meets a wide flat slab at the seam. This is the most
+   visible discontinuity left, and it cannot be answered in CSS: it asks whether
+   both derive from one receipt. It is also coupled to C3, because once the
+   pending rectangle is the settled rectangle, the pocket's width stops being a
+   matter of appearance and starts deciding where the result lands.
+
+Questions 1 to 4 are the UI owner's to answer within the accepted render model.
+Question 5 needs both owners, and the geometry receipt and the end-to-end
+proofs behind it stay with the foundation owner.
+
 ## Proof
 
-Six fixtures: single line, wrapped stepped range, adjacent segments, whole
-node, upper-grip displacement, lower-grip displacement.
+Seven fixtures: single line, wrapped stepped range, adjacent segments, whole
+node, upper-grip displacement, lower-grip displacement, and the revealing
+fixture above.
 
 Boundaries: light and dark, `forced-colors: active`,
 `prefers-reduced-motion: reduce`, `pointer: coarse`, and the 389 / 767 / 959
