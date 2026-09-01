@@ -1,66 +1,45 @@
-import type { StretchHandle } from "../runtime/stretch-interaction";
-
 export type LanguageFlowProjection = Readonly<{
-  beforeTop: number;
-  selectedTop: number;
-  slotTop: number;
-  afterTop: number;
-  topExtent: number;
   bottomExtent: number;
   presentationHeight: number;
+  topExtent: number;
 }>;
 
 /**
- * Opens one downward-growing slot on the boundary named by the grip. The upper
- * boundary keeps the prefix fixed and pushes the selected language plus suffix
- * down; the lower boundary keeps selected language fixed and pushes the suffix.
+ * Reports how much taller than the canonical paragraph the projected partitions
+ * stand once the slot is open.
+ *
+ * The projection lays witness, slot, and moving partition out in real flow, so
+ * it decides its own positions and no longer needs a natural suffix top to
+ * reconstruct them. What layout damage still needs is only how tall the
+ * partitions are with the slot closed, plus the current depth. The upper
+ * boundary stays fixed by construction, so growth is always downward.
  */
 export function projectLanguageFlow(input: Readonly<{
-  sourceHeight: number;
-  selectedTop: number;
-  afterNaturalTop: number;
-  afterHeight: number;
+  naturalProjectedHeight: number;
   slotDepth: number;
-  handle: StretchHandle;
+  sourceHeight: number;
 }>): LanguageFlowProjection | null {
   if (
-    !isNonNegative(input.sourceHeight) ||
-    !isNonNegative(input.selectedTop) ||
-    !isNonNegative(input.afterNaturalTop) ||
-    !isNonNegative(input.afterHeight) ||
+    !isNonNegative(input.naturalProjectedHeight) ||
     !isNonNegative(input.slotDepth) ||
-    input.selectedTop > input.sourceHeight ||
-    input.afterNaturalTop > input.sourceHeight ||
-    input.afterNaturalTop < input.selectedTop ||
-    (input.handle !== "top" && input.handle !== "bottom")
+    !isNonNegative(input.sourceHeight)
   ) return null;
-
-  if (input.handle === "top") {
-    return own({
-      beforeTop: 0,
-      selectedTop: input.selectedTop + input.slotDepth,
-      slotTop: input.selectedTop,
-      afterTop: input.afterNaturalTop + input.slotDepth,
-      topExtent: 0,
-      bottomExtent: input.slotDepth,
-      presentationHeight: input.sourceHeight + input.slotDepth,
-    });
-  }
-
-  const afterTop = input.afterNaturalTop + input.slotDepth;
-  const projectedBottom = afterTop + input.afterHeight;
-  const bottomExtent = Math.max(0, projectedBottom - input.sourceHeight);
-  return own({
-    beforeTop: 0,
-    selectedTop: input.selectedTop,
-    slotTop: input.afterNaturalTop,
-    afterTop,
+  const presentationHeight = input.naturalProjectedHeight + input.slotDepth;
+  return Object.freeze({
+    bottomExtent: Math.max(0, presentationHeight - input.sourceHeight),
+    presentationHeight,
     topExtent: 0,
-    bottomExtent,
-    presentationHeight: input.sourceHeight + bottomExtent,
   });
 }
 
+function isNonNegative(value: number): boolean {
+  return Number.isFinite(value) && value >= 0;
+}
+
+/**
+ * Converts a client-pixel depth into the canvas's own units. Presentation reads
+ * client pixels; the tree layout stores world units.
+ */
 export function clientDepthToWorld(clientPixels: number, viewportZoom: number): number | null {
   return Number.isFinite(clientPixels) && clientPixels >= 0 &&
     Number.isFinite(viewportZoom) && viewportZoom > 0
@@ -68,16 +47,6 @@ export function clientDepthToWorld(clientPixels: number, viewportZoom: number): 
     : null;
 }
 
-function isNonNegative(value: number): boolean {
-  return Number.isFinite(value) && value >= 0;
-}
-
-function own(value: LanguageFlowProjection): LanguageFlowProjection {
-  return Object.freeze(Object.fromEntries(
-    Object.entries(value).map(([key, number]) => [key, round(number)]),
-  ) as unknown as LanguageFlowProjection);
-}
-
 function round(value: number): number {
-  return Math.round(value * 1_000) / 1_000;
+  return Math.round(value * 1000) / 1000;
 }

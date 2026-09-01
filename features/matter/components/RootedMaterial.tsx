@@ -38,6 +38,7 @@ import {
   STRETCH_COMMIT_THRESHOLD,
   isStretchInteractionKey,
 } from "../runtime/stretch-interaction";
+import type { StretchHandle } from "../runtime/stretch-interaction";
 import {
   prepareElasticPreviewSource,
   projectElasticPreview,
@@ -48,7 +49,7 @@ import {
   projectMaterialAddress,
   type ProjectedLayoutReceipt,
 } from "../interaction/projected-layout-receipt";
-import { normalizeClientRects } from "../interaction/range-measurement";
+import { measureTextRange, normalizeClientRects } from "../interaction/range-measurement";
 import { useNativeMaterialSelection } from "../interaction/use-native-material-selection";
 import { useStructuralMaterialSelection } from "../interaction/use-structural-material-selection";
 import { projectLanguageAroundSelection } from "../material/language-projection";
@@ -242,11 +243,9 @@ type PresentationDamage = Readonly<{
 type ProjectionHandleReceipt = Readonly<{
   selectedTopClient: number;
   selectedBottomClient: number;
-  afterTopClient: number;
   selectedTopWorld: number;
   selectedBottomWorld: number;
-  afterTopWorld: number;
-  afterHeightWorld: number;
+  naturalProjectedHeightWorld: number;
   sourceHeightWorld: number;
 }>;
 
@@ -945,12 +944,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       publishLiveLanguageLayout(null);
     } else if (split !== null && receipt !== null) {
       const flow = projectLanguageFlow({
-        sourceHeight: receipt.sourceHeightWorld,
-        selectedTop: receipt.selectedTopWorld,
-        afterNaturalTop: receipt.afterTopWorld,
-        afterHeight: receipt.afterHeightWorld,
+        naturalProjectedHeight: receipt.naturalProjectedHeightWorld,
         slotDepth: worldDepth,
-        handle,
+        sourceHeight: receipt.sourceHeightWorld,
       });
       const nodeId = stretchSelectionRef.current?.nodeId;
       if (flow !== null && nodeId !== undefined) {
@@ -1313,10 +1309,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     const projectionElement = splitProjectionRef.current;
     const selected = projectionElement?.querySelector<HTMLElement>(".language-split-block--selected");
-    const source = projectionElement?.querySelector<HTMLElement>(".language-split-source");
-    const afterGhost = projectionElement?.querySelector<HTMLElement>(".language-split-after-ghost");
-    const projectedAfter = projectionElement?.querySelector<HTMLElement>(".language-split-block--after");
-    if (projectionElement == null || selected == null || source == null) {
+    const witness = projectionElement?.querySelector<HTMLElement>(".language-split-witness");
+    const moving = projectionElement?.querySelector<HTMLElement>(".language-split-moving");
+    const seam = projectionElement?.querySelector<HTMLElement>(".language-split-seam");
+    if (projectionElement == null || selected == null || witness == null || moving == null) {
       projectionHandleReceiptRef.current = null;
       projectedLayoutReceiptRef.current = null;
       setProjectedLayoutReceipt(null);
@@ -1324,20 +1320,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     const projectionRect = projectionElement.getBoundingClientRect();
     const selectedRange = rangeBoundsAroundContents(selected);
-    const afterRange = afterGhost == null ? null : rangeAroundContents(afterGhost);
-    const projectedAfterRange = projectedAfter == null ? null : rangeAroundContents(projectedAfter);
-    const projectedAfterBounds = projectedAfter == null
-      ? null
-      : rangeBoundsAroundContents(projectedAfter);
-    const sourceRect = source.getBoundingClientRect();
-    const slot = projectionElement.querySelector<HTMLElement>(".language-split-slot");
     const currentHandle = stretch.activeHandle ?? stretch.lastHandle;
-    // The upper-grip projection moves the source copy down. Recover natural
-    // coordinates before freezing the next receipt so repeated keyboard steps,
-    // zoom, or a settled remeasurement cannot compound that presentation shift.
-    const sourceOffsetClient = selectionPreviewMode === "expand" && currentHandle === "top"
-      ? slot?.getBoundingClientRect().height ?? 0
-      : 0;
+    // Witness, slot, and moving partition sit in real flow, so a measured rect
+    // is already the truth. There is no presentation shift left to undo.
+    const sourceOffsetClient = 0;
     const ownerText = projectionElement.closest<HTMLElement>(".spatial-thought")
       ?.querySelector<HTMLElement>(".spatial-thought__text") ?? null;
     const selectedRects = rangeClientRectsAroundContents(selected).map((rect) => Object.freeze({
@@ -1373,45 +1359,65 @@ export function RootedMaterial(props: RootedMaterialProps) {
         });
     projectedLayoutReceiptRef.current = nextProjectedLayoutReceipt;
     setProjectedLayoutReceipt(nextProjectedLayoutReceipt);
-    const selectedTopClient = (selectedRange?.top ?? sourceRect.top) - sourceOffsetClient;
-    const selectedBottomClient = (selectedRange?.bottom ?? sourceRect.bottom) - sourceOffsetClient;
-    const afterTopClient = (afterRange?.top ?? sourceRect.bottom) - sourceOffsetClient;
+    const canonicalRect = ownerText?.getBoundingClientRect() ?? null;
+    const selectedTopClient = (selectedRange?.top ?? canonicalRect?.top ?? projectionRect.top) -
+      sourceOffsetClient;
+    const selectedBottomClient = (selectedRange?.bottom ?? canonicalRect?.bottom ?? projectionRect.top) -
+      sourceOffsetClient;
     const selectedTop = clientDepthToWorld(
       Math.max(0, selectedTopClient - projectionRect.top),
-      viewport.zoom,
-    ) ?? 0;
-    const afterTop = clientDepthToWorld(
-      Math.max(0, afterTopClient - projectionRect.top),
       viewport.zoom,
     ) ?? 0;
     const selectedBottom = clientDepthToWorld(
       Math.max(0, selectedBottomClient - projectionRect.top),
       viewport.zoom,
     ) ?? selectedTop;
-    const projectedAfterTopClient = projectedAfter?.getBoundingClientRect().top ?? 0;
-    const afterLeading = projectedAfterRange == null
+    const sourceHeightWorld = clientDepthToWorld(canonicalRect?.height ?? 0, viewport.zoom) ?? 0;
+    // The witness ends on the fixed partition's last canonical line, so the
+    // slot opens on a line boundary and never splits a line. Measuring it from
+    // the canonical text keeps this one pass and keeps the witness identical.
+    const seamLength = seam?.textContent?.length ?? 0;
+    const fixedLength = currentHandle === "top"
+      ? currentSelection?.start ?? 0
+      : (currentSelection?.end ?? 0) + seamLength;
+    const canonicalText = currentSelection === null
+      ? null
+      : props.tree.nodes[currentSelection.nodeId]?.text ?? null;
+    // An empty fixed partition is not a failed measurement: the slot opens at
+    // the very top and the witness must take no room at all.
+    const emptyFixedPartition = fixedLength <= 0;
+    const witnessMeasurement = ownerText === null || canonicalText === null || emptyFixedPartition
+      ? null
+      : measureTextRange(ownerText, canonicalText, {
+          start: 0,
+          end: Math.min(fixedLength, canonicalText.length),
+          selectedText: canonicalText.slice(0, Math.min(fixedLength, canonicalText.length)),
+        });
+    const witnessBottomClient = witnessMeasurement?.ok === true
+      ? Math.max(...witnessMeasurement.rects.map((rect: { y: number; height: number }) => rect.y + rect.height))
+      : null;
+    const witnessBlockSizeWorld = emptyFixedPartition
       ? 0
-      : projectedAfterRange.top - projectedAfterTopClient;
-    const afterTopWorld = clientDepthToWorld(
-      Math.max(0, afterTopClient - projectionRect.top - afterLeading),
-      viewport.zoom,
-    ) ?? 0;
-    const sourceHeightWorld = clientDepthToWorld(sourceRect.height, viewport.zoom) ?? 0;
-    const afterHeightWorld = projectedAfterBounds === null
-      ? 0
-      : clientDepthToWorld(
-          projectedAfterBounds.bottom - projectedAfterBounds.top,
-          viewport.zoom,
-        ) ?? 0;
-    projectionElement.style.setProperty("--split-after-top", `${afterTopWorld}px`);
+      : witnessBottomClient === null || canonicalRect === null
+        ? null
+        : clientDepthToWorld(Math.max(0, witnessBottomClient - canonicalRect.top), viewport.zoom);
+    // A missing size fails closed: the projection keeps its natural height
+    // rather than guessing where the fixed partition ends.
+    if (witnessBlockSizeWorld === null) {
+      projectionElement.style.removeProperty("--witness-block-size");
+    } else {
+      projectionElement.style.setProperty("--witness-block-size", `${witnessBlockSizeWorld}px`);
+    }
+    // Natural height with the slot closed: the witness plus the moving block,
+    // whose own wrapping does not depend on the witness's clipped height.
+    const naturalProjectedHeightWorld = (witnessBlockSizeWorld ?? 0) +
+      (clientDepthToWorld(moving.offsetHeight, viewport.zoom) ?? 0);
     projectionHandleReceiptRef.current = Object.freeze({
       selectedTopClient,
       selectedBottomClient,
-      afterTopClient,
       selectedTopWorld: selectedTop,
       selectedBottomWorld: selectedBottom,
-      afterTopWorld: afterTop,
-      afterHeightWorld,
+      naturalProjectedHeightWorld,
       sourceHeightWorld,
     });
     if (selectionPreviewMode === "expand") {
@@ -1421,6 +1427,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     activeLayout?.layoutEpoch,
     lasso.selection,
     props.documentEpoch,
+    props.tree.nodes,
     selectionPreviewMode,
     stretch.activeHandle,
     stretch.lastHandle,
@@ -1444,14 +1451,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       const slot = projectionElement.querySelector<HTMLElement>(".language-split-slot");
       const receipt = projectionHandleReceiptRef.current;
       if (source === null || slot === null || receipt === null) return;
-      const projectedAfter = projectionElement.querySelector<HTMLElement>(".language-split-block--after");
       const flow = projectLanguageFlow({
-        sourceHeight: source.offsetHeight,
-        selectedTop: receipt.selectedTopWorld,
-        afterNaturalTop: receipt.afterTopWorld,
-        afterHeight: projectedAfter?.offsetHeight ?? 0,
+        naturalProjectedHeight: receipt.naturalProjectedHeightWorld,
         slotDepth: slot.offsetHeight,
-        handle: stretch.activeHandle ?? stretch.lastHandle ?? "bottom",
+        sourceHeight: source.offsetHeight,
       });
       if (flow === null) return;
       nextDamage = Object.freeze({
@@ -2608,6 +2611,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSelection={stretchSelection}
               lassoSourceText={lasso.sourceText}
               locale={props.locale}
+              selectionMovingHandle={stretch.activeHandle ?? stretch.lastHandle ?? "bottom"}
               selectionPreviewMode={selectionPreviewMode}
               navigation={navigation}
               onSelectNode={selectNodeAfterAbort}
@@ -2766,6 +2770,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSelection,
   lassoSourceText,
   locale,
+  selectionMovingHandle,
   selectionPreviewMode,
   navigation,
   onSelectNode,
@@ -2787,6 +2792,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSelection: SegmentSelection | null;
   lassoSourceText: string | null;
   locale: CanvasLanguage;
+  selectionMovingHandle: StretchHandle;
   selectionPreviewMode: SelectionPreviewMode;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
@@ -2912,6 +2918,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             ) : null}
             {languageProjection?.ok ? (
               <LanguageSplitProjection
+                movingHandle={selectionMovingHandle}
                 previewMode={selectionPreviewMode}
                 projection={languageProjection.projection}
                 projectionRef={splitProjectionRef}
@@ -3246,10 +3253,12 @@ function LassoOverlay({
 }
 
 function LanguageSplitProjection({
+  movingHandle,
   previewMode,
   projection,
   projectionRef,
 }: {
+  movingHandle: StretchHandle;
   previewMode: SelectionPreviewMode;
   projection: LanguageProjection;
   projectionRef: React.RefObject<HTMLDivElement | null>;
@@ -3259,24 +3268,43 @@ function LanguageSplitProjection({
       aria-hidden="true"
       className="language-split-projection"
       data-preview-mode={previewMode}
-      data-stretch-handle="bottom"
+      data-stretch-handle={movingHandle}
       inert
       ref={projectionRef}
     >
-      <span className="language-split-focus">
-        <span className="language-split-source" dir="auto">
+      <span className="language-split-flow">
+        {/* The witness keeps the fixed partition exactly where the source puts
+            it, including the canonical remainder it shares its last line with,
+            so splitting the flow cannot move a line the grip does not own. */}
+        <span className="language-split-witness" dir="auto">
           <span className="language-split-before-copy language-split-block--before">{projection.before}</span>
-          <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
-          <span className="language-split-seam">{projection.outerSeam}</span>
-          <span className="language-split-after-ghost">{projection.after}</span>
+          {movingHandle === "top" ? null : (
+            <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
+          )}
+          {movingHandle === "top" ? null : (
+            <span className="language-split-seam">{projection.outerSeam}</span>
+          )}
+          <span aria-hidden="true" className="language-split-witness-tail">
+            {movingHandle === "top"
+              ? `${projection.selected}${projection.outerSeam}${projection.after}`
+              : projection.after}
+          </span>
         </span>
         <span className="language-split-slot" />
-      </span>
-      {projection.hasAfter ? (
-        <span className="language-split-block language-split-block--after" dir="auto">
-          {projection.after}
+        {/* The moving partition is its own full-width block, so it reflows for
+            real instead of inheriting the witness's line breaking. */}
+        <span className="language-split-moving" dir="auto">
+          {movingHandle === "top" ? (
+            <>
+              <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
+              <span className="language-split-seam">{projection.outerSeam}</span>
+            </>
+          ) : null}
+          {projection.hasAfter ? (
+            <span className="language-split-block--after">{projection.after}</span>
+          ) : null}
         </span>
-      ) : null}
+      </span>
     </div>
   );
 }
@@ -3532,19 +3560,6 @@ function receiptMatchesSource(
     expected.viewportKey === actual.viewportKey;
 }
 
-/** Uses the same glyph geometry primitive as lasso addressing. */
-function rangeAroundContents(element: HTMLElement): DOMRect | null {
-  const range = document.createRange();
-  const text = Array.from(element.childNodes).find(
-    (node): node is Text => node.nodeType === Node.TEXT_NODE && (node.textContent?.length ?? 0) > 0,
-  );
-  range.selectNodeContents(text ?? element);
-  const rect = Array.from(range.getClientRects()).find(
-    (candidate) => candidate.width > 0 && candidate.height > 0,
-  );
-  range.detach();
-  return rect ?? null;
-}
 
 /** Clips a fixed control without changing the material-space projection. */
 function clampClient(

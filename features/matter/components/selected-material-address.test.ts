@@ -283,6 +283,30 @@ describe("selected material address", () => {
     expect(base![1]).toContain("stroke: none");
   });
 
+  it("lays the split partitions out in real flow", () => {
+    // The upper grip used to move a shared inline source and cancel the shift
+    // on the prefix, so the moving partition never rewrapped and a line was
+    // painted across the gap. Nothing here may fake a position again.
+    expect(css).not.toContain("language-split-source");
+    expect(css).not.toContain("language-split-after-ghost");
+    expect(css).not.toContain("--split-after-top");
+    const slot = css.match(/\n\.language-split-slot \{([^}]*)\}/);
+    expect(slot![1]).toContain("height: var(--split-depth)");
+    expect(slot![1]).not.toContain("position: absolute");
+    const after = css.match(/\.language-split-block--after \{([^}]*)\}/);
+    expect(after).toBeNull();
+    // The witness carries the canonical remainder invisibly, which is what
+    // keeps the fixed partition's last line breaking and centring as it does
+    // in the source.
+    expect(css).toMatch(/\.language-split-witness-tail \{[^}]*visibility:\s*hidden/);
+    expect(css).toMatch(/\.language-split-witness \{[^}]*height:\s*var\(--witness-block-size/);
+    // Crossing the deadzone is what physicalises the partition; before that
+    // nothing extra is laid out.
+    expect(css).toMatch(
+      /:not\(\[data-preview-mode="expand"\]\) \.language-split-moving \{ display: none/,
+    );
+  });
+
   it("writes no presentation custom property that no rule reads", () => {
     const written = new Set(
       Array.from(rooted.matchAll(/setProperty\(\s*"(--[a-z-]+)"/g), (match) => match[1]),

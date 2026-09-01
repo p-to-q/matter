@@ -240,6 +240,75 @@ test("forced colors keeps selected text readable above a system outline", async 
   expect(await label.evaluate((node) => getComputedStyle(node).color)).not.toBe("rgba(0, 0, 0, 0)");
 });
 
+test("the upper moving partition reflows in the full column and never splits a line", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  // A segment that starts mid-line, so the prefix and the moving partition
+  // share a canonical line and the split has to be real.
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 1));
+
+  const projection = page.locator(".language-split-projection");
+  const witness = projection.locator(".language-split-block--before");
+  const moving = projection.locator(".language-split-moving");
+  const upper = page.getByRole("slider", { name: "用上握点设置所选文字的展开程度" });
+
+  const witnessBefore = await witness.evaluate((node) =>
+    [...node.getClientRects()].map((rect) => [Math.round(rect.x), Math.round(rect.y)]));
+
+  await upper.press("End");
+  await expect(projection).toHaveAttribute("data-stretch-handle", "top");
+
+  const geometry = await projection.evaluate((node) => {
+    const column = node.closest(".spatial-thought")!
+      .querySelector<HTMLElement>(".spatial-thought__text")!.getBoundingClientRect();
+    const slot = node.querySelector<HTMLElement>(".language-split-slot")!.getBoundingClientRect();
+    const movingBox = node.querySelector<HTMLElement>(".language-split-moving")!.getBoundingClientRect();
+    const before = node.querySelector<HTMLElement>(".language-split-block--before")!;
+    const lastPrefixLine = [...before.getClientRects()].at(-1)!;
+    const lines = [...node.querySelectorAll<HTMLElement>(".language-split-moving span")]
+      .flatMap((span) => [...span.getClientRects()])
+      .map((rect) => ({ bottom: rect.bottom, top: rect.top, x: rect.x }));
+    return {
+      column: { left: column.left, right: column.right },
+      lines,
+      moving: { left: movingBox.left, right: movingBox.right },
+      prefixRight: lastPrefixLine.right,
+      slot: { bottom: slot.bottom, top: slot.top },
+    };
+  });
+
+  // The moving partition owns the whole column, so its first line starts at the
+  // column's logical start instead of trailing the prefix's last line.
+  expect(Math.round(geometry.moving.left)).toBe(Math.round(geometry.column.left));
+  expect(Math.round(geometry.moving.right)).toBe(Math.round(geometry.column.right));
+  expect(Math.abs(geometry.lines[0]!.x - geometry.prefixRight)).toBeGreaterThan(24);
+
+  // Nothing is painted across the opened gap.
+  for (const line of geometry.lines) {
+    expect(line.bottom <= geometry.slot.top + 1 || line.top >= geometry.slot.bottom - 1).toBe(true);
+  }
+
+  // The witness is the fixed partition and may not move at all.
+  const witnessAfter = await witness.evaluate((node) =>
+    [...node.getClientRects()].map((rect) => [Math.round(rect.x), Math.round(rect.y)]));
+  expect(witnessAfter).toEqual(witnessBefore);
+
+  // Degree changes the slot, never the moving partition's line breaking.
+  const linesAt = async () => moving.evaluate((node) =>
+    [...node.querySelectorAll<HTMLElement>("span")]
+      .flatMap((span) => [...span.getClientRects()])
+      .map((rect) => [Math.round(rect.x), Math.round(rect.width)]));
+  const full = await linesAt();
+  await upper.press("Home");
+  await upper.press("ArrowUp");
+  await expect(upper).toHaveAttribute("aria-valuenow", "0.1");
+  expect(await linesAt()).toEqual(full);
+});
+
 test("the upper grip keeps its upper boundary fixed and pushes selected language down", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
