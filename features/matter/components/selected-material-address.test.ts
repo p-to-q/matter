@@ -81,6 +81,21 @@ describe("selected material address", () => {
     expect(css).toMatch(/\.language-pocket \{[^}]*rgba\(var\(--selection-control-rgb\),\.035\)/);
   });
 
+  it("never lets an arrival and a displacement own one property", () => {
+    // The mark used to arrive with a scaleY squash on `transform`, which the
+    // engaged rule also owned. Touching a grip within the arrival cancelled it
+    // and snapped the impression by half the squash. A persistent address does
+    // not perform an entrance, so it carries no animation at all.
+    const base = css.match(/\n\.lasso-selection-fragment \{([^}]*)\}/);
+    expect(base).not.toBeNull();
+    expect(base![1]).not.toContain("animation");
+    expect(css).not.toContain("lasso-settle");
+    // Displacement is the sole owner of the fragment's transform family.
+    for (const body of engagedFragmentRules()) {
+      expect(body).not.toMatch(/animation-name|scale:|rotate:/);
+    }
+  });
+
   it("keeps one actionable address painter while a projection is engaged", () => {
     // The projected duplicate sits exactly under the reference during expand.
     // If it carried its own selection skin the two densities would stack, so
