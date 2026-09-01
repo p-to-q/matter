@@ -7,6 +7,33 @@ import type { MaterialAddressProjection } from "../interaction/projected-layout-
 export type MaterialAddressVariant = "actionable" | "native" | "structural";
 
 /**
+ * A whole-node structural selection is a softer optical object than a precise
+ * material address, so it keeps the older label pill's rounding instead of the
+ * receipt's tight radius. The scale lives here, once, because React and the
+ * pointer hot path have to reach the same decision for one projection.
+ */
+const VARIANT_CORNER_SCALE: Readonly<Record<MaterialAddressVariant, number>> = {
+  actionable: 1,
+  native: 1,
+  structural: 2.7,
+};
+
+export function materialAddressVariantOutline(
+  projection: MaterialAddressProjection | null,
+  variant: MaterialAddressVariant,
+) {
+  if (projection === null) return null;
+  return materialAddressOutline(projection, {
+    cornerRadius: projection.metrics.cornerRadius * (VARIANT_CORNER_SCALE[variant] ?? 1),
+  });
+}
+
+function readVariant(layer: HTMLElement): MaterialAddressVariant {
+  const variant = layer.dataset.addressVariant;
+  return variant === "structural" || variant === "native" ? variant : "actionable";
+}
+
+/**
  * Stable mount point for the single-outline visual owner.
  *
  * React and the pointer hot path share one pure outline function, so a frame
@@ -24,7 +51,7 @@ export function MaterialAddressLayer({
   projection: MaterialAddressProjection | null;
   variant: MaterialAddressVariant;
 }>) {
-  const outline = materialAddressOutline(projection);
+  const outline = materialAddressVariantOutline(projection, variant);
   return (
     <div
       aria-hidden="true"
@@ -50,7 +77,7 @@ export function publishMaterialAddressProjection(
 ): void {
   if (layer === null) return;
   const path = layer.querySelector<SVGPathElement>(".material-address-layer__path");
-  const outline = materialAddressOutline(projection);
+  const outline = materialAddressVariantOutline(projection, readVariant(layer));
   if (projection === null || outline === null) {
     path?.removeAttribute("d");
     delete layer.dataset.materialAddressPainted;

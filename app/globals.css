@@ -22,8 +22,8 @@ body, button { font-family: var(--mono); -webkit-font-smoothing: antialiased; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --address-density-native: .12; --address-density-actionable: .18; --address-density-structural: .08; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
-.matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; --address-density-native: .16; --address-density-actionable: .1; --address-density-structural: .15; }
+.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --address-density-native: .12; --address-density-actionable: .18; --address-density-structural: .08; --address-ring-structural: .13; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
+.matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; --address-density-native: .16; --address-density-actionable: .1; --address-density-structural: .15; --address-ring-structural: .16; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
 .matter-shell[data-node-dragging="true"] { cursor: grabbing; }
@@ -472,6 +472,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-address-layer[data-address-variant="actionable"] { --address-density: var(--address-density-actionable); }
 .material-address-layer[data-address-variant="structural"] { --address-density: var(--address-density-structural); }
 .material-address-layer[data-address-variant="native"] { --address-density: var(--address-density-native); }
+.material-address-layer[data-address-variant="structural"] .material-address-layer__path { stroke: rgba(var(--selection-control-rgb),var(--address-ring-structural)); stroke-width: 1px; vector-effect: non-scaling-stroke; }
 /* Each older paint is only released once the outline has actually written a
    path, so no frame can show grips or a focus ring with no address. */
 .lasso-layer:has(.material-address-layer[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback[data-single-address-fallback] { display: none; }
@@ -641,7 +642,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .lasso-layer:has(.elastic-preview[data-preview-mode="expand"]) .lasso-selection-fragment { border: 1px solid Highlight; background: transparent; opacity: 1; }
   .matter-shell::selection,
   .matter-shell ::selection { background: Highlight; color: HighlightText; }
-  .material-address-layer__path { fill: Highlight; }
+  .material-address-layer__path { fill: Highlight; stroke: none; }
   .material-address-layer[data-address-variant="native"] { display: none; }
   .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
   .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: Highlight; color: HighlightText; }

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ELASTIC_PREVIEW_METRICS, elasticPreviewGeometry } from "../interaction/elastic-preview";
 import { materialAddressOutline } from "../interaction/material-address-outline";
+import { materialAddressVariantOutline } from "./MaterialAddressLayer";
 import type { MaterialAddressProjection } from "../interaction/projected-layout-receipt";
 
 const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
@@ -180,8 +181,11 @@ describe("selected material address", () => {
     // The flag is only set once a path has actually been written.
     expect(layer).toContain('path.setAttribute("d", outline.path)');
     expect(layer).toMatch(/if \(path === null\) \{[^]*?delete layer\.dataset\.materialAddressPainted/);
-    // React and the pointer hot path share one pure function.
-    expect((layer.match(/materialAddressOutline\(/g) ?? []).length).toBe(2);
+    // React and the pointer hot path share one variant decision, and the hot
+    // path recovers the variant from the mounted layer rather than a second
+    // source of truth.
+    expect(layer).toContain("materialAddressVariantOutline(projection, variant)");
+    expect(layer).toContain("materialAddressVariantOutline(projection, readVariant(layer))");
   });
 
   it("keeps forced colors on the system contract and settle motion optional", () => {
@@ -194,6 +198,36 @@ describe("selected material address", () => {
     // The settle may only move opacity, never geometry.
     const base = css.match(/\n\.material-address-layer \{([^}]*)\}/);
     expect(base![1]).toMatch(/transition: opacity 120ms/);
+  });
+
+  it("gives the whole-node state a softer rounding than a precise address", () => {
+    // The structural state is the old label pill's optical object, so it keeps
+    // that rounding instead of the receipt's tight material-address radius.
+    const projection = addressProjection();
+    const radius = (variant: "actionable" | "native" | "structural") => {
+      const path = materialAddressVariantOutline(projection, variant)!.path;
+      return Number(path.match(/A([\d.]+) /)![1]);
+    };
+    expect(radius("structural")).toBeGreaterThan(radius("actionable"));
+    expect(radius("actionable")).toBe(projection.metrics.cornerRadius);
+    expect(radius("native")).toBe(projection.metrics.cornerRadius);
+    expect(radius("structural")).toBeCloseTo(projection.metrics.cornerRadius * 2.7, 5);
+    // One decision serves React and the pointer hot path.
+    expect((layer.match(/materialAddressVariantOutline\(/g) ?? []).length).toBe(3);
+    expect(layer).not.toMatch(/\bmaterialAddressOutline\(projection\)/);
+  });
+
+  it("keeps the whole-node ring and leaves precise addresses a pure fill", () => {
+    expect(css).toMatch(
+      /\[data-address-variant="structural"\] \.material-address-layer__path \{[^}]*stroke:\s*rgba\(var\(--selection-control-rgb\),var\(--address-ring-structural\)\)/,
+    );
+    expect(css).toMatch(/\[data-address-variant="structural"\] \.material-address-layer__path \{[^}]*stroke-width:\s*1px/);
+    expect(css).toMatch(/\[data-address-variant="structural"\] \.material-address-layer__path \{[^}]*vector-effect:\s*non-scaling-stroke/);
+    expect(css).toMatch(/--address-ring-structural:\s*\.13/);
+    expect(css).toMatch(/--address-ring-structural:\s*\.16/);
+    // Only the structural variant carries a ring.
+    const base = css.match(/\n\.material-address-layer__path \{([^}]*)\}/);
+    expect(base![1]).toContain("stroke: none");
   });
 
   it("writes no presentation custom property that no rule reads", () => {

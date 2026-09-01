@@ -13,6 +13,11 @@ export type MaterialAddressOutline = Readonly<{
   path: string;
 }>;
 
+export type MaterialAddressOutlineOptions = Readonly<{
+  /** Overrides the receipt's corner radius; still clamped by the edges it meets. */
+  cornerRadius?: number;
+}>;
+
 /** Two coordinates that bound one row along the logical inline axis. */
 type LogicalSpan = Readonly<{ from: number; to: number }>;
 
@@ -33,12 +38,14 @@ const MINIMUM_BAND_EXTENT = 0.5;
  */
 export function materialAddressOutline(
   projection: MaterialAddressProjection | null,
+  options: MaterialAddressOutlineOptions = {},
 ): MaterialAddressOutline | null {
   if (projection === null) return null;
   if (projection.writingMode !== "horizontal-tb") return null;
   const { column, metrics, rows, run } = projection;
   if (rows.length === 0) return null;
-  if (!Number.isFinite(metrics.cornerRadius) || metrics.cornerRadius < 0) return null;
+  const cornerRadius = options.cornerRadius ?? metrics.cornerRadius;
+  if (!Number.isFinite(cornerRadius) || cornerRadius < 0) return null;
 
   const first = Math.max(0, Math.min(run.startRow, rows.length - 1));
   const last = Math.max(first, Math.min(run.endRow, rows.length - 1));
@@ -111,7 +118,7 @@ export function materialAddressOutline(
 
   const joined = joinBlockEdges(bands, metrics.blockOutset);
   if (joined.length === 0) return null;
-  const path = outlinePath(joined, metrics.cornerRadius);
+  const path = outlinePath(joined, cornerRadius);
   if (path.length === 0) return null;
   return Object.freeze({
     bands: Object.freeze(joined),
