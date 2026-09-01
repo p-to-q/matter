@@ -1,9 +1,40 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { ELASTIC_PREVIEW_METRICS, elasticPreviewGeometry } from "../interaction/elastic-preview";
+import { materialAddressOutline } from "../interaction/material-address-outline";
+import type { MaterialAddressProjection } from "../interaction/projected-layout-receipt";
 
 const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
 const rooted = readFileSync(new URL("./RootedMaterial.tsx", import.meta.url), "utf8");
+const layer = readFileSync(new URL("./MaterialAddressLayer.tsx", import.meta.url), "utf8");
+
+const ROWS = Object.freeze([
+  Object.freeze({ blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 300 }),
+  Object.freeze({ blockEnd: 180, blockStart: 140, inlineEnd: 600, inlineStart: 100 }),
+  Object.freeze({ blockEnd: 220, blockStart: 180, inlineEnd: 260, inlineStart: 100 }),
+]);
+
+function addressProjection(
+  overrides: Partial<MaterialAddressProjection> = {},
+): MaterialAddressProjection {
+  return Object.freeze({
+    attachmentProgress: 0,
+    basis: Object.freeze({
+      addressKey: "address", documentEpoch: 1, layoutEpoch: 1, nodeId: "node",
+      partitionKey: "partition", treeId: "tree", viewportKey: "viewport",
+    }),
+    column: Object.freeze({ blockEnd: 400, blockStart: 100, inlineEnd: 600, inlineStart: 100 }),
+    coordinateSpace: "client-css-px",
+    direction: "neutral",
+    metrics: Object.freeze({ blockOutset: 3, cornerRadius: 4, inlineOutset: 3 }),
+    rows: ROWS,
+    run: Object.freeze({ endInline: 260, endRow: 2, startInline: 300, startRow: 0 }),
+    slot: null,
+    textDirection: "ltr",
+    writingMode: "horizontal-tb",
+    ...overrides,
+  }) as MaterialAddressProjection;
+}
 
 /** Every rule body that targets the fragment while Elastic owns the degree. */
 function engagedFragmentRules(): readonly string[] {
@@ -82,15 +113,13 @@ describe("selected material address", () => {
   });
 
   it("never lets an arrival and a displacement own one property", () => {
-    // The mark used to arrive with a scaleY squash on `transform`, which the
-    // engaged rule also owned. Touching a grip within the arrival cancelled it
-    // and snapped the impression by half the squash. A persistent address does
-    // not perform an entrance, so it carries no animation at all.
-    const base = css.match(/\n\.lasso-selection-fragment \{([^}]*)\}/);
-    expect(base).not.toBeNull();
-    expect(base![1]).not.toContain("animation");
-    expect(css).not.toContain("lasso-settle");
-    // Displacement is the sole owner of the fragment's transform family.
+    // The fallback once arrived with a scaleY squash on `transform`, which the
+    // engaged rule also owns for displacement. Touching a grip inside the
+    // arrival cancelled it and moved the mark by half the squash, so no
+    // arrival may own a transform-family property.
+    const arrival = css.match(/@keyframes lasso-settle \{([^]*?)\n\}/);
+    expect(arrival).not.toBeNull();
+    expect(arrival![1]).not.toMatch(/transform|scale:|rotate:|translate:/);
     for (const body of engagedFragmentRules()) {
       expect(body).not.toMatch(/animation-name|scale:|rotate:/);
     }
@@ -103,6 +132,68 @@ describe("selected material address", () => {
     expect(css).not.toMatch(/\.language-split-selected-copy \{[^}]*background:\s*rgba/);
     const forced = css.slice(css.indexOf("@media (forced-colors: active)"));
     expect(forced).not.toContain(".language-split-selected-copy");
+  });
+
+  it("paints one closed outline instead of per-row capsules", () => {
+    const outline = materialAddressOutline(addressProjection())!;
+    expect(outline).not.toBeNull();
+    expect((outline.path.match(/M/g) ?? []).length).toBe(1);
+    expect((outline.path.match(/Z/g) ?? []).length).toBe(1);
+    expect(outline.path.length).toBeGreaterThan(0);
+    // A whole-node double-click reads as one corridor: the first row runs to
+    // the column's logical end rather than stopping at its last glyph.
+    expect(outline.bands[0]!.right).toBe(603);
+    expect(outline.bands[1]!.left).toBe(97);
+  });
+
+  it("keeps neutral, lower, and upper on one path and one colour", () => {
+    const paths = [
+      materialAddressOutline(addressProjection())!,
+      materialAddressOutline(addressProjection({
+        attachmentProgress: 1, direction: "selection-then-slot",
+        slot: { blockEnd: 300, blockStart: 220 },
+      }))!,
+      materialAddressOutline(addressProjection({
+        attachmentProgress: 1, direction: "slot-then-selection",
+        slot: { blockEnd: 100, blockStart: 20 },
+      }))!,
+    ];
+    for (const outline of paths) {
+      expect((outline.path.match(/M/g) ?? []).length).toBe(1);
+    }
+    // One rule fills every variant, so a grip cannot change the address colour.
+    const fill = css.match(/\.material-address-layer__path \{([^}]*)\}/);
+    expect(fill).not.toBeNull();
+    expect(fill![1]).toContain("rgba(var(--selection-control-rgb),var(--address-density");
+    expect(css).toMatch(/--address-density-actionable:\s*\.18/);
+    expect(css).toMatch(/--address-density-actionable:\s*\.1;/);
+    expect(css).toMatch(/--address-density-structural:\s*\.08/);
+    expect(css).toMatch(/--address-density-structural:\s*\.15/);
+  });
+
+  it("never releases an older paint before the outline is painted", () => {
+    // Without the handshake a frame can show grips, or a pill's focus ring,
+    // with no address at all.
+    expect(css).toContain('[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback');
+    expect(css).toContain('[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label');
+    expect(css).toContain('[data-address-variant="native"][data-material-address-painted]) ::selection');
+    // The flag is only set once a path has actually been written.
+    expect(layer).toContain('path.setAttribute("d", outline.path)');
+    expect(layer).toMatch(/if \(path === null\) \{[^]*?delete layer\.dataset\.materialAddressPainted/);
+    // React and the pointer hot path share one pure function.
+    expect((layer.match(/materialAddressOutline\(/g) ?? []).length).toBe(2);
+  });
+
+  it("keeps forced colors on the system contract and settle motion optional", () => {
+    const forced = css.slice(css.indexOf("@media (forced-colors: active)"));
+    expect(forced).toMatch(/\.material-address-layer__path \{[^}]*fill:\s*Highlight/);
+    expect(forced).toMatch(/\[data-address-variant="native"\] \{ display: none/);
+    expect(forced).toMatch(/::selection \{[^}]*background:\s*Highlight/);
+    const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
+    expect(reduced).toMatch(/\.material-address-layer \{ transition: none/);
+    // The settle may only move opacity, never geometry.
+    const base = css.match(/\n\.material-address-layer \{([^}]*)\}/);
+    expect(base![1]).toMatch(/transition: opacity 120ms/);
   });
 
   it("writes no presentation custom property that no rule reads", () => {

@@ -62,6 +62,55 @@ test("both literal grips stay visible in the paper's light and dark appearances"
   expect(surfaceReceipt.handleShadow).toContain("4px");
 });
 
+test("one outline owns the address from neutral through both grips", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+
+  // A whole-node structural selection reads as one outline, not per-row pills.
+  const structural = page.locator('.material-address-layer[data-address-variant="structural"]');
+  await expect(structural).toHaveAttribute("data-material-address-painted", "true");
+  const structuralPath = structural.locator(".material-address-layer__path");
+  const structuralD = await structuralPath.getAttribute("d");
+  expect(structuralD ?? "").not.toBe("");
+  expect((structuralD ?? "").match(/M/g) ?? []).toHaveLength(1);
+  // The label pill only steps aside once that path exists.
+  await expect(page.locator('.spatial-thought[data-selected="true"] .spatial-thought__label'))
+    .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
+
+  const actionable = page.locator('.material-address-layer[data-address-variant="actionable"]');
+  const actionablePath = actionable.locator(".material-address-layer__path");
+  await expect(actionable).toHaveAttribute("data-material-address-painted", "true");
+  const neutralFill = await actionablePath.evaluate((node) => getComputedStyle(node).fill);
+  const neutralD = await actionablePath.getAttribute("d");
+  expect((neutralD ?? "").match(/M/g) ?? []).toHaveLength(1);
+  // Painted means the single-selection fallback is released, so the two never
+  // stack and no frame can show grips over an unpainted address.
+  await expect(page.locator(".material-address-selection-set--fallback[data-single-address-fallback]"))
+    .toBeHidden();
+
+  const lower = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
+  const upper = page.getByRole("slider", { name: "用上握点设置所选文字的展开程度" });
+  for (const grip of [lower, upper]) {
+    await grip.press("Home");
+    await grip.press("End");
+    await expect(actionable).toHaveAttribute("data-material-address-painted", "true");
+    const engagedD = await actionablePath.getAttribute("d");
+    expect((engagedD ?? "").match(/M/g) ?? []).toHaveLength(1);
+    expect(engagedD).not.toBe(neutralD);
+    // The address keeps one colour across neutral and both grips.
+    expect(await actionablePath.evaluate((node) => getComputedStyle(node).fill)).toBe(neutralFill);
+    // Grips stay present and keep their physical rule while the outline owns paint.
+    await expect(page.locator(".stretch-handle")).toHaveCount(2);
+    await grip.press("Home");
+  }
+});
+
 test("the upper grip keeps its upper boundary fixed and pushes selected language down", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
