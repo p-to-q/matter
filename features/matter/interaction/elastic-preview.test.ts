@@ -43,6 +43,11 @@ describe("elastic preview geometry", () => {
     expect(preview.topHandle.y).toBe(197);
     expect(preview.bottomHandle.y).toBe(319);
     expect(preview.pocket).toMatchObject({ top: 247, bottom: 319 });
+    expect(preview.addressProjection).toMatchObject({
+      attachmentProgress: 1,
+      direction: "selection-then-slot",
+      slot: { blockStart: 244, blockEnd: 316 },
+    });
     expect(preview.fragments).toEqual(stepped);
   });
 
@@ -52,6 +57,11 @@ describe("elastic preview geometry", () => {
     expect(preview.topHandle.y).toBe(197);
     expect(preview.bottomHandle.y).toBe(319);
     expect(preview.pocket).toMatchObject({ top: 197, bottom: 269 });
+    expect(preview.addressProjection).toMatchObject({
+      attachmentProgress: 1,
+      direction: "slot-then-selection",
+      slot: { blockStart: 128, blockEnd: 200 },
+    });
     expect(preview.fragments).toEqual(stepped);
   });
 

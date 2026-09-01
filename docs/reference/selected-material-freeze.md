@@ -1,5 +1,11 @@
 # Selected material freeze
 
+Status update 2026-09-02: implementation screenshots reopened and superseded
+the hidden-suffix, fragment-connector, and neck/body geometry below. Those
+sections remain as decision trace, not acceptance contract. Use
+`selected-material-flow-interval.md` for current geometry. All unrelated product
+and lifecycle decisions in this document remain in force.
+
 Module: `features/matter/components/`, `app/globals.css`
 
 Joint freeze between the foundation owner (address identity, geometry receipt,

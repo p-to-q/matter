@@ -39,10 +39,18 @@ import {
   isStretchInteractionKey,
 } from "../runtime/stretch-interaction";
 import {
-  elasticPreviewGeometry,
   prepareElasticPreviewSource,
   projectElasticPreview,
+  type ElasticPreviewSource,
 } from "../interaction/elastic-preview";
+import {
+  createProjectedLayoutReceipt,
+  projectMaterialAddress,
+  type ProjectedLayoutReceipt,
+} from "../interaction/projected-layout-receipt";
+import { normalizeClientRects } from "../interaction/range-measurement";
+import { useNativeMaterialSelection } from "../interaction/use-native-material-selection";
+import { useStructuralMaterialSelection } from "../interaction/use-structural-material-selection";
 import { projectLanguageAroundSelection } from "../material/language-projection";
 import type { LanguageProjection } from "../material/language-projection";
 import {
@@ -77,6 +85,10 @@ import {
 } from "./admission-feedback-geometry";
 import { CanvasChrome, type CanvasChromeHandle } from "./CanvasChrome";
 import { CanvasRuling } from "./CanvasRuling";
+import {
+  MaterialAddressLayer,
+  publishMaterialAddressProjection,
+} from "./MaterialAddressLayer";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
@@ -234,6 +246,8 @@ type ProjectionHandleReceipt = Readonly<{
   selectedTopWorld: number;
   selectedBottomWorld: number;
   afterTopWorld: number;
+  afterHeightWorld: number;
+  sourceHeightWorld: number;
 }>;
 
 type SelectionPreviewMode = "neutral" | "expand";
@@ -828,8 +842,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [clearNodeDrag]);
   useEffect(() => () => clearNodeDrag(), [clearNodeDrag, props.documentEpoch, navigation.mode, tree.revision]);
   const elasticRef = useRef<HTMLDivElement>(null);
+  const actionableAddressLayerRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
+  const projectedLayoutReceiptRef = useRef<ProjectedLayoutReceipt | null>(null);
+  const [projectedLayoutReceipt, setProjectedLayoutReceipt] = useState<ProjectedLayoutReceipt | null>(null);
   const stretchSelectionRef = useRef<SegmentSelection | null>(null);
   // Range fragments and their visual-line grouping are stable until lasso
   // geometry changes. Keeping them out of the pointer-move path prevents a
@@ -838,16 +855,43 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => prepareElasticPreviewSource(
       lasso.selectionRects,
       lasso.selectionColumn ?? undefined,
+      {
+        addressKey: lasso.selection === null
+          ? "elastic-selection"
+          : `${lasso.selection.nodeId}:${lasso.selection.start}:${lasso.selection.end}`,
+        documentEpoch: props.documentEpoch,
+        layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+        nodeId: lasso.selection?.nodeId ?? "elastic-selection",
+        partitionKey: "selection",
+        treeId: tree.id,
+        viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}`,
+      },
     ),
-    [lasso.selectionColumn, lasso.selectionRects],
+    [
+      activeLayout?.layoutEpoch,
+      lasso.selection,
+      lasso.selectionColumn,
+      lasso.selectionRects,
+      props.documentEpoch,
+      tree.id,
+      viewport.x,
+      viewport.y,
+      viewport.zoom,
+    ],
   );
   const updateElasticPreview = useCallback((signal: StretchPreviewSignal) => {
     const element = elasticRef.current;
     const split = splitProjectionRef.current;
-    const preview = elasticPreviewSource === null
+    const projectionReceipt = projectedLayoutReceiptRef.current;
+    const source = elasticPreviewSource === null
+      ? null
+      : projectionReceipt === null || !receiptMatchesSource(elasticPreviewSource, projectionReceipt)
+        ? elasticPreviewSource
+        : Object.freeze({ ...elasticPreviewSource, layoutReceipt: projectionReceipt });
+    const preview = source === null
       ? null
       : projectElasticPreview(
-          elasticPreviewSource,
+          source,
           signal.amount,
           clientViewport(),
           signal.handle,
@@ -858,17 +902,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (preview === null) {
       element.removeAttribute("data-preview-mode");
       split?.removeAttribute("data-preview-mode");
-      element.closest<HTMLElement>(".lasso-layer")
-        ?.style.removeProperty("--address-displacement-y");
+      const addressLayer = element.closest<HTMLElement>(".lasso-layer");
+      addressLayer?.style.removeProperty("--address-displacement-y");
+      addressLayer?.style.removeProperty("--pocket-height");
       publishLiveLanguageLayout(null);
+      publishMaterialAddressProjection(actionableAddressLayerRef.current, null);
       return;
     }
+    publishMaterialAddressProjection(
+      actionableAddressLayerRef.current,
+      preview.addressProjection,
+    );
     element.dataset.previewMode = preview.mode;
     const handle = signal.handle ?? "bottom";
     element.dataset.stretchHandle = handle;
     const receipt = projectionHandleReceiptRef.current;
-    const selectedTop = receipt?.selectedTopClient ?? preview.sourceBounds.top;
-    const selectedBottom = receipt?.selectedBottomClient ?? preview.sourceBounds.bottom;
     const neutral = preview.mode === "neutral";
     const travelDepth = neutral ? 0 : preview.pocketDepth;
     let worldDepth = 0;
@@ -888,14 +936,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (neutral) {
       publishLiveLanguageLayout(null);
     } else if (split !== null && receipt !== null) {
-      const owner = split.closest<HTMLElement>(".spatial-thought");
-      const source = owner?.querySelector<HTMLElement>(".spatial-thought__text") ?? null;
-      const projectedAfter = split.querySelector<HTMLElement>(".language-split-block--after");
-      const flow = source === null ? null : projectLanguageFlow({
-        sourceHeight: source.offsetHeight,
+      const flow = projectLanguageFlow({
+        sourceHeight: receipt.sourceHeightWorld,
         selectedTop: receipt.selectedTopWorld,
         afterNaturalTop: receipt.afterTopWorld,
-        afterHeight: projectedAfter?.offsetHeight ?? 0,
+        afterHeight: receipt.afterHeightWorld,
         slotDepth: worldDepth,
         handle,
       });
@@ -921,10 +966,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     element.style.setProperty("--elastic-handle-top", `${bottomY}px`);
     element.style.setProperty("--elastic-top-center", `${topCenter}px`);
     element.style.setProperty("--elastic-bottom-center", `${bottomCenter}px`);
-    element.style.setProperty("--pocket-left", `${preview.pocket.left}px`);
-    element.style.setProperty("--pocket-top", `${handle === "top" ? selectedTop : selectedBottom}px`);
-    element.style.setProperty("--pocket-width", `${preview.pocket.right - preview.pocket.left}px`);
-    element.style.setProperty("--pocket-height", `${travelDepth}px`);
     const addressLayer = element.closest<HTMLElement>(".lasso-layer");
     addressLayer?.style.setProperty(
       "--address-displacement-y",
@@ -939,6 +980,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
       else delete control.dataset.stretchCommitReady;
     }
   }, [elasticPreviewSource, props.locale, publishLiveLanguageLayout, viewport.zoom]);
+  const renderedElasticPreviewSource = useMemo(
+    () => elasticPreviewSource === null
+      ? null
+      : projectedLayoutReceipt === null
+        ? elasticPreviewSource
+        : !receiptMatchesSource(elasticPreviewSource, projectedLayoutReceipt)
+          ? elasticPreviewSource
+        : Object.freeze({
+            ...elasticPreviewSource,
+            layoutReceipt: projectedLayoutReceipt,
+          }),
+    [elasticPreviewSource, projectedLayoutReceipt],
+  );
   const navigationKey = `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`;
   const pointTalkEligibleNodeIds = useMemo(() => new Set(
     Array.from(workingContext.activeNodeIds).filter((nodeId) => {
@@ -1016,6 +1070,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onPreview: updateElasticPreview,
     onCommit: startFixedExpansion,
   });
+  const stretchPreviewSignalRef = useRef<StretchPreviewSignal>({
+    amount: stretch.amount,
+    handle: stretch.activeHandle ?? stretch.lastHandle,
+    dragging: stretch.dragging,
+  });
+  stretchPreviewSignalRef.current = {
+    amount: stretch.amount,
+    handle: stretch.activeHandle ?? stretch.lastHandle,
+    dragging: stretch.dragging,
+  };
   useLayoutEffect(() => {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
@@ -1054,6 +1118,46 @@ export function RootedMaterial(props: RootedMaterialProps) {
   ) ? transformPresentation.change : null;
   const lassoHasSelectionGeometry = lasso.selectionRects.length > 0;
   const interactionPending = persistenceLoading || admissionInteractionPending;
+  const nativeSelectionReceipt = useNativeMaterialSelection({
+    documentEpoch: props.documentEpoch,
+    enabled: !lasso.active && !lassoHasSelectionGeometry &&
+      activePointTalkNodeId === null && navigation.selectedNodeId === null,
+    layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+    scopeRef: canvasRef,
+    treeId: tree.id,
+    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}`,
+  });
+  const nativeAddressProjection = useMemo(
+    () => nativeSelectionReceipt === null
+      ? null
+      : projectMaterialAddress({
+          amount: 0,
+          handle: null,
+          maximumDepth: 0,
+          receipt: nativeSelectionReceipt,
+        }),
+    [nativeSelectionReceipt],
+  );
+  const structuralSelectionReceipt = useStructuralMaterialSelection({
+    documentEpoch: props.documentEpoch,
+    enabled: !lasso.active && !lassoHasSelectionGeometry && activePointTalkNodeId === null,
+    layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+    nodeId: navigation.selectedNodeId,
+    scopeRef: canvasRef,
+    treeId: tree.id,
+    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}`,
+  });
+  const structuralAddressProjection = useMemo(
+    () => structuralSelectionReceipt === null
+      ? null
+      : projectMaterialAddress({
+          amount: 0,
+          handle: null,
+          maximumDepth: 0,
+          receipt: structuralSelectionReceipt,
+        }),
+    [structuralSelectionReceipt],
+  );
   const interruptIndexCameraMotion = useCallback(() => {
     const basis = viewport;
     const world = worldRef.current;
@@ -1214,12 +1318,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const projectedAfter = projectionElement?.querySelector<HTMLElement>(".language-split-block--after");
     if (projectionElement == null || selected == null || source == null) {
       projectionHandleReceiptRef.current = null;
+      projectedLayoutReceiptRef.current = null;
+      setProjectedLayoutReceipt(null);
       return;
     }
     const projectionRect = projectionElement.getBoundingClientRect();
     const selectedRange = rangeBoundsAroundContents(selected);
     const afterRange = afterGhost == null ? null : rangeAroundContents(afterGhost);
     const projectedAfterRange = projectedAfter == null ? null : rangeAroundContents(projectedAfter);
+    const projectedAfterBounds = projectedAfter == null
+      ? null
+      : rangeBoundsAroundContents(projectedAfter);
     const sourceRect = source.getBoundingClientRect();
     const slot = projectionElement.querySelector<HTMLElement>(".language-split-slot");
     const currentHandle = stretch.activeHandle ?? stretch.lastHandle;
@@ -1229,6 +1338,41 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const sourceOffsetClient = selectionPreviewMode === "expand" && currentHandle === "top"
       ? slot?.getBoundingClientRect().height ?? 0
       : 0;
+    const ownerText = projectionElement.closest<HTMLElement>(".spatial-thought")
+      ?.querySelector<HTMLElement>(".spatial-thought__text") ?? null;
+    const selectedRects = rangeClientRectsAroundContents(selected).map((rect) => Object.freeze({
+      ...rect,
+      y: rect.y - sourceOffsetClient,
+    }));
+    const columnRect = ownerText?.getBoundingClientRect() ?? null;
+    const currentSelection = stretchSelectionRef.current;
+    const ownerTextStyle = ownerText === null ? null : getComputedStyle(ownerText);
+    const nextProjectedLayoutReceipt = ownerText === null || columnRect === null || currentSelection === null || ownerTextStyle === null
+      ? null
+      : createProjectedLayoutReceipt({
+          basis: {
+            addressKey: `${currentSelection.nodeId}:${currentSelection.start}:${currentSelection.end}`,
+            documentEpoch: props.documentEpoch,
+            layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+            nodeId: currentSelection.nodeId,
+            partitionKey: selectionPreviewMode === "expand"
+              ? `projected-${currentHandle ?? "bottom"}`
+              : "selection",
+            treeId: tree.id,
+            viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}`,
+          },
+          column: {
+            left: columnRect.left,
+            top: columnRect.top - sourceOffsetClient,
+            right: columnRect.right,
+            bottom: columnRect.bottom - sourceOffsetClient,
+          },
+          rects: selectedRects,
+          textDirection: ownerTextStyle.direction,
+          writingMode: ownerTextStyle.writingMode,
+        });
+    projectedLayoutReceiptRef.current = nextProjectedLayoutReceipt;
+    setProjectedLayoutReceipt(nextProjectedLayoutReceipt);
     const selectedTopClient = (selectedRange?.top ?? sourceRect.top) - sourceOffsetClient;
     const selectedBottomClient = (selectedRange?.bottom ?? sourceRect.bottom) - sourceOffsetClient;
     const afterTopClient = (afterRange?.top ?? sourceRect.bottom) - sourceOffsetClient;
@@ -1252,6 +1396,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       Math.max(0, afterTopClient - projectionRect.top - afterLeading),
       viewport.zoom,
     ) ?? 0;
+    const sourceHeightWorld = clientDepthToWorld(sourceRect.height, viewport.zoom) ?? 0;
+    const afterHeightWorld = projectedAfterBounds === null
+      ? 0
+      : clientDepthToWorld(
+          projectedAfterBounds.bottom - projectedAfterBounds.top,
+          viewport.zoom,
+        ) ?? 0;
     projectionElement.style.setProperty("--split-after-top", `${afterTopWorld}px`);
     projectionHandleReceiptRef.current = Object.freeze({
       selectedTopClient,
@@ -1260,15 +1411,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
       selectedTopWorld: selectedTop,
       selectedBottomWorld: selectedBottom,
       afterTopWorld: afterTop,
+      afterHeightWorld,
+      sourceHeightWorld,
     });
     if (selectionPreviewMode === "expand") {
-      updateElasticPreview({
-        amount: stretch.amount,
-        handle: stretch.activeHandle ?? stretch.lastHandle,
-        dragging: stretch.dragging,
-      });
+      updateElasticPreview(stretchPreviewSignalRef.current);
     }
-  }, [activeLayout?.layoutEpoch, lasso.selection, selectionPreviewMode, stretch.activeHandle, stretch.amount, stretch.dragging, stretch.lastHandle, updateElasticPreview, viewport.x, viewport.y, viewport.zoom]);
+  }, [
+    activeLayout?.layoutEpoch,
+    lasso.selection,
+    props.documentEpoch,
+    selectionPreviewMode,
+    stretch.activeHandle,
+    stretch.lastHandle,
+    tree.id,
+    updateElasticPreview,
+    viewport.x,
+    viewport.y,
+    viewport.zoom,
+  ]);
   useLayoutEffect(() => {
     const projectionElement = splitProjectionRef.current;
     const owner = projectionElement?.closest<HTMLElement>(".spatial-thought");
@@ -1983,6 +2144,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-canvas-mode={lasso.active ? "lasso" : canvasMode}
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
+      data-native-address-ready={nativeAddressProjection !== null || undefined}
+      data-structural-address-ready={structuralAddressProjection !== null || undefined}
       data-point-talk-node-id={activePointTalkNodeId ?? undefined}
       data-stretching={stretch.dragging || undefined}
       data-transform-phase={transformState.phase === "idle" ? undefined : transformState.phase}
@@ -2525,6 +2688,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           ref={canvasChromeRef}
         />
       </section>
+      <MaterialAddressLayer
+        projection={nativeAddressProjection}
+        variant="native"
+      />
+      <MaterialAddressLayer
+        projection={structuralAddressProjection}
+        variant="structural"
+      />
       {activePointTalkNodeId === null ? null : (
         <PointTalkTurn
           boundaryRef={documentRef}
@@ -2547,6 +2718,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       )}
       <LassoOverlay
         active={lasso.active}
+        addressLayerRef={actionableAddressLayerRef}
         drawing={lasso.drawing}
         closurePathRef={lasso.closurePathRef}
         inkRef={lasso.inkRef}
@@ -2556,12 +2728,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         selectedText={lasso.selections.length === 1 ? lasso.selection?.selectedText ?? null : null}
         selectionCount={lasso.selections.length}
         elasticRef={elasticRef}
+        previewSource={renderedElasticPreviewSource}
         locale={props.locale}
         onBeginAdjustment={beginStretchAdjustment}
         onPreciseGesture={props.admission.discardPendingRepairs}
         status={transformState.phase}
         stretchVisible={elasticSelection !== null}
-        textColumn={lasso.selectionColumn}
         stretch={stretch}
       />
     </main>
@@ -2909,6 +3081,7 @@ function retainBoundedCache<T>(
 
 function LassoOverlay({
   active,
+  addressLayerRef,
   drawing,
   closurePathRef,
   inkRef,
@@ -2918,15 +3091,16 @@ function LassoOverlay({
   selectedText,
   selectionCount,
   elasticRef,
+  previewSource,
   locale,
   onBeginAdjustment,
   onPreciseGesture,
   status,
   stretchVisible,
-  textColumn,
   stretch,
 }: {
   active: boolean;
+  addressLayerRef: React.RefObject<HTMLDivElement | null>;
   drawing: boolean;
   closurePathRef: React.RefObject<SVGPathElement | null>;
   inkRef: React.RefObject<SVGSVGElement | null>;
@@ -2936,12 +3110,12 @@ function LassoOverlay({
   selectedText: string | null;
   selectionCount: number;
   elasticRef: React.RefObject<HTMLDivElement | null>;
+  previewSource: ElasticPreviewSource | null;
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
   onPreciseGesture: () => void;
   status: "idle" | "requesting";
   stretchVisible: boolean;
-  textColumn: Readonly<{ left: number; top: number; right: number; bottom: number }> | null;
   stretch: ReturnType<typeof useStretch>;
 }) {
   const bounds = selectionBounds(rects);
@@ -2950,15 +3124,26 @@ function LassoOverlay({
   const selectionProjectionActive = bounds !== null && stretchVisible &&
     (stretch.dragging || stretch.amount > 0 || status !== "idle");
   const descriptionId = useId();
-  const preview = elasticPreviewGeometry(
-    rects,
-    stretch.amount,
-    clientViewport(),
-    textColumn ?? undefined,
-    stretch.activeHandle,
-    stretch.lastHandle,
-    coarsePointer,
-  );
+  const preview = previewSource === null
+    ? null
+    : projectElasticPreview(
+        previewSource,
+        stretch.amount,
+        clientViewport(),
+        stretch.activeHandle,
+        stretch.lastHandle,
+        coarsePointer,
+      );
+  const addressProjection = selectionCount === 1
+    ? preview?.addressProjection ?? (previewSource === null
+        ? null
+        : projectMaterialAddress({
+            amount: 0,
+            handle: null,
+            maximumDepth: 0,
+            receipt: previewSource.layoutReceipt,
+          }))
+    : null;
   return (
     <div
       className="lasso-layer"
@@ -2972,16 +3157,34 @@ function LassoOverlay({
           {`${accessibility.selectedLanguage}: ${summarizeSelectedLanguage(selectedText, locale)}`}
         </span>
       )}
-      {rects.map((rect, index) => (
-        <span
+      <MaterialAddressLayer
+        layerRef={addressLayerRef}
+        projection={addressProjection}
+        variant="actionable"
+      />
+      {rects.length === 0 ? null : (
+        <div
           aria-hidden="true"
-          className="lasso-selection-fragment"
-          key={`${rect.x}:${rect.y}:${index}`}
-          data-first-fragment={index === 0 || undefined}
-          data-last-fragment={index === rects.length - 1 || undefined}
-          style={{ left: rect.x - 3, top: rect.y - 3, width: rect.width + 6, height: rect.height + 6 }}
-        />
-      ))}
+          className="material-address-selection-set material-address-selection-set--fallback"
+          data-single-address-fallback={selectionCount === 1 || undefined}
+        >
+        {rects.map((fragment, index) => (
+          <span
+            className="lasso-selection-fragment"
+            key={`${fragment.x}:${fragment.y}:${index}`}
+            data-first-fragment={index === 0 || undefined}
+            data-last-fragment={index === rects.length - 1 || undefined}
+            style={{
+              left: fragment.x - 3,
+              top: fragment.y - 3,
+              width: fragment.width + 6,
+              height: fragment.height + 6,
+              borderRadius: 4,
+            }}
+          />
+        ))}
+      </div>
+      )}
       {bounds === null || !stretchVisible ? null : (
         <>
           <div
@@ -2998,16 +3201,11 @@ function LassoOverlay({
               "--elastic-handle-top": `${preview?.bottomHandle.y ?? bounds.bottom}px`,
               "--elastic-top-center": `${preview === null ? bounds.left : (preview.topHandle.x1 + preview.topHandle.x2) / 2}px`,
               "--elastic-bottom-center": `${preview === null ? bounds.left : (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2}px`,
-              "--pocket-left": `${preview?.pocket.left ?? bounds.left}px`,
-              "--pocket-top": `${preview?.pocket.top ?? bounds.bottom}px`,
-              "--pocket-width": `${(preview?.pocket.right ?? bounds.right) - (preview?.pocket.left ?? bounds.left)}px`,
-              "--pocket-height": `${preview === null ? 0 : preview.pocket.bottom - preview.pocket.top}px`,
             } as CSSProperties}
           >
             <span className="visually-hidden" id={descriptionId}>
               {accessibility.groupInstructions}
             </span>
-            <span aria-hidden="true" className="language-pocket" />
             {status === "idle" ? null : (
               <span
                 aria-live="polite"
@@ -3308,6 +3506,30 @@ function rangeBoundsAroundContents(
     top: Math.min(...rects.map((rect) => rect.top)),
     bottom: Math.max(...rects.map((rect) => rect.bottom)),
   });
+}
+
+function rangeClientRectsAroundContents(
+  element: HTMLElement,
+): readonly Readonly<{ x: number; y: number; width: number; height: number }>[] {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  const rects = normalizeClientRects(range.getClientRects());
+  range.detach();
+  return rects;
+}
+
+function receiptMatchesSource(
+  source: ElasticPreviewSource,
+  receipt: ProjectedLayoutReceipt,
+): boolean {
+  const expected = source.layoutReceipt.basis;
+  const actual = receipt.basis;
+  return expected.addressKey === actual.addressKey &&
+    expected.documentEpoch === actual.documentEpoch &&
+    expected.layoutEpoch === actual.layoutEpoch &&
+    expected.nodeId === actual.nodeId &&
+    expected.treeId === actual.treeId &&
+    expected.viewportKey === actual.viewportKey;
 }
 
 /** Uses the same glyph geometry primitive as lasso addressing. */

@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-02 — selected material becomes one post-reflow flow interval
+
+Changed: whole-node structural selection, native same-node copy selection,
+neutral Lasso, and both Elastic grip projections share one client-space layout
+receipt and one reading-order outline authority. Elastic measures after
+partition reflow, then projects degree without DOM reads; the pointer deadzone
+contributes no amount. Hidden suffix wrapping as moving-layout authority,
+fragment connectors, and neck/body vessel remain historical trace only.
+
+Why: implementation screenshots proved those independent shapes omit real
+continuation regions, preserve the wrong suffix wrapping, and cannot guarantee
+one density or one connected boundary. A semantic flow interval generates the
+missing regions by construction and gives pointer, touch, and keyboard equal
+geometry for equal amount.
+
+Forecloses: repairing the surface with more connector heuristics, sending DOM
+pixels to the server, measuring layout per pointer frame, hiding native selection
+before custom paint is available, and treating Point and Talk or Elastic as one
+generic AI lifecycle merely because they share geometry.
+
 ## 2026-08-29 — quiet controls stay operable at their full bounds
 
 Changed: a long Ask Matter answer becomes a named, keyboard-focusable scroll

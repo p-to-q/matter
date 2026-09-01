@@ -197,9 +197,24 @@ function moveOwnedPointer(
   const crossedDeadzone =
     state.crossedDeadzone || Math.abs(delta) > deadzoneFor(state.pointerType);
   if (!crossedDeadzone) return state;
-  const amount = stretchAmountFromClientDelta(state.priorAmount, delta, state.handle);
+  const effectiveDelta = effectiveStretchTravel(delta, state.pointerType);
+  const amount = stretchAmountFromClientDelta(
+    state.priorAmount,
+    effectiveDelta,
+    state.handle,
+  );
   if (state.crossedDeadzone && amount === state.amount) return state;
   return Object.freeze({ ...state, amount, crossedDeadzone: true });
+}
+
+/** The deadzone measures the hand in fixed client pixels and carries no degree. */
+export function effectiveStretchTravel(
+  deltaClientY: number,
+  pointerType: StretchPointerType,
+): number {
+  if (!Number.isFinite(deltaClientY) || !isPointerType(pointerType)) return 0;
+  const magnitude = Math.max(0, Math.abs(deltaClientY) - deadzoneFor(pointerType));
+  return Math.sign(deltaClientY) * magnitude;
 }
 
 /** Outward travel expands either grip; reversing reduces the shared degree. */

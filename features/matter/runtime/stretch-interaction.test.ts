@@ -6,6 +6,7 @@ import {
   STRETCH_TOUCH_DEADZONE_PX,
   STRETCH_TRAVEL_PX,
   createStretchInteractionState,
+  effectiveStretchTravel,
   isStretchInteractionKey,
   reduceStretchInteraction,
   stretchCommitBasisFromTransition,
@@ -145,11 +146,25 @@ describe("stretch interaction", () => {
       clientY: 100 + threshold,
     })).toBe(state);
 
-    expect(reduceStretchInteraction(state, {
+    const crossed = reduceStretchInteraction(state, {
       type: "pointer-move",
       pointerId: 7,
       clientY: 100 + threshold + 0.001,
-    })).toMatchObject({ mode: "dragging", crossedDeadzone: true });
+    });
+    expect(crossed).toMatchObject({ mode: "dragging", crossedDeadzone: true });
+    expect(crossed.mode === "dragging" && crossed.amount).toBeGreaterThan(0);
+  });
+
+  it("starts degree from effective travel after the client-pixel deadzone", () => {
+    expect(effectiveStretchTravel(4, "mouse")).toBe(0);
+    expect(effectiveStretchTravel(5, "mouse")).toBe(1);
+    expect(effectiveStretchTravel(-12, "touch")).toBe(-4);
+    const moved = reduceStretchInteraction(down(), {
+      type: "pointer-move",
+      pointerId: 7,
+      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX + STRETCH_TRAVEL_PX / 2,
+    });
+    expect(moved).toMatchObject({ mode: "dragging", amount: .5 });
   });
 
   it("maps 120 downward client pixels to the full degree", () => {
@@ -188,13 +203,15 @@ describe("stretch interaction", () => {
     expect(reduceStretchInteraction(down(), {
       type: "pointer-up",
       pointerId: 7,
-      clientY: 100 + STRETCH_TRAVEL_PX * (STRETCH_COMMIT_THRESHOLD - 0.001),
+      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX +
+        STRETCH_TRAVEL_PX * (STRETCH_COMMIT_THRESHOLD - 0.001),
     })).toEqual({ mode: "armed", anchor: ANCHOR, amount: 0 });
 
     const committed = reduceStretchInteraction(down(), {
       type: "pointer-up",
       pointerId: 7,
-      clientY: 100 + STRETCH_TRAVEL_PX * STRETCH_COMMIT_THRESHOLD,
+      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX +
+        STRETCH_TRAVEL_PX * STRETCH_COMMIT_THRESHOLD,
     });
     expect(committed).toMatchObject({
       mode: "committed",
