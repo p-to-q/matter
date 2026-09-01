@@ -48,6 +48,16 @@ falls back to the browser's default blue inside a strictly neutral canvas.
 **C.** Shared geometry receipt; operation-slot lease; address-to-result handoff
 identity; a displacement input on the existing fragment renderer.
 
+**C3 carries one spatial constraint.** The handoff identity is not only logical.
+The rectangle the pocket occupies while a turn is pending is the rectangle the
+result occupies when it settles. The pocket is the vessel the result arrives
+in, not an empty lane beside where the result will appear. Today there is no
+coupling at all: `.language-pocket` opens a constant `.035` lane and the settle
+runs as a separate `transform-text` animation with its own cue, so pending and
+result are two different objects in two different places. That is the remaining
+structural discontinuity after Slice 0.5, and it belongs to the handoff design
+rather than to a later visual pass.
+
 **D.** Exact-segment Point Talk.
 
 ## Boundary
@@ -142,6 +152,37 @@ compete around one visible selection". Read precisely, that constrains
 No chat surface, no candidate carousel, and no warm palette enter through
 either path.
 
+## Reference reading
+
+Point + Talk is a concept film, so it is read for mechanism, not for style.
+
+**Transferable — the opened slot is the vessel.** A press opens a rounded slot
+under the addressed lines, the following language is pushed down and stays
+legible, and the generated result arrives inside that same slot, continuous
+with the impression above it. Selection, pending, and result are one growing
+object. This is the source of C3's spatial constraint.
+
+**Transferable — the impression is per line and ends ragged.** The mark hugs
+each visual line and the final line stops where the selected text stops. Matter
+already does this correctly.
+
+**Not transferable — the ink-colour channel.** The reference shifts selected
+text from black to warm red, giving it a second channel beside the background
+tint. In a neutral system the only available shift is toward `--muted`, which
+already means excluded or de-emphasised here. The same gesture would read as
+the opposite state, so this stays a one-channel system.
+
+**Not transferable — the absence of instruments.** No handle, field, or chrome
+appears in any frame, because the film is projected onto paper and a real
+finger is the instrument: it carries position, pressure, lift, and withdrawal
+by itself. A pointer has none of those, so Matter needs visible grips. Much of
+the naturalness being admired is a property of the medium, not a design result.
+What is actually available to us is continuity — one piece of material that
+never changes owner, never blanks, and never becomes a different object.
+
+The reference is also not a correctness standard: one frame shows its own
+address almost entirely gone with an empty slot open.
+
 ## State matrix
 
 Grip form (22x2 visible, 52x40 hit, 30px on hover and press) and the existing
@@ -169,9 +210,24 @@ regression net for the receipt and lease refactor.
 
 - **Slice 0.5 — UI owner.** Class A and the `::selection` half of class B, plus
   appearance and geometry proofs. No architecture.
-- **Slice 1+ — foundation owner.** Geometry receipt, operation lease,
-  address-to-result handoff, backend closure, then whole-node Point Talk
-  reference.
+- **Slice 1 — foundation owner.** Geometry receipt, operation lease,
+  address-to-result handoff, backend closure.
+- **Slice 1 UI — UI owner, on top of the accepted render model.** Three pieces,
+  in this order:
+  1. **Pending pocket to result settle.** Make the vessel visible: the pending
+     rectangle and the settled rectangle are the same rectangle, with no paint
+     in which the address and the result are both absent. Depends on C3.
+  2. **Whole-node Point Talk reference.** A per-line impression at a density
+     below `held`, no grips, unchanged through eligible, listening, pending,
+     retryable failure, and recovery. Needs only the clarifying amendment to
+     `product.md` line 97, not a freeze change.
+  3. **Field anchor and active Lens.** The Control Fog mark and the opened
+     field share one anchor with a bounded continuity tolerance, and an active
+     Point Talk lease suppresses the Lens rather than letting hover or focus
+     mount it again over an open field.
+
+  Exact-segment Point Talk stays blocked throughout, with no CSS branch
+  reserved for it.
 
 ## Proof
 
