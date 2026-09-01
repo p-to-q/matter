@@ -112,8 +112,10 @@ describe("selected material address", () => {
     expect(Object.keys(ELASTIC_PREVIEW_METRICS)).not.toContain("minimumOpacity");
     expect(Object.keys(ELASTIC_PREVIEW_METRICS)).not.toContain("maximumOpacity");
     expect(rooted).not.toContain("--elastic-opacity");
-    // The pocket keeps its own constant density.
-    expect(css).toMatch(/\.language-pocket \{[^}]*rgba\(var\(--selection-control-rgb\),\.035\)/);
+    // The single material-address outline owns the selected surface. A second
+    // pocket painter would stack density and reopen a seam during projection.
+    expect(css).not.toContain(".language-pocket");
+    expect(rooted).not.toContain("--pocket-height");
   });
 
   it("never lets an arrival and a displacement own one property", () => {
@@ -193,7 +195,7 @@ describe("selected material address", () => {
 
   it("keeps forced colors on the system contract and settle motion optional", () => {
     const forced = css.slice(css.indexOf("@media (forced-colors: active)"));
-    expect(forced).toMatch(/\.material-address-layer__path \{[^}]*fill:\s*Highlight/);
+    expect(forced).toMatch(/\[data-address-variant="actionable"\] \.material-address-layer__path,[^]*?\[data-address-variant="structural"\] \.material-address-layer__path \{[^}]*fill:\s*transparent;[^}]*stroke:\s*Highlight/);
     expect(forced).toMatch(/\[data-address-variant="native"\] \{ display: none/);
     expect(forced).toMatch(/::selection \{[^}]*background:\s*Highlight/);
     const reduced = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
@@ -201,6 +203,20 @@ describe("selected material address", () => {
     // The settle may only move opacity, never geometry.
     const base = css.match(/\n\.material-address-layer \{([^}]*)\}/);
     expect(base![1]).toMatch(/transition: opacity 120ms/);
+  });
+
+  it("clips every fixed address painter to the paper boundary", () => {
+    const base = css.match(/\.material-address-layer \{([^}]*)\}/);
+    expect(base![1]).toContain("clip-path: inset(var(--shell-gutter)");
+    const narrow = css.slice(css.indexOf("@media (max-width: 959px)"));
+    expect(narrow).toMatch(/\.material-address-layer \{[^}]*clip-path:\s*inset\(var\(--narrow-paper-top\)/);
+  });
+
+  it("caches the hot path node and avoids redundant paint-state writes", () => {
+    expect(layer).toContain("const pathByLayer = new WeakMap");
+    expect(layer).toContain("pathForLayer(layer)");
+    expect(layer).toContain('path.getAttribute("d") !== outline.path');
+    expect(layer).toContain('layer.dataset.materialAddressPainted !== "true"');
   });
 
   it("takes the whole-node rounding from its own rows, not the precise radius", () => {

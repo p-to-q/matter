@@ -18,4 +18,16 @@ describe("structural material selection measurement", () => {
     expect(source).toContain("root === null || label === null");
     expect(source).toContain("setReceipt(null)");
   });
+
+  it("measures after paint ownership changes and gates stale identities", () => {
+    expect(source).toContain("window.requestAnimationFrame");
+    expect(source).toContain("structuralReceiptMatchesInput(receipt, input)");
+    expect(source).toContain('basis.partitionKey === "structural-selection"');
+  });
+
+  it("remeasures after the material plane or camera finishes moving", () => {
+    expect(source).toContain('addEventListener("transitionend", finishPositioningTransition)');
+    expect(source).toContain('addEventListener("transitioncancel", finishPositioningTransition)');
+    expect(source).toContain('target.classList.contains("matter-world")');
+  });
 });

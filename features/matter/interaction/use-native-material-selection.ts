@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import type { RefObject } from "react";
 import { normalizeClientRects } from "./range-measurement";
 import {
@@ -14,6 +15,7 @@ type NativeSelectionInput = Readonly<{
   documentEpoch: number;
   enabled: boolean;
   layoutEpoch: number;
+  positioningRef: RefObject<HTMLElement | null>;
   scopeRef: RefObject<HTMLElement | null>;
   treeId: string;
   viewportKey: string;
@@ -111,7 +113,6 @@ export function useNativeMaterialSelection(
 
   useLayoutEffect(() => {
     generationRef.current += 1;
-    setReceipt(null);
     const generation = generationRef.current;
     const schedule = () => {
       if (frameRef.current !== null) return;
@@ -120,16 +121,51 @@ export function useNativeMaterialSelection(
         if (generation === generationRef.current) measure();
       });
     };
+    const invalidateAndSchedule = () => {
+      // The browser has already moved its Selection. Release the old custom
+      // paint before this native event returns, then measure the new identity
+      // at most once in the next frame. A normal concurrent update may merge
+      // with that measurement and leave the old path suppressing ::selection.
+      flushSync(() => setReceipt(null));
+      schedule();
+    };
+    const positioningElement = input.positioningRef.current;
+    const finishPositioningTransition = (event: TransitionEvent) => {
+      const target = event.target;
+      if (
+        event.propertyName !== "transform" ||
+        !(target instanceof HTMLElement) ||
+        (target !== positioningElement && !target.classList.contains("matter-world"))
+      ) return;
+      schedule();
+    };
     schedule();
-    document.addEventListener("selectionchange", schedule);
+    document.addEventListener("selectionchange", invalidateAndSchedule);
+    positioningElement?.addEventListener("transitioncancel", finishPositioningTransition);
+    positioningElement?.addEventListener("transitionend", finishPositioningTransition);
     return () => {
-      document.removeEventListener("selectionchange", schedule);
+      document.removeEventListener("selectionchange", invalidateAndSchedule);
+      positioningElement?.removeEventListener("transitioncancel", finishPositioningTransition);
+      positioningElement?.removeEventListener("transitionend", finishPositioningTransition);
       if (frameRef.current !== null) window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     };
-  }, [measure]);
+  }, [input.positioningRef, measure]);
 
-  return receipt;
+  return nativeReceiptMatchesInput(receipt, input) ? receipt : null;
+}
+
+function nativeReceiptMatchesInput(
+  receipt: ProjectedLayoutReceipt | null,
+  input: NativeSelectionInput,
+): receipt is ProjectedLayoutReceipt {
+  if (!input.enabled || receipt === null) return false;
+  const basis = receipt.basis;
+  return basis.documentEpoch === input.documentEpoch &&
+    basis.layoutEpoch === input.layoutEpoch &&
+    basis.partitionKey === "native-selection" &&
+    basis.treeId === input.treeId &&
+    basis.viewportKey === input.viewportKey;
 }
 
 function materialTextRoot(node: Node): HTMLElement | null {

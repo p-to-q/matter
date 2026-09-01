@@ -6,6 +6,8 @@ import type { MaterialAddressProjection } from "../interaction/projected-layout-
 
 export type MaterialAddressVariant = "actionable" | "native" | "structural";
 
+const pathByLayer = new WeakMap<HTMLElement, SVGPathElement>();
+
 /**
  * The whole-node state keeps the label pill's `.44em` rounding, so it is taken
  * from the rows this projection actually measured rather than from a multiple
@@ -56,6 +58,14 @@ function readVariant(layer: HTMLElement): MaterialAddressVariant {
   return variant === "structural" || variant === "native" ? variant : "actionable";
 }
 
+function pathForLayer(layer: HTMLElement): SVGPathElement | null {
+  const cached = pathByLayer.get(layer);
+  if (cached?.isConnected) return cached;
+  const path = layer.querySelector<SVGPathElement>(".material-address-layer__path");
+  if (path !== null) pathByLayer.set(layer, path);
+  return path;
+}
+
 /**
  * Stable mount point for the single-outline visual owner.
  *
@@ -99,25 +109,37 @@ export function publishMaterialAddressProjection(
   projection: MaterialAddressProjection | null,
 ): void {
   if (layer === null) return;
-  const path = layer.querySelector<SVGPathElement>(".material-address-layer__path");
+  const path = pathForLayer(layer);
   const outline = materialAddressVariantOutline(projection, readVariant(layer));
   if (projection === null || outline === null) {
-    path?.removeAttribute("d");
-    delete layer.dataset.materialAddressPainted;
-    delete layer.dataset.materialAddressReady;
-    delete layer.dataset.addressDirection;
-    delete layer.dataset.addressPartition;
+    if (path?.hasAttribute("d")) path.removeAttribute("d");
+    if (layer.dataset.materialAddressPainted !== undefined) {
+      delete layer.dataset.materialAddressPainted;
+    }
+    if (layer.dataset.materialAddressReady !== undefined) {
+      delete layer.dataset.materialAddressReady;
+    }
+    if (layer.dataset.addressDirection !== undefined) delete layer.dataset.addressDirection;
+    if (layer.dataset.addressPartition !== undefined) delete layer.dataset.addressPartition;
     return;
   }
-  layer.dataset.materialAddressReady = "true";
-  layer.dataset.addressDirection = projection.direction;
-  layer.dataset.addressPartition = projection.basis.partitionKey;
+  if (layer.dataset.materialAddressReady !== "true") {
+    layer.dataset.materialAddressReady = "true";
+  }
+  if (layer.dataset.addressDirection !== projection.direction) {
+    layer.dataset.addressDirection = projection.direction;
+  }
+  if (layer.dataset.addressPartition !== projection.basis.partitionKey) {
+    layer.dataset.addressPartition = projection.basis.partitionKey;
+  }
   if (path === null) {
     // Without a path element there is nothing painted, so the fallback has to
     // keep the address visible rather than the layer claiming it.
     delete layer.dataset.materialAddressPainted;
     return;
   }
-  path.setAttribute("d", outline.path);
-  layer.dataset.materialAddressPainted = "true";
+  if (path.getAttribute("d") !== outline.path) path.setAttribute("d", outline.path);
+  if (layer.dataset.materialAddressPainted !== "true") {
+    layer.dataset.materialAddressPainted = "true";
+  }
 }

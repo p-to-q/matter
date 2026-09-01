@@ -14,6 +14,8 @@ describe("material address foundation", () => {
     expect(publisher).not.toContain("getBoundingClientRect");
     expect(publisher).not.toContain("offsetHeight");
     expect(publisher).toContain("publishMaterialAddressProjection");
+    expect(publisher).toContain("stretchPreviewSignalRef.current = signal");
+    expect(rooted).not.toMatch(/stretchPreviewSignalRef\.current\s*=\s*\{\s*amount:\s*stretch\.amount/);
   });
 
   it("keeps the old paint as fallback until the new path reports painted", () => {

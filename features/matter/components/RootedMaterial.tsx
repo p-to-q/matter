@@ -848,6 +848,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const projectedLayoutReceiptRef = useRef<ProjectedLayoutReceipt | null>(null);
   const [projectedLayoutReceipt, setProjectedLayoutReceipt] = useState<ProjectedLayoutReceipt | null>(null);
   const stretchSelectionRef = useRef<SegmentSelection | null>(null);
+  const stretchPreviewSignalRef = useRef<StretchPreviewSignal>({
+    amount: 0,
+    handle: null,
+    dragging: false,
+  });
   // Range fragments and their visual-line grouping are stable until lasso
   // geometry changes. Keeping them out of the pointer-move path prevents a
   // long wrapped selection from paying that O(n log n) work every frame.
@@ -880,6 +885,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     ],
   );
   const updateElasticPreview = useCallback((signal: StretchPreviewSignal) => {
+    // A receipt can arrive while a pointer preview is still hot. Remember the
+    // last signal at the event boundary so that re-publishing the new receipt
+    // cannot fall back to React's older settled degree.
+    stretchPreviewSignalRef.current = signal;
     const element = elasticRef.current;
     const split = splitProjectionRef.current;
     const projectionReceipt = projectedLayoutReceiptRef.current;
@@ -904,7 +913,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
       split?.removeAttribute("data-preview-mode");
       const addressLayer = element.closest<HTMLElement>(".lasso-layer");
       addressLayer?.style.removeProperty("--address-displacement-y");
-      addressLayer?.style.removeProperty("--pocket-height");
       publishLiveLanguageLayout(null);
       publishMaterialAddressProjection(actionableAddressLayerRef.current, null);
       return;
@@ -1070,16 +1078,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onPreview: updateElasticPreview,
     onCommit: startFixedExpansion,
   });
-  const stretchPreviewSignalRef = useRef<StretchPreviewSignal>({
-    amount: stretch.amount,
-    handle: stretch.activeHandle ?? stretch.lastHandle,
-    dragging: stretch.dragging,
-  });
-  stretchPreviewSignalRef.current = {
-    amount: stretch.amount,
-    handle: stretch.activeHandle ?? stretch.lastHandle,
-    dragging: stretch.dragging,
-  };
   useLayoutEffect(() => {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
@@ -1123,9 +1121,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     enabled: !lasso.active && !lassoHasSelectionGeometry &&
       activePointTalkNodeId === null && navigation.selectedNodeId === null,
     layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+    positioningRef: materialPlaneRef,
     scopeRef: canvasRef,
     treeId: tree.id,
-    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}`,
+    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`,
   });
   const nativeAddressProjection = useMemo(
     () => nativeSelectionReceipt === null
@@ -1143,9 +1142,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     enabled: !lasso.active && !lassoHasSelectionGeometry && activePointTalkNodeId === null,
     layoutEpoch: activeLayout?.layoutEpoch ?? 0,
     nodeId: navigation.selectedNodeId,
+    positioningRef: materialPlaneRef,
     scopeRef: canvasRef,
     treeId: tree.id,
-    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}`,
+    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`,
   });
   const structuralAddressProjection = useMemo(
     () => structuralSelectionReceipt === null

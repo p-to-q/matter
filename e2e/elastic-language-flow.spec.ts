@@ -26,40 +26,125 @@ test("both literal grips stay visible in the paper's light and dark appearances"
 
   const grips = page.locator(".stretch-handle");
   const selectedCopy = page.locator(".language-split-selected-copy");
+  const addressPath = page.locator('.material-address-layer[data-address-variant="actionable"] .material-address-layer__path');
   const appearance = page.locator('[data-chrome-control="appearance"]');
   await expect(grips).toHaveCount(2);
   await appearance.click({ force: true });
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-theme", "light");
   expect(await gripColors(grips)).toEqual(["rgb(22, 29, 39)", "rgb(22, 29, 39)"]);
-  await expect(selectedCopy).toHaveCSS("background-color", "rgba(22, 29, 39, 0.1)");
+  await expect(selectedCopy).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(addressPath).toHaveCSS("fill", "rgba(22, 29, 39, 0.18)");
 
   await appearance.click({ force: true });
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-theme", "dark");
   expect(await gripColors(grips)).toEqual(["rgb(240, 242, 243)", "rgb(240, 242, 243)"]);
-  await expect(selectedCopy).toHaveCSS("background-color", "rgba(240, 242, 243, 0.08)");
+  await expect(selectedCopy).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(addressPath).toHaveCSS("fill", "rgba(240, 242, 243, 0.1)");
 
+  const neutralAddressBox = await addressPath.boundingBox();
+  expect(neutralAddressBox).not.toBeNull();
   const lower = page.getByRole("slider", {
     name: "用下握点设置所选文字的展开程度",
   });
   await lower.press("End");
-  const surfaceReceipt = await page.locator(".elastic-preview").evaluate((preview) => {
+  await expect.poll(async () => (await addressPath.boundingBox())?.height ?? 0).toBeGreaterThan(
+    neutralAddressBox!.height + 100,
+  );
+  const surfaceReceipt = await addressPath.evaluate((path) => {
     const projection = document.querySelector<HTMLElement>(".language-split-projection");
-    const pocket = preview.querySelector<HTMLElement>(".language-pocket");
-    const handle = preview.querySelector<HTMLElement>(".stretch-handle");
-    if (projection === null || pocket === null || handle === null) {
+    const handle = document.querySelector<HTMLElement>(".stretch-handle");
+    if (projection === null || handle === null) {
       throw new Error("elastic visual receipt missing");
     }
-    const pocketColor = getComputedStyle(pocket).backgroundColor;
-    const pocketAlpha = Number(pocketColor.match(/[\d.]+\)$/)?.[0].slice(0, -1) ?? "1");
     return {
-      pocketAlpha,
+      addressFill: getComputedStyle(path).fill,
       projectionBackground: getComputedStyle(projection, "::before").backgroundColor,
       handleShadow: getComputedStyle(handle, "::after").boxShadow,
     };
   });
-  expect(surfaceReceipt.pocketAlpha).toBeLessThanOrEqual(.04);
+  expect(surfaceReceipt.addressFill).toBe("rgba(240, 242, 243, 0.1)");
   expect(surfaceReceipt.projectionBackground).toBe("rgba(0, 0, 0, 0)");
   expect(surfaceReceipt.handleShadow).toContain("4px");
+});
+
+test("native copy releases stale paint before measuring a new range", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const native = page.locator('.material-address-layer[data-address-variant="native"]');
+  const nativePath = native.locator(".material-address-layer__path");
+  const setRootRange = async (start: number, end: number) => page.evaluate(
+    ({ endOffset, nodeId, startOffset }) => {
+      const root = document.querySelector<HTMLElement>(`[data-thought-text-id="${nodeId}"]`);
+      const text = root === null
+        ? null
+        : document.createTreeWalker(root, NodeFilter.SHOW_TEXT).nextNode();
+      const selection = window.getSelection();
+      if (!(text instanceof Text) || selection === null) throw new Error("native fixture text missing");
+      const range = document.createRange();
+      range.setStart(text, startOffset);
+      range.setEnd(text, endOffset);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new Event("selectionchange"));
+      return document.querySelector(
+        '.material-address-layer[data-address-variant="native"]',
+      )?.hasAttribute("data-material-address-painted") ?? false;
+    },
+    { endOffset: end, nodeId: ROOT_ID, startOffset: start },
+  );
+
+  expect(await setRootRange(0, 6)).toBe(false);
+  await expect(native).toHaveAttribute("data-material-address-painted", "true");
+  const firstPath = await nativePath.getAttribute("d");
+  expect(firstPath).not.toBeNull();
+
+  // selectionchange must synchronously stop the old path from suppressing the
+  // browser's new range; the replacement custom path arrives on the next rAF.
+  expect(await setRootRange(9, 16)).toBe(false);
+  await expect(native).toHaveAttribute("data-material-address-painted", "true");
+  await expect.poll(() => nativePath.getAttribute("d")).not.toBe(firstPath);
+
+  const collapsedPainted = await page.evaluate(() => {
+    window.getSelection()?.removeAllRanges();
+    document.dispatchEvent(new Event("selectionchange"));
+    return document.querySelector(
+      '.material-address-layer[data-address-variant="native"]',
+    )?.hasAttribute("data-material-address-painted") ?? false;
+  });
+  expect(collapsedPainted).toBe(false);
+  await expect(native).not.toHaveAttribute("data-material-address-painted", "true");
+
+  await setRootRange(0, 6);
+  await expect(native).toHaveAttribute("data-material-address-painted", "true");
+  const crossNode = await page.evaluate(() => {
+    const roots = Array.from(document.querySelectorAll<HTMLElement>("[data-thought-text-id]"));
+    const first = roots[0] === undefined
+      ? null
+      : document.createTreeWalker(roots[0], NodeFilter.SHOW_TEXT).nextNode();
+    const second = roots[1] === undefined
+      ? null
+      : document.createTreeWalker(roots[1], NodeFilter.SHOW_TEXT).nextNode();
+    const selection = window.getSelection();
+    if (!(first instanceof Text) || !(second instanceof Text) || selection === null) {
+      throw new Error("cross-node fixture text missing");
+    }
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(second, Math.min(5, second.length));
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+    return {
+      collapsed: selection.isCollapsed,
+      painted: document.querySelector(
+        '.material-address-layer[data-address-variant="native"]',
+      )?.hasAttribute("data-material-address-painted") ?? false,
+    };
+  });
+  expect(crossNode).toEqual({ collapsed: false, painted: false });
+  await expect(native).not.toHaveAttribute("data-material-address-painted", "true");
 });
 
 test("one outline owns the address from neutral through both grips", async ({ page }) => {
@@ -75,6 +160,9 @@ test("one outline owns the address from neutral through both grips", async ({ pa
   const structuralD = await structuralPath.getAttribute("d");
   expect(structuralD ?? "").not.toBe("");
   expect((structuralD ?? "").match(/M/g) ?? []).toHaveLength(1);
+  expect(await structuralPath.evaluate((node) => getComputedStyle(node).stroke)).not.toBe("none");
+  await expect(structuralPath).toHaveCSS("stroke-width", "1px");
+  expect(await structural.evaluate((node) => getComputedStyle(node).clipPath)).not.toBe("none");
   // The label pill only steps aside once that path exists.
   await expect(page.locator('.spatial-thought[data-selected="true"] .spatial-thought__label'))
     .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
@@ -109,6 +197,47 @@ test("one outline owns the address from neutral through both grips", async ({ pa
     await expect(page.locator(".stretch-handle")).toHaveCount(2);
     await grip.press("Home");
   }
+});
+
+test("a structural address settles with the narrow index transition", async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+
+  const path = page.locator(
+    '.material-address-layer[data-address-variant="structural"] .material-address-layer__path',
+  );
+  const label = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  const [pathBefore, labelBefore] = await Promise.all([path.boundingBox(), label.boundingBox()]);
+  expect(pathBefore).not.toBeNull();
+  expect(labelBefore).not.toBeNull();
+  const inlineOffset = pathBefore!.x - labelBefore!.x;
+
+  await page.locator(".material-files-toggle").click({ force: true });
+  await expect(page.locator(".matter-material-plane"))
+    .toHaveAttribute("data-index-disclosure", "open");
+  await expect.poll(async () => (await label.boundingBox())?.x ?? 0)
+    .toBeGreaterThan(labelBefore!.x + 100);
+  await expect.poll(async () => {
+    const [nextPath, nextLabel] = await Promise.all([path.boundingBox(), label.boundingBox()]);
+    if (nextPath === null || nextLabel === null) return Number.POSITIVE_INFINITY;
+    return Math.abs((nextPath.x - nextLabel.x) - inlineOffset);
+  }).toBeLessThan(2);
+});
+
+test("forced colors keeps selected text readable above a system outline", async ({ page }) => {
+  await page.emulateMedia({ forcedColors: "active" });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+
+  const path = page.locator('.material-address-layer[data-address-variant="structural"] .material-address-layer__path');
+  const label = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await expect(path).toHaveCSS("fill", "rgba(0, 0, 0, 0)");
+  expect(await path.evaluate((node) => getComputedStyle(node).stroke)).not.toBe("none");
+  expect(await label.evaluate((node) => getComputedStyle(node).color)).not.toBe("rgba(0, 0, 0, 0)");
 });
 
 test("the upper grip keeps its upper boundary fixed and pushes selected language down", async ({ page }) => {
@@ -418,7 +547,9 @@ async function runElasticReceipt(
     const y = box.y + box.height / 2;
     await page.mouse.move(x, y);
     await page.mouse.down();
-    await page.mouse.move(x, y - 60, { steps: 5 });
+    // Four pixels are the mouse deadzone; 64px of physical travel therefore
+    // commits the fixture's exact 0.5 degree rather than an adjacent length.
+    await page.mouse.move(x, y - 64, { steps: 5 });
     await page.mouse.up();
   } else if (input === "touch") {
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
@@ -426,7 +557,8 @@ async function runElasticReceipt(
     if (gripBox === null) throw new Error("touch lower grip missing");
     expect(gripBox.width).toBeGreaterThanOrEqual(48);
     expect(gripBox.height).toBeGreaterThanOrEqual(48);
-    await dragByTouch(page, grip, 60);
+    // Touch owns an eight-pixel deadzone, so 68px reaches the same 0.5 degree.
+    await dragByTouch(page, grip, 68);
   } else {
     await grip.focus();
     await page.keyboard.press("PageUp");
@@ -501,22 +633,32 @@ async function expectLowerSpaceBeforeSuffix(page: Page): Promise<void> {
 async function expectNeutralSelection(page: Page): Promise<void> {
   await expect(page.locator(".language-split-projection"))
     .toHaveAttribute("data-preview-mode", "neutral");
-  await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
+  const address = page.locator(
+    '.material-address-layer[data-address-variant="actionable"]',
+  );
+  await expect(address).toHaveAttribute("data-material-address-painted", "true");
+  await expect(address.locator(".material-address-layer__path")).toBeVisible();
+  await expect(page.locator(
+    ".material-address-selection-set--fallback[data-single-address-fallback]",
+  )).toBeHidden();
 }
 
 async function expectUpperGripAtSelection(
   page: Page,
   grip: ReturnType<Page["locator"]>,
 ): Promise<void> {
-  const [gripBox, firstFragment] = await Promise.all([
+  const [gripBox, addressBox] = await Promise.all([
     grip.boundingBox(),
-    page.locator(".lasso-selection-fragment").first().boundingBox(),
+    page.locator(
+      '.material-address-layer[data-address-variant="actionable"] .material-address-layer__path',
+    ).boundingBox(),
   ]);
   expect(gripBox).not.toBeNull();
-  expect(firstFragment).not.toBeNull();
+  expect(addressBox).not.toBeNull();
   const lowerEdge = gripBox!.y + gripBox!.height;
-  expect(lowerEdge).toBeLessThanOrEqual(firstFragment!.y + 1);
-  expect(lowerEdge).toBeGreaterThanOrEqual(firstFragment!.y - 14);
+  // The invisible hit target sits just above the painted address; the visible
+  // 22x2 grip grows from that edge without becoming part of its geometry.
+  expect(Math.abs(addressBox!.y - lowerEdge)).toBeLessThanOrEqual(18);
 }
 
 async function gripColors(grips: ReturnType<Page["locator"]>): Promise<readonly string[]> {

@@ -456,11 +456,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .stretch-handle[data-active="true"]::after { left: 11px; width: 30px; opacity: 1; }
 .stretch-handle:focus-visible { outline: 1px solid var(--selection-control-ink); outline-offset: -5px; border-radius: 12px; }
 .elastic-preview { position: fixed; z-index: 29; inset: 0; pointer-events: none; }
-.language-pocket { position: fixed; left: var(--pocket-left, 0); top: var(--pocket-top, 0); width: var(--pocket-width, 0); height: min(var(--pocket-height, 0px), max(0px, calc(100dvh - var(--pocket-top, 0px) - 8px))); background: rgba(var(--selection-control-rgb),.035); opacity: 0; transform: scaleY(.96); transform-origin: top center; transition: opacity 150ms ease, transform 180ms cubic-bezier(.2,.8,.2,1); }
 .matter-shell[data-canvas-theme="dark"] .lasso-ink__trace { opacity: .58; }
 .matter-shell[data-canvas-theme="dark"] .lasso-ink__closure { opacity: .16; }
 .matter-shell[data-canvas-theme="dark"] .lasso-selection-fragment { background: rgba(var(--selection-control-rgb),.1); }
-.material-address-layer { position: fixed; inset: 0; pointer-events: none; transition: opacity 120ms ease; }
+.material-address-layer { position: fixed; inset: 0; clip-path: inset(var(--shell-gutter) var(--shell-gutter) var(--shell-gutter) var(--sidebar-width) round 18px); pointer-events: none; transition: opacity 120ms ease; }
 /* The paper is its own `z-index: 2` layer, so a negative layer here paints
    behind the paper and shows nothing. These sit just under the lasso layer and
    tint the canonical text, which keeps the glyphs their own solid colour. */
@@ -483,8 +482,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell[data-canvas-theme="dark"] .stretch-handle:hover::after,
 .matter-shell[data-canvas-theme="dark"] .stretch-handle:active::after,
 .matter-shell[data-canvas-theme="dark"] .stretch-handle[data-active="true"]::after { background: currentColor; }
-[data-stretch-handle="top"] .language-pocket { transform-origin: bottom center; }
-.elastic-preview[data-preview-mode="expand"] .language-pocket { opacity: 1; transform: scaleY(1); }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important; }
 
 /* The arrival owns opacity only. It once animated `transform`, which the
@@ -510,6 +507,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    one width token so disclosure is an exact, reversible push. */
 @media (max-width: 959px) {
   .matter-shell { --index-navigation-return-centering: 1; }
+  .material-address-layer { clip-path: inset(var(--narrow-paper-top) var(--narrow-paper-inset) var(--narrow-paper-inset) var(--narrow-paper-inset) round var(--narrow-paper-radius)); }
   .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
   .material-files__clip { position: fixed; z-index: 41; top: var(--narrow-paper-top); right: var(--narrow-paper-inset); bottom: var(--narrow-paper-inset); left: var(--narrow-paper-inset); display: block; overflow: clip; border-radius: var(--narrow-paper-radius); pointer-events: none; }
   .material-files { --index-row: 48px; position: absolute; z-index: auto; top: 0; right: auto; bottom: 0; left: 0; width: var(--narrow-index-width); padding: 8px 10px 6px 8px; border: 0; border-radius: 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(-100%); transform-origin: left center; }
@@ -636,13 +634,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .material-file__check input:checked + .material-file__check-mark::after { border-color: Highlight; }
   .repair-text__grapheme,
   .transform-text__group { animation: none !important; color: var(--material-text-color); filter: none; opacity: 1; }
-  .lasso-selection-fragment,
-  .language-pocket { border: 1px solid Highlight; background: transparent; }
+  .lasso-selection-fragment { border: 1px solid Highlight; background: transparent; }
   .lasso-layer[data-selection-projection="true"] .lasso-selection-fragment,
   .lasso-layer:has(.elastic-preview[data-preview-mode="expand"]) .lasso-selection-fragment { border: 1px solid Highlight; background: transparent; opacity: 1; }
   .matter-shell::selection,
   .matter-shell ::selection { background: Highlight; color: HighlightText; }
-  .material-address-layer__path { fill: Highlight; stroke: none; }
+  .material-address-layer[data-address-variant="actionable"] .material-address-layer__path,
+  .material-address-layer[data-address-variant="structural"] .material-address-layer__path { fill: transparent; stroke: Highlight; stroke-width: 1px; vector-effect: non-scaling-stroke; }
   .material-address-layer[data-address-variant="native"] { display: none; }
   .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
   .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: Highlight; color: HighlightText; }
