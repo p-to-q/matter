@@ -30,7 +30,6 @@ export type ElasticPreview = Readonly<{
   handleViewportInset: number;
   pocketDepth: number;
   maximumDepth: number;
-  opacity: number;
 }>;
 
 export const ELASTIC_PREVIEW_METRICS = Object.freeze({
@@ -49,8 +48,6 @@ export const ELASTIC_PREVIEW_METRICS = Object.freeze({
   lineTopTolerance: 1,
   minimumCueWidth: 32,
   maximumCueWidth: 96,
-  minimumOpacity: 0.08,
-  maximumOpacity: 0.18,
 });
 
 /**
@@ -166,11 +163,6 @@ export function projectElasticPreview(
       ? topBase + pocketDepth
       : Math.max(bottomBase, bottomY),
   });
-  const opacity = roundClientValue(
-    ELASTIC_PREVIEW_METRICS.minimumOpacity + normalizedAmount *
-      (ELASTIC_PREVIEW_METRICS.maximumOpacity - ELASTIC_PREVIEW_METRICS.minimumOpacity),
-  );
-
   return Object.freeze({
     mode: normalizedAmount === 0 ? "neutral" : "expand",
     amount: normalizedAmount,
@@ -185,7 +177,6 @@ export function projectElasticPreview(
     handleViewportInset,
     pocketDepth,
     maximumDepth,
-    opacity,
   });
 }
 

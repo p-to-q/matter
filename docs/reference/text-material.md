@@ -225,7 +225,8 @@ invalidation, and a newer selection restore the previous settled degree.
 Wrapped Range rectangles are grouped into visual lines by vertical overlap.
 Fragments on one line are unioned only for that line; the two handles never use
 the complete selection's horizontal center. This keeps a stepped selection's
-upper and lower grips attached to the actual first and last pink fragments.
+upper and lower grips attached to that selection's actual first and last
+visual-line fragments, at first paint as well as during adjustment.
 
 At degree zero, the highlight and two grips remain on the source and no empty
 interstitial lane opens. Moving either grip transfers ownership to Elastic and

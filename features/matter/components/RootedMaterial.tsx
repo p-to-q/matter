@@ -228,7 +228,6 @@ type PresentationDamage = Readonly<{
 }>;
 
 type ProjectionHandleReceipt = Readonly<{
-  centerX: number;
   selectedTopClient: number;
   selectedBottomClient: number;
   afterTopClient: number;
@@ -859,6 +858,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (preview === null) {
       element.removeAttribute("data-preview-mode");
       split?.removeAttribute("data-preview-mode");
+      element.closest<HTMLElement>(".lasso-layer")
+        ?.style.removeProperty("--address-displacement-y");
       publishLiveLanguageLayout(null);
       return;
     }
@@ -883,7 +884,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
       split.style.setProperty("--split-depth", `${worldDepth ?? 0}px`);
       split.style.setProperty("--split-pocket-top", `${pocketTop}px`);
       split.style.setProperty("--split-pocket-depth", `${worldDepth}px`);
-      split.style.setProperty("--elastic-opacity", String(preview.opacity));
     }
     if (neutral) {
       publishLiveLanguageLayout(null);
@@ -913,9 +913,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // duplicating just the clamp here made the two controls merge at an edge.
     const topY = preview.topHandle.y;
     const bottomY = preview.bottomHandle.y;
-    const projectionCenter = preview.mode === "expand" ? receipt?.centerX : undefined;
-    const rawTopCenter = projectionCenter ?? (preview.topHandle.x1 + preview.topHandle.x2) / 2;
-    const rawBottomCenter = projectionCenter ?? (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2;
+    const rawTopCenter = (preview.topHandle.x1 + preview.topHandle.x2) / 2;
+    const rawBottomCenter = (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2;
     const topCenter = clampClient(rawTopCenter, visible?.left, visible?.right, 26);
     const bottomCenter = clampClient(rawBottomCenter, visible?.left, visible?.right, 26);
     element.style.setProperty("--elastic-anchor-top", `${topY}px`);
@@ -926,7 +925,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     element.style.setProperty("--pocket-top", `${handle === "top" ? selectedTop : selectedBottom}px`);
     element.style.setProperty("--pocket-width", `${preview.pocket.right - preview.pocket.left}px`);
     element.style.setProperty("--pocket-height", `${travelDepth}px`);
-    element.style.setProperty("--elastic-opacity", String(preview.opacity));
+    const addressLayer = element.closest<HTMLElement>(".lasso-layer");
+    addressLayer?.style.setProperty(
+      "--address-displacement-y",
+      `${handle === "top" ? travelDepth : 0}px`,
+    );
     const controls = element.querySelectorAll<HTMLElement>(".stretch-handle");
     for (const control of controls) {
       control.dataset.stretchAmount = String(Number(signal.amount.toFixed(3)));
@@ -1245,14 +1248,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const afterLeading = projectedAfterRange == null
       ? 0
       : projectedAfterRange.top - projectedAfterTopClient;
-    projectionElement.style.setProperty("--split-selected-top", `${selectedTop}px`);
     const afterTopWorld = clientDepthToWorld(
       Math.max(0, afterTopClient - projectionRect.top - afterLeading),
       viewport.zoom,
     ) ?? 0;
     projectionElement.style.setProperty("--split-after-top", `${afterTopWorld}px`);
     projectionHandleReceiptRef.current = Object.freeze({
-      centerX: projectionRect.left + projectionRect.width / 2,
       selectedTopClient,
       selectedBottomClient,
       afterTopClient,
@@ -2995,13 +2996,12 @@ function LassoOverlay({
             style={{
               "--elastic-anchor-top": `${preview?.topHandle.y ?? bounds.top}px`,
               "--elastic-handle-top": `${preview?.bottomHandle.y ?? bounds.bottom}px`,
-              "--elastic-top-center": `${((preview?.topHandle.x1 ?? bounds.left) + (preview?.topHandle.x2 ?? bounds.right)) / 2}px`,
-              "--elastic-bottom-center": `${((preview?.bottomHandle.x1 ?? bounds.left) + (preview?.bottomHandle.x2 ?? bounds.right)) / 2}px`,
+              "--elastic-top-center": `${preview === null ? bounds.left : (preview.topHandle.x1 + preview.topHandle.x2) / 2}px`,
+              "--elastic-bottom-center": `${preview === null ? bounds.left : (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2}px`,
               "--pocket-left": `${preview?.pocket.left ?? bounds.left}px`,
               "--pocket-top": `${preview?.pocket.top ?? bounds.bottom}px`,
               "--pocket-width": `${(preview?.pocket.right ?? bounds.right) - (preview?.pocket.left ?? bounds.left)}px`,
               "--pocket-height": `${preview === null ? 0 : preview.pocket.bottom - preview.pocket.top}px`,
-              "--elastic-opacity": String(preview?.opacity ?? .08),
             } as CSSProperties}
           >
             <span className="visually-hidden" id={descriptionId}>
