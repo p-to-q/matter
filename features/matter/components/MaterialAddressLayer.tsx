@@ -42,8 +42,12 @@ export function materialAddressVariantOutline(
   variant: MaterialAddressVariant,
 ) {
   if (projection === null) return null;
+  const cornerRadius = materialAddressVariantCornerRadius(projection, variant);
   return materialAddressOutline(projection, {
-    cornerRadius: materialAddressVariantCornerRadius(projection, variant),
+    cornerRadius,
+    // Only the softly rounded whole-node state can produce a step too short to
+    // hold its own corners; a precise address keeps every step it measured.
+    minimumStepExtent: variant === "structural" ? cornerRadius * 2 : 0,
   });
 }
 

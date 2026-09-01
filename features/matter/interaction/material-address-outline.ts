@@ -16,6 +16,13 @@ export type MaterialAddressOutline = Readonly<{
 export type MaterialAddressOutlineOptions = Readonly<{
   /** Overrides the receipt's corner radius; still clamped by the edges it meets. */
   cornerRadius?: number;
+  /**
+   * Lateral steps narrower than this are opened outward instead of drawn.
+   * A step only as wide as two corner radii leaves no straight platform
+   * between them, so the vertex clamp collapses both quarter circles and the
+   * seam reads as a hard S. Longer steps are real shape and stay.
+   */
+  minimumStepExtent?: number;
 }>;
 
 /** Two coordinates that bound one row along the logical inline axis. */
@@ -116,7 +123,10 @@ export function materialAddressOutline(
     pushBand(slotSpan(), projection.slot!.blockStart, projection.slot!.blockEnd);
   }
 
-  const joined = joinBlockEdges(bands, metrics.blockOutset);
+  const joined = openShortSteps(
+    joinBlockEdges(bands, metrics.blockOutset),
+    options.minimumStepExtent ?? 0,
+  );
   if (joined.length === 0) return null;
   const path = outlinePath(joined, cornerRadius);
   if (path.length === 0) return null;
@@ -156,6 +166,43 @@ function joinBlockEdges(
     joined.push({ blockEnd, blockStart, left: band.left, right: band.right });
   }
   return joined;
+}
+
+/**
+ * Widens the pair of bands on either side of a step too short to hold its own
+ * corners. Every decision reads the original neighbours, so one merge cannot
+ * lower the bar for the next and swallow a chain of real steps. Edges only
+ * move outward, so no glyph is ever clipped, and block seams do not move.
+ */
+function openShortSteps(
+  bands: readonly MaterialAddressBand[],
+  threshold: number,
+): readonly MaterialAddressBand[] {
+  if (!(threshold > 0) || bands.length < 2) return bands;
+  const left = bands.map((band) => band.left);
+  const right = bands.map((band) => band.right);
+  for (const [index, band] of bands.entries()) {
+    const next = bands[index + 1];
+    if (next === undefined) continue;
+    const leftStep = Math.abs(band.left - next.left);
+    if (leftStep > 0 && leftStep < threshold) {
+      const opened = Math.min(band.left, next.left);
+      left[index] = Math.min(left[index]!, opened);
+      left[index + 1] = Math.min(left[index + 1]!, opened);
+    }
+    const rightStep = Math.abs(band.right - next.right);
+    if (rightStep > 0 && rightStep < threshold) {
+      const opened = Math.max(band.right, next.right);
+      right[index] = Math.max(right[index]!, opened);
+      right[index + 1] = Math.max(right[index + 1]!, opened);
+    }
+  }
+  return bands.map((band, index) => ({
+    blockEnd: band.blockEnd,
+    blockStart: band.blockStart,
+    left: left[index]!,
+    right: right[index]!,
+  }));
 }
 
 /** Walks the staircase clockwise: right edges downward, then left edges up. */
