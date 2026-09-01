@@ -52,9 +52,10 @@ identity; a displacement input on the existing fragment renderer.
 The rectangle the pocket occupies while a turn is pending is the rectangle the
 result occupies when it settles. The pocket is the vessel the result arrives
 in, not an empty lane beside where the result will appear. Today there is no
-coupling at all: `.language-pocket` opens a constant `.035` lane and the settle
-runs as a separate `transform-text` animation with its own cue, so pending and
-result are two different objects in two different places. That is the remaining
+coupling at all: the pocket now shares the address surface's colour and
+density, but the settle still runs as a separate `transform-text` animation
+with its own cue, so pending and result remain two different objects in two
+different places. That is the remaining
 structural discontinuity after Slice 0.5, and it belongs to the handoff design
 rather than to a later visual pass.
 
@@ -92,20 +93,32 @@ reducer merge, and no general AI reducer.
 
 ## Invariants
 
-1. **One fragment renderer.** `.lasso-selection-fragment` is the only renderer
-   for an actionable address. It is extended, never paralleled. A migration
-   that leaves two fragment renderers alive at once is rejected.
-2. **The address never blanks.** There is no paint in which the address is
+1. **One address surface.** Selected fragments, their connectors, and the
+   expanded pocket are parts of a single material address surface. The parent
+   holds the only opacity; children paint at full alpha and may overlap freely
+   without compounding density. No part of an actionable address is painted by
+   a second renderer or carries its own transparency.
+2. **The pocket and the fragments share one effective colour and density.**
+   This is the user's explicit decision: the expansion must read as one block
+   with the selection above it. A large area at the same alpha carries more
+   optical weight than thin bands behind glyphs, and that cost is accepted. It
+   may not be "optimised" back to a quieter pocket, because a separate density
+   is exactly what produced the visible colour difference between the two
+   halves.
+3. **The address never blanks.** There is no paint in which the address is
    neither visible nor already replaced by its result.
-3. **Degree is expressed by position, not by animation.** Real displacement,
+4. **Degree is expressed by position, not by animation.** Real displacement,
    pocket depth, and grip position carry degree. `prefers-reduced-motion`
    therefore needs no special-casing.
-4. **Per-line anchors.** Grips derive from the first and last visual line.
+5. **Per-line anchors.** Grips derive from the first and last visual line.
    Neither grip may use the whole selection's horizontal centre, at any point
    in the lifecycle including first paint.
-5. **No written-but-unconsumed presentation values.** A custom property that
+6. **Seams are zero-gap.** Wherever two parts of the surface meet, they meet
+   exactly. A measured gap between the pocket and the first fragment, or
+   between a connector and the rows it bridges, is a defect.
+7. **No written-but-unconsumed presentation values.** A custom property that
    JS writes and no rule reads is a defect, and is proven against.
-6. **Theme-resolved densities live in CSS.** Opacity constants may not live in
+8. **Theme-resolved densities live in CSS.** Opacity constants may not live in
    TypeScript, because a single numeric ramp cannot be correct for both themes.
 
 ## Two scope tightenings
@@ -123,8 +136,9 @@ screenshots, as its own change.
 This also resolves the `--elastic-opacity` question: it is **not** wired up.
 The formula `0.08 + amount * (0.18 - 0.08)` is anchored at both ends to
 fragment densities, is theme-blind, and belongs to a renderer that was hidden.
-`.language-pocket` keeps its own constant `.035`. The dead metric and the dead
-custom property are deleted rather than connected.
+The dead metric and the dead custom property are deleted rather than
+connected. The pocket has no separate density constant either; it takes the
+address surface's, per invariant 2.
 
 **B — structural selection untouched.** The filled paragraph capsule on
 `.spatial-thought__label` carries navigation semantics and is not part of this
@@ -195,7 +209,7 @@ neutral palette are unchanged.
 | lasso eligible | per-line impression at `held` | shown, from first/last line | none |
 | lasso ineligible | same impression at `held` | hidden | none |
 | grip press, degree zero | **stays visible, density unchanged** | press form | pocket depth 0 |
-| dragging | **stays visible**; upper grip displaces it with the language, lower grip leaves it in place | follow per-line anchors | pocket at `.035` |
+| dragging | **stays visible**; upper grip displaces it with the language, lower grip leaves it in place | follow per-line anchors | pocket at the surface's own density |
 | pending | same impression, same density, same place | present, non-interactive | no spinner, toast, or panel |
 | result | atomic handoff to the settle receipt | removed | existing settle |
 | failure | impression and degree return to a usable phase | interactive again | no error chrome |
@@ -229,59 +243,60 @@ regression net for the receipt and lease refactor.
   Exact-segment Point Talk stays blocked throughout, with no CSS branch
   reserved for it.
 
-Slice 0.5 is closed. The questions below were only visible once the impression
+Slice 0.5 is closed. The decisions below were only visible once the impression
 was painting again, so they belong to Slice 1 UI rather than to an amendment of
 the slice that revealed them.
 
-## Open visual questions
+## Settled visual decisions
 
-These are the acceptance criteria for Slice 1 UI. Each states a defect that is
-currently observable, not a preference.
+The five questions raised after Slice 0.5 are answered. They are recorded as
+decisions, not preferences, and are not reopened without both owners.
 
-**The revealing fixture.** High canvas zoom, dark appearance, a wrapped stepped
-range, upper grip engaged. It is added to the six proof fixtures because every
-question below is invisible at default zoom in light appearance, which is why
-they survived Slice 0.5. Any answer must be reviewed at this fixture and at the
-default one.
+1. **Topology.** Fragments, connectors, and the expanded pocket compose one
+   surface under a single parent opacity, per invariants 1 and 2.
 
-1. **Fragment topology.** The impression is one rectangle per Range rect, drawn
-   without any relationship between rects. What should its topology be when the
-   selection is a single continuous run of language?
+2. **Cross-line joining.** Adjacent rows are bridged along their real line-box
+   overlap with a short rectangular bridge, extended outward by at most one
+   dynamic corner radius per side. The rare non-overlapping case takes an
+   orthogonal step bounded by the real line gap. A sheared trapezoid across a
+   large horizontal run is forbidden: it produced a near-horizontal edge with
+   two acute corners, measured at one point as a 155px horizontal travel inside
+   an 11.4px height. Overlapping a connector into its rows costs nothing now
+   that children paint at full alpha inside one group, so height may grow to
+   keep the joint honest.
 
-2. **Cross-line joining.** A stepped range leaves a hard step between the tail
-   of one line and the head of the next, so the mark reads as separate labels
-   rather than one continuous piece of material. What, if anything, joins them?
+3. **Grip seam.** The halo stays, retinted to the theme-resolved surface
+   composite: ink at 18% over field in light, ink at 10% over field in dark. It
+   is kept rather than removed because both visible bars sit exactly on the
+   surface's outer boundary, so half of each is over bare material and would
+   lose contrast without it. Grip shape, size, colour, and the existing
+   physical rules are unchanged.
 
-3. **Grip seam.** The grip's visible bar carries an opaque paper-coloured halo
-   so it stays legible on arbitrary material, and sits five pixels outside its
-   anchor. On its own impression that halo punches a hole in the mark it
-   belongs to. How does a grip take contrast from the impression when it is on
-   one, without losing legibility when it is not?
+4. **Proportional geometry.** Radius, outset, and the pocket shoulder derive
+   from the measured line height, with safe upper and lower bounds, so the mark
+   stays proportional to the material it marks across the zoom range instead of
+   reading tight and square when magnified.
 
-4. **Proportional outset and radius.** The `3px` outset and `4px` radius are
-   client-space constants while the material scales with canvas zoom, so the
-   mark is tight and square when zoomed in and loose and over-rounded when
-   zoomed out. It does not scale with the thing it marks. Should both derive
-   from the line box instead?
+5. **Pocket source and seam.** The pocket shoulder runs from the real first or
+   last line to the owning text column's edge. The upper grip moves the
+   selected language and its address together; the lower grip leaves the
+   selected language fixed. Every seam is zero-gap, per invariant 6.
 
-5. **Pocket and impression source.** The pocket is derived from the text column
-   with a `10px` inline outset; the impression is derived from the Range rects
-   with a `3px` outset, and the pocket carries no radius at all. A narrow
-   stepped mark therefore meets a wide flat slab at the seam. This is the most
-   visible discontinuity left, and it cannot be answered in CSS: it asks whether
-   both derive from one receipt. It is also coupled to C3, because once the
-   pending rectangle is the settled rectangle, the pocket's width stops being a
-   matter of appearance and starts deciding where the result lands.
+### Known non-blocking
 
-Questions 1 to 4 are the UI owner's to answer within the accepted render model.
-Question 5 needs both owners, and the geometry receipt and the end-to-end
-proofs behind it stay with the foundation owner.
+Under `forced-colors`, connectors paint a solid `Highlight` fill while
+fragments paint `transparent` with a `1px solid Highlight` border, so high
+contrast renders outlined rows joined by solid bars. It stays legible because
+connectors sit in the line gap and never cover glyphs. Logged, not expanded
+into Slice 1.
 
 ## Proof
 
 Seven fixtures: single line, wrapped stepped range, adjacent segments, whole
-node, upper-grip displacement, lower-grip displacement, and the revealing
-fixture above.
+node, upper-grip displacement, lower-grip displacement, and the high-zoom dark
+fixture that revealed the decisions above. The last one is in place and
+passing; it exists because all five were invisible at default zoom in light
+appearance, which is how they survived Slice 0.5.
 
 Boundaries: light and dark, `forced-colors: active`,
 `prefers-reduced-motion: reduce`, `pointer: coarse`, and the 389 / 767 / 959
@@ -294,6 +309,11 @@ Slice 0.5 locks, at minimum: press-at-zero opacity is not zero; the fragment is
 still visible during expand and pending; per-line centres are used on first
 paint and on the hot path; forced-colors keeps the reference outline; and no
 presentation custom property is written without a consumer.
+
+At the time these decisions were frozen the browser regression suite ran
+123 passed / 15 skipped, with one pre-existing `material-files` zoom
+floating-point difference of `3.39e-5` that is unrelated to this work, and the
+unit suite and typecheck were clean.
 
 ## Non-goals
 
