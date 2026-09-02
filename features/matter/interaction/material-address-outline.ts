@@ -25,6 +25,12 @@ export type MaterialAddressOutlineOptions = Readonly<{
    */
   edgeSnapExtent?: number;
   /**
+   * Draws one closed capsule per row instead of joining the rows into a single
+   * region. A whole-node selection reads line by line, so the leading between
+   * two lines is the layout speaking, not a hole to be filled.
+   */
+  separateRows?: boolean;
+  /**
    * Lateral steps narrower than this are opened outward instead of drawn.
    * A step only as wide as two corner radii leaves no straight platform
    * between them, so the vertex clamp collapses both quarter circles and the
@@ -157,12 +163,22 @@ export function materialAddressOutline(
     pushBand(slotSpan(), projection.slot!.blockStart, projection.slot!.blockEnd);
   }
 
-  const joined = openShortSteps(
-    joinBlockEdges(bands, blockOutset),
-    options.minimumStepExtent ?? 0,
-  );
+  const separateRows = options.separateRows === true;
+  const joined = separateRows
+    ? bands.map((band) => ({
+        blockEnd: band.blockEnd + blockOutset,
+        blockStart: band.blockStart - blockOutset,
+        left: band.left,
+        right: band.right,
+      }))
+    : openShortSteps(
+        joinBlockEdges(bands, blockOutset),
+        options.minimumStepExtent ?? 0,
+      );
   if (joined.length === 0) return null;
-  const path = outlinePath(joined, cornerRadius);
+  const path = separateRows
+    ? joined.map((band) => outlinePath([band], cornerRadius)).filter(Boolean).join("")
+    : outlinePath(joined, cornerRadius);
   if (path.length === 0) return null;
   return Object.freeze({
     bands: Object.freeze(joined),

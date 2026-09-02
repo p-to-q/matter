@@ -62,6 +62,12 @@ into a plain column rectangle because its rows happen to be ragged. The grips
 already depend on this: each one centres on its own line's real glyph midpoint,
 so a band that ignored the glyphs would leave its grip floating beside it.
 
+A whole-node address also reads line by line. The label it replaced cloned its
+decoration per line box, so the leading between two lines was never filled, and
+joining the rows into one region turned a stack of lines into a slab. Its rows
+stay separate capsules; a precise address, which marks one continuous run of
+language, still resolves to a single region.
+
 The contact impression follows one glyph-relative optical family. Top and
 bottom outset are the same measured value; inline outset remains wider at a
 `.245 / .36` glyph-box proportion. The precise address uses a fixed `3px`

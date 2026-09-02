@@ -82,6 +82,37 @@ describe("material address outline", () => {
     expect(ringShape(centred.path)).toEqual({ closes: 1, starts: 1 });
   });
 
+  it("reads a whole-node address line by line", () => {
+    // The label this replaced cloned its decoration per line box, so the
+    // leading between two lines was never filled. Joining the rows into one
+    // region turned a stack of lines into a single slab.
+    const rows = [
+      { blockEnd: 140, blockStart: 100, inlineEnd: 560, inlineStart: 140 },
+      { blockEnd: 195, blockStart: 155, inlineEnd: 560, inlineStart: 140 },
+      { blockEnd: 250, blockStart: 210, inlineEnd: 400, inlineStart: 300 },
+    ];
+    const run = { endInline: 400, endRow: 2, startInline: 140, startRow: 0 };
+    const perRow = materialAddressOutline(projection({ rows, run }), {
+      blockOutset: 2,
+      cornerRadius: 10,
+      separateRows: true,
+    })!;
+    expect((perRow.path.match(/M/g) ?? []).length).toBe(3);
+    expect((perRow.path.match(/Z/g) ?? []).length).toBe(3);
+    // Each capsule keeps its own row, so the leading survives between them.
+    expect(perRow.bands.map((band) => [band.blockStart, band.blockEnd])).toEqual([
+      [98, 142],
+      [153, 197],
+      [208, 252],
+    ]);
+    // A precise address still resolves to one region.
+    const joined = materialAddressOutline(projection({ rows, run }), {
+      blockOutset: 2,
+      cornerRadius: 10,
+    })!;
+    expect((joined.path.match(/M/g) ?? []).length).toBe(1);
+  });
+
   it("keeps a whole-node address on the glyphs it names", () => {
     // Following the language is the point of the mark. A whole-node address is
     // not allowed to collapse into a plain column rectangle just because its
