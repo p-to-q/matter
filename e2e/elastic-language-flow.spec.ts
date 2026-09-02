@@ -230,13 +230,22 @@ test("one outline owns the address from neutral through both grips", async ({ pa
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
 
-  // A whole-node structural selection reads as one outline, not per-row pills.
+  // A whole-node structural selection reads line by line, the way the label it
+  // replaced did, so it closes one capsule per line box rather than one region.
   const structural = page.locator('.material-address-layer[data-address-variant="structural"]');
   await expect(structural).toHaveAttribute("data-material-address-painted", "true");
   const structuralPath = structural.locator(".material-address-layer__path");
   const structuralD = await structuralPath.getAttribute("d");
   expect(structuralD ?? "").not.toBe("");
-  expect((structuralD ?? "").match(/M/g) ?? []).toHaveLength(1);
+  const structuralRows = await page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`)
+    .evaluate((node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return [...range.getClientRects()].filter((rect) => rect.height > 8).length;
+    });
+  expect(structuralRows).toBeGreaterThan(1);
+  expect((structuralD ?? "").match(/M/g) ?? []).toHaveLength(structuralRows);
+  expect((structuralD ?? "").match(/Z/g) ?? []).toHaveLength(structuralRows);
   expect(await structuralPath.evaluate((node) => getComputedStyle(node).stroke)).not.toBe("none");
   await expect(structuralPath).toHaveCSS("stroke-width", "1px");
   expect(await structural.evaluate((node) => getComputedStyle(node).clipPath)).not.toBe("none");

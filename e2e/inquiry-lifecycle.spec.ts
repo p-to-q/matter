@@ -43,6 +43,11 @@ test("Ask Matter and material-local AI surfaces own one transient slot", async (
   await expect(inquiry).toBeVisible();
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text));
+  // The grips mount from the measured address, so wait for the paint that
+  // causes them rather than for the count alone. A font event can revoke a
+  // fresh measurement, and racing that produced an intermittent zero here.
+  await expect(page.locator('.material-address-layer[data-address-variant="actionable"]'))
+    .toHaveAttribute("data-material-address-painted", "true");
   await expect(page.locator(".stretch-handle")).toHaveCount(2);
   // A neutral lasso may remain visible because it is also legitimate Inquiry
   // context. Elastic owns the AI slot only when the person starts adjusting a
