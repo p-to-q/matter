@@ -47,10 +47,11 @@ export function materialAddressVariantCornerRadius(
 function materialAddressVariantEdgeSnapExtent(
   projection: MaterialAddressProjection,
   variant: MaterialAddressVariant,
-  cornerRadius: number,
 ): number {
   if (variant === "native") return 0;
-  if (variant === "structural") return cornerRadius * 2;
+  // A whole-node address paints the column, so it has no endpoint near an edge
+  // to absorb and nothing to snap.
+  if (variant === "structural") return 0;
   return Math.max(
     6,
     Math.min(24, projection.metrics.medianRowExtent * ACTIONABLE_SNAP_ROW_RATIO),
@@ -69,10 +70,14 @@ export function materialAddressVariantOutline(
     // Exact browser copy stays literal. Actionable and whole-node material may
     // absorb only a near-column sliver. Topology stays independent from the
     // visual corner, so retuning the radius cannot move the snap threshold.
-    edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant, cornerRadius),
-    // Only the softly rounded whole-node state opens arbitrary short internal
-    // steps; a precise address changes only the near-column endpoint above.
-    minimumStepExtent: variant === "structural" ? cornerRadius * 2 : 0,
+    edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant),
+    // A whole-node selection names the node, not the words in it. Tracing
+    // centred ragged text gave every node a different lumpy silhouette, and a
+    // short last line put a narrow band far to one side of a wide one. The
+    // column is the node's own box: one shape, identical for every node.
+    columnAligned: variant === "structural",
+    // Column-aligned bands have no internal steps left to open.
+    minimumStepExtent: 0,
   });
 }
 

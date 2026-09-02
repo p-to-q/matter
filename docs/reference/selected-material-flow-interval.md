@@ -28,23 +28,40 @@ The visible object is one continuous interval in reading order over the final
 projected line grid. It is not a union of glyph rectangles plus a separate
 pocket.
 
-For a horizontal text column with logical inline edges `S` and `E`, an interval
-starts at `(startRow, startInline)` and ends at `(endRow, endInline)`. Its row
-bands are:
+Every glyph row is bounded by the language it contains. Only the interval's two
+real endpoints clip the boundary rows:
 
 ```text
 only row     [startInline, endInline]
-first row    [startInline, E]
-middle rows  [S, E]
-last row     [S, endInline]
+first row    [startInline, row.end]
+middle rows  [row.start, row.end]
+last row     [row.start, endInline]
 ```
 
-The lower grip makes the interval `selection start -> slot end`, so the first
-row continues to `E` and every later row through the slot is full-column. The
-upper grip mirrors it as `slot start -> selection end`. At amount zero there is
-no slot and the formula reduces to the neutral selected range. RTL mirrors the
-logical axes; an unsupported writing mode fails closed until it has a proven
-projection.
+An earlier version filled each row out to the column's logical edges. That is
+honest reading order for text set flush to those edges, which is how a browser
+paints multi-line selection. This material is centred: a row's glyphs are inset
+from both sides, so the region between a column edge and the glyphs belongs to
+no line. Claiming it produced a wide first row above a narrow band pinned to
+the far side of the column, and the shape a node received depended on how its
+text happened to wrap.
+
+Centring also makes that fill unnecessary. Every row shares one centre axis, so
+any two rows overlap and the outline stays one connected shape on its own.
+
+The opened slot is not a glyph row. It is inserted column space, so it does
+reach both edges and meets its neighbour in a symmetric step. The lower grip
+makes the interval `selection start -> slot end` and the upper grip mirrors it.
+At amount zero there is no slot and the formula reduces to the neutral selected
+range. RTL mirrors the logical axes; an unsupported writing mode fails closed
+until it has a proven projection.
+
+A whole-node address paints its owning text column instead of its rows. It
+names a node, not a set of words, so it carries no information about glyph
+extents; tracing centred ragged text gave every node a different silhouette for
+reasons no reader can see. The column is the node's own box, so every selected
+node is one identical rounded rectangle aligned to the column grid, and neither
+edge snapping nor step opening applies to it.
 
 The contact impression follows one glyph-relative optical family. Top and
 bottom outset are the same measured value; inline outset remains wider at a
