@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { projectLanguageAroundSelection } from "./language-projection";
+import {
+  projectLanguageAroundSelection,
+  projectMaterialAddressTextRange,
+} from "./language-projection";
 
 const nodeId = "node_a";
 
@@ -17,6 +20,9 @@ describe("language projection", () => {
         before: "前面，",
         selected: "选中内容",
         outerSeam: "。",
+        visibleOuterSeam: "。",
+        outerSeamTail: "",
+        addressText: "选中内容。",
         selectedWithSeam: "选中内容。",
         after: "后面。",
         hasBefore: true,
@@ -43,6 +49,9 @@ describe("language projection", () => {
         before: "",
         selected: "第一句，第二句",
         outerSeam: "。",
+        visibleOuterSeam: "。",
+        outerSeamTail: "",
+        addressText: "第一句，第二句。",
         selectedWithSeam: "第一句，第二句。",
         after: "第三句。",
         hasBefore: false,
@@ -58,5 +67,63 @@ describe("language projection", () => {
     expect(projectLanguageAroundSelection("第一句。", {
       type: "segment-range", nodeId, start: 1, end: 3, selectedText: "一句",
     })).toEqual({ ok: false, error: "INVALID_SELECTION" });
+  });
+
+  it("paints visible punctuation but leaves trailing whitespace to flow", () => {
+    const text = "甲。\t\r\n乙。";
+    const selection = {
+      type: "segment-range" as const,
+      nodeId,
+      start: 0,
+      end: 1,
+      selectedText: "甲",
+    };
+
+    expect(projectLanguageAroundSelection(text, selection)).toMatchObject({
+      ok: true,
+      projection: {
+        outerSeam: "。\t\r\n",
+        visibleOuterSeam: "。",
+        outerSeamTail: "\t\r\n",
+        addressText: "甲。",
+        selectedWithSeam: "甲。\t\r\n",
+      },
+    });
+    expect(projectMaterialAddressTextRange(text, selection)).toEqual({
+      ok: true,
+      range: { start: 0, end: 2, selectedText: "甲。" },
+    });
+  });
+
+  it("keeps terminal runs and closing punctuation inside the visible address", () => {
+    const text = "他说：测试？！”）  后面。";
+    const selection = {
+      type: "segment-range" as const,
+      nodeId,
+      start: 3,
+      end: 5,
+      selectedText: "测试",
+    };
+
+    expect(projectMaterialAddressTextRange(text, selection)).toEqual({
+      ok: true,
+      range: { start: 3, end: 9, selectedText: "测试？！”）" },
+    });
+  });
+
+  it("does not widen the address when a seam contains only whitespace", () => {
+    const text = "甲\n乙。";
+    const selection = {
+      type: "segment-range" as const,
+      nodeId,
+      start: 0,
+      end: 1,
+      selectedText: "甲",
+    };
+
+    expect(projectMaterialAddressTextRange(text, selection)).toEqual({
+      ok: true,
+      range: { start: 0, end: 1, selectedText: "甲" },
+    });
   });
 });

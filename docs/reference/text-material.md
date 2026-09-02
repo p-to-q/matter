@@ -225,7 +225,8 @@ invalidation, and a newer selection restore the previous settled degree.
 Wrapped Range rectangles are grouped into visual lines by vertical overlap.
 Fragments on one line are unioned only for that line; the two handles never use
 the complete selection's horizontal center. This keeps a stepped selection's
-upper and lower grips attached to the actual first and last pink fragments.
+upper and lower grips attached to that selection's actual first and last
+visual-line fragments, at first paint as well as during adjustment.
 
 At degree zero, the highlight and two grips remain on the source and no empty
 interstitial lane opens. Moving either grip transfers ownership to Elastic and
@@ -242,8 +243,11 @@ The visible surface is projected from the exact Range fragments, the owning
 text column, and a pure `before / selected+outer-seam / after` text projection.
 Fragment tint preserves the stepped shape at rest. During a lower-grip
 expansion the upper language keeps the complete source paragraph's inline
-layout: a hidden suffix ghost retains every prior line break while a centered
-`after` copy moves to the slot floor. During an upper-grip expansion the fixed
+layout: the moving suffix reflows in the complete text column before one
+post-layout receipt redraws the combined selection-and-slot interval. An
+invisible fixed-source witness may remain for measurement, but it is never the
+moving suffix's line-box authority. The former rule that reused its wrapping is
+superseded by `selected-material-flow-interval.md`. During an upper-grip expansion the fixed
 seam and prefix remain stationary while the selected language and suffix move
 down. The two grips own one shared degree and one operation; their mirrored
 pointer directions do not create a second transform. Their difference is which

@@ -17,6 +17,56 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-02 — selected material restores its precise optical identity
+
+Changed: the shared address receipt derives equal `.245` top/bottom air, wider
+`.36` inline air, and a fixed `3px` precise corner. Structural
+whole-node material retains its independent `.08` block air and `.44`
+row-height corner as one optical pair. The visual address includes the protected visible punctuation seam that moves with a
+semantic selection, while requests remain scoped to `selectedText` and trailing
+whitespace remains layout-only. Known tight inter-row leading may reduce only
+the block air. Near-column snapping remains type-relative and independent of
+the painted radius; native copy, one-line ranges, and meaningful wider gaps
+stay exact. The initial gzip ceiling moves from 384 to 388 KiB: an identical
+production build measured main at 393,145 bytes and this complete client-side
+selection lifecycle at 395,706 bytes, a 2,561-byte (0.65%) increase with no new
+dependency or initial asset.
+
+Why: same-passage light/dark comparison showed that `.245H/3px` preserves
+breathing room without returning to separate capsules or a full-line marker.
+The premature punctuation cutoff came from measuring only replaceable text even
+though the flow contract already moves its outer seam. A tiny edge remnant
+cannot read as intentional empty paper, so one logical-axis rule removes it
+without a direction-specific CSS patch. Keeping the previous transfer ceiling
+would leave only 71 bytes above main and force this primary interaction behind
+an extra loading boundary; the reviewed four-KiB step retains a hard 1,606-byte
+headroom instead of disguising the change by weakening the check.
+
+Forecloses: independent top/bottom tuning, using request scope as paint scope,
+letting optical radius changes alter selection topology, LTR-only fill
+rectangles, globally flattening every genuine stepped range, and silently
+widening the runtime budget without a measured main/candidate comparison.
+
+## 2026-09-02 — selected material becomes one post-reflow flow interval
+
+Changed: whole-node structural selection, native same-node copy selection,
+neutral Lasso, and both Elastic grip projections share one client-space layout
+receipt and one reading-order outline authority. Elastic measures after
+partition reflow, then projects degree without DOM reads; the pointer deadzone
+contributes no amount. Hidden suffix wrapping as moving-layout authority,
+fragment connectors, and neck/body vessel remain historical trace only.
+
+Why: implementation screenshots proved those independent shapes omit real
+continuation regions, preserve the wrong suffix wrapping, and cannot guarantee
+one density or one connected boundary. A semantic flow interval generates the
+missing regions by construction and gives pointer, touch, and keyboard equal
+geometry for equal amount.
+
+Forecloses: repairing the surface with more connector heuristics, sending DOM
+pixels to the server, measuring layout per pointer frame, hiding native selection
+before custom paint is available, and treating Point and Talk or Elastic as one
+generic AI lifecycle merely because they share geometry.
+
 ## 2026-08-29 — quiet controls stay operable at their full bounds
 
 Changed: a long Ask Matter answer becomes a named, keyboard-focusable scroll

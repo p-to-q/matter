@@ -1,18 +1,16 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.47 at source
-`25a0ea0f7e99b0f9323b23bc2054488b8ed5bbac` is the current deployed
-public-origin version. Its repository, browser, CI, and automatic deployment
-gates passed, but the strict deployed-origin model-surface probe did not; no
-immutable tag or GitHub prerelease was created. Preview.48 is a provisional
-hardening candidate until its exact
-repository, browser, GitHub CI, automatically triggered Vercel deployment, tag,
-and prerelease receipts settle. The repository maintainer operates only through
-GitHub: a topic push triggers Preview and a `main` update triggers Production.
-No manual Vercel command, project binding, credential, or environment edit is
-part of this release. A package version alone proves neither source nor live
-identity.
+the complete generative product loop yet. Preview.48 is the current deployed
+public-origin version; the no-store health boundary reported
+`0.2.0-preview.48` on 2026-09-02, while no immutable tag or GitHub prerelease
+exists. Preview.49 is the provisional selected-material candidate until its
+exact repository, browser, GitHub CI, automatically triggered Vercel
+deployment, deployed-origin probe, tag, and prerelease receipts settle. The
+repository maintainer operates only through GitHub: a topic push triggers
+Preview and a `main` update triggers Production. No manual Vercel command,
+project binding, credential, or environment edit is part of this release. A
+package version alone proves neither source nor live identity.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -65,6 +63,71 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Provisional release boundary — 0.2.0-preview.49
+
+Preview.49 makes selected text one continuous material address across native
+copy, whole-node structure, neutral Lasso, and both Elastic projections. It
+replaces independent fragment, connector, and split-text paint owners with one
+post-reflow layout receipt and one rounded reading-order outline. The two grips,
+their physical meaning, palette, request amount, transform/2 wire, server plan,
+tree-engine commit, and pointer Undo remain unchanged.
+
+The painted address may include the protected visible punctuation seam so the
+surface and projected text end together; the request continues to contain only
+the validated semantic `selectedText`. Trailing whitespace remains layout-only.
+Native copy synchronously supersedes structural selection, RTL uses one
+node-level direction owner, and every viewport, transition, font, partition, or
+source-receipt invalidation revokes stale fixed geometry before it can remain
+visible or operable. Pointer movement performs no DOM measurement.
+
+The initial gzip ceiling advances from 384 to 396 KiB, and the earlier
+`0.65%` claim is withdrawn: it subtracted two different measurement bases. A
+cold build of each exact commit on one host records merged Preview.48 main at
+380.8 KiB gzip / 1,199.6 KiB raw and this candidate at 386.4 KiB / 1,224.0 KiB,
+a 5,735-byte (1.47%) gzip and 24,986-byte (2.03%) raw increase. Chunk-level
+comparison attributes all of it to the single application chunk, which grows
+446,782 to 469,644 bytes while every other initial chunk stays byte-identical;
+that is about 10.9 bytes per shipped source line, so the growth is written
+behaviour rather than a duplicated or mis-bundled dependency.
+
+The same build measures about 2,820 bytes larger on the Linux CI host than on
+macOS. The ceiling is therefore stated on the enforcing CI basis, where this
+candidate is 398,494 bytes, and it carries one release of deliberate headroom
+(7,010 bytes) instead of just clearing the current build. Earlier rows in this
+file predate that rule and mix the two bases. A future increase requires a
+reduction plan rather than another raise. The existing strict 2,000-node
+cold-task `<100 ms`
+optimization target remains unchanged and open; on this host both exact main
+and the candidate recorded the same 111 ms cold task, while interaction p95
+remained below its 200 ms release ceiling.
+
+This release keeps the public Transform and Text Swap adapters unavailable.
+The fixture transform proves request, server-constructed plan, browser
+revalidation, one tree-engine mutation, Undo/Redo, and reload; it does not
+promote a live model adapter or satisfy the separate multilingual, provider,
+distributed-rate, spend, alert, or rollback evidence.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor found 28 repository files; 47 linked Markdown
+                       documents passed; 79 Node checks passed; architecture
+                       covered 427 files across 7 layers with no outward edge,
+                       provider leak, or cycle; the release-owner host passed
+                       2,093 Vitest cases with 3 explicit opt-in skips; an
+                       independent restricted audit passed 2,092 with one
+                       additional loopback capability skip; type generation,
+                       TypeScript, lint, and the Next 16.3 production build passed
+runtime proof          initial 1,224.0 KiB raw / 386.4 KiB gzip remained below
+                       the reviewed 388 KiB ceiling; no repository-only trace
+                       entered the artifact
+browser proof          full Chromium passed 130 cases with 15 explicit
+                       capability or research skips and no failure
+GitHub CI proof         pending on the exact topic and merged main identities
+automatic deploy proof pending from GitHub-triggered Preview and Production
+publication state      pending; no tag or prerelease unless the strict
+                       deployed-origin surface probe also passes
+```
 
 ## Provisional release boundary — 0.2.0-preview.48
 

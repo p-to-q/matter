@@ -22,8 +22,8 @@ body, button { font-family: var(--mono); -webkit-font-smoothing: antialiased; }
 button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
-.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
-.matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; }
+.matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --address-density-native: .12; --address-density-actionable: .18; --address-density-structural: .08; --address-ring-structural: .13; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
+.matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; --address-density-native: .08; --address-density-actionable: .1; --address-density-structural: .15; --address-ring-structural: .16; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
 .matter-shell[data-node-dragging="true"] { cursor: grabbing; }
@@ -290,6 +290,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-canvas:not([data-layout-revealed="true"]) .spatial-thought:first-child { visibility: visible; opacity: .62; }
 .spatial-thought__text { --material-text-color: var(--ink); position: relative; z-index: 1; display: block; width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: var(--material-text-color); font: 400 clamp(22px, 2.2vw, 34px)/1.62 var(--matter-face); letter-spacing: 0; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; cursor: inherit; user-select: text; }
 .spatial-thought__label { -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.matter-shell::selection,
+.matter-shell ::selection { background: rgba(var(--selection-control-rgb),var(--address-density-native)); text-shadow: none; }
 .spatial-thought[data-selected="true"] .spatial-thought__text { --material-text-color: var(--ink); }
 .spatial-thought[data-selected="true"] .spatial-thought__label { padding: .08em .32em; border-radius: .44em; background: var(--selection-bg); box-shadow: inset 0 0 0 1px var(--selection-ring); color: inherit; text-shadow: var(--selection-shadow); }
 .spatial-thought[data-lasso-selected="true"] .spatial-thought__label { padding: 0; border-radius: 0; background: transparent; box-shadow: none; text-shadow: none; }
@@ -318,27 +320,33 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    addressable recovery target. Descendants inherit exclusion without an exception. */
 .spatial-thought[data-context-restore-target="true"] .spatial-thought__text { pointer-events: auto; }
 .spatial-thought[data-context-restore-target="true"] .spatial-thought__text:is(:hover, :focus) { opacity: .72; }
-.language-split-projection { --split-depth: 0px; --split-selected-top: 0px; --split-after-top: 0px; --split-pocket-top: 0px; --split-pocket-depth: 0px; position: absolute; z-index: 7; inset: 0 auto auto 0; width: 100%; height: 0; color: var(--ink); font: inherit; font-size: clamp(22px, 2.2vw, 34px); font-family: var(--matter-face); font-weight: 400; line-height: 1.62; letter-spacing: 0; opacity: 0; pointer-events: none; user-select: none; }
+.language-split-projection { --split-depth: 0px; --split-pocket-top: 0px; --split-pocket-depth: 0px; position: absolute; z-index: 7; inset: 0 auto auto 0; width: 100%; height: 0; color: var(--ink); font: inherit; font-size: clamp(22px, 2.2vw, 34px); font-family: var(--matter-face); font-weight: 400; line-height: 1.62; letter-spacing: 0; opacity: 0; pointer-events: none; user-select: none; }
 .language-split-projection::before { position: absolute; z-index: -1; top: var(--split-pocket-top); left: 0; width: 100%; height: var(--split-pocket-depth); background: transparent; content: ""; opacity: 0; }
 .spatial-thought[data-parent-id] .language-split-projection { color: var(--muted); font-size: 17px; line-height: 1.72; letter-spacing: 0; }
+/* Witness, slot, and moving partition are real in-flow blocks. The slot is
+   block height rather than a translate, so the moving partition genuinely
+   reflows at the full column width and its line boxes are the truth the
+   receipt measures. Nothing here fakes a position. */
+.language-split-flow { position: absolute; top: 0; left: 0; width: 100%; }
 .language-split-block,
-.language-split-source { display: block; width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; unicode-bidi: plaintext; }
-.language-split-focus { position: absolute; top: 0; left: 0; width: 100%; }
-.language-split-source { position: absolute; top: 0; left: 0; }
-.language-split-slot { position: absolute; top: var(--split-after-top); left: 0; display: block; width: 100%; height: var(--split-depth); }
-.language-split-selected-copy { background: rgba(var(--selection-control-rgb),.1); }
-.language-split-before-copy { position: relative; }
+.language-split-witness,
+.language-split-moving { display: block; width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; unicode-bidi: isolate; }
+/* The witness carries the canonical remainder invisibly, so the fixed
+   partition's last line breaks and centres exactly as it does in the source.
+   Its height is clipped to that line, which is where the slot opens. */
+.language-split-witness { height: var(--witness-block-size, auto); overflow: clip; }
+.language-split-witness-tail { visibility: hidden; }
+.language-split-slot { display: block; width: 100%; height: var(--split-depth); }
 .language-split-seam { background: transparent; }
-.language-split-after-ghost { visibility: hidden; }
-.language-split-block--after { position: absolute; top: calc(var(--split-after-top) + var(--split-depth)); left: 0; }
-.language-split-projection[data-preview-mode="expand"][data-stretch-handle="top"] .language-split-source { top: var(--split-depth); }
-.language-split-projection[data-preview-mode="expand"][data-stretch-handle="top"] .language-split-before-copy { top: calc(-1 * var(--split-depth)); }
-.language-split-projection[data-preview-mode="expand"][data-stretch-handle="top"] .language-split-after-ghost { visibility: visible; }
-.language-split-projection[data-preview-mode="expand"][data-stretch-handle="top"] .language-split-block--after { visibility: hidden; }
+.language-split-projection:not([data-layout-mode="expand"]) .language-split-slot,
+.language-split-projection:not([data-layout-mode="expand"]) .language-split-moving { display: none; }
+.language-split-projection:not([data-layout-mode="expand"]) .language-split-witness { height: auto; }
 .language-split-projection[data-preview-mode="expand"] { opacity: 1; }
 .language-split-projection[data-preview-mode="expand"]::before { opacity: 1; }
-.language-split-projection[data-preview-mode="expand"] ~ *,
-.spatial-thought__text[data-visual-projection="true"] { transition: color 90ms ease, text-decoration-color 90ms ease; }
+/* Renderer ownership changes atomically. A colour transition here makes the
+   canonical line and the real-flow projection readable at once for 90ms,
+   which looks like duplicated text and breaks the material's identity. */
+.spatial-thought__text[data-visual-projection="true"] { transition: none; }
 .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; text-decoration-color: transparent; }
 .admission-feedback { position: absolute; z-index: 6; display: flex; width: min(var(--matter-column-width), calc(100vw - 44px)); max-width: calc(100vw - 44px); min-height: 40px; box-sizing: border-box; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); flex-wrap: wrap; pointer-events: auto; }
 .admission-feedback__signal { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--active); opacity: .72; }
@@ -439,7 +447,12 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .lasso-ink__trace { stroke-width: 2; opacity: .78; }
 .lasso-ink__closure { stroke-width: 1; stroke-dasharray: 2 5; opacity: .24; }
 .lasso-selection-fragment { position: absolute; border-radius: 4px; background: rgba(var(--selection-control-rgb),.18); animation: lasso-settle 160ms cubic-bezier(.2,.8,.2,1) both; }
-.lasso-layer[data-selection-projection="true"] .lasso-selection-fragment { animation: none; opacity: 0; }
+/* Engaged states suppress only the arrival animation, so the impression
+   cannot re-enter mid-gesture, and take the same client-space displacement
+   the upper-grip projection applies to the selected language. The address
+   itself never stops painting. */
+.lasso-layer[data-selection-projection="true"] .lasso-selection-fragment,
+.lasso-layer:has(.elastic-preview[data-preview-mode="expand"]) .lasso-selection-fragment { animation: none; transform: translateY(var(--address-displacement-y, 0px)); }
 .stretch-handle { position: fixed; z-index: 30; width: 52px; height: 40px; border: 0; background: transparent; color: var(--selection-control-ink); }
 .stretch-handle::after { position: absolute; left: 15px; top: var(--stretch-grip-y); width: 22px; height: 2px; border-radius: 2px; background: currentColor; box-shadow: 0 0 0 3px var(--selection-control-field); content: ""; opacity: .76; transform: translateY(-50%); transition: left 140ms ease, width 140ms ease, opacity 140ms ease; animation: stretch-grip-arrive 180ms cubic-bezier(.2,.8,.2,1); }
 .stretch-handle { display: block; margin: 0; padding: 0; cursor: ns-resize; pointer-events: auto; touch-action: none; }
@@ -450,23 +463,41 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .stretch-handle[data-active="true"]::after { left: 11px; width: 30px; opacity: 1; }
 .stretch-handle:focus-visible { outline: 1px solid var(--selection-control-ink); outline-offset: -5px; border-radius: 12px; }
 .elastic-preview { position: fixed; z-index: 29; inset: 0; pointer-events: none; }
-.language-pocket { position: fixed; left: var(--pocket-left, 0); top: var(--pocket-top, 0); width: var(--pocket-width, 0); height: min(var(--pocket-height, 0px), max(0px, calc(100dvh - var(--pocket-top, 0px) - 8px))); background: rgba(var(--selection-control-rgb),.035); opacity: 0; transform: scaleY(.96); transform-origin: top center; transition: opacity 150ms ease, transform 180ms cubic-bezier(.2,.8,.2,1); }
 .matter-shell[data-canvas-theme="dark"] .lasso-ink__trace { opacity: .58; }
 .matter-shell[data-canvas-theme="dark"] .lasso-ink__closure { opacity: .16; }
 .matter-shell[data-canvas-theme="dark"] .lasso-selection-fragment { background: rgba(var(--selection-control-rgb),.1); }
-.matter-shell[data-canvas-theme="dark"] .language-split-selected-copy { background: rgba(var(--selection-control-rgb),.08); }
+.material-address-layer { position: fixed; inset: 0; clip-path: inset(var(--shell-gutter) var(--shell-gutter) var(--shell-gutter) var(--sidebar-width) round 18px); pointer-events: none; transition: opacity 120ms ease; }
+/* The paper is its own `z-index: 2` layer, so a negative layer here paints
+   behind the paper and shows nothing. These sit just under the lasso layer and
+   tint the canonical text, which keeps the glyphs their own solid colour. */
+.material-address-layer[data-address-variant="native"],
+.material-address-layer[data-address-variant="structural"] { z-index: 27; }
+.material-address-layer[data-address-variant="actionable"] { z-index: 1; }
+.material-address-layer__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.material-address-layer__path { fill: rgba(var(--selection-control-rgb),var(--address-density, .18)); stroke: none; }
+.material-address-layer[data-address-variant="actionable"] { --address-density: var(--address-density-actionable); }
+.material-address-layer[data-address-variant="structural"] { --address-density: var(--address-density-structural); }
+.material-address-layer[data-address-variant="native"] { --address-density: var(--address-density-native); }
+.material-address-layer[data-address-variant="structural"] .material-address-layer__path { stroke: rgba(var(--selection-control-rgb),var(--address-ring-structural)); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+/* Each older paint is only released once the outline has actually written a
+   path, so no frame can show grips or a focus ring with no address. */
+.lasso-layer:has(.material-address-layer[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback[data-single-address-fallback] { display: none; }
+.matter-shell:has(.material-address-layer[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
+.matter-shell[data-material-address-owner="native"] .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
+.matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
+.matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: transparent; }
 .matter-shell[data-canvas-theme="dark"] .stretch-handle::after { background: color-mix(in srgb, currentColor 68%, transparent); box-shadow: 0 0 0 4px #202831; opacity: 1; animation-name: stretch-grip-arrive-dark; }
 .matter-shell[data-canvas-theme="dark"] .stretch-handle:hover::after,
 .matter-shell[data-canvas-theme="dark"] .stretch-handle:active::after,
 .matter-shell[data-canvas-theme="dark"] .stretch-handle[data-active="true"]::after { background: currentColor; }
-[data-stretch-handle="top"] .language-pocket { transform-origin: bottom center; }
-.elastic-preview[data-preview-mode="expand"] .language-pocket { opacity: 1; transform: scaleY(1); }
-.lasso-layer:has(.elastic-preview[data-preview-mode="expand"]) .lasso-selection-fragment { animation: none; opacity: 0; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important; }
 
+/* The arrival owns opacity only. It once animated `transform`, which the
+   engaged rule also owns for displacement, so touching a grip inside the
+   arrival cancelled it and moved the fallback by half its squash. */
 @keyframes lasso-settle {
-  from { opacity: 0; transform: scaleY(.72); }
-  to { opacity: 1; transform: scaleY(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes stretch-grip-arrive {
@@ -484,6 +515,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    one width token so disclosure is an exact, reversible push. */
 @media (max-width: 959px) {
   .matter-shell { --index-navigation-return-centering: 1; }
+  .material-address-layer { clip-path: inset(var(--narrow-paper-top) var(--narrow-paper-inset) var(--narrow-paper-inset) var(--narrow-paper-inset) round var(--narrow-paper-radius)); }
   .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
   .material-files__clip { position: fixed; z-index: 41; top: var(--narrow-paper-top); right: var(--narrow-paper-inset); bottom: var(--narrow-paper-inset); left: var(--narrow-paper-inset); display: block; overflow: clip; border-radius: var(--narrow-paper-radius); pointer-events: none; }
   .material-files { --index-row: 48px; position: absolute; z-index: auto; top: 0; right: auto; bottom: 0; left: 0; width: var(--narrow-index-width); padding: 8px 10px 6px 8px; border: 0; border-radius: 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(-100%); transform-origin: left center; }
@@ -560,6 +592,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 
 @media (prefers-reduced-motion: reduce) {
   .matter-guidance { transition: none; }
+  .material-address-layer { transition: none; }
   .repair-text__grapheme,
   .transform-text__group { animation: none !important; color: var(--material-text-color); filter: none; opacity: 1; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
@@ -609,8 +642,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .material-file__check input:checked + .material-file__check-mark::after { border-color: Highlight; }
   .repair-text__grapheme,
   .transform-text__group { animation: none !important; color: var(--material-text-color); filter: none; opacity: 1; }
-  .lasso-selection-fragment,
-  .language-pocket { border: 1px solid Highlight; background: transparent; }
+  .lasso-selection-fragment { border: 1px solid Highlight; background: transparent; }
+  .lasso-layer[data-selection-projection="true"] .lasso-selection-fragment,
+  .lasso-layer:has(.elastic-preview[data-preview-mode="expand"]) .lasso-selection-fragment { border: 1px solid Highlight; background: transparent; opacity: 1; }
+  .matter-shell::selection,
+  .matter-shell ::selection { background: Highlight; color: HighlightText; }
+  .material-address-layer[data-address-variant="actionable"] .material-address-layer__path,
+  .material-address-layer[data-address-variant="structural"] .material-address-layer__path { fill: transparent; stroke: Highlight; stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .material-address-layer[data-address-variant="native"] { display: none; }
+  .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
+  .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: Highlight; color: HighlightText; }
   .stretch-handle { color: ButtonText; }
   .spatial-thought[data-transform-phase] .spatial-thought__text::after { background: CanvasText; }
   .spatial-thought[data-context-restore-target="true"] .spatial-thought__text,
@@ -618,6 +659,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; }
   .language-split-projection { color: CanvasText; }
   .language-split-projection::before { outline: none; background: transparent; }
-  .language-split-selected-copy { outline: 1px solid Highlight; background: transparent; }
-  .language-split-slot { border: 1px solid Highlight; background: transparent; }
+  .language-split-slot { border: 0; background: transparent; }
+  .language-split-witness-tail { visibility: hidden; }
 }

@@ -1,9 +1,22 @@
 import type { StretchHandle } from "../runtime/stretch-interaction";
+import {
+  createProjectedLayoutReceipt,
+  projectMaterialAddress,
+  type MaterialAddressProjection,
+  type ProjectedLayoutBasis,
+  type ProjectedLayoutReceipt,
+} from "./projected-layout-receipt";
 
 export type ElasticPreviewRect = Readonly<{ x: number; y: number; width: number; height: number }>;
 export type ElasticPreviewBounds = Readonly<{ left: number; top: number; right: number; bottom: number }>;
 export type ElasticPreviewLine = Readonly<{ x1: number; x2: number; y: number }>;
 export type ElasticPreviewViewport = Readonly<{ left: number; top: number; right: number; bottom: number }>;
+export type ElasticPreviewMode = "neutral" | "expand";
+
+export type ProjectedElasticLayoutReceipt = Readonly<{
+  receipt: ProjectedLayoutReceipt;
+  sourceReceipt: ProjectedLayoutReceipt;
+}>;
 
 /**
  * Stable, measured selection geometry. Pointer movement changes only degree;
@@ -11,9 +24,9 @@ export type ElasticPreviewViewport = Readonly<{ left: number; top: number; right
  */
 export type ElasticPreviewSource = Readonly<{
   fragments: readonly ElasticPreviewRect[];
-  visualLines: readonly ElasticPreviewBounds[];
   sourceBounds: ElasticPreviewBounds;
   textColumn: ElasticPreviewBounds | null;
+  layoutReceipt: ProjectedLayoutReceipt;
 }>;
 
 export type ElasticPreview = Readonly<{
@@ -22,35 +35,28 @@ export type ElasticPreview = Readonly<{
   activeHandle: StretchHandle | null;
   lastHandle: StretchHandle | null;
   fragments: readonly ElasticPreviewRect[];
-  visualLines: readonly ElasticPreviewBounds[];
   sourceBounds: ElasticPreviewBounds;
+  addressProjection: MaterialAddressProjection;
   pocket: ElasticPreviewBounds;
   topHandle: ElasticPreviewLine;
   bottomHandle: ElasticPreviewLine;
   handleViewportInset: number;
   pocketDepth: number;
   maximumDepth: number;
-  opacity: number;
 }>;
 
 export const ELASTIC_PREVIEW_METRICS = Object.freeze({
-  boundaryOutset: 3,
-  pocketGap: 4,
-  pocketInlineOutset: 10,
   minimumPocketWidth: 48,
   maximumExpansionDepth: 144,
   viewportEdgeInset: 8,
   handleHalfWidth: 26,
-  // The upper control sits five pixels outside its anchor. These values cover
-  // the tallest fine/coarse CSS targets, not only the visible two-pixel cue.
+  // These conservative values cover the complete fine/coarse CSS targets and
+  // their focus clearance, not only the visible two-pixel cue.
   handleOutwardExtent: 49,
   coarseHandleOutwardExtent: 53,
   minimumHandleSeparation: 12,
-  lineTopTolerance: 1,
   minimumCueWidth: 32,
   maximumCueWidth: 96,
-  minimumOpacity: 0.08,
-  maximumOpacity: 0.18,
 });
 
 /**
@@ -86,6 +92,9 @@ export function elasticPreviewGeometry(
 export function prepareElasticPreviewSource(
   rects: readonly ElasticPreviewRect[],
   textColumn?: ElasticPreviewBounds,
+  basis: ProjectedLayoutBasis = PREVIEW_BASIS,
+  textDirection: string = "ltr",
+  writingMode: string = "horizontal-tb",
 ): ElasticPreviewSource | null {
   if (
     !Array.isArray(rects) || rects.length === 0 ||
@@ -94,15 +103,48 @@ export function prepareElasticPreviewSource(
   ) return null;
 
   const fragments = Object.freeze(rects.map(ownRect));
-  const visualLines = groupVisualLines(fragments);
-  if (visualLines.length === 0) return null;
   const sourceBounds = unionBounds(fragments);
+  const column = textColumn ?? sourceBounds;
+  const layoutReceipt = createProjectedLayoutReceipt({
+    basis,
+    column,
+    rects: fragments,
+    textDirection,
+    writingMode,
+  });
+  if (layoutReceipt === null) return null;
   return Object.freeze({
     fragments,
-    visualLines,
     sourceBounds,
     textColumn: textColumn === undefined ? null : Object.freeze({ ...textColumn }),
+    layoutReceipt,
   });
+}
+
+/**
+ * Chooses the only receipt that describes the DOM currently on screen.
+ * Neutral material may use the natural Range receipt. Once a partition has
+ * reflowed, missing or wrong-partition geometry fails closed instead of
+ * painting the old range over a different text layout.
+ */
+export function resolveElasticLayoutReceipt(input: Readonly<{
+  handle: StretchHandle | null;
+  mode: ElasticPreviewMode;
+  projected: ProjectedElasticLayoutReceipt | null;
+  source: ElasticPreviewSource | null;
+}>): ProjectedLayoutReceipt | null {
+  if (input.source === null) return null;
+  if (input.mode === "neutral") return input.source.layoutReceipt;
+  if (
+    input.projected === null || input.handle === null ||
+    input.projected.sourceReceipt !== input.source.layoutReceipt
+  ) return null;
+  const expectedPartition = `projected-${input.handle}`;
+  return receiptMatchesProjection(
+    input.source.layoutReceipt.basis,
+    input.projected.receipt.basis,
+    expectedPartition,
+  ) ? input.projected.receipt : null;
 }
 
 /** Projects cheap degree-dependent geometry from a prepared measured source. */
@@ -113,6 +155,7 @@ export function projectElasticPreview(
   activeHandle: StretchHandle | null = null,
   lastHandle: StretchHandle | null = null,
   coarsePointer = false,
+  layoutReceipt: ProjectedLayoutReceipt = source.layoutReceipt,
 ): ElasticPreview | null {
   if (
     !Number.isFinite(amount) ||
@@ -120,12 +163,23 @@ export function projectElasticPreview(
     !isOptionalHandle(activeHandle) || !isOptionalHandle(lastHandle)
   ) return null;
 
-  const { fragments, sourceBounds, visualLines } = source;
+  const { fragments, sourceBounds } = source;
+  const firstAddressedRow = Math.max(
+    0,
+    Math.min(layoutReceipt.run.startRow, layoutReceipt.rows.length - 1),
+  );
+  const lastAddressedRow = Math.max(
+    firstAddressedRow,
+    Math.min(layoutReceipt.run.endRow, layoutReceipt.rows.length - 1),
+  );
+  const topReceiptRow = layoutReceipt.rows[firstAddressedRow];
+  const bottomReceiptRow = layoutReceipt.rows[lastAddressedRow];
+  if (topReceiptRow === undefined || bottomReceiptRow === undefined) return null;
   const normalizedAmount = roundClientValue(clamp(amount, 0, 1));
-  const topLine = visualLines[0]!;
-  const bottomLine = visualLines.at(-1)!;
-  const topBase = topLine.top - ELASTIC_PREVIEW_METRICS.boundaryOutset;
-  const bottomBase = bottomLine.bottom + ELASTIC_PREVIEW_METRICS.boundaryOutset;
+  const topLine = receiptRowBounds(topReceiptRow);
+  const bottomLine = receiptRowBounds(bottomReceiptRow);
+  const topBase = topLine.top - layoutReceipt.metrics.blockOutset;
+  const bottomBase = bottomLine.bottom + layoutReceipt.metrics.blockOutset;
   const handleViewportInset = coarsePointer
     ? ELASTIC_PREVIEW_METRICS.coarseHandleOutwardExtent
     : ELASTIC_PREVIEW_METRICS.handleOutwardExtent;
@@ -156,67 +210,77 @@ export function projectElasticPreview(
   );
   const topHandle = cueAt(topCenter, topY);
   const bottomHandle = cueAt(bottomCenter, bottomY);
-  const horizontal = pocketHorizontalBounds(source.textColumn ?? sourceBounds, viewport);
+  const horizontal = pocketHorizontalBounds(
+    source.textColumn ?? sourceBounds,
+    layoutReceipt.metrics.inlineOutset,
+    viewport,
+  );
   if (horizontal === null) return null;
+  const pocketTop = movingHandle === "top" ? topBase : bottomBase;
   const pocket = Object.freeze({
     left: horizontal.left,
-    top: movingHandle === "top" ? topBase : bottomBase,
+    top: pocketTop,
     right: horizontal.right,
-    bottom: movingHandle === "top"
-      ? topBase + pocketDepth
-      : Math.max(bottomBase, bottomY),
+    bottom: pocketTop + pocketDepth,
   });
-  const opacity = roundClientValue(
-    ELASTIC_PREVIEW_METRICS.minimumOpacity + normalizedAmount *
-      (ELASTIC_PREVIEW_METRICS.maximumOpacity - ELASTIC_PREVIEW_METRICS.minimumOpacity),
-  );
-
+  const addressProjection = projectMaterialAddress({
+    amount: normalizedAmount,
+    handle: normalizedAmount === 0 ? null : movingHandle,
+    maximumDepth,
+    receipt: layoutReceipt,
+  });
+  if (addressProjection === null) return null;
   return Object.freeze({
     mode: normalizedAmount === 0 ? "neutral" : "expand",
     amount: normalizedAmount,
     activeHandle,
     lastHandle,
     fragments,
-    visualLines,
     sourceBounds,
+    addressProjection,
     pocket,
     topHandle,
     bottomHandle,
     handleViewportInset,
     pocketDepth,
     maximumDepth,
-    opacity,
   });
 }
 
-function groupVisualLines(rects: readonly ElasticPreviewRect[]): readonly ElasticPreviewBounds[] {
-  const ordered = rects.map((rect, index) => ({ rect, index })).sort((left, right) =>
-    left.rect.y - right.rect.y || left.index - right.index,
-  );
-  const lines: Array<{ left: number; top: number; right: number; bottom: number }> = [];
-  for (const { rect } of ordered) {
-    const bounds = rectBounds(rect);
-    const line = lines.find((candidate) => sameVisualLine(candidate, bounds));
-    if (line === undefined) {
-      lines.push({ ...bounds });
-    } else {
-      line.left = Math.min(line.left, bounds.left);
-      line.top = Math.min(line.top, bounds.top);
-      line.right = Math.max(line.right, bounds.right);
-      line.bottom = Math.max(line.bottom, bounds.bottom);
-    }
-  }
-  return Object.freeze(lines.map((line) => Object.freeze({ ...line })));
+function receiptMatchesProjection(
+  expected: ProjectedLayoutBasis,
+  actual: ProjectedLayoutBasis,
+  expectedPartition: string,
+): boolean {
+  return expected.addressKey === actual.addressKey &&
+    expected.documentEpoch === actual.documentEpoch &&
+    expected.layoutEpoch === actual.layoutEpoch &&
+    expected.nodeId === actual.nodeId &&
+    expected.treeId === actual.treeId &&
+    expected.viewportKey === actual.viewportKey &&
+    actual.partitionKey === expectedPartition;
 }
 
-function sameVisualLine(line: ElasticPreviewBounds, rect: ElasticPreviewBounds): boolean {
-  const overlap = Math.min(line.bottom, rect.bottom) - Math.max(line.top, rect.top);
-  const tolerance = Math.max(
-    ELASTIC_PREVIEW_METRICS.lineTopTolerance,
-    Math.min(line.bottom - line.top, rect.bottom - rect.top) * 0.35,
-  );
-  return overlap > 0 || Math.abs(line.top - rect.top) <= tolerance;
+function receiptRowBounds(
+  row: ProjectedLayoutReceipt["rows"][number],
+): ElasticPreviewBounds {
+  return Object.freeze({
+    bottom: row.blockEnd,
+    left: row.inlineStart,
+    right: row.inlineEnd,
+    top: row.blockStart,
+  });
 }
+
+const PREVIEW_BASIS: ProjectedLayoutBasis = Object.freeze({
+  addressKey: "elastic-preview",
+  documentEpoch: 0,
+  layoutEpoch: 0,
+  nodeId: "elastic-preview",
+  partitionKey: "selection",
+  treeId: "elastic-preview",
+  viewportKey: "preview",
+});
 
 function cueAt(center: number, y: number): ElasticPreviewLine {
   return Object.freeze({ x1: center - 11, x2: center + 11, y });
@@ -281,11 +345,14 @@ function separateHandleYs(
 
 function pocketHorizontalBounds(
   bounds: ElasticPreviewBounds,
+  inlineOutset: number,
   viewport: ElasticPreviewViewport | undefined,
 ): Readonly<{ left: number; right: number }> | null {
-  const outset = ELASTIC_PREVIEW_METRICS.pocketInlineOutset;
   const center = (bounds.left + bounds.right) / 2;
-  const width = Math.max(ELASTIC_PREVIEW_METRICS.minimumPocketWidth, bounds.right - bounds.left + outset * 2);
+  const width = Math.max(
+    ELASTIC_PREVIEW_METRICS.minimumPocketWidth,
+    bounds.right - bounds.left + inlineOutset * 2,
+  );
   const minimum = viewport?.left === undefined ? Number.NEGATIVE_INFINITY : viewport.left + ELASTIC_PREVIEW_METRICS.viewportEdgeInset;
   const maximum = viewport?.right === undefined ? Number.POSITIVE_INFINITY : viewport.right - ELASTIC_PREVIEW_METRICS.viewportEdgeInset;
   const left = Math.max(minimum, center - width / 2);

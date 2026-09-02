@@ -1,62 +1,46 @@
 import { describe, expect, it } from "vitest";
-import {
-  clientDepthToWorld,
-  projectLanguageFlow,
-} from "./language-flow";
-
-const RECEIPT = {
-  sourceHeight: 120,
-  selectedTop: 36,
-  afterNaturalTop: 72,
-  afterHeight: 48,
-  slotDepth: 60,
-} as const;
+import { clientDepthToWorld, projectLanguageFlow } from "./language-flow";
 
 describe("language flow projection", () => {
-  it("moves only the suffix downward from the lower grip", () => {
-    expect(projectLanguageFlow({ ...RECEIPT, handle: "bottom" })).toEqual({
-      beforeTop: 0,
-      selectedTop: 36,
-      slotTop: 72,
-      afterTop: 132,
-      topExtent: 0,
-      bottomExtent: 60,
-      presentationHeight: 180,
-    });
-  });
-
-  it("keeps the prefix fixed and pushes the selected language plus suffix down", () => {
-    expect(projectLanguageFlow({ ...RECEIPT, handle: "top" })).toEqual({
-      beforeTop: 0,
-      selectedTop: 96,
-      slotTop: 36,
-      afterTop: 132,
-      topExtent: 0,
-      bottomExtent: 60,
-      presentationHeight: 180,
-    });
-  });
-
-  it("counts only real overflow beyond the unchanged source box", () => {
+  it("reports the growth a closed-slot projection gains from the open slot", () => {
+    // Real flow decides its own positions, so damage only needs how tall the
+    // partitions stand closed plus the depth that was opened.
     expect(projectLanguageFlow({
-      ...RECEIPT,
-      afterNaturalTop: 60,
-      afterHeight: 20,
+      naturalProjectedHeight: 120,
+      slotDepth: 40,
+      sourceHeight: 120,
+    })).toEqual({ bottomExtent: 40, presentationHeight: 160, topExtent: 0 });
+  });
+
+  it("keeps the upper boundary fixed for either grip", () => {
+    // Splitting the flow can make the projection taller than the source even
+    // before the slot opens, and growth is still downward only.
+    expect(projectLanguageFlow({
+      naturalProjectedHeight: 160,
+      slotDepth: 0,
+      sourceHeight: 120,
+    })).toEqual({ bottomExtent: 40, presentationHeight: 160, topExtent: 0 });
+  });
+
+  it("never reports negative growth for a projection shorter than its source", () => {
+    expect(projectLanguageFlow({
+      naturalProjectedHeight: 80,
       slotDepth: 10,
-      handle: "bottom",
-    })?.bottomExtent).toBe(0);
+      sourceHeight: 120,
+    })).toEqual({ bottomExtent: 0, presentationHeight: 90, topExtent: 0 });
   });
 
-  it("rejects impossible or malformed measurement receipts atomically", () => {
-    expect(projectLanguageFlow({ ...RECEIPT, afterNaturalTop: 20, handle: "bottom" })).toBeNull();
-    expect(projectLanguageFlow({ ...RECEIPT, sourceHeight: Number.NaN, handle: "bottom" })).toBeNull();
-    expect(projectLanguageFlow({ ...RECEIPT, slotDepth: -1, handle: "bottom" })).toBeNull();
+  it("fails closed on values it cannot trust", () => {
+    for (const input of [
+      { naturalProjectedHeight: -1, slotDepth: 0, sourceHeight: 10 },
+      { naturalProjectedHeight: 10, slotDepth: -1, sourceHeight: 10 },
+      { naturalProjectedHeight: 10, slotDepth: 0, sourceHeight: Number.NaN },
+    ]) expect(projectLanguageFlow(input)).toBeNull();
   });
 
-  it("converts client travel to stable world space at canvas zoom", () => {
-    expect(clientDepthToWorld(60, 1)).toBe(60);
-    expect(clientDepthToWorld(60, 1.5)).toBe(40);
-    expect(clientDepthToWorld(60, 0.75)).toBe(80);
-    expect(clientDepthToWorld(60, 0)).toBeNull();
+  it("converts client depth into canvas units", () => {
+    expect(clientDepthToWorld(144, 2)).toBe(72);
+    expect(clientDepthToWorld(144, 0)).toBeNull();
+    expect(clientDepthToWorld(-1, 1)).toBeNull();
   });
 });

@@ -104,7 +104,10 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
         try {
           const change = inputRef.current.commit(envelope, plan, basis.documentEpoch);
           if (change === null) {
-            // A stale response has no recovery action: current material wins.
+            // Current material wins, but the local degree must remain usable.
+            // Reopen the bounded address instead of stranding its reducer in a
+            // committed state that rejects every subsequent keyboard change.
+            inputRef.current.onUnavailable?.();
             setState(IDLE);
             return;
           }

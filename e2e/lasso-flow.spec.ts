@@ -108,11 +108,15 @@ for (const viewport of [
     const sourceLayout = await sourceLayoutReceipt(page, text);
     const handle = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
     await expect(handle).toHaveAttribute("aria-valuenow", "0");
-    const lastPink = await page.locator(".lasso-selection-fragment").last().boundingBox();
+    const selectedRows = (
+      await selectionProjectionParity(page, text, "，", { includeVisibleSeam: true })
+    ).sourceRects;
+    const lastSelectedRow = selectedRows.at(-1) ?? null;
     const bottomHandleInitial = await handle.boundingBox();
-    if (lastPink === null || bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
+    if (lastSelectedRow === null || bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
     expect(Math.abs(
-      bottomHandleInitial.x + bottomHandleInitial.width / 2 - (lastPink.x + lastPink.width / 2),
+      bottomHandleInitial.x + bottomHandleInitial.width / 2 -
+      (lastSelectedRow.x + lastSelectedRow.width / 2),
     )).toBeLessThanOrEqual(3.1);
     await page.evaluate(() => {
       const original = Element.prototype.setPointerCapture;
@@ -164,12 +168,15 @@ for (const viewport of [
     await expect(page.locator(".language-split-slot")).toBeVisible();
     const surface = await page.locator(".language-split-slot").boundingBox();
     const movingHandle = await handle.boundingBox();
-    const lastFragment = await page.locator(".lasso-selection-fragment[data-last-fragment=true]").boundingBox();
-    if (surface === null || movingHandle === null || lastFragment === null) {
+    const address = page.locator(
+      '.material-address-layer[data-address-variant="actionable"]',
+    );
+    if (surface === null || movingHandle === null) {
       throw new Error("continuous material geometry missing");
     }
+    await expect(address).toHaveAttribute("data-material-address-painted", "true");
     expect(surface.height).toBeGreaterThan(0);
-    expect(movingHandle.y).toBeGreaterThan(lastFragment.y);
+    expect(movingHandle.y).toBeGreaterThanOrEqual(surface.y + surface.height - 2);
     const liveLayout = await sourceLayoutReceipt(page, text);
     expect(sourceTextReceipt(liveLayout)).toEqual(sourceTextReceipt(sourceLayout));
     expect(liveLayout.node).toEqual(sourceLayout.node);
@@ -216,6 +223,8 @@ for (const viewport of [
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
 
     await handle.press("End");
+    await expect(handle).toHaveAttribute("aria-valuenow", "1");
+    await expect(handle).toBeVisible();
 
     const visibleViewport = await page.evaluate(() => {
       const visual = window.visualViewport;
@@ -268,6 +277,25 @@ for (const viewport of [
       await expect(handle).toHaveAttribute("aria-valuenow", settledBeforeInvalidation!);
       await expect(handle).toBeVisible();
     }
+
+    // A keyboard adjustment may replace the projected control more than once.
+    // Focus follows only that semantic address, and an explicit move to another
+    // control cancels the request before a later geometry remount.
+    await handle.press("PageDown");
+    await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
+    await expect(handle).toBeFocused();
+    const activeLassoTool = page.locator('[data-tool-id="lasso"]');
+    await expect(activeLassoTool).toBeVisible();
+    await expect(activeLassoTool).toBeEnabled();
+    await activeLassoTool.focus();
+    await expect(activeLassoTool).toBeFocused();
+    await page.evaluate(() => window.dispatchEvent(new Event("resize")));
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    await expect(activeLassoTool).toBeFocused();
+    await expect(address).toHaveAttribute("data-material-address-painted", "true");
+    await expect(handle).toBeVisible();
 
     const committedDegree = await handle.getAttribute("aria-valuenow");
     const movedHandleBox = await handle.boundingBox();
@@ -403,7 +431,10 @@ for (const viewport of [
     const sourceBefore = await sourceLayoutReceipt(page, text);
     await expect(page.locator(".language-split-projection"))
       .toHaveAttribute("data-preview-mode", "neutral");
-    await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
+    await expect(page.locator(
+      '.material-address-layer[data-address-variant="actionable"]',
+    )).toHaveAttribute("data-material-address-painted", "true");
+    await expect(page.locator(".lasso-selection-fragment").first()).toBeHidden();
     const sourceGlyphsBefore = await sourceGlyphReceipt(text, 0, "，");
     const projectionParity = await selectionProjectionParity(page, text, "，");
     expect(projectionParity.typography.projection).toEqual(projectionParity.typography.source);
@@ -426,10 +457,10 @@ for (const viewport of [
     const sourceGlyphsExpanded = await sourceGlyphReceipt(text, 0, "，");
     await expect(page.locator(".language-split-projection"))
       .toHaveAttribute("data-preview-mode", "expand");
-    expect(Math.abs(expanded.before.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(expanded.witness.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
     expect(expanded.selected.left).toBeGreaterThanOrEqual(expanded.columnLeft - 1);
     expect(expanded.selected.right).toBeLessThanOrEqual(expanded.columnRight + 1);
-    expect(Math.abs(expanded.after.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(expanded.moving.centerX - expanded.columnCenterX)).toBeLessThanOrEqual(1);
     expect(expanded.slot.height).toBeGreaterThan(120);
     expect(sourceGlyphsExpanded).toEqual(sourceGlyphsBefore);
     const sourceAfter = await sourceLayoutReceipt(page, text);
@@ -440,7 +471,10 @@ for (const viewport of [
     await bottom.press("Home");
     await expect(page.locator(".language-split-projection"))
       .toHaveAttribute("data-preview-mode", "neutral");
-    await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
+    await expect(page.locator(
+      '.material-address-layer[data-address-variant="actionable"]',
+    )).toHaveAttribute("data-material-address-painted", "true");
+    await expect(page.locator(".lasso-selection-fragment").first()).toBeHidden();
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitLanguageSelection, exact: true }).click();
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".stretch-handle")).toHaveCount(0);
@@ -1072,25 +1106,27 @@ async function selectionProjectionParity(
   page: Page,
   source: ReturnType<Page["locator"]>,
   delimiter: string,
+  options: { includeVisibleSeam?: boolean } = {},
 ) {
-  return page.evaluate(({ selector, delimiter }) => {
+  return page.evaluate(({ selector, delimiter, includeVisibleSeam }) => {
     const sourceElement = document.querySelector<HTMLElement>(selector);
-    const projectionElement = document.querySelector<HTMLElement>(".language-split-selected-copy");
+    const projectionElement = document.querySelector<HTMLElement>(
+      includeVisibleSeam ? ".language-split-address-copy" : ".language-split-selected-copy",
+    );
     if (sourceElement === null || projectionElement === null) {
       throw new Error("selection typography receipt is missing");
     }
     const sourceNode = sourceElement.firstChild;
-    const projectionNode = projectionElement.firstChild;
-    if (!(sourceNode instanceof Text) || !(projectionNode instanceof Text)) {
+    if (!(sourceNode instanceof Text)) {
       throw new Error("selection typography text is missing");
     }
     const end = sourceNode.data.indexOf(delimiter);
     if (end < 0) throw new Error("selection typography delimiter is missing");
     const sourceRange = document.createRange();
     sourceRange.setStart(sourceNode, 0);
-    sourceRange.setEnd(sourceNode, end);
+    sourceRange.setEnd(sourceNode, end + (includeVisibleSeam ? delimiter.length : 0));
     const projectionRange = document.createRange();
-    projectionRange.selectNodeContents(projectionNode);
+    projectionRange.selectNodeContents(projectionElement);
     const box = (rect: DOMRect) => ({
       x: rect.x,
       y: rect.y,
@@ -1119,7 +1155,7 @@ async function selectionProjectionParity(
     const id = element.closest<HTMLElement>("[data-thought-text-id]")?.dataset.thoughtTextId;
     if (id === undefined) throw new Error("source thought id is missing");
     return `[data-thought-text-id="${CSS.escape(id)}"] .spatial-thought__label`;
-  }), delimiter });
+  }), delimiter, includeVisibleSeam: options.includeVisibleSeam === true });
 }
 
 async function projectionReceipt(page: Page) {
@@ -1153,7 +1189,8 @@ async function projectionReceipt(page: Page) {
       columnLeft: column.left,
       columnRight: column.right,
       columnCenterX: column.left + column.width / 2,
-      before: read(".language-split-source"),
+      witness: read(".language-split-witness"),
+      moving: read(".language-split-moving"),
       selected: read(".language-split-block--selected"),
       after: read(".language-split-block--after"),
       afterGlyphTop: afterGlyphRect.top,

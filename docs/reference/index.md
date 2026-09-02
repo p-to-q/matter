@@ -8,6 +8,7 @@ ordinary component and store work needs no matching document.
 | --- | --- |
 | [`foundation.md`](foundation.md) | choosing a base, module ownership, or a dependency |
 | [`text-material.md`](text-material.md) | punctuation segmentation and lasso geometry |
+| [`selected-material-freeze.md`](selected-material-freeze.md) | the signed boundary for selected-material presentation, grips, and Point Talk reference |
 | [`tree-layout.md`](tree-layout.md) | variable-height rooted layout |
 | [`tool-system.md`](tool-system.md) | contextual tool projection and rail behavior |
 | [`history-and-undo.md`](history-and-undo.md) | atomic tree commands and exact inverse |

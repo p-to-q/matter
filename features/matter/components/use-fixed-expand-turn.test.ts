@@ -122,6 +122,7 @@ describe("useFixedExpandTurn", () => {
     hookSpies.requestTransform.mockImplementation(async (envelope) =>
       buildTransformPlan(envelope, "source more"));
     const commit = vi.fn(() => null);
+    const onUnavailable = vi.fn();
     const turn = useFixedExpandTurn({
       tree: tree(),
       documentEpoch: BASIS.documentEpoch,
@@ -131,6 +132,7 @@ describe("useFixedExpandTurn", () => {
       interactionScopeKey: "focus:thought",
       commit,
       onCommitted: vi.fn(),
+      onUnavailable,
     });
 
     expect(turn.start(BASIS)).toBe(true);
@@ -139,6 +141,7 @@ describe("useFixedExpandTurn", () => {
       expect.objectContaining({ requestVersion: "transform/2" }),
       BASIS.documentEpoch,
     ));
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
   });
 
   it("returns to idle without visible failure state when the provider request is unavailable", async () => {
