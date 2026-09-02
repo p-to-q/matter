@@ -71,9 +71,11 @@ export function materialAddressVariantOutline(
     // absorb only a near-column sliver. Topology stays independent from the
     // visual corner, so retuning the radius cannot move the snap threshold.
     edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant),
-    // Every variant traces the language it addresses. Following the glyphs is
-    // the point of the mark, so a whole-node address is not allowed to collapse
-    // into a plain column rectangle.
+    // Every variant traces the language it addresses; following the glyphs is
+    // the point of the mark. A whole-node selection additionally reads line by
+    // line, the way the label it replaced did, so its rows stay separate
+    // capsules and the leading between them is left alone.
+    separateRows: variant === "structural",
     minimumStepExtent: 0,
   });
 }
