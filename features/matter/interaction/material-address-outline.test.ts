@@ -82,21 +82,22 @@ describe("material address outline", () => {
     expect(ringShape(centred.path)).toEqual({ closes: 1, starts: 1 });
   });
 
-  it("paints the owning column when the address names a whole node", () => {
-    // A whole-node address names a node, not a set of words. Tracing centred
-    // ragged text gave every node a different silhouette for reasons no reader
-    // can see, so the node's own box is the honest shape.
+  it("keeps a whole-node address on the glyphs it names", () => {
+    // Following the language is the point of the mark. A whole-node address is
+    // not allowed to collapse into a plain column rectangle just because its
+    // rows are ragged.
     const outline = materialAddressOutline(projection({
       rows: [
         { blockEnd: 140, blockStart: 100, inlineEnd: 560, inlineStart: 140 },
         { blockEnd: 180, blockStart: 140, inlineEnd: 400, inlineStart: 300 },
       ],
       run: { endInline: 400, endRow: 1, startInline: 140, startRow: 0 },
-    }), { columnAligned: true })!;
-    for (const band of outline.bands) expect([band.left, band.right]).toEqual([100, 600]);
-    // Identical spans collapse to one rectangle, so the node reads as one card.
-    expect(ringShape(outline.path)).toEqual({ closes: 1, starts: 1 });
-    expect((outline.path.match(/A/g) ?? []).length).toBeLessThanOrEqual(4);
+    }))!;
+    expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
+      [140, 560],
+      [300, 400],
+    ]);
+    expect(outline.bands.some((band) => band.left === 100 || band.right === 600)).toBe(false);
   });
 
   it("keeps a single-row interval on its own glyph edges", () => {

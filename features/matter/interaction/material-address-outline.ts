@@ -25,13 +25,6 @@ export type MaterialAddressOutlineOptions = Readonly<{
    */
   edgeSnapExtent?: number;
   /**
-   * Paints the owning text column instead of the measured glyph rows. A
-   * whole-node address names a node, not a set of words, so tracing centred
-   * ragged text would make every node a different lumpy shape for reasons the
-   * reader cannot see.
-   */
-  columnAligned?: boolean;
-  /**
    * Lateral steps narrower than this are opened outward instead of drawn.
    * A step only as wide as two corner radii leaves no straight platform
    * between them, so the vertex clamp collapses both quarter circles and the
@@ -94,7 +87,6 @@ export function materialAddressOutline(
   const ltr = projection.textDirection === "ltr";
   const logicalStart = ltr ? column.inlineStart : column.inlineEnd;
   const logicalEnd = ltr ? column.inlineEnd : column.inlineStart;
-  const columnAligned = options.columnAligned === true;
   const rowFrom = (index: number): number =>
     ltr ? selected[index]!.inlineStart : selected[index]!.inlineEnd;
   const rowTo = (index: number): number =>
@@ -111,7 +103,6 @@ export function materialAddressOutline(
   const slotFollows = projection.direction === "selection-then-slot";
 
   const neutralSpan = (index: number): LogicalSpan => {
-    if (columnAligned) return { from: logicalStart, to: logicalEnd };
     if (count === 1) return { from: run.startInline, to: run.endInline };
     if (index === 0) return { from: snappedStart, to: rowTo(0) };
     if (index === count - 1) return { from: rowFrom(index), to: snappedEnd };

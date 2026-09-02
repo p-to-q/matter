@@ -56,12 +56,11 @@ At amount zero there is no slot and the formula reduces to the neutral selected
 range. RTL mirrors the logical axes; an unsupported writing mode fails closed
 until it has a proven projection.
 
-A whole-node address paints its owning text column instead of its rows. It
-names a node, not a set of words, so it carries no information about glyph
-extents; tracing centred ragged text gave every node a different silhouette for
-reasons no reader can see. The column is the node's own box, so every selected
-node is one identical rounded rectangle aligned to the column grid, and neither
-edge snapping nor step opening applies to it.
+Every variant traces the language it addresses, whole-node included. Following
+the glyphs is what the mark is for, so a whole-node address may not collapse
+into a plain column rectangle because its rows happen to be ragged. The grips
+already depend on this: each one centres on its own line's real glyph midpoint,
+so a band that ignored the glyphs would leave its grip floating beside it.
 
 The contact impression follows one glyph-relative optical family. Top and
 bottom outset are the same measured value; inline outset remains wider at a

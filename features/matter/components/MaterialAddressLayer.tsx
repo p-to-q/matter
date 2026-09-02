@@ -49,8 +49,8 @@ function materialAddressVariantEdgeSnapExtent(
   variant: MaterialAddressVariant,
 ): number {
   if (variant === "native") return 0;
-  // A whole-node address paints the column, so it has no endpoint near an edge
-  // to absorb and nothing to snap.
+  // Centring insets a row from both edges, so a boundary row is never near a
+  // column edge for a reason worth absorbing.
   if (variant === "structural") return 0;
   return Math.max(
     6,
@@ -71,12 +71,9 @@ export function materialAddressVariantOutline(
     // absorb only a near-column sliver. Topology stays independent from the
     // visual corner, so retuning the radius cannot move the snap threshold.
     edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant),
-    // A whole-node selection names the node, not the words in it. Tracing
-    // centred ragged text gave every node a different lumpy silhouette, and a
-    // short last line put a narrow band far to one side of a wide one. The
-    // column is the node's own box: one shape, identical for every node.
-    columnAligned: variant === "structural",
-    // Column-aligned bands have no internal steps left to open.
+    // Every variant traces the language it addresses. Following the glyphs is
+    // the point of the mark, so a whole-node address is not allowed to collapse
+    // into a plain column rectangle.
     minimumStepExtent: 0,
   });
 }
