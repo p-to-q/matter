@@ -4,6 +4,7 @@ import { fixtureUiCopy, fixtureVoiceAdmissionName } from "./matter-ui-copy";
 const ROOT_ID = "thought_fixture_root";
 const SOURCE = "我们怀念的也许不是一个真实存在过的过去";
 const EXPANDED = "我们怀念的也许不是一个真实存在过的、拥有非常清楚边界和十分完整形状的过去";
+const ROOT_SUFFIX = "，而是那个过去在今天仍然允许我们想象的其他生活。";
 
 test("Elastic Language commits one laptop drag, then Undo, Redo, and reload stay exact", async ({ page }) => {
   await runElasticReceipt(page, "drag");
@@ -65,6 +66,56 @@ test("both literal grips stay visible in the paper's light and dark appearances"
   expect(surfaceReceipt.addressFill).toBe("rgba(240, 242, 243, 0.1)");
   expect(surfaceReceipt.projectionBackground).toBe("rgba(0, 0, 0, 0)");
   expect(surfaceReceipt.handleShadow).toContain("4px");
+});
+
+test("font loading revokes actionable geometry until either font outcome settles", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
+
+  const address = page.locator('.material-address-layer[data-address-variant="actionable"]');
+  const grips = page.locator(".stretch-handle");
+  await expect(address).toHaveAttribute("data-material-address-painted", "true");
+  await expect(grips).toHaveCount(2);
+
+  for (const outcome of ["loadingdone", "loadingerror"] as const) {
+    const immediate = await page.evaluate(() => {
+      document.fonts.dispatchEvent(new Event("loading"));
+      const layer = document.querySelector<HTMLElement>(
+        '.material-address-layer[data-address-variant="actionable"]',
+      );
+      return {
+        semanticSelection: document.querySelector(".lasso-layer")?.getAttribute("data-selected"),
+        painted: layer?.hasAttribute("data-material-address-painted") ?? false,
+        fragments: document.querySelectorAll(".lasso-selection-fragment").length,
+        grips: document.querySelectorAll(".stretch-handle").length,
+      };
+    });
+    expect(immediate).toEqual({
+      semanticSelection: "true",
+      painted: false,
+      fragments: 0,
+      grips: 0,
+    });
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    }));
+    await expect(address).not.toHaveAttribute("data-material-address-painted", "true");
+    await expect(grips).toHaveCount(0);
+
+    await page.evaluate((eventName) => {
+      document.fonts.dispatchEvent(new Event(eventName));
+    }, outcome);
+    await expect(address).toHaveAttribute("data-material-address-painted", "true");
+    await expect(grips).toHaveCount(2);
+  }
 });
 
 test("native copy releases stale paint before measuring a new range", async ({ page }) => {
@@ -147,6 +198,32 @@ test("native copy releases stale paint before measuring a new range", async ({ p
   await expect(native).not.toHaveAttribute("data-material-address-painted", "true");
 });
 
+test("a real double-click gives native copy sole paint ownership over structural selection", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+
+  const shell = page.locator("main.matter-shell");
+  const root = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+  const label = root.locator(".spatial-thought__label");
+  const native = page.locator('.material-address-layer[data-address-variant="native"]');
+  const structural = page.locator('.material-address-layer[data-address-variant="structural"]');
+  const revision = await shell.getAttribute("data-tree-revision");
+  await expect(structural).toHaveAttribute("data-material-address-painted", "true");
+
+  await label.dblclick({ position: { x: 80, y: 12 } });
+  await expect.poll(() => page.evaluate(() => {
+    const selection = window.getSelection();
+    return selection !== null && !selection.isCollapsed && selection.toString().length > 0;
+  })).toBe(true);
+  await expect(shell).toHaveAttribute("data-material-address-owner", "native");
+  await expect(native).toHaveAttribute("data-material-address-painted", "true");
+  await expect(structural).not.toHaveAttribute("data-material-address-painted", "true");
+  await expect(root).toHaveAttribute("aria-pressed", "true");
+  await expect(shell).toHaveAttribute("data-tree-revision", revision ?? "");
+});
+
 test("one outline owns the address from neutral through both grips", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
@@ -174,22 +251,71 @@ test("one outline owns the address from neutral through both grips", async ({ pa
   const actionable = page.locator('.material-address-layer[data-address-variant="actionable"]');
   const actionablePath = actionable.locator(".material-address-layer__path");
   await expect(actionable).toHaveAttribute("data-material-address-painted", "true");
+  const addressCopy = page.locator(".language-split-address-copy");
+  await expect(addressCopy).toHaveText(`${SOURCE}，`);
+  await expect(page.locator(".language-split-seam")).toHaveText("，");
   const neutralFill = await actionablePath.evaluate((node) => getComputedStyle(node).fill);
   const neutralD = await actionablePath.getAttribute("d");
   expect((neutralD ?? "").match(/M/g) ?? []).toHaveLength(1);
+  const seamCoverage = await actionablePath.evaluate((path) => {
+    if (!(path instanceof SVGGeometryElement)) throw new Error("address path missing");
+    const seam = document.querySelector<HTMLElement>(".language-split-seam");
+    if (seam === null) throw new Error("protected punctuation seam missing");
+    const range = document.createRange();
+    range.selectNodeContents(seam);
+    const seamBox = range.getBoundingClientRect();
+    const outline = path.getBoundingClientRect();
+    const seamMidY = (seamBox.top + seamBox.bottom) / 2;
+    return {
+      airAfterSeam: outline.right - seamBox.right,
+      coversBottom: outline.bottom >= seamBox.bottom,
+      coversTop: outline.top <= seamBox.top,
+      seamAirInside: path.isPointInFill(new DOMPoint(seamBox.right + 5, seamMidY)),
+      seamInkInside: path.isPointInFill(new DOMPoint(seamBox.right - .5, seamMidY)),
+    };
+  });
+  expect(seamCoverage.coversTop).toBe(true);
+  expect(seamCoverage.coversBottom).toBe(true);
+  expect(seamCoverage.airAfterSeam).toBeGreaterThan(5);
+  expect(seamCoverage.seamInkInside).toBe(true);
+  expect(seamCoverage.seamAirInside).toBe(true);
   const opticalAir = await actionablePath.evaluate((path) => {
-    const selectedCopy = document.querySelector<HTMLElement>(".language-split-selected-copy");
-    if (selectedCopy === null) throw new Error("selected language copy missing");
+    const selectedCopy = document.querySelector<HTMLElement>(".language-split-address-copy");
+    if (selectedCopy === null) throw new Error("selected address copy missing");
     const range = document.createRange();
     range.selectNodeContents(selectedCopy);
-    const rows = [...range.getClientRects()];
+    const fragments = [...range.getClientRects()].sort(
+      (left, right) => left.top - right.top || left.left - right.left,
+    );
+    const rows: Array<{ bottom: number; height: number; top: number }> = [];
+    for (const fragment of fragments) {
+      const current = rows.at(-1);
+      const belongs = current !== undefined &&
+        fragment.top <= current.bottom + 1 && fragment.bottom >= current.top - 1;
+      if (!belongs || current === undefined) {
+        rows.push({ bottom: fragment.bottom, height: fragment.height, top: fragment.top });
+      } else {
+        current.top = Math.min(current.top, fragment.top);
+        current.bottom = Math.max(current.bottom, fragment.bottom);
+        current.height = current.bottom - current.top;
+      }
+    }
     const outline = path.getBoundingClientRect();
     const first = rows[0];
     const last = rows.at(-1);
     if (first === undefined || last === undefined) throw new Error("selected language rows missing");
+    const halfLeading = rows.slice(1).reduce((minimum, row, index) =>
+      Math.min(minimum, Math.max(0, row.top - rows[index]!.bottom) / 2),
+    Number.POSITIVE_INFINITY);
+    const heights = rows.map((row) => row.height).sort((left, right) => left - right);
+    const middle = Math.floor(heights.length / 2);
+    const medianHeight = heights.length % 2 === 1
+      ? heights[middle]!
+      : (heights[middle - 1]! + heights[middle]!) / 2;
+    const preferred = Math.max(2, Math.min(medianHeight * .245, 14));
     return {
       bottom: outline.bottom - last.bottom,
-      expected: Math.max(2, Math.min(first.height * .1, 7)),
+      expected: Number.isFinite(halfLeading) ? Math.min(preferred, halfLeading) : preferred,
       top: first.top - outline.top,
     };
   });
@@ -206,6 +332,7 @@ test("one outline owns the address from neutral through both grips", async ({ pa
     await grip.press("Home");
     await grip.press("End");
     await expect(actionable).toHaveAttribute("data-material-address-painted", "true");
+    await expect(page.locator(".language-split-address-copy")).toHaveText(`${SOURCE}，`);
     const engagedD = await actionablePath.getAttribute("d");
     expect((engagedD ?? "").match(/M/g) ?? []).toHaveLength(1);
     expect(engagedD).not.toBe(neutralD);
@@ -244,7 +371,7 @@ test("a structural address settles with the narrow index transition", async ({ p
   }).toBeLessThan(2);
 });
 
-test("forced colors keeps selected text readable above a system outline", async ({ page }) => {
+test("forced colors keeps structural, actionable, and native text readable", async ({ page }) => {
   await page.emulateMedia({ forcedColors: "active" });
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
@@ -256,6 +383,59 @@ test("forced colors keeps selected text readable above a system outline", async 
   await expect(path).toHaveCSS("fill", "rgba(0, 0, 0, 0)");
   expect(await path.evaluate((node) => getComputedStyle(node).stroke)).not.toBe("none");
   expect(await label.evaluate((node) => getComputedStyle(node).color)).not.toBe("rgba(0, 0, 0, 0)");
+
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(label, 0));
+  const actionable = page.locator(
+    '.material-address-layer[data-address-variant="actionable"]',
+  );
+  const actionablePath = actionable.locator(".material-address-layer__path");
+  await expect(actionable).toHaveAttribute("data-material-address-painted", "true");
+  await expect(actionablePath).toHaveCSS("fill", "rgba(0, 0, 0, 0)");
+  expect(await actionablePath.evaluate((node) => getComputedStyle(node).stroke)).not.toBe("none");
+  const lower = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
+  await lower.press("End");
+  await expect(page.locator(".language-split-projection"))
+    .toHaveAttribute("data-preview-mode", "expand");
+  await expect(page.locator(".language-split-slot")).toHaveCSS("border-top-width", "0px");
+  expect(await page.locator(".language-split-projection").evaluate(
+    (node) => getComputedStyle(node).color,
+  )).not.toBe("rgba(0, 0, 0, 0)");
+
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.exitLanguageSelection,
+    exact: true,
+  }).click();
+  await page.evaluate((nodeId) => {
+    const labelElement = document.querySelector<HTMLElement>(
+      `[data-thought-text-id="${CSS.escape(nodeId)}"] .spatial-thought__label`,
+    );
+    const textNode = labelElement?.firstChild;
+    const selection = window.getSelection();
+    if (!(textNode instanceof Text) || selection === null) {
+      throw new Error("native forced-colors fixture missing");
+    }
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, Math.min(4, textNode.length));
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new Event("selectionchange"));
+  }, ROOT_ID);
+  const native = page.locator('.material-address-layer[data-address-variant="native"]');
+  await expect(page.locator("main.matter-shell"))
+    .toHaveAttribute("data-material-address-owner", "native");
+  await expect(native).toHaveAttribute("data-material-address-painted", "true");
+  await expect(native).toHaveCSS("display", "none");
+  const nativeSelection = await label.evaluate((node) => {
+    const style = getComputedStyle(node, "::selection");
+    return { background: style.backgroundColor, color: style.color };
+  });
+  expect(nativeSelection.background).not.toBe("rgba(0, 0, 0, 0)");
+  expect(nativeSelection.color).not.toBe("rgba(0, 0, 0, 0)");
 });
 
 test("the upper moving partition reflows in the full column and never splits a line", async ({ page }) => {
@@ -357,7 +537,7 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
     name: "用下握点设置所选文字的展开程度",
   });
   const beforeCopy = page.locator(".language-split-before-copy");
-  const selectedCopy = page.locator(".language-split-block--selected");
+  const selectedCopy = page.locator(".language-split-witness .language-split-block--selected");
   const [before, selected, lowerBefore] = await Promise.all([
     beforeCopy.boundingBox(),
     selectedCopy.boundingBox(),
@@ -370,9 +550,14 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
   await upper.press("End");
   await expect(page.locator(".language-split-projection"))
     .toHaveAttribute("data-stretch-handle", "top");
+  const projectedSelectedCopy = page.locator(
+    ".language-split-moving .language-split-block--selected",
+  );
+  await expect(projectedSelectedCopy).toBeVisible();
+  await expect(lower).toBeVisible();
   const [beforeAfter, selectedAfter, lowerAfter] = await Promise.all([
     beforeCopy.boundingBox(),
-    selectedCopy.boundingBox(),
+    projectedSelectedCopy.boundingBox(),
     lower.boundingBox(),
   ]);
   if (beforeAfter === null || selectedAfter === null || lowerAfter === null) {
@@ -600,12 +785,26 @@ async function runElasticReceipt(
 ): Promise<void> {
   const browserErrors: string[] = [];
   let turnRequests = 0;
+  let requestReceipt: Readonly<{
+    amount: number;
+    end: number;
+    selectedText: string;
+  }> | null = null;
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
   });
   await page.route("**/api/turn", async (route) => {
     turnRequests += 1;
+    const envelope = route.request().postDataJSON() as {
+      selection: { end: number; selectedText: string };
+      gesture: { amount: number };
+    };
+    requestReceipt = Object.freeze({
+      amount: envelope.gesture.amount,
+      end: envelope.selection.end,
+      selectedText: envelope.selection.selectedText,
+    });
     await new Promise((resolve) => setTimeout(resolve, 350));
     await route.continue();
   });
@@ -630,6 +829,7 @@ async function runElasticReceipt(
   await expect(upperGrip).toHaveAttribute("aria-valuenow", "0");
   await expect(lowerGrip).toHaveAttribute("aria-valuenow", "0");
   await expect(grip).toHaveAttribute("aria-valuenow", "0");
+  await expect(page.locator(".language-split-address-copy")).toHaveText(`${SOURCE}，`);
   await expect(page.locator(".stretch-amount-rail")).toHaveCount(0);
   await expectUpperGripAtSelection(page, upperGrip);
   await expectNeutralSelection(page);
@@ -685,6 +885,12 @@ async function runElasticReceipt(
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
   await expect(text).toContainText(EXPANDED);
   expect(turnRequests).toBe(1);
+  expect(requestReceipt).toEqual({
+    amount: 0.5,
+    end: SOURCE.length,
+    selectedText: SOURCE,
+  });
+  await expect(text).toHaveText(`${EXPANDED}${ROOT_SUFFIX}`);
   if (input === "keyboard") {
     const animations = await page.locator(".transform-text__group").evaluateAll((groups) =>
       groups.map((group) => getComputedStyle(group).animationName),
@@ -698,18 +904,18 @@ async function runElasticReceipt(
   await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
 
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
-  await expect(text).toContainText(SOURCE);
-  await expect(text).not.toContainText(EXPANDED);
+  await expect(text).toHaveText(`${SOURCE}${ROOT_SUFFIX}`);
   await expect(page.locator(".transform-text")).toHaveCount(0);
 
   await page.keyboard.press("Control+Shift+Z");
-  await expect(text).toContainText(EXPANDED);
+  await expect(text).toHaveText(`${EXPANDED}${ROOT_SUFFIX}`);
   await expect(page.locator(".transform-text")).toHaveCount(0);
   await expect(page.locator("#material-files")).toHaveAttribute("data-persistence-phase", "saved");
 
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await expect(page.locator(`[data-thought-text-id="${ROOT_ID}"]`)).toContainText(EXPANDED);
+  await expect(page.locator(`[data-thought-text-id="${ROOT_ID}"]`))
+    .toHaveText(`${EXPANDED}${ROOT_SUFFIX}`);
   await expect(page.locator(".transform-text")).toHaveCount(0);
   expect(turnRequests).toBe(1);
   expect(browserErrors).toEqual([]);

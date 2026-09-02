@@ -37,6 +37,7 @@ export type ProjectedLayoutReceipt = Readonly<{
     blockOutset: number;
     cornerRadius: number;
     inlineOutset: number;
+    medianRowExtent: number;
   }>;
   rows: readonly ProjectedLayoutRow[];
   run: Readonly<{
@@ -69,11 +70,14 @@ export const MATERIAL_ADDRESS_NATIVE_ROW_LIMIT = 64;
 
 const LINE_BLOCK_TOLERANCE_PX = 1;
 // These proportions are measured from the glyph box, not the CSS line box.
-// They retain the original `.08em / .32em` family with a small optical allowance
-// for an antialiased SVG edge, while keeping inline air deliberately wider than
-// block air. Every edge reads the same receipt, so top/bottom can never drift.
-const BLOCK_OUTSET_RATIO = 0.1;
-const CORNER_RADIUS_RATIO = 0.18;
+// They preserve the original idea of wider inline than block air, with enough
+// vertical room for a filled SVG edge to breathe around the glyphs. Every edge
+// reads the same receipt, so top/bottom can never drift.
+const BLOCK_OUTSET_RATIO = 0.245;
+const BLOCK_OUTSET_MAX_PX = 14;
+// Precise material keeps a client-pixel corner independent from glyph-relative
+// air. Whole-node material owns a separate type-relative radius.
+const PRECISE_CORNER_RADIUS_PX = 3;
 const INLINE_OUTSET_RATIO = 0.36;
 
 /**
@@ -120,9 +124,10 @@ export function createProjectedLayoutReceipt(input: Readonly<{
     column,
     coordinateSpace: "client-css-px",
     metrics: Object.freeze({
-      blockOutset: rounded(clamp(medianHeight * BLOCK_OUTSET_RATIO, 2, 7)),
-      cornerRadius: rounded(clamp(medianHeight * CORNER_RADIUS_RATIO, 3, 12)),
+      blockOutset: rounded(opticalBlockOutset(rows, medianHeight)),
+      cornerRadius: PRECISE_CORNER_RADIUS_PX,
       inlineOutset: rounded(clamp(medianHeight * INLINE_OUTSET_RATIO, 6, 22)),
+      medianRowExtent: rounded(medianHeight),
     }),
     rows,
     run: Object.freeze({
@@ -250,6 +255,33 @@ function groupIntoRows(rects: readonly ClientTextRect[]): readonly ProjectedLayo
     inlineEnd: rounded(row.inlineEnd),
     inlineStart: rounded(row.inlineStart),
   })));
+}
+
+function opticalBlockOutset(
+  rows: readonly ProjectedLayoutRow[],
+  medianHeight: number,
+): number {
+  const preferred = clamp(
+    medianHeight * BLOCK_OUTSET_RATIO,
+    2,
+    BLOCK_OUTSET_MAX_PX,
+  );
+  if (rows.length < 2) return preferred;
+
+  // The ratio owns the look. Known inter-row leading is only a safety ceiling:
+  // a tight line grid may reduce the cap, but a wide grid never turns the
+  // material address into a full-line marker. A false row split therefore
+  // fails conservatively instead of making the address more expansive.
+  let minimumHalfLeading = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = rows[index - 1]!;
+    const current = rows[index]!;
+    const halfLeading = Math.max(0, current.blockStart - previous.blockEnd) / 2;
+    minimumHalfLeading = Math.min(minimumHalfLeading, halfLeading);
+  }
+  return Number.isFinite(minimumHalfLeading)
+    ? Math.min(preferred, minimumHalfLeading)
+    : preferred;
 }
 
 function validBasis(basis: ProjectedLayoutBasis): boolean {

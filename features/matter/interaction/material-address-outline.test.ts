@@ -142,7 +142,7 @@ describe("material address outline", () => {
       materialAddressOutline(projection({
         attachmentProgress: 1,
         direction: "selection-then-slot",
-        metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 3 },
+        metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 3, medianRowExtent: 20 },
         slot: { blockEnd: 300, blockStart: 220 },
       }))!,
     ]) {
@@ -154,7 +154,7 @@ describe("material address outline", () => {
   it("makes neighbouring rows share one block edge", () => {
     // Real line boxes can leave sub-pixel leading; a hole is not permitted.
     const outline = materialAddressOutline(projection({
-      metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 3 },
+      metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 3, medianRowExtent: 20 },
       rows: [
         { blockEnd: 139, blockStart: 100, inlineEnd: 600, inlineStart: 300 },
         { blockEnd: 180, blockStart: 141, inlineEnd: 600, inlineStart: 100 },
@@ -172,7 +172,7 @@ describe("material address outline", () => {
 
   it("rounds corners without exceeding the edges that meet there", () => {
     const outline = materialAddressOutline(projection({
-      metrics: { blockOutset: 0, cornerRadius: 4, inlineOutset: 0 },
+      metrics: { blockOutset: 0, cornerRadius: 4, inlineOutset: 0, medianRowExtent: 20 },
     }))!;
     expect(outline.path).toContain("A4 4 0 0 1");
     // A concave turn takes the opposite sweep, which is what makes the step

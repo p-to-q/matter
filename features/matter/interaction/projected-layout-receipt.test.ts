@@ -39,7 +39,7 @@ describe("projected layout receipt", () => {
       ],
       run: { startRow: 0, startInline: 600, endRow: 1, endInline: 600 },
       textDirection: "ltr",
-      metrics: { blockOutset: 2, cornerRadius: 3.6, inlineOutset: 7.2 },
+      metrics: { blockOutset: 4.9, cornerRadius: 3, inlineOutset: 7.2, medianRowExtent: 20 },
     });
     expect(Object.isFrozen(RECEIPT)).toBe(true);
     expect(Object.isFrozen(RECEIPT.rows)).toBe(true);
@@ -47,9 +47,9 @@ describe("projected layout receipt", () => {
 
   it("keeps block air symmetric and inline air in the original optical family", () => {
     const metrics = RECEIPT.metrics;
-    expect(metrics.blockOutset).toBe(2);
-    expect(metrics.inlineOutset / metrics.blockOutset).toBeCloseTo(3.6, 5);
-    expect(metrics.cornerRadius).toBeCloseTo(20 * 0.18, 5);
+    expect(metrics.blockOutset).toBe(4.9);
+    expect(metrics.inlineOutset / metrics.blockOutset).toBeCloseTo(7.2 / 4.9, 5);
+    expect(metrics.cornerRadius).toBe(3);
   });
 
   it("scales the optical family with glyph geometry and bounds extreme zoom", () => {
@@ -60,13 +60,52 @@ describe("projected layout receipt", () => {
       textDirection: "ltr",
       writingMode: "horizontal-tb",
     })!.metrics;
-    expect(metricsAt(12)).toEqual({ blockOutset: 2, cornerRadius: 3, inlineOutset: 6 });
-    expect(metricsAt(44)).toEqual({
-      blockOutset: 4.4,
-      cornerRadius: 7.92,
-      inlineOutset: 15.84,
+    expect(metricsAt(12)).toEqual({
+      blockOutset: 2.94,
+      cornerRadius: 3,
+      inlineOutset: 6,
+      medianRowExtent: 12,
     });
-    expect(metricsAt(80)).toEqual({ blockOutset: 7, cornerRadius: 12, inlineOutset: 22 });
+    expect(metricsAt(44)).toEqual({
+      blockOutset: 10.78,
+      cornerRadius: 3,
+      inlineOutset: 15.84,
+      medianRowExtent: 44,
+    });
+    expect(metricsAt(80)).toEqual({
+      blockOutset: 14,
+      cornerRadius: 3,
+      inlineOutset: 22,
+      medianRowExtent: 80,
+    });
+  });
+
+  it("lets tight measured leading cap optical air below the nominal minimum", () => {
+    const receipt = createProjectedLayoutReceipt({
+      basis: BASIS,
+      column: { left: 0, top: 0, right: 400, bottom: 200 },
+      rects: [
+        { x: 40, y: 40, width: 200, height: 20 },
+        { x: 40, y: 62, width: 200, height: 20 },
+      ],
+      textDirection: "ltr",
+      writingMode: "horizontal-tb",
+    });
+    expect(receipt?.metrics.blockOutset).toBe(1);
+  });
+
+  it("keeps a sub-two-pixel measured gap from bleeding into an adjacent line", () => {
+    const receipt = createProjectedLayoutReceipt({
+      basis: BASIS,
+      column: { left: 0, top: 0, right: 400, bottom: 200 },
+      rects: [
+        { x: 40, y: 40, width: 200, height: 20 },
+        { x: 40, y: 61.2, width: 200, height: 20 },
+      ],
+      textDirection: "ltr",
+      writingMode: "horizontal-tb",
+    });
+    expect(receipt?.metrics.blockOutset).toBe(0.6);
   });
 
   it("keeps amount zero exactly equal to the neutral measured run", () => {

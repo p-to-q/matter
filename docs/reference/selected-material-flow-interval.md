@@ -47,13 +47,19 @@ logical axes; an unsupported writing mode fails closed until it has a proven
 projection.
 
 The contact impression follows one glyph-relative optical family. Top and
-bottom outset are the same measured value; inline outset is wider, near the
-original `.08em / .32em` proportion; the precise corner also follows glyph
-height instead of a fixed viewport pixel. On a wrapped actionable or structural
-interval, a real first/last endpoint within one corner diameter of its logical
-column edge snaps outward to that edge. This fills a remnant too small to read
-as a deliberate paper cell. A single-row interval, native copy range, or wider
-gap keeps its exact endpoint. RTL mirrors the rule.
+bottom outset are the same measured value; inline outset remains wider at a
+`.245 / .36` glyph-box proportion. The precise address uses a fixed `3px`
+client-space corner, while structural whole-node material keeps its independent
+`.08` block outset and `.44` row-height corner so the older whole-node state
+does not become a full-line marker; those two structural proportions are one
+optical pair and must be retuned together. Known inter-row leading is a safety
+ceiling and may reduce either block outset below its nominal `2px` minimum; it
+never makes the mark expand into a full-line marker. On a wrapped actionable or structural
+interval, a real first/last endpoint within the existing type-relative optical
+threshold of its logical column edge snaps outward to that edge. The snap
+threshold is independent of the painted corner, so an optical radius adjustment
+cannot silently change topology. A single-row interval, native copy range, or
+wider gap keeps its exact endpoint. RTL mirrors the rule.
 
 One rounded orthogonal outline paints these bands exactly once. There are no
 fragment connectors, neck, body, seam overlap, or density-compounding children.
@@ -62,7 +68,11 @@ fragment connectors, neck, body, seam overlap, or density-compounding children.
 
 The sequence is fixed:
 
-1. determine the semantic range and top/bottom flow partition;
+1. determine the semantic range, its protected outer seam, and the top/bottom
+   flow partition. Request and commit continue to own only `selectedText`; the
+   painted address additionally covers the visible punctuation and closing
+   marks that travel with the material. Trailing seam whitespace remains in
+   layout but never widens the painted address;
 2. write the projection DOM;
 3. let the moving partition reflow in the complete text column; an invisible
    source witness may preserve the fixed partition but cannot supply the moving
@@ -94,16 +104,18 @@ or model context.
 
 ## Whole-node selection and native copy
 
-The whole-node structural state reached by pointer selection (including the
-current double-click path) uses the same neutral outline instead of per-line
-cloned capsules. It keeps its current light/dark density and does not acquire
-Elastic grips merely because it shares geometry. The old label paint remains a
-fallback until the single outline is confirmed painted, preventing a handles-
-only or focus-ring-only frame.
+The whole-node structural state reached by pointer selection uses the same
+neutral outline instead of per-line cloned capsules. It keeps its current
+light/dark density and does not acquire Elastic grips merely because it shares
+geometry. The old label paint remains a fallback until the single outline is
+confirmed painted, preventing a handles-only or focus-ring-only frame.
 
 A non-collapsed, single browser Range inside one material text node uses the
 same neutral outline authority without grips or slot. The browser Selection
-remains the copy and accessibility authority.
+remains the copy and accessibility authority. Native range ownership
+synchronously supersedes a structural outline during a real double-click, then
+restores the cached structural address only after the range collapses; the two
+states never paint together.
 
 Custom paint suppresses the native background only while a current receipt is
 already paintable. Measurement failure, more than 64 visual rows, a cross-node

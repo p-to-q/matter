@@ -14,6 +14,8 @@ export type MaterialAddressOutline = Readonly<{
 }>;
 
 export type MaterialAddressOutlineOptions = Readonly<{
+  /** Overrides the measured outer block air for a presentation variant. */
+  blockOutset?: number;
   /** Overrides the receipt's corner radius; still clamped by the edges it meets. */
   cornerRadius?: number;
   /**
@@ -58,8 +60,10 @@ export function materialAddressOutline(
   const { column, metrics, rows, run } = projection;
   if (rows.length === 0) return null;
   const cornerRadius = options.cornerRadius ?? metrics.cornerRadius;
+  const blockOutset = options.blockOutset ?? metrics.blockOutset;
   const edgeSnapExtent = options.edgeSnapExtent ?? 0;
   if (
+    !Number.isFinite(blockOutset) || blockOutset < 0 ||
     !Number.isFinite(cornerRadius) || cornerRadius < 0 ||
     !Number.isFinite(edgeSnapExtent) || edgeSnapExtent < 0
   ) return null;
@@ -140,7 +144,7 @@ export function materialAddressOutline(
   }
 
   const joined = openShortSteps(
-    joinBlockEdges(bands, metrics.blockOutset),
+    joinBlockEdges(bands, blockOutset),
     options.minimumStepExtent ?? 0,
   );
   if (joined.length === 0) return null;

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ELASTIC_PREVIEW_METRICS, elasticPreviewGeometry } from "../interaction/elastic-preview";
 import { materialAddressOutline } from "../interaction/material-address-outline";
 import {
+  materialAddressVariantBlockOutset,
   materialAddressVariantCornerRadius,
   materialAddressVariantOutline,
 } from "./MaterialAddressLayer";
@@ -101,7 +102,7 @@ describe("selected material address", () => {
       /\.matter-shell ::selection \{[^}]*background:\s*rgba\(var\(--selection-control-rgb\),var\(--address-density-native\)\)/,
     );
     expect(css).toMatch(/--address-density-native:\s*\.12/);
-    expect(css).toMatch(/--address-density-native:\s*\.16/);
+    expect(css).toMatch(/--address-density-native:\s*\.08/);
     const forced = css.slice(css.indexOf("@media (forced-colors: active)"));
     expect(forced).toMatch(/\.matter-shell ::selection \{[^}]*background:\s*Highlight/);
   });
@@ -230,16 +231,15 @@ describe("selected material address", () => {
     const requested = (extent: number, cornerRadius: number) =>
       materialAddressVariantCornerRadius(
         addressProjection({
-          metrics: { blockOutset: 3, cornerRadius, inlineOutset: 3 },
+          metrics: { blockOutset: 3, cornerRadius, inlineOutset: 3, medianRowExtent: extent },
           rows: rowsOfHeight(extent),
         }),
         "structural",
       );
 
-    // The receipt radius is a clamped `4 * scale`, so a multiple of it drifts
-    // from the pill's `.44em` at small type or high zoom. The row extent does
-    // not: structural tracks the rows even where the receipt radius is pinned
-    // to its lower and upper clamps.
+    // The precise receipt uses a fixed client-pixel corner. A multiple of that
+    // cannot reproduce the pill's `.44em`; the structural variant has to keep
+    // following the rows it actually measured.
     expect(requested(28, 3)).toBeCloseTo(28 * 0.44, 5);
     expect(requested(60, 3)).toBeCloseTo(60 * 0.44, 5);
     expect(requested(28, 12)).toBeCloseTo(28 * 0.44, 5);
@@ -252,14 +252,17 @@ describe("selected material address", () => {
     // A precise address keeps the receipt radius exactly.
     for (const variant of ["actionable", "native"] as const) {
       const projection = addressProjection({
-        metrics: { blockOutset: 3, cornerRadius: 7, inlineOutset: 3 },
+        metrics: { blockOutset: 3, cornerRadius: 7, inlineOutset: 3, medianRowExtent: 20 },
       });
       expect(materialAddressVariantCornerRadius(projection, variant)).toBe(7);
     }
 
     // The emitted path uses the requested radius where the edges allow it.
     const outline = materialAddressVariantOutline(
-      addressProjection({ rows: rowsOfHeight(60) }),
+      addressProjection({
+        metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 3, medianRowExtent: 60 },
+        rows: rowsOfHeight(60),
+      }),
       "structural",
     )!;
     const emitted = [...outline.path.matchAll(/A([\d.]+) /g)].map((match) => Number(match[1]));
@@ -270,9 +273,18 @@ describe("selected material address", () => {
     expect(layer).not.toMatch(/\bmaterialAddressOutline\(projection\)/);
   });
 
-  it("snaps an actionable wrapped endpoint only when one corner diameter reaches the paper edge", () => {
+  it("keeps precise air shared while whole-node identity retains its quiet old cap", () => {
+    const projection = addressProjection({
+      metrics: { blockOutset: 4.9, cornerRadius: 3, inlineOutset: 7.2, medianRowExtent: 20 },
+    });
+    expect(materialAddressVariantBlockOutset(projection, "actionable")).toBe(4.9);
+    expect(materialAddressVariantBlockOutset(projection, "native")).toBe(4.9);
+    expect(materialAddressVariantBlockOutset(projection, "structural")).toBe(1.6);
+  });
+
+  it("keeps actionable edge snapping independent from the painted corner", () => {
     const nearEdge = addressProjection({
-      metrics: { blockOutset: 2, cornerRadius: 4, inlineOutset: 8 },
+      metrics: { blockOutset: 2, cornerRadius: 4, inlineOutset: 8, medianRowExtent: 20 },
       rows: [
         { blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 107 },
         { blockEnd: 180, blockStart: 140, inlineEnd: 520, inlineStart: 100 },
@@ -284,6 +296,12 @@ describe("selected material address", () => {
 
     const native = materialAddressVariantOutline(nearEdge, "native")!;
     expect(native.bands.map((band) => band.left)).toEqual([99, 92]);
+
+    const sameRowsSmallerCorner = materialAddressVariantOutline({
+      ...nearEdge,
+      metrics: { ...nearEdge.metrics, cornerRadius: 2 },
+    }, "actionable")!;
+    expect(sameRowsSmallerCorner.bands.map((band) => band.left)).toEqual([92, 92]);
   });
 
   it("keeps the whole-node ring and leaves precise addresses a pure fill", () => {
@@ -316,10 +334,13 @@ describe("selected material address", () => {
     // in the source.
     expect(css).toMatch(/\.language-split-witness-tail \{[^}]*visibility:\s*hidden/);
     expect(css).toMatch(/\.language-split-witness \{[^}]*height:\s*var\(--witness-block-size/);
-    // Crossing the deadzone is what physicalises the partition; before that
-    // nothing extra is laid out.
+    expect(rooted).toContain("language-split-address-copy");
+    expect(rooted).toContain("projection.visibleOuterSeam");
+    expect(rooted).toContain("projection.outerSeamTail");
+    // The projected flow may be staged invisibly for measurement; only its
+    // explicit layout mode is allowed to add the moving partition and slot.
     expect(css).toMatch(
-      /:not\(\[data-preview-mode="expand"\]\) \.language-split-moving \{ display: none/,
+      /:not\(\[data-layout-mode="expand"\]\) \.language-split-moving \{ display: none/,
     );
   });
 

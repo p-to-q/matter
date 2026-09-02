@@ -7,6 +7,7 @@ test("Ask Matter and material-local AI surfaces own one transient slot", async (
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.evaluate(() => document.fonts.ready);
   const ask = page.getByRole("button", { name: "询问 Matter", exact: true });
   const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
   const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);

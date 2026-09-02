@@ -9,11 +9,11 @@ const source = readFileSync(
 describe("native material selection observer", () => {
   it("coalesces selection changes and fails open outside one material range", () => {
     expect(source).toContain('document.addEventListener("selectionchange", invalidateAndSchedule)');
-    expect(source).toMatch(/const invalidateAndSchedule = \(\) => \{[^]*?flushSync\(\(\) => setReceipt\(null\)\);[^]*?schedule\(\)/);
+    expect(source).toMatch(/const invalidateAndSchedule = \(\) => \{[^]*?flushSync\(\(\) => setPresentation\(currentPresence\(\)\)\);[^]*?schedule\(\)/);
     expect(source).toContain("window.requestAnimationFrame");
     expect(source).toContain("selection.rangeCount !== 1");
     expect(source).toContain("startRoot !== endRoot");
-    expect(source).toContain("setReceipt(null)");
+    expect(source).toContain("setPresentation(BROWSER_NATIVE_SELECTION)");
   });
 
   it("limits the custom corridor while leaving the browser Selection intact", () => {
@@ -23,7 +23,7 @@ describe("native material selection observer", () => {
   });
 
   it("never returns a receipt from an older layout identity", () => {
-    expect(source).toContain("nativeReceiptMatchesInput(receipt, input)");
+    expect(source).toContain("nativeReceiptMatchesInput(presentation.receipt, input)");
     expect(source).toContain("basis.documentEpoch === input.documentEpoch");
     expect(source).toContain("basis.viewportKey === input.viewportKey");
   });

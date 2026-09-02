@@ -47,6 +47,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     });
   });
   await page.goto("/matter");
+  await page.evaluate(async () => document.fonts.ready);
 
   const paper = page.getByRole("region", { name: "Thought material" });
   const rootThought = page.locator('[data-thought-id="thought_fixture_root"]');
@@ -290,15 +291,22 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await expect(paper).toHaveAttribute("data-canvas-theme", "light");
   await rootThought.locator("[data-thought-text-id]").click();
   await expect(rootThought).toHaveAttribute("data-selected", "true");
+  const structuralAddress = page.locator(
+    '.material-address-layer[data-address-variant="structural"]',
+  );
+  const structuralPath = structuralAddress.locator(".material-address-layer__path");
+  await expect(structuralAddress).toHaveAttribute("data-material-address-painted", "true");
   await expect(rootThought.locator(".spatial-thought__label"))
-    .toHaveCSS("background-color", "rgba(22, 29, 39, 0.08)");
+    .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(structuralPath).toHaveCSS("fill", "rgba(22, 29, 39, 0.08)");
   await page.getByRole("button", { name: "Appearance: Light" }).click();
   await expect(paper).toHaveAttribute("data-canvas-theme-preference", "dark");
   await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
   await expect(rootThought).toHaveAttribute("data-selected", "true");
   await expect(rootThought.locator("[data-thought-text-id]")).toHaveCSS("color", "rgb(243, 244, 241)");
   await expect(rootThought.locator(".spatial-thought__label"))
-    .toHaveCSS("background-color", "rgba(245, 245, 242, 0.15)");
+    .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(structuralPath).toHaveCSS("fill", "rgba(240, 242, 243, 0.15)");
   await expect(page.locator("[data-matter-ambient='leaf-shadows'] .matter-ambient__poster"))
     .toHaveCSS("filter", "grayscale(1) contrast(0.9) brightness(1.31)");
 

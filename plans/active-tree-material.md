@@ -387,6 +387,33 @@ Non-goals:  production gate changes, provider work, a new operation chooser,
             animation redesign, or changes to Voice admission and material.
 ```
 
+## Active correction — selected material keeps one address through Elastic
+
+State: implemented; source, runtime, and browser proof complete; exact
+Preview.49 GitHub, deployment, origin, tag, and prerelease proof pending.
+
+```text
+Outcome:    native copy, whole-node structure, neutral Lasso, and upper/lower
+            Elastic project one continuous address that follows post-reflow text
+Boundary:   rendering-edge range measurement, projected layout receipts, one
+            pure reading-order outline, grip anchors, and focused browser proof
+Invariants: canonical text and semantic selection stay authoritative; DOM pixels
+            never enter transform/2; both existing grips retain their shape,
+            colour, direction, deadzone and amount; the model still returns only
+            { text }, the server constructs the plan, and the tree engine alone
+            commits one pointer-undoable mutation
+Proof:      light/dark native, structural and actionable surfaces; real double
+            click; upper/lower pointer, touch and keyboard Elastic; punctuation
+            seam through request/commit/Undo/Redo/reload; RTL ownership;
+            forced-colours; font/viewport/transition invalidation; 2,093 Vitest
+            and 130 Chromium passes on the release-owner host; exact CI,
+            automatic deployment, public origin, tag, and prerelease gates
+            remain required for publication
+Non-goals:  a generic selection reducer, Point-and-Talk protocol changes, live
+            Elastic promotion, a model-visible layout measurement, new chrome,
+            a grip redesign, or weakening the 2,000-node optimization target
+```
+
 Receipt, 2026-08-21: Preview.37 closes the active browser-preview slice. The
 selection-local lane passed laptop, 390px coarse/reduced-motion, and 834px
 real-touch proof; the full controlled Chromium suite passed 67 cases with 2

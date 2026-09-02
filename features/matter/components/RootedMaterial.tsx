@@ -42,12 +42,13 @@ import type { StretchHandle } from "../runtime/stretch-interaction";
 import {
   prepareElasticPreviewSource,
   projectElasticPreview,
+  resolveElasticLayoutReceipt,
   type ElasticPreviewSource,
+  type ProjectedElasticLayoutReceipt,
 } from "../interaction/elastic-preview";
 import {
   createProjectedLayoutReceipt,
   projectMaterialAddress,
-  type ProjectedLayoutReceipt,
 } from "../interaction/projected-layout-receipt";
 import { measureTextRange, normalizeClientRects } from "../interaction/range-measurement";
 import { useNativeMaterialSelection } from "../interaction/use-native-material-selection";
@@ -844,17 +845,42 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const actionableAddressLayerRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
   const projectionHandleReceiptRef = useRef<ProjectionHandleReceipt | null>(null);
-  const projectedLayoutReceiptRef = useRef<ProjectedLayoutReceipt | null>(null);
-  const [projectedLayoutReceipt, setProjectedLayoutReceipt] = useState<ProjectedLayoutReceipt | null>(null);
+  const projectedLayoutReceiptRef = useRef<ProjectedElasticLayoutReceipt | null>(null);
+  const [projectedLayoutReceipt, setProjectedLayoutReceipt] = useState<ProjectedElasticLayoutReceipt | null>(null);
   const stretchSelectionRef = useRef<SegmentSelection | null>(null);
   const stretchPreviewSignalRef = useRef<StretchPreviewSignal>({
     amount: 0,
     handle: null,
     dragging: false,
   });
-  // Range fragments and their visual-line grouping are stable until lasso
-  // geometry changes. Keeping them out of the pointer-move path prevents a
-  // long wrapped selection from paying that O(n log n) work every frame.
+  const [stretchFocusRestore, setStretchFocusRestore] = useState<Readonly<{
+    handle: StretchHandle;
+    selection: SegmentSelection;
+  }> | null>(null);
+  const requestStretchFocusRestore = useCallback((handle: StretchHandle) => {
+    if (lasso.selection === null) return;
+    setStretchFocusRestore({ handle, selection: lasso.selection });
+  }, [lasso.selection]);
+  const finishStretchFocusRestore = useCallback((handle: StretchHandle) => {
+    setStretchFocusRestore((current) => current?.handle === handle ? null : current);
+  }, []);
+  useEffect(() => {
+    if (stretchFocusRestore === null) return;
+    const abandon = (event: PointerEvent | FocusEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".stretch-handle") !== null) return;
+      setStretchFocusRestore(null);
+    };
+    window.addEventListener("pointerdown", abandon, true);
+    window.addEventListener("focusin", abandon, true);
+    return () => {
+      window.removeEventListener("pointerdown", abandon, true);
+      window.removeEventListener("focusin", abandon, true);
+    };
+  }, [stretchFocusRestore]);
+  // Freeze measured range geometry and its receipt until the lasso geometry
+  // epoch changes. Pointer movement then projects cached rows without reading
+  // layout or rebuilding the address source.
   const elasticPreviewSource = useMemo(
     () => prepareElasticPreviewSource(
       lasso.selectionRects,
@@ -870,12 +896,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
         treeId: tree.id,
         viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}`,
       },
+      lasso.selectionTextDirection ?? "",
+      lasso.selectionWritingMode ?? "",
     ),
     [
       activeLayout?.layoutEpoch,
       lasso.selection,
       lasso.selectionColumn,
       lasso.selectionRects,
+      lasso.selectionTextDirection,
+      lasso.selectionWritingMode,
       props.documentEpoch,
       tree.id,
       viewport.x,
@@ -883,6 +913,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       viewport.zoom,
     ],
   );
+  const stretchFocusRestoreHandle = lasso.active && stretchFocusRestore?.selection === lasso.selection
+    ? stretchFocusRestore.handle
+    : null;
   const updateElasticPreview = useCallback((signal: StretchPreviewSignal) => {
     // A receipt can arrive while a pointer preview is still hot. Remember the
     // last signal at the event boundary so that re-publishing the new receipt
@@ -890,32 +923,42 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretchPreviewSignalRef.current = signal;
     const element = elasticRef.current;
     const split = splitProjectionRef.current;
-    const projectionReceipt = projectedLayoutReceiptRef.current;
-    const source = elasticPreviewSource === null
-      ? null
-      : projectionReceipt === null || !receiptMatchesSource(elasticPreviewSource, projectionReceipt)
-        ? elasticPreviewSource
-        : Object.freeze({ ...elasticPreviewSource, layoutReceipt: projectionReceipt });
-    const preview = source === null
+    const layoutReceipt = resolveElasticLayoutReceipt({
+      handle: signal.handle,
+      mode: signal.amount > 0 ? "expand" : "neutral",
+      projected: projectedLayoutReceiptRef.current,
+      source: elasticPreviewSource,
+    });
+    const preview = elasticPreviewSource === null || layoutReceipt === null
       ? null
       : projectElasticPreview(
-          source,
+          elasticPreviewSource,
           signal.amount,
           clientViewport(),
           signal.handle,
           signal.handle,
           hasCoarsePointer(),
+          layoutReceipt,
         );
-    if (element === null) return;
     if (preview === null) {
+      publishMaterialAddressProjection(actionableAddressLayerRef.current, null);
+      publishLiveLanguageLayout(null);
+      if (element === null) {
+        if (signal.dragging) stretchInvalidationRef.current();
+        return;
+      }
+      element.inert = true;
+      element.style.visibility = "hidden";
       element.removeAttribute("data-preview-mode");
       split?.removeAttribute("data-preview-mode");
       const addressLayer = element.closest<HTMLElement>(".lasso-layer");
       addressLayer?.style.removeProperty("--address-displacement-y");
-      publishLiveLanguageLayout(null);
-      publishMaterialAddressProjection(actionableAddressLayerRef.current, null);
+      if (signal.dragging) stretchInvalidationRef.current();
       return;
     }
+    if (element === null) return;
+    element.inert = false;
+    element.style.removeProperty("visibility");
     publishMaterialAddressProjection(
       actionableAddressLayerRef.current,
       preview.addressProjection,
@@ -984,19 +1027,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
       else delete control.dataset.stretchCommitReady;
     }
   }, [elasticPreviewSource, props.locale, publishLiveLanguageLayout, viewport.zoom]);
-  const renderedElasticPreviewSource = useMemo(
-    () => elasticPreviewSource === null
-      ? null
-      : projectedLayoutReceipt === null
-        ? elasticPreviewSource
-        : !receiptMatchesSource(elasticPreviewSource, projectedLayoutReceipt)
-          ? elasticPreviewSource
-        : Object.freeze({
-            ...elasticPreviewSource,
-            layoutReceipt: projectedLayoutReceipt,
-          }),
-    [elasticPreviewSource, projectedLayoutReceipt],
-  );
   const navigationKey = `${navigation.mode}:${navigation.focusNodeId ?? ""}:${navigation.selectedNodeId ?? ""}:${Array.from(navigation.foldedNodeIds).sort().join(",")}`;
   const pointTalkEligibleNodeIds = useMemo(() => new Set(
     Array.from(workingContext.activeNodeIds).filter((nodeId) => {
@@ -1097,7 +1127,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
-  useEffect(() => {
+  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0 ||
+    transformState.phase !== "idle"
+    ? "expand"
+    : "neutral";
+  const renderedElasticPreviewSource = useMemo(() => {
+    const receipt = resolveElasticLayoutReceipt({
+      handle: stretch.activeHandle ?? stretch.lastHandle,
+      mode: visibleAddressMode,
+      projected: projectedLayoutReceipt,
+      source: elasticPreviewSource,
+    });
+    if (elasticPreviewSource === null || receipt === null) return null;
+    return receipt === elasticPreviewSource.layoutReceipt
+      ? elasticPreviewSource
+      : Object.freeze({ ...elasticPreviewSource, layoutReceipt: receipt });
+  }, [
+    elasticPreviewSource,
+    projectedLayoutReceipt,
+    visibleAddressMode,
+    stretch.activeHandle,
+    stretch.lastHandle,
+  ]);
+  const visibleSplitPreviewMode: SelectionPreviewMode =
+    visibleAddressMode === "expand" && renderedElasticPreviewSource !== null
+      ? "expand"
+      : "neutral";
+  useLayoutEffect(() => {
     if (transformState.phase !== "requesting") return;
     const clearCommittedDegree = (event: KeyboardEvent) => {
       if (event.key === "Escape") stretch.keyDown("Escape");
@@ -1112,16 +1168,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   ) ? transformPresentation.change : null;
   const lassoHasSelectionGeometry = lasso.selectionRects.length > 0;
   const interactionPending = persistenceLoading || admissionInteractionPending;
-  const nativeSelectionReceipt = useNativeMaterialSelection({
+  const nativeSelectionPresentation = useNativeMaterialSelection({
     documentEpoch: props.documentEpoch,
     enabled: !lasso.active && !lassoHasSelectionGeometry &&
-      activePointTalkNodeId === null && navigation.selectedNodeId === null,
+      activePointTalkNodeId === null,
     layoutEpoch: activeLayout?.layoutEpoch ?? 0,
     positioningRef: materialPlaneRef,
     scopeRef: canvasRef,
     treeId: tree.id,
     viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`,
   });
+  const nativeSelectionReceipt = nativeSelectionPresentation.phase === "custom"
+    ? nativeSelectionPresentation.receipt
+    : null;
+  const nativeOwnsAddress = nativeSelectionPresentation.phase !== "none";
   const nativeAddressProjection = useMemo(
     () => nativeSelectionReceipt === null
       ? null
@@ -1154,6 +1214,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }),
     [structuralSelectionReceipt],
   );
+  const visibleStructuralAddressProjection = nativeOwnsAddress
+    ? null
+    : structuralAddressProjection;
+  const materialAddressOwner = lasso.selections.length > 0
+    ? "actionable"
+    : nativeOwnsAddress
+      ? "native"
+      : navigation.selectedNodeId === null
+        ? "none"
+        : "structural";
   const interruptIndexCameraMotion = useCallback(() => {
     const basis = viewport;
     const world = worldRef.current;
@@ -1308,19 +1378,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [stretch.layoutInvalidated]);
   useLayoutEffect(() => {
     const projectionElement = splitProjectionRef.current;
-    const selected = projectionElement?.querySelector<HTMLElement>(".language-split-block--selected");
+    const address = projectionElement?.querySelector<HTMLElement>(".language-split-address-copy");
     const flowRoot = projectionElement?.querySelector<HTMLElement>(".language-split-flow");
     const witness = projectionElement?.querySelector<HTMLElement>(".language-split-witness");
     const moving = projectionElement?.querySelector<HTMLElement>(".language-split-moving");
     const slot = projectionElement?.querySelector<HTMLElement>(".language-split-slot");
-    const seam = projectionElement?.querySelector<HTMLElement>(".language-split-seam");
     const clearReceipts = () => {
       projectionHandleReceiptRef.current = null;
       projectedLayoutReceiptRef.current = null;
       setProjectedLayoutReceipt(null);
     };
     if (
-      projectionElement == null || selected == null || flowRoot == null ||
+      projectionElement == null || address == null || flowRoot == null ||
       witness == null || moving == null || slot == null
     ) {
       clearReceipts();
@@ -1336,7 +1405,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       ? null
       : props.tree.nodes[currentSelection.nodeId]?.text ?? null;
     if (
-      ownerText === null || columnRect === null || currentSelection === null ||
+      elasticPreviewSource === null || ownerText === null || columnRect === null || currentSelection === null ||
       ownerTextStyle === null || canonicalText === null
     ) {
       clearReceipts();
@@ -1346,7 +1415,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // The witness ends on the fixed partition's last canonical line, so the
     // slot opens on a line boundary and never splits a line. Its hidden tail
     // preserves the original line breaking and centring of that last line.
-    const seamLength = seam?.textContent?.length ?? 0;
+    const seamLength = Number(projectionElement.dataset.outerSeamLength);
+    if (!Number.isSafeInteger(seamLength) || seamLength < 0) {
+      clearReceipts();
+      return;
+    }
     const fixedLength = Math.min(
       currentHandle === "top"
         ? currentSelection.start
@@ -1387,8 +1460,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     projectionElement.style.setProperty("--split-depth", "0px");
     const projectionRect = projectionElement.getBoundingClientRect();
     const flowRect = flowRoot.getBoundingClientRect();
-    const selectedRange = rangeBoundsAroundContents(selected);
-    const selectedRects = rangeClientRectsAroundContents(selected);
+    const selectedRange = rangeBoundsAroundContents(address);
+    const selectedRects = rangeClientRectsAroundContents(address);
     const naturalProjectedHeightWorld = clientDepthToWorld(flowRect.height, viewport.zoom);
     const sourceHeightWorld = clientDepthToWorld(columnRect.height, viewport.zoom);
     const nextProjectedLayoutReceipt = createProjectedLayoutReceipt({
@@ -1422,8 +1495,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       clearReceipts();
       return;
     }
-    projectedLayoutReceiptRef.current = nextProjectedLayoutReceipt;
-    setProjectedLayoutReceipt(nextProjectedLayoutReceipt);
+    const projectedReceipt = Object.freeze({
+      receipt: nextProjectedLayoutReceipt,
+      sourceReceipt: elasticPreviewSource.layoutReceipt,
+    });
+    projectedLayoutReceiptRef.current = projectedReceipt;
+    setProjectedLayoutReceipt(projectedReceipt);
     const selectedTopClient = selectedRange.top;
     const selectedBottomClient = selectedRange.bottom;
     const selectedTop = clientDepthToWorld(
@@ -1442,11 +1519,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       naturalProjectedHeightWorld,
       sourceHeightWorld,
     });
-    if (selectionPreviewMode === "expand") {
-      updateElasticPreview(stretchPreviewSignalRef.current);
-    }
   }, [
     activeLayout?.layoutEpoch,
+    elasticPreviewSource,
     lasso.selection,
     props.documentEpoch,
     props.tree.nodes,
@@ -1454,11 +1529,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretch.activeHandle,
     stretch.lastHandle,
     tree.id,
-    updateElasticPreview,
     viewport.x,
     viewport.y,
     viewport.zoom,
   ]);
+  useLayoutEffect(() => {
+    // React owns settled state, while pointer movement owns the live frame.
+    // A projected receipt can also remount the controls after a keyboard
+    // adjustment. Republish every visible expanded frame after each commit so
+    // neither case is left with a zero-depth split or an older SVG projection.
+    if (stretch.dragging || visibleAddressMode === "expand") {
+      updateElasticPreview(stretchPreviewSignalRef.current);
+    }
+  });
   useLayoutEffect(() => {
     const projectionElement = splitProjectionRef.current;
     const owner = projectionElement?.closest<HTMLElement>(".spatial-thought");
@@ -2169,8 +2252,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-canvas-mode={lasso.active ? "lasso" : canvasMode}
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
+      data-material-address-owner={materialAddressOwner}
       data-native-address-ready={nativeAddressProjection !== null || undefined}
-      data-structural-address-ready={structuralAddressProjection !== null || undefined}
+      data-structural-address-ready={visibleStructuralAddressProjection !== null || undefined}
       data-point-talk-node-id={activePointTalkNodeId ?? undefined}
       data-stretching={stretch.dragging || undefined}
       data-transform-phase={transformState.phase === "idle" ? undefined : transformState.phase}
@@ -2634,7 +2718,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
               lassoSourceText={lasso.sourceText}
               locale={props.locale}
               selectionMovingHandle={stretch.activeHandle ?? stretch.lastHandle ?? "bottom"}
-              selectionPreviewMode={selectionPreviewMode}
+              selectionLayoutMode={selectionPreviewMode}
+              selectionPreviewMode={visibleSplitPreviewMode}
               navigation={navigation}
               onSelectNode={selectNodeAfterAbort}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
@@ -2719,7 +2804,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         variant="native"
       />
       <MaterialAddressLayer
-        projection={structuralAddressProjection}
+        projection={visibleStructuralAddressProjection}
         variant="structural"
       />
       {activePointTalkNodeId === null ? null : (
@@ -2751,13 +2836,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
         inkPathRef={lasso.inkPathRef}
         particleCanvasRef={lasso.particleCanvasRef}
         rects={lasso.selections.length > 1 ? lasso.selectionSetRects : lasso.selectionRects}
+        previewMode={visibleAddressMode}
         selectedText={lasso.selections.length === 1 ? lasso.selection?.selectedText ?? null : null}
         selectionCount={lasso.selections.length}
         elasticRef={elasticRef}
         previewSource={renderedElasticPreviewSource}
         locale={props.locale}
         onBeginAdjustment={beginStretchAdjustment}
+        onFocusRestored={finishStretchFocusRestore}
         onPreciseGesture={props.admission.discardPendingRepairs}
+        onRequestFocusRestore={requestStretchFocusRestore}
+        restoreFocusHandle={stretchFocusRestoreHandle}
         status={transformState.phase}
         stretchVisible={elasticSelection !== null}
         stretch={stretch}
@@ -2793,6 +2882,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText,
   locale,
   selectionMovingHandle,
+  selectionLayoutMode,
   selectionPreviewMode,
   navigation,
   onSelectNode,
@@ -2815,6 +2905,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   lassoSourceText: string | null;
   locale: CanvasLanguage;
   selectionMovingHandle: StretchHandle;
+  selectionLayoutMode: SelectionPreviewMode;
   selectionPreviewMode: SelectionPreviewMode;
   navigation: NavigationState;
   onSelectNode: (nodeId: string) => void;
@@ -2889,6 +2980,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         return (
           <li
             className="spatial-thought"
+            dir="auto"
             data-focused={isFocused || undefined}
             data-context-excluded={isHeldAside || undefined}
             data-context-restore-target={isHeldAsideRoot || undefined}
@@ -2940,6 +3032,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             ) : null}
             {languageProjection?.ok ? (
               <LanguageSplitProjection
+                layoutMode={selectionLayoutMode}
                 movingHandle={selectionMovingHandle}
                 previewMode={selectionPreviewMode}
                 projection={languageProjection.projection}
@@ -3116,6 +3209,7 @@ function LassoOverlay({
   inkRef,
   inkPathRef,
   particleCanvasRef,
+  previewMode,
   rects,
   selectedText,
   selectionCount,
@@ -3123,7 +3217,10 @@ function LassoOverlay({
   previewSource,
   locale,
   onBeginAdjustment,
+  onFocusRestored,
   onPreciseGesture,
+  onRequestFocusRestore,
+  restoreFocusHandle,
   status,
   stretchVisible,
   stretch,
@@ -3135,6 +3232,7 @@ function LassoOverlay({
   inkRef: React.RefObject<SVGSVGElement | null>;
   inkPathRef: React.RefObject<SVGPathElement | null>;
   particleCanvasRef: React.RefObject<HTMLCanvasElement | null>;
+  previewMode: SelectionPreviewMode;
   rects: readonly { x: number; y: number; width: number; height: number }[];
   selectedText: string | null;
   selectionCount: number;
@@ -3142,7 +3240,10 @@ function LassoOverlay({
   previewSource: ElasticPreviewSource | null;
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
+  onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
+  onRequestFocusRestore: (handle: StretchHandle) => void;
+  restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretchVisible: boolean;
   stretch: ReturnType<typeof useStretch>;
@@ -3150,7 +3251,7 @@ function LassoOverlay({
   const bounds = selectionBounds(rects);
   const coarsePointer = hasCoarsePointer();
   const accessibility = lassoAccessibilityCopy(locale);
-  const selectionProjectionActive = bounds !== null && stretchVisible &&
+  const selectionProjectionActive = bounds !== null && previewSource !== null && stretchVisible &&
     (stretch.dragging || stretch.amount > 0 || status !== "idle");
   const descriptionId = useId();
   const preview = previewSource === null
@@ -3191,7 +3292,7 @@ function LassoOverlay({
         projection={addressProjection}
         variant="actionable"
       />
-      {rects.length === 0 ? null : (
+      {rects.length === 0 || previewMode === "expand" ? null : (
         <div
           aria-hidden="true"
           className="material-address-selection-set material-address-selection-set--fallback"
@@ -3214,13 +3315,13 @@ function LassoOverlay({
         ))}
       </div>
       )}
-      {bounds === null || !stretchVisible ? null : (
+      {bounds === null || previewSource === null || !stretchVisible ? null : (
         <>
           <div
             aria-label={accessibility.groupLabel}
             aria-roledescription={accessibility.groupRoleDescription}
             className="elastic-preview"
-            data-preview-mode={stretch.amount === 0 ? "neutral" : "expand"}
+            data-preview-mode={previewMode}
             data-stretch-handle={stretch.activeHandle ?? stretch.lastHandle ?? "bottom"}
             ref={elasticRef}
             role="group"
@@ -3249,7 +3350,10 @@ function LassoOverlay({
               handle="top"
               locale={locale}
               onBeginAdjustment={onBeginAdjustment}
+              onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
+              onRequestFocusRestore={onRequestFocusRestore}
+              restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
             />
@@ -3258,7 +3362,10 @@ function LassoOverlay({
               handle="bottom"
               locale={locale}
               onBeginAdjustment={onBeginAdjustment}
+              onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
+              onRequestFocusRestore={onRequestFocusRestore}
+              restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
             />
@@ -3275,11 +3382,13 @@ function LassoOverlay({
 }
 
 function LanguageSplitProjection({
+  layoutMode,
   movingHandle,
   previewMode,
   projection,
   projectionRef,
 }: {
+  layoutMode: SelectionPreviewMode;
   movingHandle: StretchHandle;
   previewMode: SelectionPreviewMode;
   projection: LanguageProjection;
@@ -3289,6 +3398,8 @@ function LanguageSplitProjection({
     <div
       aria-hidden="true"
       className="language-split-projection"
+      data-layout-mode={layoutMode}
+      data-outer-seam-length={projection.outerSeam.length}
       data-preview-mode={previewMode}
       data-stretch-handle={movingHandle}
       inert
@@ -3298,13 +3409,16 @@ function LanguageSplitProjection({
         {/* The witness keeps the fixed partition exactly where the source puts
             it, including the canonical remainder it shares its last line with,
             so splitting the flow cannot move a line the grip does not own. */}
-        <span className="language-split-witness" dir="auto">
+        <span className="language-split-witness">
           <span className="language-split-before-copy language-split-block--before">{projection.before}</span>
           {movingHandle === "top" ? null : (
-            <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
-          )}
-          {movingHandle === "top" ? null : (
-            <span className="language-split-seam">{projection.outerSeam}</span>
+            <>
+              <span className="language-split-address-copy">
+                <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
+                <span className="language-split-seam">{projection.visibleOuterSeam}</span>
+              </span>
+              <span className="language-split-seam-tail">{projection.outerSeamTail}</span>
+            </>
           )}
           <span aria-hidden="true" className="language-split-witness-tail">
             {movingHandle === "top"
@@ -3315,11 +3429,14 @@ function LanguageSplitProjection({
         <span className="language-split-slot" />
         {/* The moving partition is its own full-width block, so it reflows for
             real instead of inheriting the witness's line breaking. */}
-        <span className="language-split-moving" dir="auto">
+        <span className="language-split-moving">
           {movingHandle === "top" ? (
             <>
-              <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
-              <span className="language-split-seam">{projection.outerSeam}</span>
+              <span className="language-split-address-copy">
+                <span className="language-split-selected-copy language-split-block--selected">{projection.selected}</span>
+                <span className="language-split-seam">{projection.visibleOuterSeam}</span>
+              </span>
+              <span className="language-split-seam-tail">{projection.outerSeamTail}</span>
             </>
           ) : null}
           {projection.hasAfter ? (
@@ -3336,7 +3453,10 @@ function StretchHandleButton({
   handle,
   locale,
   onBeginAdjustment,
+  onFocusRestored,
   onPreciseGesture,
+  onRequestFocusRestore,
+  restoreFocusHandle,
   status,
   stretch,
 }: {
@@ -3344,10 +3464,26 @@ function StretchHandleButton({
   handle: "top" | "bottom";
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
+  onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
+  onRequestFocusRestore: (handle: StretchHandle) => void;
+  restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretch: ReturnType<typeof useStretch>;
 }) {
+  const controlRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    if (restoreFocusHandle !== handle) return;
+    const control = controlRef.current;
+    if (control === null || !control.isConnected) return;
+    const group = control.closest<HTMLElement>(".elastic-preview");
+    if (group?.inert) return;
+    control.focus({ preventScroll: true });
+    // A projected layout can replace the button across several layout epochs.
+    // Keep this bounded request alive until the person leaves the control or
+    // commits; every successor for the same semantic address can then restore
+    // keyboard ownership without guessing how many frames reflow will take.
+  }, [handle, restoreFocusHandle]);
   return (
     <button
       aria-describedby={descriptionId}
@@ -3372,6 +3508,7 @@ function StretchHandleButton({
       }}
       onPointerDown={(event) => {
         event.stopPropagation();
+        onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           // Only a primary edge-grip gesture may supersede a pending turn.
           // Rejected secondary or foreign pointers leave its authority intact.
@@ -3395,21 +3532,25 @@ function StretchHandleButton({
         }
       }}
       onKeyDown={(event) => {
+        if (event.key === "Tab") {
+          onFocusRestored(handle);
+          return;
+        }
         if (!isStretchInteractionKey(event.key)) return;
         event.preventDefault();
         if (status === "requesting" && (event.key === "Enter" || event.key === " ")) return;
         onBeginAdjustment();
+        if (event.key !== "Escape" && event.key !== "Enter" && event.key !== " ") {
+          onRequestFocusRestore(handle);
+        } else if (event.key === "Escape") {
+          onFocusRestored(handle);
+        }
         if (status !== "idle" && event.key !== "Escape") stretch.reopen();
         stretch.keyDown(event.key, handle);
         onPreciseGesture();
-        const control = event.currentTarget;
-        // A layout publication can move the control. Preserve the current
-        // physical handle rather than querying a duplicate control globally.
-        window.requestAnimationFrame(() => {
-          if (control.isConnected) control.focus();
-        });
       }}
       role="slider"
+      ref={controlRef}
       type="button"
     />
   );
@@ -3567,21 +3708,6 @@ function rangeClientRectsAroundContents(
   range.detach();
   return rects;
 }
-
-function receiptMatchesSource(
-  source: ElasticPreviewSource,
-  receipt: ProjectedLayoutReceipt,
-): boolean {
-  const expected = source.layoutReceipt.basis;
-  const actual = receipt.basis;
-  return expected.addressKey === actual.addressKey &&
-    expected.documentEpoch === actual.documentEpoch &&
-    expected.layoutEpoch === actual.layoutEpoch &&
-    expected.nodeId === actual.nodeId &&
-    expected.treeId === actual.treeId &&
-    expected.viewportKey === actual.viewportKey;
-}
-
 
 /** Clips a fixed control without changing the material-space projection. */
 function clampClient(

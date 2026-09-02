@@ -17,20 +17,35 @@ Forecloses: what this makes harder or impossible
 
 ---
 
-## 2026-09-02 — selected material uses glyph-relative optical edges
+## 2026-09-02 — selected material restores its precise optical identity
 
-Changed: the shared address receipt derives equal top/bottom air, wider inline
-air, and the precise corner from glyph height. A wrapped actionable or
-structural endpoint within one corner diameter of its logical paper edge snaps
-outward; native copy, one-line ranges, and meaningful wider gaps stay exact.
+Changed: the shared address receipt derives equal `.245` top/bottom air, wider
+`.36` inline air, and a fixed `3px` precise corner. Structural
+whole-node material retains its independent `.08` block air and `.44`
+row-height corner as one optical pair. The visual address includes the protected visible punctuation seam that moves with a
+semantic selection, while requests remain scoped to `selectedText` and trailing
+whitespace remains layout-only. Known tight inter-row leading may reduce only
+the block air. Near-column snapping remains type-relative and independent of
+the painted radius; native copy, one-line ranges, and meaningful wider gaps
+stay exact. The initial gzip ceiling moves from 384 to 388 KiB: an identical
+production build measured main at 393,145 bytes and this complete client-side
+selection lifecycle at 395,706 bytes, a 2,561-byte (0.65%) increase with no new
+dependency or initial asset.
 
-Why: the former generous outset drifted from the original selection family, and
-a tiny edge remnant could not hold its own corners or read as intentional empty
-paper. One logical-axis rule removes the notch without a direction-specific CSS
-patch.
+Why: same-passage light/dark comparison showed that `.245H/3px` preserves
+breathing room without returning to separate capsules or a full-line marker.
+The premature punctuation cutoff came from measuring only replaceable text even
+though the flow contract already moves its outer seam. A tiny edge remnant
+cannot read as intentional empty paper, so one logical-axis rule removes it
+without a direction-specific CSS patch. Keeping the previous transfer ceiling
+would leave only 71 bytes above main and force this primary interaction behind
+an extra loading boundary; the reviewed four-KiB step retains a hard 1,606-byte
+headroom instead of disguising the change by weakening the check.
 
-Forecloses: independent top/bottom tuning, fixed-pixel padding at one zoom,
-LTR-only fill rectangles, and globally flattening every genuine stepped range.
+Forecloses: independent top/bottom tuning, using request scope as paint scope,
+letting optical radius changes alter selection topology, LTR-only fill
+rectangles, globally flattening every genuine stepped range, and silently
+widening the runtime budget without a measured main/candidate comparison.
 
 ## 2026-09-02 — selected material becomes one post-reflow flow interval
 

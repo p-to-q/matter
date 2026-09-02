@@ -1,14 +1,13 @@
 # Preview deployment-owner handoff
 
-Status: Preview.47 source `25a0ea0f7e99b0f9323b23bc2054488b8ed5bbac`
-is the current deployed public-origin version through the automatic
-GitHub-linked Production path. Its strict paced model-surface probe failed, so
-it has no immutable tag or GitHub prerelease. Preview.48 is authorized through
-the repository's GitHub-triggered delivery path: its
-exact source, CI, automatic Preview/Production, tag, and prerelease receipts are
-pending and none may be inferred from another. The repository maintainer pushes
-only GitHub and observes the linked deployment; the deployment owner retains
-Vercel configuration and credential authority. The
+Status: Preview.48 is the current deployed public-origin version through the
+automatic GitHub-linked Production path; the no-store health boundary reported
+`0.2.0-preview.48` on 2026-09-02. It has no immutable tag or GitHub prerelease.
+Preview.49 is authorized through the repository's GitHub-triggered delivery
+path: its exact source, CI, automatic Preview/Production, tag, and prerelease
+receipts are pending and none may be inferred from another. The repository
+maintainer pushes only GitHub and observes the linked deployment; the
+deployment owner retains Vercel configuration and credential authority. The
 candidate preserves the current process-local admission perimeter and live
 label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
@@ -24,7 +23,7 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.48 prerelease after the exact
+The repository owner has directed one Preview.49 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
 deployment gates. This is not authority for the repository maintainer to run a
 manual Vercel command or edit Vercel configuration. The automatic promotion

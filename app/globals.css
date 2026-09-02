@@ -23,7 +23,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 
 .matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --address-density-native: .12; --address-density-actionable: .18; --address-density-structural: .08; --address-ring-structural: .13; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
-.matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; --address-density-native: .16; --address-density-actionable: .1; --address-density-structural: .15; --address-ring-structural: .16; }
+.matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; --address-density-native: .08; --address-density-actionable: .1; --address-density-structural: .15; --address-ring-structural: .16; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
 .matter-shell[data-node-dragging="true"] { cursor: grabbing; }
@@ -330,7 +330,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .language-split-flow { position: absolute; top: 0; left: 0; width: 100%; }
 .language-split-block,
 .language-split-witness,
-.language-split-moving { display: block; width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; unicode-bidi: plaintext; }
+.language-split-moving { display: block; width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; unicode-bidi: isolate; }
 /* The witness carries the canonical remainder invisibly, so the fixed
    partition's last line breaks and centres exactly as it does in the source.
    Its height is clipped to that line, which is where the slot opens. */
@@ -338,9 +338,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .language-split-witness-tail { visibility: hidden; }
 .language-split-slot { display: block; width: 100%; height: var(--split-depth); }
 .language-split-seam { background: transparent; }
-.language-split-projection:not([data-preview-mode="expand"]) .language-split-slot,
-.language-split-projection:not([data-preview-mode="expand"]) .language-split-moving { display: none; }
-.language-split-projection:not([data-preview-mode="expand"]) .language-split-witness { height: auto; }
+.language-split-projection:not([data-layout-mode="expand"]) .language-split-slot,
+.language-split-projection:not([data-layout-mode="expand"]) .language-split-moving { display: none; }
+.language-split-projection:not([data-layout-mode="expand"]) .language-split-witness { height: auto; }
 .language-split-projection[data-preview-mode="expand"] { opacity: 1; }
 .language-split-projection[data-preview-mode="expand"]::before { opacity: 1; }
 /* Renderer ownership changes atomically. A colour transition here makes the
@@ -483,6 +483,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    path, so no frame can show grips or a focus ring with no address. */
 .lasso-layer:has(.material-address-layer[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback[data-single-address-fallback] { display: none; }
 .matter-shell:has(.material-address-layer[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
+.matter-shell[data-material-address-owner="native"] .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: transparent; }
 .matter-shell[data-canvas-theme="dark"] .stretch-handle::after { background: color-mix(in srgb, currentColor 68%, transparent); box-shadow: 0 0 0 4px #202831; opacity: 1; animation-name: stretch-grip-arrive-dark; }
@@ -658,6 +659,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; }
   .language-split-projection { color: CanvasText; }
   .language-split-projection::before { outline: none; background: transparent; }
-  .language-split-slot { border: 1px solid Highlight; background: transparent; }
+  .language-split-slot { border: 0; background: transparent; }
   .language-split-witness-tail { visibility: hidden; }
 }

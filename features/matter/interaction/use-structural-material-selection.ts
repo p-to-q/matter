@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import type { RefObject } from "react";
 import { normalizeClientRects } from "./range-measurement";
 import {
@@ -30,6 +31,14 @@ export function useStructuralMaterialSelection(
 
   useLayoutEffect(() => {
     let frame: number | null = null;
+    const fonts = document.fonts;
+    let fontLoading = fonts?.status === "loading";
+    const transitioning = new Set<EventTarget>();
+    const cancelScheduledMeasurement = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = null;
+    };
+    const measurementSuspended = () => fontLoading || transitioning.size > 0;
     const measure = () => {
       frame = null;
       const scope = input.scopeRef.current;
@@ -78,8 +87,19 @@ export function useStructuralMaterialSelection(
       }
     };
     const schedule = () => {
-      if (frame !== null) return;
-      frame = window.requestAnimationFrame(measure);
+      if (frame !== null || measurementSuspended()) return;
+      frame = window.requestAnimationFrame(() => {
+        if (!measurementSuspended()) measure();
+        else frame = null;
+      });
+    };
+    const invalidateAndSchedule = () => {
+      flushSync(() => setReceipt(null));
+      schedule();
+    };
+    const invalidateOnly = () => {
+      cancelScheduledMeasurement();
+      flushSync(() => setReceipt(null));
     };
     const positioningElement = input.positioningRef.current;
     const finishPositioningTransition = (event: TransitionEvent) => {
@@ -89,15 +109,50 @@ export function useStructuralMaterialSelection(
         !(target instanceof HTMLElement) ||
         (target !== positioningElement && !target.classList.contains("matter-world"))
       ) return;
-      schedule();
+      transitioning.delete(target);
+      invalidateAndSchedule();
+    };
+    const beginPositioningTransition = (event: TransitionEvent) => {
+      const target = event.target;
+      if (
+        event.propertyName !== "transform" ||
+        !(target instanceof HTMLElement) ||
+        (target !== positioningElement && !target.classList.contains("matter-world"))
+      ) return;
+      transitioning.add(target);
+      invalidateOnly();
+    };
+    const beginFontLoading = () => {
+      fontLoading = true;
+      invalidateOnly();
+    };
+    const finishFontLoading = () => {
+      fontLoading = false;
+      invalidateAndSchedule();
     };
     schedule();
+    window.addEventListener("resize", invalidateAndSchedule);
+    window.addEventListener("scroll", invalidateAndSchedule, true);
+    window.visualViewport?.addEventListener("resize", invalidateAndSchedule);
+    window.visualViewport?.addEventListener("scroll", invalidateAndSchedule);
+    fonts?.addEventListener?.("loading", beginFontLoading);
+    fonts?.addEventListener?.("loadingdone", finishFontLoading);
+    fonts?.addEventListener?.("loadingerror", finishFontLoading);
+    positioningElement?.addEventListener("transitionrun", beginPositioningTransition);
     positioningElement?.addEventListener("transitioncancel", finishPositioningTransition);
     positioningElement?.addEventListener("transitionend", finishPositioningTransition);
     return () => {
+      window.removeEventListener("resize", invalidateAndSchedule);
+      window.removeEventListener("scroll", invalidateAndSchedule, true);
+      window.visualViewport?.removeEventListener("resize", invalidateAndSchedule);
+      window.visualViewport?.removeEventListener("scroll", invalidateAndSchedule);
+      fonts?.removeEventListener?.("loading", beginFontLoading);
+      fonts?.removeEventListener?.("loadingdone", finishFontLoading);
+      fonts?.removeEventListener?.("loadingerror", finishFontLoading);
+      positioningElement?.removeEventListener("transitionrun", beginPositioningTransition);
       positioningElement?.removeEventListener("transitioncancel", finishPositioningTransition);
       positioningElement?.removeEventListener("transitionend", finishPositioningTransition);
-      if (frame !== null) window.cancelAnimationFrame(frame);
+      cancelScheduledMeasurement();
     };
   }, [
     input.documentEpoch,

@@ -126,10 +126,12 @@ test.describe("tablet touch material language", () => {
     expect(gripBox.width).toBeGreaterThanOrEqual(48);
     expect(gripBox.height).toBeGreaterThanOrEqual(48);
     await expectContainedByVisualViewport(page, upperGrip);
-    await dragByTouch(page, upperGrip, -60);
+    await dragByTouch(page, upperGrip, -68);
     await expect.poll(() => turnRequests).toBe(1);
     await expect(page.locator(".stretch-status-marker")).toHaveCount(0);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
+    // The first eight pixels are the existing deadzone, so 60px of this 68px
+    // gesture contributes exactly half of the 120px degree range.
     await expect(upperGrip).toHaveAttribute("aria-valuenow", "0.5");
     await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
     await expect(page.locator(".language-split-projection"))
@@ -156,7 +158,9 @@ async function focusRootByTouch(page: Page): Promise<void> {
 async function selectFirstSegmentByTouch(page: Page, text: Locator): Promise<void> {
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).tap();
   await drawTouchLoop(page, await segmentProbeRect(text, 0));
-  await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
+  await expect(page.locator('.material-address-layer[data-address-variant="actionable"]'))
+    .toHaveAttribute("data-material-address-painted", "true");
+  await expect(page.locator(".lasso-selection-fragment").first()).toBeHidden();
 }
 
 async function drawTouchLoop(
@@ -232,19 +236,23 @@ async function expectNoOverlap(first: Locator, second: Locator): Promise<void> {
 async function expectNeutralSelection(page: Page): Promise<void> {
   await expect(page.locator(".language-split-projection"))
     .toHaveAttribute("data-preview-mode", "neutral");
-  await expect(page.locator(".lasso-selection-fragment").first()).toBeVisible();
+  await expect(page.locator('.material-address-layer[data-address-variant="actionable"]'))
+    .toHaveAttribute("data-material-address-painted", "true");
+  await expect(page.locator(".lasso-selection-fragment").first()).toBeHidden();
 }
 
 async function expectUpperGripAtSelection(page: Page, grip: Locator): Promise<void> {
-  const [gripBox, firstFragment] = await Promise.all([
+  const [gripBox, addressBox] = await Promise.all([
     grip.boundingBox(),
-    page.locator(".lasso-selection-fragment").first().boundingBox(),
+    page.locator(
+      '.material-address-layer[data-address-variant="actionable"] .material-address-layer__path',
+    ).boundingBox(),
   ]);
   expect(gripBox).not.toBeNull();
-  expect(firstFragment).not.toBeNull();
+  expect(addressBox).not.toBeNull();
   const lowerEdge = gripBox!.y + gripBox!.height;
-  expect(lowerEdge).toBeLessThanOrEqual(firstFragment!.y + 1);
-  expect(lowerEdge).toBeGreaterThanOrEqual(firstFragment!.y - 14);
+  expect(lowerEdge).toBeLessThanOrEqual(addressBox!.y + 1);
+  expect(lowerEdge).toBeGreaterThanOrEqual(addressBox!.y - 14);
 }
 
 async function expectContainedByVisualViewport(page: Page, target: Locator): Promise<void> {

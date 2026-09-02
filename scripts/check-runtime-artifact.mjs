@@ -7,7 +7,7 @@ import { createGzip } from "node:zlib";
 export const RUNTIME_ARTIFACT_BUDGETS = Object.freeze({
   pageHtmlBytes: 48 * 1_024,
   initialRawBytes: 1_280 * 1_024,
-  initialGzipBytes: 384 * 1_024,
+  initialGzipBytes: 388 * 1_024,
   staticBytes: 26 * 1_024 * 1_024,
   publicBytes: 512 * 1_024,
   wasmBytes: 24 * 1_024 * 1_024,

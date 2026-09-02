@@ -4,6 +4,7 @@ import {
   elasticPreviewGeometry,
   prepareElasticPreviewSource,
   projectElasticPreview,
+  resolveElasticLayoutReceipt,
 } from "./elastic-preview";
 
 const stepped = [
@@ -19,9 +20,9 @@ describe("elastic preview geometry", () => {
       { x: 100, y: 224, width: 48, height: 20 },
     ];
     const preview = elasticPreviewGeometry(rects, 0)!;
-    expect(preview.visualLines).toEqual([
-      { left: 100, top: 200, right: 220, bottom: 220 },
-      { left: 100, top: 224, right: 148, bottom: 244 },
+    expect(preview.addressProjection.rows).toEqual([
+      { inlineStart: 100, blockStart: 200, inlineEnd: 220, blockEnd: 220 },
+      { inlineStart: 100, blockStart: 224, inlineEnd: 148, blockEnd: 244 },
     ]);
     expect((preview.topHandle.x1 + preview.topHandle.x2) / 2).toBe(160);
     expect((preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2).toBe(124);
@@ -32,7 +33,7 @@ describe("elastic preview geometry", () => {
       { x: 20, y: 50, width: 40, height: 18 },
       { x: 70, y: 50, width: 30, height: 18 },
     ], 0)!;
-    expect(preview.visualLines).toHaveLength(1);
+    expect(preview.addressProjection.rows).toHaveLength(1);
     expect(preview.topHandle.x1).toBe(preview.bottomHandle.x1);
     expect(preview.topHandle.x2).toBe(preview.bottomHandle.x2);
   });
@@ -155,9 +156,104 @@ describe("elastic preview geometry", () => {
     const second = projectElasticPreview(source, 0.8, viewport, "bottom", "bottom");
     expect(first?.fragments).toBe(source.fragments);
     expect(second?.fragments).toBe(source.fragments);
-    expect(first?.visualLines).toBe(source.visualLines);
+    expect(first?.addressProjection.rows).toBe(source.layoutReceipt.rows);
     expect(second?.pocketDepth).toBeGreaterThan(first?.pocketDepth ?? 0);
     expect(second).toEqual(elasticPreviewGeometry(stepped, 0.8, viewport, source.textColumn ?? undefined, "bottom", "bottom"));
+  });
+
+  it("uses natural geometry at zero and fails closed on a missing or wrong partition", () => {
+    const source = prepareElasticPreviewSource(
+      stepped,
+      { left: 80, top: 180, right: 260, bottom: 360 },
+    );
+    if (source === null) throw new Error("source should be valid");
+    const projectedTop = Object.freeze({
+      ...source.layoutReceipt,
+      basis: Object.freeze({
+        ...source.layoutReceipt.basis,
+        partitionKey: "projected-top",
+      }),
+    });
+    const wrongViewport = Object.freeze({
+      ...projectedTop,
+      basis: Object.freeze({ ...projectedTop.basis, viewportKey: "stale" }),
+    });
+    const projectedTopBundle = Object.freeze({
+      receipt: projectedTop,
+      sourceReceipt: source.layoutReceipt,
+    });
+
+    expect(resolveElasticLayoutReceipt({
+      handle: "top",
+      mode: "neutral",
+      projected: null,
+      source,
+    })).toBe(source.layoutReceipt);
+    expect(resolveElasticLayoutReceipt({
+      handle: "top",
+      mode: "expand",
+      projected: null,
+      source,
+    })).toBeNull();
+    expect(resolveElasticLayoutReceipt({
+      handle: "bottom",
+      mode: "expand",
+      projected: projectedTopBundle,
+      source,
+    })).toBeNull();
+    expect(resolveElasticLayoutReceipt({
+      handle: "top",
+      mode: "expand",
+      projected: Object.freeze({
+        receipt: wrongViewport,
+        sourceReceipt: source.layoutReceipt,
+      }),
+      source,
+    })).toBeNull();
+    expect(resolveElasticLayoutReceipt({
+      handle: "top",
+      mode: "expand",
+      projected: projectedTopBundle,
+      source,
+    })).toBe(projectedTop);
+    expect(resolveElasticLayoutReceipt({
+      handle: null,
+      mode: "expand",
+      projected: projectedTopBundle,
+      source,
+    })).toBeNull();
+    const foreignSource = prepareElasticPreviewSource(
+      stepped.map((rect) => ({ ...rect, x: rect.x + 1 })),
+      { left: 80, top: 180, right: 260, bottom: 360 },
+    );
+    if (foreignSource === null) throw new Error("foreign source should be valid");
+    expect(resolveElasticLayoutReceipt({
+      handle: "top",
+      mode: "expand",
+      projected: Object.freeze({
+        receipt: projectedTop,
+        sourceReceipt: foreignSource.layoutReceipt,
+      }),
+      source,
+    })).toBeNull();
+  });
+
+  it("keeps the rendering edge's measured base direction", () => {
+    const source = prepareElasticPreviewSource(
+      stepped,
+      undefined,
+      undefined,
+      "rtl",
+      "horizontal-tb",
+    );
+    expect(source?.layoutReceipt.textDirection).toBe("rtl");
+    expect(prepareElasticPreviewSource(
+      stepped,
+      undefined,
+      undefined,
+      "rtl",
+      "vertical-rl",
+    )).toBeNull();
   });
 
 });
