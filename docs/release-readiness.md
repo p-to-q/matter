@@ -81,10 +81,23 @@ node-level direction owner, and every viewport, transition, font, partition, or
 source-receipt invalidation revokes stale fixed geometry before it can remain
 visible or operable. Pointer movement performs no DOM measurement.
 
-The initial gzip ceiling advances from 384 to 388 KiB on measured evidence: the
-same production build recorded merged Preview.48 main at 393,145 bytes and this
-candidate at 395,706 bytes, a 2,561-byte (0.65%) increase with no dependency or
-initial-asset addition. The existing strict 2,000-node cold-task `<100 ms`
+The initial gzip ceiling advances from 384 to 396 KiB, and the earlier
+`0.65%` claim is withdrawn: it subtracted two different measurement bases. A
+cold build of each exact commit on one host records merged Preview.48 main at
+380.8 KiB gzip / 1,199.6 KiB raw and this candidate at 386.4 KiB / 1,224.0 KiB,
+a 5,735-byte (1.47%) gzip and 24,986-byte (2.03%) raw increase. Chunk-level
+comparison attributes all of it to the single application chunk, which grows
+446,782 to 469,644 bytes while every other initial chunk stays byte-identical;
+that is about 10.9 bytes per shipped source line, so the growth is written
+behaviour rather than a duplicated or mis-bundled dependency.
+
+The same build measures about 2,820 bytes larger on the Linux CI host than on
+macOS. The ceiling is therefore stated on the enforcing CI basis, where this
+candidate is 398,494 bytes, and it carries one release of deliberate headroom
+(7,010 bytes) instead of just clearing the current build. Earlier rows in this
+file predate that rule and mix the two bases. A future increase requires a
+reduction plan rather than another raise. The existing strict 2,000-node
+cold-task `<100 ms`
 optimization target remains unchanged and open; on this host both exact main
 and the candidate recorded the same 111 ms cold task, while interaction p95
 remained below its 200 ms release ceiling.

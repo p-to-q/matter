@@ -7,7 +7,9 @@ import { createGzip } from "node:zlib";
 export const RUNTIME_ARTIFACT_BUDGETS = Object.freeze({
   pageHtmlBytes: 48 * 1_024,
   initialRawBytes: 1_280 * 1_024,
-  initialGzipBytes: 388 * 1_024,
+  // Stated on the enforcing CI basis, which measures about 2,820 bytes
+  // larger than macOS for the same commit, plus one release of headroom.
+  initialGzipBytes: 396 * 1_024,
   staticBytes: 26 * 1_024 * 1_024,
   publicBytes: 512 * 1_024,
   wasmBytes: 24 * 1_024 * 1_024,
