@@ -46,15 +46,58 @@ function ringShape(path: string) {
 }
 
 describe("material address outline", () => {
-  it("reads a multi-row interval as a corridor rather than glyph rectangles", () => {
+  it("bounds every row by the language it contains", () => {
     const outline = materialAddressOutline(projection())!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
-      // First row runs from the real start to the column's logical end,
-      // because the line break it ends on is part of the selected reading.
       [300, 600],
       [100, 600],
       [100, 260],
     ]);
+  });
+
+  it("never claims the margin that centring leaves on either side", () => {
+    // Centred rows are inset from BOTH column edges, so the region between an
+    // edge and the glyphs belongs to no line. Filling to the edge put a wide
+    // first row above a narrow band pinned to the far side of the column.
+    const centred = materialAddressOutline(projection({
+      rows: [
+        { blockEnd: 140, blockStart: 100, inlineEnd: 560, inlineStart: 140 },
+        { blockEnd: 180, blockStart: 140, inlineEnd: 520, inlineStart: 180 },
+        { blockEnd: 220, blockStart: 180, inlineEnd: 400, inlineStart: 300 },
+      ],
+      run: { endInline: 400, endRow: 2, startInline: 140, startRow: 0 },
+    }))!;
+    expect(centred.bands.map((band) => [band.left, band.right])).toEqual([
+      [140, 560],
+      [180, 520],
+      [300, 400],
+    ]);
+    // Centring also makes the fill unnecessary: rows share one centre axis, so
+    // consecutive bands always overlap and the outline stays one closed ring.
+    for (const [index, band] of centred.bands.entries()) {
+      const next = centred.bands[index + 1];
+      if (next === undefined) continue;
+      expect(Math.min(band.right, next.right)).toBeGreaterThan(Math.max(band.left, next.left));
+    }
+    expect(ringShape(centred.path)).toEqual({ closes: 1, starts: 1 });
+  });
+
+  it("keeps a whole-node address on the glyphs it names", () => {
+    // Following the language is the point of the mark. A whole-node address is
+    // not allowed to collapse into a plain column rectangle just because its
+    // rows are ragged.
+    const outline = materialAddressOutline(projection({
+      rows: [
+        { blockEnd: 140, blockStart: 100, inlineEnd: 560, inlineStart: 140 },
+        { blockEnd: 180, blockStart: 140, inlineEnd: 400, inlineStart: 300 },
+      ],
+      run: { endInline: 400, endRow: 1, startInline: 140, startRow: 0 },
+    }))!;
+    expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
+      [140, 560],
+      [300, 400],
+    ]);
+    expect(outline.bands.some((band) => band.left === 100 || band.right === 600)).toBe(false);
   });
 
   it("keeps a single-row interval on its own glyph edges", () => {
@@ -70,13 +113,13 @@ describe("material address outline", () => {
     const outline = materialAddressOutline(projection({
       // In RTL the run's start is the physical right edge of the first row and
       // its end is the physical left edge of the last row.
-      run: { endInline: 260, endRow: 2, startInline: 300, startRow: 0 },
+      run: { endInline: 100, endRow: 2, startInline: 600, startRow: 0 },
       textDirection: "rtl",
     }))!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
-      [100, 300],
+      [300, 600],
       [100, 600],
-      [260, 600],
+      [100, 260],
     ]);
   });
 
@@ -89,8 +132,9 @@ describe("material address outline", () => {
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
       [300, 600],
       [100, 600],
-      // The last selected row is now interior, so it reaches the column.
-      [100, 600],
+      // The selected rows keep their own language; only the slot is column
+      // space, so only the slot reaches both edges.
+      [100, 260],
       [100, 600],
     ]);
     expect(outline.bands.at(-1)!.blockEnd).toBe(300);
@@ -103,9 +147,10 @@ describe("material address outline", () => {
       slot: { blockEnd: 100, blockStart: 20 },
     }))!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
+      // The slot is inserted column space and reaches both edges; the rows
+      // below it keep the language they contain.
       [100, 600],
-      // The first selected row is now interior; only the last row returns.
-      [100, 600],
+      [300, 600],
       [100, 600],
       [100, 260],
     ]);
@@ -132,7 +177,9 @@ describe("material address outline", () => {
       direction: "selection-then-slot",
       slot: { blockEnd: 260, blockStart: 220 },
     }))!;
-    expect(half.bands[2]!.right).toBe(430);
+    // The row keeps its own end throughout; only the slot advances toward the
+    // column, so attachment can never widen language that was not selected.
+    expect(half.bands[2]!.right).toBe(260);
     expect(half.bands[3]!.right).toBe(430);
   });
 
@@ -283,7 +330,7 @@ describe("material address outline", () => {
         run: { endInline: 600, endRow: 2, startInline: 142, startRow: 0 },
       }), { cornerRadius: 4, minimumStepExtent: 8 })!;
       // Each 14px step is wider than the 8px threshold, so none is opened.
-      expect(outline.bands.map((band) => band.left)).toEqual([142, 100, 100]);
+      expect(outline.bands.map((band) => band.left)).toEqual([142, 128, 114]);
     });
 
     it("mirrors the policy for right-to-left material", () => {

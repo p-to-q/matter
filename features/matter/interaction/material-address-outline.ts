@@ -39,13 +39,22 @@ type LogicalSpan = Readonly<{ from: number; to: number }>;
 const MINIMUM_BAND_EXTENT = 0.5;
 
 /**
- * Projects one reading-order interval into a single rounded orthogonal outline.
+ * Projects one addressed interval into a single rounded orthogonal outline.
  *
- * The interval's row bands follow the frozen formula: the only row keeps both
- * real edges, the first row runs to the logical end, interior rows span the
- * column, and the last row returns to the real end edge. A lower grip makes the
- * interval `selection start -> slot end` and an upper grip mirrors it, so the
- * slot is never a second object that has to be connected back.
+ * Every glyph row is bounded by the language it actually contains, and only the
+ * interval's two real endpoints clip the boundary rows. Filling each row out to
+ * the column edge instead would be honest reading order for text set flush to
+ * that edge, but this material is centred: a row's glyphs are inset from both
+ * sides, so the region between a column edge and the glyphs belongs to no line.
+ * Claiming it produced a wide first row above a narrow, far-left last row.
+ *
+ * Centring also makes that fill unnecessary. Rows share one centre axis, so any
+ * two of them overlap and the outline stays one connected shape without it.
+ *
+ * The opened slot is different: it is inserted column space rather than a line
+ * of glyphs, so it does reach the column and joins its neighbour symmetrically.
+ * A lower grip makes the interval `selection start -> slot end` and an upper
+ * grip mirrors it, so the slot is never a second object to connect back.
  *
  * Attachment interpolates between the neutral interval and the engaged one, so
  * no edge can jump when the slot first opens. It is a pure function of the
@@ -75,8 +84,13 @@ export function materialAddressOutline(
 
   // Logical edge values are already physical coordinates; RTL simply swaps
   // which column side the logical start and end refer to.
-  const logicalStart = projection.textDirection === "ltr" ? column.inlineStart : column.inlineEnd;
-  const logicalEnd = projection.textDirection === "ltr" ? column.inlineEnd : column.inlineStart;
+  const ltr = projection.textDirection === "ltr";
+  const logicalStart = ltr ? column.inlineStart : column.inlineEnd;
+  const logicalEnd = ltr ? column.inlineEnd : column.inlineStart;
+  const rowFrom = (index: number): number =>
+    ltr ? selected[index]!.inlineStart : selected[index]!.inlineEnd;
+  const rowTo = (index: number): number =>
+    ltr ? selected[index]!.inlineEnd : selected[index]!.inlineStart;
   const count = selected.length;
   const snappedStart = count > 1 && Math.abs(run.startInline - logicalStart) <= edgeSnapExtent
     ? logicalStart
@@ -90,9 +104,9 @@ export function materialAddressOutline(
 
   const neutralSpan = (index: number): LogicalSpan => {
     if (count === 1) return { from: run.startInline, to: run.endInline };
-    if (index === 0) return { from: snappedStart, to: logicalEnd };
-    if (index === count - 1) return { from: logicalStart, to: snappedEnd };
-    return { from: logicalStart, to: logicalEnd };
+    if (index === 0) return { from: snappedStart, to: rowTo(0) };
+    if (index === count - 1) return { from: rowFrom(index), to: snappedEnd };
+    return { from: rowFrom(index), to: rowTo(index) };
   };
   const engagedSpan = (index: number): LogicalSpan => {
     if (!engaged) return neutralSpan(index);
@@ -100,12 +114,12 @@ export function materialAddressOutline(
     // row, because the interval now continues past it into the opened space.
     if (slotFollows) {
       return index === 0
-        ? { from: snappedStart, to: logicalEnd }
-        : { from: logicalStart, to: logicalEnd };
+        ? { from: snappedStart, to: rowTo(0) }
+        : { from: rowFrom(index), to: rowTo(index) };
     }
     return index === count - 1
-      ? { from: logicalStart, to: snappedEnd }
-      : { from: logicalStart, to: logicalEnd };
+      ? { from: rowFrom(index), to: snappedEnd }
+      : { from: rowFrom(index), to: rowTo(index) };
   };
 
   const bands: MaterialAddressBand[] = [];

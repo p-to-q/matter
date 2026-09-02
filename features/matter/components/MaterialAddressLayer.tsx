@@ -47,10 +47,11 @@ export function materialAddressVariantCornerRadius(
 function materialAddressVariantEdgeSnapExtent(
   projection: MaterialAddressProjection,
   variant: MaterialAddressVariant,
-  cornerRadius: number,
 ): number {
   if (variant === "native") return 0;
-  if (variant === "structural") return cornerRadius * 2;
+  // Centring insets a row from both edges, so a boundary row is never near a
+  // column edge for a reason worth absorbing.
+  if (variant === "structural") return 0;
   return Math.max(
     6,
     Math.min(24, projection.metrics.medianRowExtent * ACTIONABLE_SNAP_ROW_RATIO),
@@ -69,10 +70,11 @@ export function materialAddressVariantOutline(
     // Exact browser copy stays literal. Actionable and whole-node material may
     // absorb only a near-column sliver. Topology stays independent from the
     // visual corner, so retuning the radius cannot move the snap threshold.
-    edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant, cornerRadius),
-    // Only the softly rounded whole-node state opens arbitrary short internal
-    // steps; a precise address changes only the near-column endpoint above.
-    minimumStepExtent: variant === "structural" ? cornerRadius * 2 : 0,
+    edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant),
+    // Every variant traces the language it addresses. Following the glyphs is
+    // the point of the mark, so a whole-node address is not allowed to collapse
+    // into a plain column rectangle.
+    minimumStepExtent: 0,
   });
 }
 
