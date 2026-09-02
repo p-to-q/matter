@@ -17,6 +17,21 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-02 — selected material uses glyph-relative optical edges
+
+Changed: the shared address receipt derives equal top/bottom air, wider inline
+air, and the precise corner from glyph height. A wrapped actionable or
+structural endpoint within one corner diameter of its logical paper edge snaps
+outward; native copy, one-line ranges, and meaningful wider gaps stay exact.
+
+Why: the former generous outset drifted from the original selection family, and
+a tiny edge remnant could not hold its own corners or read as intentional empty
+paper. One logical-axis rule removes the notch without a direction-specific CSS
+patch.
+
+Forecloses: independent top/bottom tuning, fixed-pixel padding at one zoom,
+LTR-only fill rectangles, and globally flattening every genuine stepped range.
+
 ## 2026-09-02 — selected material becomes one post-reflow flow interval
 
 Changed: whole-node structural selection, native same-node copy selection,

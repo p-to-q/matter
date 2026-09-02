@@ -67,8 +67,14 @@ export const MATERIAL_ADDRESS_ENGAGEMENT_AMOUNT = 0.1;
 export const MATERIAL_ADDRESS_NATIVE_FRAGMENT_LIMIT = 256;
 export const MATERIAL_ADDRESS_NATIVE_ROW_LIMIT = 64;
 
-const REFERENCE_LINE_HEIGHT = 20;
 const LINE_BLOCK_TOLERANCE_PX = 1;
+// These proportions are measured from the glyph box, not the CSS line box.
+// They retain the original `.08em / .32em` family with a small optical allowance
+// for an antialiased SVG edge, while keeping inline air deliberately wider than
+// block air. Every edge reads the same receipt, so top/bottom can never drift.
+const BLOCK_OUTSET_RATIO = 0.1;
+const CORNER_RADIUS_RATIO = 0.18;
+const INLINE_OUTSET_RATIO = 0.36;
 
 /**
  * Freezes one post-layout range measurement. It owns browser geometry only;
@@ -96,7 +102,6 @@ export function createProjectedLayoutReceipt(input: Readonly<{
   const first = rows[0]!;
   const last = rows.at(-1)!;
   const medianHeight = median(rows.map((row) => row.blockEnd - row.blockStart));
-  const scale = medianHeight / REFERENCE_LINE_HEIGHT;
   const column = Object.freeze({
     blockEnd: rounded(input.column.bottom),
     blockStart: rounded(input.column.top),
@@ -115,9 +120,9 @@ export function createProjectedLayoutReceipt(input: Readonly<{
     column,
     coordinateSpace: "client-css-px",
     metrics: Object.freeze({
-      blockOutset: rounded(clamp(3 * scale, 2, 8)),
-      cornerRadius: rounded(clamp(4 * scale, 3, 12)),
-      inlineOutset: rounded(clamp(10 * scale, 8, 24)),
+      blockOutset: rounded(clamp(medianHeight * BLOCK_OUTSET_RATIO, 2, 7)),
+      cornerRadius: rounded(clamp(medianHeight * CORNER_RADIUS_RATIO, 3, 12)),
+      inlineOutset: rounded(clamp(medianHeight * INLINE_OUTSET_RATIO, 6, 22)),
     }),
     rows,
     run: Object.freeze({

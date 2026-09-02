@@ -39,10 +39,34 @@ describe("projected layout receipt", () => {
       ],
       run: { startRow: 0, startInline: 600, endRow: 1, endInline: 600 },
       textDirection: "ltr",
-      metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 10 },
+      metrics: { blockOutset: 2, cornerRadius: 3.6, inlineOutset: 7.2 },
     });
     expect(Object.isFrozen(RECEIPT)).toBe(true);
     expect(Object.isFrozen(RECEIPT.rows)).toBe(true);
+  });
+
+  it("keeps block air symmetric and inline air in the original optical family", () => {
+    const metrics = RECEIPT.metrics;
+    expect(metrics.blockOutset).toBe(2);
+    expect(metrics.inlineOutset / metrics.blockOutset).toBeCloseTo(3.6, 5);
+    expect(metrics.cornerRadius).toBeCloseTo(20 * 0.18, 5);
+  });
+
+  it("scales the optical family with glyph geometry and bounds extreme zoom", () => {
+    const metricsAt = (height: number) => createProjectedLayoutReceipt({
+      basis: BASIS,
+      column: { left: 0, top: 0, right: 400, bottom: 200 },
+      rects: [{ x: 40, y: 40, width: 200, height }],
+      textDirection: "ltr",
+      writingMode: "horizontal-tb",
+    })!.metrics;
+    expect(metricsAt(12)).toEqual({ blockOutset: 2, cornerRadius: 3, inlineOutset: 6 });
+    expect(metricsAt(44)).toEqual({
+      blockOutset: 4.4,
+      cornerRadius: 7.92,
+      inlineOutset: 15.84,
+    });
+    expect(metricsAt(80)).toEqual({ blockOutset: 7, cornerRadius: 12, inlineOutset: 22 });
   });
 
   it("keeps amount zero exactly equal to the neutral measured run", () => {

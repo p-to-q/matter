@@ -200,6 +200,65 @@ describe("material address outline", () => {
       expect(outline.bands.map((band) => band.right)).toEqual([600, 520]);
     });
 
+    it("snaps only a wrapped endpoint close enough to the paper edge", () => {
+      const near = materialAddressOutline(stepped(), {
+        cornerRadius: 4,
+        edgeSnapExtent: 16,
+      })!;
+      expect(near.bands.map((band) => band.left)).toEqual([100, 100]);
+      expect(near.bands.map((band) => band.right)).toEqual([600, 520]);
+
+      const far = materialAddressOutline(stepped(), {
+        cornerRadius: 4,
+        edgeSnapExtent: 13,
+      })!;
+      expect(far.bands.map((band) => band.left)).toEqual([114, 100]);
+    });
+
+    it("keeps the snapped endpoint while either grip attaches the slot", () => {
+      const lower = materialAddressOutline(stepped({
+        attachmentProgress: 1,
+        direction: "selection-then-slot",
+        slot: { blockEnd: 260, blockStart: 180 },
+      }), { edgeSnapExtent: 16 })!;
+      expect(lower.bands.map((band) => band.left)).toEqual([100, 100, 100]);
+
+      const upper = materialAddressOutline(projection({
+        attachmentProgress: 1,
+        direction: "slot-then-selection",
+        rows: [
+          { blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 180 },
+          { blockEnd: 180, blockStart: 140, inlineEnd: 586, inlineStart: 100 },
+        ],
+        run: { endInline: 586, endRow: 1, startInline: 180, startRow: 0 },
+        slot: { blockEnd: 100, blockStart: 20 },
+      }), { edgeSnapExtent: 16 })!;
+      expect(upper.bands.map((band) => band.right)).toEqual([600, 600, 600]);
+    });
+
+    it("never expands a one-line exact address merely because it is near an edge", () => {
+      const single = materialAddressOutline(projection({
+        rows: [ROWS[0]!],
+        run: { endInline: 590, endRow: 0, startInline: 110, startRow: 0 },
+      }), { edgeSnapExtent: 20 })!;
+      expect([single.bands[0]!.left, single.bands[0]!.right]).toEqual([110, 590]);
+    });
+
+    it("mirrors endpoint snapping in right-to-left material", () => {
+      const outline = materialAddressOutline(projection({
+        rows: [
+          { blockEnd: 140, blockStart: 100, inlineEnd: 586, inlineStart: 100 },
+          { blockEnd: 180, blockStart: 140, inlineEnd: 600, inlineStart: 180 },
+        ],
+        run: { endInline: 180, endRow: 1, startInline: 586, startRow: 0 },
+        textDirection: "rtl",
+      }), { edgeSnapExtent: 16 })!;
+      expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
+        [100, 600],
+        [180, 600],
+      ]);
+    });
+
     it("only ever moves an edge outward, so no glyph is clipped", () => {
       const plain = materialAddressOutline(stepped())!;
       const opened = materialAddressOutline(stepped(), { cornerRadius: 10, minimumStepExtent: 20 })!;
@@ -264,5 +323,6 @@ describe("material address outline", () => {
     expect(materialAddressOutline(projection({
       writingMode: "vertical-rl" as MaterialAddressProjection["writingMode"],
     }))).toBeNull();
+    expect(materialAddressOutline(projection(), { edgeSnapExtent: Number.NaN })).toBeNull();
   });
 });

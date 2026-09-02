@@ -38,11 +38,14 @@ describe("elastic preview geometry", () => {
   });
 
   it("moves only the lower grip down for the shared degree", () => {
+    const blockOutset = prepareElasticPreviewSource(stepped)!.layoutReceipt.metrics.blockOutset;
+    const top = stepped[0].y - blockOutset;
+    const pocketTop = stepped[1].y + stepped[1].height + blockOutset;
     const preview = elasticPreviewGeometry(stepped, 0.5, undefined, undefined, "bottom", "bottom")!;
     expect(preview).toMatchObject({ mode: "expand", amount: 0.5, activeHandle: "bottom", pocketDepth: 72 });
-    expect(preview.topHandle.y).toBe(197);
-    expect(preview.bottomHandle.y).toBe(319);
-    expect(preview.pocket).toMatchObject({ top: 247, bottom: 319 });
+    expect(preview.topHandle.y).toBe(top);
+    expect(preview.bottomHandle.y).toBe(pocketTop + 72);
+    expect(preview.pocket).toMatchObject({ top: pocketTop, bottom: pocketTop + 72 });
     expect(preview.addressProjection).toMatchObject({
       attachmentProgress: 1,
       direction: "selection-then-slot",
@@ -52,11 +55,14 @@ describe("elastic preview geometry", () => {
   });
 
   it("keeps the upper seam fixed while its outward gesture opens the slot below", () => {
+    const blockOutset = prepareElasticPreviewSource(stepped)!.layoutReceipt.metrics.blockOutset;
+    const top = stepped[0].y - blockOutset;
+    const bottom = stepped[1].y + stepped[1].height + blockOutset + 72;
     const preview = elasticPreviewGeometry(stepped, 0.5, undefined, undefined, "top", "top")!;
     expect(preview).toMatchObject({ mode: "expand", amount: 0.5, activeHandle: "top", pocketDepth: 72 });
-    expect(preview.topHandle.y).toBe(197);
-    expect(preview.bottomHandle.y).toBe(319);
-    expect(preview.pocket).toMatchObject({ top: 197, bottom: 269 });
+    expect(preview.topHandle.y).toBe(top);
+    expect(preview.bottomHandle.y).toBe(bottom);
+    expect(preview.pocket).toMatchObject({ top, bottom: top + 72 });
     expect(preview.addressProjection).toMatchObject({
       attachmentProgress: 1,
       direction: "slot-then-selection",

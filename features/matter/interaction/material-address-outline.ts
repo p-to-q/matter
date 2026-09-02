@@ -17,6 +17,12 @@ export type MaterialAddressOutlineOptions = Readonly<{
   /** Overrides the receipt's corner radius; still clamped by the edges it meets. */
   cornerRadius?: number;
   /**
+   * On a wrapped interval, a real endpoint this close to its logical column
+   * edge snaps outward to that edge. A gap narrower than the address's corner
+   * diameter reads as a missing paper cell, not meaningful unselected text.
+   */
+  edgeSnapExtent?: number;
+  /**
    * Lateral steps narrower than this are opened outward instead of drawn.
    * A step only as wide as two corner radii leaves no straight platform
    * between them, so the vertex clamp collapses both quarter circles and the
@@ -52,7 +58,11 @@ export function materialAddressOutline(
   const { column, metrics, rows, run } = projection;
   if (rows.length === 0) return null;
   const cornerRadius = options.cornerRadius ?? metrics.cornerRadius;
-  if (!Number.isFinite(cornerRadius) || cornerRadius < 0) return null;
+  const edgeSnapExtent = options.edgeSnapExtent ?? 0;
+  if (
+    !Number.isFinite(cornerRadius) || cornerRadius < 0 ||
+    !Number.isFinite(edgeSnapExtent) || edgeSnapExtent < 0
+  ) return null;
 
   const first = Math.max(0, Math.min(run.startRow, rows.length - 1));
   const last = Math.max(first, Math.min(run.endRow, rows.length - 1));
@@ -64,14 +74,20 @@ export function materialAddressOutline(
   const logicalStart = projection.textDirection === "ltr" ? column.inlineStart : column.inlineEnd;
   const logicalEnd = projection.textDirection === "ltr" ? column.inlineEnd : column.inlineStart;
   const count = selected.length;
+  const snappedStart = count > 1 && Math.abs(run.startInline - logicalStart) <= edgeSnapExtent
+    ? logicalStart
+    : run.startInline;
+  const snappedEnd = count > 1 && Math.abs(run.endInline - logicalEnd) <= edgeSnapExtent
+    ? logicalEnd
+    : run.endInline;
   const progress = clamp01(projection.attachmentProgress);
   const engaged = projection.slot !== null && projection.direction !== "neutral";
   const slotFollows = projection.direction === "selection-then-slot";
 
   const neutralSpan = (index: number): LogicalSpan => {
     if (count === 1) return { from: run.startInline, to: run.endInline };
-    if (index === 0) return { from: run.startInline, to: logicalEnd };
-    if (index === count - 1) return { from: logicalStart, to: run.endInline };
+    if (index === 0) return { from: snappedStart, to: logicalEnd };
+    if (index === count - 1) return { from: logicalStart, to: snappedEnd };
     return { from: logicalStart, to: logicalEnd };
   };
   const engagedSpan = (index: number): LogicalSpan => {
@@ -80,11 +96,11 @@ export function materialAddressOutline(
     // row, because the interval now continues past it into the opened space.
     if (slotFollows) {
       return index === 0
-        ? { from: run.startInline, to: logicalEnd }
+        ? { from: snappedStart, to: logicalEnd }
         : { from: logicalStart, to: logicalEnd };
     }
     return index === count - 1
-      ? { from: logicalStart, to: run.endInline }
+      ? { from: logicalStart, to: snappedEnd }
       : { from: logicalStart, to: logicalEnd };
   };
 

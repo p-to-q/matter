@@ -270,6 +270,22 @@ describe("selected material address", () => {
     expect(layer).not.toMatch(/\bmaterialAddressOutline\(projection\)/);
   });
 
+  it("snaps an actionable wrapped endpoint only when one corner diameter reaches the paper edge", () => {
+    const nearEdge = addressProjection({
+      metrics: { blockOutset: 2, cornerRadius: 4, inlineOutset: 8 },
+      rows: [
+        { blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 107 },
+        { blockEnd: 180, blockStart: 140, inlineEnd: 520, inlineStart: 100 },
+      ],
+      run: { endInline: 520, endRow: 1, startInline: 107, startRow: 0 },
+    });
+    const actionable = materialAddressVariantOutline(nearEdge, "actionable")!;
+    expect(actionable.bands.map((band) => band.left)).toEqual([92, 92]);
+
+    const native = materialAddressVariantOutline(nearEdge, "native")!;
+    expect(native.bands.map((band) => band.left)).toEqual([99, 92]);
+  });
+
   it("keeps the whole-node ring and leaves precise addresses a pure fill", () => {
     expect(css).toMatch(
       /\[data-address-variant="structural"\] \.material-address-layer__path \{[^}]*stroke:\s*rgba\(var\(--selection-control-rgb\),var\(--address-ring-structural\)\)/,

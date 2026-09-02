@@ -47,8 +47,12 @@ export function materialAddressVariantOutline(
   const cornerRadius = materialAddressVariantCornerRadius(projection, variant);
   return materialAddressOutline(projection, {
     cornerRadius,
-    // Only the softly rounded whole-node state can produce a step too short to
-    // hold its own corners; a precise address keeps every step it measured.
+    // Exact browser copy stays literal. Actionable and whole-node material may
+    // absorb only a near-column sliver: a gap that cannot hold two corners is
+    // optical noise, while a wider gap remains part of the address's meaning.
+    edgeSnapExtent: variant === "native" ? 0 : cornerRadius * 2,
+    // Only the softly rounded whole-node state opens arbitrary short internal
+    // steps; a precise address changes only the near-column endpoint above.
     minimumStepExtent: variant === "structural" ? cornerRadius * 2 : 0,
   });
 }

@@ -46,6 +46,15 @@ no slot and the formula reduces to the neutral selected range. RTL mirrors the
 logical axes; an unsupported writing mode fails closed until it has a proven
 projection.
 
+The contact impression follows one glyph-relative optical family. Top and
+bottom outset are the same measured value; inline outset is wider, near the
+original `.08em / .32em` proportion; the precise corner also follows glyph
+height instead of a fixed viewport pixel. On a wrapped actionable or structural
+interval, a real first/last endpoint within one corner diameter of its logical
+column edge snaps outward to that edge. This fills a remnant too small to read
+as a deliberate paper cell. A single-row interval, native copy range, or wider
+gap keeps its exact endpoint. RTL mirrors the rule.
+
 One rounded orthogonal outline paints these bands exactly once. There are no
 fragment connectors, neck, body, seam overlap, or density-compounding children.
 

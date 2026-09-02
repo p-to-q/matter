@@ -177,6 +177,24 @@ test("one outline owns the address from neutral through both grips", async ({ pa
   const neutralFill = await actionablePath.evaluate((node) => getComputedStyle(node).fill);
   const neutralD = await actionablePath.getAttribute("d");
   expect((neutralD ?? "").match(/M/g) ?? []).toHaveLength(1);
+  const opticalAir = await actionablePath.evaluate((path) => {
+    const selectedCopy = document.querySelector<HTMLElement>(".language-split-selected-copy");
+    if (selectedCopy === null) throw new Error("selected language copy missing");
+    const range = document.createRange();
+    range.selectNodeContents(selectedCopy);
+    const rows = [...range.getClientRects()];
+    const outline = path.getBoundingClientRect();
+    const first = rows[0];
+    const last = rows.at(-1);
+    if (first === undefined || last === undefined) throw new Error("selected language rows missing");
+    return {
+      bottom: outline.bottom - last.bottom,
+      expected: Math.max(2, Math.min(first.height * .1, 7)),
+      top: first.top - outline.top,
+    };
+  });
+  expect(Math.abs(opticalAir.top - opticalAir.bottom)).toBeLessThan(.25);
+  expect(Math.abs(opticalAir.top - opticalAir.expected)).toBeLessThan(.5);
   // Painted means the single-selection fallback is released, so the two never
   // stack and no frame can show grips over an unpainted address.
   await expect(page.locator(".material-address-selection-set--fallback[data-single-address-fallback]"))
