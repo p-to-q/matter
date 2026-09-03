@@ -282,7 +282,10 @@ describe("selected material address", () => {
     expect(materialAddressVariantBlockOutset(projection, "structural")).toBe(1.6);
   });
 
-  it("keeps actionable edge snapping independent from the painted corner", () => {
+  it("keeps every variant off the gutter that centring leaves", () => {
+    // A boundary endpoint used to snap outward to the column edge when it came
+    // within a corner diameter of it. Centred rows are inset by the alignment,
+    // not by a missing paper cell, so every variant now keeps its real edge.
     const nearEdge = addressProjection({
       metrics: { blockOutset: 2, cornerRadius: 4, inlineOutset: 8, medianRowExtent: 20 },
       rows: [
@@ -291,17 +294,10 @@ describe("selected material address", () => {
       ],
       run: { endInline: 520, endRow: 1, startInline: 107, startRow: 0 },
     });
-    const actionable = materialAddressVariantOutline(nearEdge, "actionable")!;
-    expect(actionable.bands.map((band) => band.left)).toEqual([92, 92]);
-
-    const native = materialAddressVariantOutline(nearEdge, "native")!;
-    expect(native.bands.map((band) => band.left)).toEqual([99, 92]);
-
-    const sameRowsSmallerCorner = materialAddressVariantOutline({
-      ...nearEdge,
-      metrics: { ...nearEdge.metrics, cornerRadius: 2 },
-    }, "actionable")!;
-    expect(sameRowsSmallerCorner.bands.map((band) => band.left)).toEqual([92, 92]);
+    for (const variant of ["actionable", "native", "structural"] as const) {
+      const outline = materialAddressVariantOutline(nearEdge, variant)!;
+      expect(outline.bands[0]!.left).toBe(99);
+    }
   });
 
   it("keeps the whole-node ring and leaves precise addresses a pure fill", () => {

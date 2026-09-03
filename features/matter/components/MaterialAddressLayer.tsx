@@ -19,7 +19,6 @@ const pathByLayer = new WeakMap<HTMLElement, SVGPathElement>();
  */
 const STRUCTURAL_ROW_RATIO = 0.44;
 const STRUCTURAL_BLOCK_ROW_RATIO = 0.08;
-const ACTIONABLE_SNAP_ROW_RATIO = 0.36;
 
 export function materialAddressVariantBlockOutset(
   projection: MaterialAddressProjection,
@@ -44,19 +43,6 @@ export function materialAddressVariantCornerRadius(
   return projection.metrics.medianRowExtent * STRUCTURAL_ROW_RATIO;
 }
 
-function materialAddressVariantEdgeSnapExtent(
-  projection: MaterialAddressProjection,
-  variant: MaterialAddressVariant,
-): number {
-  if (variant === "native") return 0;
-  // Centring insets a row from both edges, so a boundary row is never near a
-  // column edge for a reason worth absorbing.
-  if (variant === "structural") return 0;
-  return Math.max(
-    6,
-    Math.min(24, projection.metrics.medianRowExtent * ACTIONABLE_SNAP_ROW_RATIO),
-  );
-}
 
 export function materialAddressVariantOutline(
   projection: MaterialAddressProjection | null,
@@ -67,16 +53,11 @@ export function materialAddressVariantOutline(
   return materialAddressOutline(projection, {
     blockOutset: materialAddressVariantBlockOutset(projection, variant),
     cornerRadius,
-    // Exact browser copy stays literal. Actionable and whole-node material may
-    // absorb only a near-column sliver. Topology stays independent from the
-    // visual corner, so retuning the radius cannot move the snap threshold.
-    edgeSnapExtent: materialAddressVariantEdgeSnapExtent(projection, variant),
     // Every variant traces the language it addresses; following the glyphs is
     // the point of the mark. A whole-node selection additionally reads line by
     // line, the way the label it replaced did, so its rows stay separate
     // capsules and the leading between them is left alone.
     separateRows: variant === "structural",
-    minimumStepExtent: 0,
   });
 }
 

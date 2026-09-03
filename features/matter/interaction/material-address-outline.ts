@@ -9,7 +9,6 @@ export type MaterialAddressBand = Readonly<{
 
 export type MaterialAddressOutline = Readonly<{
   bands: readonly MaterialAddressBand[];
-  bounds: Readonly<{ bottom: number; left: number; right: number; top: number }>;
   path: string;
 }>;
 
@@ -19,24 +18,11 @@ export type MaterialAddressOutlineOptions = Readonly<{
   /** Overrides the receipt's corner radius; still clamped by the edges it meets. */
   cornerRadius?: number;
   /**
-   * On a wrapped interval, a real endpoint this close to its logical column
-   * edge snaps outward to that edge. A gap narrower than the address's corner
-   * diameter reads as a missing paper cell, not meaningful unselected text.
-   */
-  edgeSnapExtent?: number;
-  /**
    * Draws one closed capsule per row instead of joining the rows into a single
    * region. A whole-node selection reads line by line, so the leading between
    * two lines is the layout speaking, not a hole to be filled.
    */
   separateRows?: boolean;
-  /**
-   * Lateral steps narrower than this are opened outward instead of drawn.
-   * A step only as wide as two corner radii leaves no straight platform
-   * between them, so the vertex clamp collapses both quarter circles and the
-   * seam reads as a hard S. Longer steps are real shape and stay.
-   */
-  minimumStepExtent?: number;
 }>;
 
 /** Two coordinates that bound one row along the logical inline axis. */
@@ -55,7 +41,9 @@ const MINIMUM_BAND_EXTENT = 0.5;
  * Claiming it produced a wide first row above a narrow, far-left last row.
  *
  * Centring also makes that fill unnecessary. Rows share one centre axis, so any
- * two of them overlap and the outline stays one connected shape without it.
+ * two of them overlap and the outline stays one connected shape without it. For
+ * the same reason a boundary row is never near a column edge for a reason worth
+ * absorbing, so no endpoint is snapped outward to one.
  *
  * The opened slot is different: it is inserted column space rather than a line
  * of glyphs, so it does reach the column and joins its neighbour symmetrically.
@@ -76,11 +64,9 @@ export function materialAddressOutline(
   if (rows.length === 0) return null;
   const cornerRadius = options.cornerRadius ?? metrics.cornerRadius;
   const blockOutset = options.blockOutset ?? metrics.blockOutset;
-  const edgeSnapExtent = options.edgeSnapExtent ?? 0;
   if (
     !Number.isFinite(blockOutset) || blockOutset < 0 ||
-    !Number.isFinite(cornerRadius) || cornerRadius < 0 ||
-    !Number.isFinite(edgeSnapExtent) || edgeSnapExtent < 0
+    !Number.isFinite(cornerRadius) || cornerRadius < 0
   ) return null;
 
   const first = Math.max(0, Math.min(run.startRow, rows.length - 1));
@@ -98,20 +84,14 @@ export function materialAddressOutline(
   const rowTo = (index: number): number =>
     ltr ? selected[index]!.inlineEnd : selected[index]!.inlineStart;
   const count = selected.length;
-  const snappedStart = count > 1 && Math.abs(run.startInline - logicalStart) <= edgeSnapExtent
-    ? logicalStart
-    : run.startInline;
-  const snappedEnd = count > 1 && Math.abs(run.endInline - logicalEnd) <= edgeSnapExtent
-    ? logicalEnd
-    : run.endInline;
   const progress = clamp01(projection.attachmentProgress);
   const engaged = projection.slot !== null && projection.direction !== "neutral";
   const slotFollows = projection.direction === "selection-then-slot";
 
   const neutralSpan = (index: number): LogicalSpan => {
     if (count === 1) return { from: run.startInline, to: run.endInline };
-    if (index === 0) return { from: snappedStart, to: rowTo(0) };
-    if (index === count - 1) return { from: rowFrom(index), to: snappedEnd };
+    if (index === 0) return { from: run.startInline, to: rowTo(0) };
+    if (index === count - 1) return { from: rowFrom(index), to: run.endInline };
     return { from: rowFrom(index), to: rowTo(index) };
   };
   const engagedSpan = (index: number): LogicalSpan => {
@@ -120,11 +100,11 @@ export function materialAddressOutline(
     // row, because the interval now continues past it into the opened space.
     if (slotFollows) {
       return index === 0
-        ? { from: snappedStart, to: rowTo(0) }
+        ? { from: run.startInline, to: rowTo(0) }
         : { from: rowFrom(index), to: rowTo(index) };
     }
     return index === count - 1
-      ? { from: rowFrom(index), to: snappedEnd }
+      ? { from: rowFrom(index), to: run.endInline }
       : { from: rowFrom(index), to: rowTo(index) };
   };
 
@@ -171,25 +151,13 @@ export function materialAddressOutline(
         left: band.left,
         right: band.right,
       }))
-    : openShortSteps(
-        joinBlockEdges(bands, blockOutset),
-        options.minimumStepExtent ?? 0,
-      );
+    : joinBlockEdges(bands, blockOutset);
   if (joined.length === 0) return null;
   const path = separateRows
     ? joined.map((band) => outlinePath([band], cornerRadius)).filter(Boolean).join("")
     : outlinePath(joined, cornerRadius);
   if (path.length === 0) return null;
-  return Object.freeze({
-    bands: Object.freeze(joined),
-    bounds: Object.freeze({
-      bottom: joined.at(-1)!.blockEnd,
-      left: Math.min(...joined.map((band) => band.left)),
-      right: Math.max(...joined.map((band) => band.right)),
-      top: joined[0]!.blockStart,
-    }),
-    path,
-  });
+  return Object.freeze({ bands: Object.freeze(joined), path });
 }
 
 /**
@@ -216,43 +184,6 @@ function joinBlockEdges(
     joined.push({ blockEnd, blockStart, left: band.left, right: band.right });
   }
   return joined;
-}
-
-/**
- * Widens the pair of bands on either side of a step too short to hold its own
- * corners. Every decision reads the original neighbours, so one merge cannot
- * lower the bar for the next and swallow a chain of real steps. Edges only
- * move outward, so no glyph is ever clipped, and block seams do not move.
- */
-function openShortSteps(
-  bands: readonly MaterialAddressBand[],
-  threshold: number,
-): readonly MaterialAddressBand[] {
-  if (!(threshold > 0) || bands.length < 2) return bands;
-  const left = bands.map((band) => band.left);
-  const right = bands.map((band) => band.right);
-  for (const [index, band] of bands.entries()) {
-    const next = bands[index + 1];
-    if (next === undefined) continue;
-    const leftStep = Math.abs(band.left - next.left);
-    if (leftStep > 0 && leftStep < threshold) {
-      const opened = Math.min(band.left, next.left);
-      left[index] = Math.min(left[index]!, opened);
-      left[index + 1] = Math.min(left[index + 1]!, opened);
-    }
-    const rightStep = Math.abs(band.right - next.right);
-    if (rightStep > 0 && rightStep < threshold) {
-      const opened = Math.max(band.right, next.right);
-      right[index] = Math.max(right[index]!, opened);
-      right[index + 1] = Math.max(right[index + 1]!, opened);
-    }
-  }
-  return bands.map((band, index) => ({
-    blockEnd: band.blockEnd,
-    blockStart: band.blockStart,
-    left: left[index]!,
-    right: right[index]!,
-  }));
 }
 
 /** Walks the staircase clockwise: right edges downward, then left edges up. */
