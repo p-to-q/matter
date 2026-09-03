@@ -76,12 +76,11 @@ client-space corner, while structural whole-node material keeps its independent
 does not become a full-line marker; those two structural proportions are one
 optical pair and must be retuned together. Known inter-row leading is a safety
 ceiling and may reduce either block outset below its nominal `2px` minimum; it
-never makes the mark expand into a full-line marker. On a wrapped actionable or structural
-interval, a real first/last endpoint within the existing type-relative optical
-threshold of its logical column edge snaps outward to that edge. The snap
-threshold is independent of the painted corner, so an optical radius adjustment
-cannot silently change topology. A single-row interval, native copy range, or
-wider gap keeps its exact endpoint. RTL mirrors the rule.
+never makes the mark expand into a full-line marker. No endpoint is snapped
+outward to a column edge. That rule read a small gap as a missing paper cell,
+which is a fair reading for text set flush to the edge; centred rows are inset
+by the alignment instead, so snapping claimed the gutter on one side while the
+opposite edge stayed on the glyphs and left the first row visibly lopsided.
 
 One rounded orthogonal outline paints these bands exactly once. There are no
 fragment connectors, neck, body, seam overlap, or density-compounding children.

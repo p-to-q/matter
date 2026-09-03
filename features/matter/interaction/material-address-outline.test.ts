@@ -258,141 +258,20 @@ describe("material address outline", () => {
     expect(outline.path).toContain("A4 4 0 0 0");
   });
 
-  describe("short lateral steps", () => {
-    // Rows whose left edges differ by 14px and whose right edges differ by 80px.
-    const STEPPED = Object.freeze([
-      Object.freeze({ blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 114 }),
-      Object.freeze({ blockEnd: 180, blockStart: 140, inlineEnd: 520, inlineStart: 100 }),
-    ]);
-    const stepped = (overrides: Partial<MaterialAddressProjection> = {}) => projection({
-      rows: STEPPED,
-      run: { endInline: 520, endRow: 1, startInline: 114, startRow: 0 },
-      ...overrides,
-    });
-
-    it("opens a step too short to hold its corners and keeps a long one", () => {
-      const outline = materialAddressOutline(stepped(), { cornerRadius: 10, minimumStepExtent: 20 })!;
-      // The 14px left step is gone: both bands share the outer edge.
-      expect(outline.bands.map((band) => band.left)).toEqual([100, 100]);
-      // The 80px right step is real shape and survives.
-      expect(outline.bands.map((band) => band.right)).toEqual([600, 520]);
-    });
-
-    it("snaps only a wrapped endpoint close enough to the paper edge", () => {
-      const near = materialAddressOutline(stepped(), {
-        cornerRadius: 4,
-        edgeSnapExtent: 16,
-      })!;
-      expect(near.bands.map((band) => band.left)).toEqual([100, 100]);
-      expect(near.bands.map((band) => band.right)).toEqual([600, 520]);
-
-      const far = materialAddressOutline(stepped(), {
-        cornerRadius: 4,
-        edgeSnapExtent: 13,
-      })!;
-      expect(far.bands.map((band) => band.left)).toEqual([114, 100]);
-    });
-
-    it("keeps the snapped endpoint while either grip attaches the slot", () => {
-      const lower = materialAddressOutline(stepped({
-        attachmentProgress: 1,
-        direction: "selection-then-slot",
-        slot: { blockEnd: 260, blockStart: 180 },
-      }), { edgeSnapExtent: 16 })!;
-      expect(lower.bands.map((band) => band.left)).toEqual([100, 100, 100]);
-
-      const upper = materialAddressOutline(projection({
-        attachmentProgress: 1,
-        direction: "slot-then-selection",
-        rows: [
-          { blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 180 },
-          { blockEnd: 180, blockStart: 140, inlineEnd: 586, inlineStart: 100 },
-        ],
-        run: { endInline: 586, endRow: 1, startInline: 180, startRow: 0 },
-        slot: { blockEnd: 100, blockStart: 20 },
-      }), { edgeSnapExtent: 16 })!;
-      expect(upper.bands.map((band) => band.right)).toEqual([600, 600, 600]);
-    });
-
-    it("never expands a one-line exact address merely because it is near an edge", () => {
-      const single = materialAddressOutline(projection({
-        rows: [ROWS[0]!],
-        run: { endInline: 590, endRow: 0, startInline: 110, startRow: 0 },
-      }), { edgeSnapExtent: 20 })!;
-      expect([single.bands[0]!.left, single.bands[0]!.right]).toEqual([110, 590]);
-    });
-
-    it("mirrors endpoint snapping in right-to-left material", () => {
-      const outline = materialAddressOutline(projection({
-        rows: [
-          { blockEnd: 140, blockStart: 100, inlineEnd: 586, inlineStart: 100 },
-          { blockEnd: 180, blockStart: 140, inlineEnd: 600, inlineStart: 180 },
-        ],
-        run: { endInline: 180, endRow: 1, startInline: 586, startRow: 0 },
-        textDirection: "rtl",
-      }), { edgeSnapExtent: 16 })!;
-      expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
-        [100, 600],
-        [180, 600],
-      ]);
-    });
-
-    it("only ever moves an edge outward, so no glyph is clipped", () => {
-      const plain = materialAddressOutline(stepped())!;
-      const opened = materialAddressOutline(stepped(), { cornerRadius: 10, minimumStepExtent: 20 })!;
-      for (const [index, band] of plain.bands.entries()) {
-        const after = opened.bands[index]!;
-        expect(after.left).toBeLessThanOrEqual(band.left);
-        expect(after.right).toBeGreaterThanOrEqual(band.right);
-        expect(after.blockStart).toBe(band.blockStart);
-        expect(after.blockEnd).toBe(band.blockEnd);
-      }
-    });
-
-    it("judges each step against the rows it was measured from", () => {
-      // Three 14px steps in one direction must not swallow each other into one
-      // 42px merge; each pair is compared before any edge has moved.
-      const outline = materialAddressOutline(projection({
-        rows: [
-          { blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 142 },
-          { blockEnd: 180, blockStart: 140, inlineEnd: 600, inlineStart: 128 },
-          { blockEnd: 220, blockStart: 180, inlineEnd: 600, inlineStart: 114 },
-        ],
-        run: { endInline: 600, endRow: 2, startInline: 142, startRow: 0 },
-      }), { cornerRadius: 4, minimumStepExtent: 8 })!;
-      // Each 14px step is wider than the 8px threshold, so none is opened.
-      expect(outline.bands.map((band) => band.left)).toEqual([142, 128, 114]);
-    });
-
-    it("mirrors the policy for right-to-left material", () => {
-      const outline = materialAddressOutline(stepped({
-        run: { endInline: 100, endRow: 1, startInline: 486, startRow: 0 },
-        textDirection: "rtl",
-      }), { cornerRadius: 10, minimumStepExtent: 20 })!;
-      // The short step is opened on whichever physical side carries it.
-      const rights = outline.bands.map((band) => band.right);
-      const lefts = outline.bands.map((band) => band.left);
-      expect(new Set(rights).size + new Set(lefts).size).toBeLessThan(4);
-      expect((outline.path.match(/M/g) ?? []).length).toBe(1);
-    });
-
-    it("leaves a single-row interval and precise addresses untouched", () => {
-      const single = materialAddressOutline(projection({
-        rows: [ROWS[0]!],
-        run: { endInline: 520, endRow: 0, startInline: 300, startRow: 0 },
-      }), { cornerRadius: 10, minimumStepExtent: 20 })!;
-      expect([single.bands[0]!.left, single.bands[0]!.right]).toEqual([300, 520]);
-      // Without a threshold nothing merges at all.
-      const precise = materialAddressOutline(stepped(), { cornerRadius: 4 })!;
-      expect(precise.bands.map((band) => band.left)).toEqual([114, 100]);
-      expect(precise.bands.map((band) => band.right)).toEqual([600, 520]);
-    });
-
-    it("stays one closed ring after opening a step", () => {
-      const outline = materialAddressOutline(stepped(), { cornerRadius: 10, minimumStepExtent: 20 })!;
-      expect((outline.path.match(/M/g) ?? []).length).toBe(1);
-      expect((outline.path.match(/Z/g) ?? []).length).toBe(1);
-    });
+  it("leaves the same air on both sides of a centred row", () => {
+    // A boundary endpoint used to snap outward to the column edge when it came
+    // within a corner diameter of it. Every row here is inset by centring, not
+    // by a missing paper cell, so snapping made the first row asymmetric: it
+    // claimed the left gutter while its right edge stayed on the glyphs.
+    const outline = materialAddressOutline(projection({
+      rows: [
+        { blockEnd: 140, blockStart: 100, inlineEnd: 592, inlineStart: 108 },
+        { blockEnd: 180, blockStart: 140, inlineEnd: 520, inlineStart: 180 },
+      ],
+      run: { endInline: 520, endRow: 1, startInline: 108, startRow: 0 },
+    }), { blockOutset: 2, cornerRadius: 4 })!;
+    const [first] = outline.bands;
+    expect(first!.left - 108).toBe(592 - first!.right);
   });
 
   it("fails closed instead of painting something it cannot prove", () => {
@@ -401,6 +280,7 @@ describe("material address outline", () => {
     expect(materialAddressOutline(projection({
       writingMode: "vertical-rl" as MaterialAddressProjection["writingMode"],
     }))).toBeNull();
-    expect(materialAddressOutline(projection(), { edgeSnapExtent: Number.NaN })).toBeNull();
+    expect(materialAddressOutline(projection(), { cornerRadius: Number.NaN })).toBeNull();
+    expect(materialAddressOutline(projection(), { blockOutset: -1 })).toBeNull();
   });
 });
