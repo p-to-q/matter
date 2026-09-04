@@ -5,8 +5,8 @@ Matter is an environment where thought becomes touchable material.
 Voice admits human language. On one contiguous range inside a passage the person has
 explicitly lassoed, the current source release implements one bounded Elastic
 Language operation: gesture fixes reference and degree, while the tool owns
-direction and bounds. Its public deployment gate remains closed in Preview.41,
-so it is not yet a publicly available transform. Structure keeps the lineage
+direction and bounds. Its public deployment gate remains closed, so it is not
+yet a publicly available transform. Structure keeps the lineage
 between thoughts. AI is intelligence inside the material, not an agent standing
 outside it.
 

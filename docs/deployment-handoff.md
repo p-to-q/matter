@@ -119,17 +119,16 @@ distributed rate limit, provider spend cap, alert delivery, or operator-owned
 rollback. Exact source, CI, tag, release, deployment, and probe identifiers
 stay pending until each is observed.
 
-Preview.48 subsequently reached the public origin through merged `main`; its
-no-store health response reported `0.2.0-preview.48` on 2026-09-02. It still has
-no immutable tag or GitHub prerelease, so that absent publication identity must
-not be manufactured retroactively. For Preview.49, the repository owner has
-directed the selected-material continuity and lifecycle correction through the
-same GitHub-triggered Preview and Production path. This is a fresh,
-Preview.49-only authorization. It preserves the current live label, repair,
-inquiry, and voice gates; Elastic and Text Swap providers remain unavailable,
-and issues #34 and #68 remain open. Exact source, CI, automatic deployment,
-public-origin probe, tag, and prerelease identities must be observed for
-Preview.49 itself.
+Preview.52 subsequently reached the public origin through merged `main`; main,
+annotated `v0.2.0-preview.52`, GitHub prerelease, automatic Production, and the
+no-store health response all identify source `6a4931b` and version
+`0.2.0-preview.52`. For Preview.53, the repository owner has directed the
+precise-range reading-interval correction through the same GitHub-triggered
+Preview and Production path. This is a fresh Preview.53-only authorization. It
+preserves the current live label, repair, inquiry, and voice gates; Elastic and
+Text Swap providers remain unavailable, and issues #34 and #68 remain open.
+Exact source, CI, automatic deployment, public-origin probe, tag, and prerelease
+identities must be observed for Preview.53 itself.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was

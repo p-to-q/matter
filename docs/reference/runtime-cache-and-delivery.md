@@ -110,7 +110,7 @@ regression contract, not a claim that this release invented a new cache hit.
 
 - `/` is no longer a permanent static prerender or an API route is prerendered;
 - root HTML exceeds 48 KiB;
-- initial assets exceed 1,280 KiB raw or 388 KiB at gzip level 9;
+- initial assets exceed 1,280 KiB raw or 396 KiB at gzip level 9;
 - content-hashed `.next/static` assets exceed 26 MiB;
 - the complete stable-name `public/` directory exceeds 512 KiB, including
   visuals, fonts, licences, and any future public file;

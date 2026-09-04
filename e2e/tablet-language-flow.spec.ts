@@ -256,9 +256,7 @@ async function expectUpperGripAtSelection(page: Page, grip: Locator): Promise<vo
 }
 
 async function expectContainedByVisualViewport(page: Page, target: Locator): Promise<void> {
-  const [box, viewport] = await Promise.all([
-    target.boundingBox(),
-    page.evaluate(() => {
+  const viewport = await page.evaluate(() => {
       const visual = window.visualViewport;
       return visual === null
         ? { left: 0, top: 0, right: innerWidth, bottom: innerHeight }
@@ -268,13 +266,18 @@ async function expectContainedByVisualViewport(page: Page, target: Locator): Pro
             right: visual.offsetLeft + visual.width,
             bottom: visual.offsetTop + visual.height,
           };
-    }),
-  ]);
-  expect(box).not.toBeNull();
-  expect(box!.x).toBeGreaterThanOrEqual(viewport.left - .5);
-  expect(box!.y).toBeGreaterThanOrEqual(viewport.top - .5);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.right + .5);
-  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.bottom + .5);
+    });
+  // A projected receipt may replace both grip nodes after an equal semantic
+  // value is already visible. Poll the current locator through that atomic
+  // handoff instead of treating a transient detached node as missing UI.
+  await expect.poll(async () => {
+    const box = await target.boundingBox();
+    return box !== null &&
+      box.x >= viewport.left - .5 &&
+      box.y >= viewport.top - .5 &&
+      box.x + box.width <= viewport.right + .5 &&
+      box.y + box.height <= viewport.bottom + .5;
+  }).toBe(true);
 }
 
 async function segmentProbeRect(

@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-04 — structure and precise ranges keep distinct honest topologies
+
+Changed: pointer-selected whole-node structure remains one glyph-bounded capsule
+per visual line. A multi-line native or actionable range again follows one
+continuous reading interval: its first row reaches logical end, interior rows
+span the text column, and its last row returns from logical start to the true
+end. Elastic turns the boundary row it extends past into an interior row. No
+real endpoint uses proximity snapping. A horizontally disjoint wrap uses one
+neutral-receipt-stable transition in measured positive leading or fails open
+without grips.
+
+Why: a row-bounded reinterpretation correctly restored the older structural
+rhythm but also removed the three continuation regions that made Lasso and
+Elastic feel like one object. The claim that centred rows always overlap applies
+to complete rows, not to a clipped first-row suffix followed by a clipped
+last-row prefix. Product review confirmed that structural separation is
+intentional while double-click/native and Lasso/Elastic must remain continuous.
+
+Forecloses: forcing every selection meaning into one topology, inferring a
+missing paper cell from edge proximity, changing topology during one drag,
+painting a self-touching ring, and exposing handles without a paintable address.
+
 ## 2026-09-02 — selected material restores its precise optical identity
 
 Changed: the shared address receipt derives equal `.245` top/bottom air, wider

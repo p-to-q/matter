@@ -389,26 +389,32 @@ Non-goals:  production gate changes, provider work, a new operation chooser,
 
 ## Active correction — selected material keeps one address through Elastic
 
-State: implemented; source, runtime, and browser proof complete; exact
-Preview.49 GitHub, deployment, origin, tag, and prerelease proof pending.
+State: Preview.52 is deployed; the precise-range reading-interval correction is
+implemented for Preview.53. The exact local candidate passed the full source,
+production-build, runtime-artifact, and controlled Chromium gates. GitHub CI,
+automatic deployment, public-origin, tag, and prerelease receipts remain
+required before publication.
 
 ```text
-Outcome:    native copy, whole-node structure, neutral Lasso, and upper/lower
-            Elastic project one continuous address that follows post-reflow text
-Boundary:   rendering-edge range measurement, projected layout receipts, one
-            pure reading-order outline, grip anchors, and focused browser proof
+Outcome:    native copy, neutral Lasso, and upper/lower Elastic project one
+            continuous address that follows post-reflow reading order; a
+            pointer-selected whole node keeps one separate capsule per visual row
+Boundary:   rendering-edge range measurement, projected layout receipts, explicit
+            structural-row and precise-reading topologies, grip anchors, and
+            focused browser proof
 Invariants: canonical text and semantic selection stay authoritative; DOM pixels
             never enter transform/2; both existing grips retain their shape,
             colour, direction, deadzone and amount; the model still returns only
             { text }, the server constructs the plan, and the tree engine alone
             commits one pointer-undoable mutation
-Proof:      light/dark native, structural and actionable surfaces; real double
-            click; upper/lower pointer, touch and keyboard Elastic; punctuation
-            seam through request/commit/Undo/Redo/reload; RTL ownership;
-            forced-colours; font/viewport/transition invalidation; 2,093 Vitest
-            and 130 Chromium passes on the release-owner host; exact CI,
-            automatic deployment, public origin, tag, and prerelease gates
-            remain required for publication
+Proof:      light/dark native, per-row structural and continuous actionable
+            surfaces; real double click; lower and upper continuation cells;
+            stable disjoint-wrap topology; pointer, touch and keyboard Elastic;
+            punctuation seam through request/commit/Undo/Redo/reload; RTL
+            ownership; forced-colours; font/viewport/transition invalidation;
+            full source and Chromium gates on the exact candidate; exact CI,
+            automatic deployment, public origin, tag, and prerelease gates remain
+            required for publication
 Non-goals:  a generic selection reducer, Point-and-Talk protocol changes, live
             Elastic promotion, a model-visible layout measurement, new chrome,
             a grip redesign, or weakening the 2,000-node optimization target

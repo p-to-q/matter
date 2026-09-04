@@ -46,7 +46,7 @@ function ringShape(path: string) {
 }
 
 describe("material address outline", () => {
-  it("bounds every row by the language it contains", () => {
+  it("projects a multi-row range as one reading-order corridor", () => {
     const outline = materialAddressOutline(projection())!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
       [300, 600],
@@ -55,10 +55,9 @@ describe("material address outline", () => {
     ]);
   });
 
-  it("never claims the margin that centring leaves on either side", () => {
-    // Centred rows are inset from BOTH column edges, so the region between an
-    // edge and the glyphs belongs to no line. Filling to the edge put a wide
-    // first row above a narrow band pinned to the far side of the column.
+  it("keeps a centred multi-row range continuous through the column", () => {
+    // Centring changes where glyphs sit, not the logical route from one visual
+    // line to the next. Only the two true range endpoints stay clipped.
     const centred = materialAddressOutline(projection({
       rows: [
         { blockEnd: 140, blockStart: 100, inlineEnd: 560, inlineStart: 140 },
@@ -68,17 +67,10 @@ describe("material address outline", () => {
       run: { endInline: 400, endRow: 2, startInline: 140, startRow: 0 },
     }))!;
     expect(centred.bands.map((band) => [band.left, band.right])).toEqual([
-      [140, 560],
-      [180, 520],
-      [300, 400],
+      [140, 600],
+      [100, 600],
+      [100, 400],
     ]);
-    // Centring also makes the fill unnecessary: rows share one centre axis, so
-    // consecutive bands always overlap and the outline stays one closed ring.
-    for (const [index, band] of centred.bands.entries()) {
-      const next = centred.bands[index + 1];
-      if (next === undefined) continue;
-      expect(Math.min(band.right, next.right)).toBeGreaterThan(Math.max(band.left, next.left));
-    }
     expect(ringShape(centred.path)).toEqual({ closes: 1, starts: 1 });
   });
 
@@ -105,6 +97,11 @@ describe("material address outline", () => {
       [153, 197],
       [208, 252],
     ]);
+    expect(perRow.bands.map((band) => [band.left, band.right])).toEqual([
+      [140, 560],
+      [140, 560],
+      [300, 400],
+    ]);
     // A precise address still resolves to one region.
     const joined = materialAddressOutline(projection({ rows, run }), {
       blockOutset: 2,
@@ -123,7 +120,7 @@ describe("material address outline", () => {
         { blockEnd: 180, blockStart: 140, inlineEnd: 400, inlineStart: 300 },
       ],
       run: { endInline: 400, endRow: 1, startInline: 140, startRow: 0 },
-    }))!;
+    }), { separateRows: true })!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
       [140, 560],
       [300, 400],
@@ -144,13 +141,13 @@ describe("material address outline", () => {
     const outline = materialAddressOutline(projection({
       // In RTL the run's start is the physical right edge of the first row and
       // its end is the physical left edge of the last row.
-      run: { endInline: 100, endRow: 2, startInline: 600, startRow: 0 },
+      run: { endInline: 140, endRow: 2, startInline: 560, startRow: 0 },
       textDirection: "rtl",
     }))!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
-      [300, 600],
+      [100, 560],
       [100, 600],
-      [100, 260],
+      [140, 600],
     ]);
   });
 
@@ -163,9 +160,9 @@ describe("material address outline", () => {
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
       [300, 600],
       [100, 600],
-      // The selected rows keep their own language; only the slot is column
-      // space, so only the slot reaches both edges.
-      [100, 260],
+      // The former endpoint row is now inside the interval, so it reaches the
+      // logical end before the full-column slot begins.
+      [100, 600],
       [100, 600],
     ]);
     expect(outline.bands.at(-1)!.blockEnd).toBe(300);
@@ -178,10 +175,9 @@ describe("material address outline", () => {
       slot: { blockEnd: 100, blockStart: 20 },
     }))!;
     expect(outline.bands.map((band) => [band.left, band.right])).toEqual([
-      // The slot is inserted column space and reaches both edges; the rows
-      // below it keep the language they contain.
+      // The slot and every row before the real end are full-column.
       [100, 600],
-      [300, 600],
+      [100, 600],
       [100, 600],
       [100, 260],
     ]);
@@ -208,9 +204,9 @@ describe("material address outline", () => {
       direction: "selection-then-slot",
       slot: { blockEnd: 260, blockStart: 220 },
     }))!;
-    // The row keeps its own end throughout; only the slot advances toward the
-    // column, so attachment can never widen language that was not selected.
-    expect(half.bands[2]!.right).toBe(260);
+    // The former endpoint row and its slot advance together toward the logical
+    // end, so no shoulder can detach from the selected surface.
+    expect(half.bands[2]!.right).toBe(430);
     expect(half.bands[3]!.right).toBe(430);
   });
 
@@ -258,7 +254,7 @@ describe("material address outline", () => {
     expect(outline.path).toContain("A4 4 0 0 0");
   });
 
-  it("leaves the same air on both sides of a centred row", () => {
+  it("never proximity-snaps either real endpoint to the column", () => {
     // A boundary endpoint used to snap outward to the column edge when it came
     // within a corner diameter of it. Every row here is inset by centring, not
     // by a missing paper cell, so snapping made the first row asymmetric: it
@@ -270,8 +266,81 @@ describe("material address outline", () => {
       ],
       run: { endInline: 520, endRow: 1, startInline: 108, startRow: 0 },
     }), { blockOutset: 2, cornerRadius: 4 })!;
-    const [first] = outline.bands;
-    expect(first!.left - 108).toBe(592 - first!.right);
+    expect(outline.bands[0]!.left).toBe(108);
+    expect(outline.bands[1]!.right).toBe(520);
+  });
+
+  it("bridges a disjoint wrap through measured leading without a self-touch", () => {
+    const outline = materialAddressOutline(projection({
+      column: { blockEnd: 220, blockStart: 80, inlineEnd: 600, inlineStart: 100 },
+      rows: [
+        { blockEnd: 120, blockStart: 100, inlineEnd: 560, inlineStart: 500 },
+        { blockEnd: 152, blockStart: 132, inlineEnd: 200, inlineStart: 140 },
+      ],
+      run: { endInline: 200, endRow: 1, startInline: 500, startRow: 0 },
+    }))!;
+    expect(outline.bands.map((band) => [band.blockStart, band.blockEnd, band.left, band.right]))
+      .toEqual([
+        [100, 120, 500, 600],
+        [120, 132, 100, 600],
+        [132, 152, 100, 200],
+      ]);
+    expect(ringShape(outline.path)).toEqual({ closes: 1, starts: 1 });
+  });
+
+  it("keeps a required wrap turn through the entire upper and lower attachment", () => {
+    const disjoint = {
+      column: { blockEnd: 240, blockStart: 20, inlineEnd: 600, inlineStart: 100 },
+      rows: [
+        { blockEnd: 120, blockStart: 100, inlineEnd: 560, inlineStart: 500 },
+        { blockEnd: 152, blockStart: 132, inlineEnd: 200, inlineStart: 140 },
+      ],
+      run: { endInline: 200, endRow: 1, startInline: 500, startRow: 0 },
+    };
+    for (const direction of ["selection-then-slot", "slot-then-selection"] as const) {
+      const expectedBandCount = 4;
+      for (const attachmentProgress of [0, 0.001, 0.05, 0.1, 1]) {
+        const outline = materialAddressOutline(projection({
+          ...disjoint,
+          attachmentProgress,
+          direction,
+          slot: direction === "selection-then-slot"
+            ? { blockEnd: 220, blockStart: 152 }
+            : { blockEnd: 100, blockStart: 32 },
+        }))!;
+        const transition = outline.bands.find((band) =>
+          band.blockStart === 120 && band.blockEnd === 132
+        );
+        expect(outline.bands).toHaveLength(expectedBandCount);
+        expect(transition).toMatchObject({ left: 100, right: 600 });
+        expect(ringShape(outline.path)).toEqual({ closes: 1, starts: 1 });
+      }
+    }
+  });
+
+  it("fails open when disjoint rows have no safe leading for the wrap turn", () => {
+    const unsupported = {
+      rows: [
+        { blockEnd: 121, blockStart: 100, inlineEnd: 560, inlineStart: 500 },
+        { blockEnd: 140, blockStart: 120, inlineEnd: 200, inlineStart: 140 },
+      ],
+      run: { endInline: 200, endRow: 1, startInline: 500, startRow: 0 },
+    };
+    for (const state of [
+      { attachmentProgress: 0, direction: "neutral", slot: null },
+      {
+        attachmentProgress: 1,
+        direction: "selection-then-slot",
+        slot: { blockEnd: 220, blockStart: 140 },
+      },
+      {
+        attachmentProgress: 1,
+        direction: "slot-then-selection",
+        slot: { blockEnd: 100, blockStart: 20 },
+      },
+    ] as const) {
+      expect(materialAddressOutline(projection({ ...unsupported, ...state }))).toBeNull();
+    }
   });
 
   it("fails closed instead of painting something it cannot prove", () => {

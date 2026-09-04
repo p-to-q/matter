@@ -18,9 +18,9 @@ export type MaterialAddressOutlineOptions = Readonly<{
   /** Overrides the receipt's corner radius; still clamped by the edges it meets. */
   cornerRadius?: number;
   /**
-   * Draws one closed capsule per row instead of joining the rows into a single
-   * region. A whole-node selection reads line by line, so the leading between
-   * two lines is the layout speaking, not a hole to be filled.
+   * Draws one glyph-bounded capsule per row instead of one reading-order
+   * interval. Whole-node structure reads line by line; precise native and
+   * actionable ranges keep the continuous interval below.
    */
   separateRows?: boolean;
 }>;
@@ -33,17 +33,15 @@ const MINIMUM_BAND_EXTENT = 0.5;
 /**
  * Projects one addressed interval into a single rounded orthogonal outline.
  *
- * Every glyph row is bounded by the language it actually contains, and only the
- * interval's two real endpoints clip the boundary rows. Filling each row out to
- * the column edge instead would be honest reading order for text set flush to
- * that edge, but this material is centred: a row's glyphs are inset from both
- * sides, so the region between a column edge and the glyphs belongs to no line.
- * Claiming it produced a wide first row above a narrow, far-left last row.
+ * A multi-row precise range follows reading order: its first row continues to
+ * the column's logical end, interior rows span the column, and its last row
+ * returns from the logical start to the real endpoint. Those column-side bands
+ * are the visible continuation between lines, not a guess based on proximity;
+ * no endpoint is snapped outward merely because it is near an edge.
  *
- * Centring also makes that fill unnecessary. Rows share one centre axis, so any
- * two of them overlap and the outline stays one connected shape without it. For
- * the same reason a boundary row is never near a column edge for a reason worth
- * absorbing, so no endpoint is snapped outward to one.
+ * Structural whole-node material is deliberately different. It passes
+ * `separateRows` and keeps one glyph-bounded capsule per line, preserving the
+ * rhythm of a node selection without changing precise-range geometry.
  *
  * The opened slot is different: it is inserted column space rather than a line
  * of glyphs, so it does reach the column and joins its neighbour symmetrically.
@@ -84,28 +82,30 @@ export function materialAddressOutline(
   const rowTo = (index: number): number =>
     ltr ? selected[index]!.inlineEnd : selected[index]!.inlineStart;
   const count = selected.length;
+  const separateRows = options.separateRows === true;
   const progress = clamp01(projection.attachmentProgress);
   const engaged = projection.slot !== null && projection.direction !== "neutral";
   const slotFollows = projection.direction === "selection-then-slot";
 
   const neutralSpan = (index: number): LogicalSpan => {
+    if (separateRows) return { from: rowFrom(index), to: rowTo(index) };
     if (count === 1) return { from: run.startInline, to: run.endInline };
-    if (index === 0) return { from: run.startInline, to: rowTo(0) };
-    if (index === count - 1) return { from: rowFrom(index), to: run.endInline };
-    return { from: rowFrom(index), to: rowTo(index) };
+    if (index === 0) return { from: run.startInline, to: logicalEnd };
+    if (index === count - 1) return { from: logicalStart, to: run.endInline };
+    return { from: logicalStart, to: logicalEnd };
   };
   const engagedSpan = (index: number): LogicalSpan => {
-    if (!engaged) return neutralSpan(index);
+    if (!engaged || separateRows) return neutralSpan(index);
     // The grip that owns the slot turns its own boundary row into an interior
     // row, because the interval now continues past it into the opened space.
     if (slotFollows) {
       return index === 0
-        ? { from: run.startInline, to: rowTo(0) }
-        : { from: rowFrom(index), to: rowTo(index) };
+        ? { from: run.startInline, to: logicalEnd }
+        : { from: logicalStart, to: logicalEnd };
     }
     return index === count - 1
-      ? { from: rowFrom(index), to: run.endInline }
-      : { from: rowFrom(index), to: rowTo(index) };
+      ? { from: logicalStart, to: run.endInline }
+      : { from: logicalStart, to: logicalEnd };
   };
 
   const bands: MaterialAddressBand[] = [];
@@ -131,6 +131,32 @@ export function materialAddressOutline(
   const slotVisible = projection.slot !== null &&
     projection.slot.blockEnd - projection.slot.blockStart > 0;
 
+  // Decide wrap topology from the neutral address, not the current Elastic
+  // amount. Otherwise a bridge would disappear at the frame where two moving
+  // bands first overlap, changing the silhouette during one gesture.
+  let wrapTransition: MaterialAddressBand | null = null;
+  // Only a two-row range can be disjoint: with three or more rows every inner
+  // row already spans the column. Keep this scalar so pointer frames do not
+  // allocate a map or rescan topology that the neutral receipt already fixes.
+  if (!separateRows && count === 2) {
+    const columnLeft = Math.min(logicalStart, logicalEnd) - metrics.inlineOutset;
+    const columnRight = Math.max(logicalStart, logicalEnd) + metrics.inlineOutset;
+    const currentSpan = neutralSpan(0);
+    const nextSpan = neutralSpan(1);
+    const currentLeft = Math.min(currentSpan.from, currentSpan.to) - metrics.inlineOutset;
+    const currentRight = Math.max(currentSpan.from, currentSpan.to) + metrics.inlineOutset;
+    const nextLeft = Math.min(nextSpan.from, nextSpan.to) - metrics.inlineOutset;
+    const nextRight = Math.max(nextSpan.from, nextSpan.to) + metrics.inlineOutset;
+    const inlineOverlap = Math.min(currentRight, nextRight) -
+      Math.max(currentLeft, nextLeft);
+    if (inlineOverlap < MINIMUM_BAND_EXTENT) {
+      const blockStart = selected[0]!.blockEnd;
+      const blockEnd = selected[1]!.blockStart;
+      if (blockEnd - blockStart < MINIMUM_BAND_EXTENT) return null;
+      wrapTransition = { blockEnd, blockStart, left: columnLeft, right: columnRight };
+    }
+  }
+
   if (engaged && !slotFollows && slotVisible) {
     pushBand(slotSpan(), projection.slot!.blockStart, projection.slot!.blockEnd);
   }
@@ -138,12 +164,12 @@ export function materialAddressOutline(
     const from = mix(neutralSpan(index).from, engagedSpan(index).from, progress);
     const to = mix(neutralSpan(index).to, engagedSpan(index).to, progress);
     pushBand({ from, to }, row.blockStart, row.blockEnd);
+    if (index === 0 && wrapTransition !== null) bands.push(wrapTransition);
   }
   if (engaged && slotFollows && slotVisible) {
     pushBand(slotSpan(), projection.slot!.blockStart, projection.slot!.blockEnd);
   }
 
-  const separateRows = options.separateRows === true;
   const joined = separateRows
     ? bands.map((band) => ({
         blockEnd: band.blockEnd + blockOutset,

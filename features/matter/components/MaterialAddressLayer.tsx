@@ -53,10 +53,9 @@ export function materialAddressVariantOutline(
   return materialAddressOutline(projection, {
     blockOutset: materialAddressVariantBlockOutset(projection, variant),
     cornerRadius,
-    // Every variant traces the language it addresses; following the glyphs is
-    // the point of the mark. A whole-node selection additionally reads line by
-    // line, the way the label it replaced did, so its rows stay separate
-    // capsules and the leading between them is left alone.
+    // Whole-node structure reads line by line, the way the label it replaced
+    // did. Native and actionable multi-row ranges instead remain one continuous
+    // reading-order interval through neutral and Elastic states.
     separateRows: variant === "structural",
   });
 }
@@ -111,12 +110,16 @@ export function MaterialAddressLayer({
   );
 }
 
-/** Pointer frames publish cached projection only; this function never measures. */
+/**
+ * Pointer frames publish cached projection only; this function never measures.
+ * The return value is the control-eligibility receipt: handles may remain
+ * interactive only when the same call successfully painted their address.
+ */
 export function publishMaterialAddressProjection(
   layer: HTMLElement | null,
   projection: MaterialAddressProjection | null,
-): void {
-  if (layer === null) return;
+): boolean {
+  if (layer === null) return false;
   const path = pathForLayer(layer);
   const outline = materialAddressVariantOutline(projection, readVariant(layer));
   if (projection === null || outline === null) {
@@ -129,7 +132,7 @@ export function publishMaterialAddressProjection(
     }
     if (layer.dataset.addressDirection !== undefined) delete layer.dataset.addressDirection;
     if (layer.dataset.addressPartition !== undefined) delete layer.dataset.addressPartition;
-    return;
+    return false;
   }
   if (layer.dataset.materialAddressReady !== "true") {
     layer.dataset.materialAddressReady = "true";
@@ -144,10 +147,11 @@ export function publishMaterialAddressProjection(
     // Without a path element there is nothing painted, so the fallback has to
     // keep the address visible rather than the layer claiming it.
     delete layer.dataset.materialAddressPainted;
-    return;
+    return false;
   }
   if (path.getAttribute("d") !== outline.path) path.setAttribute("d", outline.path);
   if (layer.dataset.materialAddressPainted !== "true") {
     layer.dataset.materialAddressPainted = "true";
   }
+  return true;
 }
