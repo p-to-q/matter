@@ -1,10 +1,11 @@
 # Preview deployment-owner handoff
 
-Status: Preview.48 is the current deployed public-origin version through the
-automatic GitHub-linked Production path; the no-store health boundary reported
-`0.2.0-preview.48` on 2026-09-02. It has no immutable tag or GitHub prerelease.
-Preview.49 is authorized through the repository's GitHub-triggered delivery
-path: its exact source, CI, automatic Preview/Production, tag, and prerelease
+Status: Preview.52 is the current deployed public-origin version through the
+automatic GitHub-linked Production path; main, annotated tag, GitHub
+prerelease, Production, and no-store health all identify source `6a4931b` and
+version `0.2.0-preview.52`. Preview.53 is authorized through the repository's
+GitHub-triggered delivery path: its exact source, CI, automatic
+Preview/Production, tag, and prerelease
 receipts are pending and none may be inferred from another. The repository
 maintainer pushes only GitHub and observes the linked deployment; the
 deployment owner retains Vercel configuration and credential authority. The
@@ -23,14 +24,15 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.49 prerelease after the exact
+The repository owner has directed one Preview.53 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
-deployment gates. This is not authority for the repository maintainer to run a
-manual Vercel command or edit Vercel configuration. The automatic promotion
-does not prove that external controls exist. Issues #34 and #68 remain open;
-label, repair, inquiry, and browser/local voice stay as configured, while
-Elastic and Text Swap remain unavailable. The source admission ceilings below
-are per warm instance only.
+deployment gates. This is fresh Preview.53-only authority; it does not extend
+the historical Preview.49 authorization or permit the repository maintainer to
+run a manual Vercel command or edit Vercel configuration. The automatic
+promotion does not prove that external controls exist. Issues #34 and #68
+remain open; label, repair, inquiry, and browser/local voice stay as configured,
+while Elastic and Text Swap remain unavailable. The source admission ceilings
+below are per warm instance only.
 
 ## Resolved-by-itself incident — inquiry reached no model on Production
 
@@ -128,7 +130,7 @@ that exists, every occurrence of this will be found the same way.
 
 ### How to know it is fixed
 
-`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.48`
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.53`
 reports `pool-healthy` and `surface-usable`, with repair, label, and Inquiry
 producing a real accepted result on every call. Healthy
 inquiry latency has been under two
@@ -141,7 +143,8 @@ deployment and public version check. Health and deployment success did not
 substitute for it, so publication was withheld. Preview.48 must produce its own
 closed-count release receipt; neither the failure nor any later success may be
 borrowed across source versions, and one successful run is not evidence that
-the intermittency is gone.
+the intermittency is gone. The same rule now binds Preview.53: its release probe
+must identify Preview.53 and cannot borrow Preview.48's later receipt.
 
 ### Incident-time source boundary
 

@@ -237,12 +237,17 @@ for (const viewport of [
             bottom: visual.offsetTop + visual.height,
           };
     });
-    const boundedHandle = await handle.boundingBox();
-    if (boundedHandle === null) throw new Error("bounded handle missing");
-    expect(boundedHandle.x).toBeGreaterThanOrEqual(visibleViewport.left);
-    expect(boundedHandle.y).toBeGreaterThanOrEqual(visibleViewport.top);
-    expect(boundedHandle.x + boundedHandle.width).toBeLessThanOrEqual(visibleViewport.right);
-    expect(boundedHandle.y + boundedHandle.height).toBeLessThanOrEqual(visibleViewport.bottom);
+    // The projected receipt can remount the same semantic handle after its
+    // value has settled. Poll the live locator so the viewport proof observes
+    // the successor control rather than a transient detached node.
+    await expect.poll(async () => {
+      const boundedHandle = await handle.boundingBox();
+      return boundedHandle !== null &&
+        boundedHandle.x >= visibleViewport.left &&
+        boundedHandle.y >= visibleViewport.top &&
+        boundedHandle.x + boundedHandle.width <= visibleViewport.right &&
+        boundedHandle.y + boundedHandle.height <= visibleViewport.bottom;
+    }).toBe(true);
 
     const settledBeforeInvalidation = await handle.getAttribute("aria-valuenow");
     for (const eventSource of ["window", "visualViewport", "fonts"] as const) {

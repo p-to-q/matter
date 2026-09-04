@@ -28,26 +28,30 @@ The visible object is one continuous interval in reading order over the final
 projected line grid. It is not a union of glyph rectangles plus a separate
 pocket.
 
-Every glyph row is bounded by the language it contains. Only the interval's two
-real endpoints clip the boundary rows:
+Precise native and actionable ranges follow the logical route through the text
+column. Only the interval's two real endpoints clip the boundary rows:
 
 ```text
 only row     [startInline, endInline]
-first row    [startInline, row.end]
-middle rows  [row.start, row.end]
-last row     [row.start, endInline]
+first row    [startInline, column.logicalEnd]
+middle rows  [column.logicalStart, column.logicalEnd]
+last row     [column.logicalStart, endInline]
 ```
 
-An earlier version filled each row out to the column's logical edges. That is
-honest reading order for text set flush to those edges, which is how a browser
-paints multi-line selection. This material is centred: a row's glyphs are inset
-from both sides, so the region between a column edge and the glyphs belongs to
-no line. Claiming it produced a wide first row above a narrow band pinned to
-the far side of the column, and the shape a node received depended on how its
-text happened to wrap.
+Centred typesetting changes where a row's glyphs sit; it does not erase the
+reading-order continuation from one visual line to the next. This is not
+proximity snapping. The true start and end never move merely because they are
+near a column edge: the first row claims only its continuation toward logical
+end, the last only its continuation from logical start, and an interior row
+claims the route between both edges.
 
-Centring also makes that fill unnecessary. Every row shares one centre axis, so
-any two rows overlap and the outline stays one connected shape on its own.
+Two clipped boundary rows can be horizontally disjoint even when their full
+centred rows share an axis. When that occurs, one full-column wrap-transition
+band occupies the measured positive leading between them. Whether that band is
+required is derived from the neutral receipt and remains fixed through upper and
+lower attachment, so a drag never changes topology. If no positive leading can
+carry the turn, custom paint fails open instead of emitting a self-touching path
+or leaving invisible-but-operable grips.
 
 The opened slot is not a glyph row. It is inserted column space, so it does
 reach both edges and meets its neighbour in a symmetric step. The lower grip
@@ -82,8 +86,10 @@ which is a fair reading for text set flush to the edge; centred rows are inset
 by the alignment instead, so snapping claimed the gutter on one side while the
 opposite edge stayed on the glyphs and left the first row visibly lopsided.
 
-One rounded orthogonal outline paints these bands exactly once. There are no
-fragment connectors, neck, body, seam overlap, or density-compounding children.
+A precise range is painted as one rounded orthogonal outline. A structural
+whole-node address paints one glyph-bounded capsule per visual line. Neither
+topology uses fragment connectors, neck, body, seam overlap, or
+density-compounding children.
 
 ## Measurement and projection boundary
 
@@ -125,11 +131,12 @@ or model context.
 
 ## Whole-node selection and native copy
 
-The whole-node structural state reached by pointer selection uses the same
-neutral outline instead of per-line cloned capsules. It keeps its current
-light/dark density and does not acquire Elastic grips merely because it shares
-geometry. The old label paint remains a fallback until the single outline is
-confirmed painted, preventing a handles-only or focus-ring-only frame.
+The whole-node structural state reached by pointer selection deliberately reads
+line by line, with one glyph-bounded capsule for each visual row. It shares the
+receipt, optical family, and painter with precise ranges, but not their
+reading-corridor topology. It keeps its current light/dark density and never
+acquires Elastic grips. The old label paint remains a fallback until all row
+paths are confirmed painted, preventing a focus-ring-only frame.
 
 A non-collapsed, single browser Range inside one material text node uses the
 same neutral outline authority without grips or slot. The browser Selection

@@ -147,7 +147,7 @@ describe("selected material address", () => {
     expect((outline.path.match(/M/g) ?? []).length).toBe(1);
     expect((outline.path.match(/Z/g) ?? []).length).toBe(1);
     expect(outline.path.length).toBeGreaterThan(0);
-    // A whole-node double-click reads as one corridor: the first row runs to
+    // A precise multi-row range reads as one corridor: the first row runs to
     // the column's logical end rather than stopping at its last glyph.
     expect(outline.bands[0]!.right).toBe(603);
     expect(outline.bands[1]!.left).toBe(97);
@@ -282,7 +282,7 @@ describe("selected material address", () => {
     expect(materialAddressVariantBlockOutset(projection, "structural")).toBe(1.6);
   });
 
-  it("keeps every variant off the gutter that centring leaves", () => {
+  it("never proximity-snaps a precise range endpoint", () => {
     // A boundary endpoint used to snap outward to the column edge when it came
     // within a corner diameter of it. Centred rows are inset by the alignment,
     // not by a missing paper cell, so every variant now keeps its real edge.
@@ -298,6 +298,26 @@ describe("selected material address", () => {
       const outline = materialAddressVariantOutline(nearEdge, variant)!;
       expect(outline.bands[0]!.left).toBe(99);
     }
+  });
+
+  it("withholds Elastic controls and layout damage when its address cannot be painted", () => {
+    const unsupported = addressProjection({
+      metrics: { blockOutset: 3, cornerRadius: 4, inlineOutset: 3, medianRowExtent: 20 },
+      rows: [
+        { blockEnd: 121, blockStart: 100, inlineEnd: 560, inlineStart: 500 },
+        { blockEnd: 140, blockStart: 120, inlineEnd: 200, inlineStart: 140 },
+      ],
+      run: { endInline: 200, endRow: 1, startInline: 500, startRow: 0 },
+    });
+    expect(materialAddressVariantOutline(unsupported, "actionable")).toBeNull();
+    expect(materialAddressVariantOutline(unsupported, "native")).toBeNull();
+    expect(materialAddressVariantOutline(unsupported, "structural")).not.toBeNull();
+    expect(rooted).toContain("paintableElasticPreviewSource");
+    expect(rooted).toContain("previewSource={paintableElasticPreviewSource}");
+    expect(rooted).toMatch(/const addressPainted = publishMaterialAddressProjection\([^]*?if \(!addressPainted\)/);
+    expect(rooted).toMatch(
+      /if \(visibleSplitPreviewMode === "expand" && stretch\.dragging\) return;[^]*?if \(visibleSplitPreviewMode === "expand"\)/,
+    );
   });
 
   it("keeps the whole-node ring and leaves precise addresses a pure fill", () => {

@@ -156,6 +156,80 @@ test("native copy releases stale paint before measuring a new range", async ({ p
   expect(await setRootRange(9, 16)).toBe(false);
   await expect(native).toHaveAttribute("data-material-address-painted", "true");
   await expect.poll(() => nativePath.getAttribute("d")).not.toBe(firstPath);
+  const secondPath = await nativePath.getAttribute("d");
+
+  // A literal same-node range spanning visual rows owns the same reading
+  // corridor as Lasso: one path covers the first-row continuation and the
+  // last-row return without proximity-snapping either true endpoint.
+  expect(await setRootRange(0, `${SOURCE}${ROOT_SUFFIX}`.length - 1)).toBe(false);
+  await expect(native).toHaveAttribute("data-material-address-painted", "true");
+  await expect.poll(() => nativePath.getAttribute("d")).not.toBe(secondPath);
+  const multiLineNative = await nativePath.evaluate((path) => {
+    if (!(path instanceof SVGGeometryElement)) throw new Error("native path missing");
+    const root = document.querySelector<HTMLElement>(
+      '[data-thought-text-id="thought_fixture_root"]',
+    );
+    if (!(root instanceof HTMLElement)) throw new Error("native range root missing");
+    const text = document.createTreeWalker(root, NodeFilter.SHOW_TEXT).nextNode();
+    if (!(text instanceof Text)) throw new Error("native range text missing");
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, text.length - 1);
+    const measuredColumn = root.getBoundingClientRect();
+    const fragments = [...range.getClientRects()]
+      .filter((rect) => rect.width > .5 && rect.height > .5)
+      .sort((left, right) => left.top - right.top || left.left - right.left);
+    const rows: Array<{ bottom: number; left: number; right: number; top: number }> = [];
+    for (const fragment of fragments) {
+      const row = rows.find((candidate) =>
+        fragment.top <= candidate.bottom + 1 && fragment.bottom >= candidate.top - 1
+      );
+      if (row === undefined) {
+        rows.push({
+          bottom: fragment.bottom,
+          left: fragment.left,
+          right: fragment.right,
+          top: fragment.top,
+        });
+      } else {
+        row.bottom = Math.max(row.bottom, fragment.bottom);
+        row.left = Math.min(row.left, fragment.left);
+        row.right = Math.max(row.right, fragment.right);
+        row.top = Math.min(row.top, fragment.top);
+      }
+    }
+    rows.sort((left, right) => left.top - right.top);
+    const first = rows[0];
+    const last = rows.at(-1);
+    if (first === undefined || last === undefined) throw new Error("native rows missing");
+    const firstPoint = new DOMPoint(
+      (first.right + measuredColumn.right) / 2,
+      (first.top + first.bottom) / 2,
+    );
+    const lastPoint = new DOMPoint(
+      (measuredColumn.left + last.left) / 2,
+      (last.top + last.bottom) / 2,
+    );
+    const d = path.getAttribute("d") ?? "";
+    return {
+      closes: (d.match(/Z/g) ?? []).length,
+      firstGap: measuredColumn.right - first.right,
+      firstInside: path.isPointInFill(firstPoint),
+      lastGap: last.left - measuredColumn.left,
+      lastInside: path.isPointInFill(lastPoint),
+      rowCount: rows.length,
+      starts: (d.match(/M/g) ?? []).length,
+    };
+  });
+  expect(multiLineNative.rowCount).toBeGreaterThan(1);
+  expect(multiLineNative.firstGap).toBeGreaterThan(2);
+  expect(multiLineNative.lastGap).toBeGreaterThan(2);
+  expect(multiLineNative).toMatchObject({
+    closes: 1,
+    firstInside: true,
+    lastInside: true,
+    starts: 1,
+  });
 
   const collapsedPainted = await page.evaluate(() => {
     window.getSelection()?.removeAllRanges();
@@ -330,6 +404,12 @@ test("one outline owns the address from neutral through both grips", async ({ pa
   });
   expect(Math.abs(opticalAir.top - opticalAir.bottom)).toBeLessThan(.25);
   expect(Math.abs(opticalAir.top - opticalAir.expected)).toBeLessThan(.5);
+  const neutralCorridor = await readingCorridorCoverage(page);
+  expect(neutralCorridor.rowCount).toBeGreaterThan(1);
+  expect(neutralCorridor.firstToLogicalEndGap).toBeGreaterThan(2);
+  expect(neutralCorridor.lastFromLogicalStartGap).toBeGreaterThan(2);
+  expect(neutralCorridor.firstToLogicalEndInside).toBe(true);
+  expect(neutralCorridor.lastFromLogicalStartInside).toBe(true);
   // Painted means the single-selection fallback is released, so the two never
   // stack and no frame can show grips over an unpainted address.
   await expect(page.locator(".material-address-selection-set--fallback[data-single-address-fallback]"))
@@ -337,10 +417,14 @@ test("one outline owns the address from neutral through both grips", async ({ pa
 
   const lower = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
   const upper = page.getByRole("slider", { name: "用上握点设置所选文字的展开程度" });
-  for (const grip of [lower, upper]) {
+  for (const [kind, grip] of [["lower", lower], ["upper", upper]] as const) {
     await grip.press("Home");
     await grip.press("End");
     await expect(actionable).toHaveAttribute("data-material-address-painted", "true");
+    await expect(actionable).toHaveAttribute(
+      "data-address-direction",
+      kind === "lower" ? "selection-then-slot" : "slot-then-selection",
+    );
     await expect(page.locator(".language-split-address-copy")).toHaveText(`${SOURCE}，`);
     const engagedD = await actionablePath.getAttribute("d");
     expect((engagedD ?? "").match(/M/g) ?? []).toHaveLength(1);
@@ -349,6 +433,11 @@ test("one outline owns the address from neutral through both grips", async ({ pa
     expect(await actionablePath.evaluate((node) => getComputedStyle(node).fill)).toBe(neutralFill);
     // Grips stay present and keep their physical rule while the outline owns paint.
     await expect(page.locator(".stretch-handle")).toHaveCount(2);
+    if (kind === "lower") {
+      const lowerCorridor = await readingCorridorCoverage(page);
+      expect(lowerCorridor.lastToLogicalEndGap).toBeGreaterThan(2);
+      expect(lowerCorridor.lastToLogicalEndInside).toBe(true);
+    }
     await grip.press("Home");
   }
 });
@@ -564,6 +653,11 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
   );
   await expect(projectedSelectedCopy).toBeVisible();
   await expect(lower).toBeVisible();
+  // The layout owner stages the projected partition before the paintable
+  // receipt remounts both controls. Visibility alone can still observe the old
+  // zero-degree controls, so wait on the new semantic value before measuring.
+  await expect(upper).toHaveAttribute("aria-valuenow", "1");
+  await expect(lower).toHaveAttribute("aria-valuenow", "1");
   const [beforeAfter, selectedAfter, lowerAfter] = await Promise.all([
     beforeCopy.boundingBox(),
     projectedSelectedCopy.boundingBox(),
@@ -933,17 +1027,90 @@ async function runElasticReceipt(
 async function expectLowerSpaceBeforeSuffix(page: Page): Promise<void> {
   const suffix = page.locator(".language-split-block--after");
   const selection = page.locator(".language-split-block--selected");
-  await expect(page.locator(".language-split-projection")).toHaveAttribute(
+  const projection = page.locator(".language-split-projection");
+  await expect(projection).toHaveAttribute(
     "data-stretch-handle",
     "bottom",
   );
-  const [selectionBox, suffixBox] = await Promise.all([
-    selection.boundingBox(),
-    suffix.boundingBox(),
-  ]);
-  expect(selectionBox).not.toBeNull();
-  expect(suffixBox).not.toBeNull();
-  expect(suffixBox!.y).toBeGreaterThan(selectionBox!.y + selectionBox!.height + 20);
+  await expect(projection).toHaveAttribute("data-preview-mode", "expand");
+  await expect(page.locator('.material-address-layer[data-address-variant="actionable"]'))
+    .toHaveAttribute("data-material-address-painted", "true");
+  // The semantic degree can settle before the replacement receipt has mounted
+  // its expanded flow boxes. Poll the current boxes through that atomic
+  // handoff; a one-shot read can observe the old neutral spacing under load.
+  await expect.poll(async () => {
+    const [selectionBox, suffixBox] = await Promise.all([
+      selection.boundingBox(),
+      suffix.boundingBox(),
+    ]);
+    if (selectionBox === null || suffixBox === null) return 0;
+    return suffixBox.y - (selectionBox.y + selectionBox.height);
+  }).toBeGreaterThan(20);
+}
+
+async function readingCorridorCoverage(page: Page): Promise<Readonly<{
+  firstToLogicalEndGap: number;
+  firstToLogicalEndInside: boolean;
+  lastFromLogicalStartGap: number;
+  lastFromLogicalStartInside: boolean;
+  lastToLogicalEndGap: number;
+  lastToLogicalEndInside: boolean;
+  rowCount: number;
+}>> {
+  return page.locator(
+    '.material-address-layer[data-address-variant="actionable"] .material-address-layer__path',
+  ).evaluate((path) => {
+    if (!(path instanceof SVGGeometryElement)) throw new Error("actionable path missing");
+    const address = document.querySelector<HTMLElement>(".language-split-address-copy");
+    const column = address?.closest(".spatial-thought")
+      ?.querySelector<HTMLElement>(".spatial-thought__text")
+      ?.getBoundingClientRect();
+    if (address === null || address === undefined || column === undefined) {
+      throw new Error("reading-corridor fixture missing");
+    }
+    const range = document.createRange();
+    range.selectNodeContents(address);
+    const fragments = [...range.getClientRects()]
+      .filter((rect) => rect.width > .5 && rect.height > .5)
+      .sort((left, right) => left.top - right.top || left.left - right.left);
+    const rows: Array<{ bottom: number; left: number; right: number; top: number }> = [];
+    for (const fragment of fragments) {
+      const row = rows.find((candidate) =>
+        fragment.top <= candidate.bottom + 1 && fragment.bottom >= candidate.top - 1
+      );
+      if (row === undefined) {
+        rows.push({
+          bottom: fragment.bottom,
+          left: fragment.left,
+          right: fragment.right,
+          top: fragment.top,
+        });
+      } else {
+        row.bottom = Math.max(row.bottom, fragment.bottom);
+        row.left = Math.min(row.left, fragment.left);
+        row.right = Math.max(row.right, fragment.right);
+        row.top = Math.min(row.top, fragment.top);
+      }
+    }
+    rows.sort((left, right) => left.top - right.top);
+    const first = rows[0];
+    const last = rows.at(-1);
+    if (first === undefined || last === undefined) throw new Error("address rows missing");
+    const firstY = (first.top + first.bottom) / 2;
+    const lastY = (last.top + last.bottom) / 2;
+    const firstEndX = (first.right + column.right) / 2;
+    const lastStartX = (column.left + last.left) / 2;
+    const lastEndX = (last.right + column.right) / 2;
+    return {
+      firstToLogicalEndGap: column.right - first.right,
+      firstToLogicalEndInside: path.isPointInFill(new DOMPoint(firstEndX, firstY)),
+      lastFromLogicalStartGap: last.left - column.left,
+      lastFromLogicalStartInside: path.isPointInFill(new DOMPoint(lastStartX, lastY)),
+      lastToLogicalEndGap: column.right - last.right,
+      lastToLogicalEndInside: path.isPointInFill(new DOMPoint(lastEndX, lastY)),
+      rowCount: rows.length,
+    };
+  });
 }
 
 async function expectNeutralSelection(page: Page): Promise<void> {

@@ -17,6 +17,43 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-04 — structure and precise ranges keep distinct honest topologies
+
+Changed: pointer-selected whole-node structure remains one glyph-bounded capsule
+per visual line. A multi-line native or actionable range again follows one
+continuous reading interval: its first row reaches logical end, interior rows
+span the text column, and its last row returns from logical start to the true
+end. Elastic turns the boundary row it extends past into an interior row. No
+real endpoint uses proximity snapping. A horizontally disjoint wrap uses one
+neutral-receipt-stable transition in measured positive leading or fails open
+without grips.
+
+Why: a row-bounded reinterpretation correctly restored the older structural
+rhythm but also removed the three continuation regions that made Lasso and
+Elastic feel like one object. The claim that centred rows always overlap applies
+to complete rows, not to a clipped first-row suffix followed by a clipped
+last-row prefix. Product review confirmed that structural separation is
+intentional while double-click/native and Lasso/Elastic must remain continuous.
+
+Forecloses: forcing every selection meaning into one topology, inferring a
+missing paper cell from edge proximity, changing topology during one drag,
+painting a self-touching ring, and exposing handles without a paintable address.
+
+## 2026-09-04 — the runtime ceiling follows its enforcing host
+
+Changed: the initial gzip ceiling is 396 KiB on the Linux CI measurement basis;
+the raw, static, public, font, and lazy-WASM ceilings stay unchanged.
+
+Why: the same candidate measured about 2,820 bytes larger on Linux than macOS,
+so the earlier 388 KiB local ceiling did not describe the environment that
+enforces releases. The 396 KiB bound preserves roughly 7 KiB of deliberate
+headroom without hiding a dependency or moving first-use selection behavior
+behind an asynchronous boundary.
+
+Forecloses: treating cross-host compression drift as product growth, citing a
+macOS-only number as the CI contract, and raising the ceiling again without a
+same-host main/candidate comparison and reduction plan.
+
 ## 2026-09-02 — selected material restores its precise optical identity
 
 Changed: the shared address receipt derives equal `.245` top/bottom air, wider

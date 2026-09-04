@@ -89,6 +89,7 @@ import { CanvasChrome, type CanvasChromeHandle } from "./CanvasChrome";
 import { CanvasRuling } from "./CanvasRuling";
 import {
   MaterialAddressLayer,
+  materialAddressVariantOutline,
   publishMaterialAddressProjection,
 } from "./MaterialAddressLayer";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
@@ -959,10 +960,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (element === null) return;
     element.inert = false;
     element.style.removeProperty("visibility");
-    publishMaterialAddressProjection(
+    const addressPainted = publishMaterialAddressProjection(
       actionableAddressLayerRef.current,
       preview.addressProjection,
     );
+    if (!addressPainted) {
+      publishLiveLanguageLayout(null);
+      element.inert = true;
+      element.style.visibility = "hidden";
+      element.removeAttribute("data-preview-mode");
+      split?.removeAttribute("data-preview-mode");
+      const addressLayer = element.closest<HTMLElement>(".lasso-layer");
+      addressLayer?.style.removeProperty("--address-displacement-y");
+      if (signal.dragging) stretchInvalidationRef.current();
+      return;
+    }
     element.dataset.previewMode = preview.mode;
     const handle = signal.handle ?? "bottom";
     element.dataset.stretchHandle = handle;
@@ -1149,8 +1161,28 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretch.activeHandle,
     stretch.lastHandle,
   ]);
+  const paintableElasticPreviewSource = useMemo(() => {
+    if (renderedElasticPreviewSource === null) return null;
+    const preview = projectElasticPreview(
+      renderedElasticPreviewSource,
+      stretch.amount,
+      undefined,
+      stretch.activeHandle,
+      stretch.lastHandle,
+      false,
+    );
+    return preview !== null &&
+        materialAddressVariantOutline(preview.addressProjection, "actionable") !== null
+      ? renderedElasticPreviewSource
+      : null;
+  }, [
+    renderedElasticPreviewSource,
+    stretch.activeHandle,
+    stretch.amount,
+    stretch.lastHandle,
+  ]);
   const visibleSplitPreviewMode: SelectionPreviewMode =
-    visibleAddressMode === "expand" && renderedElasticPreviewSource !== null
+    visibleAddressMode === "expand" && paintableElasticPreviewSource !== null
       ? "expand"
       : "neutral";
   useLayoutEffect(() => {
@@ -1548,9 +1580,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // Hot pointer movement publishes disposable DOM geometry through the same
     // pure layout policy. A React layout receipt would invalidate the gesture,
     // so canonical state publication still waits for pointer settlement.
-    if (selectionPreviewMode === "expand" && stretch.dragging) return;
+    if (visibleSplitPreviewMode === "expand" && stretch.dragging) return;
     let nextDamage: PresentationDamage | null = null;
-    if (selectionPreviewMode === "expand") {
+    // Layout staging may reflow the hidden split solely to obtain a receipt.
+    // Only a paintable visible address may displace surrounding material;
+    // otherwise a failed outline would leave an empty lane after its text and
+    // controls have already fallen back.
+    if (visibleSplitPreviewMode === "expand") {
       if (projectionElement == null || owner == null) return;
       const source = owner.querySelector<HTMLElement>(".spatial-thought__text");
       const slot = projectionElement.querySelector<HTMLElement>(".language-split-slot");
@@ -1577,11 +1613,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     return () => cancelAnimationFrame(frame);
   }, [
     lasso.selection?.nodeId,
-    selectionPreviewMode,
     stretch.amount,
     stretch.activeHandle,
     stretch.dragging,
     stretch.lastHandle,
+    visibleSplitPreviewMode,
     viewport.zoom,
   ]);
   const selectedNode =
@@ -2836,11 +2872,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         inkPathRef={lasso.inkPathRef}
         particleCanvasRef={lasso.particleCanvasRef}
         rects={lasso.selections.length > 1 ? lasso.selectionSetRects : lasso.selectionRects}
-        previewMode={visibleAddressMode}
+        previewMode={visibleSplitPreviewMode}
         selectedText={lasso.selections.length === 1 ? lasso.selection?.selectedText ?? null : null}
         selectionCount={lasso.selections.length}
         elasticRef={elasticRef}
-        previewSource={renderedElasticPreviewSource}
+        previewSource={paintableElasticPreviewSource}
         locale={props.locale}
         onBeginAdjustment={beginStretchAdjustment}
         onFocusRestored={finishStretchFocusRestore}

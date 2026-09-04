@@ -1,11 +1,12 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.48 is the current deployed
-public-origin version; the no-store health boundary reported
-`0.2.0-preview.48` on 2026-09-02, while no immutable tag or GitHub prerelease
-exists. Preview.49 is the provisional selected-material candidate until its
-exact repository, browser, GitHub CI, automatically triggered Vercel
+the complete generative product loop yet. Preview.52 is the current deployed
+public-origin version; main, annotated tag, GitHub prerelease, Production
+deployment, and the no-store health boundary all identify source `6a4931b` and
+version `0.2.0-preview.52`. Preview.53 is the provisional precise-range
+continuity correction until its exact repository, browser, GitHub CI,
+automatically triggered Vercel
 deployment, deployed-origin probe, tag, and prerelease receipts settle. The
 repository maintainer operates only through GitHub: a topic push triggers
 Preview and a `main` update triggers Production. No manual Vercel command,
@@ -64,13 +65,16 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Provisional release boundary — 0.2.0-preview.49
+## Provisional release boundary — 0.2.0-preview.53
 
-Preview.49 makes selected text one continuous material address across native
-copy, whole-node structure, neutral Lasso, and both Elastic projections. It
-replaces independent fragment, connector, and split-text paint owners with one
-post-reflow layout receipt and one rounded reading-order outline. The two grips,
-their physical meaning, palette, request amount, transform/2 wire, server plan,
+Preview.53 keeps pointer-selected whole-node structure as one glyph-bounded
+capsule per visual row. Native copy, neutral Lasso, and both Elastic projections
+instead use one continuous post-reflow reading interval: first row to logical
+end, interior rows across the text column, and logical start to the true final
+endpoint. Horizontally disjoint boundary rows turn through measured positive
+leading with topology fixed by the neutral receipt; an unprovable turn fails
+open without grips. No endpoint uses proximity snapping. The two grips, their
+physical meaning, palette, request amount, transform/2 wire, server plan,
 tree-engine commit, and pointer Undo remain unchanged.
 
 The painted address may include the protected visible punctuation seam so the
@@ -81,26 +85,14 @@ node-level direction owner, and every viewport, transition, font, partition, or
 source-receipt invalidation revokes stale fixed geometry before it can remain
 visible or operable. Pointer movement performs no DOM measurement.
 
-The initial gzip ceiling advances from 384 to 396 KiB, and the earlier
-`0.65%` claim is withdrawn: it subtracted two different measurement bases. A
-cold build of each exact commit on one host records merged Preview.48 main at
-380.8 KiB gzip / 1,199.6 KiB raw and this candidate at 386.4 KiB / 1,224.0 KiB,
-a 5,735-byte (1.47%) gzip and 24,986-byte (2.03%) raw increase. Chunk-level
-comparison attributes all of it to the single application chunk, which grows
-446,782 to 469,644 bytes while every other initial chunk stays byte-identical;
-that is about 10.9 bytes per shipped source line, so the growth is written
-behaviour rather than a duplicated or mis-bundled dependency.
-
-The same build measures about 2,820 bytes larger on the Linux CI host than on
-macOS. The ceiling is therefore stated on the enforcing CI basis, where this
-candidate is 398,494 bytes, and it carries one release of deliberate headroom
-(7,010 bytes) instead of just clearing the current build. Earlier rows in this
-file predate that rule and mix the two bases. A future increase requires a
-reduction plan rather than another raise. The existing strict 2,000-node
-cold-task `<100 ms`
-optimization target remains unchanged and open; on this host both exact main
-and the candidate recorded the same 111 ms cold task, while interaction p95
-remained below its 200 ms release ceiling.
+The initial gzip ceiling remains 396 KiB on the enforcing Linux CI basis. That
+bound was established by a same-host comparison during the original selected-
+material slice: Preview.48 measured 380.8 KiB gzip / 1,199.6 KiB raw and its
+successor measured 386.4 KiB / 1,224.0 KiB. The Linux build was about 2,820
+bytes larger than the same source on macOS, which is why the older 388 KiB local
+number is not the release contract. Preview.53 must provide its own exact
+artifact receipt and may not raise this ceiling. The strict 2,000-node cold-task
+`<100 ms` optimization target remains unchanged and open.
 
 This release keeps the public Transform and Text Swap adapters unavailable.
 The fixture transform proves request, server-constructed plan, browser
@@ -109,20 +101,19 @@ promote a live model adapter or satisfy the separate multilingual, provider,
 distributed-rate, spend, alert, or rollback evidence.
 
 ```text
-source proof           npm run check exited 0 on the versioned candidate:
-                       doctor found 28 repository files; 47 linked Markdown
-                       documents passed; 79 Node checks passed; architecture
-                       covered 427 files across 7 layers with no outward edge,
-                       provider leak, or cycle; the release-owner host passed
-                       2,093 Vitest cases with 3 explicit opt-in skips; an
-                       independent restricted audit passed 2,092 with one
-                       additional loopback capability skip; type generation,
-                       TypeScript, lint, and the Next 16.3 production build passed
-runtime proof          initial 1,224.0 KiB raw / 386.4 KiB gzip remained below
-                       the reviewed 388 KiB ceiling; no repository-only trace
-                       entered the artifact
-browser proof          full Chromium passed 130 cases with 15 explicit
-                       capability or research skips and no failure
+source proof           exact local Preview.53 candidate passed npm run check:
+                       79 Node checks; 47 Markdown files; architecture across
+                       427 files and seven layers; 2,090 Vitest passed with four
+                       explicit skips; type generation, TypeScript, zero-warning
+                       lint, and the production build all passed
+runtime proof          exact local artifact passed at 1,224.2 KiB raw / 386.5
+                       KiB gzip under the 396 KiB Linux-CI ceiling; the enforcing
+                       Linux receipt remains part of GitHub CI
+browser proof          full controlled Chromium passed: 130 cases and 15
+                       explicit historical/capability skips, including real
+                       double click, multi-line native and actionable corridors,
+                       both Elastic grips, touch, reduced motion, forced colours,
+                       font invalidation, and the 2,000-node fixtures
 GitHub CI proof         pending on the exact topic and merged main identities
 automatic deploy proof pending from GitHub-triggered Preview and Production
 publication state      pending; no tag or prerelease unless the strict
