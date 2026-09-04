@@ -127,9 +127,10 @@ passed. The strict six-round pool release probe did not: repair reached a model
 therefore withheld and remain at Preview.52; an older healthy receipt cannot be
 borrowed. A second six-round probe after a full recovery window reached 0/6 on
 all three surfaces and classified the pool as down, so no immediate retry is a
-release remedy. Preview.53 preserves the current live label, repair, inquiry,
-and voice gates; Elastic and Text Swap providers remain unavailable, and issues
-#34 and #68 remain open.
+release remedy. A later fresh closed-count probe must pass all three surfaces
+before the Preview.53 tag or GitHub prerelease is created. Preview.53 preserves
+the current live label, repair, inquiry, and voice gates; Elastic and Text Swap
+providers remain unavailable, with issues #34 and #68 still open.
 
 This handoff is for the person who controls the Matter Vercel project and the
 model-provider account. It contains no credential values. A credential that was
