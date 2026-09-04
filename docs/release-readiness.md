@@ -122,8 +122,11 @@ automatic deploy proof Preview deployment `6255338383` succeeded for exact
                        matched Preview.53 after one bounded public check
 publication state      withheld: the six-round release probe reached a model
                        for repair 0/6, label 1/6, and Inquiry 1/6; no Preview.53
-                       tag or GitHub prerelease may exist until a new exact
-                       closed-count probe passes
+                       tag or GitHub prerelease may exist. After a full recovery
+                       window, a second six-round probe reached 0/6 on all three
+                       surfaces and reported pool-down. Publication requires a
+                       later fresh exact closed-count pass, not another immediate
+                       retry
 ```
 
 ## Provisional release boundary — 0.2.0-preview.48

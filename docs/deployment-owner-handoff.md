@@ -153,6 +153,12 @@ evidence, not a reason to alter the selected-material implementation or enable
 a hidden fallback. Publication remains withheld until a fresh closed-count
 Preview.53 probe reports both `pool-healthy` and `surface-usable`.
 
+After a full recovery window, the one permitted repeat also failed: repair,
+label, and Inquiry each reached a model 0/6, and the probe classified the pool
+as down. Do not keep retrying this release in a tight loop. A later owner-run
+probe must be a new closed-count observation and must pass all three surfaces
+before the immutable tag or GitHub prerelease is created.
+
 ### Incident-time source boundary
 
 At the time of the incident the working tree carried uncommitted prompt work
