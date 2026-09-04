@@ -1,17 +1,16 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.52 is the current deployed
-public-origin version; main, annotated tag, GitHub prerelease, Production
-deployment, and the no-store health boundary all identify source `6a4931b` and
-version `0.2.0-preview.52`. Preview.53 is the provisional precise-range
-continuity correction until its exact repository, browser, GitHub CI,
-automatically triggered Vercel
-deployment, deployed-origin probe, tag, and prerelease receipts settle. The
-repository maintainer operates only through GitHub: a topic push triggers
-Preview and a `main` update triggers Production. No manual Vercel command,
-project binding, credential, or environment edit is part of this release. A
-package version alone proves neither source nor live identity.
+the complete generative product loop yet. Preview.53 is the current deployed
+public-origin source: merged `main` `7cd3bb6`, automatic Production deployment
+`6255484923`, and the no-store public check identify version
+`0.2.0-preview.53`. Publication is withheld because its exact strict model-pool
+release probe failed. The latest annotated tag and GitHub prerelease therefore
+remain Preview.52 at `6a4931b`; neither may be advanced by borrowing an older
+pool receipt. The repository maintainer operates only through GitHub: a topic
+push triggers Preview and a `main` update triggers Production. No manual Vercel
+command, project binding, credential, or environment edit is part of this
+release. A package version alone proves neither source nor live identity.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -114,10 +113,17 @@ browser proof          full controlled Chromium passed: 130 cases and 15
                        double click, multi-line native and actionable corridors,
                        both Elastic grips, touch, reduced motion, forced colours,
                        font invalidation, and the 2,000-node fixtures
-GitHub CI proof         pending on the exact topic and merged main identities
-automatic deploy proof pending from GitHub-triggered Preview and Production
-publication state      pending; no tag or prerelease unless the strict
-                       deployed-origin surface probe also passes
+GitHub CI proof         exact topic `884dfc0` passed run `33821304049`; merged
+                       main `7cd3bb6` passed run `33822246434`, including the
+                       Linux runtime ceiling and full Chromium suite
+automatic deploy proof Preview deployment `6255338383` succeeded for exact
+                       topic `884dfc0`; Production deployment `6255484923`
+                       succeeded for exact main `7cd3bb6`; matter.ptoq.io
+                       matched Preview.53 after one bounded public check
+publication state      withheld: the six-round release probe reached a model
+                       for repair 0/6, label 1/6, and Inquiry 1/6; no Preview.53
+                       tag or GitHub prerelease may exist until a new exact
+                       closed-count probe passes
 ```
 
 ## Provisional release boundary — 0.2.0-preview.48
