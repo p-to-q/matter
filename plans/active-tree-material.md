@@ -389,11 +389,13 @@ Non-goals:  production gate changes, provider work, a new operation chooser,
 
 ## Active correction — selected material keeps one address through Elastic
 
-State: Preview.52 is deployed; the precise-range reading-interval correction is
-implemented for Preview.53. The exact local candidate passed the full source,
-production-build, runtime-artifact, and controlled Chromium gates. GitHub CI,
-automatic deployment, public-origin, tag, and prerelease receipts remain
-required before publication.
+State: the precise-range reading-interval correction is deployed from merged
+Preview.53 `main` `7cd3bb6`. Exact local, topic-CI, merged-main-CI, automatic
+Preview/Production, and public-version proofs passed. The strict six-round pool
+probe failed at repair 0/6, label 1/6, and Inquiry 1/6, so the Preview.53 tag and
+GitHub prerelease remain withheld. One repeat after a full recovery window
+reported pool-down with 0/6 on every surface; a later fresh closed-count pass,
+not another immediate retry, is required for publication.
 
 ```text
 Outcome:    native copy, neutral Lasso, and upper/lower Elastic project one

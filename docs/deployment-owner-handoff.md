@@ -1,15 +1,14 @@
 # Preview deployment-owner handoff
 
-Status: Preview.52 is the current deployed public-origin version through the
-automatic GitHub-linked Production path; main, annotated tag, GitHub
-prerelease, Production, and no-store health all identify source `6a4931b` and
-version `0.2.0-preview.52`. Preview.53 is authorized through the repository's
-GitHub-triggered delivery path: its exact source, CI, automatic
-Preview/Production, tag, and prerelease
-receipts are pending and none may be inferred from another. The repository
-maintainer pushes only GitHub and observes the linked deployment; the
-deployment owner retains Vercel configuration and credential authority. The
-candidate preserves the current process-local admission perimeter and live
+Status: Preview.53 is the current deployed public-origin source through the
+automatic GitHub-linked Production path. Topic `884dfc0` passed CI and automatic
+Preview; merged `main` `7cd3bb6` passed CI, automatic Production deployment
+`6255484923`, and the no-store public version check. Its GitHub prerelease and
+annotated tag are withheld because the exact strict pool release probe failed;
+the latest immutable publication remains Preview.52 at `6a4931b`. The
+repository maintainer pushes only GitHub and observes the linked deployment;
+the deployment owner retains Vercel configuration and credential authority.
+The candidate preserves the current process-local admission perimeter and live
 label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
@@ -145,6 +144,20 @@ closed-count release receipt; neither the failure nor any later success may be
 borrowed across source versions, and one successful run is not evidence that
 the intermittency is gone. The same rule now binds Preview.53: its release probe
 must identify Preview.53 and cannot borrow Preview.48's later receipt.
+
+Preview.53's first exact six-round release probe failed after successful CI,
+automatic Preview and Production, and a one-probe public version match. Repair
+reached a model 0/6, label 1/6, and Inquiry 1/6; the remaining calls ended in
+their bounded timeout or unavailable behavior. This is external runtime
+evidence, not a reason to alter the selected-material implementation or enable
+a hidden fallback. Publication remains withheld until a fresh closed-count
+Preview.53 probe reports both `pool-healthy` and `surface-usable`.
+
+After a full recovery window, the one permitted repeat also failed: repair,
+label, and Inquiry each reached a model 0/6, and the probe classified the pool
+as down. Do not keep retrying this release in a tight loop. A later owner-run
+probe must be a new closed-count observation and must pass all three surfaces
+before the immutable tag or GitHub prerelease is created.
 
 ### Incident-time source boundary
 
