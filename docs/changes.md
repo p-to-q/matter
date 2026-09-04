@@ -39,21 +39,6 @@ Forecloses: forcing every selection meaning into one topology, inferring a
 missing paper cell from edge proximity, changing topology during one drag,
 painting a self-touching ring, and exposing handles without a paintable address.
 
-## 2026-09-04 — the runtime ceiling follows its enforcing host
-
-Changed: the initial gzip ceiling is 396 KiB on the Linux CI measurement basis;
-the raw, static, public, font, and lazy-WASM ceilings stay unchanged.
-
-Why: the same candidate measured about 2,820 bytes larger on Linux than macOS,
-so the earlier 388 KiB local ceiling did not describe the environment that
-enforces releases. The 396 KiB bound preserves roughly 7 KiB of deliberate
-headroom without hiding a dependency or moving first-use selection behavior
-behind an asynchronous boundary.
-
-Forecloses: treating cross-host compression drift as product growth, citing a
-macOS-only number as the CI contract, and raising the ceiling again without a
-same-host main/candidate comparison and reduction plan.
-
 ## 2026-09-02 — selected material restores its precise optical identity
 
 Changed: the shared address receipt derives equal `.245` top/bottom air, wider
