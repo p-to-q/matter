@@ -1,4 +1,5 @@
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 /**
  * Owns the deterministic half of transcript repair: which utterances are worth
@@ -100,7 +101,12 @@ export function repairSkeleton(value: string): string {
 }
 
 export function decideRepairRequest(input: NormalizedRepairInput): boolean {
-  if (input.text.length === 0 || input.text.length > MAX_REPAIR_TEXT_CODE_UNITS) return false;
+  if (
+    input.text.length === 0 ||
+    input.text.length > MAX_REPAIR_TEXT_CODE_UNITS ||
+    !isWellFormedUnicodeText(input.text) ||
+    input.vocabulary.some((term) => !isWellFormedUnicodeText(term))
+  ) return false;
   const minimum = input.locale === "zh-CN" || input.locale === "zh-TW"
     ? MIN_CJK_REPAIR_SKELETON_LENGTH
     : MIN_REPAIR_SKELETON_LENGTH;
@@ -156,6 +162,11 @@ export function adjudicateRepair(
   candidate: unknown,
 ): RepairAdjudication {
   if (typeof candidate !== "string") return reject("EMPTY");
+  if (
+    !isWellFormedUnicodeText(original.text) ||
+    original.vocabulary.some((term) => !isWellFormedUnicodeText(term)) ||
+    !isWellFormedUnicodeText(candidate)
+  ) return reject("NOT_ONE_UTTERANCE");
   const text = unwrapQuoted(stripFence(candidate).trim());
   if (text.length === 0) return reject("EMPTY");
   if (text.length > MAX_REPAIR_TEXT_CODE_UNITS) return reject("TOO_LONG");

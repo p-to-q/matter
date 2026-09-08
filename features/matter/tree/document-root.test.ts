@@ -41,6 +41,17 @@ describe("document root normalization", () => {
     expect(validateThoughtTree(tree)).toEqual({ ok: true });
   });
 
+  it("normalizes a long astral title without splitting or persisting malformed text", () => {
+    const prefix = "a".repeat(159);
+    const tree = normalizeDocumentTree(createEmptyTree("empty_document"), `${prefix}🚀`);
+    expect(tree.title).toBe(prefix);
+    expect(validateThoughtTree(tree)).toEqual({ ok: true });
+
+    const malformed = normalizeDocumentTree(createEmptyTree("other_document"), "bad\uD800title");
+    expect(malformed.title).toBe("Untitled matter");
+    expect(validateThoughtTree(malformed)).toEqual({ ok: true });
+  });
+
   it("repairs an early structural root that predates the explicit role", () => {
     const normalized = normalizeDocumentTree(createSeededDocument().tree);
     const rootId = normalized.rootId!;

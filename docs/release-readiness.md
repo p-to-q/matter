@@ -65,6 +65,79 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
+## Provisional release boundary — 0.2.0-preview.55
+
+Preview.55 is a maintainer hardening release. It does not widen the public
+product or provider boundary. Voice focus restoration is now owned by the exact
+admission, keyboard focus reveals a complete passage without stealing an active
+pointer or wheel camera, and an Elastic grip that has focus transfers it only
+to the same semantic successor while font or viewport geometry republishes.
+Lasso browser receipts wait for the post-tool font and layout epoch rather than
+retrying a stroke that correctly failed closed. Elastic keeps the Preview.54
+contract: drag settles degree, a primary click in the painted address or opened
+pocket confirms it, Enter and Space are the keyboard equivalents, and clicking
+a grip without movement never submits.
+
+Every durable or model-bound text seam now rejects incomplete Unicode scalar
+values before mutation, persistence, encoding, prompting, or display while
+preserving valid astral text byte-for-byte. Inquiry IndexedDB compare-and-swap
+versions refuse unsafe successors before a write. The deployment verifier
+streams every consumed body through an artifact-specific byte ceiling, grows
+one bounded buffer instead of retaining attacker-controlled chunk metadata, and
+does not trust `Content-Length`. The opt-in persistence benchmark and the real
+maximum archive boundary own explicit hang guards without widening the global
+test timeout. Transcript punctuation skips the full protected-literal matcher
+when a bounded passage cannot contain any protected form; all URL, email, path,
+identifier, quote, version, and address alternatives retain focused coverage.
+
+The production 2,000-node renderer now keeps immutable base geometry beside
+the actual displayed geometry. Elastic reuses that base instead of forcing a
+style read and rebuilding every layout box after publication. Material action
+callbacks depend only on their real owners, so an internal geometry publication
+does not invalidate the memoized 2,000-passage list. This changes no DOM,
+presentation rule, cache ceiling, interaction threshold, or measurement mark.
+
+This release adds no dependency, durable format, cache, provider SDK, public
+live Transform/Text Swap gate, service worker, or production route. Existing
+provider prompt/cache identities and no-store rules remain unchanged. The
+repository still proves only process-local admission control; distributed edge
+limits, provider spend caps, alert delivery, and rollback ownership remain
+deployment-owner evidence. The strict model-pool gate below is publication
+authority, not the successful source, browser, or deployment checks.
+
+```text
+source proof           exact runtime candidate 5db2c62 passed npm run check:
+                       97 Node checks; 48 Markdown files; architecture across
+                       446 files and seven layers; 2,173 Vitest passed with
+                       four explicit skips; type generation, TypeScript,
+                       zero-warning lint, production build, and npm audit with
+                       zero known vulnerabilities all passed
+runtime proof          exact artifact passed at 1,239.7 KiB raw / 391.3 KiB
+                       gzip under the unchanged 396 KiB ceiling; the complete
+                       production 2,000-node receipt passed with 188ms FCP,
+                       322.1ms layout ready, a 90ms cold-attributed long task,
+                       5.2ms pure layout, and 61ms interaction-task p95. Three
+                       independent cold receipts also passed at 87/78/93ms,
+                       with 2,000 nodes, 4,483 elements, and zero blocking rounds
+browser proof          full controlled Chromium passed 139 cases with 15
+                       explicit historical/capability skips and zero retries;
+                       focused cold-start and geometry-successor pressure
+                       receipts also passed, including pointer, touch, keyboard,
+                       opened-pocket confirmation, focus transfer, failure,
+                       Undo/Redo, reload, and 2,000-node geometry
+persistence proof      deterministic Node and Chromium IndexedDB profiles
+                       passed; realistic median validate/paths/encode/decode
+                       were 4.25/5.69/11.15/27.05ms; maximum-text medians were
+                       15.05/13.33/29.80/52.43ms. Chromium realistic put/get
+                       medians were 1.6/0.6ms and maximum-text 7.3/2.8ms
+GitHub CI proof         pending reviewed topic and merged-main runs
+automatic deploy proof pending GitHub-triggered Preview and Production, followed
+                       by the bounded public-origin Preview.55 identity check
+publication state      withheld until the exact deployed Preview.55 source
+                       passes all six Repair, Label, and Inquiry rounds in the
+                       strict Production model-pool release profile
+```
+
 ## Provisional release boundary — 0.2.0-preview.54
 
 Preview.54 makes a material change deliberate before it spends a model turn.

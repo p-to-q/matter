@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-08 — transient owners and exact text fail closed
+
+Changed: keyboard focus now reveals its complete passage inside the unobscured
+paper without selecting it, while an active pointer or wheel interaction keeps
+camera ownership. Every later focus cancels an older focus transition. Durable
+and model-bound text must contain complete Unicode scalar values before tree,
+snapshot, speech, label, repair, or inquiry boundaries accept it. A focused
+Elastic grip now transfers focus only to its same semantic successor when
+client geometry republishes. Inquiry CAS versions refuse unsafe successors,
+and deployment proof byte-bounds every body it reads.
+
+Why: focus that exists outside the perceivable paper is not operable, but a
+keyboard convenience must not invalidate a hand already drawing or dragging.
+Likewise JavaScript permits lone UTF-16 surrogates that UTF-8 encoding replaces
+silently, and safe-integer/body limits are incomplete if checked only after the
+irreversible write or download.
+
+Forecloses: invisible keyboard focus, stale focus animations winning a race,
+camera theft during direct manipulation, losing a focused Elastic grip during
+safe geometry replacement, replacement-character corruption on export,
+wrapping local inquiry authority, and an unbounded release verifier.
+
 ## 2026-09-05 — Elastic separates degree from confirmation
 
 Changed: releasing an Elastic grip now settles the visible expansion degree

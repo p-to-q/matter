@@ -486,10 +486,33 @@ describe("LabelDriver", () => {
     const floor = labelFor(instance.getState(), "root");
 
     // Syntactically valid, but unrelated to the exact material in the request.
-    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "量子芯片研发计划"));
+    expect(recorded.pending).toHaveLength(1);
+    recorded.pending[0]!.resolve(success(recorded.calls[0]!, "量子芯片研发计划"));
     await settle();
     expect(labelFor(instance.getState(), "root")).toBe(floor);
     expect(instance.getState().entries.get("root")?.pendingOperationId).toBeNull();
+    expect(store.stored.get("root")).toBeUndefined();
+  });
+
+  it("rejects malformed model and manual labels before publishing or storing them", async () => {
+    const recorded = recorder();
+    const store = repository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+    const floor = labelFor(instance.getState(), "root");
+
+    expect(recorded.pending).toHaveLength(1);
+    recorded.pending[0]!.resolve(success(recorded.calls[0]!, "bad\uD800label"));
+    await settle();
+    expect(labelFor(instance.getState(), "root")).toBe(floor);
+    expect(store.stored.get("root")).toBeUndefined();
+
+    await expect(instance.rename("root", "bad\uDC00label")).resolves.toEqual({
+      ok: false,
+      code: "REJECTED",
+    });
+    expect(labelFor(instance.getState(), "root")).toBe(floor);
     expect(store.stored.get("root")).toBeUndefined();
   });
 

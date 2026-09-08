@@ -54,6 +54,11 @@ import { useNativeMaterialSelection } from "../interaction/use-native-material-s
 import { useStructuralMaterialSelection } from "../interaction/use-structural-material-selection";
 import { subscribePageSuspension } from "../interaction/page-suspension";
 import {
+  admissionFocusRestorationIsCurrent,
+  type AdmissionFocusRestorationBasis,
+} from "../interaction/admission-focus-restoration";
+import { projectFocusedMaterialRevealField } from "../interaction/focused-material-visibility";
+import {
   pointTalkFocusRestorationIsCurrent,
   type PointTalkFocusRestorationBasis,
 } from "../interaction/point-talk-focus-restoration";
@@ -207,6 +212,7 @@ export type RootedMaterialProps = {
 };
 
 type PublishedGeometry = {
+  baseLayout: ColumnarLayout;
   heightBasis?: TypographyHeightAuthorityToken;
   key: string;
   layout: ColumnarLayout;
@@ -264,6 +270,14 @@ type IndexCenterRequest = Readonly<{
   nodeId: string;
 }>;
 
+type KeyboardFocusRevealRequest = Readonly<{
+  documentEpoch: number;
+  frameId: number;
+  nodeId: string;
+  target: HTMLElement;
+  treeId: string;
+}>;
+
 function sameViewportCamera(left: CanvasViewportState, right: CanvasViewportState): boolean {
   return left.x === right.x && left.y === right.y && left.zoom === right.zoom && left.gesture === null;
 }
@@ -274,11 +288,11 @@ function clearIndexCameraMotion(world: HTMLDivElement | null): void {
   world.style.removeProperty("--index-camera-duration");
 }
 
-function readRenderedIndexCamera(
+function readRenderedAnimatedCamera(
   world: HTMLDivElement | null,
   basis: CanvasViewportState,
 ): CanvasViewportState | null {
-  if (world?.dataset.cameraMotion !== "index") return null;
+  if (world?.dataset.cameraMotion === undefined) return null;
   try {
     const matrix = new DOMMatrixReadOnly(getComputedStyle(world).transform);
     const zoom = (matrix.a + matrix.d) / 2;
@@ -322,7 +336,20 @@ type NodeDragGesture = {
 };
 
 export function RootedMaterial(props: RootedMaterialProps) {
-  const { canRedo, canUndo, navigation, onRedo, onRemoveSelected, onUndo, tree } = props;
+  const {
+    canRedo,
+    canUndo,
+    documentEpoch,
+    navigation,
+    onClearSelection,
+    onExitFocus,
+    onFocusNode,
+    onRedo,
+    onRemoveSelected,
+    onSelectNode,
+    onUndo,
+    tree,
+  } = props;
   if (props.performanceViewport !== undefined && props.performanceMarking !== true) {
     throw new Error("Viewport research requires the explicit performance fixture.");
   }
@@ -377,49 +404,58 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (
       navigation.selectedNodeId !== null &&
       isNodeHeldAside(tree, next, navigation.selectedNodeId)
-    ) props.onClearSelection();
+    ) onClearSelection();
     if (
       navigation.mode === "focus" &&
       isNodeHeldAside(tree, next, navigation.focusNodeId)
-    ) props.onExitFocus();
+    ) onExitFocus();
     setWorkingContextState((current) => ({
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       epoch: current.epoch + 1,
       heldAsideRootIds: next,
     }));
-  }, [heldAsideRootIds, navigation.focusNodeId, navigation.mode, navigation.selectedNodeId, props, tree]);
+  }, [
+    heldAsideRootIds,
+    navigation.focusNodeId,
+    navigation.mode,
+    navigation.selectedNodeId,
+    documentEpoch,
+    onClearSelection,
+    onExitFocus,
+    tree,
+  ]);
   const focusWorkingNode = useCallback((nodeId: string) => {
     setWorkingContextState((current) => {
-      const currentIds = current.documentEpoch === props.documentEpoch
+      const currentIds = current.documentEpoch === documentEpoch
         ? current.heldAsideRootIds
         : createHeldAsideNodeIds();
       const next = restoreHeldAsideLineage(tree, currentIds, nodeId);
-      return next === currentIds && current.documentEpoch === props.documentEpoch
+      return next === currentIds && current.documentEpoch === documentEpoch
         ? current
         : {
-            documentEpoch: props.documentEpoch,
+            documentEpoch,
             epoch: current.epoch + 1,
             heldAsideRootIds: next,
           };
     });
-    props.onFocusNode(nodeId);
-  }, [props, tree]);
+    onFocusNode(nodeId);
+  }, [documentEpoch, onFocusNode, tree]);
   const restoreWorkingNode = useCallback((nodeId: string) => {
     setWorkingContextState((current) => {
-      const currentIds = current.documentEpoch === props.documentEpoch
+      const currentIds = current.documentEpoch === documentEpoch
         ? current.heldAsideRootIds
         : createHeldAsideNodeIds();
       const next = restoreHeldAsideLineage(tree, currentIds, nodeId);
-      return next === currentIds && current.documentEpoch === props.documentEpoch
+      return next === currentIds && current.documentEpoch === documentEpoch
         ? current
         : {
-            documentEpoch: props.documentEpoch,
+            documentEpoch,
             epoch: current.epoch + 1,
             heldAsideRootIds: next,
           };
     });
-    props.onSelectNode(nodeId);
-  }, [props, tree]);
+    onSelectNode(nodeId);
+  }, [documentEpoch, onSelectNode, tree]);
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
   const materialPlaneRef = useRef<HTMLDivElement>(null);
@@ -475,6 +511,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => createCanvasNavigationSession(props.documentEpoch),
   );
   const indexCenterRequestRef = useRef<IndexCenterRequest | null>(null);
+  const keyboardFocusRevealRef = useRef<KeyboardFocusRevealRequest | null>(null);
   const canvasNavigation = reconcileCanvasNavigationSession(
     canvasNavigationState,
     props.documentEpoch,
@@ -698,31 +735,45 @@ export function RootedMaterial(props: RootedMaterialProps) {
     viewportRenderer,
     wheelMotionActive,
   ]);
+  const keyboardFocusContextRef = useRef({
+    documentEpoch: props.documentEpoch,
+    tree,
+    viewport,
+  });
+  const cancelKeyboardFocusReveal = useCallback(() => {
+    const pending = keyboardFocusRevealRef.current;
+    keyboardFocusRevealRef.current = null;
+    if (pending !== null) cancelAnimationFrame(pending.frameId);
+  }, []);
+  useLayoutEffect(() => {
+    keyboardFocusContextRef.current = {
+      documentEpoch: props.documentEpoch,
+      tree,
+      viewport,
+    };
+    const pending = keyboardFocusRevealRef.current;
+    if (
+      pending !== null &&
+      (
+        pending.documentEpoch !== props.documentEpoch ||
+        pending.treeId !== tree.id ||
+        tree.nodes[pending.nodeId] === undefined
+      )
+    ) cancelKeyboardFocusReveal();
+  }, [cancelKeyboardFocusReveal, props.documentEpoch, tree, viewport]);
+  useEffect(() => {
+    const unsubscribe = subscribePageSuspension(cancelKeyboardFocusReveal);
+    return () => {
+      unsubscribe();
+      cancelKeyboardFocusReveal();
+    };
+  }, [cancelKeyboardFocusReveal]);
   const liveLanguageLayoutBasisRef = useRef<ColumnarLayout | null>(null);
   useLayoutEffect(() => {
-    if (viewportRenderer) return;
-    const canvas = canvasRef.current;
-    if (activeLayout === null || canvas === null) {
-      liveLanguageLayoutBasisRef.current = null;
-      return;
-    }
-    const style = getComputedStyle(canvas);
-    const nodes = activeLayout.boxes.map((box) => Object.freeze({
-      id: box.nodeId,
-      parentId: box.parentId,
-      depth: box.depth,
-      size: Object.freeze({ width: box.width, height: box.height }),
-    } satisfies LayoutNode));
-    const result = layoutColumnarTree({
-      nodes,
-      origin: { x: 0, y: 0 },
-      layoutEpoch: activeLayout.layoutEpoch,
-      columnWidth: readCssPixels(style, "--matter-column-width", 300),
-      columnGap: readCssPixels(style, "--matter-column-gap", 72),
-      siblingGap: readCssPixels(style, "--matter-sibling-gap", 28),
-    });
-    liveLanguageLayoutBasisRef.current = result.ok ? result.layout : null;
-  }, [activeLayout, viewportRenderer]);
+    liveLanguageLayoutBasisRef.current = viewportRenderer
+      ? null
+      : completePublication?.baseLayout ?? null;
+  }, [completePublication, viewportRenderer]);
   const publishLiveLanguageLayout = useCallback((damage: PresentationDamage | null) => {
     const basis = liveLanguageLayoutBasisRef.current;
     const canvas = canvasRef.current;
@@ -1176,6 +1227,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onPreview: updateElasticPreview,
     onCommit: startFixedExpansion,
   });
+  const stretchKeyDown = stretch.keyDown;
   useLayoutEffect(() => {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
@@ -1190,8 +1242,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [cancelTransform, transformState.phase]);
   const abortElasticExpansion = useCallback(() => {
     if (transformState.phase === "requesting") cancelTransform();
-    stretch.keyDown("Escape");
-  }, [cancelTransform, stretch, transformState.phase]);
+    stretchKeyDown("Escape");
+  }, [cancelTransform, stretchKeyDown, transformState.phase]);
   const abortFixedExpansion = useCallback(() => {
     closePointTalk();
     abortElasticExpansion();
@@ -1248,11 +1300,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     if (transformState.phase !== "requesting") return;
     const clearCommittedDegree = (event: KeyboardEvent) => {
-      if (event.key === "Escape") stretch.keyDown("Escape");
+      if (event.key === "Escape") stretchKeyDown("Escape");
     };
     window.addEventListener("keydown", clearCommittedDegree);
     return () => window.removeEventListener("keydown", clearCommittedDegree);
-  }, [stretch, transformState.phase]);
+  }, [stretchKeyDown, transformState.phase]);
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
@@ -1319,7 +1371,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const interruptIndexCameraMotion = useCallback(() => {
     const basis = viewport;
     const world = worldRef.current;
-    const rendered = readRenderedIndexCamera(world, basis);
+    const rendered = readRenderedAnimatedCamera(world, basis);
     const plannedTransform = world?.style.transform ?? "";
     if (rendered !== null && world !== null) {
       // Pointer ownership and its render-edge measurements continue in this
@@ -1347,48 +1399,149 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     return adopted && rendered !== null ? rendered : basis;
   }, [setViewport, viewport]);
+  const directManipulationOwnsCamera = useCallback(() => (
+    lasso.drawing ||
+    stretch.dragging ||
+    nodeDragRef.current !== null ||
+    viewport.gesture !== null ||
+    wheelMotionActive ||
+    wheelMotionTimerRef.current !== null
+  ), [lasso.drawing, stretch.dragging, viewport.gesture, wheelMotionActive]);
+  const revealKeyboardFocusedMaterial = useCallback((nodeId: string, target: HTMLElement) => {
+    cancelKeyboardFocusReveal();
+    if (
+      viewportRenderer ||
+      document.visibilityState !== "visible" ||
+      !target.matches(":focus-visible") ||
+      directManipulationOwnsCamera()
+    ) return;
+
+    // A newly focused passage owns the camera even when it already fits. Adopt
+    // the pixels currently on screen before testing visibility so an older
+    // focus transition cannot finish at its obsolete destination.
+    interruptIndexCameraMotion();
+    const request = {
+      documentEpoch: props.documentEpoch,
+      frameId: 0,
+      nodeId,
+      target,
+      treeId: tree.id,
+    };
+    const frameId = requestAnimationFrame(() => {
+      const pending = keyboardFocusRevealRef.current;
+      if (pending === null || pending.frameId !== frameId) return;
+      keyboardFocusRevealRef.current = null;
+      const context = keyboardFocusContextRef.current;
+      if (
+        pending.documentEpoch !== context.documentEpoch ||
+        pending.treeId !== context.tree.id ||
+        context.tree.nodes[pending.nodeId] === undefined ||
+        !pending.target.isConnected ||
+        pending.target.dataset.thoughtTextId !== pending.nodeId ||
+        document.activeElement !== pending.target ||
+        document.visibilityState !== "visible" ||
+        !pending.target.matches(":focus-visible") ||
+        directManipulationOwnsCamera()
+      ) return;
+      const paper = documentRef.current;
+      const world = worldRef.current;
+      const visual = clientViewport();
+      if (paper === null || world === null || visual === undefined) return;
+      const targetRect = pending.target.getBoundingClientRect();
+      const paperRect = paper.getBoundingClientRect();
+      const occluders = [
+        shellRef.current?.querySelector<HTMLElement>(".tool-rail") ?? null,
+        shellRef.current?.querySelector<HTMLElement>('.material-files[data-open="true"]') ?? null,
+      ].flatMap((element) => element === null ? [] : [clientRect(element.getBoundingClientRect())]);
+      const visualRect = {
+        left: visual.left,
+        top: visual.top,
+        width: visual.right - visual.left,
+        height: visual.bottom - visual.top,
+      };
+      const attention = projectFocusedMaterialRevealField({
+        target: clientRect(targetRect),
+        paper: clientRect(paperRect),
+        visualViewport: visualRect,
+        occluders,
+      });
+      if (attention === null) return;
+      const worldRect = world.getBoundingClientRect();
+      const plan = planCanvasViewportForClientRect(
+        context.viewport,
+        {
+          ...clientRect(targetRect),
+          fontCssPx: Number.parseFloat(getComputedStyle(pending.target).fontSize),
+        },
+        visualRect,
+        { x: worldRect.left - context.viewport.x, y: worldRect.top - context.viewport.y },
+        attention,
+      );
+      if (plan === null) return;
+      if (
+        plan.motion === "smooth" &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        world.dataset.cameraMotion = "focus";
+        world.style.setProperty("--index-camera-duration", `${plan.durationMs}ms`);
+        void world.getBoundingClientRect();
+      } else {
+        clearIndexCameraMotion(world);
+      }
+      setViewport((current) => sameViewportCamera(current, context.viewport) ? plan.state : current);
+    });
+    keyboardFocusRevealRef.current = Object.freeze({ ...request, frameId });
+  }, [
+    cancelKeyboardFocusReveal,
+    directManipulationOwnsCamera,
+    interruptIndexCameraMotion,
+    props.documentEpoch,
+    setViewport,
+    tree.id,
+    viewportRenderer,
+  ]);
   const selectNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = null;
-    props.onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, props]);
+    onSelectNode(nodeId);
+  }, [abortFixedExpansion, interruptIndexCameraMotion, onSelectNode]);
   const focusIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       mode: "focus",
       nodeId,
     });
     requestMeasurement();
     focusWorkingNode(nodeId);
-  }, [abortFixedExpansion, focusWorkingNode, interruptIndexCameraMotion, props.documentEpoch]);
+  }, [abortFixedExpansion, documentEpoch, focusWorkingNode, interruptIndexCameraMotion]);
   const restoreIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       mode: "full",
       nodeId,
     });
     requestMeasurement();
     restoreWorkingNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, props.documentEpoch, restoreWorkingNode]);
+  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, restoreWorkingNode]);
   const selectIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       mode: "full",
       nodeId,
     });
     requestMeasurement();
-    props.onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, props]);
+    onSelectNode(nodeId);
+  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, onSelectNode]);
   const archiveAfterAbort = useMemo<MaterialArchiveActions | undefined>(() => {
     if (props.archive === undefined) return undefined;
     return Object.freeze({
@@ -1688,13 +1841,60 @@ export function RootedMaterial(props: RootedMaterialProps) {
     voiceReadiness.status === "ready";
   const voiceAvailable = admissionVoiceAvailable;
   const voiceToolAvailable = voiceAvailable && props.admission.state.phase !== "error";
-  const restoreVoiceToolFocus = useCallback(() => {
-    requestAnimationFrame(() => {
+  const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
+  const admissionFocusFrameRef = useRef<Readonly<{
+    basis: AdmissionFocusRestorationBasis;
+    frameId: number;
+  }> | null>(null);
+  const cancelAdmissionFocusRestore = useCallback(() => {
+    const pending = admissionFocusFrameRef.current;
+    admissionFocusFrameRef.current = null;
+    if (pending !== null) cancelAnimationFrame(pending.frameId);
+  }, []);
+  useLayoutEffect(() => {
+    admissionFocusContextRef.current = { tree, documentEpoch: props.documentEpoch };
+    const pending = admissionFocusFrameRef.current;
+    if (pending === null) return;
+    if (!admissionFocusRestorationIsCurrent(
+      pending.basis,
+      tree,
+      props.documentEpoch,
+      document.visibilityState === "visible",
+    )) cancelAdmissionFocusRestore();
+  }, [cancelAdmissionFocusRestore, props.documentEpoch, tree]);
+  useEffect(() => {
+    const unsubscribe = subscribePageSuspension(cancelAdmissionFocusRestore);
+    return () => {
+      unsubscribe();
+      cancelAdmissionFocusRestore();
+    };
+  }, [cancelAdmissionFocusRestore]);
+  const restoreVoiceToolFocus = useCallback((basis: AdmissionFocusRestorationBasis | null) => {
+    cancelAdmissionFocusRestore();
+    if (basis === null) return;
+    if (!admissionFocusRestorationIsCurrent(
+      basis,
+      tree,
+      props.documentEpoch,
+      document.visibilityState === "visible",
+    )) return;
+    const frameId = requestAnimationFrame(() => {
+      const pending = admissionFocusFrameRef.current;
+      if (pending === null || pending.frameId !== frameId) return;
+      admissionFocusFrameRef.current = null;
+      const context = admissionFocusContextRef.current;
+      if (!admissionFocusRestorationIsCurrent(
+        pending.basis,
+        context.tree,
+        context.documentEpoch,
+        document.visibilityState === "visible",
+      )) return;
       shellRef.current
         ?.querySelector<HTMLButtonElement>('[data-tool-id="voice"]')
         ?.focus({ preventScroll: true });
     });
-  }, []);
+    admissionFocusFrameRef.current = Object.freeze({ basis, frameId });
+  }, [cancelAdmissionFocusRestore, props.documentEpoch, tree]);
   const tools = useMemo(
     () =>
       projectTools({
@@ -1910,6 +2110,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     delete canvas.dataset.viewportRendererError;
     layoutEpochRef.current = result.publication.layout.layoutEpoch;
     setPublished({
+      baseLayout: result.publication.layout,
       heightBasis: result.publication.basis,
       key: publicationKey,
       layout: result.publication.layout,
@@ -2000,10 +2201,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       });
       if (!publishCanvasGeometry(canvas, elements, layout)) return;
       layoutEpochRef.current = layout.layoutEpoch;
-      setPublished({ key: projectionKey, layout });
+      setPublished({ baseLayout: layout, key: projectionKey, layout });
       return;
     }
-    const nodes: LayoutNode[] = [];
+    const baseNodes: LayoutNode[] = [];
+    const admissionNodes: LayoutNode[] | null = admissionPresentationDamage === null
+      ? null
+      : [];
     if (!initialPerformanceMarksRef.current.heightReadStarted) {
       initialPerformanceMarksRef.current.heightReadStarted = true;
       markPerformance("matter:performance:height-read-start");
@@ -2052,18 +2256,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
           text: item.node.text,
         }));
       }
-      nodes.push({
+      const baseNode = {
         id: item.node.id,
         parentId: item.parentId,
         depth: item.depth,
         size: { width: columnWidth, height },
-        presentation: admissionPresentationDamage?.nodeId === item.node.id
-          ? {
+      } satisfies LayoutNode;
+      baseNodes.push(baseNode);
+      admissionNodes?.push(admissionPresentationDamage?.nodeId === item.node.id
+        ? {
+            ...baseNode,
+            presentation: {
               topExtent: admissionPresentationDamage.topExtent,
               bottomExtent: admissionPresentationDamage.bottomExtent,
-            }
-          : undefined,
-      });
+            },
+          }
+        : baseNode);
     }
     if (!initialPerformanceMarksRef.current.heightReadComplete) {
       initialPerformanceMarksRef.current.heightReadComplete = true;
@@ -2074,22 +2282,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
       initialPerformanceMarksRef.current.pureLayoutStarted = true;
       markPerformance("matter:performance:pure-layout-start");
     }
-    const result = layoutColumnarTree({
-      nodes,
+    const baseResult = layoutColumnarTree({
+      nodes: baseNodes,
       origin: { x: 0, y: 0 },
       layoutEpoch: layoutEpochRef.current + 1,
       columnWidth,
       columnGap,
       siblingGap,
     });
+    const displayResult = admissionNodes === null
+      ? baseResult
+      : layoutColumnarTree({
+          nodes: admissionNodes,
+          origin: { x: 0, y: 0 },
+          layoutEpoch: layoutEpochRef.current + 1,
+          columnWidth,
+          columnGap,
+          siblingGap,
+        });
     if (!initialPerformanceMarksRef.current.pureLayoutComplete) {
       initialPerformanceMarksRef.current.pureLayoutComplete = true;
       markPerformance("matter:performance:pure-layout-complete");
     }
-    if (!result.ok) return;
+    if (!baseResult.ok || !displayResult.ok) return;
+    const baseLayout = baseResult.layout;
     const layout = admissionPresentationDamage === null && languagePresentationDamage !== null
-      ? projectVerticalPresentationBand(result.layout, languagePresentationDamage)
-      : result.layout;
+      ? projectVerticalPresentationBand(baseLayout, languagePresentationDamage)
+      : displayResult.layout;
     if (layout === null) return;
     const retry = measurementRetryRef.current;
     if (retry.frame !== null) cancelAnimationFrame(retry.frame);
@@ -2097,7 +2316,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     retry.attempts = 0;
     retry.frame = null;
     if (layoutCacheKey !== null) {
-      retainBoundedCache(measuredLayoutCacheRef.current, layoutCacheKey, layout);
+      retainBoundedCache(measuredLayoutCacheRef.current, layoutCacheKey, baseLayout);
     }
     if (!publishCanvasGeometry(canvas, elements, layout)) return;
     layoutEpochRef.current = layout.layoutEpoch;
@@ -2105,7 +2324,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       initialPerformanceMarksRef.current.geometryPublished = true;
       markPerformance("matter:performance:geometry-dom-published");
     }
-    setPublished({ key: projectionKey, layout });
+    setPublished({ baseLayout, key: projectionKey, layout });
   }, [admissionPresentationDamage, languagePresentationDamage, markPerformance, measureRevision, presentationDamage, projection, projectionKey, props.documentEpoch, tree.rootId, viewportRenderer]);
 
   useLayoutEffect(() => {
@@ -2305,6 +2524,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const shell = shellRef.current;
     if (shell === null) return;
     const handleWheel = (event: WheelEvent) => {
+      cancelKeyboardFocusReveal();
       if ((event.target as HTMLElement).closest("[data-canvas-interactive]")) return;
       if (lasso.active) {
         event.preventDefault();
@@ -2345,7 +2565,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // field gesture, so this boundary must be explicitly non-passive.
     shell.addEventListener("wheel", handleWheel, { passive: false });
     return () => shell.removeEventListener("wheel", handleWheel);
-  }, [canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
+  }, [cancelKeyboardFocusReveal, canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
 
   return (
     <main
@@ -2396,6 +2616,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
       }}
       onPointerDown={(event) => {
+        cancelKeyboardFocusReveal();
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
         const pointerViewport = interruptIndexCameraMotion();
@@ -2825,6 +3046,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               selectionLayoutMode={selectionPreviewMode}
               selectionPreviewMode={visibleSplitPreviewMode}
               navigation={navigation}
+              onKeyboardFocus={revealKeyboardFocusedMaterial}
               onSelectNode={selectNodeAfterAbort}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
@@ -2994,6 +3216,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   selectionLayoutMode,
   selectionPreviewMode,
   navigation,
+  onKeyboardFocus,
   onSelectNode,
   onSelectLassoSegment,
   activeNodeIds,
@@ -3017,6 +3240,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   selectionLayoutMode: SelectionPreviewMode;
   selectionPreviewMode: SelectionPreviewMode;
   navigation: NavigationState;
+  onKeyboardFocus: (nodeId: string, target: HTMLElement) => void;
   onSelectNode: (nodeId: string) => void;
   onSelectLassoSegment: (nodeId: string, direction: "next" | "previous") => boolean;
   activeNodeIds: ReadonlySet<string>;
@@ -3114,6 +3338,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
               disabled={isHeldAside && !isHeldAsideRoot}
+              onFocus={(event) => onKeyboardFocus(node.id, event.currentTarget)}
               onKeyDown={(event) => {
                 if (
                   !isLassoKeyboardEligible || event.altKey || event.ctrlKey ||
@@ -3613,6 +3838,7 @@ function StretchHandleButton({
       data-active={stretch.activeHandle === handle || undefined}
       data-stretch-amount={Number(stretch.amount.toFixed(3))}
       data-stretch-commit-ready={stretch.amount > 0 || undefined}
+      onFocus={() => onRequestFocusRestore(handle)}
       onPointerCancel={(event) => {
         event.stopPropagation();
         stretch.pointerCancel(event.pointerId);
@@ -3796,6 +4022,15 @@ function clientViewport() {
       };
 }
 
+function clientRect(rect: Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">) {
+  return Object.freeze({
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
 function hasCoarsePointer(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 }
@@ -3867,13 +4102,13 @@ function AdmissionFeedback({
   controller: AdmissionController;
   locale: CanvasLanguage;
   onDismiss: () => void;
-  onReturnFocus: () => void;
+  onReturnFocus: (basis: AdmissionFocusRestorationBasis | null) => void;
   onHeightChange: (height: number) => void;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
   const retryFocusRef = useRef(false);
   const phase = controller.state.phase;
-  const previousPhaseRef = useRef(phase);
+  const previousStateRef = useRef(controller.state);
   useLayoutEffect(() => {
     const element = feedbackRef.current;
     if (element === null) {
@@ -3891,8 +4126,8 @@ function AdmissionFeedback({
     };
   }, [anchor, onHeightChange, phase]);
   useLayoutEffect(() => {
-    const previousPhase = previousPhaseRef.current;
-    previousPhaseRef.current = phase;
+    const previousState = previousStateRef.current;
+    previousStateRef.current = controller.state;
     if (phase === "error") {
       retryFocusRef.current = false;
       feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
@@ -3904,9 +4139,9 @@ function AdmissionFeedback({
     }
     if (phase === "idle") {
       retryFocusRef.current = false;
-      if (previousPhase !== "idle") onReturnFocus();
+      if (previousState.phase !== "idle") onReturnFocus(controller.settlement);
     }
-  }, [onReturnFocus, phase]);
+  }, [controller.settlement, controller.state, onReturnFocus, phase]);
   if (controller.state.phase === "idle" || anchor === null) return null;
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,

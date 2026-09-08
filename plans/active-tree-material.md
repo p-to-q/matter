@@ -3278,6 +3278,160 @@ not after a timeout.
 
 ## Current risks
 
+### Preview 55 maintainer audit — Elastic focus follows semantic geometry
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    a focused Elastic grip remains focused when a font or viewport
+            invalidation replaces its DOM geometry
+Boundary:   one selected segment and physical top/bottom grip identity; Tab,
+            outside focus, and outside pointer input release the request
+Invariants: drag settlement and address/Enter/Space confirmation do not change;
+            pointer focus cannot trap later focus outside the grip
+Proof:      a Chromium receipt forces geometry replacement between focus and
+            PageDown, then proves the successor owns focus and degree changes
+Non-goals:  retaining stale client coordinates, retrying a rejected lasso
+            stroke, changing tab order, or making the grip a submit target
+```
+
+### Preview 55 maintainer audit — persistence proof owns its wall clock
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    the opt-in persistence benchmark completes both its deterministic
+            Node profile and local Chromium IndexedDB profile; the real maximum
+            archive expansion test also keeps enough local wall-clock authority
+Boundary:   each genuinely heavy boundary case owns its explicit hang guard;
+            production persistence, fixtures, and global test policy do not change
+Invariants: a slower development machine may finish the receipt, while a hung
+            benchmark still fails; no global Vitest timeout is widened
+Proof:      npm run bench:persistence prints both receipts and exits zero
+Non-goals:  changing persistence semantics, reducing the measurement work, or
+            turning one-machine timings into a product SLO
+```
+
+### Preview 55 maintainer audit — Voice focus belongs to its admission
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    dismissing or completing Voice restores its tool only while the
+            originating admission still belongs to the visible document
+Boundary:   one pure admission-focus basis plus the rendering-edge RAF owner
+Invariants: normal error dismissal and successful admission still restore
+            focus; hidden, replaced, stale, or missing material never receives it
+Proof:      pure document/tree/revision/parent cases and a Chromium hidden-page
+            cancellation beside the existing successful restoration walk
+Non-goals:  changing admission state, Voice copy, microphone behavior, or
+            durable material
+```
+
+### Preview 55 maintainer audit — keyboard focus remains perceivable
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    keyboard focus that enters an off-paper passage reveals that whole
+            passage inside the paper's unobscured reading field
+Boundary:   one pure readable-field projection and one rendering-edge focus
+            camera owner; material selection and layout do not change
+Invariants: pointer focus never moves the camera; only the latest visible,
+            connected focus-visible target may move transient viewport state
+Proof:      pure clipping/occlusion cases plus real Chromium walks at laptop,
+            narrow, compact, and reduced-motion widths
+Non-goals:  changing tab order, selecting on focus, stacking child columns, or
+            triggering a typography/layout measurement pass
+```
+
+### Preview 55 maintainer audit — text preserves Unicode scalar integrity
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    authored, transcribed, model-produced, restored, and exported text
+            cannot silently change into Unicode replacement characters
+Boundary:   one tree-owned scalar check reused by strict text protocols and
+            persistence validators before encoding or durable mutation
+Invariants: valid astral characters remain accepted byte-for-byte; invalid
+            UTF-16 fails closed without normalization or partial persistence
+Proof:      high/low lone-surrogate and valid-pair cases at tree, wire,
+            transcription, semantic-label, inquiry-record, and snapshot seams
+Non-goals:  Unicode normalization, grapheme policy changes, transliteration,
+            repairing corrupt text, or changing existing length units
+```
+
+### Preview 55 maintainer audit — inquiry CAS versions never wrap
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    an exhausted Ask Matter generation or clear epoch fails without
+            replacing its last recoverable local record
+Boundary:   one checked safe-integer successor inside the inquiry transaction
+Invariants: ordinary save and clear receipts do not change; CAS conflicts keep
+            their existing meaning; exhaustion aborts before any IndexedDB put
+Proof:      maximum generation on save and clear, plus maximum epoch on clear,
+            all return write failure and leave the stored row untouched
+Non-goals:  generation rollover, record migration, distributed inquiry sync,
+            deleting an exhausted row, or changing exchange retention
+```
+
+### Preview 55 maintainer audit — deployment proof bounds every body
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    a broken or hostile deployment cannot make the release verifier
+            buffer an unbounded HTML, JSON, or icon response or retain an
+            attacker-controlled list of tiny chunk objects
+Boundary:   one byte-counted, geometrically growing stream buffer with
+            per-artifact ceilings
+Invariants: header-only probes remain body-free; redirects and timeouts do not
+            change; declared length is only a preflight, never the authority
+Proof:      exact-limit, oversized declared, oversized chunked, cancellation,
+            and one million reusable one-byte chunks pass their exact contracts
+            while current deployment fixtures still pass
+Non-goals:  crawling deployment pages, changing cache/security contracts,
+            trusting compression metadata, or raising production asset budgets
+```
+
+### Preview 55 maintainer audit — transcript scans reject impossible work early
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    maximum mixed Han/Latin transcript input that contains no protected
+            literal bypasses the expensive literal matcher before punctuation
+Boundary:   one conservative prefilter in the shared protected-literal owner
+Invariants: every full matcher alternative still has a necessary prefilter
+            signal; protected source text is never normalized or partially scanned
+Proof:      the maximum alternating-script fast path and 18 positive forms cover
+            fences, quotes, URLs, email, paths, flags, addresses, versions, and identifiers
+Non-goals:  changing punctuation semantics, adding a cache, weakening protected
+            literals, or moving transcript work off the synchronous admission path
+```
+
+### Preview 55 maintainer audit — geometry publication keeps one material render
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    the 2,000-passage list remains memoized when measured geometry is
+            published, and Elastic reuses the immutable base layout directly
+Boundary:   explicit base/display geometry ownership plus callbacks depending
+            only on their actual document, interaction, and navigation owners
+Invariants: DOM shape, presentation damage, cache bounds, layout epochs, Elastic
+            confirmation, and the <100ms production receipt threshold do not change
+Proof:      diagnostic comparison found onSelectNode as the sole initial changed
+            prop; full Chromium passed 139/139 active cases, the formal receipt
+            passed at 90ms cold and 61ms interaction p95, and three independent
+            cold runs passed at 87/78/93ms with zero blocking rounds
+Non-goals:  viewport windowing promotion, event delegation, changing thresholds,
+            removing native buttons, or hiding work outside performance marks
+```
+
 ### Synthetic speech expression receipt — real content, no committed recording
 
 State: Proven in a real Chromium receipt; still capability-gated.

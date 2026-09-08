@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { settleLassoGeometry } from "./lasso-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
@@ -41,8 +42,10 @@ test("Ask Matter and material-local AI surfaces own one transient slot", async (
     exact: true,
   }).click();
   await expect(inquiry).toBeVisible();
+  await settleLassoGeometry(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text));
+  await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
   // The grips mount from the measured address, so wait for the paint that
   // causes them rather than for the count alone. A font event can revoke a
   // fresh measurement, and racing that produced an intermittent zero here.
@@ -421,6 +424,7 @@ async function drawEarlyReleaseLoop(
   const margin = 9;
   await page.mouse.move(rect.x - margin, rect.y - margin);
   await page.mouse.down();
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
   await page.mouse.move(rect.x + rect.width + margin, rect.y - margin, { steps: 5 });
   await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
   await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });

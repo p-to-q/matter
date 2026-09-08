@@ -7,6 +7,13 @@ import {
 } from "./spoken-transcript";
 
 describe("spoken transcript punctuation", () => {
+  it("keeps astral text and refuses malformed input before normalization", () => {
+    expect(normalizeSpokenTranscript({ text: "保留🚀这个想法", locale: "zh-CN" }))
+      .toBe("保留🚀这个想法。");
+    expect(normalizeSpokenTranscript({ text: "bad\uD800speech", locale: "en-US" })).toBe("");
+    expect(normalizeSpokenTranscript({ text: "bad\uDC00speech", locale: "en-US" })).toBe("");
+  });
+
   it.each([
     ["zh-CN", "这个方案可以但是还需要测试", "这个方案可以，但是还需要测试。"],
     ["zh-TW", "這個方案可以但是還需要測試", "這個方案可以，但是還需要測試。"],

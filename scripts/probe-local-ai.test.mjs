@@ -168,7 +168,7 @@ test("checks the expected health identity before issuing at most five posts", as
       if (url.endsWith("/api/health")) return json({
         status: "ok",
         protocolVersion: "0.2",
-        appVersion: "0.2.0-preview.54",
+        appVersion: "0.2.0-preview.55",
         basePath: "/matter",
         surfaces,
       });
@@ -256,7 +256,7 @@ test("does not mistake an all-fixture development server for the AI demo profile
     fetchImpl: async () => new Response(JSON.stringify({
       status: "ok",
       protocolVersion: "0.2",
-      appVersion: "0.2.0-preview.54",
+      appVersion: "0.2.0-preview.55",
       basePath: "/matter",
       surfaces: {
         material: "available",
@@ -292,7 +292,7 @@ test("rejects a route response without no-store before classifying it", async ()
         return new Response(JSON.stringify({
           status: "ok",
           protocolVersion: "0.2",
-          appVersion: "0.2.0-preview.54",
+          appVersion: "0.2.0-preview.55",
           basePath: "/matter",
           surfaces: {
             material: "available",
@@ -374,7 +374,7 @@ function localAiHealthResponse() {
   return new Response(JSON.stringify({
     status: "ok",
     protocolVersion: "0.2",
-    appVersion: "0.2.0-preview.54",
+    appVersion: "0.2.0-preview.55",
     basePath: "/matter",
     surfaces: {
       material: "available",

@@ -7,6 +7,7 @@ import {
 } from "../material/semantic-label";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { PROTOCOL_VERSION } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import { isMatterLocale } from "../config/locales";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 
@@ -167,7 +168,7 @@ export function parseLabelRequest(value: unknown): LabelRequestParse {
   ) {
     return invalid("The label length bound is invalid.");
   }
-  const text = boundedString(value.text, MAX_NODE_TEXT_CODE_UNITS);
+  const text = boundedText(value.text, MAX_NODE_TEXT_CODE_UNITS);
   if (text === null || text.trim().length === 0) return invalid("The label material is invalid.");
 
   const reference = parseReference(value.reference);
@@ -217,7 +218,11 @@ export function isLabelSuccess(
   ) {
     return false;
   }
-  if (typeof value.label !== "string" || value.label.length === 0) return false;
+  if (
+    typeof value.label !== "string" ||
+    !isWellFormedUnicodeText(value.label) ||
+    value.label.length === 0
+  ) return false;
   if (value.source !== "provisional" && value.source !== "model") return false;
   if (value.fallbackReason !== undefined && !isLabelFallbackReason(value.fallbackReason)) {
     return false;
@@ -251,12 +256,12 @@ function parseReference(value: unknown): LabelReference | null {
     siblingLabels?: readonly string[];
   } = {};
   if (value.parentLabel !== undefined) {
-    const parentLabel = boundedString(value.parentLabel, MAX_LABEL_SIBLING_CODE_UNITS);
+    const parentLabel = boundedText(value.parentLabel, MAX_LABEL_SIBLING_CODE_UNITS);
     if (parentLabel === null) return null;
     reference.parentLabel = parentLabel;
   }
   if (value.parentExcerpt !== undefined) {
-    const excerpt = boundedString(value.parentExcerpt, MAX_PARENT_EXCERPT_CODE_UNITS);
+    const excerpt = boundedText(value.parentExcerpt, MAX_PARENT_EXCERPT_CODE_UNITS);
     if (excerpt === null) return null;
     reference.parentExcerpt = excerpt;
   }
@@ -266,7 +271,7 @@ function parseReference(value: unknown): LabelReference | null {
     }
     const labels: string[] = [];
     for (const entry of value.siblingLabels) {
-      const sibling = boundedString(entry, MAX_LABEL_SIBLING_CODE_UNITS);
+      const sibling = boundedText(entry, MAX_LABEL_SIBLING_CODE_UNITS);
       if (sibling === null) return null;
       labels.push(sibling);
     }
@@ -278,6 +283,11 @@ function parseReference(value: unknown): LabelReference | null {
 function boundedString(value: unknown, maxCodeUnits: number): string | null {
   if (typeof value !== "string" || value.length === 0 || value.length > maxCodeUnits) return null;
   return value;
+}
+
+function boundedText(value: unknown, maxCodeUnits: number): string | null {
+  const text = boundedString(value, maxCodeUnits);
+  return text !== null && isWellFormedUnicodeText(text) ? text : null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

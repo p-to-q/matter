@@ -4,6 +4,7 @@ import {
   MAX_TEXT_SWAP_DIRECTION_CODE_POINTS,
 } from "./spoken-text-limits";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 export const MAX_RECORDING_MS = 60_000;
 export const MAX_ACCEPTED_RECORDING_MS = 65_000;
@@ -46,6 +47,7 @@ export function transcriptionTextFitsCapacity(
 ): value is string {
   if (
     typeof value !== "string" ||
+    !isWellFormedUnicodeText(value) ||
     value.trim().length === 0 ||
     value.length > MAX_NODE_TEXT_CODE_UNITS
   ) return false;

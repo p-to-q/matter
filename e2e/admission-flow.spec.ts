@@ -277,6 +277,28 @@ test("a denied microphone leaves material unchanged and Record again starts a fr
   await expect(voiceTool).toBeFocused();
 });
 
+test("a hidden page cancels Voice without restoring focus into the background", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: () => Promise.reject(new DOMException("Synthetic permission denial", "NotAllowedError")),
+    });
+  });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  await voiceTool.click();
+  const failure = page.locator('.admission-feedback[data-phase="error"]');
+  await expect(failure).toBeVisible();
+  await expect(failure.getByRole("button", { name: "重新录音", exact: true })).toBeFocused();
+
+  await setDocumentVisibility(page, "hidden");
+  await expect(failure).toHaveCount(0);
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+  await expect(voiceTool).not.toBeFocused();
+});
+
 test("a transcription outage keeps material unchanged and Record again can recover", async ({ page }) => {
   let transcriptionRequests = 0;
   await page.route("**/api/transcribe", async (route) => {
@@ -358,3 +380,16 @@ test("reduced motion presents repaired text whole without a reveal sequence", as
   }))).toBe(true);
   await expect(admitted.getByRole("button", { name: repairedTranscript, exact: true })).toHaveCount(1);
 });
+
+async function setDocumentVisibility(
+  page: import("@playwright/test").Page,
+  state: "hidden" | "visible",
+): Promise<void> {
+  await page.evaluate((next) => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: next,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
+}

@@ -439,7 +439,7 @@ describe("repairAdmittedTranscript", () => {
     expect(chinese).not.toContain("\n");
   });
 
-  it("falls back whole when repair-only spacing would exceed node capacity", () => {
+  it("falls back whole when repair-only spacing would exceed node capacity", { timeout: 2_500 }, () => {
     const exactCapacity = "中A".repeat(1_000);
     expect(repairAdmittedTranscript(exactCapacity, "zh-CN")).toBe(exactCapacity);
   });

@@ -157,6 +157,12 @@ describe("validation", () => {
     expect(result).toEqual({ ok: false, code: "MARKUP" });
   });
 
+  it("accepts astral text and rejects lone surrogates before normalization", () => {
+    expect(validateSemanticLabel("思想🚀生长")).toEqual({ ok: true, label: "思想🚀生长" });
+    expect(validateSemanticLabel("bad\uD800label")).toEqual({ ok: false, code: "MARKUP" });
+    expect(validateSemanticLabel("bad\uDC00label")).toEqual({ ok: false, code: "MARKUP" });
+  });
+
   it("rejects a near-duplicate of an existing sibling", () => {
     const result = validateSemanticLabel("模型调用成本", { siblingLabels: ["模型调用成本"] });
     expect(result).toEqual({ ok: false, code: "SIBLING_DUPLICATE" });

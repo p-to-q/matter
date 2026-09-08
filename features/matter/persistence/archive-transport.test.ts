@@ -123,7 +123,9 @@ describe("material ZIP transport", () => {
     });
   });
 
-  it("bounds declared and streamed expanded bytes independently", async () => {
+  // This boundary must actually inflate a deflate stream whose declared size
+  // is forged, so the resource-heavy proof owns its wall-clock allowance.
+  it("bounds declared and streamed expanded bytes independently", { timeout: 15_000 }, async () => {
     const expandedOverBound = new Uint8Array(18_000_001);
     const declaredOverBound = zipSync({ "matter/index.md": expandedOverBound }, { level: 6 });
     const actualOverBound = rewriteZipUncompressedSize(declaredOverBound, 1);

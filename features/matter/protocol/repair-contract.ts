@@ -10,6 +10,7 @@ import {
   type RepairSource,
 } from "../material/transcript-repair";
 import { PROTOCOL_VERSION } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 /**
  * The wire shape of the transcript-repair boundary. Both sides parse against
@@ -128,7 +129,7 @@ export function parseRepairRequest(value: unknown): RepairRequestParse {
   const locale = boundedString(value.locale, MAX_LOCALE_LENGTH);
   if (locale === null || !isMatterLocale(locale)) return invalid("The repair locale is invalid.");
 
-  const text = boundedString(value.text, MAX_REPAIR_TEXT_CODE_UNITS);
+  const text = boundedText(value.text, MAX_REPAIR_TEXT_CODE_UNITS);
   if (text === null || text.trim().length === 0) return invalid("The repair transcript is invalid.");
 
   const vocabulary = parseVocabulary(value.vocabulary);
@@ -169,7 +170,11 @@ export function isRepairSuccess(
   if (value.promptVersion !== TRANSCRIPT_REPAIR_PROMPT_VERSION) return false;
   if (value.operationId !== request.operationId) return false;
   if (value.attempt !== request.attempt) return false;
-  if (typeof value.text !== "string" || value.text.trim().length === 0) return false;
+  if (
+    typeof value.text !== "string" ||
+    !isWellFormedUnicodeText(value.text) ||
+    value.text.trim().length === 0
+  ) return false;
   if (value.text.length > MAX_REPAIR_TEXT_CODE_UNITS) return false;
   if (value.source !== "verbatim" && value.source !== "model") return false;
   if (value.fallbackReason !== undefined && !isRepairFallbackReason(value.fallbackReason)) {
@@ -188,7 +193,7 @@ function parseVocabulary(value: unknown): readonly string[] | null {
   if (!Array.isArray(value) || value.length > MAX_VOCABULARY_TERMS) return null;
   const terms: string[] = [];
   for (const entry of value) {
-    const term = boundedString(entry, MAX_VOCABULARY_TERM_CODE_UNITS);
+    const term = boundedText(entry, MAX_VOCABULARY_TERM_CODE_UNITS);
     if (term === null || term.trim().length === 0) return null;
     terms.push(term);
   }
@@ -202,6 +207,11 @@ function isAttempt(value: unknown): value is number {
 function boundedString(value: unknown, maxCodeUnits: number): string | null {
   if (typeof value !== "string" || value.length === 0 || value.length > maxCodeUnits) return null;
   return value;
+}
+
+function boundedText(value: unknown, maxCodeUnits: number): string | null {
+  const text = boundedString(value, maxCodeUnits);
+  return text !== null && isWellFormedUnicodeText(text) ? text : null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

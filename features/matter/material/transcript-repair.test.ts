@@ -60,6 +60,13 @@ describe("decideRepairRequest", () => {
     expect(decideRepairRequest(zh("   "))).toBe(false);
     expect(decideRepairRequest(zh("字".repeat(2_001)))).toBe(false);
   });
+
+  it("declines malformed source or vocabulary while accepting astral text", () => {
+    expect(decideRepairRequest(zh("我在想🚀这件事该怎么做"))).toBe(true);
+    expect(decideRepairRequest(zh("我在想\uD800这件事该怎么做"))).toBe(false);
+    expect(decideRepairRequest(zhWith("我在想这件事该怎么做", ["bad\uDC00term"])))
+      .toBe(false);
+  });
 });
 
 describe("repairDeadlineMs", () => {
@@ -95,6 +102,13 @@ describe("boundedEditDistance", () => {
 });
 
 describe("adjudicateRepair", () => {
+  it("rejects malformed source or answer before semantic comparison", () => {
+    expect(adjudicateRepair(zh("我在想\uD800这件事该怎么做"), "我在想这件事该怎么做。"))
+      .toEqual({ ok: false, reason: "NOT_ONE_UTTERANCE" });
+    expect(adjudicateRepair(zh("我在想这件事该怎么做"), "我在想\uDC00这件事该怎么做。"))
+      .toEqual({ ok: false, reason: "NOT_ONE_UTTERANCE" });
+  });
+
   it("accepts restored punctuation and sentence boundaries", () => {
     const original = zh("我在想这件事到底该怎么做 也许先放一放会更好");
     const verdict = adjudicateRepair(original, "我在想，这件事到底该怎么做。也许先放一放会更好。");

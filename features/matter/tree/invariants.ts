@@ -4,6 +4,7 @@ import {
   type ThoughtNode,
   type ThoughtTree,
 } from "./model";
+import { isWellFormedUnicodeText } from "./unicode-text";
 
 export const MAX_NODE_TEXT_CODE_UNITS = 2_000;
 export const MAX_REPLACEMENT_TEXT_CODE_UNITS = 800;
@@ -48,7 +49,7 @@ export function validateThoughtNode(
   if (!isMaterialId(candidate.id)) {
     return failure("TREE_INVARIANT_VIOLATION", "A thought node requires a non-empty id.");
   }
-  if (typeof candidate.text !== "string") {
+  if (typeof candidate.text !== "string" || !isWellFormedUnicodeText(candidate.text)) {
     return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} has invalid text.`);
   }
   if (candidate.role !== undefined && candidate.role !== "document-root") {
@@ -125,6 +126,15 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
   if (candidate.rootId !== null && typeof candidate.rootId !== "string") {
     return failure("TREE_INVARIANT_VIOLATION", "The tree root id is invalid.");
   }
+  if (
+    typeof candidate.title !== "undefined" &&
+    (typeof candidate.title !== "string" ||
+      !isWellFormedUnicodeText(candidate.title) ||
+      candidate.title.trim().length === 0 ||
+      candidate.title.length > 160)
+  ) {
+    return failure("TREE_INVARIANT_VIOLATION", "The document title is invalid.");
+  }
   if (candidate.rootId === null) {
     return nodeIds.length === 0
       ? { ok: true }
@@ -133,13 +143,6 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
   if (nodeIds.length === 0 || !Object.hasOwn(nodes, candidate.rootId)) {
     return failure("TREE_INVARIANT_VIOLATION", "The tree root does not exist.");
   }
-  if (
-    typeof candidate.title !== "undefined" &&
-    (typeof candidate.title !== "string" || candidate.title.trim().length === 0 || candidate.title.length > 160)
-  ) {
-    return failure("TREE_INVARIANT_VIOLATION", "The document title is invalid.");
-  }
-
   const incoming = new Map<string, number>();
   for (const key of nodeIds) {
     const node = nodes[key];

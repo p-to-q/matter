@@ -56,7 +56,8 @@ export function createIndexedDbInquiryRecordRepository(): InquiryRecordRepositor
         }
         const version = inquiryRecordVersion(current ?? null);
         if (!sameVersion(version, expectedVersion)) return abortConflict(transaction);
-        const nextGeneration = (version.generation ?? 0) + 1;
+        const nextGeneration = nextSafeInteger(version.generation ?? 0);
+        if (nextGeneration === null) return abortVersionExhausted(transaction);
         const next = Object.freeze({
           storageSchemaVersion: STORAGE_SCHEMA_VERSION,
           ...record,
@@ -81,12 +82,15 @@ export function createIndexedDbInquiryRecordRepository(): InquiryRecordRepositor
         if (current !== undefined && !isStoredInquiryRecord(current, treeId)) return abortCorrupt(transaction);
         const version = inquiryRecordVersion(current ?? null);
         if (!sameVersion(version, expectedVersion)) return abortConflict(transaction);
+        const nextGeneration = nextSafeInteger(version.generation ?? 0);
+        const nextEpoch = nextSafeInteger(version.epoch);
+        if (nextGeneration === null || nextEpoch === null) return abortVersionExhausted(transaction);
         const cleared = Object.freeze({
           storageSchemaVersion: STORAGE_SCHEMA_VERSION,
           recordSchemaVersion: 1 as const,
           treeId,
-          writeGeneration: (version.generation ?? 0) + 1,
-          recordEpoch: version.epoch + 1,
+          writeGeneration: nextGeneration,
+          recordEpoch: nextEpoch,
           cleared: true,
           exchanges: Object.freeze([]),
         });
@@ -113,6 +117,12 @@ async function abortCorrupt(transaction: { abort: () => void; done: Promise<unkn
   return failure("PERSISTENCE_CORRUPT", "The saved Ask Matter record is invalid.");
 }
 
+async function abortVersionExhausted(transaction: { abort: () => void; done: Promise<unknown> }): Promise<RepositoryResult<never>> {
+  transaction.abort();
+  try { await transaction.done; } catch { /* Exhaustion leaves the last recoverable record untouched. */ }
+  return failure("PERSISTENCE_WRITE_FAILED", "Ask Matter storage reached its safe version limit.");
+}
+
 function writeFailure(error: unknown): RepositoryResult<never> {
   return error instanceof DOMException && error.name === "QuotaExceededError"
     ? failure("PERSISTENCE_STORAGE_FULL", "Local Ask Matter storage is full.")
@@ -131,6 +141,10 @@ function isValidDraft(record: InquiryRecordDraft): boolean {
 
 function sameVersion(left: InquiryRecordVersion, right: InquiryRecordVersion): boolean {
   return left.generation === right.generation && left.epoch === right.epoch;
+}
+
+function nextSafeInteger(value: number): number | null {
+  return value < Number.MAX_SAFE_INTEGER ? value + 1 : null;
 }
 
 function success<Value>(value: Value): RepositoryResult<Value> {

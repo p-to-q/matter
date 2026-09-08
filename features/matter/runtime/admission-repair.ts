@@ -1,5 +1,6 @@
 import { MAX_NODE_TEXT_CODE_UNITS, isCanonicalTimestamp } from "../tree/invariants";
 import type { ThoughtTree, TreeCommand } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 /**
  * A transcript is already human material when repair starts. The repair window
@@ -63,6 +64,12 @@ export function admissionRepairToTreeCommand(
     values.text.length > MAX_NODE_TEXT_CODE_UNITS
   ) {
     return invalid("BOUND_EXCEEDED", "Transcript repair exceeds the material text bound.");
+  }
+  if (
+    !isWellFormedUnicodeText(values.expectedText) ||
+    !isWellFormedUnicodeText(values.text)
+  ) {
+    return invalid("INVALID_REPAIR", "Transcript repair text is not well-formed Unicode.");
   }
   if (values.text === values.expectedText) {
     return invalid("INVALID_REPAIR", "Transcript repair must change the text.");

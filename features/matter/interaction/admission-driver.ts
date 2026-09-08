@@ -39,6 +39,14 @@ export type AdmissionScope = Readonly<{
   documentEpoch?: number;
 }>;
 
+export type AdmissionSettlement = Readonly<{
+  anchor: AdmissionAnchor;
+  attempt: number;
+  documentEpoch: number;
+  outcome: "committed" | "released";
+  token: string;
+}>;
+
 type Transcribe = typeof requestTranscription;
 
 export type AdmissionDriverDependencies = Readonly<{
@@ -95,6 +103,8 @@ export class AdmissionDriver {
   private disposed = false;
   private leases = 0;
   private leaseGeneration = 0;
+  private activeSettlementOrigin: Omit<AdmissionSettlement, "outcome"> | null = null;
+  private settlement: AdmissionSettlement | null = null;
 
   constructor(dependencies: AdmissionDriverDependencies) {
     this.dependencies = dependencies;
@@ -102,6 +112,10 @@ export class AdmissionDriver {
 
   getState(): AdmissionInteractionState {
     return this.state;
+  }
+
+  getSettlement(): AdmissionSettlement | null {
+    return this.settlement;
   }
 
   subscribe(listener: (state: AdmissionInteractionState) => void): () => void {
@@ -200,8 +214,28 @@ export class AdmissionDriver {
       while (this.events.length > 0 && !this.disposed) {
         const nextEvent = this.events.shift();
         if (nextEvent === undefined) break;
-        const result = reduceAdmissionInteraction(this.state, nextEvent);
-        if (result.state !== this.state) {
+        const previousState = this.state;
+        const result = reduceAdmissionInteraction(previousState, nextEvent);
+        if (result.state !== previousState) {
+          if (result.state.phase !== "idle" && (
+            previousState.phase === "idle" ||
+            previousState.attempt !== result.state.attempt
+          )) {
+            this.activeSettlementOrigin = Object.freeze({
+              anchor: result.state.anchor,
+              attempt: result.state.attempt,
+              documentEpoch: this.scope?.documentEpoch ?? 0,
+              token: result.state.token,
+            });
+            this.settlement = null;
+          } else if (result.state.phase === "idle" && previousState.phase !== "idle") {
+            const origin = this.activeSettlementOrigin;
+            this.settlement = origin === null ? null : Object.freeze({
+              ...origin,
+              outcome: nextEvent.type === "commit-succeeded" ? "committed" : "released",
+            });
+            this.activeSettlementOrigin = null;
+          }
           this.state = result.state;
           this.notify();
         }

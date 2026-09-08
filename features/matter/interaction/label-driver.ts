@@ -18,6 +18,7 @@ import type {
 } from "../persistence/label-repository";
 import type { LabelSuccess } from "../protocol/label-contract";
 import type { ThoughtTree } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import type { requestLabel } from "./label-client";
 
 export type LabelScope = Readonly<{
@@ -188,6 +189,9 @@ export class LabelDriver {
    */
   rename(nodeId: string, label: string): Promise<LabelWriteReceipt> {
     if (this.disposed) return Promise.resolve(WRITE_SKIPPED);
+    if (!isWellFormedUnicodeText(label)) {
+      return Promise.resolve(Object.freeze({ ok: false, code: "REJECTED" }));
+    }
     const trimmed = label.trim();
     if (trimmed.length === 0) return Promise.resolve(WRITE_SKIPPED);
     const treeId = this.state.treeId;
@@ -494,6 +498,10 @@ export class LabelDriver {
 
   private settleSuccess(item: LabelWorkItem, operationId: string, success: LabelSuccess): void {
     if (this.disposed) return;
+    if (!isWellFormedUnicodeText(success.label)) {
+      this.releaseRejectedResult(item, operationId);
+      return;
+    }
     let label = success.label;
     if (success.source === "provisional") {
       // A fallback is allowed to report only the floor the browser already

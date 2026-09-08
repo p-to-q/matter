@@ -1,4 +1,5 @@
 import { deriveMaterialTitle } from "./material-files";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 /**
  * Owns the deterministic half of thought labelling: it compresses one node's
@@ -291,6 +292,7 @@ export function validateSemanticLabel(
   options: SemanticLabelValidationOptions = {},
 ): SemanticLabelValidation {
   const maxGraphemes = clampBound(options.maxGraphemes ?? MAX_SEMANTIC_LABEL_GRAPHEMES);
+  if (!isWellFormedUnicodeText(value)) return reject("MARKUP");
   const label = collapseWhitespace(value);
   if (label.length === 0) return reject("EMPTY");
   // Control characters would corrupt a row; markup would leak authoring syntax

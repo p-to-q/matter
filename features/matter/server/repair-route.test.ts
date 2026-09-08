@@ -95,6 +95,14 @@ describe("parseRepairRequest", () => {
     expect(parseRepairRequest({ ...BODY, text: "   " }).ok).toBe(false);
     expect(parseRepairRequest({ ...BODY, text: "字".repeat(2_001) }).ok).toBe(false);
   });
+
+  it("accepts astral text and rejects malformed transcript or vocabulary text", () => {
+    expect(parseRepairRequest({ ...BODY, text: "保留🚀这个词。" }).ok).toBe(true);
+    for (const malformed of ["bad\uD800text", "bad\uDC00text"]) {
+      expect(parseRepairRequest({ ...BODY, text: malformed }).ok).toBe(false);
+      expect(parseRepairRequest({ ...BODY, vocabulary: [malformed] }).ok).toBe(false);
+    }
+  });
 });
 
 describe("repair route", () => {
@@ -104,6 +112,17 @@ describe("repair route", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     const payload = await response.json();
     expect(isRepairSuccess(payload, { operationId: "voice_1", attempt: 1 })).toBe(true);
+  });
+
+  it("refuses a malformed success transcript", () => {
+    expect(isRepairSuccess({
+      protocolVersion: PROTOCOL_VERSION,
+      promptVersion: TRANSCRIPT_REPAIR_PROMPT_VERSION,
+      operationId: BODY.operationId,
+      attempt: BODY.attempt,
+      text: "bad\uD800text",
+      source: "model",
+    }, BODY)).toBe(false);
   });
 
   it("refuses a body larger than the boundary allows", async () => {

@@ -1,4 +1,5 @@
 import { PROTOCOL_VERSION } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import { isMatterLocale } from "../config/locales";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import {
@@ -409,7 +410,7 @@ function boundedId(value: unknown): string | null {
 }
 
 function boundedText(value: unknown, maxCodePoints: number): string | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== "string" || !isWellFormedUnicodeText(value)) return null;
   return Array.from(value).length > maxCodePoints ? null : value;
 }
 

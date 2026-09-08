@@ -282,7 +282,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   100% { opacity: var(--canvas-ruling-opacity); }
 }
 .matter-world { position: absolute; z-index: 2; inset: 0; transform-origin: 0 0; will-change: transform; }
-.matter-world[data-camera-motion="index"] { transition: transform var(--index-camera-duration, 300ms) cubic-bezier(.65,0,.35,1); }
+.matter-world[data-camera-motion="index"],
+.matter-world[data-camera-motion="focus"] { transition: transform var(--index-camera-duration, 300ms) cubic-bezier(.65,0,.35,1); }
 .matter-canvas { position: absolute; top: 43%; left: calc(50% + var(--matter-canvas-anchor-x)); width: max(var(--matter-canvas-width, 520px), 520px); height: max(var(--matter-canvas-height, 160px), 160px); transform: translate(calc(var(--matter-column-width) / -2), -80px); }
 .spatial-thoughts { margin: 0; padding: 0; list-style: none; }
 .spatial-thought { position: absolute; top: 0; left: 0; width: var(--matter-column-width); contain: layout style; }
