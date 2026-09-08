@@ -54,7 +54,7 @@ test.describe("passage-local Point and Talk", () => {
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
     await passage.hover();
-    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    await page.locator("[data-node-action=point-talk]").click();
 
     const composer = page.locator(".point-talk");
     const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
@@ -99,6 +99,101 @@ test.describe("passage-local Point and Talk", () => {
     await expect(passage).toContainText(SOURCE_TEXT);
   });
 
+  test("a retryable provider failure keeps the direction and retries one exact node", async ({ page }) => {
+    let requestCount = 0;
+    const requests: Array<Readonly<{
+      id: string;
+      direction: string;
+      selection: Readonly<{ nodeId: string; start: number; end: number; selectedText: string }>;
+    }>> = [];
+    await page.route("**/api/text-swap", async (route) => {
+      requestCount += 1;
+      const envelope = route.request().postDataJSON() as {
+        protocolVersion: "0.2";
+        requestVersion: "text-swap/2";
+        id: string;
+        treeId: string;
+        treeRevision: number;
+        direction: { text: string };
+        selection: { nodeId: string; start: number; end: number; selectedText: string };
+      };
+      requests.push({ id: envelope.id, direction: envelope.direction.text, selection: envelope.selection });
+      if (requestCount === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          headers: { "Cache-Control": "no-store" },
+          body: JSON.stringify({
+            error: {
+              code: "TURN_UNAVAILABLE",
+              message: "Synthetic model unavailable.",
+              retryable: true,
+              fallbackReason: "MODEL_UNAVAILABLE",
+            },
+          }),
+        });
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await route.fulfill({
+        contentType: "application/json",
+        headers: { "Cache-Control": "no-store" },
+        body: JSON.stringify({
+          protocolVersion: envelope.protocolVersion,
+          requestVersion: envelope.requestVersion,
+          id: envelope.id,
+          treeId: envelope.treeId,
+          treeRevision: envelope.treeRevision,
+          action: {
+            id: envelope.id,
+            type: "replace-text-range",
+            nodeId: ROOT_ID,
+            start: 0,
+            end: SOURCE_TEXT.length,
+            text: REWRITTEN_TEXT,
+            intent: "paraphrase",
+          },
+          presentation: { motionHint: "settle" },
+        }),
+      });
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
+    await direction.fill(DIRECTION);
+    await page.getByRole("button", { name: "改写", exact: true }).click();
+
+    const failure = page.locator('.point-talk[data-phase="error"]');
+    await expect(failure).toContainText("原文没有改变。");
+    await expect(passage).toContainText(SOURCE_TEXT);
+    expect(requestCount).toBe(1);
+
+    const retry = failure.getByRole("button", { name: "重试", exact: true });
+    await expect(retry).toBeFocused();
+    await retry.press("Enter");
+    await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
+    await expect(passage).toContainText(REWRITTEN_TEXT);
+    await expect(passage).toBeFocused();
+    expect(requestCount).toBe(2);
+    expect(requests.map(({ direction }) => direction)).toEqual([DIRECTION, DIRECTION]);
+    expect(new Set(requests.map(({ id }) => id)).size).toBe(2);
+    expect(requests.map(({ selection }) => selection)).toEqual([0, 1].map(() => ({
+      type: "segment-range",
+      nodeId: ROOT_ID,
+      start: 0,
+      end: SOURCE_TEXT.length,
+      selectedText: SOURCE_TEXT,
+    })));
+
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
+    await expect(passage).toContainText(SOURCE_TEXT);
+  });
+
   test("the local field follows material zoom within one optical size range", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/matter");
@@ -125,7 +220,7 @@ test.describe("passage-local Point and Talk", () => {
     };
     const openAndMeasure = async () => {
       await passage.hover();
-      await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+      await page.locator("[data-node-action=point-talk]").click();
       const composer = page.locator(".point-talk");
       await expect(composer).toBeVisible();
       return composer.evaluate((element) => {
@@ -174,7 +269,7 @@ test.describe("passage-local Point and Talk", () => {
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan }).click();
 
     await passage.hover();
-    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    await page.locator("[data-node-action=point-talk]").click();
     const field = page.locator(".point-talk");
     await expect(field).toBeVisible();
     expect(await page.evaluate(() => {
@@ -231,7 +326,7 @@ test.describe("passage-local Point and Talk", () => {
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
     await passage.hover();
-    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    await page.locator("[data-node-action=point-talk]").click();
     await page.getByRole("button", { name: "说出改写方向", exact: true }).click();
     await expect(page.locator('.point-talk[data-phase="recording"]')).toBeVisible();
     await page.waitForTimeout(350);
@@ -250,7 +345,7 @@ test.describe("passage-local Point and Talk", () => {
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
     await passage.hover();
-    await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+    await page.locator("[data-node-action=point-talk]").click();
     await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill(DIRECTION);
     await page.getByRole("button", { name: "改写", exact: true }).click();
     await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
@@ -268,7 +363,7 @@ test.describe("passage-local Point and Talk", () => {
       await page.goto("/matter");
       await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
       await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).click();
-      await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+      await page.locator("[data-node-action=point-talk]").click();
       const composer = page.locator(".point-talk");
       await expect(composer).toBeVisible();
       expect(await composer.evaluate((element) => {
@@ -284,7 +379,7 @@ test.describe("passage-local Point and Talk", () => {
       await page.goto("/matter");
       await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
       await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).click();
-      await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+      await page.locator("[data-node-action=point-talk]").click();
       const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
       await expect(direction).toBeFocused();
 

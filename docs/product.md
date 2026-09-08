@@ -62,10 +62,15 @@ suffix and every material row that begins below it move down. The upper grip is
 pulled up from its fixed seam, then pushes the selected segment, its suffix,
 and every lower material row down. The mirrored outward gestures therefore
 open the same downward-growing material pocket; their difference is which
-boundary stays anchored. This displacement follows the pointer before release;
-release settles the degree and may start the one transform only when its public
-deployment gate is explicitly opened, but it never introduces the first visible
-layout movement. The quiet
+boundary stays anchored. This displacement follows the pointer before release
+and never introduces its first visible movement after the gesture. Release
+settles the visible degree without spending a model request. The fixed pointer
+deadzone is only protection against an accidental start; every positive degree
+after it remains exactly human-owned. One subsequent tap inside the shaped
+address surface confirms that exact degree and may start the single transform
+only when its deployment gate is open. Enter or Space is the keyboard-equivalent
+confirmation, never the primary instruction.
+The quiet
 selected state opens no empty tool lane; local space appears only when a grip
 actually moves.
 
@@ -252,11 +257,11 @@ Elastic Language may insert language that unfolds only what the selected passage
 already contains; it may not delete or reorder the original lexical material,
 introduce another topic, change a claim, or finish an idea on the person's
 behalf.
-If reactivated, Text Swap may restate only the selected passage in the person's requested
-direction. It preserves speaker, claims, entities, facts, numbers, polarity,
-modality, conditions, causality, question type, unfinishedness, and the outer
-seam; direction cannot authorize a new topic, fact, conclusion, or answer to the
-person.
+Point and Talk's Text Swap may restate only the addressed passage in the
+person's requested direction. It preserves speaker, claims, entities, facts,
+numbers, polarity, modality, conditions, causality, question type,
+unfinishedness, and the outer seam; direction cannot authorize a new topic,
+fact, conclusion, or answer to the person.
 
 ## Not Matter
 

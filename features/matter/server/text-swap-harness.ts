@@ -41,15 +41,14 @@ export function adjudicateTextSwap(
   input: TextSwapScenarioInput,
 ): Readonly<{ ok: true; value: string }> | Readonly<{ ok: false; reason: TextSwapRejection }> {
   if (typeof answer !== "string") return Object.freeze({ ok: false, reason: "EMPTY" });
-  const text = answer.trim();
   const verdict = validateTextSwapCandidate({
     sourceText: input.passage,
-    candidateText: text,
+    candidateText: answer,
     beforeText: input.surrounding.before,
     afterText: input.surrounding.after,
   });
   return verdict.ok
-    ? Object.freeze({ ok: true, value: text })
+    ? Object.freeze({ ok: true, value: answer })
     : Object.freeze({ ok: false, reason: verdict.code });
 }
 

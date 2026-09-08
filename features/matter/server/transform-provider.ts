@@ -29,6 +29,12 @@ export const FROZEN_TRANSFORM_FIXTURES: readonly FrozenFixtureExpansion[] = Obje
   }),
   Object.freeze({
     locale: "zh-CN",
+    passage: "我们怀念的也许不是一个真实存在过的过去",
+    requestedDeltaGraphemes: 24,
+    text: "我们怀念的也许不是一个真实存在过的、拥有非常清楚的边界和十分完整的形状的过去",
+  }),
+  Object.freeze({
+    locale: "zh-CN",
     passage: "而是那个过去在今天仍然允许我们想象的其他生活",
     requestedDeltaGraphemes: 22,
     text: "而是那个过去在今天仍然带着松动的边界，持续允许我们缓慢想象仍有开放余地的其他生活",

@@ -37,7 +37,7 @@ export type MaterialTurnObservation = Readonly<{
   outcome: MaterialTurnOutcome;
   reason: MaterialTurnReason;
   locale: MatterLocale | "unknown";
-  amountBucket: "0.15-0.39" | "0.40-0.74" | "0.75-1.00" | "tool-owned" | "unknown";
+  amountBucket: "0.00-0.39" | "0.40-0.74" | "0.75-1.00" | "tool-owned" | "unknown";
   lengthBucket: "1-20" | "21-80" | "81-200" | "201-800" | "over-800" | "unknown";
   requestBytesBucket: MaterialTurnByteBucket;
   responseBytesBucket: MaterialTurnByteBucket | "none";
@@ -258,8 +258,8 @@ function safeFailureReason(outcome: MaterialTurnOutcome, value: string): Materia
 }
 
 function stretchAmountBucket(amount: number): MaterialTurnObservation["amountBucket"] {
-  if (!Number.isFinite(amount) || amount < .15 || amount > 1) return "unknown";
-  if (amount < .4) return "0.15-0.39";
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 1) return "unknown";
+  if (amount < .4) return "0.00-0.39";
   if (amount < .75) return "0.40-0.74";
   return "0.75-1.00";
 }

@@ -18,6 +18,7 @@ ordinary component and store work needs no matching document.
 | [`local-transcript-repair.md`](local-transcript-repair.md) | staged transcript repair, managed fallback, future browser worker, and cache policy |
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
 | [`prompt-harness.md`](prompt-harness.md) | how any Matter prompt is built, budgeted, and judged |
+| [`local-ai-demo.md`](local-ai-demo.md) | running and verifying the bounded localhost AI surface without changing production authority |
 | [`thought-label.md`](thought-label.md) | naming a node in the material index |
 | [`virtual-file-system.md`](virtual-file-system.md) | Markdown snapshot and browser durability |
 | [`runtime-cache-and-delivery.md`](runtime-cache-and-delivery.md) | runtime caches, deferred local-model work, artifact budgets, and deployment delivery |

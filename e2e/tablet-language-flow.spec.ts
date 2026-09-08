@@ -32,6 +32,9 @@ test.describe("tablet touch material language", () => {
       ? "closed"
       : await feedback.getAttribute("data-phase"), {
       message: "fake-device recording should either commit or expose its explicit no-audio recovery",
+      // This test owns touch geometry, not the repair lease. Under the full
+      // three-worker suite the fixture can settle just after the default 5 s.
+      timeout: 10_000,
     }).toMatch(/^(closed|error)$/u);
     if (await feedback.count() > 0) {
       const recoveryActions = feedback.locator("button");
@@ -109,7 +112,7 @@ test.describe("tablet touch material language", () => {
     if (lowerGripBox === null) throw new Error("tablet lower Elastic grip missing");
     expect(lowerGripBox.width).toBeGreaterThanOrEqual(48);
     expect(lowerGripBox.height).toBeGreaterThanOrEqual(48);
-    await dragByTouch(page, grip, 12);
+    await dragByTouch(page, grip, 8);
     await expect(grip).toHaveAttribute("aria-valuenow", "0");
     await expect(typeDirection).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Rewrite selected language", exact: true }))
@@ -127,6 +130,9 @@ test.describe("tablet touch material language", () => {
     expect(gripBox.height).toBeGreaterThanOrEqual(48);
     await expectContainedByVisualViewport(page, upperGrip);
     await dragByTouch(page, upperGrip, -68);
+    await expect(upperGrip).toHaveAttribute("aria-valuenow", "0.5");
+    expect(turnRequests).toBe(0);
+    await confirmElasticAddress(page);
     await expect.poll(() => turnRequests).toBe(1);
     await expect(page.locator(".stretch-status-marker")).toHaveCount(0);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
@@ -153,6 +159,25 @@ test.describe("tablet touch material language", () => {
 async function focusRootByTouch(page: Page): Promise<void> {
   await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).tap();
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-view", "full");
+}
+
+async function confirmElasticAddress(page: Page): Promise<void> {
+  const layer = page.locator('.material-address-layer[data-address-variant="actionable"]');
+  await expect(layer).toHaveAttribute("data-address-confirmable", "true");
+  const point = await layer.locator(".material-address-layer__path").evaluate((path) => {
+    if (!(path instanceof SVGGeometryElement)) throw new Error("Elastic address path missing");
+    const box = path.getBoundingClientRect();
+    const matrix = path.getScreenCTM();
+    if (matrix === null) throw new Error("Elastic address transform missing");
+    for (let y = box.top + 2; y < box.bottom - 2; y += 4) {
+      for (let x = box.left + 2; x < box.right - 2; x += 4) {
+        const local = new DOMPoint(x, y).matrixTransform(matrix.inverse());
+        if (path.isPointInFill(local)) return { x, y };
+      }
+    }
+    throw new Error("Elastic address has no confirmable interior point");
+  });
+  await page.touchscreen.tap(point.x, point.y);
 }
 
 async function selectFirstSegmentByTouch(page: Page, text: Locator): Promise<void> {

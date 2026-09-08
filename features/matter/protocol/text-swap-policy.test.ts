@@ -23,6 +23,7 @@ describe("text swap direction", () => {
     expect(normalizeTextSwapDirection(`hidden\u202E`)).toBeNull();
     expect(normalizeTextSwapDirection(`hidden\uFEFF`)).toBeNull();
     expect(normalizeTextSwapDirection(`hidden\u200D`)).toBeNull();
+    expect(normalizeTextSwapDirection(`hidden\uD800`)).toBeNull();
     expect(normalizeTextSwapDirection("one\ttwo")).toBeNull();
     expect(normalizeTextSwapDirection("\none")).toBeNull();
     expect(normalizeTextSwapDirection("😀".repeat(240))).toBe("😀".repeat(240));
@@ -53,6 +54,7 @@ describe("text swap policy", () => {
       maximumAcceptedGraphemes: 135,
     });
     expect(deriveTextSwapLength("a", "x".repeat(2_000), "")).toBeNull();
+    expect(deriveTextSwapLength("quiet\uD800", "", "")).toBeNull();
   });
 
   it("allows genuine replacement instead of requiring the expand lexical subsequence", () => {
@@ -69,6 +71,9 @@ describe("text swap policy", () => {
     expect(validateTextSwapCandidate(candidate({ candidateText: "x".repeat(801) }))).toMatchObject({ ok: false, code: "BOUND_EXCEEDED" });
     expect(validateTextSwapCandidate(candidate({ candidateText: "Sure: calm room" }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
     expect(validateTextSwapCandidate(candidate({ candidateText: "The </passage>" }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+    expect(validateTextSwapCandidate(candidate({
+      candidateText: `<passage>${"calm room ".repeat(20)}</passage>`,
+    }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
     expect(validateTextSwapCandidate(candidate({ sourceText: "A quiet room", candidateText: "The room calm." }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
   });
 
@@ -119,6 +124,16 @@ describe("text swap policy", () => {
     expect(validateTextSwapCandidate(candidate({
       sourceText: "“A quiet room”",
       candidateText: "“The room is calm”",
+    }))).toMatchObject({ ok: true });
+  });
+
+  it("rejects malformed Unicode without rejecting a valid surrogate pair", () => {
+    expect(validateTextSwapCandidate(candidate({
+      candidateText: "A calmer room\uD800",
+    }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+    expect(validateTextSwapCandidate(candidate({
+      sourceText: "A quiet room 😀",
+      candidateText: "The room is calm 😀",
     }))).toMatchObject({ ok: true });
   });
 });

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SegmentSelection } from "../material/text-segments";
 import {
-  STRETCH_COMMIT_THRESHOLD,
   STRETCH_MOUSE_PEN_DEADZONE_PX,
   STRETCH_TOUCH_DEADZONE_PX,
   STRETCH_TRAVEL_PX,
@@ -199,49 +198,45 @@ describe("stretch interaction", () => {
     })).toBe(state);
   });
 
-  it("resets a released amount below 0.15 and commits an exact-threshold basis", () => {
-    expect(reduceStretchInteraction(down(), {
+  it("settles every positive degree after the deadzone without submitting", () => {
+    const atDeadzone = reduceStretchInteraction(down(), {
       type: "pointer-up",
       pointerId: 7,
-      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX +
-        STRETCH_TRAVEL_PX * (STRETCH_COMMIT_THRESHOLD - 0.001),
-    })).toEqual({ mode: "armed", anchor: ANCHOR, amount: 0 });
+      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX,
+    });
+    expect(atDeadzone).toEqual({ mode: "armed", anchor: ANCHOR, amount: 0 });
 
-    const committed = reduceStretchInteraction(down(), {
+    const settled = reduceStretchInteraction(down(), {
       type: "pointer-up",
       pointerId: 7,
-      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX +
-        STRETCH_TRAVEL_PX * STRETCH_COMMIT_THRESHOLD,
+      clientY: 100 + STRETCH_MOUSE_PEN_DEADZONE_PX + 1,
     });
-    expect(committed).toMatchObject({
-      mode: "committed",
-      amount: STRETCH_COMMIT_THRESHOLD,
+    expect(settled).toMatchObject({
+      mode: "adjusted",
+      amount: 1 / STRETCH_TRAVEL_PX,
       lastHandle: "bottom",
-      basis: {
-        selection: SELECTION,
-        treeId: ANCHOR.treeId,
-        baseRevision: ANCHOR.revision,
-        documentEpoch: ANCHOR.documentEpoch,
-        amount: STRETCH_COMMIT_THRESHOLD,
-      },
     });
+    expect(stretchCommitBasisFromTransition(down(), settled)).toBeNull();
   });
 
-  it("returns one immutable commit basis and re-grabs without duplicating the commit", () => {
+  it("returns one immutable commit basis only after the settled address is confirmed", () => {
     const mutableSelection = { ...SELECTION };
     const state = down(armed({ ...ANCHOR, selection: mutableSelection }));
-    const committed = reduceStretchInteraction(state, {
+    const settled = reduceStretchInteraction(state, {
       type: "pointer-up",
       pointerId: 7,
       clientY: 160,
     });
+    expect(settled.mode).toBe("adjusted");
+    const committed = reduceStretchInteraction(settled, { type: "confirm" });
     expect(committed.mode).toBe("committed");
     if (committed.mode !== "committed") throw new Error("expected commit");
     mutableSelection.selectedText = "mutated later";
     expect(Object.isFrozen(committed.basis)).toBe(true);
     expect(Object.isFrozen(committed.basis.selection)).toBe(true);
     expect(committed.basis.selection.selectedText).toBe("语言材料");
-    expect(stretchCommitBasisFromTransition(state, committed)).toBe(committed.basis);
+    expect(stretchCommitBasisFromTransition(state, settled)).toBeNull();
+    expect(stretchCommitBasisFromTransition(settled, committed)).toBe(committed.basis);
     expect(stretchCommitBasisFromTransition(committed, committed)).toBeNull();
     const regrabbed = reduceStretchInteraction(committed, {
       type: "pointer-down",
@@ -264,40 +259,50 @@ describe("stretch interaction", () => {
     });
   });
 
-  it("lets an adjusted keyboard degree submit with one no-move grip release", () => {
+  it("commits the settled degree when the addressed surface is explicitly confirmed", () => {
+    const adjusted = setAmount(armed(), 0.5);
+    const committed = reduceStretchInteraction(adjusted, { type: "confirm" });
+
+    expect(committed).toMatchObject({ mode: "committed", amount: 0.5 });
+    expect(stretchCommitBasisFromTransition(adjusted, committed)).toMatchObject({ amount: 0.5 });
+    expect(reduceStretchInteraction(armed(), { type: "confirm" })).toEqual(armed());
+  });
+
+  it("keeps an adjusted keyboard degree settled after one no-move grip release", () => {
     const adjusted = setAmount(armed(), 0.5);
     const pressing = down(adjusted);
     expect(pressing).toMatchObject({
       mode: "dragging",
       amount: 0.5,
       crossedDeadzone: false,
-      tapCommits: true,
     });
-    const committed = reduceStretchInteraction(pressing, {
+    const settled = reduceStretchInteraction(pressing, {
       type: "pointer-up",
       pointerId: 7,
       clientY: 100,
     });
-    expect(committed).toMatchObject({ mode: "committed", amount: 0.5 });
-    expect(stretchCommitBasisFromTransition(pressing, committed)).toMatchObject({ amount: 0.5 });
+    expect(settled).toMatchObject({ mode: "adjusted", amount: 0.5 });
+    expect(stretchCommitBasisFromTransition(pressing, settled)).toBeNull();
   });
 
-  it("does not submit an unadjusted, below-threshold, or pending re-grab tap", () => {
+  it("does not submit an unadjusted or settled grip tap", () => {
     expect(reduceStretchInteraction(down(armed()), {
       type: "pointer-up", pointerId: 7, clientY: 100,
     })).toMatchObject({ mode: "armed", amount: 0 });
 
-    const below = setAmount(armed(), STRETCH_COMMIT_THRESHOLD - .01);
-    expect(reduceStretchInteraction(down(below), {
+    const smallestSettled = setAmount(armed(), 1 / STRETCH_TRAVEL_PX);
+    expect(reduceStretchInteraction(down(smallestSettled), {
       type: "pointer-up", pointerId: 7, clientY: 100,
-    })).toMatchObject({ mode: "adjusted", amount: STRETCH_COMMIT_THRESHOLD - .01 });
+    })).toMatchObject({ mode: "adjusted", amount: 1 / STRETCH_TRAVEL_PX });
 
     const dragged = reduceStretchInteraction(down(armed()), {
       type: "pointer-up", pointerId: 7, clientY: 160,
     });
-    expect(dragged.mode).toBe("committed");
-    if (dragged.mode !== "committed") throw new Error("expected committed state");
-    const regrabbed = reduceStretchInteraction(dragged, {
+    expect(dragged.mode).toBe("adjusted");
+    const committed = reduceStretchInteraction(dragged, { type: "key-down", key: "Enter" });
+    expect(committed.mode).toBe("committed");
+    if (committed.mode !== "committed") throw new Error("expected committed state");
+    const regrabbed = reduceStretchInteraction(committed, {
       type: "pointer-down",
       handle: "bottom",
       pointerId: 7,
@@ -306,10 +311,10 @@ describe("stretch interaction", () => {
       button: 0,
       clientY: 100,
     });
-    expect(regrabbed).toMatchObject({ mode: "dragging", tapCommits: false });
+    expect(regrabbed).toMatchObject({ mode: "dragging" });
     expect(reduceStretchInteraction(regrabbed, {
       type: "pointer-up", pointerId: 7, clientY: 100,
-    })).toMatchObject({ mode: "adjusted", amount: dragged.amount });
+    })).toMatchObject({ mode: "adjusted", amount: committed.amount });
   });
 
   it.each(["pointer-cancel", "lost-pointer-capture"] as const)(
@@ -346,13 +351,15 @@ describe("stretch interaction", () => {
     });
   });
 
-  it("keeps keyboard adjustment separate from Enter or Space commit", () => {
+  it("keeps keyboard adjustment separate until Enter or Space confirms it", () => {
     let state = armed();
     state = reduceStretchInteraction(state, { type: "key-down", key: "ArrowUp" });
     expect(state).toMatchObject({ mode: "adjusted", amount: 0.1 });
     expect(reduceStretchInteraction(state, { type: "key-down", key: "Enter" }))
-      .toEqual({ mode: "armed", anchor: ANCHOR, amount: 0 });
+      .toMatchObject({ mode: "committed", amount: 0.1 });
 
+    state = armed();
+    state = reduceStretchInteraction(state, { type: "key-down", key: "ArrowRight" });
     state = reduceStretchInteraction(state, { type: "key-down", key: "ArrowRight" });
     expect(reduceStretchInteraction(state, { type: "key-down", key: " " }))
       .toMatchObject({ mode: "committed", amount: 0.2 });

@@ -31,6 +31,7 @@ export type StretchController = Readonly<{
   pointerMove: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerUp: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerCancel: (pointerId: number) => boolean;
+  confirm: () => boolean;
   reopen: () => void;
   keyDown: (key: string, handle?: StretchHandle) => boolean;
   layoutInvalidated: () => void;
@@ -229,6 +230,14 @@ export function useStretch(input: {
     return true;
   }, [flushPreview, send]);
 
+  const confirm = useCallback(() => {
+    const current = stateRef.current;
+    const next = send({ type: "confirm" });
+    flushPreview(previewSignal(next));
+    emitCommit(current, next);
+    return stretchCommitBasisFromTransition(current, next) !== null;
+  }, [emitCommit, flushPreview, send]);
+
   const reopen = useCallback(() => {
     const next = send({ type: "reopen" });
     flushPreview(previewSignal(next));
@@ -264,6 +273,7 @@ export function useStretch(input: {
     pointerMove,
     pointerUp,
     pointerCancel,
+    confirm,
     reopen,
     keyDown,
     layoutInvalidated,

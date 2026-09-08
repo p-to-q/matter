@@ -1,7 +1,16 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from "react";
+import {
+  beginMaterialAddressConfirmation,
+  createMaterialAddressConfirmationBasis,
+  finishesMaterialAddressConfirmation,
+  moveMaterialAddressConfirmation,
+  sameMaterialAddressConfirmationBasis,
+  type MaterialAddressConfirmationPress,
+} from "../interaction/material-address-confirmation";
 import { materialAddressOutline } from "../interaction/material-address-outline";
+import { subscribePageSuspension } from "../interaction/page-suspension";
 import type { MaterialAddressProjection } from "../interaction/projected-layout-receipt";
 
 export type MaterialAddressVariant = "actionable" | "native" | "structural";
@@ -83,31 +92,184 @@ function pathForLayer(layer: HTMLElement): SVGPathElement | null {
  * grips and no address.
  */
 export function MaterialAddressLayer({
+  confirmable = false,
   layerRef,
+  onConfirm,
   projection,
   variant,
 }: Readonly<{
+  confirmable?: boolean;
   layerRef?: RefObject<HTMLDivElement | null>;
+  onConfirm?: () => void;
   projection: MaterialAddressProjection | null;
   variant: MaterialAddressVariant;
 }>) {
   const outline = materialAddressVariantOutline(projection, variant);
+  const pathRef = useRef<SVGPathElement>(null);
+  const confirmationRef = useRef<MaterialAddressConfirmationPress | null>(null);
+  const pendingConfirmationRef = useRef<Readonly<{
+    basis: MaterialAddressConfirmationPress["basis"];
+    confirm: () => void;
+    frameId: number;
+  }> | null>(null);
+  const ownsConfirmation = onConfirm !== undefined;
+  const confirmationAvailable = confirmable && ownsConfirmation;
+  const confirmationBasis = confirmationAvailable && projection !== null && outline !== null
+    ? createMaterialAddressConfirmationBasis(projection, outline.path)
+    : null;
+  const cancelConfirmation = useCallback(() => {
+    const press = confirmationRef.current;
+    confirmationRef.current = null;
+    const pending = pendingConfirmationRef.current;
+    pendingConfirmationRef.current = null;
+    if (pending !== null) cancelAnimationFrame(pending.frameId);
+    const path = pathRef.current;
+    if (press === null || path === null || !path.hasPointerCapture(press.pointerId)) return;
+    try {
+      path.releasePointerCapture(press.pointerId);
+    } catch {
+      // A detached or browser-cancelled path has already lost authority.
+    }
+  }, []);
+  useLayoutEffect(() => {
+    const press = confirmationRef.current;
+    const pending = pendingConfirmationRef.current;
+    if (
+      (press !== null || pending !== null) &&
+      (confirmationBasis === null || (press !== null &&
+        !sameMaterialAddressConfirmationBasis(press.basis, confirmationBasis)) ||
+        (pending !== null &&
+          !sameMaterialAddressConfirmationBasis(pending.basis, confirmationBasis)))
+    ) cancelConfirmation();
+  }, [cancelConfirmation, confirmationBasis]);
+  useEffect(() => {
+    if (!ownsConfirmation) return;
+    const unsubscribe = subscribePageSuspension(cancelConfirmation);
+    return () => {
+      unsubscribe();
+      cancelConfirmation();
+    };
+  }, [cancelConfirmation, ownsConfirmation]);
   return (
     <div
       aria-hidden="true"
       className="material-address-layer"
       data-address-direction={projection?.direction}
+      data-address-confirmable={confirmationAvailable || undefined}
       data-address-partition={projection?.basis.partitionKey}
       data-address-variant={variant}
+      data-canvas-interactive={confirmationAvailable || undefined}
       data-material-address-painted={outline !== null || undefined}
       data-material-address-ready={projection !== null || undefined}
       ref={layerRef}
     >
       <svg className="material-address-layer__svg">
-        <path className="material-address-layer__path" d={outline?.path} />
+        <path
+          className="material-address-layer__path"
+          d={outline?.path}
+          onClick={!ownsConfirmation ? undefined : (event) => {
+            // Pointer-up owns qualification, but its effect waits one paint
+            // opportunity so this path can absorb the browser's following
+            // compatibility click instead of retargeting it to the canvas.
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onLostPointerCapture={!ownsConfirmation ? undefined : (event) => {
+            event.stopPropagation();
+            if (confirmationRef.current?.pointerId === event.pointerId) {
+              confirmationRef.current = null;
+            }
+          }}
+          onPointerCancel={!ownsConfirmation ? undefined : (event) => {
+            event.stopPropagation();
+            if (confirmationRef.current?.pointerId === event.pointerId) {
+              confirmationRef.current = null;
+            }
+          }}
+          onPointerDown={confirmationAvailable
+            ? (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (
+                  confirmationBasis === null || confirmationRef.current !== null ||
+                  pendingConfirmationRef.current !== null
+                ) return;
+                const press = beginMaterialAddressConfirmation(confirmationBasis, event);
+                if (press === null) return;
+                confirmationRef.current = press;
+                try {
+                  event.currentTarget.setPointerCapture(event.pointerId);
+                } catch {
+                  confirmationRef.current = null;
+                }
+              }
+            : undefined}
+          onPointerMove={!ownsConfirmation ? undefined : (event) => {
+            const press = confirmationRef.current;
+            if (press === null || press.pointerId !== event.pointerId) return;
+            event.stopPropagation();
+            const coalesced = typeof event.nativeEvent.getCoalescedEvents === "function"
+              ? event.nativeEvent.getCoalescedEvents()
+              : [];
+            let moved = press;
+            for (const sample of coalesced) {
+              moved = moveMaterialAddressConfirmation(moved, sample);
+            }
+            confirmationRef.current = moveMaterialAddressConfirmation(moved, event.nativeEvent);
+          }}
+          onPointerUp={!ownsConfirmation ? undefined : (event) => {
+            const press = confirmationRef.current;
+            if (press === null || press.pointerId !== event.pointerId) return;
+            event.preventDefault();
+            event.stopPropagation();
+            confirmationRef.current = null;
+            const currentBasis = confirmationBasis;
+            const confirmed = currentBasis !== null && finishesMaterialAddressConfirmation(
+              press,
+              currentBasis,
+              event,
+              pointIsInsidePath(event.currentTarget, event.clientX, event.clientY),
+              event.currentTarget.getAttribute("d"),
+            );
+            if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+              event.currentTarget.releasePointerCapture(event.pointerId);
+            }
+            if (!confirmed) return;
+            const basis = currentBasis;
+            const frameId = requestAnimationFrame(() => {
+              const pending = pendingConfirmationRef.current;
+              if (pending === null || pending.frameId !== frameId) return;
+              pendingConfirmationRef.current = null;
+              const path = pathRef.current;
+              if (
+                path === null || !path.isConnected ||
+                path.getAttribute("d") !== basis.outlinePath
+              ) return;
+              pending.confirm();
+            });
+            pendingConfirmationRef.current = Object.freeze({
+              basis,
+              confirm: () => onConfirm?.(),
+              frameId,
+            });
+          }}
+          ref={pathRef}
+        />
       </svg>
     </div>
   );
+}
+
+function pointIsInsidePath(path: SVGPathElement, clientX: number, clientY: number): boolean {
+  if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) return false;
+  const matrix = path.getScreenCTM();
+  if (matrix === null || typeof path.isPointInFill !== "function") return false;
+  try {
+    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse());
+    return path.isPointInFill(point);
+  } catch {
+    return false;
+  }
 }
 
 /**

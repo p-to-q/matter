@@ -194,6 +194,29 @@ describe("selected material address", () => {
     expect(layer).toContain("materialAddressVariantOutline(projection, readVariant(layer))");
   });
 
+  it("makes only a settled actionable surface a pointer confirmation target", () => {
+    expect(layer).toContain("data-address-confirmable={confirmationAvailable || undefined}");
+    expect(layer).toContain("data-canvas-interactive={confirmationAvailable || undefined}");
+    expect(css).toMatch(/data-address-confirmable="true"[^}]*pointer-events:\s*fill/);
+  });
+
+  it("keeps the opened Elastic pocket inside the same actionable surface", () => {
+    const outline = materialAddressVariantOutline(addressProjection({
+      attachmentProgress: 1,
+      direction: "selection-then-slot",
+      slot: { blockEnd: 300, blockStart: 220 },
+    }), "actionable")!;
+
+    expect(outline.bands.at(-1)).toMatchObject({
+      blockEnd: 303,
+      blockStart: 220,
+      left: 97,
+      right: 603,
+    });
+    expect((outline.path.match(/M/g) ?? [])).toHaveLength(1);
+    expect((outline.path.match(/Z/g) ?? [])).toHaveLength(1);
+  });
+
   it("keeps forced colors on the system contract and settle motion optional", () => {
     const forced = css.slice(css.indexOf("@media (forced-colors: active)"));
     expect(forced).toMatch(/\[data-address-variant="actionable"\] \.material-address-layer__path,[^]*?\[data-address-variant="structural"\] \.material-address-layer__path \{[^}]*fill:\s*transparent;[^}]*stroke:\s*Highlight/);

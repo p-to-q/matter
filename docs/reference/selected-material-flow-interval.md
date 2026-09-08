@@ -4,7 +4,7 @@ Status: implementation contract for the selected-material geometry slice. It
 supersedes only the use of hidden suffix layout as the moving-partition
 authority, plus fragment-connector and neck/body geometry in
 `text-material.md` and `selected-material-freeze.md`. Product lifecycles,
-palette, grip shape, grip count, commit threshold, protocol, context policy,
+palette, grip shape, grip count, confirmation surface, protocol, context policy,
 tree mutation, and pointer Undo remain unchanged.
 
 ## Evidence that reopened the prior freeze
@@ -124,8 +124,10 @@ travel is `max(0, abs(rawTravel) - deadzonePx)` with the original sign. Degree
 begins only after that boundary.
 
 Attachment is a pure function of amount, never of input mode. It completes by
-amount `0.1`, below the `0.15` commit threshold, so the first keyboard step and
-an equal pointer/touch amount produce the same outline. Attachment is transient
+amount `0.1`, so the first keyboard step and an equal pointer/touch amount
+produce the same outline. The client-pixel deadzone is the only start boundary:
+every positive degree after it settles exactly as the person left it and can be
+confirmed from the address surface. Attachment is transient
 presentation and never enters the material document, command history, request,
 or model context.
 

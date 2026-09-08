@@ -10,6 +10,7 @@ import {
 } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree, type TreeCommand } from "../tree/model";
 import { deriveExpandInPlaceLength, validateExpandInPlaceCandidate } from "./expand-in-place-policy";
+import { isWellFormedUnicodeText } from "./unicode-text";
 
 export const MAX_TRANSFORM_REQUEST_BYTES = 32 * 1024;
 export const MAX_TRANSFORM_RESPONSE_BYTES = 8 * 1024;
@@ -315,7 +316,13 @@ function parseLineage(value: unknown): readonly TransformLineageNode[] | null {
   for (let index = 0; index < value.lineage.length; index += 1) {
     const entry = value.lineage[index];
     if (!isRecord(entry) || !hasExactKeys(entry, ["id", "text", "parentId", "createdAt", "updatedAt"])) return null;
-    if (!isMaterialId(entry.id) || typeof entry.text !== "string" || entry.text.length > MAX_NODE_TEXT_CODE_UNITS) return null;
+    if (
+      !isMaterialId(entry.id) ||
+      typeof entry.text !== "string" ||
+      !isWellFormedUnicodeText(entry.text) ||
+      entry.text.trim().length === 0 ||
+      entry.text.length > MAX_NODE_TEXT_CODE_UNITS
+    ) return null;
     if ((index === 0 && entry.parentId !== null) || (index > 0 && (typeof entry.parentId !== "string" || entry.parentId !== lineage[index - 1]!.id)) || !isCanonicalTimestamp(entry.createdAt) || !isCanonicalTimestamp(entry.updatedAt) || Date.parse(entry.updatedAt) < Date.parse(entry.createdAt)) return null;
     codePoints += Array.from(entry.text).length;
     if (codePoints > MAX_TRANSFORM_CONTEXT_CODE_POINTS) return null;

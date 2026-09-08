@@ -475,6 +475,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-address-layer[data-address-variant="actionable"] { z-index: 1; }
 .material-address-layer__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .material-address-layer__path { fill: rgba(var(--selection-control-rgb),var(--address-density, .18)); stroke: none; }
+.material-address-layer[data-address-confirmable="true"] .material-address-layer__path { cursor: pointer; pointer-events: fill; touch-action: manipulation; }
 .material-address-layer[data-address-variant="actionable"] { --address-density: var(--address-density-actionable); }
 .material-address-layer[data-address-variant="structural"] { --address-density: var(--address-density-structural); }
 .material-address-layer[data-address-variant="native"] { --address-density: var(--address-density-native); }

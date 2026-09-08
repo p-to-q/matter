@@ -48,9 +48,11 @@ permanent assistant panel.
 
 1. Reference: a node or punctuation-bounded segment.
 2. Degree: a non-negative amount expressed by gesture.
-3. Direction: Elastic Language's fixed \`expand-in-place\` tool policy.
-4. Lineage: the visible path from root to focus.
-5. Result: one perceivable, pointer-undoable material change.
+3. Confirmation: release settles the degree; one explicit action inside the
+   same shaped address authorizes the request.
+4. Direction: Elastic Language's fixed \`expand-in-place\` tool policy.
+5. Lineage: the visible path from root to focus.
+6. Result: one perceivable, pointer-undoable material change.
 
 The model boundary is intentionally small: the model returns text and the
 server constructs the change plan. Only the tree engine mutates durable

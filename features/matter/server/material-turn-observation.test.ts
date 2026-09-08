@@ -57,4 +57,19 @@ describe("material turn observation", () => {
     expect(() => owner.settle({ outcome: "success", reason: "NONE", responseBytes: 1 }))
       .not.toThrow();
   });
+
+  it("classifies every positive human-owned degree instead of hiding small intent", () => {
+    const observe = vi.fn();
+    const owner = createMaterialTurnObservationOwner("expand-in-place", {
+      observe,
+      now: () => 0,
+    });
+
+    owner.noteBasis({ locale: "zh-CN", amount: 1 / 120, targetGraphemes: 12 });
+    owner.settle({ outcome: "success", reason: "NONE", responseBytes: 1 });
+
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      amountBucket: "0.00-0.39",
+    }));
+  });
 });

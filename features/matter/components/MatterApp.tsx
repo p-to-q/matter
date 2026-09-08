@@ -5,7 +5,6 @@ import { RootedMaterial } from "./RootedMaterial";
 import { useMatterStore } from "../store/matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { useAdmission } from "../interaction/use-admission";
-import { collectVocabulary } from "../material/material-vocabulary";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
 import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/archive-transport";
 import { treeToBundle } from "../persistence/snapshot-codec";
@@ -131,21 +130,11 @@ export function MatterApp() {
     validateImport: validateArchive,
     replaceImport: replaceArchive,
   }), [exportArchive, replaceArchive, validateArchive]);
-  // Recomputed only when the material or the language actually moves. Every
-  // term here is already on the person's own canvas; nothing is retrieved.
-  const materialVocabulary = useMemo(
-    () => collectVocabulary(
-      Object.values(tree.nodes).map((node) => node.text),
-      canvasPreferences.preferences.language,
-    ),
-    [tree.nodes, canvasPreferences.preferences.language],
-  );
   const admission = useAdmission({
     commit: admitHumanTranscript,
     settleRepair: settleHumanTranscriptRepair,
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
     locale: canvasPreferences.preferences.language,
-    vocabulary: materialVocabulary,
   });
   useLayoutEffect(() => {
     if (

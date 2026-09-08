@@ -2,9 +2,10 @@ import {
   MAX_NODE_TEXT_CODE_UNITS,
   MAX_REPLACEMENT_TEXT_CODE_UNITS,
 } from "../tree/invariants";
+import { isWellFormedUnicodeText } from "./unicode-text";
 
 /** Human-readable identity for the deterministic transform adjudication rules. */
-export const EXPAND_IN_PLACE_POLICY_VERSION = "expand-in-place-policy/1";
+export const EXPAND_IN_PLACE_POLICY_VERSION = "expand-in-place-policy/2";
 
 export const EXPAND_IN_PLACE_MAX_DELTA_GRAPHEMES = 2;
 
@@ -82,6 +83,9 @@ export function deriveExpandInPlaceLength(
     typeof sourceText !== "string" ||
     typeof beforeText !== "string" ||
     typeof afterText !== "string" ||
+    !isWellFormedUnicodeText(sourceText) ||
+    !isWellFormedUnicodeText(beforeText) ||
+    !isWellFormedUnicodeText(afterText) ||
     !Number.isFinite(amount) || amount <= 0 || amount > 1
   ) return null;
 
@@ -122,6 +126,7 @@ export function deriveExpandInPlaceLength(
 export function validateExpandInPlaceCandidate(
   input: ExpandInPlaceCandidate,
 ): ExpandInPlacePolicyResult {
+  if (!isWellFormedUnicodeText(input.candidateText)) return rejected("INVALID_FORMAT");
   const length = deriveExpandInPlaceLength(
     input.sourceText,
     input.beforeText,
@@ -136,13 +141,6 @@ export function validateExpandInPlaceCandidate(
     input.beforeText.length + input.candidateText.length + input.afterText.length > MAX_NODE_TEXT_CODE_UNITS
   ) return rejected("BOUND_EXCEEDED");
 
-  const candidateGraphemes = countExtendedGraphemes(input.candidateText);
-  const delta = candidateGraphemes - length.sourceGraphemes;
-  if (delta <= 0) return rejected("NOT_GROWING");
-  if (
-    delta < length.minimumAcceptedDeltaGraphemes ||
-    delta > length.maximumAcceptedDeltaGraphemes
-  ) return rejected("LENGTH_OUT_OF_RANGE");
   if (MULTILINE.test(input.candidateText) ||
       DANGEROUS_CONTROL.test(input.candidateText) ||
       addsWrapper(input.sourceText, input.candidateText) ||
@@ -151,6 +149,13 @@ export function validateExpandInPlaceCandidate(
       !preservesOuterSeams(input.sourceText, input.candidateText)) {
     return rejected("INVALID_FORMAT");
   }
+  const candidateGraphemes = countExtendedGraphemes(input.candidateText);
+  const delta = candidateGraphemes - length.sourceGraphemes;
+  if (delta <= 0) return rejected("NOT_GROWING");
+  if (
+    delta < length.minimumAcceptedDeltaGraphemes ||
+    delta > length.maximumAcceptedDeltaGraphemes
+  ) return rejected("LENGTH_OUT_OF_RANGE");
   if (!sameSequence(protectedAnchors(input.sourceText), protectedAnchors(input.candidateText))) {
     return rejected("PROTECTED_MEANING_CHANGED");
   }

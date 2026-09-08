@@ -29,7 +29,7 @@ the running product, not how ambitious a feature sounds.
    changing a claim or completing an idea is not expansion and requires new
    human material.
 5. **The primary path is bodily.** Voice is sufficient to admit a thought;
-   pointer is sufficient to address, stretch, release, and undo. Normal web
+   pointer is sufficient to address, stretch, confirm, and undo. Normal web
    accessibility remains supported; keyboard absence is never an excuse to make
    semantics inaccessible.
 6. **Quietness is functional.** Controls appear where material needs a handle.

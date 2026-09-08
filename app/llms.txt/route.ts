@@ -27,8 +27,9 @@ related category, not a prompt-box workflow.
 ## Product grammar
 
 The intended turn is: reference a node or lassoed segment, set a non-negative
-degree with gesture, use Elastic Language's fixed \`expand-in-place\` direction,
-and receive one local, perceivable, reversible change. Voice admits human
+degree with gesture, explicitly confirm the settled address, use Elastic
+Language's fixed \`expand-in-place\` direction, and receive one local,
+perceivable, reversible change. Voice admits human
 material rather than directing that transform. The person keeps the handle and
 can undo the change with a pointer.
 

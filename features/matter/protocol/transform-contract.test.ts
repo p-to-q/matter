@@ -111,6 +111,43 @@ describe("transform/2 contract", () => {
     })).ok).toBe(false);
   });
 
+  it("rejects empty material in the visible lineage before a provider can be called", () => {
+    expect(parseTransformEnvelope(envelope({
+      context: { lineage: [
+        { id: "parent", text: " \t ", parentId: null, createdAt: TIME, updatedAt: TIME },
+        { id: "thought", text: TEXT, parentId: "parent", createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(false);
+  });
+
+  it("rejects malformed Unicode in reference material before a provider can be called", () => {
+    expect(parseTransformEnvelope(envelope({
+      selection: {
+        type: "segment-range",
+        nodeId: "thought",
+        start: 0,
+        end: PASSAGE.length,
+        selectedText: PASSAGE,
+      },
+      context: { lineage: [
+        { id: "thought", text: `${PASSAGE}\uD800`, parentId: null, createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(false);
+    const emojiPassage = "source 😀";
+    expect(parseTransformEnvelope(envelope({
+      selection: {
+        type: "segment-range",
+        nodeId: "thought",
+        start: 0,
+        end: emojiPassage.length,
+        selectedText: emojiPassage,
+      },
+      context: { lineage: [
+        { id: "thought", text: emojiPassage, parentId: null, createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(true);
+  });
+
   it("requires an exact echo, fixed grow presentation, and a policy-valid expansion", () => {
     const parsed = parseTransformEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");

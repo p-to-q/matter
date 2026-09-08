@@ -75,6 +75,8 @@ type LateRepairResources = {
   candidate?: TranscriptRepairResult;
 };
 
+const NO_REPAIR_VOCABULARY: readonly string[] = Object.freeze([]);
+
 /**
  * Serializes admission events and owns their ephemeral effects. React may
  * recreate this driver, but no browser resource may survive dispose or scope
@@ -89,12 +91,6 @@ export class AdmissionDriver {
   private readonly lateRepairs = new Map<string, LateRepairResources>();
   private readonly events: AdmissionInteractionEvent[] = [];
   private voice: VoicePort | null = null;
-  /**
-   * Terms from the person's material, pushed in like the scope rather than read
-   * at construction: the tree they come from has usually grown since this
-   * driver was made. Empty is always a valid answer.
-   */
-  private vocabulary: readonly string[] = Object.freeze([]);
   private processing = false;
   private disposed = false;
   private leases = 0;
@@ -165,11 +161,6 @@ export class AdmissionDriver {
   /** Precise material gestures take precedence over an optional late repair. */
   discardPendingRepairs(): void {
     this.cancelLateRepairs();
-  }
-
-  updateVocabulary(terms: readonly string[]): void {
-    if (this.disposed) return;
-    this.vocabulary = terms;
   }
 
   updateScope(scope: AdmissionScope): void {
@@ -469,7 +460,9 @@ export class AdmissionDriver {
         attempt: input.operation.attempt,
         text: input.baseline,
         locale: this.dependencies.locale,
-        vocabulary: this.vocabulary,
+        // Admission does not own the active working-context projection. Empty
+        // is the only safe hint until that owner can be captured synchronously.
+        vocabulary: NO_REPAIR_VOCABULARY,
         signal: resources.controller.signal,
       }))
       .then((result) => {

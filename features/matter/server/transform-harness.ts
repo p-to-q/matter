@@ -9,12 +9,12 @@ import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine";
 
 /** Prompt artifact version; the public material protocol remains `transform/2`. */
-export const TRANSFORM_PROMPT_VERSION = "transform/3";
+export const TRANSFORM_PROMPT_VERSION = "transform/4";
 export const TRANSFORM_PROVIDER_TIMEOUT_MS = MODEL_DEADLINES.transform.providerMs;
 
 export type TransformScenarioInput = Readonly<{
   locale: MatterLocale;
-  /** Exactly one current punctuation segment; the only language that may change. */
+  /** One current contiguous punctuation-segment range; the only language that may change. */
   passage: string;
   amount: number;
   length: ExpandInPlaceLength;
@@ -44,21 +44,22 @@ export function adjudicateTransform(
   input: TransformScenarioInput,
 ): Readonly<{ ok: true; value: string }> | Readonly<{ ok: false; reason: TransformRejection }> {
   if (typeof answer !== "string") return Object.freeze({ ok: false, reason: "EMPTY" });
-  const text = answer.trim();
   const verdict = validateExpandInPlaceCandidate({
     sourceText: input.passage,
-    candidateText: text,
+    candidateText: answer,
     beforeText: input.surrounding.before,
     afterText: input.surrounding.after,
     amount: input.amount,
   });
   return verdict.ok
-    ? Object.freeze({ ok: true, value: text })
+    ? Object.freeze({ ok: true, value: answer })
     : Object.freeze({ ok: false, reason: verdict.code });
 }
 
 export function compileTransformPrompt(input: TransformScenarioInput): string {
   const { length } = input;
+  const minimumTotal = length.sourceGraphemes + length.minimumAcceptedDeltaGraphemes;
+  const maximumTotal = length.sourceGraphemes + length.maximumAcceptedDeltaGraphemes;
   return composePrompt("matter-transform", TRANSFORM_PROMPT_VERSION, {
     background: true,
     mandate: [
@@ -68,11 +69,11 @@ export function compileTransformPrompt(input: TransformScenarioInput): string {
     fixed: [
       "the reference: exactly the text inside <passage>; no other material may change.",
       "the operation: expand-in-place. The gesture selected this tool policy; there is no free-form direction to infer.",
-      `the degree: add about ${length.requestedDeltaGraphemes} extended graphemes, for about ${length.targetGraphemes} total. This visible stretch is not a suggestion.`,
+      `the degree: aim to add ${length.requestedDeltaGraphemes} extended graphemes, for ${length.targetGraphemes} total; the exact accepted range is ${minimumTotal} to ${maximumTotal} total extended graphemes. This visible stretch is not a suggestion.`,
       `the language: the passage itself is authoritative. ${JSON.stringify(input.locale)} only guides punctuation and spelling conventions.`,
     ],
     allow: [
-      "insert short phrases or clauses that open a relationship, feeling, or qualification the passage already compresses;",
+      "insert local modifiers, appositives, or short dependent phrases inside the passage's original lexical skeleton to unfold what it already compresses;",
       "make only the local punctuation or grammatical connections forced by those insertions.",
     ],
     keep: [
@@ -83,6 +84,8 @@ export function compileTransformPrompt(input: TransformScenarioInput): string {
     ],
     never: [
       "delete, replace, or reorder the passage's original lexical material;",
+      "append an independent sentence or a new afterthought after the passage's original lexical material;",
+      "add or duplicate any negation, hedge or modality, quantifier, condition, or causal marker that the passage does not already contain;",
       "add a new topic, name, example, fact, reason, conclusion, recommendation, or certainty;",
       "translate, polish into a different register, complete the thought, or answer the person;",
       "return a heading, list, quotation wrapper, explanation, chat opener, or more than one line;",
@@ -90,12 +93,18 @@ export function compileTransformPrompt(input: TransformScenarioInput): string {
     ],
     unsure: "When a safe insertion is unclear, return the passage unchanged. Matter will reject that no-op and preserve the original rather than guessing.",
     answer: [
-      "Return one line containing only the raw replacement passage, with no title, wrapping quotation marks, or explanation.",
+      "Return one line containing only the raw replacement for <passage>, with no title, XML tag, wrapping quotation marks, or explanation.",
+      `Hard acceptance gate: the replacement must contain ${minimumTotal} to ${maximumTotal} user-perceived grapheme clusters in total; silently count and revise it into that range before returning. Aim for ${length.targetGraphemes}.`,
+      "Keep the passage's first and final boundary grapheme clusters unchanged, and do not put any character, punctuation, clause, summary, or afterthought outside them.",
+      "Do not carry the <surrounding> or <lineage> blocks, or any extra material from them, into the answer; they remain outside the replacement.",
+      "Count user-perceived grapheme clusters, not bytes or UTF-16 units, when checking the exact range above; ordinary CJK ideographs and punctuation usually count as one.",
+      "Preserve exactly any punctuation or spacing already inside the passage boundaries, and do not append a mark merely because it appears in <surrounding>.",
     ],
     material: [
-      fence("passage", input.passage, "The one passage to expand:"),
       fenceJson("surrounding", input.surrounding, "The rest of the selected node, for seam continuity only:"),
       fenceJson("lineage", input.lineage, "Its ancestors, root first, as context only:"),
+      fence("passage", input.passage, "The one passage to expand:"),
     ],
+    answerAfterMaterial: true,
   });
 }

@@ -67,6 +67,31 @@ describe("transform route", () => {
     expect((call?.input as { lineage: unknown }).lineage).toEqual([]);
   });
 
+  it("carries the smallest positive pointer degree through parsing, budget, and observation", async () => {
+    let call: ScenarioCall | undefined;
+    const observe = vi.fn();
+    const adapter: ScenarioAdapter = async (candidate) => {
+      call = candidate;
+      return { text: "这件事也可能没那么重要" };
+    };
+    const response = await post(
+      body({ gesture: { type: "stretch", axis: "vertical", amount: 1 / 120 } }),
+      adapter,
+      {},
+      { observe },
+    );
+
+    expect(response.status).toBe(200);
+    expect(call).toMatchObject({ deadlineMs: 12_000, maxOutputTokens: 256 });
+    expect((call?.input as { length: { requestedDeltaGraphemes: number } }).length).toMatchObject({
+      requestedDeltaGraphemes: 1,
+    });
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "success",
+      amountBucket: "0.00-0.39",
+    }));
+  });
+
   it("does not invent a plan without an enabled provider or fixture", async () => {
     const response = await post(body(), null);
     expect(response.status).toBe(503);

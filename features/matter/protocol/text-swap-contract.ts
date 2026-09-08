@@ -14,6 +14,7 @@ import {
   normalizeTextSwapDirection,
   validateTextSwapCandidate,
 } from "./text-swap-policy";
+import { isWellFormedUnicodeText } from "./unicode-text";
 
 export const TEXT_SWAP_REQUEST_VERSION = "text-swap/2" as const;
 export const MAX_TEXT_SWAP_REQUEST_BYTES = 32 * 1024;
@@ -282,6 +283,7 @@ function parseLineage(value: unknown): readonly TextSwapLineageNode[] | null {
     if (
       !isMaterialId(entry.id) ||
       typeof entry.text !== "string" ||
+      !isWellFormedUnicodeText(entry.text) ||
       entry.text.trim().length === 0 ||
       entry.text.length > MAX_NODE_TEXT_CODE_UNITS
     ) return null;

@@ -84,16 +84,16 @@ describe("CanvasChrome", () => {
   it("keeps pre-release information honest and task-oriented", () => {
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input, transcript repair, and Ask Matter are available");
-    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("material transformation remains unavailable");
+    expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Public material transformation remains gated");
     expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("未完成想法获得形体的界面");
     expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("实时语音输入、语音整理和询问 Matter 已可使用");
-    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("材料生成变换尚未开放");
+    expect(CANVAS_CHROME_INFO["zh-CN"].about.body.join(" ")).toContain("公开的材料生成变换仍受门禁限制");
     expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("實時語音輸入、語音整理和詢問 Matter 已可使用");
-    expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("材料生成變換尚未開放");
+    expect(CANVAS_CHROME_INFO["zh-TW"].about.body.join(" ")).toContain("公開的材料生成變換仍受門禁限制");
     expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("リアルタイム音声入力");
-    expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("生成機能はまだ利用できません");
+    expect(CANVAS_CHROME_INFO["ja-JP"].about.body.join(" ")).toContain("公開環境での素材生成変換は引き続き制限され");
     expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Live-Spracheingabe, Transkriptreparatur und Matter fragen sind verfügbar");
-    expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Materialtransformation bleibt deaktiviert");
+    expect(CANVAS_CHROME_INFO["de-DE"].about.body.join(" ")).toContain("Materialtransformation bleibt gesperrt");
     expect(CANVAS_CHROME_INFO["en-US"].pricing.body.join(" ")).toContain("no paid plan");
     expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("bounded lassoed language");
     expect(CANVAS_CHROME_INFO["en-US"].privacy.body.join(" ")).toContain("held-aside material is not sent");

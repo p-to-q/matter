@@ -25,9 +25,11 @@ visible for 650ms. The browser port computes a pure TypeScript floor first: it
 protects literals, applies locale-specific disfluency cleanup, classifies only
 high-confidence spoken number/date/time/version/unit spans, renders them without
 numeric precision loss, then settles punctuation and casing. It may then ask
-the existing managed repair route to improve that floor. The request
-carries one utterance, locale, and bounded vocabulary, never tree identity or
-address. A model may make one evidence-backed faithful redraft of broken spoken
+the existing managed repair route to improve that floor. The request carries
+one utterance, locale, and an optional bounded vocabulary hint, never tree
+identity or address. The current browser omits that hint until the active
+working-context owner can supply it synchronously. A model may make one
+evidence-backed faithful redraft of broken spoken
 grammar, but clean prose keeps a narrow edit budget and numbers, units, stable
 identifiers, vocabulary, speaker, modality, relations, question type, and claim
 order remain locked. Timeout, rejection, malformed output, and provider absence all return
@@ -77,7 +79,9 @@ selected lineage  → LineageContext         lineage
                     ↓
        TransformEnvelope transform/2
                     ↓
-             pointer release
+       pointer release settles degree
+                    ↓
+   address-surface tap confirms transform
                     ↓
              POST /api/turn
                     ↓
@@ -353,7 +357,8 @@ read a clock, random source, DOM, network, or storage directly.
 Interaction authority is split into focused lifecycles, not one application-wide
 reducer. Admission has an explicit reducer and effect driver; lasso and stretch
 have their own focused reducers; the Elastic Language turn starts from one
-settled pointer release rather than borrowing admission's Voice lifecycle. Text
+explicit address-surface confirmation after a settled degree rather than borrowing
+admission's Voice lifecycle. Text
 Swap owns a separate selected-segment direction and request lifecycle while
 borrowing only the narrow recording capability. Rendering-edge code coordinates
 their visible precedence and pointer availability. Each lifecycle owns its

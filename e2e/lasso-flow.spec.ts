@@ -84,7 +84,7 @@ for (const viewport of [
     await expect(page.getByRole("status").filter({ hasText: "已选文字" }))
       .toContainText("已选文字");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("向下拉动任一把手展开。");
+      .toHaveText("向外拉动任一握点展开。");
     const rewriteField = page.getByRole("textbox", {
       name: "输入所选文字的改写方向",
       exact: true,
@@ -163,7 +163,7 @@ for (const viewport of [
     await page.mouse.move(secondStart.x, secondStart.y + 60, { steps: 5 });
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-stretching", "true");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("再拉开一点。");
+      .toHaveText("拉动握点开始展开。");
     await expect(page.locator(".elastic-preview")).toHaveAttribute("data-preview-mode", "expand");
     await expect(page.locator(".language-split-slot")).toBeVisible();
     const surface = await page.locator(".language-split-slot").boundingBox();
@@ -191,7 +191,7 @@ for (const viewport of [
     await handle.press("PageUp");
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("按回车键展开。");
+      .toHaveText("轻点选中框内确认展开。");
     const settledLayout = await sourceLayoutReceipt(page, text);
     expect(sourceTextReceipt(settledLayout)).toEqual(sourceTextReceipt(sourceLayout));
     expect(settledLayout.node).toEqual(sourceLayout.node);
@@ -316,11 +316,17 @@ for (const viewport of [
     await page.mouse.up();
     await expect(handle).toHaveAttribute("aria-valuenow", committedDegree!);
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("按回车键展开。");
+      .toHaveText("轻点选中框内确认展开。");
     const selected = await page.getByRole("status")
       .filter({ hasText: "已选文字" })
       .textContent();
     expect(selected).toContain("已选文字");
+
+    // The shaped address is now the explicit confirmation target. Reset its
+    // degree before exercising unrelated Lasso cancellation gestures so those
+    // synthetic paths cannot intentionally confirm the settled transform.
+    await handle.press("Home");
+    await expect(handle).toHaveAttribute("aria-valuenow", "0");
 
     const selectionBeforeCancel = selected;
     await page.mouse.move(fragment.x - 10, fragment.y - 10);
@@ -423,7 +429,7 @@ for (const viewport of [
     await expect(page.getByRole("status").filter({ hasText: "已选文字" }))
       .toContainText("已选文字");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("向下拉动任一把手展开。");
+      .toHaveText("向外拉动任一握点展开。");
     await expect(page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" }))
       .toBeVisible();
 
@@ -457,7 +463,7 @@ for (const viewport of [
     await bottom.press("End");
     await expect(bottom).toHaveAttribute("aria-valuenow", "1");
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("按回车键展开。");
+      .toHaveText("轻点选中框内确认展开。");
     const expanded = await projectionReceipt(page);
     const sourceGlyphsExpanded = await sourceGlyphReceipt(text, 0, "，");
     await expect(page.locator(".language-split-projection"))

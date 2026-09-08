@@ -14,7 +14,9 @@ import {
 } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
+import type { MatterLocale } from "../config/locales";
 import { MatterAiIcon, MinusIcon, PlusIcon } from "./icons";
+import { nodeActionLensCopy } from "./node-action-lens-copy";
 import {
   projectNodeHandleMetrics,
   projectNodeHandlePosition,
@@ -44,6 +46,7 @@ export type NodeActionLensProps = Readonly<{
   geometryKey: string;
   heldAsideRootIds: ReadonlySet<string>;
   interaction: "idle" | "pending";
+  locale: MatterLocale;
   navigation: NavigationState;
   onOpenPointTalk: (nodeId: string) => void;
   onToggleHeldAside: (nodeId: string) => void;
@@ -66,6 +69,7 @@ export function NodeActionLens({
   geometryKey,
   heldAsideRootIds,
   interaction,
+  locale,
   navigation,
   onOpenPointTalk,
   onToggleHeldAside,
@@ -73,6 +77,7 @@ export function NodeActionLens({
   positioningRef,
   tree,
 }: NodeActionLensProps) {
+  const copy = nodeActionLensCopy(locale);
   const [coarse, setCoarse] = useState(false);
   const [compact, setCompact] = useState(false);
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
@@ -370,7 +375,7 @@ export function NodeActionLens({
 
   return (
     <div
-      aria-label="Thought context"
+      aria-label={copy.actions}
       className="node-action-lens"
       data-canvas-interactive
       data-node-action-lens
@@ -403,7 +408,7 @@ export function NodeActionLens({
       } as CSSProperties}
     >
       <button
-        aria-label="Rewrite this material with AI"
+        aria-label={copy.rewrite}
         aria-disabled={!pointTalkEnabled || undefined}
         className="node-action-lens__button node-action-lens__button--ai"
         data-node-action="point-talk"
@@ -412,23 +417,21 @@ export function NodeActionLens({
           onOpenPointTalk(activeTarget.nodeId);
           close();
         }}
-        title="Rewrite with AI"
+        title={copy.rewriteShort}
         tabIndex={pointTalkEnabled ? 0 : -1}
         type="button"
       >
         <MatterAiIcon />
       </button>
       <button
-        aria-label={activeTarget.kind === "active"
-          ? "Set this material branch aside"
-          : "Include this material branch"}
+        aria-label={activeTarget.kind === "active" ? copy.setAside : copy.include}
         className="node-action-lens__button"
         data-node-action={activeTarget.kind === "active" ? "set-aside" : "restore"}
         onClick={() => {
           onToggleHeldAside(activeTarget.nodeId);
           close();
         }}
-        title={activeTarget.kind === "active" ? "Set aside" : "Include"}
+        title={activeTarget.kind === "active" ? copy.setAsideShort : copy.includeShort}
         tabIndex={pointTalkEnabled ? -1 : 0}
         type="button"
       >

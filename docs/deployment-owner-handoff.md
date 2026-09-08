@@ -23,9 +23,9 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.53 prerelease after the exact
+The repository owner has directed one Preview.54 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
-deployment gates. This is fresh Preview.53-only authority; it does not extend
+deployment gates. This is fresh Preview.54-only authority; it does not extend
 the historical Preview.49 authorization or permit the repository maintainer to
 run a manual Vercel command or edit Vercel configuration. The automatic
 promotion does not prove that external controls exist. Issues #34 and #68
@@ -127,37 +127,47 @@ whose failure reaches a person, and a recorded expectation for inquiry latency
 so that "slow" is distinguishable from "down" without reading this file. Until
 that exists, every occurrence of this will be found the same way.
 
-### How to know it is fixed
+### Current Preview.54 publication gate
 
-`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.53`
-reports `pool-healthy` and `surface-usable`, with repair, label, and Inquiry
-producing a real accepted result on every call. Healthy
-inquiry latency has been under two
-seconds, so a correct result is fast, not marginal. Pacing beyond the local
+After the exact Preview.54 source has passed merged-main CI, its automatic
+Production deployment, and the bounded public-origin version check, run:
+
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.54`
+
+Publication is allowed only when that one exact, paced run identifies
+Preview.54 and reports both `pool-healthy` and `surface-usable`, with repair,
+label, and Inquiry producing a real accepted result on every call. A partial
+result, an older successful receipt, or a successful deployment is not a
+substitute. If it fails, Preview.54 source may remain deployed but its annotated
+tag and GitHub prerelease stay withheld. Healthy Inquiry latency has been under
+two seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
+
+### Historical withheld publications
 
 The exact Preview.47 strict-pool release probe failed after its successful
 deployment and public version check. Health and deployment success did not
 substitute for it, so publication was withheld. Preview.48 must produce its own
 closed-count release receipt; neither the failure nor any later success may be
 borrowed across source versions, and one successful run is not evidence that
-the intermittency is gone. The same rule now binds Preview.53: its release probe
-must identify Preview.53 and cannot borrow Preview.48's later receipt.
+the intermittency is gone. The same rule bound Preview.53: its release probe had
+to identify Preview.53 and could not borrow Preview.48's later receipt.
 
 Preview.53's first exact six-round release probe failed after successful CI,
 automatic Preview and Production, and a one-probe public version match. Repair
 reached a model 0/6, label 1/6, and Inquiry 1/6; the remaining calls ended in
 their bounded timeout or unavailable behavior. This is external runtime
 evidence, not a reason to alter the selected-material implementation or enable
-a hidden fallback. Publication remains withheld until a fresh closed-count
-Preview.53 probe reports both `pool-healthy` and `surface-usable`.
+a hidden fallback. Preview.53 publication remains permanently withheld;
+Preview.54 requires its own fresh closed-count evidence under the current gate
+above.
 
 After a full recovery window, the one permitted repeat also failed: repair,
 label, and Inquiry each reached a model 0/6, and the probe classified the pool
 as down. Do not keep retrying this release in a tight loop. A later owner-run
-probe must be a new closed-count observation and must pass all three surfaces
-before the immutable tag or GitHub prerelease is created.
+probe would have needed to be a new closed-count observation passing all three
+surfaces; that historical publication is no longer eligible.
 
 ### Incident-time source boundary
 

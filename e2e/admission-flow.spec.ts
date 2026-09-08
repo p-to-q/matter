@@ -223,6 +223,112 @@ for (const viewport of [
   });
 }
 
+test("a denied microphone leaves material unchanged and Record again starts a fresh attempt", async ({ page }) => {
+  await page.addInitScript(() => {
+    const mediaDevices = navigator.mediaDevices;
+    const original = mediaDevices.getUserMedia.bind(mediaDevices);
+    const runtime = window as Window & { __matterDenyMicrophone?: boolean };
+    runtime.__matterDenyMicrophone = true;
+    Object.defineProperty(mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: (constraints: MediaStreamConstraints) => runtime.__matterDenyMicrophone
+        ? Promise.reject(new DOMException("Synthetic permission denial", "NotAllowedError"))
+        : original(constraints),
+    });
+  });
+
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialNodeCount = await page.locator("[data-thought-id]").count();
+  await page.getByRole("button", {
+    name: fixtureUiCopy.voiceTool.recordTopLevelThought,
+    exact: true,
+  }).click();
+
+  const failure = page.locator('.admission-feedback[data-phase="error"]');
+  await expect(failure).toContainText("麦克风权限已被阻止。");
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  const retry = failure.getByRole("button", { name: "重新录音", exact: true });
+  const dismiss = failure.getByRole("button", { name: "关闭", exact: true });
+  await expect(retry).toBeFocused();
+  await expect(voiceTool).toBeDisabled();
+  await retry.press("Tab");
+  await expect(dismiss).toBeFocused();
+  await dismiss.press("Enter");
+  await expect(failure).toHaveCount(0);
+  await expect(voiceTool).toBeFocused();
+
+  await voiceTool.press("Enter");
+  await expect(failure).toContainText("麦克风权限已被阻止。");
+
+  await page.evaluate(() => {
+    (window as Window & { __matterDenyMicrophone?: boolean }).__matterDenyMicrophone = false;
+  });
+  await expect(retry).toBeFocused();
+  await retry.press("Enter");
+  const recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible();
+  await expect(recording.getByRole("button", { name: "停止录音", exact: true })).toBeFocused();
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount + 1);
+  await expect(voiceTool).toBeFocused();
+});
+
+test("a transcription outage keeps material unchanged and Record again can recover", async ({ page }) => {
+  let transcriptionRequests = 0;
+  await page.route("**/api/transcribe", async (route) => {
+    transcriptionRequests += 1;
+    if (transcriptionRequests === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: { "Cache-Control": "no-store" },
+        body: JSON.stringify({
+          error: {
+            code: "TRANSCRIPTION_UNAVAILABLE",
+            message: "Synthetic transcription outage.",
+            retryable: true,
+          },
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialNodeCount = await page.locator("[data-thought-id]").count();
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  await voiceTool.click();
+  let recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible();
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+
+  const failure = page.locator('.admission-feedback[data-phase="error"]');
+  await expect(failure).toContainText("没能把这段录音变成文字。");
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+  expect(transcriptionRequests).toBe(1);
+
+  const retry = failure.getByRole("button", { name: "重新录音", exact: true });
+  await expect(retry).toBeFocused();
+  await retry.press("Enter");
+  recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible();
+  const stop = recording.getByRole("button", { name: "停止录音", exact: true });
+  await expect(stop).toBeFocused();
+  await page.waitForTimeout(350);
+  await stop.click();
+
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount + 1);
+  await expect(voiceTool).toBeFocused();
+  expect(transcriptionRequests).toBe(2);
+});
+
 test("reduced motion presents repaired text whole without a reveal sequence", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/matter");

@@ -35,7 +35,6 @@ import { useLasso } from "../interaction/use-lasso";
 import { useStretch } from "../interaction/use-stretch";
 import type { StretchPreviewSignal } from "../interaction/use-stretch";
 import {
-  STRETCH_COMMIT_THRESHOLD,
   isStretchInteractionKey,
 } from "../runtime/stretch-interaction";
 import type { StretchHandle } from "../runtime/stretch-interaction";
@@ -53,6 +52,11 @@ import {
 import { measureTextRange, normalizeClientRects } from "../interaction/range-measurement";
 import { useNativeMaterialSelection } from "../interaction/use-native-material-selection";
 import { useStructuralMaterialSelection } from "../interaction/use-structural-material-selection";
+import { subscribePageSuspension } from "../interaction/page-suspension";
+import {
+  pointTalkFocusRestorationIsCurrent,
+  type PointTalkFocusRestorationBasis,
+} from "../interaction/point-talk-focus-restoration";
 import { projectLanguageAroundSelection } from "../material/language-projection";
 import type { LanguageProjection } from "../material/language-projection";
 import {
@@ -1034,8 +1038,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     for (const control of controls) {
       control.dataset.stretchAmount = String(Number(signal.amount.toFixed(3)));
       control.setAttribute("aria-valuenow", String(Number(signal.amount.toFixed(3))));
-      control.setAttribute("aria-valuetext", stretchValueText(signal.amount, props.locale));
-      if (signal.amount >= STRETCH_COMMIT_THRESHOLD) control.dataset.stretchCommitReady = "true";
+      control.setAttribute("aria-valuetext", stretchValueText(signal.amount, props.locale, signal.dragging));
+      if (signal.amount > 0) control.dataset.stretchCommitReady = "true";
       else delete control.dataset.stretchCommitReady;
     }
   }, [elasticPreviewSource, props.locale, publishLiveLanguageLayout, viewport.zoom]);
@@ -1076,10 +1080,66 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const publishMaterialTextChange = useCallback((change: MaterialTextCommittedChange) => {
     publishTransformPresentation(change);
   }, [publishTransformPresentation]);
+  const pointTalkFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
+  const pointTalkFocusFrameRef = useRef<Readonly<{
+    basis: PointTalkFocusRestorationBasis;
+    frameId: number;
+  }> | null>(null);
+  const cancelPointTalkFocusRestore = useCallback(() => {
+    const pending = pointTalkFocusFrameRef.current;
+    pointTalkFocusFrameRef.current = null;
+    if (pending !== null) cancelAnimationFrame(pending.frameId);
+  }, []);
+  useLayoutEffect(() => {
+    pointTalkFocusContextRef.current = { tree, documentEpoch: props.documentEpoch };
+    const pending = pointTalkFocusFrameRef.current;
+    if (pending === null) return;
+    if (!pointTalkFocusRestorationIsCurrent(pending.basis, tree, props.documentEpoch)) {
+      cancelPointTalkFocusRestore();
+    }
+  }, [cancelPointTalkFocusRestore, props.documentEpoch, tree]);
+  useEffect(() => {
+    const unsubscribe = subscribePageSuspension(cancelPointTalkFocusRestore);
+    return () => {
+      unsubscribe();
+      cancelPointTalkFocusRestore();
+    };
+  }, [cancelPointTalkFocusRestore]);
   const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
     publishMaterialTextChange(change);
     setPointTalkNodeId(null);
-  }, [publishMaterialTextChange]);
+    cancelPointTalkFocusRestore();
+    const basis = Object.freeze({
+      documentEpoch: change.documentEpoch,
+      nodeId: change.nodeId,
+      treeId: change.treeId,
+    });
+    if (!pointTalkFocusRestorationIsCurrent(basis, tree, props.documentEpoch)) return;
+    const frameId = requestAnimationFrame(() => {
+      const pending = pointTalkFocusFrameRef.current;
+      if (pending === null || pending.frameId !== frameId) return;
+      pointTalkFocusFrameRef.current = null;
+      const context = pointTalkFocusContextRef.current;
+      if (!pointTalkFocusRestorationIsCurrent(
+        pending.basis,
+        context.tree,
+        context.documentEpoch,
+      )) return;
+      const canvas = canvasRef.current;
+      if (canvas === null || document.visibilityState !== "visible") return;
+      for (const candidate of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
+        if (candidate.dataset.thoughtTextId !== pending.basis.nodeId) continue;
+        candidate.focus({ preventScroll: true });
+        break;
+      }
+    });
+    pointTalkFocusFrameRef.current = Object.freeze({ basis, frameId });
+  }, [
+    cancelPointTalkFocusRestore,
+    props.documentEpoch,
+    publishMaterialTextChange,
+    tree,
+  ]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
   const admissionInteractionPending =
     props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
@@ -1627,6 +1687,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
     voiceAdmissionIsEnabled() &&
     voiceReadiness.status === "ready";
   const voiceAvailable = admissionVoiceAvailable;
+  const voiceToolAvailable = voiceAvailable && props.admission.state.phase !== "error";
+  const restoreVoiceToolFocus = useCallback(() => {
+    requestAnimationFrame(() => {
+      shellRef.current
+        ?.querySelector<HTMLButtonElement>('[data-tool-id="voice"]')
+        ?.focus({ preventScroll: true });
+    });
+  }, []);
   const tools = useMemo(
     () =>
       projectTools({
@@ -2674,7 +2742,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         surface={toolSurface}
         panActive={!lasso.active && canvasMode === "pan"}
         voiceActive={props.admission.state.phase === "recording"}
-        voiceAvailable={voiceAvailable}
+        voiceAvailable={voiceToolAvailable}
         // A navigation restriction must be named as one. The generic build
         // limitation is the last branch, because reaching for it first told a
         // person in focus view that the preview cannot record at all — and left
@@ -2782,6 +2850,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
               parentBox={admissionParentBox}
               controller={props.admission}
               locale={props.locale}
+              onDismiss={() => {
+                props.admission.dismiss();
+              }}
+              onReturnFocus={restoreVoiceToolFocus}
               onHeightChange={setAdmissionFeedbackHeight}
             />
           </div>
@@ -2797,6 +2869,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             heldAsideRootIds={heldAsideRootIds}
             interaction="idle"
             key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
+            locale={props.locale}
             navigation={navigation}
             onOpenPointTalk={(nodeId) => {
               canvasChromeRef.current?.closeInquiry();
@@ -3324,7 +3397,13 @@ function LassoOverlay({
         </span>
       )}
       <MaterialAddressLayer
+        confirmable={status === "idle" && stretch.mode === "adjusted" &&
+          stretch.amount > 0}
         layerRef={addressLayerRef}
+        onConfirm={() => {
+          onBeginAdjustment();
+          if (stretch.confirm()) onPreciseGesture();
+        }}
         projection={addressProjection}
         variant="actionable"
       />
@@ -3528,12 +3607,12 @@ function StretchHandleButton({
       aria-valuemax={1}
       aria-valuemin={0}
       aria-valuenow={Number(stretch.amount.toFixed(3))}
-      aria-valuetext={stretchValueText(stretch.amount, locale)}
+      aria-valuetext={stretchValueText(stretch.amount, locale, stretch.dragging)}
       className={`stretch-handle stretch-handle--${handle}`}
       data-canvas-interactive
       data-active={stretch.activeHandle === handle || undefined}
       data-stretch-amount={Number(stretch.amount.toFixed(3))}
-      data-stretch-commit-ready={stretch.amount >= STRETCH_COMMIT_THRESHOLD || undefined}
+      data-stretch-commit-ready={stretch.amount > 0 || undefined}
       onPointerCancel={(event) => {
         event.stopPropagation();
         stretch.pointerCancel(event.pointerId);
@@ -3625,6 +3704,7 @@ function summarizeSelectedLanguage(text: string, locale: CanvasLanguage): string
 function stretchValueText(
   amount: number,
   locale: CanvasLanguage,
+  dragging: boolean,
 ): string {
   if (amount === 0) {
     if (locale === "zh-CN") return "尚未设置展开程度";
@@ -3637,25 +3717,26 @@ function stretchValueText(
     style: "percent",
     maximumFractionDigits: 0,
   }).format(amount);
-  if (amount < STRETCH_COMMIT_THRESHOLD) {
-    if (locale === "zh-CN") return `${degree}；再拉开一点`;
-    if (locale === "zh-TW") return `${degree}；再拉開一點`;
-    if (locale === "ja-JP") return `${degree}、もう少し引いてください`;
-    if (locale === "de-DE") return `${degree}; etwas weiter ziehen`;
-    return `${degree}; pull a little farther`;
+  if (dragging) {
+    if (locale === "zh-CN") return `${degree}；松手确定展开程度`;
+    if (locale === "zh-TW") return `${degree}；放開以確定展開程度`;
+    if (locale === "ja-JP") return `${degree}、放して展開量を決めます`;
+    if (locale === "de-DE") return `${degree}; loslassen, um den Grad festzulegen`;
+    return `${degree}; release to set the degree`;
   }
-  if (locale === "zh-CN") return `${degree}；松开或按回车展开`;
-  if (locale === "zh-TW") return `${degree}；放開或按 Enter 展開`;
-  if (locale === "ja-JP") return `${degree}、放すかEnterで展開`;
-  if (locale === "de-DE") return `${degree}; loslassen oder Enter drücken`;
-  return `${degree}; release or press Enter to expand`;
+  if (locale === "zh-CN") return `${degree}；轻点选中框内确认展开；键盘可按回车或空格`;
+  if (locale === "zh-TW") return `${degree}；輕點選取框內確認展開；鍵盤可按 Enter 或空白鍵`;
+  if (locale === "ja-JP") return `${degree}、選択枠内をタップして確定。キーボードはEnterまたはSpace`;
+  if (locale === "de-DE") return `${degree}; in die Auswahl tippen; per Tastatur Enter oder Leertaste`;
+  return `${degree}; tap inside the selection to confirm; keyboard Enter or Space`;
 }
 
 function stretchStatusText(locale: CanvasLanguage): string {
-  if (locale === "zh-CN" || locale === "zh-TW") return "正在展开";
-  if (locale === "ja-JP") return "展開中";
-  if (locale === "de-DE") return "Wird erweitert";
-  return "Expanding";
+  if (locale === "zh-CN") return "已确认，正在展开";
+  if (locale === "zh-TW") return "已確認，正在展開";
+  if (locale === "ja-JP") return "確定しました。展開中";
+  if (locale === "de-DE") return "Bestätigt. Wird erweitert";
+  return "Confirmed. Expanding";
 }
 
 function materialTextSuccessAnnouncement(
@@ -3777,16 +3858,22 @@ function AdmissionFeedback({
   parentBox,
   controller,
   locale,
+  onDismiss,
+  onReturnFocus,
   onHeightChange,
 }: {
   anchor: InteractionAdmissionAnchor | null;
   parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
   locale: CanvasLanguage;
+  onDismiss: () => void;
+  onReturnFocus: () => void;
   onHeightChange: (height: number) => void;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
+  const retryFocusRef = useRef(false);
   const phase = controller.state.phase;
+  const previousPhaseRef = useRef(phase);
   useLayoutEffect(() => {
     const element = feedbackRef.current;
     if (element === null) {
@@ -3803,6 +3890,23 @@ function AdmissionFeedback({
       onHeightChange(0);
     };
   }, [anchor, onHeightChange, phase]);
+  useLayoutEffect(() => {
+    const previousPhase = previousPhaseRef.current;
+    previousPhaseRef.current = phase;
+    if (phase === "error") {
+      retryFocusRef.current = false;
+      feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+      return;
+    }
+    if (phase === "recording" && retryFocusRef.current) {
+      feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+      retryFocusRef.current = false;
+    }
+    if (phase === "idle") {
+      retryFocusRef.current = false;
+      if (previousPhase !== "idle") onReturnFocus();
+    }
+  }, [onReturnFocus, phase]);
   if (controller.state.phase === "idle" || anchor === null) return null;
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
@@ -3831,8 +3935,11 @@ function AdmissionFeedback({
         <button onClick={controller.stop} type="button">{actions.stop}</button>
       ) : phase === "error" ? (
         <>
-          <button onClick={controller.retry} type="button">{actions.retry}</button>
-          <button onClick={controller.dismiss} type="button">{actions.dismiss}</button>
+          <button onClick={() => {
+            retryFocusRef.current = true;
+            controller.retry();
+          }} type="button">{actions.retry}</button>
+          <button onClick={onDismiss} type="button">{actions.dismiss}</button>
         </>
       ) : (
         <button onClick={controller.cancel} type="button">

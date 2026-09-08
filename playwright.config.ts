@@ -43,6 +43,7 @@ export default defineConfig({
       MATTER_TRANSCRIPTION_ADAPTER: "fixture",
       MATTER_FIXTURE_ADMISSION_TRANSCRIPT: "呃，我觉得我觉得这个方案可以但是它的实现事件比预期长",
       MATTER_INQUIRY_ADAPTER: "off",
+      MATTER_TRANSFORM_ADAPTER: "fixture",
       MATTER_E2E_RUNNER: "playwright",
       NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED: "false",
       NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED: "true",

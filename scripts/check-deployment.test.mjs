@@ -93,13 +93,13 @@ test("requires truthful release surfaces", () => {
   ]);
 });
 
-test("promotes Elastic alone while the dormant Text Swap gate stays closed", () => {
+test("promotes Elastic alone while the public Text Swap gate stays closed", () => {
   const live = structuredClone(HEALTH);
   live.surfaces.transformTurn = "available";
   assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "elastic-live"), []);
   live.surfaces.textSwap = "available";
   assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "elastic-live"), [
-    "Dormant material surface textSwap must be unavailable for elastic-live.",
+    "Public Text Swap surface must be unavailable for elastic-live.",
   ]);
 });
 

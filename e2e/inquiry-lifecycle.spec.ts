@@ -17,12 +17,12 @@ test("Ask Matter and material-local AI surfaces own one transient slot", async (
   await passage.hover();
   // Open canvas chrome suppresses the local lens, so the person cannot enter
   // a second AI surface without first leaving Inquiry.
-  await expect(page.getByRole("button", { name: "Rewrite this material with AI" })).toHaveCount(0);
+  await expect(page.locator("[data-node-action=point-talk]")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(inquiry).toBeHidden();
 
   await passage.hover();
-  await page.getByRole("button", { name: "Rewrite this material with AI" }).click();
+  await page.locator("[data-node-action=point-talk]").click();
   await expect(page.locator(".point-talk")).toBeVisible();
 
   await ask.click();
@@ -106,6 +106,52 @@ test("closing Inquiry revokes a delayed answer before UI or durable record", asy
   await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 });
 
+test("an unavailable answer restores the exact draft and can be asked again", async ({ page }) => {
+  const question = "这份材料现在在怀念什么？";
+  const answer = "它在怀念仍可被想象的另一种生活。";
+  let requestCount = 0;
+  await page.route("**/api/inquiry", async (route) => {
+    const request = inquiryRequest(route);
+    requestCount += 1;
+    if (requestCount === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: { "Cache-Control": "no-store" },
+        body: JSON.stringify({
+          error: {
+            code: "INQUIRY_FAILED",
+            message: "Synthetic provider busy.",
+            retryable: true,
+            fallbackReason: "MODEL_BUSY",
+          },
+        }),
+      });
+      return;
+    }
+    await fulfillInquiry(route, request, answer);
+  });
+
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill(question);
+  await field.press("Enter");
+
+  await expect(field).toHaveValue(question);
+  await expect(field).toBeFocused();
+  await expect(inquiry.locator('[data-inquiry-role="person"]')).toHaveCount(0);
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toHaveCount(0);
+  expect(requestCount).toBe(1);
+
+  await field.press("Enter");
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(answer);
+  await expect(field).toHaveValue("");
+  expect(requestCount).toBe(2);
+  await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
+});
+
 test("a hidden tab still accepts the bounded answer it already requested", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();
@@ -181,7 +227,7 @@ test("chrome restoration preserves ordinary hover and an explicit Escape dismiss
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
-  const lens = page.getByRole("toolbar", { name: "Thought context" });
+  const lens = page.locator("[data-node-action-lens]");
   const paper = page.locator(".matter-document");
 
   await passage.hover();
