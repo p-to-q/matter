@@ -64,7 +64,13 @@ describe("text swap prompt harness", () => {
 
   it("accepts a bounded paraphrase and rejects no-op, anchor drift, packaging, and script drift", () => {
     expect(adjudicateTextSwap(SWAP, input())).toEqual({ ok: true, value: SWAP });
-    expect(adjudicateTextSwap(`\n${SWAP}\n`, input())).toEqual({ ok: true, value: SWAP });
+    const source = " A quiet room";
+    const swap = " The room is calm";
+    expect(adjudicateTextSwap(swap, input({
+      passage: source,
+      surrounding: { before: "", after: "" },
+    }))).toEqual({ ok: true, value: swap });
+    expect(adjudicateTextSwap(`\n${SWAP}\n`, input())).toEqual({ ok: false, reason: "INVALID_FORMAT" });
     expect(adjudicateTextSwap(PASSAGE, input())).toEqual({ ok: false, reason: "NO_CHANGE" });
     expect(adjudicateTextSwap(`“${SWAP}”`, input())).toEqual({ ok: false, reason: "INVALID_FORMAT" });
     expect(adjudicateTextSwap("Quiet room", input()))

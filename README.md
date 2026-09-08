@@ -50,6 +50,23 @@ The dedicated preview uses browser-native recognition when available and a
 lazy, pinned local Whisper worker after a person records in an unsupported
 browser; raw audio and transcripts never enter a shared cache.
 
+For a deliberate localhost AI demonstration, configure one provider pool only
+in gitignored `.env.local`, then run:
+
+```bash
+npm run dev:ai
+npm run probe:local-ai                 # dry run; sends nothing
+npm run probe:local-ai -- --execute    # at most five synthetic route checks
+```
+
+The demo binds only to loopback. It keeps automatic labels and Elastic on
+fixtures by default, while Repair, Inquiry, and the passage-local Point Talk
+path use the configured provider only when their user action occurs. Add
+`-- --live-label` or `-- --live-transform` to the first command only for an
+explicit local evaluation. These switches do not authorize either public live
+gate, and health reports configuration rather than provider quality. See
+[`docs/reference/local-ai-demo.md`](docs/reference/local-ai-demo.md).
+
 ```bash
 npm run check
 npm run test:e2e

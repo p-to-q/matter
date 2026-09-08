@@ -25,8 +25,10 @@ import type { MatterScenarioId } from "./harness";
  * ANSWER     the exact shape of the reply, and nothing around it
  * <material> reference, fenced and named
  *
- * With intent only, the final three entries become:
+ * With intent, the final three entries become:
  * <material> → <intent> → ANSWER
+ * A versioned no-intent scenario may also opt into:
+ * <material> → ANSWER
  * ```
  *
  * MANDATE before NEVER because a model that knows its job needs fewer
@@ -195,6 +197,12 @@ export type PromptSpine = Readonly<{
   never?: readonly string[];
   unsure?: string;
   answer: readonly string[];
+  /**
+   * Keep the legacy answer-before-material byte order unless a versioned
+   * scenario owns a terminal answer boundary. Intent-bearing scenarios already
+   * close with their answer contract.
+   */
+  answerAfterMaterial?: true;
   material?: readonly FencedMaterial[];
   /**
    * What the person asked for, when this scenario takes an instruction from
@@ -222,11 +230,15 @@ export function composePrompt(
   lines.push("", spine.unsure ?? WHEN_UNSURE_DO_LESS);
 
   if (spine.intent === undefined) {
-    // Preserve the original byte order and standing for the three gesture-only
-    // scenarios. Label and Repair intentionally omit the shared background and
-    // must not inherit a prompt change under an unchanged artifact version.
-    lines.push("", ...spine.answer);
-    standingBlock(lines, REFERENCE_NOT_INSTRUCTION, spine.material);
+    // Label and Repair retain their versioned legacy byte order. Transform's
+    // newer artifact owns a terminal server-authored answer contract instead.
+    if (spine.answerAfterMaterial === true) {
+      standingBlock(lines, REFERENCE_NOT_INSTRUCTION, spine.material);
+      lines.push("", ...spine.answer);
+    } else {
+      lines.push("", ...spine.answer);
+      standingBlock(lines, REFERENCE_NOT_INSTRUCTION, spine.material);
+    }
   } else {
     // Reference first, then the one instruction that acts on it. A server-owned
     // answer contract closes the prompt so person-authored text is never the

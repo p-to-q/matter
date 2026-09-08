@@ -3,10 +3,11 @@ import {
   MAX_REPLACEMENT_TEXT_CODE_UNITS,
 } from "../tree/invariants";
 import { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "./spoken-text-limits";
+import { isWellFormedUnicodeText } from "./unicode-text";
 export { MAX_TEXT_SWAP_DIRECTION_CODE_POINTS } from "./spoken-text-limits";
 
 /** Human-readable identity for the deterministic Text Swap adjudication rules. */
-export const TEXT_SWAP_POLICY_VERSION = "text-swap-policy/1";
+export const TEXT_SWAP_POLICY_VERSION = "text-swap-policy/2";
 
 export type TextSwapPolicyCode =
   | "EMPTY"
@@ -63,7 +64,11 @@ const PROTECTED_CURRENCY_AMOUNT = /(?:\p{Lu}{1,3}\$|\p{Sc}|\p{Lu}{3}|Euro|Euros|
 /** Canonicalizes the person's bounded spoken direction before it crosses the wire. */
 export function normalizeTextSwapDirection(value: unknown): string | null {
   if (typeof value !== "string") return null;
-  if (MULTILINE.test(value) || DIRECTION_DANGEROUS.test(value)) return null;
+  if (
+    !isWellFormedUnicodeText(value) ||
+    MULTILINE.test(value) ||
+    DIRECTION_DANGEROUS.test(value)
+  ) return null;
   const text = value.trim();
   const codePoints = Array.from(text).length;
   if (
@@ -82,7 +87,14 @@ export function deriveTextSwapLength(
   beforeText: string,
   afterText: string,
 ): TextSwapLength | null {
-  if (typeof sourceText !== "string" || typeof beforeText !== "string" || typeof afterText !== "string") {
+  if (
+    typeof sourceText !== "string" ||
+    typeof beforeText !== "string" ||
+    typeof afterText !== "string" ||
+    !isWellFormedUnicodeText(sourceText) ||
+    !isWellFormedUnicodeText(beforeText) ||
+    !isWellFormedUnicodeText(afterText)
+  ) {
     return null;
   }
   const sourceGraphemes = countTextSwapGraphemes(sourceText);
@@ -116,6 +128,7 @@ export function deriveTextSwapLength(
 
 /** Runs identically at server adjudication and browser pre-commit boundaries. */
 export function validateTextSwapCandidate(input: TextSwapCandidate): TextSwapPolicyResult {
+  if (!isWellFormedUnicodeText(input.candidateText)) return rejected("INVALID_FORMAT");
   const length = deriveTextSwapLength(input.sourceText, input.beforeText, input.afterText);
   if (length === null) return rejected("BOUND_EXCEEDED");
   if (input.candidateText.trim().length === 0) return rejected("EMPTY");
@@ -124,11 +137,6 @@ export function validateTextSwapCandidate(input: TextSwapCandidate): TextSwapPol
     input.candidateText.length > MAX_REPLACEMENT_TEXT_CODE_UNITS ||
     input.beforeText.length + input.candidateText.length + input.afterText.length > MAX_NODE_TEXT_CODE_UNITS
   ) return rejected("BOUND_EXCEEDED");
-  const candidateGraphemes = countTextSwapGraphemes(input.candidateText);
-  if (
-    candidateGraphemes < length.minimumAcceptedGraphemes ||
-    candidateGraphemes > length.maximumAcceptedGraphemes
-  ) return rejected("LENGTH_OUT_OF_RANGE");
   if (
     MULTILINE.test(input.candidateText) ||
     DANGEROUS_CONTROL.test(input.candidateText) ||
@@ -137,6 +145,11 @@ export function validateTextSwapCandidate(input: TextSwapCandidate): TextSwapPol
     !sameSequence(joinersAndVariations(input.sourceText), joinersAndVariations(input.candidateText)) ||
     !preservesOuterSeams(input.sourceText, input.candidateText)
   ) return rejected("INVALID_FORMAT");
+  const candidateGraphemes = countTextSwapGraphemes(input.candidateText);
+  if (
+    candidateGraphemes < length.minimumAcceptedGraphemes ||
+    candidateGraphemes > length.maximumAcceptedGraphemes
+  ) return rejected("LENGTH_OUT_OF_RANGE");
   if (!sameSequence(protectedAnchors(input.sourceText), protectedAnchors(input.candidateText))) {
     return rejected("PROTECTED_MEANING_CHANGED");
   }

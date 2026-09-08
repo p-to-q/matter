@@ -36,7 +36,7 @@ function input(overrides: Partial<TransformScenarioInput> = {}): TransformScenar
 describe("compileTransformPrompt", () => {
   const prompt = compileTransformPrompt(input());
 
-  it("names transform/2 and the fixed insertive operation", () => {
+  it("names the current prompt artifact and the fixed insertive operation", () => {
     expect(prompt).toContain(`SCENARIO: matter-transform@${TRANSFORM_PROMPT_VERSION}`);
     expect(prompt).toContain("Expand this passage in place by inserting language");
     expect(prompt).toContain("there is no free-form direction to infer");
@@ -44,9 +44,20 @@ describe("compileTransformPrompt", () => {
   });
 
   it("states grapheme degree and keeps locale subordinate to the passage", () => {
-    expect(prompt).toContain("add about 10 extended graphemes, for about 20 total");
+    expect(prompt).toContain("aim to add 10 extended graphemes, for 20 total; the exact accepted range is 17 to 23 total");
     expect(prompt).toContain("the passage itself is authoritative");
     expect(prompt).toContain('"zh-CN" only guides punctuation and spelling conventions');
+  });
+
+  it("closes after the reference material with an exact output boundary", () => {
+    const terminalAnswer = "Preserve exactly any punctuation or spacing already inside the passage boundaries, and do not append a mark merely because it appears in <surrounding>.";
+    const answerStart = prompt.lastIndexOf("Return one line containing only the raw replacement");
+    expect(prompt.indexOf("<lineage>")).toBeLessThan(answerStart);
+    expect(prompt.indexOf("</passage>")).toBeLessThan(answerStart);
+    expect(prompt.endsWith(terminalAnswer)).toBe(true);
+    expect(prompt).toContain("Hard acceptance gate: the replacement must contain 17 to 23 user-perceived grapheme clusters");
+    expect(prompt).toContain("Keep the passage's first and final boundary grapheme clusters unchanged");
+    expect(prompt).toContain("Do not carry the <surrounding> or <lineage> blocks");
   });
 
   it("carries only surrounding material and ancestor lineage as reference", () => {
@@ -64,7 +75,13 @@ describe("compileTransformPrompt", () => {
 describe("adjudicateTransform", () => {
   it("accepts one policy-valid insertive expansion", () => {
     expect(adjudicateTransform(EXPANSION, input())).toEqual({ ok: true, value: EXPANSION });
-    expect(adjudicateTransform(`\n${EXPANSION}\n`, input())).toEqual({ ok: true, value: EXPANSION });
+    const source = " source";
+    const expansion = " source more";
+    expect(adjudicateTransform(expansion, input({
+      passage: source,
+      surrounding: { before: "", after: "" },
+      amount: .25,
+    }))).toEqual({ ok: true, value: expansion });
   });
 
   it("rejects no-op, degree drift, removed source material, and semantic anchors", () => {
@@ -78,6 +95,7 @@ describe("adjudicateTransform", () => {
   });
 
   it("rejects packaging, multiline, dangerous controls, and non-text", () => {
+    expect(adjudicateTransform(`\n${EXPANSION}\n`, input())).toEqual({ ok: false, reason: "INVALID_FORMAT" });
     expect(adjudicateTransform(`“${EXPANSION}”`, input())).toEqual({ ok: false, reason: "INVALID_FORMAT" });
     expect(adjudicateTransform(`${EXPANSION}\n解释`, input())).toEqual({ ok: false, reason: "INVALID_FORMAT" });
     expect(adjudicateTransform(`${EXPANSION}\u202e`, input())).toEqual({ ok: false, reason: "INVALID_FORMAT" });
@@ -91,5 +109,24 @@ describe("adjudicateTransform", () => {
       disableThinking: true,
     });
     expect(TRANSFORM_SCENARIO.locale(input())).toBe("zh-CN");
+
+    const minimumDegree = input({
+      passage: "source",
+      surrounding: { before: "", after: "" },
+      amount: 1 / 120,
+      locale: "en-US",
+    });
+    expect(minimumDegree.length).toMatchObject({
+      requestedDeltaGraphemes: 1,
+      targetGraphemes: 7,
+    });
+    expect(TRANSFORM_SCENARIO.budget(minimumDegree)).toEqual({
+      deadlineMs: 12_000,
+      maxOutputTokens: 256,
+      disableThinking: true,
+    });
+    expect(compileTransformPrompt(minimumDegree)).toContain(
+      "aim to add 1 extended graphemes, for 7 total; the exact accepted range is 7 to 8 total",
+    );
   });
 });

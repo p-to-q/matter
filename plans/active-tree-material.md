@@ -7,10 +7,50 @@ Destination: the first usable public release at `ptoq.io/matter`
 This is the only roadmap. It ends at the first release; it is not a forecast of
 Matter as a platform.
 
-Scope decision, 2026-08-21: Text Swap is removed from the first-release line.
-Its strict protocol, harness, and tests remain a dormant regression baseline,
-but the interface exposes no Rewrite cue, typed direction, or selected-language
-Voice mode. No Text Swap live evaluation or promotion is required for this plan.
+## Active correction — bounded localhost AI demonstration
+
+State: implemented and verified locally; no production promotion is authorized.
+
+```text
+Outcome:    a maintainer can demonstrate every current AI workflow on localhost
+            and distinguish fixture, configured, provider-accepted, browser,
+            committed, and production-promoted states
+Boundary:   one loopback-only launcher, one dry-by-default synthetic route probe,
+            Transform prompt artifact and deterministic policy diagnostics,
+            focused UI/route/plan/tree/Undo proof, and operator documentation
+Invariants: startup and health send zero completions; page open sends no model
+            label request by default; secrets and answer text never enter source
+            or logs; model output remains text only; the server constructs plans;
+            the browser revalidates current authority; only the tree engine writes;
+            public Transform and Text Swap gates remain off
+Proof:      launcher/probe boundary tests; strict response and no-store checks;
+            real synthetic provider routes; browser Voice, Inquiry, Point Talk,
+            Elastic, failure recovery, current-basis commit, and pointer Undo;
+            focused protocol/harness/store tests plus ordinary repository gates
+Non-goals:  calling health a usability proof, treating a local success as paid
+            evaluation, logging provider material, automatic live traffic on
+            startup, provider-specific prompt repair, or production promotion
+```
+
+Local receipt, 2026-09-05: the dry probe made zero requests; the default hybrid
+profile accepted Repair, Inquiry, and Point Talk from the configured pool while
+Label and Elastic remained deterministic fixtures. A separate, unopened
+loopback process with both explicit live switches accepted one synthetic request
+through each of the five server routes. The then-current local worktree passed
+91 Node boundary tests and 2,094 Vitest cases with four explicit Vitest skips,
+all type/lint/build/runtime gates
+(1,224.1 KiB raw / 386.3 KiB gzip), and the full Chromium matrix with 134 passes
+and 15 historical or explicitly scoped skips. Browser proof covers Voice denial
+and transcription recovery, Inquiry draft restoration, Point Talk retry and
+Undo, and fixture Elastic commit and Undo. These are localhost receipts only;
+they are not final-candidate or Preview.54 release evidence. The public Transform
+and Text Swap gates remain closed.
+
+Historical scope decision, 2026-08-21, superseded by the 2026-08-24 Point Talk
+freeze: Text Swap was removed from the first-release line before the current
+whole-node Point Talk presenter was introduced. Point Talk is now a visible
+local workflow with its own strict Text Swap boundary, while public live
+promotion remains independently gated and outside the first-release promise.
 
 ## Release line
 
@@ -19,7 +59,9 @@ The release is complete when a person can, without a keyboard:
 1. speak a root thought and another thought beneath a selected node;
 2. move between the full tree and one exact root-to-focus working path;
 3. lasso one contiguous current segment run inside one passage, stretch it,
-   release, and receive one fixed expand-in-place material change; a loop that
+   release to settle any positive degree after the pointer deadzone, tap inside
+   the shaped address to confirm, and receive one
+   fixed expand-in-place material change; a loop that
    resolves several passage ranges remains selection-only;
 4. undo the change with the pointer;
 5. reload and recover the same tree;
@@ -138,7 +180,7 @@ surfaces. The next release work must make this one loop plain to a new person:
 
 ```text
 admit a thought → lasso one contiguous passage range without leaving the current view
-  → stretch + release for fixed expansion
+  → stretch + release to settle degree → confirm inside the shaped address
   → one reversible material change → pointer undo (keyboard redo) → reload
 ```
 
@@ -334,7 +376,8 @@ State: Elastic tooling is implemented for health/profile separation,
 tablet/strict-local recovery, a 180-case candidate corpus, a default-dry-run
 origin sampler, and privacy-safe terminal observation. Its paid run, independent
 review, distributed control, approved spend, and origin/browser receipts remain
-open. Dormant Text Swap evidence is not a release condition.
+open. Point-and-Talk's separate Text Swap live-promotion evidence is not a release
+condition.
 
 ```text
 Outcome:    a release receipt distinguishes a safe browser preview from live
@@ -347,7 +390,7 @@ Boundary:   no-store health projection, deployment receipt profiles, strict
 Invariants: health exposes no provider or material; browser-preview requires
             Elastic unavailable; elastic-live requires Elastic configured but
             cannot replace corpus, rate/spend, latency, rollback, or successful
-            origin proof. Text Swap remains gated off and dormant.
+            origin proof. Text Swap's independent public live gate remains off.
 Proof:      exact health envelope and profile tests; over-capacity lineage
             start refusal with zero request/history; 834×1112 touch lasso,
             Elastic commit and pointer Undo; full source and Chromium release
@@ -378,7 +421,7 @@ Boundary:   the existing split projection, its render-edge geometry receipt,
             transient presentation damage, local control placement, and focused
             browser geometry assertions only.
 Invariants: canonical text, tree, history, protocol, the five-slot rail, and the
-            dormant Text Swap lifecycle do not change; no new
+            Point-and-Talk/Text Swap lifecycle do not change; no new
             persistent entity, chrome, or state authority is introduced.
 Proof:      pure lane geometry; zero intersection between the projected suffix
             and Elastic grips/rail/status at
@@ -563,12 +606,13 @@ Text Swap.
 
 ```text
 Outcome:    in Full or Focus view, a person lassos one contiguous current
-            segment run inside one node, stretches it, and on release receives
-            one bounded expand-in-place proposal without recording or speaking
-            a direction.
+            segment run inside one node, stretches it, releases to settle the
+            exact degree, and confirms from the shaped address to receive one
+            bounded expand-in-place proposal without recording or speaking a
+            direction.
 Boundary:   transform/2 request/plan protocol, pure grapheme/UTF-16 length and
             adjudication policy, transform prompt/harness, explicit synthetic
-            fixture, pointer-release request lifecycle, and the still-off live gate.
+            fixture, address-confirmed request lifecycle, and the still-off live gate.
 Invariants: Voice is absent from Elastic; lasso fixes reference, stretch fixes
             degree, the selected tool fixes expand-in-place, and lineage remains
             exact root-to-focus context; the model returns `{ text }`
@@ -576,7 +620,7 @@ Invariants: Voice is absent from Elastic; lasso fixes reference, stretch fixes
             and only the tree engine commits one pointer-undoable mutation.
 Proof:      implemented focused valid/malformed/bounded/stale Unicode protocol,
             prompt, adjudication, timeout/cancel/no-op and fixture-route tests;
-            implemented pointer-only fixture browser receipt through commit,
+            implemented pointer-only address confirmation browser receipt through commit,
             undo/redo and reload at laptop and narrow widths. Keep all as the
             required regression floor while Text Swap changes nearby ownership.
 Non-goals:  adding Voice or Text Swap fields to transform/2, prompt boxes,
@@ -782,7 +826,7 @@ two modify an already counted attempt rather than inventing one. Source sampling
 Matter retains nothing; one such line per non-null scenario-adapter terminal is
 the harness volume ceiling, including a governor-shed terminal with zero
 candidate attempts. Cache hits, missing adapters, and caller cancellation emit
-nothing. Elastic and dormant Text Swap retain their separate route-owned
+nothing. Elastic and Point-and-Talk's live-gated Text Swap retain their separate route-owned
 `matter.material-turn` scalar-bucket receipt, so this is not a claim that a
 material turn produces only one application log line. This is instance evidence,
 not an origin SLO; only `candidateTelemetry: "pool"` proves pool attempt facts.
@@ -1209,10 +1253,10 @@ outcome and freeze boundary so they do not accumulate speculative phase debt.
 
 | Area | State | Frozen answer |
 | --- | --- | --- |
-| Product loop | Re-frozen | Voice admission; then one contiguous one-node range stretch + release for fixed expansion; two or more passage ranges remain selection-only; one atomic pointer-undoable change. Text Swap remains dormant outside the release line. |
+| Product loop | Re-frozen | Voice admission; then one contiguous one-node range stretch + release to settle degree + explicit shaped-address confirmation for fixed expansion; two or more passage ranges remain selection-only; one atomic pointer-undoable change. Point and Talk is visible, while its public live Text Swap gate remains independently outside the release promise. |
 | Document | Frozen | one normalized `ThoughtTree`, empty root state, monotonic revision |
 | Agent boundary | Frozen | exact lineage in; model returns `{ text }`; server constructs one action |
-| Text address | Re-frozen | adjacent current segments in one node merge into one Elastic range; disconnected or cross-node runs form a transient selection set with no transform authority; dormant Text Swap narrows to one exact segment |
+| Text address | Re-frozen | adjacent current segments in one node merge into one Elastic range; disconnected or cross-node runs form a transient selection set with no transform authority; Point and Talk currently addresses one whole node while the Text Swap protocol retains one exact segment as a separately gated address |
 | Presentation | Re-frozen | top-anchored columnar tree; measured text, pure derived geometry, no authored coordinate |
 | Editing tools | Frozen | closed context projection; right/bottom rail owns no runtime or tree state |
 | Local return | Frozen | Markdown `SnapshotBundle`, IndexedDB durability, ZIP export/import |

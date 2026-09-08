@@ -71,11 +71,11 @@ export function inspectDeploymentHealth(value, expectedVersion, profile = "brows
       `Material model surface transformTurn must be ${expectedTransformState} for ${profile}.`,
     );
   }
-  // Text Swap is a dormant regression grammar, not a current release surface.
-  // Keeping its health lane unavailable prevents an old paired-promotion
-  // command from silently publishing UI authority that no longer exists.
+  // Point-and-Talk is Text Swap's current UI owner, but its public live gate
+  // remains independently closed. An Elastic promotion cannot silently widen
+  // that separate model authority.
   if (value.surfaces.textSwap !== "unavailable") {
-    failures.push(`Dormant material surface textSwap must be unavailable for ${profile}.`);
+    failures.push(`Public Text Swap surface must be unavailable for ${profile}.`);
   }
   return failures;
 }

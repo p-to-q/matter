@@ -48,6 +48,11 @@ describe("expand-in-place policy", () => {
       requestedDeltaGraphemes: 2,
       targetGraphemes: 3,
     });
+    expect(deriveExpandInPlaceLength("source", "", "", 1 / 120)).toMatchObject({
+      requestedDeltaGraphemes: 1,
+      targetGraphemes: 7,
+    });
+    expect(deriveExpandInPlaceLength("source\uD800", "", "", .5)).toBeNull();
   });
 
   it("enforces no-op, growth, delta band, replacement, and composed-node bounds", () => {
@@ -64,6 +69,10 @@ describe("expand-in-place policy", () => {
     expect(validateExpandInPlaceCandidate(candidate({ candidateText: "source\u202Emore" }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
     expect(validateExpandInPlaceCandidate(candidate({ candidateText: "\"source more\"" }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
     expect(validateExpandInPlaceCandidate(candidate({ candidateText: "Sure: source more", amount: 1 }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+    expect(validateExpandInPlaceCandidate(candidate({
+      candidateText: `<passage>${"source more ".repeat(20)}</passage>`,
+      amount: 1,
+    }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
     expect(validateExpandInPlaceCandidate(candidate({ candidateText: "source, detail now", amount: 1 }))).toMatchObject({ ok: true });
   });
 
@@ -129,6 +138,20 @@ describe("expand-in-place policy", () => {
       candidateText,
       amount: amountForActualDelta("source", candidateText),
     }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+  });
+
+  it("rejects malformed Unicode without rejecting a valid surrogate pair", () => {
+    expect(validateExpandInPlaceCandidate(candidate({
+      candidateText: "source more\uD800",
+      amount: 1,
+    }))).toMatchObject({ ok: false, code: "INVALID_FORMAT" });
+    const sourceText = "source 😀";
+    const candidateText = "source with more detail 😀";
+    expect(validateExpandInPlaceCandidate(candidate({
+      sourceText,
+      candidateText,
+      amount: amountForActualDelta(sourceText, candidateText),
+    }))).toMatchObject({ ok: true });
   });
 
   it("preserves joiners inside source emoji without allowing new invisible structure", () => {

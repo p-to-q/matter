@@ -33,12 +33,6 @@ export type UseAdmissionInput = {
   settleRepair: (settlement: AdmissionRepairSettlement) => AdmissionRepairStoreReceipt;
   scope: AdmissionScope;
   locale?: MatterLocale;
-  /**
-   * Terms from the person's own visible material, for transcript repair. A
-   * plain value rather than a callback: the caller already recomputes it when
-   * the tree changes, and a ref keeps the driver itself stable.
-   */
-  vocabulary?: readonly string[];
 };
 
 export type AdmissionController = {
@@ -53,14 +47,11 @@ export type AdmissionController = {
   clearRepairPresentations: () => void;
 };
 
-const NO_VOCABULARY: readonly string[] = Object.freeze([]);
-
 export function useAdmission({
   commit,
   settleRepair,
   scope,
   locale = "zh-CN",
-  vocabulary = NO_VOCABULARY,
 }: UseAdmissionInput): AdmissionController {
   const repairPresentation = useRepairPresentation({
     treeId: scope.treeId,
@@ -89,10 +80,6 @@ export function useAdmission({
   );
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-
-  useEffect(() => {
-    driver.updateVocabulary(vocabulary);
-  }, [driver, vocabulary]);
 
   useEffect(() => {
     driver.updateScope({

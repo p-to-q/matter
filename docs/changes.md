@@ -17,6 +17,60 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-05 — Elastic separates degree from confirmation
+
+Changed: releasing an Elastic grip now settles the visible expansion degree
+without starting a request. A following tap inside the shaped address surface
+confirms that exact degree and creates the single Transform request; Enter or
+Space is the keyboard equivalent. Guidance is pointer-first in every supported
+locale and confirmation immediately reports that expansion is in progress.
+The fixed pointer deadzone is the only start boundary: every positive degree
+after it settles and is confirmable, with no second numeric commit threshold.
+
+Why: an open pocket is a preview of degree, not evidence that language has
+already changed. Separating adjustment from confirmation prevents accidental
+model spend and makes the person's durable intent visible without adding a
+dialog, toolbar, or permanent prompt surface. The surface the person just
+shaped is the largest and clearest confirmation object; clicking outside it
+cancels the transient selection through the existing paper interaction.
+
+Forecloses: treating drag release as an invisible network action, teaching the
+primary path as an Enter command, double-click confirmation that has no touch
+equivalent and conflicts with native text selection, and leaving a rejected
+request visually indistinguishable from a successful expansion.
+
+## 2026-09-05 — localhost AI has an explicit, bounded demonstration boundary
+
+Changed: a loopback-only launcher now assembles the intended local AI profile
+without changing production gates. It keeps automatic labels and Elastic on
+fixtures unless the operator explicitly opts into their live evaluation;
+Repair, Inquiry, and passage-local Point Talk use the configured server pool.
+A separate dry-by-default probe checks five synthetic server routes through
+their real request boundaries, response limits, no-store contract, strict
+response shapes, and server-built plans. Voice remains a browser capability and
+permission proof. Elastic's prompt artifact is `transform/4`; its final answer
+contract follows the fenced reference, names the exact accepted grapheme
+interval and boundary rule, while the public wire remains `transform/2`.
+Format-first diagnostic ordering moves both material policies to version `/2`
+without expanding either accepted answer set.
+
+Why: ordinary development fixtures prove interaction and Undo but not a real
+provider, while health proves configuration but not usability. A deliberate
+local boundary lets maintainers distinguish those claims, and the revised
+Transform contract addresses observed overlong and copied-seam answers without
+granting the model more authority or teaching the server to repair its output.
+
+Forecloses: reading a green health response as an AI acceptance receipt,
+starting paid label traffic merely by opening localhost, putting secrets or
+model text in a test artifact, bypassing the route/plan/tree chain with a direct
+adapter smoke, server-side cleanup of rejected model prose, and using one local
+success as permission to enable a production live gate.
+
+The local boundary also omits Transcript Repair's optional document-derived
+vocabulary hint until the working-context owner can provide the same active-node
+projection synchronously. This prevents held-aside material from crossing a
+model boundary through an otherwise bounded optimization.
+
 ## 2026-09-04 — structure and precise ranges keep distinct honest topologies
 
 Changed: pointer-selected whole-node structure remains one glyph-bounded capsule

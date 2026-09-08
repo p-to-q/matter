@@ -53,10 +53,13 @@ export function PointTalkComposer({
 }>) {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const retryRef = useRef<HTMLButtonElement>(null);
   const measurementFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const inputId = useId();
   const phase = controller.state.phase;
+  const retryableError = controller.state.phase === "error" && controller.state.retryable &&
+    controller.state.direction !== undefined;
   const placementReady = placement !== null;
   const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
@@ -176,11 +179,14 @@ export function PointTalkComposer({
     return () => cancelAnimationFrame(frame);
   }, [formVisible, placementReady]);
 
+  useLayoutEffect(() => {
+    if (!retryableError || !placementReady) return;
+    retryRef.current?.focus({ preventScroll: true });
+  }, [placementReady, retryableError]);
+
   const activeState = controller.state;
   if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
   const recording = activeState.phase === "recording";
-  const retryable = activeState.phase === "error" && activeState.retryable &&
-    activeState.direction !== undefined;
   const status = pointTalkStatus(activeState, locale);
 
   return (
@@ -216,8 +222,8 @@ export function PointTalkComposer({
           <span aria-atomic="true" aria-live="polite" dir="auto">{status}</span>
           {recording ? (
             <button onClick={onStopVoice} type="button">{copy.stop}</button>
-          ) : retryable ? (
-            <button onClick={onRetry} type="button">{copy.retry}</button>
+          ) : retryableError ? (
+            <button onClick={onRetry} ref={retryRef} type="button">{copy.retry}</button>
           ) : null}
         </div>
       )}

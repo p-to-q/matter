@@ -20,6 +20,8 @@ export default defineConfig({
       "scripts/check-runtime-artifact.test.mjs",
       "scripts/check-architecture.test.mjs",
       "scripts/probe-model-pool.test.mjs",
+      "scripts/local-ai-demo.test.mjs",
+      "scripts/probe-local-ai.test.mjs",
     ],
   },
 });

@@ -34,7 +34,9 @@ masking and locale-specific classification happen before
 rendering so an ambiguous bare number word, code span, URL, email, or quoted
 phrase remains untouched.
 When its existing gate is enabled, it may send only that one utterance, locale,
-and bounded vocabulary to `POST /api/repair`; the model may resolve an abandoned
+and an optional bounded vocabulary hint to `POST /api/repair`; the current
+browser deliberately omits the hint until the active working context can be
+captured synchronously. The model may resolve an abandoned
 start, contextual filler, correction, or forced grammar seam, and may redraft
 that locally into the shortest natural written phrasing, but never receives
 a tree, node, address, or repair capability. The rule floor wins on timeout,
@@ -225,8 +227,10 @@ transformation can begin in either view from one contiguous current segment run
 on an active node; Focus additionally requires that node to be the exact Focus
 node. In Full, surrounding material stays visible but is not implicit
 model context: the request carries only the authored root-to-selected-node
-lineage. Elastic Language requires a positive settled stretch; releasing it
-starts the fixed `expand-in-place` turn without recording, audio, or transcript.
+lineage. Elastic Language requires a positive settled stretch; release preserves
+that exact degree locally, and one following confirmation inside the same shaped
+address starts the fixed `expand-in-place` turn without recording, audio, or
+transcript.
 Starting Voice admission cancels any pending Elastic turn and passes a null
 selection to the stretch lifecycle until admission is idle again. The semantic
 lasso address may remain transiently available for revalidation, but its grips

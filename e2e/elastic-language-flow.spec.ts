@@ -557,6 +557,7 @@ test("the upper moving partition reflows in the full column and never splits a l
 
   await upper.press("End");
   await expect(projection).toHaveAttribute("data-stretch-handle", "top");
+  await expect(projection).toHaveAttribute("data-preview-mode", "expand");
   const rendererHandoff = await projection.evaluate((node) => {
     const canonical = node.parentElement?.querySelector<HTMLElement>(".spatial-thought__text");
     const tail = node.querySelector<HTMLElement>(".language-split-witness-tail");
@@ -658,17 +659,24 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
   // zero-degree controls, so wait on the new semantic value before measuring.
   await expect(upper).toHaveAttribute("aria-valuenow", "1");
   await expect(lower).toHaveAttribute("aria-valuenow", "1");
-  const [beforeAfter, selectedAfter, lowerAfter] = await Promise.all([
-    beforeCopy.boundingBox(),
-    projectedSelectedCopy.boundingBox(),
-    lower.boundingBox(),
-  ]);
-  if (beforeAfter === null || selectedAfter === null || lowerAfter === null) {
-    throw new Error("expanded upper projection receipt missing");
-  }
-  expect(Math.abs(beforeAfter.y - before.y)).toBeLessThanOrEqual(1);
-  expect(selectedAfter.y).toBeGreaterThan(selected.y + 120);
-  expect(lowerAfter.y).toBeGreaterThan(lowerBefore.y + 120);
+  await expect.poll(() => page.locator(".language-split-projection").evaluate((node, baseline) => {
+    const fixed = node.querySelector<HTMLElement>(".language-split-before-copy");
+    const projected = node.querySelector<HTMLElement>(
+      ".language-split-moving .language-split-block--selected",
+    );
+    const lowerGrip = document.querySelector<HTMLElement>(".stretch-handle--bottom");
+    if (fixed === null || projected === null || lowerGrip === null) return false;
+    const fixedBox = fixed.getBoundingClientRect();
+    const projectedBox = projected.getBoundingClientRect();
+    const lowerBox = lowerGrip.getBoundingClientRect();
+    return Math.abs(fixedBox.y - baseline.beforeY) <= 1 &&
+      projectedBox.y > baseline.selectedY + 120 &&
+      lowerBox.y > baseline.lowerY + 120;
+  }, {
+    beforeY: before.y,
+    lowerY: lowerBefore.y,
+    selectedY: selected.y,
+  })).toBe(true);
   await expect(upper).toHaveAttribute("aria-valuenow", "1");
   await expect(lower).toHaveAttribute("aria-valuenow", "1");
 });
@@ -717,7 +725,7 @@ test("the upper grip on the opening segment pushes every lower material row down
   }
 });
 
-test("Elastic Language cancels below-threshold and late turns without changing material", async ({ page }) => {
+test("Elastic Language cancels an unstarted gesture and a late turn without changing material", async ({ page }) => {
   let turnRequests = 0;
   await page.route("**/api/turn", async (route) => {
     turnRequests += 1;
@@ -771,7 +779,7 @@ test("Elastic Language cancels below-threshold and late turns without changing m
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  await page.mouse.move(x, y + 12);
+  await page.mouse.move(x, y + 4);
   await page.mouse.up();
   await expect(page.locator(".stretch-handle")).toHaveCount(2);
   await expect(upperGrip).toHaveAttribute("aria-valuenow", "0");
@@ -789,6 +797,70 @@ test("Elastic Language cancels below-threshold and late turns without changing m
   await expect(text).toContainText(SOURCE);
   await expect(text).not.toContainText(EXPANDED);
   expect(turnRequests).toBe(1);
+});
+
+test("the first positive degree after the deadzone can be confirmed from the address", async ({ page }) => {
+  let turnRequests = 0;
+  await page.route("**/api/turn", async (route) => {
+    turnRequests += 1;
+    await route.abort();
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
+  const grip = page.getByRole("slider", {
+    name: "用下握点设置所选文字的展开程度",
+  });
+  const box = await grip.boundingBox();
+  if (box === null) throw new Error("lower stretch grip missing");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 5);
+  await page.mouse.up();
+
+  await expect(grip).toHaveAttribute("aria-valuenow", "0.008");
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="actionable"]',
+  )).toHaveAttribute("data-address-confirmable", "true");
+  expect(turnRequests).toBe(0);
+
+  await grip.click();
+  await expect(grip).toHaveAttribute("aria-valuenow", "0.008");
+  expect(turnRequests).toBe(0);
+
+  const point = await elasticAddressInteriorPoint(page);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 10, point.y);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.up();
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="actionable"]',
+  )).toHaveAttribute("data-address-confirmable", "true");
+  expect(turnRequests).toBe(0);
+
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await setDocumentVisibility(page, "hidden");
+  await setDocumentVisibility(page, "visible");
+  await page.mouse.up();
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="actionable"]',
+  )).toHaveAttribute("data-address-confirmable", "true");
+  expect(turnRequests).toBe(0);
+
+  await confirmElasticAddress(page);
+  await expect.poll(() => turnRequests).toBe(1);
 });
 
 test("Elastic Language provider failure stays quiet and leaves material unchanged", async ({ page }) => {
@@ -832,8 +904,46 @@ test("Elastic Language provider failure stays quiet and leaves material unchange
   expect(turnRequests).toBe(1);
   await expect(page.locator("main.matter-shell"))
     .not.toHaveAttribute("data-transform-phase", "requesting");
-  await page.keyboard.press("Enter");
+  await confirmElasticAddress(page);
   await expect.poll(() => turnRequests).toBe(2);
+});
+
+test("clicking outside a settled Elastic address cancels without a request", async ({ page }) => {
+  let turnRequests = 0;
+  await page.route("**/api/turn", async (route) => {
+    turnRequests += 1;
+    await route.abort();
+  });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
+  const grip = page.getByRole("slider", {
+    name: "用下握点设置所选文字的展开程度",
+  });
+  await grip.press("PageUp");
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="actionable"]',
+  )).toHaveAttribute("data-address-confirmable", "true");
+
+  const paper = await page.locator(".matter-document").boundingBox();
+  if (paper === null) throw new Error("Matter paper missing");
+  await page.mouse.click(paper.x + 24, paper.y + 24);
+
+  await expect(page.locator(".stretch-handle")).toHaveCount(0);
+  await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
+  expect(turnRequests).toBe(0);
+  await expect(page.getByRole("button", {
+    name: `${SOURCE}${ROOT_SUFFIX}`,
+    exact: true,
+  })).toBeVisible();
 });
 
 test("Voice recording suspends selected-language grips while both stop controls remain reachable", async ({ page }) => {
@@ -952,9 +1062,12 @@ async function runElasticReceipt(
     await page.mouse.move(x, y);
     await page.mouse.down();
     // Four pixels are the mouse deadzone; 64px of physical travel therefore
-    // commits the fixture's exact 0.5 degree rather than an adjacent length.
+    // settles the fixture's exact 0.5 degree rather than an adjacent length.
     await page.mouse.move(x, y - 64, { steps: 5 });
     await page.mouse.up();
+    await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
+    expect(turnRequests).toBe(0);
+    await confirmElasticPocket(page);
   } else if (input === "touch") {
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
     const gripBox = await grip.boundingBox();
@@ -963,6 +1076,9 @@ async function runElasticReceipt(
     expect(gripBox.height).toBeGreaterThanOrEqual(48);
     // Touch owns an eight-pixel deadzone, so 68px reaches the same 0.5 degree.
     await dragByTouch(page, grip, 68);
+    await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
+    expect(turnRequests).toBe(0);
+    await confirmElasticPocket(page, "touch");
   } else {
     await grip.focus();
     await page.keyboard.press("PageUp");
@@ -972,6 +1088,7 @@ async function runElasticReceipt(
   }
 
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
+  await expect(page.locator(".matter-guidance__next")).toHaveText("已确认，正在展开。");
   await expect(page.locator(".stretch-status-marker")).toHaveCount(0);
   await expect(page.locator(".stretch-handle__ratio")).toHaveCount(0);
   if (input === "drag") {
@@ -1022,6 +1139,80 @@ async function runElasticReceipt(
   await expect(page.locator(".transform-text")).toHaveCount(0);
   expect(turnRequests).toBe(1);
   expect(browserErrors).toEqual([]);
+}
+
+async function confirmElasticAddress(
+  page: Page,
+  input: "mouse" | "touch" = "mouse",
+): Promise<void> {
+  const point = await elasticAddressInteriorPoint(page);
+  if (input === "touch") {
+    await page.touchscreen.tap(point.x, point.y);
+  } else await page.mouse.click(point.x, point.y);
+}
+
+async function confirmElasticPocket(
+  page: Page,
+  input: "mouse" | "touch" = "mouse",
+): Promise<void> {
+  const slot = page.locator(
+    '.language-split-projection[data-preview-mode="expand"] .language-split-slot',
+  );
+  const box = await slot.boundingBox();
+  if (box === null) throw new Error("Elastic pocket missing");
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const path = page.locator(
+    '.material-address-layer[data-address-variant="actionable"] .material-address-layer__path',
+  );
+  await expect(path).toHaveAttribute("d", /.+/u);
+  expect(await path.evaluate((element, clientPoint) => {
+    if (!(element instanceof SVGGeometryElement)) return false;
+    const matrix = element.getScreenCTM();
+    if (matrix === null) return false;
+    const local = new DOMPoint(clientPoint.x, clientPoint.y).matrixTransform(matrix.inverse());
+    return element.isPointInFill(local) && document.elementFromPoint(
+      clientPoint.x,
+      clientPoint.y,
+    ) === element;
+  }, point)).toBe(true);
+  if (input === "touch") await page.touchscreen.tap(point.x, point.y);
+  else await page.mouse.click(point.x, point.y);
+}
+
+async function elasticAddressInteriorPoint(page: Page): Promise<Readonly<{ x: number; y: number }>> {
+  const layer = page.locator('.material-address-layer[data-address-variant="actionable"]');
+  await expect(layer).toHaveAttribute("data-address-confirmable", "true");
+  const path = layer.locator(".material-address-layer__path");
+  let point: Readonly<{ x: number; y: number }> | null = null;
+  await expect.poll(async () => {
+    point = await path.evaluate((element) => {
+      const path = element;
+      if (!(path instanceof SVGGeometryElement)) throw new Error("Elastic address path missing");
+      const box = path.getBoundingClientRect();
+      const matrix = path.getScreenCTM();
+      if (matrix === null) return null;
+      for (let y = box.top + 2; y < box.bottom - 2; y += 4) {
+        for (let x = box.left + 2; x < box.right - 2; x += 4) {
+          const local = new DOMPoint(x, y).matrixTransform(matrix.inverse());
+          if (path.isPointInFill(local)) return { x, y };
+        }
+      }
+      return null;
+    });
+    return point;
+  }).not.toBeNull();
+  if (point === null) throw new Error("Elastic address has no confirmable interior point");
+  return point;
+}
+
+async function setDocumentVisibility(page: Page, state: "hidden" | "visible"): Promise<void> {
+  await page.evaluate((next) => {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: next,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
 }
 
 async function expectLowerSpaceBeforeSuffix(page: Page): Promise<void> {

@@ -109,7 +109,7 @@ export type SegmentSelection = {
 export type StretchGesture = {
   type: "stretch";
   axis: "vertical";
-  amount: number;         // [0, 1]
+  amount: number;         // (0, 1] after explicit confirmation
 };
 ```
 
@@ -117,6 +117,9 @@ The upper and lower grips are transient presentation state, not network fields.
 They express one shared non-negative expansion degree. The selected Elastic
 Language tool supplies the only direction: fixed `expand-in-place`. Voice is a
 human-admission channel and does not enter this request.
+The pointer deadzone creates no degree and never reaches this envelope. Every
+positive settled amount is valid request authority once the shaped address is
+explicitly confirmed; there is no second commit threshold.
 
 Segment indices and screen geometry never cross the network. The shared
 `validateSelection` rule runs at envelope creation, server planning, and
@@ -309,7 +312,8 @@ current target text/timestamp, selection, complete visible lineage, grapheme,
 adjudication, and composed-node checks synchronously, then gives the tree engine
 one command against the current revision.
 
-One pointer release creates one immutable interaction id and one POST. Neither
+One click inside the settled address surface creates one immutable interaction
+id and one POST. Pointer release alone is local preview state. Neither
 client nor route automatically retries it. A successful commit increments the
 tree revision, so the same plan cannot commit twice. This is durable-effect
 idempotency, not a promise that provider billing is exactly once; transform

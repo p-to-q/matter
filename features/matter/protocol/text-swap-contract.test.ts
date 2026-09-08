@@ -86,6 +86,30 @@ describe("text-swap/2 contract", () => {
     })).ok).toBe(false);
   });
 
+  it("rejects malformed Unicode in reference or direction before a provider can be called", () => {
+    expect(parseTextSwapEnvelope(envelope({
+      direction: { text: "make it tactile\uD800" },
+    })).ok).toBe(false);
+    expect(parseTextSwapEnvelope(envelope({
+      context: { lineage: [
+        { id: "thought", text: `${TEXT}\uD800`, parentId: null, createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(false);
+    const emojiPassage = "A quiet room 😀";
+    expect(parseTextSwapEnvelope(envelope({
+      selection: {
+        type: "segment-range",
+        nodeId: "thought",
+        start: 0,
+        end: emojiPassage.length,
+        selectedText: emojiPassage,
+      },
+      context: { lineage: [
+        { id: "thought", text: emojiPassage, parentId: null, createdAt: TIME, updatedAt: TIME },
+      ] },
+    })).ok).toBe(true);
+  });
+
   it("accepts a one-sentence node when its single segment fills the node", () => {
     expect(parseTextSwapEnvelope(envelope({
       selection: { type: "segment-range", nodeId: "thought", start: 0, end: PASSAGE.length, selectedText: PASSAGE },

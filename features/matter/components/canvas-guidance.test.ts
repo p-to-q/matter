@@ -102,12 +102,12 @@ describe("canvas guidance projection", () => {
   it.each([
     [{ kind: "lasso-ready" }, "circle-selection", "action", "Circle text between punctuation."],
     [{ kind: "lasso-drawing" }, "close-lasso", "action", "Close the loop around a phrase."],
-    [{ kind: "selected", stretch: { kind: "armed", amount: 0 } }, "set-degree", "action", "Pull either handle down to expand."],
-    [{ kind: "selected", stretch: { kind: "dragging", amount: 0 } }, "reach-stretch-threshold", "action", "Pull a little farther."],
-    [{ kind: "selected", stretch: { kind: "dragging", amount: 0.8 } }, "release-stretch", "action", "Release to expand."],
-    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.1 } }, "reach-stretch-threshold", "action", "Pull a little farther."],
-    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.6 } }, "apply-stretch", "action", "Press Enter to expand."],
-    [{ kind: "selected", stretch: { kind: "pending", amount: 0.6 } }, "wait-expansion", "progress", "Expanding."],
+    [{ kind: "selected", stretch: { kind: "armed", amount: 0 } }, "set-degree", "action", "Pull either handle outward."],
+    [{ kind: "selected", stretch: { kind: "dragging", amount: 0 } }, "begin-stretch", "action", "Pull to begin."],
+    [{ kind: "selected", stretch: { kind: "dragging", amount: 0.8 } }, "release-stretch", "action", "Release to set the degree."],
+    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.1 } }, "apply-stretch", "action", "Tap the selection to confirm."],
+    [{ kind: "selected", stretch: { kind: "adjusted", amount: 0.6 } }, "apply-stretch", "action", "Tap the selection to confirm."],
+    [{ kind: "selected", stretch: { kind: "pending", amount: 0.6 } }, "wait-expansion", "progress", "Confirmed. Expanding."],
   ] satisfies readonly [CanvasLanguageGuidanceState, string, string, string][])(
     "projects language state %s before rooted navigation",
     (language, id, kind, text) => {
@@ -131,8 +131,8 @@ describe("canvas guidance projection", () => {
   });
 
   it.each([
-    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull either handle down to expand."],
-    [{ kind: "pending", amount: 0.6 }, "wait-expansion", "progress", "Expanding."],
+    [{ kind: "armed", amount: 0 }, "set-degree", "action", "Pull either handle outward."],
+    [{ kind: "pending", amount: 0.6 }, "wait-expansion", "progress", "Confirmed. Expanding."],
   ] satisfies readonly [
     Extract<CanvasLanguageGuidanceState, { kind: "selected" }>["stretch"],
     string,
@@ -182,7 +182,7 @@ describe("canvas guidance projection", () => {
       "dismiss-stale-recording": true,
       "speak-root": true,
       "close-lasso": true,
-      "reach-stretch-threshold": true,
+      "begin-stretch": true,
       "release-stretch": true,
       "set-degree": true,
       "apply-stretch": true,

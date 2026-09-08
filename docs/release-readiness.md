@@ -1,7 +1,8 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.53 is the current deployed
+the complete generative product loop yet. Preview.54 is the next candidate;
+Preview.53 remains the current deployed
 public-origin source: merged `main` `7cd3bb6`, automatic Production deployment
 `6255484923`, and the no-store public check identify version
 `0.2.0-preview.53`. Publication is withheld because its exact strict model-pool
@@ -63,6 +64,69 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Provisional release boundary — 0.2.0-preview.54
+
+Preview.54 makes a material change deliberate before it spends a model turn.
+Releasing an Elastic grip now settles the exact positive degree created after
+the pointer deadzone; it does not submit. A primary tap inside the same painted
+address — including the empty pocket the drag opened — confirms that degree,
+while Enter or Space remains the keyboard equivalent. Pointer movement,
+cancellation, lost capture, page suspension, or
+any tree, document, layout, viewport, partition, direction, or outline change
+revokes an in-progress confirmation. The grip itself no longer doubles as a
+hidden submit target.
+
+The server continues to receive strict `transform/2` and `text-swap/2`
+envelopes and to construct the only public plan. Their adjudicators now preserve
+accepted text byte-for-byte instead of trimming a model answer before policy,
+reject malformed Unicode and whitespace-only lineage before provider work, and
+run format rejection before length diagnostics. Transform's prompt artifact is
+`transform/4`: it names the exact accepted grapheme interval, keeps surrounding
+and lineage material fenced as reference, and closes with the server-owned
+answer contract. Even the smallest confirmable degree (`1 / 120`) derives a
+bounded one-grapheme request, stays inside the existing deadline/token lattice,
+and appears in content-free operational buckets.
+
+A loopback-only, dry-by-default maintainer harness can exercise the five
+server-backed AI routes without changing public authority. It sends no request
+on startup or dry run, keeps Label and Elastic on fixtures unless explicitly
+enabled, checks exact version/base-path/no-store/response bounds, and never logs
+provider text or secrets. Repair's optional vocabulary optimization remains
+empty until admission can synchronously own the active working-context
+projection; whole-tree or render-effect-derived hints are not an acceptable
+shortcut. Voice failure, Inquiry retry, Point Talk retry, localized material
+actions, and focus restoration now have browser-level recovery receipts.
+
+This release adds no dependency, durable format, service worker, response
+cache, provider SDK, public live Transform/Text Swap gate, or production route.
+Existing cache keys, bounds, invalidation, no-store rules, runtime ceilings, and
+tree-engine-only mutation authority remain unchanged. This candidate passes one
+production 2,000-node receipt, but sustained cold-task optimization,
+corrupt-history recovery measurement, distributed provider controls, and live
+material-language promotion remain separately owned work; none is silently
+claimed here.
+
+```text
+source proof           exact local candidate passed npm run check: 95 Node
+                       checks; 48 Markdown files; architecture across 438 files
+                       and seven layers; 2,109 Vitest passed with four explicit
+                       skips; type generation, TypeScript, zero-warning lint,
+                       production build, and an npm audit with zero known
+                       vulnerabilities all passed
+runtime proof          exact artifact passed at 1,229.9 KiB raw / 388.8 KiB
+                       gzip under the unchanged 396 KiB ceiling; the separate
+                       production 2,000-node receipt passed with a 98ms
+                       cold-attributed long task and 4.3ms pure layout
+browser proof          full controlled Chromium passed 136 cases with 15
+                       explicit historical/capability skips, including pointer,
+                       touch, keyboard, opened-pocket confirmation, failure,
+                       stale-owner, Undo/Redo, reload, and 2,000-node geometry
+GitHub CI proof         pending on the exact topic and merged main identities
+automatic deploy proof pending from GitHub-triggered Preview and Production
+publication state      pending; no tag or prerelease unless the strict exact
+                       Production pool probe also passes
+```
 
 ## Provisional release boundary — 0.2.0-preview.53
 

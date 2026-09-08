@@ -142,16 +142,18 @@ for (const viewport of [
 
     if (viewport.name === "narrow") await rootText.click();
     else await rootText.hover();
-    const lens = page.getByRole("toolbar", { name: "Thought context" });
+    const lens = page.locator("[data-node-action-lens]");
     await expect(lens).toBeVisible();
+    await expect(lens).toHaveAttribute("aria-label", "材料操作");
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
     await expect(lens).toHaveAttribute("aria-orientation", "horizontal");
     await expect(lens).toHaveAttribute("data-relation", "corner");
     await expect(lens.getByRole("button")).toHaveCount(2);
-    const rewriteMaterial = lens.getByRole("button", { name: "Rewrite this material with AI" });
+    const rewriteMaterial = lens.locator("[data-node-action=point-talk]");
     await expect(rewriteMaterial).toBeVisible();
+    await expect(rewriteMaterial).toHaveAttribute("aria-label", "用 AI 改写这段材料");
     await expect(rewriteMaterial).toBeEnabled();
-    await expect(lens.getByRole("button", { name: "Set this material branch aside" })).toBeVisible();
+    await expect(lens.locator("[data-node-action=set-aside]")).toBeVisible();
     const expectedTarget = viewport.name === "narrow" ? 48 : 44;
     expect(await lens.getByRole("button").evaluateAll((buttons, target) => buttons.every((button) => {
       const rect = button.getBoundingClientRect();
@@ -219,12 +221,12 @@ for (const viewport of [
     await page.keyboard.press("Escape");
     await expect(pointTalk).toBeHidden();
     await rootText.hover();
-    await lens.getByRole("button", { name: "Set this material branch aside" }).click();
+    await lens.locator("[data-node-action=set-aside]").click();
     await expect(page.locator(`[data-thought-id="${ROOT_ID}"]`)).toHaveAttribute("data-context-excluded", "true");
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
     await rootText.hover({ force: true });
-    await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeVisible();
-    await lens.getByRole("button", { name: "Include this material branch" }).click();
+    await expect(lens.locator("[data-node-action=restore]")).toBeVisible();
+    await lens.locator("[data-node-action=restore]").click();
     await expect(page.locator(`[data-thought-id="${ROOT_ID}"]`)).not.toHaveAttribute("data-context-excluded", "true");
 
     await rootText.hover();
@@ -282,7 +284,7 @@ test("the action fog becomes one system capsule in forced colors", async ({ page
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await page.locator(`[data-thought-id="${ROOT_ID}"] [data-thought-text-id]`).hover();
-  const lens = page.getByRole("toolbar", { name: "Thought context" });
+  const lens = page.locator("[data-node-action-lens]");
   await expect(lens).toBeVisible();
   expect(await lens.evaluate((element) => {
     const style = getComputedStyle(element, "::before");
@@ -301,7 +303,7 @@ test("the action lens is hoverable across its clear gap and yields to pan and ch
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
   const rootText = page.locator(`[data-thought-id="${ROOT_ID}"] [data-thought-text-id]`);
-  const lens = page.getByRole("toolbar", { name: "Thought context" });
+  const lens = page.locator("[data-node-action-lens]");
   await rootText.hover();
   await expect(lens).toBeVisible();
   const textBox = await rootText.boundingBox();
@@ -408,9 +410,9 @@ test("the action lens has one direct keyboard path and restores the thought focu
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
   const rootText = page.locator(`[data-thought-id="${ROOT_ID}"] [data-thought-text-id]`);
-  const lens = page.getByRole("toolbar", { name: "Thought context" });
-  const rewriteMaterial = lens.getByRole("button", { name: "Rewrite this material with AI" });
-  const setAside = lens.getByRole("button", { name: "Set this material branch aside" });
+  const lens = page.locator("[data-node-action-lens]");
+  const rewriteMaterial = lens.locator("[data-node-action=point-talk]");
+  const setAside = lens.locator("[data-node-action=set-aside]");
   await page.waitForTimeout(100);
   await rootText.focus();
   await expect(rootText).toBeFocused();
@@ -445,15 +447,15 @@ test("a held root exposes only local recovery", async ({ page }) => {
   await expect(heldThought).toHaveAttribute("data-context-excluded", "true");
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
   await heldText.hover({ force: true });
-  const lens = page.getByRole("toolbar", { name: "Thought context" });
-  await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeVisible();
-  await expect(lens.getByRole("button", { name: "Rewrite this material with AI" })).toBeDisabled();
+  const lens = page.locator("[data-node-action-lens]");
+  await expect(lens.locator("[data-node-action=restore]")).toBeVisible();
+  await expect(lens.locator("[data-node-action=point-talk]")).toBeDisabled();
   await page.mouse.move(0, 0);
   await heldText.focus();
   await expect(heldText).toBeFocused();
   await expect(heldText).toHaveCSS("opacity", "0.72");
   await heldText.press("ArrowRight");
-  await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeFocused();
+  await expect(lens.locator("[data-node-action=restore]")).toBeFocused();
   await page.emulateMedia({ forcedColors: "active" });
   await expect(heldText).toHaveCSS("opacity", "1");
 });
@@ -467,7 +469,7 @@ test.describe("coarse pointer action lens", () => {
     expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
     const rootText = page.locator(`[data-thought-id="${ROOT_ID}"] [data-thought-text-id]`);
     await rootText.tap();
-    const lens = page.getByRole("toolbar", { name: "Thought context" });
+    const lens = page.locator("[data-node-action-lens]");
     await expect(lens).toBeVisible();
     expect(await lens.evaluate((element) => {
       const rect = element.getBoundingClientRect();
@@ -505,7 +507,7 @@ test.describe("coarse pointer action lens", () => {
     await heldText.tap();
     await expect(heldText).toBeFocused();
     await expect(lens).toHaveAttribute("data-node-id", heldId);
-    await expect(lens.getByRole("button", { name: "Include this material branch" })).toBeVisible();
+    await expect(lens.locator("[data-node-action=restore]")).toBeVisible();
   });
 });
 

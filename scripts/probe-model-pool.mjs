@@ -95,9 +95,9 @@ export function repairRequest(round) {
     operationId: `probe-repair-${round}`,
     attempt: 1,
     locale: "en-US",
-    // Missing punctuation and a homophone, so a model that answers has
-    // something to change and the answer is distinguishable from the floor.
-    text: `probe round ${round} the quiet room aloud held it's shape until the morning came`,
+    // Missing punctuation and one spoken homophone, so a model that answers
+    // has one unambiguous repair and remains distinguishable from the floor.
+    text: `probe round ${round} the quiet room held it’s shape until morning came`,
     vocabulary: [],
   });
 }

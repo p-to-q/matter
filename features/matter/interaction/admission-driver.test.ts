@@ -182,6 +182,20 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
+  it("gives the repair request no vocabulary outside its owned admission material", async () => {
+    const repair = vi.fn(async (input) => ({
+      text: input.text,
+      source: "rules" as const,
+    }));
+    const h = harness({ repair });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(repair).toHaveBeenCalledWith(expect.objectContaining({ vocabulary: [] }));
+  });
+
   it("computes repair beside the paint gate but cannot commit before baseline paint", async () => {
     let releasePaint!: () => void;
     const h = harness({

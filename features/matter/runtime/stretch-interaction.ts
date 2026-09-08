@@ -3,7 +3,6 @@ import type { SegmentSelection } from "../material/text-segments";
 export const STRETCH_MOUSE_PEN_DEADZONE_PX = 4;
 export const STRETCH_TOUCH_DEADZONE_PX = 8;
 export const STRETCH_TRAVEL_PX = 120;
-export const STRETCH_COMMIT_THRESHOLD = 0.15;
 
 export type StretchPointerType = "mouse" | "pen" | "touch";
 
@@ -44,7 +43,6 @@ export type StretchInteractionState =
       pointerType: StretchPointerType;
       startClientY: number;
       crossedDeadzone: boolean;
-      tapCommits: boolean;
     }>
   | Readonly<{
       mode: "committed";
@@ -70,6 +68,7 @@ export type StretchInteractionEvent =
   | Readonly<{ type: "pointer-up"; pointerId: number; clientY: number }>
   | Readonly<{ type: "pointer-cancel"; pointerId: number }>
   | Readonly<{ type: "lost-pointer-capture"; pointerId: number }>
+  | Readonly<{ type: "confirm" }>
   | Readonly<{ type: "key-down"; key: string; handle?: StretchHandle }>
   | Readonly<{ type: "reopen" }>
   | Readonly<{ type: "selection-invalidated" }>
@@ -81,7 +80,8 @@ export type StretchInteractionEvent =
 
 /**
  * Owns one non-negative stretch degree across two physical grips and their
- * shared release boundary. The returned commit basis is data only; requests
+ * shared confirmation boundary. A drag release settles degree; a following
+ * address-surface click, Enter, or Space creates the commit basis. Requests
  * and durable mutation stay outside this reducer and its browser hook.
  */
 export function createStretchInteractionState(): StretchInteractionState {
@@ -129,7 +129,6 @@ export function reduceStretchInteraction(
         pointerType: event.pointerType,
         startClientY: event.clientY,
         crossedDeadzone: false,
-        tapCommits: state.mode === "adjusted" && state.amount >= STRETCH_COMMIT_THRESHOLD,
       });
     case "reopen":
       return state.mode === "committed"
@@ -144,15 +143,15 @@ export function reduceStretchInteraction(
         return state;
       }
       if (!moved.crossedDeadzone) {
-        return moved.tapCommits
-          ? commitOrReset(moved.anchor, moved.priorAmount, moved.handle)
-          : adjustedState(
-              moved.anchor,
-              moved.priorAmount,
-              moved.priorLastHandle ?? moved.handle,
-            );
+        return adjustedState(
+          moved.anchor,
+          moved.priorAmount,
+          moved.priorLastHandle ?? moved.handle,
+        );
       }
-      return commitOrReset(moved.anchor, moved.amount, moved.handle);
+      // The deadzone is the only start boundary. Once physical travel creates
+      // a positive degree, preserve the person's exact amount for confirmation.
+      return adjustedState(moved.anchor, moved.amount, moved.handle);
     }
     case "pointer-cancel":
     case "lost-pointer-capture":
@@ -164,6 +163,10 @@ export function reduceStretchInteraction(
         state.priorAmount,
         state.priorLastHandle ?? state.handle,
       );
+    case "confirm":
+      return state.mode === "adjusted"
+        ? commitOrReset(state.anchor, state.amount, state.lastHandle)
+        : state;
     case "key-down":
       return reduceKeyDown(state, event.key, event.handle);
     case "layout-invalidated":
@@ -302,7 +305,8 @@ function commitOrReset(
   amount: number,
   handle: StretchHandle,
 ): StretchInteractionState {
-  if (amount < STRETCH_COMMIT_THRESHOLD) return armedState(anchor);
+  // Zero has no material intent; every positive settled degree does.
+  if (amount <= 0) return armedState(anchor);
   const ownedAnchor = ownAnchor(anchor);
   const basis = Object.freeze({
     selection: ownedAnchor.selection,

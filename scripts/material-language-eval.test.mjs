@@ -1479,7 +1479,7 @@ function testEvaluationPlan() {
     schemaVersion: "material-language-eval-authority/3",
     scenario: "transform",
     candidate: evaluationCandidate({ station: "private-station", model: "private-model" }),
-    promptVersion: "transform/3",
+    promptVersion: definition.promptVersion,
     compiledPromptDigest: "b".repeat(64),
     executionContract: evaluationExecutionContract(definition, prepared),
     corpusVersion: "transform-live-corpus/2",

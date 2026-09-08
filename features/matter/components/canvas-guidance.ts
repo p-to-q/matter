@@ -44,7 +44,7 @@ export type CanvasGuidanceId =
   | "dismiss-stale-recording"
   | "speak-root"
   | "close-lasso"
-  | "reach-stretch-threshold"
+  | "begin-stretch"
   | "release-stretch"
   | "set-degree"
   | "apply-stretch"
@@ -69,11 +69,11 @@ const GUIDANCE_COPY = Object.freeze({
   "dismiss-stale-recording": "Dismiss this recording.",
   "speak-root": "Speak to place your first thought.",
   "close-lasso": "Close the loop around a phrase.",
-  "reach-stretch-threshold": "Pull a little farther.",
-  "release-stretch": "Release to expand.",
-  "set-degree": "Pull either handle down to expand.",
-  "apply-stretch": "Press Enter to expand.",
-  "wait-expansion": "Expanding.",
+  "begin-stretch": "Pull to begin.",
+  "release-stretch": "Release to set the degree.",
+  "set-degree": "Pull either handle outward.",
+  "apply-stretch": "Tap the selection to confirm.",
+  "wait-expansion": "Confirmed. Expanding.",
   "circle-selection": "Circle text between punctuation.",
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
@@ -93,11 +93,11 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "dismiss-stale-recording": "关闭这次录音。",
   "speak-root": "说出你的第一个想法。",
   "close-lasso": "闭合圈选这段文字。",
-  "reach-stretch-threshold": "再拉开一点。",
-  "release-stretch": "松开展开。",
-  "set-degree": "向下拉动任一把手展开。",
-  "apply-stretch": "按回车键展开。",
-  "wait-expansion": "正在展开。",
+  "begin-stretch": "拉动握点开始展开。",
+  "release-stretch": "松手确定展开程度。",
+  "set-degree": "向外拉动任一握点展开。",
+  "apply-stretch": "轻点选中框内确认展开。",
+  "wait-expansion": "已确认，正在展开。",
   "circle-selection": "圈住一段连续文字，边界停在标点处。",
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
@@ -135,15 +135,13 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     case "selected":
       switch (input.language.stretch.kind) {
         case "dragging":
-          return input.language.stretch.amount < .15
-            ? guidance("reach-stretch-threshold", "action")
+          return input.language.stretch.amount <= 0
+            ? guidance("begin-stretch", "action")
             : guidance("release-stretch", "action");
         case "armed":
           return guidance("set-degree", "action");
         case "adjusted":
-          return input.language.stretch.amount < .15
-            ? guidance("reach-stretch-threshold", "action")
-            : guidance("apply-stretch", "action");
+          return guidance("apply-stretch", "action");
         case "pending":
           return guidance("wait-expansion", "progress");
         default:
@@ -207,11 +205,11 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "dismiss-stale-recording": "關閉這次錄音。",
   "speak-root": "說出你的第一個想法。",
   "close-lasso": "閉合圈選這段文字。",
-  "reach-stretch-threshold": "再拉開一點。",
-  "release-stretch": "放開即可展開。",
-  "set-degree": "向下拉動任一把手展開。",
-  "apply-stretch": "按 Enter 展開。",
-  "wait-expansion": "正在展開。",
+  "begin-stretch": "拉動握點開始展開。",
+  "release-stretch": "放開以確定展開程度。",
+  "set-degree": "向外拉動任一握點展開。",
+  "apply-stretch": "輕點選取框內確認展開。",
+  "wait-expansion": "已確認，正在展開。",
   "circle-selection": "圈住一段連續文字，邊界停在標點處。",
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
@@ -231,11 +229,11 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "dismiss-stale-recording": "この録音を閉じてください。",
   "speak-root": "最初の考えを話してください。",
   "close-lasso": "フレーズを囲んで輪を閉じてください。",
-  "reach-stretch-threshold": "もう少し引いてください。",
-  "release-stretch": "放すと展開します。",
-  "set-degree": "どちらかのハンドルを下へ引いて展開。",
-  "apply-stretch": "Enterで展開します。",
-  "wait-expansion": "展開中。",
+  "begin-stretch": "ハンドルを引いて展開します。",
+  "release-stretch": "放して展開量を決めます。",
+  "set-degree": "どちらかのハンドルを外向きに引いて展開。",
+  "apply-stretch": "選択枠内をタップして確定。",
+  "wait-expansion": "確定しました。展開中。",
   "circle-selection": "連続した一節を囲み、句読点で境界を止めます。",
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
@@ -255,11 +253,11 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "dismiss-stale-recording": "Diese Aufnahme schließen.",
   "speak-root": "Sprich deinen ersten Gedanken aus.",
   "close-lasso": "Schließe den Kreis um eine Phrase.",
-  "reach-stretch-threshold": "Etwas weiter ziehen.",
-  "release-stretch": "Zum Erweitern loslassen.",
-  "set-degree": "Einen Griff nach unten ziehen, um zu erweitern.",
-  "apply-stretch": "Mit Enter erweitern.",
-  "wait-expansion": "Wird erweitert.",
+  "begin-stretch": "Zum Erweitern am Griff ziehen.",
+  "release-stretch": "Loslassen, um den Grad festzulegen.",
+  "set-degree": "Einen Griff nach außen ziehen, um zu erweitern.",
+  "apply-stretch": "Zum Bestätigen in die Auswahl tippen.",
+  "wait-expansion": "Bestätigt. Wird erweitert.",
   "circle-selection": "Eine zusammenhängende Passage einkreisen; an Satzzeichen enden.",
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
