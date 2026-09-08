@@ -168,7 +168,7 @@ automatic Production, and the bounded public-origin identity check all passed.
 Repair reached a model 6/6 in 1,609 / 2,140 / 2,570ms minimum, median, and
 maximum latency. Label reached a model 0/6: every call ended in `MODEL_TIMEOUT`
 and used the deterministic floor, at 12,383 / 12,423 / 12,452ms. Inquiry reached
-a model 1/6; the other five calls were refused with four `MODEL_TIMEOUT` and one
+a model 1/6; the other five calls ended with four `MODEL_TIMEOUT` and one
 `MODEL_UNAVAILABLE`, at 2,163 / 16,393 / 16,524ms. The harness reported
 `surface-specific` and `surface-degraded`. This is a failed release gate, not a
 deployment failure: Preview.55 remains online, but no annotated tag or GitHub

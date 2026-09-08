@@ -3278,7 +3278,7 @@ not after a timeout.
 
 ## Current risks
 
-### Preview 55 publication — source deployed, immutable release withheld
+### Preview.55 publication — source deployed, immutable release withheld
 
 State: Production deployed and independently verified on 2026-09-09; strict
 publication gate failed.
