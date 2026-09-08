@@ -98,6 +98,40 @@ describe("IndexedDB Ask Matter record repository", () => {
     }));
   });
 
+  it.each([
+    { boundary: "save generation", operation: "save" as const, generation: Number.MAX_SAFE_INTEGER, epoch: 2 },
+    { boundary: "clear generation", operation: "clear" as const, generation: Number.MAX_SAFE_INTEGER, epoch: 2 },
+    { boundary: "clear epoch", operation: "clear" as const, generation: 4, epoch: Number.MAX_SAFE_INTEGER },
+  ])("aborts before writing when the $boundary is exhausted", async ({ operation, generation, epoch }) => {
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({
+          storageSchemaVersion: 1,
+          ...RECORD,
+          writeGeneration: generation,
+          recordEpoch: epoch,
+          cleared: false,
+        }),
+        put: vi.fn(),
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({ transaction: vi.fn().mockReturnValue(transaction) } as never);
+    const repository = createIndexedDbInquiryRecordRepository();
+    const expectedVersion = { generation, epoch };
+    const result = operation === "save"
+      ? await repository.save(RECORD, expectedVersion)
+      : await repository.clear(RECORD.treeId, expectedVersion);
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_WRITE_FAILED" },
+    });
+    expect(transaction.abort).toHaveBeenCalledOnce();
+    expect(transaction.store.put).not.toHaveBeenCalled();
+  });
+
   it("rejects non-canonical timestamps, duplicate ids, and a basis from another tree", async () => {
     const invalidRecords = [
       { ...RECORD.exchanges[0], askedAt: "2026-08-11" },
