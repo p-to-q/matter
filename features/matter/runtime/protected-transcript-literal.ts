@@ -5,7 +5,11 @@ export type ProtectedTranscriptLiteralSpan = readonly [start: number, end: numbe
 // leak between otherwise pure runtime operations.
 const PROTECTED_TRANSCRIPT_LITERAL = /```[^]*?```|`[^`\n]+`|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」|『[^』\n]*』|"[^"\n]+"|(?:https?:\/\/|[Ww]{3}\.)[^\s，。！？；：]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s，。！？；：]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|(?<![\p{L}\p{N}_$])[\p{L}\p{N}$]+(?:_[\p{L}\p{N}$]+)+(?![\p{L}\p{N}_$])|(?<![\p{L}\p{N}_$])[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)+(?![\p{L}\p{N}_$])|\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)\b/gu;
 
-export const MAY_CONTAIN_PROTECTED_TRANSCRIPT_LITERAL = /[`“‘「『"@/\\_.]|--|[A-Za-z]/u;
+// Keep ordinary mixed-script prose off the full alternation below. Every
+// literal grammar either carries one of these structural sentinels or has an
+// actual adjacent camel/acronym shape; one isolated Latin letter is not enough.
+export const MAY_CONTAIN_PROTECTED_TRANSCRIPT_LITERAL =
+  /[`“‘「『"@/\\_.]|--|[a-z][A-Z]|[A-Z][A-Za-z0-9]*[A-Z]/u;
 
 export function protectedTranscriptLiteralPattern(): RegExp {
   return new RegExp(
