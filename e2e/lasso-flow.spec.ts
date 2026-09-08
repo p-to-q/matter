@@ -288,7 +288,13 @@ for (const viewport of [
     // A keyboard adjustment may replace the projected control more than once.
     // Focus follows only that semantic address, and an explicit move to another
     // control cancels the request before a later geometry remount.
-    await handle.press("PageDown");
+    await expect(address).toHaveAttribute("data-material-address-painted", "true");
+    await handle.focus();
+    await expect(handle).toBeFocused();
+    await page.evaluate(() => document.fonts.dispatchEvent(new Event("loadingdone")));
+    await expect(address).toHaveAttribute("data-material-address-painted", "true");
+    await expect(handle).toBeFocused();
+    await page.keyboard.press("PageDown");
     await expect(handle).toHaveAttribute("aria-valuenow", "0.5");
     await expect(handle).toBeFocused();
     const activeLassoTool = page.locator('[data-tool-id="lasso"]');

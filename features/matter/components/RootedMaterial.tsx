@@ -3814,6 +3814,7 @@ function StretchHandleButton({
       data-active={stretch.activeHandle === handle || undefined}
       data-stretch-amount={Number(stretch.amount.toFixed(3))}
       data-stretch-commit-ready={stretch.amount > 0 || undefined}
+      onFocus={() => onRequestFocusRestore(handle)}
       onPointerCancel={(event) => {
         event.stopPropagation();
         stretch.pointerCancel(event.pointerId);
