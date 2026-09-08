@@ -16,6 +16,10 @@ const HEALTH_SURFACES = [
 ];
 const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
 const DEPLOYMENT_PROFILES = new Set(["browser-preview", "elastic-live"]);
+const MAX_ROOT_HTML_BYTES = 1_024 * 1_024;
+const MAX_HEALTH_BYTES = 32 * 1_024;
+const MAX_MANIFEST_BYTES = 64 * 1_024;
+const MAX_ICON_BYTES = 512 * 1_024;
 const BRAND_MANIFEST_URL = new URL(
   "../features/matter/brand/assets/brand-assets.json",
   import.meta.url,
@@ -271,6 +275,64 @@ export function inspectDeploymentIcon(bytes, expectedSha256, path) {
   return failures;
 }
 
+/** Read the actual response stream under a byte ceiling. Content-Length is a
+ * useful early refusal, but chunked or dishonest peers remain bounded too. */
+export async function readBoundedDeploymentBody(response, maxBytes) {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
+    throw new Error("Deployment response limit must be a non-negative safe integer.");
+  }
+  const declared = response.headers?.get("content-length");
+  if (declared !== null && declared !== undefined) {
+    const trimmed = declared.trim();
+    if (!/^\d+$/u.test(trimmed) || BigInt(trimmed) > BigInt(maxBytes)) {
+      throw new Error("Deployment response exceeds its byte limit.");
+    }
+  }
+  if (response.body === null || typeof response.body?.getReader !== "function") {
+    throw new Error("Deployment response has no readable body.");
+  }
+
+  const reader = response.body.getReader();
+  const chunks = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!(value instanceof Uint8Array)) {
+        throw new Error("Deployment response produced an invalid byte chunk.");
+      }
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw new Error("Deployment response exceeds its byte limit.");
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    try { await reader.cancel(); } catch { /* The original bounded-read failure remains authoritative. */ }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+async function readBoundedDeploymentText(response, maxBytes) {
+  return new TextDecoder("utf-8", { fatal: true })
+    .decode(await readBoundedDeploymentBody(response, maxBytes));
+}
+
+async function readBoundedDeploymentJson(response, maxBytes) {
+  return JSON.parse(await readBoundedDeploymentText(response, maxBytes));
+}
+
 export async function checkDeployment({
   origin,
   expectedVersion,
@@ -298,7 +360,14 @@ export async function checkDeployment({
   if (root.status !== 200) {
     failures.push(`Root returned HTTP ${root.status}.`);
   } else {
-    failures.push(...inspectDeploymentMetadataHtml(await root.text(), normalized));
+    try {
+      failures.push(...inspectDeploymentMetadataHtml(
+        await readBoundedDeploymentText(root, MAX_ROOT_HTML_BYTES),
+        normalized,
+      ));
+    } catch {
+      failures.push("Root metadata body is invalid or exceeds its byte limit.");
+    }
   }
   if (legacy.status !== 404) failures.push(`Legacy /matter returned HTTP ${legacy.status}, expected 404.`);
   if (health.status !== 200) {
@@ -307,9 +376,9 @@ export async function checkDeployment({
     failures.push(...inspectDeploymentHealthHeaders(health.headers));
     let payload;
     try {
-      payload = await health.json();
+      payload = await readBoundedDeploymentJson(health, MAX_HEALTH_BYTES);
     } catch {
-      failures.push("Health probe did not return JSON.");
+      failures.push("Health probe body is invalid or exceeds its byte limit.");
     }
     if (payload !== undefined) {
       failures.push(...inspectDeploymentHealth(payload, expectedVersion, profile));
@@ -329,9 +398,12 @@ export async function checkDeployment({
       "Web manifest",
     ));
     try {
-      failures.push(...inspectDeploymentManifest(await manifest.json(), normalized));
+      failures.push(...inspectDeploymentManifest(
+        await readBoundedDeploymentJson(manifest, MAX_MANIFEST_BYTES),
+        normalized,
+      ));
     } catch {
-      failures.push("Web manifest did not return JSON.");
+      failures.push("Web manifest body is invalid or exceeds its byte limit.");
     }
   }
   for (const [index, response] of icons.entries()) {
@@ -351,11 +423,15 @@ export async function checkDeployment({
       contract.path,
       14_400,
     ));
-    failures.push(...inspectDeploymentIcon(
-      await response.arrayBuffer(),
-      expected.sha256,
-      contract.path,
-    ));
+    try {
+      failures.push(...inspectDeploymentIcon(
+        await readBoundedDeploymentBody(response, MAX_ICON_BYTES),
+        expected.sha256,
+        contract.path,
+      ));
+    } catch {
+      failures.push(`${contract.path} body is invalid or exceeds its byte limit.`);
+    }
   }
   failures.push(...inspectDeploymentHeaders(root.headers));
   return Object.freeze({ origin: normalized, failures: Object.freeze(failures) });

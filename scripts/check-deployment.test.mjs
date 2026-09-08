@@ -13,6 +13,7 @@ import {
   inspectDeploymentMetadataHtml,
   inspectDeploymentHealth,
   normalizeDeploymentOrigin,
+  readBoundedDeploymentBody,
   waitForDeployment,
 } from "./check-deployment.mjs";
 
@@ -244,6 +245,57 @@ test("requires the exact fingerprinted browser links and installable icons", () 
   ]);
 });
 
+test("bounds deployment bodies by declared and observed bytes", async () => {
+  assert.deepEqual(
+    await readBoundedDeploymentBody(new Response("1234"), 4),
+    new TextEncoder().encode("1234"),
+  );
+  for (const contentLength of ["5", "not-a-byte-count"]) {
+    let bodyRead = false;
+    const declared = {
+      headers: new Headers({ "content-length": contentLength }),
+      get body() {
+        bodyRead = true;
+        throw new Error("body must not be read after a failed preflight");
+      },
+    };
+    await assert.rejects(readBoundedDeploymentBody(declared, 4), /byte limit/);
+    assert.equal(bodyRead, false);
+  }
+
+  let cancelled = false;
+  const chunked = new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(4));
+      controller.enqueue(new Uint8Array(1));
+    },
+    cancel() { cancelled = true; },
+  }), { headers: { "content-length": "1" } });
+  await assert.rejects(readBoundedDeploymentBody(chunked, 4), /byte limit/);
+  assert.equal(cancelled, true);
+
+  await assert.rejects(
+    readBoundedDeploymentBody({ headers: new Headers(), body: null }, 4),
+    /no readable body/,
+  );
+
+  let invalidCancelled = 0;
+  let released = 0;
+  const invalidChunk = {
+    headers: new Headers(),
+    body: {
+      getReader: () => ({
+        async read() { return { done: false, value: "not bytes" }; },
+        async cancel() { invalidCancelled += 1; },
+        releaseLock() { released += 1; },
+      }),
+    },
+  };
+  await assert.rejects(readBoundedDeploymentBody(invalidChunk, 4), /invalid byte chunk/);
+  assert.equal(invalidCancelled, 1);
+  assert.equal(released, 1);
+});
+
 test("uses bounded discovery bodies and keeps unrelated probes header-only", async () => {
   const calls = [];
   let healthReads = 0;
@@ -266,7 +318,7 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
       hasAbortSignal: init.signal instanceof AbortSignal,
     });
     if (path === "/") {
-      return {
+      return new Response(BRAND_ROOT_HTML, {
         status: 200,
         headers: new Headers({
           "permissions-policy": "microphone=(self)",
@@ -275,8 +327,7 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
           "x-content-type-options": "nosniff",
           "x-frame-options": "DENY",
         }),
-        async text() { return BRAND_ROOT_HTML; },
-      };
+      });
     }
     if (path === "/matter") return headerOnly(404, {});
     if (path === "/matter-ui/shadows-poster.jpg") {
@@ -286,38 +337,33 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
       });
     }
     if (path === "/api/health") {
-      return {
+      healthReads += 1;
+      return new Response(JSON.stringify(HEALTH), {
         status: 200,
         headers: new Headers({
           "cache-control": "no-store",
           "content-type": "application/json",
         }),
-        async json() {
-          healthReads += 1;
-          return HEALTH;
-        },
-      };
+      });
     }
     if (path === "/manifest.webmanifest") {
-      return {
+      return new Response(JSON.stringify(BRAND_MANIFEST), {
         status: 200,
         headers: new Headers({
           "cache-control": "public, max-age=0, must-revalidate",
           "content-type": "application/manifest+json",
         }),
-        async json() { return BRAND_MANIFEST; },
-      };
+      });
     }
     const iconIndex = ICON_PATHS.indexOf(path);
     assert.notEqual(iconIndex, -1);
-    return {
+    return new Response(ICON_BYTES[iconIndex], {
       status: 200,
       headers: new Headers({
         "cache-control": "public, max-age=14400, must-revalidate",
         "content-type": "image/png",
       }),
-      async arrayBuffer() { return ICON_BYTES[iconIndex]; },
-    };
+    });
   };
 
   const result = await checkDeployment({
