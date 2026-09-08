@@ -96,6 +96,8 @@ describe("transcribeRecording", () => {
   it.each([
     ["empty", "   ", "NO_SPEECH"],
     ["oversize", "念".repeat(2_001), "INVALID_PROVIDER_RESPONSE"],
+    ["lone high surrogate", "bad\uD800speech", "INVALID_PROVIDER_RESPONSE"],
+    ["lone low surrogate", "bad\uDC00speech", "INVALID_PROVIDER_RESPONSE"],
     ["adapter-authored emoji", "这句话不是表达装饰。🎉", "INVALID_PROVIDER_RESPONSE"],
     ["adapter-authored flag", "this is not a transport mark 🇩🇪", "INVALID_PROVIDER_RESPONSE"],
   ] as const)("rejects an %s transcript whole", async (_name, transcript, code) => {

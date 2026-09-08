@@ -493,6 +493,27 @@ describe("LabelDriver", () => {
     expect(store.stored.get("root")).toBeUndefined();
   });
 
+  it("rejects malformed model and manual labels before publishing or storing them", async () => {
+    const recorded = recorder();
+    const store = repository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+    const floor = labelFor(instance.getState(), "root");
+
+    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "bad\uD800label"));
+    await settle();
+    expect(labelFor(instance.getState(), "root")).toBe(floor);
+    expect(store.stored.get("root")).toBeUndefined();
+
+    await expect(instance.rename("root", "bad\uDC00label")).resolves.toEqual({
+      ok: false,
+      code: "REJECTED",
+    });
+    expect(labelFor(instance.getState(), "root")).toBe(floor);
+    expect(store.stored.get("root")).toBeUndefined();
+  });
+
   it("does not carry an infrastructure failure streak across semantic refusal", async () => {
     const recorded = recorder();
     const instance = driver(recorded.request, {

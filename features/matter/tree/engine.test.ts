@@ -84,6 +84,24 @@ describe("thought-tree invariants", () => {
     expect(validateThoughtTree(branchedTree())).toEqual({ ok: true });
   });
 
+  it("accepts astral material and rejects lone surrogates in passage or title", () => {
+    const astral = rootedTree();
+    astral.title = "保留 🚀";
+    astral.nodes = { root: node("root", null, [], "保留 🚀") };
+    expect(validateThoughtTree(astral)).toEqual({ ok: true });
+
+    for (const malformed of ["before\uD800after", "before\uDC00after"]) {
+      expect(validateThoughtTree({
+        ...astral,
+        nodes: { root: { ...astral.nodes.root, text: malformed } },
+      })).toMatchObject({ ok: false, error: { code: "TREE_INVARIANT_VIOLATION" } });
+      expect(validateThoughtTree({ ...astral, title: malformed }))
+        .toMatchObject({ ok: false, error: { code: "TREE_INVARIANT_VIOLATION" } });
+      expect(validateThoughtTree({ ...createEmptyTree("empty"), title: malformed }))
+        .toMatchObject({ ok: false, error: { code: "TREE_INVARIANT_VIOLATION" } });
+    }
+  });
+
   it("accepts only exact empty text on the document root and positive text on passages", () => {
     const documentRoot: ThoughtNode = {
       ...node("document", null, ["passage"], ""),
@@ -187,6 +205,30 @@ describe("thought-tree invariants", () => {
 });
 
 describe("tree command engine", () => {
+  it("rejects inserting or replacing malformed Unicode text atomically", () => {
+    const tree = rootedTree();
+    const inserted = applyTreeCommand(tree, command(tree, {
+      type: "insert-node",
+      node: node("child", "root", [], "bad\uD800text"),
+      parentId: "root",
+      index: 0,
+      expectedParentChildren: [],
+    }));
+    expectFailure(inserted, "TREE_INVARIANT_VIOLATION");
+    expect(tree.nodes.root.children).toEqual([]);
+
+    const replaced = applyTreeCommand(tree, command(tree, {
+      type: "replace-text",
+      nodeId: "root",
+      expectedText: tree.nodes.root.text,
+      expectedUpdatedAt: tree.nodes.root.updatedAt,
+      text: "bad\uDC00text",
+      updatedAt: T1,
+    }));
+    expectFailure(replaced, "TREE_INVARIANT_VIOLATION");
+    expect(tree.nodes.root.text).toBe("root");
+  });
+
   it("initializes and clears the root through exact inverses while revision grows", () => {
     const empty = createEmptyTree("tree-1", 6);
     const root = node("root", null, [], "first material");

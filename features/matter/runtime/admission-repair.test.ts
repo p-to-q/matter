@@ -66,4 +66,18 @@ describe("admissionRepairToTreeCommand", () => {
         .toMatchObject({ ok: false, error: { code: "REPAIR_STALE" } });
     }
   });
+
+  it("rejects malformed expected or replacement text", () => {
+    const tree = createSeededDocument("root").tree;
+    const node = tree.nodes[tree.rootId ?? ""];
+    if (node === undefined) throw new Error("fixture root missing");
+    expect(admissionRepairToTreeCommand(tree, {
+      ...values(tree.id, node.id, node.text, node.updatedAt),
+      expectedText: `${node.text}\uD800`,
+    })).toMatchObject({ ok: false });
+    expect(admissionRepairToTreeCommand(tree, {
+      ...values(tree.id, node.id, node.text, node.updatedAt),
+      text: `${node.text}\uDC00`,
+    })).toMatchObject({ ok: false, error: { code: "INVALID_REPAIR" } });
+  });
 });

@@ -193,6 +193,26 @@ describe("BrowserSpeechVoicePort", () => {
     });
   });
 
+  it("refuses malformed native preview text before publishing or settling it", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    const onTranscript = vi.fn();
+    const onError = vi.fn();
+    await port.start(OPERATION, { locale: "en-US", onTranscript, onError });
+    FakeRecognition.instance?.onresult?.({
+      resultIndex: 0,
+      results: [{ isFinal: false, length: 1, 0: { transcript: "bad\uD800speech" } }],
+    });
+
+    expect(onTranscript).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "RECORDING_FAILED" }));
+    await expect(port.stop(OPERATION)).rejects.toMatchObject({ code: "RECORDING_NOT_ACTIVE" });
+  });
+
   it.each([[240, 241], [500, 501]])(
     "rejects %i-bound native words at %i code points",
     async (limit, length) => {

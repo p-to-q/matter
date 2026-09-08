@@ -172,4 +172,22 @@ describe("IndexedDB Ask Matter record repository", () => {
       outcome: { status: "answered", text: "答".repeat(MAX_INQUIRY_ANSWER_CODE_POINTS + 1) },
     })).toBe(false);
   });
+
+  it("accepts astral record text and rejects lone surrogates", () => {
+    expect(isStoredInquiryExchange({
+      ...RECORD.exchanges[0],
+      question: "这个🚀想法呢？",
+      outcome: { status: "answered", text: "它仍然在🚀生长。" },
+    })).toBe(true);
+    for (const malformed of ["bad\uD800text", "bad\uDC00text"]) {
+      expect(isStoredInquiryExchange({
+        ...RECORD.exchanges[0],
+        question: malformed,
+      })).toBe(false);
+      expect(isStoredInquiryExchange({
+        ...RECORD.exchanges[0],
+        outcome: { status: "answered", text: malformed },
+      })).toBe(false);
+    }
+  });
 });

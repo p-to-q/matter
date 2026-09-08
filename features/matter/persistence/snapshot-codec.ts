@@ -1,5 +1,6 @@
 import { validateThoughtTree } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import {
   allocateSnapshotPaths,
   asCanonicalPath,
@@ -62,13 +63,16 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
   for (const path of paths) {
     const content = rawFiles[path];
     if (typeof content !== "string") return failure("INVALID_BUNDLE", `Snapshot file ${path} is not text.`);
+    const pathError = validateBundlePath(path);
+    if (pathError !== null) return failure("INVALID_PATH", pathError);
+    if (!isWellFormedUnicodeText(content)) {
+      return failure("INVALID_BUNDLE", `Snapshot file ${path} is not well-formed Unicode text.`);
+    }
     const pathBytes = utf8Bytes(path);
     bytes += pathBytes + utf8Bytes(content);
     if (pathBytes > MAX_PATH_BYTES || bytes > MAX_BUNDLE_BYTES) {
       return failure("BOUND_EXCEEDED", "The snapshot exceeds its path or byte bound.");
     }
-    const pathError = validateBundlePath(path);
-    if (pathError !== null) return failure("INVALID_PATH", pathError);
   }
 
   const metadataText = rawFiles["matter/matter.json"];
@@ -269,7 +273,13 @@ function parseDirectory(directory: string):
 }
 
 function validateBundlePath(path: string): string | null {
-  if (path !== path.normalize("NFC") || !path.startsWith("matter/") || path.includes("\\") || /[\u0000-\u001f\u007f]/u.test(path)) {
+  if (
+    !isWellFormedUnicodeText(path) ||
+    path !== path.normalize("NFC") ||
+    !path.startsWith("matter/") ||
+    path.includes("\\") ||
+    /[\u0000-\u001f\u007f]/u.test(path)
+  ) {
     return `Snapshot path ${path} is not a canonical relative path.`;
   }
   const components = path.split("/");

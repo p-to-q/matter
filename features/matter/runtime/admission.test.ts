@@ -133,6 +133,22 @@ describe("human material admission", () => {
     });
   });
 
+  it("accepts astral text and rejects lone surrogates before punctuation", () => {
+    const tree = createEmptyTree("tree_1");
+    const navigation = createNavigationState();
+    const anchored = createAdmissionAnchor(tree, navigation);
+    if (!anchored.ok) throw new Error(anchored.error.code);
+
+    expect(admissionToTreeCommand(tree, navigation, anchored.anchor, values("保留🚀这个想法"))).toMatchObject({
+      ok: true,
+      command: { mutation: { root: { text: "保留🚀这个想法。" } } },
+    });
+    for (const malformed of ["bad\uD800text", "bad\uDC00text"]) {
+      expect(admissionToTreeCommand(tree, navigation, anchored.anchor, values(malformed)))
+        .toMatchObject({ ok: false, error: { code: "INVALID_ADMISSION_TRANSCRIPT" } });
+    }
+  });
+
   it("accepts the exact text bound and rejects one code unit over without truncation", () => {
     const tree = createEmptyTree("tree_1");
     const navigation = createNavigationState();

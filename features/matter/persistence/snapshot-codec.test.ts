@@ -67,6 +67,39 @@ describe("Markdown snapshot codec", () => {
     expect(bundleToTree(bundle)).toEqual({ ok: true, tree });
   });
 
+  it("round-trips astral text and rejects malformed node, title, and path text whole", () => {
+    const source = normalizeDocumentTree(createSeededDocument().tree);
+    const firstId = source.nodes[source.rootId!].children[0]!;
+    const astral: ThoughtTree = {
+      ...source,
+      title: "可触摸的🚀思想",
+      nodes: {
+        ...source.nodes,
+        [firstId]: { ...source.nodes[firstId], text: "𠮷野家与🚀都留在材料里。" },
+      },
+    };
+    expect(bundleToTree(treeToBundle(astral))).toEqual({ ok: true, tree: astral });
+
+    expect(() => treeToBundle({ ...source, title: "bad\uD800title" })).toThrow(TypeError);
+    expect(() => treeToBundle({
+      ...source,
+      nodes: { ...source.nodes, [firstId]: { ...source.nodes[firstId], text: "bad\uDC00text" } },
+    })).toThrow(TypeError);
+
+    const canonical = treeToBundle(source);
+    expect(mutate(canonical, (files) => {
+      const passage = Object.keys(files).find((path) => path !== "matter/index.md" && path.endsWith("/index.md"))!;
+      files[passage] = `${files[passage]}\uD800`;
+    })).toMatchObject({ ok: false, error: { code: "INVALID_BUNDLE" } });
+    expect(mutate(canonical, (files) => {
+      files["matter/matter.json"] = files["matter/matter.json"].replace(/\}\n$/u, ',"title":"bad\\udc00"}\n');
+    })).toMatchObject({ ok: false });
+
+    const files = { ...canonical.files } as Record<string, string>;
+    files["matter/bad\uD800/index.md"] = files["matter/index.md"];
+    expect(bundleToTree({ files })).toMatchObject({ ok: false, error: { code: "INVALID_PATH" } });
+  });
+
   it.each([
     ["empty", ""],
     ["ASCII whitespace", " \t\n"],

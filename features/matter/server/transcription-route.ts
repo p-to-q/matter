@@ -15,6 +15,7 @@ import { isTimeoutSignal, TranscriptionServerError } from "./transcription-error
 import { transcribeRecording } from "./transcriber";
 import { hasMultipartFormDataBoundary } from "./content-type";
 import { createPublicRequestAdmission } from "./public-request-admission";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 const FIELD_NAMES = new Set([
   "protocolVersion",
@@ -307,7 +308,12 @@ function validateFieldShape(form: FormData): void {
 
 function requiredString(form: FormData, field: string, maxLength: number): string {
   const value = form.get(field);
-  if (typeof value !== "string" || value.length === 0 || value.length > maxLength) {
+  if (
+    typeof value !== "string" ||
+    !isWellFormedUnicodeText(value) ||
+    value.length === 0 ||
+    value.length > maxLength
+  ) {
     throw invalidRequest(`The ${field} field is invalid.`);
   }
   return value;

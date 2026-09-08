@@ -145,6 +145,20 @@ describe("inquiry client", () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
+  it("does not serialize or fetch malformed outgoing text", async () => {
+    for (const override of [
+      { question: "bad\uD800question" },
+      { context: { ...INPUT.context, lineage: [{ ...INPUT.context.lineage[0], text: "bad\uDC00context" }] } },
+    ]) {
+      const fetchImpl = vi.fn();
+      await expect(askInquiry({ ...INPUT, ...override, fetchImpl })).resolves.toEqual({
+        status: "unavailable",
+        reason: "UNREACHABLE",
+      });
+      expect(fetchImpl).not.toHaveBeenCalled();
+    }
+  });
+
   it("settles its own timeout even when an injected transport ignores AbortSignal", async () => {
     vi.useFakeTimers();
     const fetchImpl = vi.fn(() => new Promise<Response>(() => undefined)) as unknown as typeof fetch;

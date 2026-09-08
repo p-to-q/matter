@@ -76,6 +76,10 @@ bidirectional parent/child agreement, unique ordered children, no cycle, and no
 unreachable node. Every node other than `document-root` contains at least one
 non-whitespace Unicode character; `document-root` alone has, and must have,
 exactly empty text. Invalid documents are rejected as a whole, never repaired.
+Every string that carries human or model text contains only complete Unicode
+scalar values. An unpaired UTF-16 surrogate is rejected before prompt, wire,
+snapshot, or local-record encoding can silently replace it; valid astral text
+remains ordinary material and counts under the boundary's stated unit.
 Tree and node ids use 1–128 ASCII characters from `[A-Za-z0-9_-]`, beginning
 with an alphanumeric character. This grammar is safe in Markdown frontmatter,
 network envelopes, IndexedDB keys, and logical paths without transport-specific

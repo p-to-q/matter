@@ -207,6 +207,16 @@ describe("request parsing", () => {
   it.each(rejections)("rejects %s", (_name, value) => {
     expect(parseLabelRequest(value).ok).toBe(false);
   });
+
+  it("accepts astral material and rejects malformed material or reference text", () => {
+    expect(parseLabelRequest({ ...BODY, text: "保留🚀这个想法" }).ok).toBe(true);
+    for (const malformed of ["bad\uD800text", "bad\uDC00text"]) {
+      expect(parseLabelRequest({ ...BODY, text: malformed }).ok).toBe(false);
+      expect(parseLabelRequest({ ...BODY, reference: { parentLabel: malformed } }).ok).toBe(false);
+      expect(parseLabelRequest({ ...BODY, reference: { parentExcerpt: malformed } }).ok).toBe(false);
+      expect(parseLabelRequest({ ...BODY, reference: { siblingLabels: [malformed] } }).ok).toBe(false);
+    }
+  });
 });
 
 describe("success recognition", () => {
@@ -232,5 +242,11 @@ describe("success recognition", () => {
   it("refuses an unknown source or fallback reason", () => {
     expect(isLabelSuccess({ ...success, source: "guess" }, BODY)).toBe(false);
     expect(isLabelSuccess({ ...success, fallbackReason: "WHY" }, BODY)).toBe(false);
+  });
+
+  it("accepts an astral label and refuses malformed label text", () => {
+    expect(isLabelSuccess({ ...success, label: "思想🚀生长" }, BODY)).toBe(true);
+    expect(isLabelSuccess({ ...success, label: "bad\uD800label" }, BODY)).toBe(false);
+    expect(isLabelSuccess({ ...success, label: "bad\uDC00label" }, BODY)).toBe(false);
   });
 });

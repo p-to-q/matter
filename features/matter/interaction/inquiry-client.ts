@@ -3,6 +3,7 @@ import {
   MAX_INQUIRY_RESPONSE_BYTES,
   parseInquiryAnswer,
   parseInquiryError,
+  parseInquiryRequest,
   type InquiryContextPayload,
 } from "../protocol/inquiry-contract";
 import { PROTOCOL_VERSION } from "../tree/model";
@@ -35,13 +36,21 @@ export type AskInquiryInput = Readonly<{
 
 export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome> {
   if (input.signal?.aborted) return UNREACHABLE;
+  const requestId = input.requestId ?? createInquiryRequestId();
+  const parsed = parseInquiryRequest({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId,
+    question: input.question,
+    locale: input.locale,
+    context: input.context,
+  });
+  if (!parsed.ok) return UNREACHABLE;
   const fetchImpl = input.fetchImpl ?? globalThis.fetch;
   const deadline = createRequestDeadline(
     input.signal,
     INQUIRY_CLIENT_TIMEOUT_MS,
     "The inquiry timed out.",
   );
-  const requestId = input.requestId ?? createInquiryRequestId();
 
   try {
     // AbortSignal is advisory to an injected transport. The explicit race
@@ -50,13 +59,7 @@ export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome
       fetchImpl(input.endpoint ?? `${clientMatterBasePath()}/api/inquiry`, {
         method: "POST",
         headers: { accept: "application/json", "content-type": "application/json" },
-        body: JSON.stringify({
-          protocolVersion: PROTOCOL_VERSION,
-          requestId,
-          question: input.question,
-          locale: input.locale,
-          context: input.context,
-        }),
+        body: JSON.stringify(parsed.request),
         cache: "no-store",
         redirect: "error",
         signal: deadline.signal,
@@ -75,7 +78,7 @@ export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome
     // The route's prose is intentionally discarded: only a strict, closed
     // receipt may select localized interface copy.
     if (!response.ok) return refusalOutcome(response.status, payload);
-    const answer = parseInquiryAnswer(payload, requestId, input.context);
+    const answer = parseInquiryAnswer(payload, requestId, parsed.request.context);
     if (answer === null) return UNREACHABLE;
     return answer.status === "answered"
       ? Object.freeze({ status: "answered", text: answer.text })

@@ -79,6 +79,14 @@ describe("inquiry question admission", () => {
     expect(parseInquiryRequest(body(emoji)).ok).toBe(true);
   });
 
+  it("accepts astral question and context text and rejects lone surrogates", () => {
+    expect(parseInquiryRequest(body("这个🚀想法呢？")).ok).toBe(true);
+    for (const malformed of ["bad\uD800text", "bad\uDC00text"]) {
+      expect(parseInquiryRequest(body(malformed)).ok).toBe(false);
+      expect(parseInquiryRequest(contextBody([lineageNode(0, malformed)])).ok).toBe(false);
+    }
+  });
+
   it("refuses a non-string question without throwing", () => {
     for (const question of [null, undefined, 42, {}, [QUESTION]]) {
       expect(parseInquiryRequest(body(question)).ok).toBe(false);
@@ -130,6 +138,13 @@ describe("inquiry bounds have one owner", () => {
 });
 
 describe("inquiry answer admission", () => {
+  it("accepts astral answer text and rejects either lone surrogate", () => {
+    expect(parseInquiryAnswer(answerBody("这个🚀想法仍然在生长。"), "inq_1", ANSWER_CONTEXT))
+      .toMatchObject({ status: "answered" });
+    expect(parseInquiryAnswer(answerBody("bad\uD800answer"), "inq_1", ANSWER_CONTEXT)).toBeNull();
+    expect(parseInquiryAnswer(answerBody("bad\uDC00answer"), "inq_1", ANSWER_CONTEXT)).toBeNull();
+  });
+
   it.each([
     "回答\u0000隐藏",
     "回答\u061C隐藏",

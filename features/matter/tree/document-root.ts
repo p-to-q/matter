@@ -1,5 +1,6 @@
 import { validateThoughtTree } from "./invariants";
 import type { ThoughtNode, ThoughtTree } from "./model";
+import { isWellFormedUnicodeText } from "./unicode-text";
 
 const DOCUMENT_ROOT_PREFIX = "matter_document_root_";
 const DEFAULT_TITLE = "Untitled matter";
@@ -27,7 +28,7 @@ export function normalizeDocumentTree(tree: ThoughtTree, initialTitle?: string):
     };
     return {
       ...tree,
-      title: tree.title ?? initialTitle ?? DEFAULT_TITLE,
+      title: tree.title ?? normalizeDocumentTitle(initialTitle ?? DEFAULT_TITLE),
       rootId: containerId,
       nodes: { [containerId]: container },
     };
@@ -47,7 +48,7 @@ export function normalizeDocumentTree(tree: ThoughtTree, initialTitle?: string):
     const normalized: ThoughtTree = {
       ...tree,
       title: titleNeedsRepair
-        ? (initialTitle ?? first?.text.trim() ?? "") || DEFAULT_TITLE
+        ? normalizeDocumentTitle((initialTitle ?? first?.text.trim() ?? "") || DEFAULT_TITLE)
         : tree.title,
       nodes: {
         ...tree.nodes,
@@ -58,7 +59,9 @@ export function normalizeDocumentTree(tree: ThoughtTree, initialTitle?: string):
     return validation.ok ? normalized : tree;
   }
   if (isDocumentRoot(tree, tree.rootId)) {
-    return tree.title === undefined ? { ...tree, title: initialTitle ?? deriveDocumentTitle(tree) } : tree;
+    return tree.title === undefined
+      ? { ...tree, title: normalizeDocumentTitle(initialTitle ?? deriveDocumentTitle(tree)) }
+      : tree;
   }
 
   const legacyRoot = tree.nodes[tree.rootId];
@@ -75,7 +78,7 @@ export function normalizeDocumentTree(tree: ThoughtTree, initialTitle?: string):
   };
   const normalized: ThoughtTree = {
     ...tree,
-    title: tree.title ?? initialTitle ?? deriveDocumentTitle(tree),
+    title: tree.title ?? normalizeDocumentTitle(initialTitle ?? deriveDocumentTitle(tree)),
     rootId: containerId,
     nodes: {
       ...tree.nodes,
@@ -100,5 +103,9 @@ function deriveDocumentTitle(tree: ThoughtTree): string {
 export const DOCUMENT_TITLE_MAX_CODE_UNITS = 160;
 
 export function normalizeDocumentTitle(value: string): string {
-  return value.trim().slice(0, DOCUMENT_TITLE_MAX_CODE_UNITS) || DEFAULT_TITLE;
+  if (!isWellFormedUnicodeText(value)) return DEFAULT_TITLE;
+  const trimmed = value.trim();
+  if (trimmed.length <= DOCUMENT_TITLE_MAX_CODE_UNITS) return trimmed || DEFAULT_TITLE;
+  const sliced = trimmed.slice(0, DOCUMENT_TITLE_MAX_CODE_UNITS);
+  return (/\p{Surrogate}$/u.test(sliced) ? sliced.slice(0, -1) : sliced) || DEFAULT_TITLE;
 }

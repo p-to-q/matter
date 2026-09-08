@@ -3,6 +3,7 @@ import {
   isCanonicalTimestamp,
 } from "../tree/invariants";
 import type { ThoughtTree, TreeCommand } from "../tree/model";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import type { NavigationState } from "./navigation";
 import { normalizeAdmittedTranscript } from "./transcript-punctuation";
 
@@ -174,7 +175,11 @@ export function admissionToTreeCommand(
 function validateTranscript(
   transcript: unknown,
 ): { readonly ok: true } | { readonly ok: false; readonly error: AdmissionError } {
-  if (typeof transcript !== "string" || transcript.trim().length === 0) {
+  if (
+    typeof transcript !== "string" ||
+    !isWellFormedUnicodeText(transcript) ||
+    transcript.trim().length === 0
+  ) {
     return {
       ok: false,
       error: {

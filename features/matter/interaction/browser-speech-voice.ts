@@ -4,6 +4,7 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { subscribePageSuspension } from "./page-suspension";
 import { normalizeSpokenTranscript } from "../runtime/spoken-transcript";
 import { hasPresentedEmoji } from "../protocol/transcription-contract";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 export const SPEECH_START_TIMEOUT_MS = 8_000;
 
@@ -158,7 +159,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
       if (finalText) this.finalTranscript += finalText;
       this.interimTranscript = interimText;
       const preview = `${this.finalTranscript} ${this.interimTranscript}`.trim();
-      if (hasPresentedEmoji(preview)) {
+      if (!isWellFormedUnicodeText(preview) || hasPresentedEmoji(preview)) {
         this.fail(new VoiceError("RECORDING_FAILED"));
         return;
       }
@@ -197,6 +198,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
         maxOutputCodePoints: this.maxTranscriptCodePoints,
       });
       if (!transcript) { this.fail(new VoiceError("RECORDING_EMPTY")); return; }
+      if (!isWellFormedUnicodeText(transcript)) { this.fail(new VoiceError("RECORDING_FAILED")); return; }
       if (hasPresentedEmoji(transcript)) { this.fail(new VoiceError("RECORDING_FAILED")); return; }
       const recording: VoiceRecording = Object.freeze({ operation: operationValue, audio: new Blob([], { type: "audio/webm" }), durationMs: Math.max(1, Math.round(performance.now() - this.startedAt)), transcript });
       this.resolveStop?.(recording);

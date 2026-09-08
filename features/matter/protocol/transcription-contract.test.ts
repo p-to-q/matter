@@ -40,4 +40,10 @@ describe("audio type acceptance", () => {
     expect(transcriptionTextFitsCapacity("🚀".repeat(501), "direction")).toBe(false);
     expect(transcriptionTextFitsCapacity("   ", "swap-direction")).toBe(false);
   });
+
+  it("accepts astral speech and rejects either lone surrogate", () => {
+    expect(transcriptionTextFitsCapacity("保留🚀这个想法", "admission")).toBe(true);
+    expect(transcriptionTextFitsCapacity("bad\uD800speech", "admission")).toBe(false);
+    expect(transcriptionTextFitsCapacity("bad\uDC00speech", "direction")).toBe(false);
+  });
 });

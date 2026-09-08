@@ -4,6 +4,7 @@ import {
   MAX_INQUIRY_QUESTION_CODE_POINTS,
 } from "../protocol/inquiry-contract";
 import { isCanonicalTimestamp } from "../tree/invariants";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import type { StoredInquiryExchange, StoredInquiryRecord } from "./matter-database";
 
 export const MAX_INQUIRY_RECORD_EXCHANGES = 20;
@@ -119,7 +120,10 @@ function isBoundedId(value: unknown): value is string {
 }
 
 function isBoundedText(value: unknown, maxCodePoints: number): value is string {
-  return typeof value === "string" && value.trim().length > 0 && Array.from(value).length <= maxCodePoints;
+  return typeof value === "string" &&
+    isWellFormedUnicodeText(value) &&
+    value.trim().length > 0 &&
+    Array.from(value).length <= maxCodePoints;
 }
 
 function isPositiveSafeInteger(value: unknown): value is number {

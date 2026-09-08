@@ -2,6 +2,7 @@ import {
   findProtectedTranscriptLiteralSpans,
   type ProtectedTranscriptLiteralSpan,
 } from "./protected-transcript-literal";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 /**
  * Punctuation is an overlay on recognized words. Acoustic evidence may choose
@@ -139,6 +140,7 @@ export function applySpokenTranscriptPunctuation(
 
 /** Shared final STT floor for admission, inquiry, and spoken tool direction. */
 export function normalizeSpokenTranscript(input: SpokenTranscriptInput): string {
+  if (!isWellFormedUnicodeText(input.text)) return "";
   let text = input.text.trim();
   if (text.length === 0) return "";
   const shift = input.text.indexOf(text);

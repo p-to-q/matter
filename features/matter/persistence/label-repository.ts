@@ -6,6 +6,7 @@ import {
   type StoredLabelOrigin,
 } from "./matter-database";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
+import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 /**
  * Durable storage for labels that cost something to produce.
@@ -167,7 +168,10 @@ function isStorable(record: LabelRecord): boolean {
     record.nodeId.length > 0 &&
     record.label.trim().length > 0 &&
     record.label.length <= MAX_STORED_LABEL_CODE_UNITS &&
-    (record.origin === "user" ? record.basis === null : typeof record.basis === "string")
+    isWellFormedUnicodeText(record.label) &&
+    (record.origin === "user"
+      ? record.basis === null
+      : typeof record.basis === "string" && isWellFormedUnicodeText(record.basis))
   );
 }
 
