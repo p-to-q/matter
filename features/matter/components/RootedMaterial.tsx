@@ -54,6 +54,11 @@ import { useNativeMaterialSelection } from "../interaction/use-native-material-s
 import { useStructuralMaterialSelection } from "../interaction/use-structural-material-selection";
 import { subscribePageSuspension } from "../interaction/page-suspension";
 import {
+  admissionFocusRestorationIsCurrent,
+  type AdmissionFocusRestorationBasis,
+} from "../interaction/admission-focus-restoration";
+import { projectFocusedMaterialRevealField } from "../interaction/focused-material-visibility";
+import {
   pointTalkFocusRestorationIsCurrent,
   type PointTalkFocusRestorationBasis,
 } from "../interaction/point-talk-focus-restoration";
@@ -264,6 +269,14 @@ type IndexCenterRequest = Readonly<{
   nodeId: string;
 }>;
 
+type KeyboardFocusRevealRequest = Readonly<{
+  documentEpoch: number;
+  frameId: number;
+  nodeId: string;
+  target: HTMLElement;
+  treeId: string;
+}>;
+
 function sameViewportCamera(left: CanvasViewportState, right: CanvasViewportState): boolean {
   return left.x === right.x && left.y === right.y && left.zoom === right.zoom && left.gesture === null;
 }
@@ -274,11 +287,11 @@ function clearIndexCameraMotion(world: HTMLDivElement | null): void {
   world.style.removeProperty("--index-camera-duration");
 }
 
-function readRenderedIndexCamera(
+function readRenderedAnimatedCamera(
   world: HTMLDivElement | null,
   basis: CanvasViewportState,
 ): CanvasViewportState | null {
-  if (world?.dataset.cameraMotion !== "index") return null;
+  if (world?.dataset.cameraMotion === undefined) return null;
   try {
     const matrix = new DOMMatrixReadOnly(getComputedStyle(world).transform);
     const zoom = (matrix.a + matrix.d) / 2;
@@ -475,6 +488,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => createCanvasNavigationSession(props.documentEpoch),
   );
   const indexCenterRequestRef = useRef<IndexCenterRequest | null>(null);
+  const keyboardFocusRevealRef = useRef<KeyboardFocusRevealRequest | null>(null);
   const canvasNavigation = reconcileCanvasNavigationSession(
     canvasNavigationState,
     props.documentEpoch,
@@ -698,6 +712,39 @@ export function RootedMaterial(props: RootedMaterialProps) {
     viewportRenderer,
     wheelMotionActive,
   ]);
+  const keyboardFocusContextRef = useRef({
+    documentEpoch: props.documentEpoch,
+    tree,
+    viewport,
+  });
+  const cancelKeyboardFocusReveal = useCallback(() => {
+    const pending = keyboardFocusRevealRef.current;
+    keyboardFocusRevealRef.current = null;
+    if (pending !== null) cancelAnimationFrame(pending.frameId);
+  }, []);
+  useLayoutEffect(() => {
+    keyboardFocusContextRef.current = {
+      documentEpoch: props.documentEpoch,
+      tree,
+      viewport,
+    };
+    const pending = keyboardFocusRevealRef.current;
+    if (
+      pending !== null &&
+      (
+        pending.documentEpoch !== props.documentEpoch ||
+        pending.treeId !== tree.id ||
+        tree.nodes[pending.nodeId] === undefined
+      )
+    ) cancelKeyboardFocusReveal();
+  }, [cancelKeyboardFocusReveal, props.documentEpoch, tree, viewport]);
+  useEffect(() => {
+    const unsubscribe = subscribePageSuspension(cancelKeyboardFocusReveal);
+    return () => {
+      unsubscribe();
+      cancelKeyboardFocusReveal();
+    };
+  }, [cancelKeyboardFocusReveal]);
   const liveLanguageLayoutBasisRef = useRef<ColumnarLayout | null>(null);
   useLayoutEffect(() => {
     if (viewportRenderer) return;
@@ -1319,7 +1366,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const interruptIndexCameraMotion = useCallback(() => {
     const basis = viewport;
     const world = worldRef.current;
-    const rendered = readRenderedIndexCamera(world, basis);
+    const rendered = readRenderedAnimatedCamera(world, basis);
     const plannedTransform = world?.style.transform ?? "";
     if (rendered !== null && world !== null) {
       // Pointer ownership and its render-edge measurements continue in this
@@ -1347,6 +1394,107 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     return adopted && rendered !== null ? rendered : basis;
   }, [setViewport, viewport]);
+  const directManipulationOwnsCamera = useCallback(() => (
+    lasso.drawing ||
+    stretch.dragging ||
+    nodeDragRef.current !== null ||
+    viewport.gesture !== null ||
+    wheelMotionActive ||
+    wheelMotionTimerRef.current !== null
+  ), [lasso.drawing, stretch.dragging, viewport.gesture, wheelMotionActive]);
+  const revealKeyboardFocusedMaterial = useCallback((nodeId: string, target: HTMLElement) => {
+    cancelKeyboardFocusReveal();
+    if (
+      viewportRenderer ||
+      document.visibilityState !== "visible" ||
+      !target.matches(":focus-visible") ||
+      directManipulationOwnsCamera()
+    ) return;
+
+    // A newly focused passage owns the camera even when it already fits. Adopt
+    // the pixels currently on screen before testing visibility so an older
+    // focus transition cannot finish at its obsolete destination.
+    interruptIndexCameraMotion();
+    const request = {
+      documentEpoch: props.documentEpoch,
+      frameId: 0,
+      nodeId,
+      target,
+      treeId: tree.id,
+    };
+    const frameId = requestAnimationFrame(() => {
+      const pending = keyboardFocusRevealRef.current;
+      if (pending === null || pending.frameId !== frameId) return;
+      keyboardFocusRevealRef.current = null;
+      const context = keyboardFocusContextRef.current;
+      if (
+        pending.documentEpoch !== context.documentEpoch ||
+        pending.treeId !== context.tree.id ||
+        context.tree.nodes[pending.nodeId] === undefined ||
+        !pending.target.isConnected ||
+        pending.target.dataset.thoughtTextId !== pending.nodeId ||
+        document.activeElement !== pending.target ||
+        document.visibilityState !== "visible" ||
+        !pending.target.matches(":focus-visible") ||
+        directManipulationOwnsCamera()
+      ) return;
+      const paper = documentRef.current;
+      const world = worldRef.current;
+      const visual = clientViewport();
+      if (paper === null || world === null || visual === undefined) return;
+      const targetRect = pending.target.getBoundingClientRect();
+      const paperRect = paper.getBoundingClientRect();
+      const occluders = [
+        shellRef.current?.querySelector<HTMLElement>(".tool-rail") ?? null,
+        shellRef.current?.querySelector<HTMLElement>('.material-files[data-open="true"]') ?? null,
+      ].flatMap((element) => element === null ? [] : [clientRect(element.getBoundingClientRect())]);
+      const visualRect = {
+        left: visual.left,
+        top: visual.top,
+        width: visual.right - visual.left,
+        height: visual.bottom - visual.top,
+      };
+      const attention = projectFocusedMaterialRevealField({
+        target: clientRect(targetRect),
+        paper: clientRect(paperRect),
+        visualViewport: visualRect,
+        occluders,
+      });
+      if (attention === null) return;
+      const worldRect = world.getBoundingClientRect();
+      const plan = planCanvasViewportForClientRect(
+        context.viewport,
+        {
+          ...clientRect(targetRect),
+          fontCssPx: Number.parseFloat(getComputedStyle(pending.target).fontSize),
+        },
+        visualRect,
+        { x: worldRect.left - context.viewport.x, y: worldRect.top - context.viewport.y },
+        attention,
+      );
+      if (plan === null) return;
+      if (
+        plan.motion === "smooth" &&
+        !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
+        world.dataset.cameraMotion = "focus";
+        world.style.setProperty("--index-camera-duration", `${plan.durationMs}ms`);
+        void world.getBoundingClientRect();
+      } else {
+        clearIndexCameraMotion(world);
+      }
+      setViewport((current) => sameViewportCamera(current, context.viewport) ? plan.state : current);
+    });
+    keyboardFocusRevealRef.current = Object.freeze({ ...request, frameId });
+  }, [
+    cancelKeyboardFocusReveal,
+    directManipulationOwnsCamera,
+    interruptIndexCameraMotion,
+    props.documentEpoch,
+    setViewport,
+    tree.id,
+    viewportRenderer,
+  ]);
   const selectNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
@@ -1688,13 +1836,60 @@ export function RootedMaterial(props: RootedMaterialProps) {
     voiceReadiness.status === "ready";
   const voiceAvailable = admissionVoiceAvailable;
   const voiceToolAvailable = voiceAvailable && props.admission.state.phase !== "error";
-  const restoreVoiceToolFocus = useCallback(() => {
-    requestAnimationFrame(() => {
+  const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
+  const admissionFocusFrameRef = useRef<Readonly<{
+    basis: AdmissionFocusRestorationBasis;
+    frameId: number;
+  }> | null>(null);
+  const cancelAdmissionFocusRestore = useCallback(() => {
+    const pending = admissionFocusFrameRef.current;
+    admissionFocusFrameRef.current = null;
+    if (pending !== null) cancelAnimationFrame(pending.frameId);
+  }, []);
+  useLayoutEffect(() => {
+    admissionFocusContextRef.current = { tree, documentEpoch: props.documentEpoch };
+    const pending = admissionFocusFrameRef.current;
+    if (pending === null) return;
+    if (!admissionFocusRestorationIsCurrent(
+      pending.basis,
+      tree,
+      props.documentEpoch,
+      document.visibilityState === "visible",
+    )) cancelAdmissionFocusRestore();
+  }, [cancelAdmissionFocusRestore, props.documentEpoch, tree]);
+  useEffect(() => {
+    const unsubscribe = subscribePageSuspension(cancelAdmissionFocusRestore);
+    return () => {
+      unsubscribe();
+      cancelAdmissionFocusRestore();
+    };
+  }, [cancelAdmissionFocusRestore]);
+  const restoreVoiceToolFocus = useCallback((basis: AdmissionFocusRestorationBasis | null) => {
+    cancelAdmissionFocusRestore();
+    if (basis === null) return;
+    if (!admissionFocusRestorationIsCurrent(
+      basis,
+      tree,
+      props.documentEpoch,
+      document.visibilityState === "visible",
+    )) return;
+    const frameId = requestAnimationFrame(() => {
+      const pending = admissionFocusFrameRef.current;
+      if (pending === null || pending.frameId !== frameId) return;
+      admissionFocusFrameRef.current = null;
+      const context = admissionFocusContextRef.current;
+      if (!admissionFocusRestorationIsCurrent(
+        pending.basis,
+        context.tree,
+        context.documentEpoch,
+        document.visibilityState === "visible",
+      )) return;
       shellRef.current
         ?.querySelector<HTMLButtonElement>('[data-tool-id="voice"]')
         ?.focus({ preventScroll: true });
     });
-  }, []);
+    admissionFocusFrameRef.current = Object.freeze({ basis, frameId });
+  }, [cancelAdmissionFocusRestore, props.documentEpoch, tree]);
   const tools = useMemo(
     () =>
       projectTools({
@@ -2305,6 +2500,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const shell = shellRef.current;
     if (shell === null) return;
     const handleWheel = (event: WheelEvent) => {
+      cancelKeyboardFocusReveal();
       if ((event.target as HTMLElement).closest("[data-canvas-interactive]")) return;
       if (lasso.active) {
         event.preventDefault();
@@ -2345,7 +2541,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // field gesture, so this boundary must be explicitly non-passive.
     shell.addEventListener("wheel", handleWheel, { passive: false });
     return () => shell.removeEventListener("wheel", handleWheel);
-  }, [canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
+  }, [cancelKeyboardFocusReveal, canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
 
   return (
     <main
@@ -2396,6 +2592,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
       }}
       onPointerDown={(event) => {
+        cancelKeyboardFocusReveal();
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
         const pointerViewport = interruptIndexCameraMotion();
@@ -2825,6 +3022,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               selectionLayoutMode={selectionPreviewMode}
               selectionPreviewMode={visibleSplitPreviewMode}
               navigation={navigation}
+              onKeyboardFocus={revealKeyboardFocusedMaterial}
               onSelectNode={selectNodeAfterAbort}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
@@ -2994,6 +3192,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   selectionLayoutMode,
   selectionPreviewMode,
   navigation,
+  onKeyboardFocus,
   onSelectNode,
   onSelectLassoSegment,
   activeNodeIds,
@@ -3017,6 +3216,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   selectionLayoutMode: SelectionPreviewMode;
   selectionPreviewMode: SelectionPreviewMode;
   navigation: NavigationState;
+  onKeyboardFocus: (nodeId: string, target: HTMLElement) => void;
   onSelectNode: (nodeId: string) => void;
   onSelectLassoSegment: (nodeId: string, direction: "next" | "previous") => boolean;
   activeNodeIds: ReadonlySet<string>;
@@ -3114,6 +3314,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
               data-thought-text-id={node.id}
               data-visual-projection={isProjected || undefined}
               disabled={isHeldAside && !isHeldAsideRoot}
+              onFocus={(event) => onKeyboardFocus(node.id, event.currentTarget)}
               onKeyDown={(event) => {
                 if (
                   !isLassoKeyboardEligible || event.altKey || event.ctrlKey ||
@@ -3796,6 +3997,15 @@ function clientViewport() {
       };
 }
 
+function clientRect(rect: Pick<DOMRectReadOnly, "left" | "top" | "width" | "height">) {
+  return Object.freeze({
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  });
+}
+
 function hasCoarsePointer(): boolean {
   return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 }
@@ -3867,13 +4077,13 @@ function AdmissionFeedback({
   controller: AdmissionController;
   locale: CanvasLanguage;
   onDismiss: () => void;
-  onReturnFocus: () => void;
+  onReturnFocus: (basis: AdmissionFocusRestorationBasis | null) => void;
   onHeightChange: (height: number) => void;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
   const retryFocusRef = useRef(false);
   const phase = controller.state.phase;
-  const previousPhaseRef = useRef(phase);
+  const previousStateRef = useRef(controller.state);
   useLayoutEffect(() => {
     const element = feedbackRef.current;
     if (element === null) {
@@ -3891,8 +4101,8 @@ function AdmissionFeedback({
     };
   }, [anchor, onHeightChange, phase]);
   useLayoutEffect(() => {
-    const previousPhase = previousPhaseRef.current;
-    previousPhaseRef.current = phase;
+    const previousState = previousStateRef.current;
+    previousStateRef.current = controller.state;
     if (phase === "error") {
       retryFocusRef.current = false;
       feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
@@ -3904,9 +4114,9 @@ function AdmissionFeedback({
     }
     if (phase === "idle") {
       retryFocusRef.current = false;
-      if (previousPhase !== "idle") onReturnFocus();
+      if (previousState.phase !== "idle") onReturnFocus(controller.settlement);
     }
-  }, [onReturnFocus, phase]);
+  }, [controller.settlement, controller.state, onReturnFocus, phase]);
   if (controller.state.phase === "idle" || anchor === null) return null;
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,

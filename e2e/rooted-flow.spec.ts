@@ -348,6 +348,77 @@ test("compact workbench keeps material clear of coarse controls", async ({ page 
   expect(browserErrors).toEqual([]);
 });
 
+test("keyboard focus reveals each passage inside the unobscured paper", async ({ page }) => {
+  for (const viewport of [
+    { width: 1280, height: 800 },
+    { width: 390, height: 844 },
+    { width: 320, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const world = page.locator(".matter-world");
+    const root = page.locator(`[data-thought-text-id="${rootId}"]`);
+    const pointerCamera = await world.getAttribute("style");
+    await root.click();
+    await expect(root).toBeFocused();
+    expect(await world.getAttribute("style")).toBe(pointerCamera);
+
+    await page.keyboard.press("Tab");
+    const focused = page.locator(".spatial-thought__text:focus");
+    await expect(focused).toBeFocused();
+    await expect.poll(() => focusedMaterialReceipt(page)).toEqual({
+      insidePaper: true,
+      overlapsRail: false,
+    });
+  }
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.locator(`[data-thought-text-id="${rootId}"]`).click();
+  await page.keyboard.press("Tab");
+  await expect.poll(() => focusedMaterialReceipt(page)).toEqual({
+    insidePaper: true,
+    overlapsRail: false,
+  });
+  await expect(page.locator(".matter-world")).not.toHaveAttribute("data-camera-motion", "focus");
+
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const root = page.locator(`[data-thought-text-id="${rootId}"]`);
+  await root.click();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await expect(root).toBeFocused();
+  await expect.poll(() => focusedMaterialReceipt(page)).toEqual({
+    insidePaper: true,
+    overlapsRail: false,
+  });
+});
+
+test("direct pointer ownership blocks keyboard camera reveal", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const world = page.locator(".matter-world");
+  const root = page.locator(`[data-thought-text-id="${rootId}"]`);
+  await root.click();
+  const before = await world.getAttribute("style");
+  const box = await root.boundingBox();
+  if (box === null) throw new Error("root passage is not visible");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(350);
+  expect(await world.getAttribute("style")).toBe(before);
+  await expect(page.locator(`[data-thought-text-id="${rootId}"]`)).not.toBeFocused();
+  await page.mouse.up();
+});
+
 // The band between the two narrow layouts was never measured, and material ran
 // under the fixed rail across it: 18px at 341, 8px at 360 (Galaxy S8), 1px at
 // 375 (iPhone SE), flush at 376. These are widths people actually hold.
@@ -388,6 +459,31 @@ async function expectOneLineGuidance(guidance: Locator): Promise<void> {
   expect(receipt.whiteSpace).toBe("nowrap");
   expect(receipt.lineCount).toBe(1);
   expect(receipt.overflows).toBe(false);
+}
+
+async function focusedMaterialReceipt(page: Page): Promise<Readonly<{
+  insidePaper: boolean;
+  overlapsRail: boolean;
+}>> {
+  return page.evaluate(() => {
+    const focused = document.querySelector<HTMLElement>(".spatial-thought__text:focus");
+    const paper = document.querySelector<HTMLElement>(".matter-document");
+    const rail = document.querySelector<HTMLElement>(".tool-rail");
+    if (focused === null || paper === null || rail === null) {
+      return { insidePaper: false, overlapsRail: true };
+    }
+    const target = focused.getBoundingClientRect();
+    const paperRect = paper.getBoundingClientRect();
+    const railRect = rail.getBoundingClientRect();
+    return {
+      insidePaper: target.left >= paperRect.left - 1 &&
+        target.top >= paperRect.top - 1 &&
+        target.right <= paperRect.right + 1 &&
+        target.bottom <= paperRect.bottom + 1,
+      overlapsRail: target.left < railRect.right && target.right > railRect.left &&
+        target.top < railRect.bottom && target.bottom > railRect.top,
+    };
+  });
 }
 
 async function visibleIds(page: Page): Promise<string[]> {

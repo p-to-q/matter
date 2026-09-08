@@ -16,6 +16,7 @@ import type {
 } from "../store/matter-store";
 import {
   AdmissionDriver,
+  type AdmissionSettlement,
   type AdmissionScope,
 } from "./admission-driver";
 import { createBrowserVoicePort } from "./browser-voice";
@@ -37,6 +38,7 @@ export type UseAdmissionInput = {
 
 export type AdmissionController = {
   state: AdmissionInteractionState;
+  settlement: AdmissionSettlement | null;
   repairPresentations: ReadonlyMap<string, AdmissionRepairCommittedChange>;
   start: (anchor: AdmissionAnchor) => void;
   stop: () => void;
@@ -103,6 +105,7 @@ export function useAdmission({
 
   return {
     state,
+    settlement: driver.getSettlement(),
     repairPresentations: repairPresentation.byNode,
     start: (anchor) => driver.start(anchor),
     stop: () => driver.stop(),

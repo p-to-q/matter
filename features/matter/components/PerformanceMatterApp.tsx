@@ -98,6 +98,7 @@ export function PerformanceMatterApp({
       canRedo={false}
       admission={{
         state: admissionState,
+        settlement: null,
         repairPresentations: NO_REPAIR_PRESENTATIONS,
         start: () => undefined,
         stop: () => undefined,

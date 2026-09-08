@@ -148,6 +148,13 @@ describe("AdmissionDriver", () => {
       }),
     );
     expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.driver.getSettlement()).toEqual({
+      anchor: ANCHOR,
+      attempt: 1,
+      documentEpoch: 0,
+      outcome: "committed",
+      token: "voice_1",
+    });
     expect(h.voice.cancel).toHaveBeenCalledTimes(1);
   });
 
@@ -364,6 +371,13 @@ describe("AdmissionDriver", () => {
     h.driver.updateScope({ treeId: "tree_2", revision: 0 });
 
     expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.driver.getSettlement()).toEqual({
+      anchor: ANCHOR,
+      attempt: 1,
+      documentEpoch: 0,
+      outcome: "released",
+      token: "voice_1",
+    });
     expect(h.voice.cancel).toHaveBeenCalledWith({
       interactionId: "voice_1",
       attempt: 1,
