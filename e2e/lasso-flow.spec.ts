@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleLassoGeometry } from "./lasso-driver";
 import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
@@ -54,6 +55,7 @@ for (const viewport of [
     await selectRoot(page);
     await lasso.click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+    await settleLassoGeometry(page);
     const cameraBeforeWheel = await page.locator("main.matter-shell").evaluate((main) => ({
       x: main.getAttribute("data-viewport-x"),
       y: main.getAttribute("data-viewport-y"),
@@ -1258,6 +1260,7 @@ async function drawClosedLoop(
   const margin = 9;
   await page.mouse.move(rect.x - margin, rect.y - margin);
   await page.mouse.down();
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
   await page.mouse.move(rect.x + rect.width + margin, rect.y - margin, { steps: 5 });
   await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
   await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });
