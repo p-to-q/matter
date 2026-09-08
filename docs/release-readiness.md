@@ -1,15 +1,15 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.54 is the next candidate;
-Preview.53 remains the current deployed
-public-origin source: merged `main` `7cd3bb6`, automatic Production deployment
-`6255484923`, and the no-store public check identify version
-`0.2.0-preview.53`. Publication is withheld because its exact strict model-pool
-release probe failed. The latest annotated tag and GitHub prerelease therefore
-remain Preview.52 at `6a4931b`; neither may be advanced by borrowing an older
-pool receipt. The repository maintainer operates only through GitHub: a topic
-push triggers Preview and a `main` update triggers Production. No manual Vercel
+the complete generative product loop yet. Preview.54 is the current deployed
+public-origin product source: PR #92 merged as `main` `08e346c`, exact CI run
+`34202824083` passed, automatic Production deployment `6323365156` succeeded,
+and the bounded no-store public check identified `0.2.0-preview.54` after 35
+probes. Publication is withheld because its exact strict model-pool release
+probe failed. The latest annotated tag and GitHub prerelease therefore remain
+Preview.52 at `6a4931b`; neither may be advanced by borrowing an older pool
+receipt. The repository maintainer operates only through GitHub: a topic push
+triggers Preview and a `main` update triggers Production. No manual Vercel
 command, project binding, credential, or environment edit is part of this
 release. A package version alone proves neither source nor live identity.
 
@@ -122,10 +122,18 @@ browser proof          full controlled Chromium passed 136 cases with 15
                        explicit historical/capability skips, including pointer,
                        touch, keyboard, opened-pocket confirmation, failure,
                        stale-owner, Undo/Redo, reload, and 2,000-node geometry
-GitHub CI proof         pending on the exact topic and merged main identities
-automatic deploy proof pending from GitHub-triggered Preview and Production
-publication state      pending; no tag or prerelease unless the strict exact
-                       Production pool probe also passes
+GitHub CI proof         topic `e5f1831` passed run `34201919255`; PR #92 merged
+                       as `08e346c`, which passed run `34202824083`
+automatic deploy proof exact GitHub-triggered Preview `6323203631` and
+                       Production `6323365156` succeeded; the bounded public
+                       check matched Preview.54 after 35 probes
+publication state      withheld: the exact six-round Production release probe
+                       reached a model 0/6 for Repair, 0/6 for Label, and 6/6
+                       for Inquiry; Repair ended in five `MODEL_TIMEOUT` and one
+                       `TRANSPORT`, while Label ended in five `MODEL_TIMEOUT`
+                       and one `MODEL_UNAVAILABLE`. It reported
+                       `surface-specific` / `surface-degraded`; no Preview.54
+                       tag or GitHub prerelease exists
 ```
 
 ## Provisional release boundary — 0.2.0-preview.53
