@@ -276,7 +276,8 @@ export function inspectDeploymentIcon(bytes, expectedSha256, path) {
 }
 
 /** Read the actual response stream under a byte ceiling. Content-Length is a
- * useful early refusal, but chunked or dishonest peers remain bounded too. */
+ * useful early refusal, but chunked or dishonest peers remain bounded too.
+ * Coalescing as bytes arrive also keeps peer-controlled chunk metadata bounded. */
 export async function readBoundedDeploymentBody(response, maxBytes) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new Error("Deployment response limit must be a non-negative safe integer.");
@@ -293,7 +294,7 @@ export async function readBoundedDeploymentBody(response, maxBytes) {
   }
 
   const reader = response.body.getReader();
-  const chunks = [];
+  let bytes = new Uint8Array(0);
   let total = 0;
   try {
     while (true) {
@@ -302,11 +303,23 @@ export async function readBoundedDeploymentBody(response, maxBytes) {
       if (!(value instanceof Uint8Array)) {
         throw new Error("Deployment response produced an invalid byte chunk.");
       }
-      total += value.byteLength;
-      if (total > maxBytes) {
+      if (value.byteLength > maxBytes - total) {
         throw new Error("Deployment response exceeds its byte limit.");
       }
-      chunks.push(value);
+      const nextTotal = total + value.byteLength;
+      if (nextTotal > bytes.byteLength) {
+        let nextCapacity = bytes.byteLength === 0
+          ? Math.min(16 * 1_024, maxBytes)
+          : bytes.byteLength;
+        while (nextCapacity < nextTotal) {
+          nextCapacity = Math.min(maxBytes, Math.max(nextTotal, nextCapacity * 2));
+        }
+        const grown = new Uint8Array(nextCapacity);
+        grown.set(bytes.subarray(0, total));
+        bytes = grown;
+      }
+      bytes.set(value, total);
+      total = nextTotal;
     }
   } catch (error) {
     try { await reader.cancel(); } catch { /* The original bounded-read failure remains authoritative. */ }
@@ -315,13 +328,7 @@ export async function readBoundedDeploymentBody(response, maxBytes) {
     reader.releaseLock();
   }
 
-  const bytes = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+  return total === bytes.byteLength ? bytes : bytes.slice(0, total);
 }
 
 async function readBoundedDeploymentText(response, maxBytes) {

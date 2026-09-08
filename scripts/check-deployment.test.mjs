@@ -296,6 +296,37 @@ test("bounds deployment bodies by declared and observed bytes", async () => {
   assert.equal(released, 1);
 });
 
+test("snapshots a valid one-megabyte body split into reusable one-byte chunks", async () => {
+  const byteLength = 1_024 * 1_024;
+  const chunk = new Uint8Array(1);
+  let reads = 0;
+  let released = 0;
+  const fragmented = {
+    headers: new Headers({ "content-length": String(byteLength) }),
+    body: {
+      getReader: () => ({
+        async read() {
+          if (reads === byteLength) return { done: true, value: undefined };
+          chunk[0] = reads & 0xff;
+          reads += 1;
+          return { done: false, value: chunk };
+        },
+        async cancel() { assert.fail("a valid bounded stream must not be cancelled"); },
+        releaseLock() { released += 1; },
+      }),
+    },
+  };
+
+  const bytes = await readBoundedDeploymentBody(fragmented, byteLength);
+
+  assert.equal(bytes.byteLength, byteLength);
+  for (const index of [0, 1, 255, 256, byteLength / 2 + 37, byteLength - 2, byteLength - 1]) {
+    assert.equal(bytes[index], index & 0xff);
+  }
+  assert.equal(reads, byteLength);
+  assert.equal(released, 1);
+});
+
 test("uses bounded discovery bodies and keeps unrelated probes header-only", async () => {
   const calls = [];
   let healthReads = 0;
