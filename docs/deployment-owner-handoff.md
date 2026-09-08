@@ -1,15 +1,16 @@
 # Preview deployment-owner handoff
 
-Status: Preview.53 is the current deployed public-origin source through the
-automatic GitHub-linked Production path. Topic `884dfc0` passed CI and automatic
-Preview; merged `main` `7cd3bb6` passed CI, automatic Production deployment
-`6255484923`, and the no-store public version check. Its GitHub prerelease and
-annotated tag are withheld because the exact strict pool release probe failed;
-the latest immutable publication remains Preview.52 at `6a4931b`. The
-repository maintainer pushes only GitHub and observes the linked deployment;
-the deployment owner retains Vercel configuration and credential authority.
-The candidate preserves the current process-local admission perimeter and live
-label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
+Status: Preview.54 is the current deployed public-origin product source through
+the automatic GitHub-linked Production path. Topic `e5f1831` passed CI and exact
+automatic Preview `6323203631`; PR #92 merged as `main` `08e346c`, which passed
+CI, automatic Production deployment `6323365156`, and the bounded no-store
+public version check after 35 probes. Its GitHub prerelease and annotated tag
+are withheld because the exact strict pool release probe failed; the latest
+immutable publication remains Preview.52 at `6a4931b`. The repository
+maintainer pushes only GitHub and observes the linked deployment; the deployment
+owner retains Vercel configuration and credential authority. The candidate
+preserves the current process-local admission perimeter and live label,
+transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
 The source ceilings below are active only per warm instance and are not evidence
@@ -143,6 +144,19 @@ tag and GitHub prerelease stay withheld. Healthy Inquiry latency has been under
 two seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
+
+The exact Preview.54 run failed after the source, CI, automatic deployment, and
+public-origin checks passed. Repair reached a model 0/6: five calls ended in
+`MODEL_TIMEOUT` and one in `TRANSPORT`, with 375 / 7,402 / 7,544ms minimum,
+median, and maximum latency. Label reached a model 0/6: five calls ended in
+`MODEL_TIMEOUT` and one in `MODEL_UNAVAILABLE`, with 12,394 / 12,500 / 13,082ms
+latency. Inquiry reached a model 6/6 in 1,220 / 1,491 / 3,418ms. The harness
+reported `surface-specific` and `surface-degraded`. That is a failed release
+gate, not a deployment failure: Preview.54 may remain online, but no annotated
+tag or GitHub prerelease may be created from this receipt. Do not convert a
+tight retry into apparent evidence. Only one fresh closed-count observation
+after a full recovery window could qualify while Preview.54 remains the exact
+deployed source.
 
 ### Historical withheld publications
 
