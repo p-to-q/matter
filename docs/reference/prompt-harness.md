@@ -199,8 +199,8 @@ renderer order: person-authored text is not the prompt's final
 instruction-shaped token. Gesture-only prompts retain the compatibility branch
 above. The ordering is structural hardening, not a behaviour receipt. Transform
 and Text Swap have an evaluation tool whose next authorized run binds the exact
-`/3` prompts; Inquiry does not yet have a scenario-quality corpus, so renderer
-tests prove shape only.
+`transform/4` and `text-swap/3` prompts; Inquiry does not yet have a
+scenario-quality corpus, so renderer tests prove shape only.
 
 **A cut-off answer is not a short answer.** The pool reads how a relay says it
 stopped, not only what it said. A terminator that positively means the text ran

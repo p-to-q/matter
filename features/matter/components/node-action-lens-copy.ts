@@ -12,7 +12,7 @@ export type NodeActionLensCopy = Readonly<{
 
 const COPY: Readonly<Record<MatterLocale, NodeActionLensCopy>> = Object.freeze({
   "en-US": Object.freeze({
-    actions: "Thought context",
+    actions: "Material actions",
     include: "Include this material branch",
     includeShort: "Include",
     rewrite: "Rewrite this material with AI",

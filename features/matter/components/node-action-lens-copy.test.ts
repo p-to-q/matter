@@ -11,6 +11,7 @@ describe("nodeActionLensCopy", () => {
   });
 
   it("uses the canvas language for the Point Talk entry", () => {
+    expect(nodeActionLensCopy("en-US").actions).toBe("Material actions");
     expect(nodeActionLensCopy("zh-CN").rewrite).toBe("用 AI 改写这段材料");
     expect(nodeActionLensCopy("en-US").rewrite).toBe("Rewrite this material with AI");
   });
