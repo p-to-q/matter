@@ -212,6 +212,7 @@ export type RootedMaterialProps = {
 };
 
 type PublishedGeometry = {
+  baseLayout: ColumnarLayout;
   heightBasis?: TypographyHeightAuthorityToken;
   key: string;
   layout: ColumnarLayout;
@@ -747,29 +748,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [cancelKeyboardFocusReveal]);
   const liveLanguageLayoutBasisRef = useRef<ColumnarLayout | null>(null);
   useLayoutEffect(() => {
-    if (viewportRenderer) return;
-    const canvas = canvasRef.current;
-    if (activeLayout === null || canvas === null) {
-      liveLanguageLayoutBasisRef.current = null;
-      return;
-    }
-    const style = getComputedStyle(canvas);
-    const nodes = activeLayout.boxes.map((box) => Object.freeze({
-      id: box.nodeId,
-      parentId: box.parentId,
-      depth: box.depth,
-      size: Object.freeze({ width: box.width, height: box.height }),
-    } satisfies LayoutNode));
-    const result = layoutColumnarTree({
-      nodes,
-      origin: { x: 0, y: 0 },
-      layoutEpoch: activeLayout.layoutEpoch,
-      columnWidth: readCssPixels(style, "--matter-column-width", 300),
-      columnGap: readCssPixels(style, "--matter-column-gap", 72),
-      siblingGap: readCssPixels(style, "--matter-sibling-gap", 28),
-    });
-    liveLanguageLayoutBasisRef.current = result.ok ? result.layout : null;
-  }, [activeLayout, viewportRenderer]);
+    liveLanguageLayoutBasisRef.current = viewportRenderer
+      ? null
+      : completePublication?.baseLayout ?? null;
+  }, [completePublication, viewportRenderer]);
   const publishLiveLanguageLayout = useCallback((damage: PresentationDamage | null) => {
     const basis = liveLanguageLayoutBasisRef.current;
     const canvas = canvasRef.current;
@@ -2106,6 +2088,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     delete canvas.dataset.viewportRendererError;
     layoutEpochRef.current = result.publication.layout.layoutEpoch;
     setPublished({
+      baseLayout: result.publication.layout,
       heightBasis: result.publication.basis,
       key: publicationKey,
       layout: result.publication.layout,
@@ -2196,10 +2179,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       });
       if (!publishCanvasGeometry(canvas, elements, layout)) return;
       layoutEpochRef.current = layout.layoutEpoch;
-      setPublished({ key: projectionKey, layout });
+      setPublished({ baseLayout: layout, key: projectionKey, layout });
       return;
     }
-    const nodes: LayoutNode[] = [];
+    const baseNodes: LayoutNode[] = [];
+    const admissionNodes: LayoutNode[] | null = admissionPresentationDamage === null
+      ? null
+      : [];
     if (!initialPerformanceMarksRef.current.heightReadStarted) {
       initialPerformanceMarksRef.current.heightReadStarted = true;
       markPerformance("matter:performance:height-read-start");
@@ -2248,18 +2234,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
           text: item.node.text,
         }));
       }
-      nodes.push({
+      const baseNode = {
         id: item.node.id,
         parentId: item.parentId,
         depth: item.depth,
         size: { width: columnWidth, height },
-        presentation: admissionPresentationDamage?.nodeId === item.node.id
-          ? {
+      } satisfies LayoutNode;
+      baseNodes.push(baseNode);
+      admissionNodes?.push(admissionPresentationDamage?.nodeId === item.node.id
+        ? {
+            ...baseNode,
+            presentation: {
               topExtent: admissionPresentationDamage.topExtent,
               bottomExtent: admissionPresentationDamage.bottomExtent,
-            }
-          : undefined,
-      });
+            },
+          }
+        : baseNode);
     }
     if (!initialPerformanceMarksRef.current.heightReadComplete) {
       initialPerformanceMarksRef.current.heightReadComplete = true;
@@ -2270,22 +2260,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
       initialPerformanceMarksRef.current.pureLayoutStarted = true;
       markPerformance("matter:performance:pure-layout-start");
     }
-    const result = layoutColumnarTree({
-      nodes,
+    const baseResult = layoutColumnarTree({
+      nodes: baseNodes,
       origin: { x: 0, y: 0 },
       layoutEpoch: layoutEpochRef.current + 1,
       columnWidth,
       columnGap,
       siblingGap,
     });
+    const displayResult = admissionNodes === null
+      ? baseResult
+      : layoutColumnarTree({
+          nodes: admissionNodes,
+          origin: { x: 0, y: 0 },
+          layoutEpoch: layoutEpochRef.current + 1,
+          columnWidth,
+          columnGap,
+          siblingGap,
+        });
     if (!initialPerformanceMarksRef.current.pureLayoutComplete) {
       initialPerformanceMarksRef.current.pureLayoutComplete = true;
       markPerformance("matter:performance:pure-layout-complete");
     }
-    if (!result.ok) return;
+    if (!baseResult.ok || !displayResult.ok) return;
+    const baseLayout = baseResult.layout;
     const layout = admissionPresentationDamage === null && languagePresentationDamage !== null
-      ? projectVerticalPresentationBand(result.layout, languagePresentationDamage)
-      : result.layout;
+      ? projectVerticalPresentationBand(baseLayout, languagePresentationDamage)
+      : displayResult.layout;
     if (layout === null) return;
     const retry = measurementRetryRef.current;
     if (retry.frame !== null) cancelAnimationFrame(retry.frame);
@@ -2293,7 +2294,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     retry.attempts = 0;
     retry.frame = null;
     if (layoutCacheKey !== null) {
-      retainBoundedCache(measuredLayoutCacheRef.current, layoutCacheKey, layout);
+      retainBoundedCache(measuredLayoutCacheRef.current, layoutCacheKey, baseLayout);
     }
     if (!publishCanvasGeometry(canvas, elements, layout)) return;
     layoutEpochRef.current = layout.layoutEpoch;
@@ -2301,7 +2302,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       initialPerformanceMarksRef.current.geometryPublished = true;
       markPerformance("matter:performance:geometry-dom-published");
     }
-    setPublished({ key: projectionKey, layout });
+    setPublished({ baseLayout, key: projectionKey, layout });
   }, [admissionPresentationDamage, languagePresentationDamage, markPerformance, measureRevision, presentationDamage, projection, projectionKey, props.documentEpoch, tree.rootId, viewportRenderer]);
 
   useLayoutEffect(() => {
