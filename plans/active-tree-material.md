@@ -3278,6 +3278,24 @@ not after a timeout.
 
 ## Current risks
 
+### Preview.55 publication — source deployed, immutable release withheld
+
+State: Production deployed and independently verified on 2026-09-09; strict
+publication gate failed.
+
+```text
+Outcome:    reviewed source is live from main 989d3d1, while the tag and GitHub
+            prerelease remain absent because the exact live model proof failed
+Boundary:   topic/main CI, automatic Preview/Production, bounded public identity,
+            and one paced six-round release-profile observation
+Invariants: a successful deployment cannot substitute for Repair, Label, and
+            Inquiry each reaching a real model on every release-gate call
+Proof:      source gates passed; Repair reached 6/6, Label 0/6, and Inquiry 1/6;
+            the harness reported surface-specific and surface-degraded
+Non-goals:  immediate retries, provider or Vercel configuration changes, relaxed
+            thresholds, manual deployment, or publishing from partial evidence
+```
+
 ### Preview 55 maintainer audit — Elastic focus follows semantic geometry
 
 State: Implemented and independently verified on 2026-09-08.

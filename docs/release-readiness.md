@@ -65,7 +65,7 @@ dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
 
-## Provisional release boundary — 0.2.0-preview.55
+## Release boundary — 0.2.0-preview.55
 
 Preview.55 is a maintainer hardening release. It does not widen the public
 product or provider boundary. Voice focus restoration is now owned by the exact
@@ -130,12 +130,14 @@ persistence proof      deterministic Node and Chromium IndexedDB profiles
                        were 4.25/5.69/11.15/27.05ms; maximum-text medians were
                        15.05/13.33/29.80/52.43ms. Chromium realistic put/get
                        medians were 1.6/0.6ms and maximum-text 7.3/2.8ms
-GitHub CI proof         pending reviewed topic and merged-main runs
-automatic deploy proof pending GitHub-triggered Preview and Production, followed
-                       by the bounded public-origin Preview.55 identity check
-publication state      withheld until the exact deployed Preview.55 source
-                       passes all six Repair, Label, and Inquiry rounds in the
-                       strict Production model-pool release profile
+GitHub CI proof         topic 132e670 passed run 34255465066; merged main
+                       989d3d1 passed run 34257149975
+automatic deploy proof Preview G2VtUt486jLhShhLHNNvjRpnPSxY and Production
+                       79EU4MxFmfEGU9XdhnwPJLozubtQ completed; the bounded
+                       public-origin check matched Preview.55 after one probe
+publication state      withheld: the exact six-round Production release profile
+                       reached a model for Repair 6/6, Label 0/6, and Inquiry
+                       1/6; no annotated tag or GitHub prerelease was created
 ```
 
 ## Provisional release boundary — 0.2.0-preview.54
