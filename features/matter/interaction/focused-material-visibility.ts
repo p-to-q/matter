@@ -26,6 +26,10 @@ export function projectFocusedMaterialRevealField(
   ) return null;
   let field = intersect(input.paper, input.visualViewport);
   if (field === null) return null;
+  if (
+    contains(field, input.target) &&
+    input.occluders.every((occluder) => intersect(occluder, input.target) === null)
+  ) return null;
   for (const occluder of input.occluders) {
     field = largestRemainder(field, occluder);
     if (field === null) return null;

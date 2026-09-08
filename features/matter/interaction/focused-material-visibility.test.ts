@@ -15,9 +15,27 @@ describe("focused material visibility", () => {
     })).toBeNull();
   });
 
-  it("projects the largest readable field when a rail obscures focused material", () => {
+  it("does not move visible material outside a distant rail's largest remainder", () => {
+    expect(projectFocusedMaterialRevealField({
+      target: { left: 260, top: 80, width: 40, height: 90 },
+      paper,
+      visualViewport,
+      occluders: [rail],
+    })).toBeNull();
+  });
+
+  it("projects the largest readable field when material extends outside paper", () => {
     expect(projectFocusedMaterialRevealField({
       target: { left: 300, top: 80, width: 236, height: 90 },
+      paper,
+      visualViewport,
+      occluders: [rail],
+    })).toEqual({ x: 128, y: 388, width: 240, height: 648 });
+  });
+
+  it("projects the largest readable field when a rail obscures focused material", () => {
+    expect(projectFocusedMaterialRevealField({
+      target: { left: 260, top: 250, width: 40, height: 90 },
       paper,
       visualViewport,
       occluders: [rail],
