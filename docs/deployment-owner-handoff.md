@@ -1,11 +1,12 @@
 # Preview deployment-owner handoff
 
-Status: Preview.54 is the current deployed public-origin product source through
-the automatic GitHub-linked Production path. Topic `e5f1831` passed CI and exact
-automatic Preview `6323203631`; PR #92 merged as `main` `08e346c`, which passed
-CI, automatic Production deployment `6323365156`, and the bounded no-store
-public version check after 35 probes. Its GitHub prerelease and annotated tag
-are withheld because the exact strict pool release probe failed; the latest
+Status: Preview.55 is the current deployed public-origin product source through
+the automatic GitHub-linked Production path. Topic `132e670` passed CI run
+`34255465066` and automatic Preview `G2VtUt486jLhShhLHNNvjRpnPSxY`; PR #94
+merged as `main` `989d3d1`, which passed CI run `34257149975`, automatic
+Production `79EU4MxFmfEGU9XdhnwPJLozubtQ`, and the bounded no-store public
+version check after one probe. Its GitHub prerelease and annotated tag are
+withheld because the exact strict pool release probe failed; the latest
 immutable publication remains Preview.52 at `6a4931b`. The repository
 maintainer pushes only GitHub and observes the linked deployment; the deployment
 owner retains Vercel configuration and credential authority. The candidate
@@ -13,11 +14,11 @@ preserves the current process-local admission perimeter and live label,
 transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
-Preview.55 is the reviewed next-source candidate. It changes no provider gate,
-secret, route, cache identity, or deployment ownership. Its repository and
-browser evidence is provisional until reviewed GitHub CI, the automatic
-Production deployment, the bounded public-origin identity check, and the exact
-Preview.55 model-pool gate below all complete.
+Preview.55 is the reviewed and deployed source. It changes no provider gate,
+secret, route, cache identity, or deployment ownership. Repository, browser,
+GitHub CI, automatic Production, and bounded public-origin identity evidence are
+complete. The exact Preview.55 model-pool gate failed, so immutable publication
+is withheld.
 
 Exact runtime candidate `5db2c62` passed the complete repository check and all
 139 controlled Chromium cases, with 15 explicit historical or capability skips
@@ -159,6 +160,20 @@ tag and GitHub prerelease stay withheld. Healthy Inquiry latency has been under
 two seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
+
+### Preview.55 withheld receipt
+
+The exact Preview.55 run failed after topic CI and Preview, merged-main CI,
+automatic Production, and the bounded public-origin identity check all passed.
+Repair reached a model 6/6 in 1,609 / 2,140 / 2,570ms minimum, median, and
+maximum latency. Label reached a model 0/6: every call ended in `MODEL_TIMEOUT`
+and used the deterministic floor, at 12,383 / 12,423 / 12,452ms. Inquiry reached
+a model 1/6; the other five calls were refused with four `MODEL_TIMEOUT` and one
+`MODEL_UNAVAILABLE`, at 2,163 / 16,393 / 16,524ms. The harness reported
+`surface-specific` and `surface-degraded`. This is a failed release gate, not a
+deployment failure: Preview.55 remains online, but no annotated tag or GitHub
+prerelease may be created from this receipt. A later publication attempt needs
+one fresh closed-count run after a full recovery window, not an immediate retry.
 
 ### Preview.54 withheld receipt
 
