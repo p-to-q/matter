@@ -336,7 +336,20 @@ type NodeDragGesture = {
 };
 
 export function RootedMaterial(props: RootedMaterialProps) {
-  const { canRedo, canUndo, navigation, onRedo, onRemoveSelected, onUndo, tree } = props;
+  const {
+    canRedo,
+    canUndo,
+    documentEpoch,
+    navigation,
+    onClearSelection,
+    onExitFocus,
+    onFocusNode,
+    onRedo,
+    onRemoveSelected,
+    onSelectNode,
+    onUndo,
+    tree,
+  } = props;
   if (props.performanceViewport !== undefined && props.performanceMarking !== true) {
     throw new Error("Viewport research requires the explicit performance fixture.");
   }
@@ -391,49 +404,58 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (
       navigation.selectedNodeId !== null &&
       isNodeHeldAside(tree, next, navigation.selectedNodeId)
-    ) props.onClearSelection();
+    ) onClearSelection();
     if (
       navigation.mode === "focus" &&
       isNodeHeldAside(tree, next, navigation.focusNodeId)
-    ) props.onExitFocus();
+    ) onExitFocus();
     setWorkingContextState((current) => ({
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       epoch: current.epoch + 1,
       heldAsideRootIds: next,
     }));
-  }, [heldAsideRootIds, navigation.focusNodeId, navigation.mode, navigation.selectedNodeId, props, tree]);
+  }, [
+    heldAsideRootIds,
+    navigation.focusNodeId,
+    navigation.mode,
+    navigation.selectedNodeId,
+    documentEpoch,
+    onClearSelection,
+    onExitFocus,
+    tree,
+  ]);
   const focusWorkingNode = useCallback((nodeId: string) => {
     setWorkingContextState((current) => {
-      const currentIds = current.documentEpoch === props.documentEpoch
+      const currentIds = current.documentEpoch === documentEpoch
         ? current.heldAsideRootIds
         : createHeldAsideNodeIds();
       const next = restoreHeldAsideLineage(tree, currentIds, nodeId);
-      return next === currentIds && current.documentEpoch === props.documentEpoch
+      return next === currentIds && current.documentEpoch === documentEpoch
         ? current
         : {
-            documentEpoch: props.documentEpoch,
+            documentEpoch,
             epoch: current.epoch + 1,
             heldAsideRootIds: next,
           };
     });
-    props.onFocusNode(nodeId);
-  }, [props, tree]);
+    onFocusNode(nodeId);
+  }, [documentEpoch, onFocusNode, tree]);
   const restoreWorkingNode = useCallback((nodeId: string) => {
     setWorkingContextState((current) => {
-      const currentIds = current.documentEpoch === props.documentEpoch
+      const currentIds = current.documentEpoch === documentEpoch
         ? current.heldAsideRootIds
         : createHeldAsideNodeIds();
       const next = restoreHeldAsideLineage(tree, currentIds, nodeId);
-      return next === currentIds && current.documentEpoch === props.documentEpoch
+      return next === currentIds && current.documentEpoch === documentEpoch
         ? current
         : {
-            documentEpoch: props.documentEpoch,
+            documentEpoch,
             epoch: current.epoch + 1,
             heldAsideRootIds: next,
           };
     });
-    props.onSelectNode(nodeId);
-  }, [props, tree]);
+    onSelectNode(nodeId);
+  }, [documentEpoch, onSelectNode, tree]);
   const shellRef = useRef<HTMLElement>(null);
   const documentRef = useRef<HTMLElement>(null);
   const materialPlaneRef = useRef<HTMLDivElement>(null);
@@ -1482,44 +1504,44 @@ export function RootedMaterial(props: RootedMaterialProps) {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = null;
-    props.onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, props]);
+    onSelectNode(nodeId);
+  }, [abortFixedExpansion, interruptIndexCameraMotion, onSelectNode]);
   const focusIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       mode: "focus",
       nodeId,
     });
     requestMeasurement();
     focusWorkingNode(nodeId);
-  }, [abortFixedExpansion, focusWorkingNode, interruptIndexCameraMotion, props.documentEpoch]);
+  }, [abortFixedExpansion, documentEpoch, focusWorkingNode, interruptIndexCameraMotion]);
   const restoreIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       mode: "full",
       nodeId,
     });
     requestMeasurement();
     restoreWorkingNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, props.documentEpoch, restoreWorkingNode]);
+  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, restoreWorkingNode]);
   const selectIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
-      documentEpoch: props.documentEpoch,
+      documentEpoch,
       mode: "full",
       nodeId,
     });
     requestMeasurement();
-    props.onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, props]);
+    onSelectNode(nodeId);
+  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, onSelectNode]);
   const archiveAfterAbort = useMemo<MaterialArchiveActions | undefined>(() => {
     if (props.archive === undefined) return undefined;
     return Object.freeze({
