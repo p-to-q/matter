@@ -74,7 +74,8 @@ describe("admissionRepairToTreeCommand", () => {
     expect(admissionRepairToTreeCommand(tree, {
       ...values(tree.id, node.id, node.text, node.updatedAt),
       expectedText: `${node.text}\uD800`,
-    })).toMatchObject({ ok: false });
+      text: `${node.text} repaired`,
+    })).toMatchObject({ ok: false, error: { code: "INVALID_REPAIR" } });
     expect(admissionRepairToTreeCommand(tree, {
       ...values(tree.id, node.id, node.text, node.updatedAt),
       text: `${node.text}\uDC00`,

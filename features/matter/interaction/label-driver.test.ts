@@ -486,7 +486,8 @@ describe("LabelDriver", () => {
     const floor = labelFor(instance.getState(), "root");
 
     // Syntactically valid, but unrelated to the exact material in the request.
-    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "量子芯片研发计划"));
+    expect(recorded.pending).toHaveLength(1);
+    recorded.pending[0]!.resolve(success(recorded.calls[0]!, "量子芯片研发计划"));
     await settle();
     expect(labelFor(instance.getState(), "root")).toBe(floor);
     expect(instance.getState().entries.get("root")?.pendingOperationId).toBeNull();
@@ -501,7 +502,8 @@ describe("LabelDriver", () => {
     await settle();
     const floor = labelFor(instance.getState(), "root");
 
-    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "bad\uD800label"));
+    expect(recorded.pending).toHaveLength(1);
+    recorded.pending[0]!.resolve(success(recorded.calls[0]!, "bad\uD800label"));
     await settle();
     expect(labelFor(instance.getState(), "root")).toBe(floor);
     expect(store.stored.get("root")).toBeUndefined();

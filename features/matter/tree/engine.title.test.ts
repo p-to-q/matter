@@ -13,6 +13,7 @@ describe("replace-title", () => {
       .toBe(`${"a".repeat(DOCUMENT_TITLE_MAX_CODE_UNITS - 2)}🚀`);
 
     const tree = normalizeDocumentTree(createSeededDocument().tree);
+    const originalTitle = tree.title;
     expect(renameDocumentCommand(tree, {
       commandId: "malformed-title",
       title: "bad\uD800title",
@@ -32,7 +33,7 @@ describe("replace-title", () => {
       },
     });
     expect(direct).toMatchObject({ ok: false, error: { code: "TREE_INVARIANT_VIOLATION" } });
-    expect(tree.title).not.toContain("\uDC00");
+    expect(tree.title).toBe(originalTitle);
   });
 
   it("renames independently from material text and restores through its inverse", () => {
