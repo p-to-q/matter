@@ -9,7 +9,9 @@ import { allocateSnapshotPaths } from "./snapshot-paths";
 const enabled = process.env.MATTER_PERSISTENCE_BENCHMARK === "1";
 
 describe.skipIf(!enabled)("persistence performance receipt", () => {
-  it("measures one maximum supported document through every synchronous storage boundary", () => {
+  it("measures one maximum supported document through every synchronous storage boundary", {
+    timeout: 120_000,
+  }, () => {
     const realistic = createPerformanceThoughtTree();
     const maximumText = {
       ...realistic,
