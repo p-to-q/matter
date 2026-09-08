@@ -19,6 +19,15 @@ browser evidence is provisional until reviewed GitHub CI, the automatic
 Production deployment, the bounded public-origin identity check, and the exact
 Preview.55 model-pool gate below all complete.
 
+Exact runtime candidate `5db2c62` passed the complete repository check and all
+139 controlled Chromium cases, with 15 explicit historical or capability skips
+and no retries. Its formal production 2,000-node receipt passed at 188ms FCP,
+322.1ms layout ready, 90ms cold-attributed long task, and 61ms interaction-task
+p95; three additional independent cold runs passed at 87/78/93ms with 2,000
+nodes, 4,483 elements, and zero blocking rounds. The deterministic persistence
+and Chromium IndexedDB benchmark also passed. These are local source receipts,
+not substitutes for the GitHub, deployment, public-origin, or model-pool gates.
+
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
 

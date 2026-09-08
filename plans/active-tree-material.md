@@ -3301,9 +3301,10 @@ State: Implemented and independently verified on 2026-09-08.
 
 ```text
 Outcome:    the opt-in persistence benchmark completes both its deterministic
-            Node profile and local Chromium IndexedDB profile
-Boundary:   the benchmark test case owns one explicit wall-clock hang guard;
-            production persistence, benchmark rounds, and performance policy do not change
+            Node profile and local Chromium IndexedDB profile; the real maximum
+            archive expansion test also keeps enough local wall-clock authority
+Boundary:   each genuinely heavy boundary case owns its explicit hang guard;
+            production persistence, fixtures, and global test policy do not change
 Invariants: a slower development machine may finish the receipt, while a hung
             benchmark still fails; no global Vitest timeout is widened
 Proof:      npm run bench:persistence prints both receipts and exits zero
@@ -3383,14 +3384,52 @@ State: Implemented and independently verified on 2026-09-08.
 
 ```text
 Outcome:    a broken or hostile deployment cannot make the release verifier
-            buffer an unbounded HTML, JSON, or icon response
-Boundary:   one byte-counted stream reader with per-artifact ceilings
+            buffer an unbounded HTML, JSON, or icon response or retain an
+            attacker-controlled list of tiny chunk objects
+Boundary:   one byte-counted, geometrically growing stream buffer with
+            per-artifact ceilings
 Invariants: header-only probes remain body-free; redirects and timeouts do not
             change; declared length is only a preflight, never the authority
-Proof:      exact-limit, oversized declared, and oversized chunked bodies fail
-            deterministically while current deployment fixtures still pass
+Proof:      exact-limit, oversized declared, oversized chunked, cancellation,
+            and one million reusable one-byte chunks pass their exact contracts
+            while current deployment fixtures still pass
 Non-goals:  crawling deployment pages, changing cache/security contracts,
             trusting compression metadata, or raising production asset budgets
+```
+
+### Preview 55 maintainer audit — transcript scans reject impossible work early
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    maximum mixed Han/Latin transcript input that contains no protected
+            literal bypasses the expensive literal matcher before punctuation
+Boundary:   one conservative prefilter in the shared protected-literal owner
+Invariants: every full matcher alternative still has a necessary prefilter
+            signal; protected source text is never normalized or partially scanned
+Proof:      the maximum alternating-script fast path and 18 positive forms cover
+            fences, quotes, URLs, email, paths, flags, addresses, versions, and identifiers
+Non-goals:  changing punctuation semantics, adding a cache, weakening protected
+            literals, or moving transcript work off the synchronous admission path
+```
+
+### Preview 55 maintainer audit — geometry publication keeps one material render
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    the 2,000-passage list remains memoized when measured geometry is
+            published, and Elastic reuses the immutable base layout directly
+Boundary:   explicit base/display geometry ownership plus callbacks depending
+            only on their actual document, interaction, and navigation owners
+Invariants: DOM shape, presentation damage, cache bounds, layout epochs, Elastic
+            confirmation, and the <100ms production receipt threshold do not change
+Proof:      diagnostic comparison found onSelectNode as the sole initial changed
+            prop; full Chromium passed 139/139 active cases, the formal receipt
+            passed at 90ms cold and 61ms interaction p95, and three independent
+            cold runs passed at 87/78/93ms with zero blocking rounds
+Non-goals:  viewport windowing promotion, event delegation, changing thresholds,
+            removing native buttons, or hiding work outside performance marks
 ```
 
 ### Synthetic speech expression receipt — real content, no committed recording
