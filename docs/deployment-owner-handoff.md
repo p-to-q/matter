@@ -13,6 +13,12 @@ preserves the current process-local admission perimeter and live label,
 transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
+Preview.55 is the reviewed next-source candidate. It changes no provider gate,
+secret, route, cache identity, or deployment ownership. Its repository and
+browser evidence is provisional until reviewed GitHub CI, the automatic
+Production deployment, the bounded public-origin identity check, and the exact
+Preview.55 model-pool gate below all complete.
+
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
 
@@ -24,9 +30,9 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.54 prerelease after the exact
+The repository owner has directed one Preview.55 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
-deployment gates. This is fresh Preview.54-only authority; it does not extend
+deployment gates. This is fresh Preview.55-only authority; it does not extend
 the historical Preview.49 authorization or permit the repository maintainer to
 run a manual Vercel command or edit Vercel configuration. The automatic
 promotion does not prove that external controls exist. Issues #34 and #68
@@ -128,22 +134,24 @@ whose failure reaches a person, and a recorded expectation for inquiry latency
 so that "slow" is distinguishable from "down" without reading this file. Until
 that exists, every occurrence of this will be found the same way.
 
-### Current Preview.54 publication gate
+### Current Preview.55 publication gate
 
-After the exact Preview.54 source has passed merged-main CI, its automatic
+After the exact Preview.55 source has passed merged-main CI, its automatic
 Production deployment, and the bounded public-origin version check, run:
 
-`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.54`
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.55`
 
 Publication is allowed only when that one exact, paced run identifies
-Preview.54 and reports both `pool-healthy` and `surface-usable`, with repair,
+Preview.55 and reports both `pool-healthy` and `surface-usable`, with repair,
 label, and Inquiry producing a real accepted result on every call. A partial
 result, an older successful receipt, or a successful deployment is not a
-substitute. If it fails, Preview.54 source may remain deployed but its annotated
+substitute. If it fails, Preview.55 source may remain deployed but its annotated
 tag and GitHub prerelease stay withheld. Healthy Inquiry latency has been under
 two seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
+
+### Preview.54 withheld receipt
 
 The exact Preview.54 run failed after the source, CI, automatic deployment, and
 public-origin checks passed. Repair reached a model 0/6: five calls ended in

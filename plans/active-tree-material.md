@@ -3278,6 +3278,23 @@ not after a timeout.
 
 ## Current risks
 
+### Preview 55 maintainer audit — Elastic focus follows semantic geometry
+
+State: Implemented and independently verified on 2026-09-08.
+
+```text
+Outcome:    a focused Elastic grip remains focused when a font or viewport
+            invalidation replaces its DOM geometry
+Boundary:   one selected segment and physical top/bottom grip identity; Tab,
+            outside focus, and outside pointer input release the request
+Invariants: drag settlement and address/Enter/Space confirmation do not change;
+            pointer focus cannot trap later focus outside the grip
+Proof:      a Chromium receipt forces geometry replacement between focus and
+            PageDown, then proves the successor owns focus and degree changes
+Non-goals:  retaining stale client coordinates, retrying a rejected lasso
+            stroke, changing tab order, or making the grip a submit target
+```
+
 ### Preview 55 maintainer audit — persistence proof owns its wall clock
 
 State: Implemented and independently verified on 2026-09-08.
