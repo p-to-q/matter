@@ -1223,6 +1223,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onPreview: updateElasticPreview,
     onCommit: startFixedExpansion,
   });
+  const stretchKeyDown = stretch.keyDown;
   useLayoutEffect(() => {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
@@ -1237,8 +1238,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [cancelTransform, transformState.phase]);
   const abortElasticExpansion = useCallback(() => {
     if (transformState.phase === "requesting") cancelTransform();
-    stretch.keyDown("Escape");
-  }, [cancelTransform, stretch, transformState.phase]);
+    stretchKeyDown("Escape");
+  }, [cancelTransform, stretchKeyDown, transformState.phase]);
   const abortFixedExpansion = useCallback(() => {
     closePointTalk();
     abortElasticExpansion();
@@ -1295,11 +1296,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     if (transformState.phase !== "requesting") return;
     const clearCommittedDegree = (event: KeyboardEvent) => {
-      if (event.key === "Escape") stretch.keyDown("Escape");
+      if (event.key === "Escape") stretchKeyDown("Escape");
     };
     window.addEventListener("keydown", clearCommittedDegree);
     return () => window.removeEventListener("keydown", clearCommittedDegree);
-  }, [stretch, transformState.phase]);
+  }, [stretchKeyDown, transformState.phase]);
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
