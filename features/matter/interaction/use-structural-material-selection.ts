@@ -28,6 +28,12 @@ type StructuralSelectionInput = Readonly<{
   viewportKey: string;
 }>;
 
+/** Cached line boxes belong to the exact render-edge elements that produced them. */
+type OwnedStructuralMaterialMeasurement = StructuralMaterialMeasurement & Readonly<{
+  positioningElement: HTMLElement;
+  scopeElement: HTMLElement;
+}>;
+
 /**
  * Measures whole-node selection at the rendering edge. The material document
  * keeps only structural identity; line boxes remain disposable browser state.
@@ -35,7 +41,7 @@ type StructuralSelectionInput = Readonly<{
 export function useStructuralMaterialSelection(
   input: StructuralSelectionInput,
 ): ProjectedLayoutReceipt | null {
-  const [measurement, setMeasurement] = useState<StructuralMaterialMeasurement | null>(null);
+  const [measurement, setMeasurement] = useState<OwnedStructuralMaterialMeasurement | null>(null);
   const receiptBasis = useMemo<ProjectedLayoutBasis>(() => ({
     addressKey: wholeNodeAddressKey(input.nodeId ?? "", input.source),
     documentEpoch: input.documentEpoch,
@@ -52,11 +58,24 @@ export function useStructuralMaterialSelection(
     input.treeId,
     input.viewportKey,
   ]);
+  const positioningElement = input.positioningRef.current;
+  const scopeElement = input.scopeRef.current;
   const receipt = useMemo(
-    () => !input.enabled || input.nodeId === null
+    () => !input.enabled || input.nodeId === null || input.geometryBasis === null ||
+        positioningElement === null || scopeElement === null || measurement === null ||
+        measurement.positioningElement !== positioningElement ||
+        measurement.scopeElement !== scopeElement
       ? null
       : rebaseStructuralMaterialMeasurement(measurement, input.geometryBasis, receiptBasis),
-    [input.enabled, input.geometryBasis, input.nodeId, measurement, receiptBasis],
+    [
+      input.enabled,
+      input.geometryBasis,
+      input.nodeId,
+      measurement,
+      positioningElement,
+      receiptBasis,
+      scopeElement,
+    ],
   );
   const receiptRef = useRef(receipt);
   const transitioningRef = useRef(new Set<EventTarget>());
@@ -79,6 +98,8 @@ export function useStructuralMaterialSelection(
       !input.enabled || input.nodeId === null || input.geometryBasis === null ||
       positioningElement === null
     ) {
+      // `receipt` is already null for every invalid input. The retained cache
+      // also carries both DOM owners, so replacement elements cannot revive it.
       transitioningRef.current.clear();
       transitionOwnerRef.current = null;
       return;
@@ -150,7 +171,9 @@ export function useStructuralMaterialSelection(
         });
         setMeasurement(nextReceipt === null ? null : Object.freeze({
           geometryBasis,
+          positioningElement,
           receipt: nextReceipt,
+          scopeElement: scope,
         }));
       } catch {
         setMeasurement(null);

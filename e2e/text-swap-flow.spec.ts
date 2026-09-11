@@ -103,6 +103,51 @@ test.describe("passage-local Point and Talk", () => {
       leftDifference: 0,
       upperGap: 14,
     });
+    const chromeMeasurements = await page.evaluate(async () => {
+      const bubble = document.querySelector<HTMLElement>(".point-talk");
+      const paper = document.querySelector<HTMLElement>(".matter-document");
+      const files = document.querySelector<HTMLElement>(".material-files");
+      if (bubble === null || paper === null || files === null) {
+        throw new Error("Point Talk chrome fixtures are missing");
+      }
+      const originalBounds = bubble.getBoundingClientRect.bind(bubble);
+      const originalFilesOpen = files.getAttribute("data-open");
+      let reads = 0;
+      Object.defineProperty(bubble, "getBoundingClientRect", {
+        configurable: true,
+        value: () => {
+          reads += 1;
+          return originalBounds();
+        },
+      });
+      const afterLayout = () => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+      const measureAfter = async (change: () => void) => {
+        reads = 0;
+        change();
+        await afterLayout();
+        return reads;
+      };
+      const modal = await measureAfter(() => {
+        paper.setAttribute("data-canvas-modal-open", "true");
+      });
+      paper.removeAttribute("data-canvas-modal-open");
+      await afterLayout();
+      const index = await measureAfter(() => {
+        files.toggleAttribute("data-open", originalFilesOpen !== "true");
+      });
+      if (originalFilesOpen === null) files.removeAttribute("data-open");
+      else files.setAttribute("data-open", originalFilesOpen);
+      Object.defineProperty(bubble, "getBoundingClientRect", {
+        configurable: true,
+        value: originalBounds,
+      });
+      return { index, modal };
+    });
+    expect(chromeMeasurements.modal).toBeGreaterThan(0);
+    expect(chromeMeasurements.index).toBeGreaterThan(0);
+    await expect(composer).toBeVisible();
     await expect(composer.getByRole("button", { name: "取消", exact: true })).toHaveCount(0);
     await direction.fill(DIRECTION);
     await page.getByRole("button", { name: "改写", exact: true }).click();

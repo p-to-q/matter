@@ -31,19 +31,22 @@ export function useThoughtLabels(input: Readonly<{
 }>): ThoughtLabels {
   const locale = input.locale ?? "zh-CN";
   const enabled = input.enabled ?? true;
-  const repository = useMemo(
-    () => (enabled ? createLazyLabelRepository() : undefined),
-    [enabled],
-  );
   const driver = useMemo(
     () => new LabelDriver(
       { tree: input.tree, documentEpoch: input.documentEpoch },
-      { request: requestLabel, createOperationId, locale, repository },
+      {
+        request: requestLabel,
+        createOperationId,
+        locale,
+        // LabelDriver closes its repository, so every driver must own a
+        // distinct instance across locale/enablement replacement.
+        repository: enabled ? createLazyLabelRepository() : undefined,
+      },
     ),
     // The driver owns the whole session; a new tree revision is scope, not
     // identity, and is delivered through `observe`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [locale, repository],
+    [enabled, locale],
   );
   const subscribe = useCallback((listener: () => void) => driver.subscribe(listener), [driver]);
   const getSnapshot = useCallback(() => driver.getState(), [driver]);

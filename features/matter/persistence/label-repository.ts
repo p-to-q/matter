@@ -83,6 +83,7 @@ export function createIndexedDbLabelRepository(): LabelRepository {
       try {
         const database = await handle.open();
         const transaction = database.transaction("labels", "readonly");
+        observeTransactionCompletion(transaction);
         // Queue every request before awaiting one. IndexedDB may auto-commit a
         // transaction once control returns to the event loop.
         const stored = await Promise.all(nodeIds.map(
@@ -125,6 +126,7 @@ export function createIndexedDbLabelRepository(): LabelRepository {
             // Derived labels may be regenerated; a person's name may not. A
             // quota retry therefore sacrifices only model cache entries.
             const transaction = database.transaction("labels", "readwrite");
+            observeTransactionCompletion(transaction);
             await retainNewestModelLabels(transaction.store, 0);
             await transaction.store.put(stored);
             await transaction.done;
@@ -148,6 +150,7 @@ export function createIndexedDbLabelRepository(): LabelRepository {
       try {
         const database = await handle.open();
         const transaction = database.transaction("labels", "readwrite");
+        observeTransactionCompletion(transaction);
         // Queue the complete batch before yielding. Awaiting each request in a
         // loop can let IndexedDB auto-commit between two otherwise related keys.
         await Promise.all(nodeIds.map(
@@ -167,6 +170,7 @@ export function createIndexedDbLabelRepository(): LabelRepository {
       try {
         const database = await handle.open();
         const transaction = database.transaction("labels", "readwrite");
+        observeTransactionCompletion(transaction);
         const keys = await transaction.store.index("treeId").getAllKeys(treeId);
         await Promise.all(keys.map((key) => transaction.store.delete(key)));
         await transaction.done;
@@ -186,6 +190,7 @@ async function putModelLabel(
   stored: StoredLabel,
 ): Promise<void> {
   const transaction = database.transaction("labels", "readwrite");
+  observeTransactionCompletion(transaction);
   const existing = await transaction.store.get(stored.key);
   // A second tab may have accepted a person's name while this model request
   // was in flight. The database transaction, not one tab's driver queue, is
@@ -195,6 +200,18 @@ async function putModelLabel(
     await retainNewestModelLabels(transaction.store, MAX_CACHED_MODEL_LABELS);
   }
   await transaction.done;
+}
+
+/**
+ * Observes transaction completion before its first request can reject.
+ * Callers still await the original promise to report commit failure; this
+ * early branch only prevents an aborted transaction from becoming unhandled
+ * when a request fails before control reaches that final await.
+ */
+function observeTransactionCompletion(
+  transaction: Readonly<{ done: Promise<unknown> }>,
+): void {
+  void transaction.done.catch(() => undefined);
 }
 
 /** Parses a stored row. A row that fails any check is dropped, never repaired. */

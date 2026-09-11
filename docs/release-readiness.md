@@ -97,6 +97,26 @@ of 1,196,550 raw / 379,215 gzip bytes. CI, Production identity, strict live mode
 the annotated tag, and the GitHub prerelease remain publication gates; none is
 claimed by this local receipt.
 
+Final review closed five lifecycle gaps without widening product authority.
+Point Talk now remeasures only when its exact paper-modal or index-visibility
+owner changes. Cached structural geometry carries both DOM owners that produced
+it, so missing or replacement elements cannot revive old pixels. A label driver
+owns one closeable repository for its locale lifetime, and explicit label
+transactions observe completion before their first request. Unit upgrade proof
+now binds open success to completed reclaim and open failure to versionchange
+abort; real Chromium also upgraded a v3 database from 4,002 to 4,000 model rows
+while preserving a manual name, then preserved another manual name across a
+locale-owned driver replacement.
+
+The exact source passed 97 Node checks, 48-document link proof, the 462-file
+seven-layer architecture gate, 2,224 Vitest cases with four explicit skips,
+type generation, TypeScript, zero-warning lint, production build, and runtime
+artifact inspection. The final controlled Chromium sweep passed 141 cases with
+15 explicit skips and reported three timing failures while the contended host
+took 10.2 minutes rather than its prior 3.6-minute baseline; each failed case
+then passed in one isolated run against the same source and artifact. Topic CI
+remains the independent full-suite authority before merge.
+
 The existing dependency surface is patched to Next 16.3.4, Sharp 0.35.4,
 js-yaml 4.3.2, Vitest 4.1.11, and the matching Next lint rules. `npm audit`
 reports no high or critical vulnerability. Its three remaining moderate entries

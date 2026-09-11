@@ -3,6 +3,100 @@ import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
 
+test("a v3 model-label cache upgrades atomically and converges to its global bound", async ({ page }) => {
+  await page.goto("/robots.txt");
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase("ptoq-matter");
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error ?? new Error("database deletion failed"));
+      request.onblocked = () => reject(new Error("database deletion was blocked"));
+    });
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open("ptoq-matter", 3);
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        const labels = database.createObjectStore("labels", { keyPath: "key" });
+        labels.createIndex("treeId", "treeId");
+        labels.put({
+          storageSchemaVersion: 1,
+          key: "tree_upgrade manual_name",
+          treeId: "tree_upgrade",
+          nodeId: "manual_name",
+          label: "person-owned name",
+          origin: "user",
+          basis: null,
+          updatedAt: "2026-09-01T00:00:00.000Z",
+        });
+        for (let index = 0; index < 4_002; index += 1) {
+          const nodeId = `legacy_${index}`;
+          labels.put({
+            storageSchemaVersion: 1,
+            key: `tree_upgrade ${nodeId}`,
+            treeId: "tree_upgrade",
+            nodeId,
+            label: `legacy ${index}`,
+            origin: "model",
+            basis: "0123456789abcdef12",
+            updatedAt: new Date(index).toISOString(),
+          });
+        }
+      };
+      request.onsuccess = () => {
+        request.result.close();
+        resolve();
+      };
+      request.onerror = () => reject(request.error ?? new Error("v3 database creation failed"));
+      request.onblocked = () => reject(new Error("v3 database creation was blocked"));
+    });
+  });
+
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await expect.poll(() => page.evaluate(async () =>
+    new Promise<{
+      count: number;
+      hasEvictionIndex: boolean;
+      manualLabel: string | null;
+      modelCount: number;
+      version: number;
+    }>((resolve, reject) => {
+      const request = indexedDB.open("ptoq-matter");
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction("labels", "readonly");
+        const store = transaction.objectStore("labels");
+        const countRequest = store.count();
+        const modelCountRequest = store.index("originUpdatedAt").count(
+          IDBKeyRange.bound(["model", ""], ["model", "\uffff"]),
+        );
+        const manualRequest = store.get("tree_upgrade manual_name");
+        transaction.oncomplete = () => {
+          resolve({
+            count: countRequest.result,
+            hasEvictionIndex: store.indexNames.contains("originUpdatedAt"),
+            manualLabel: manualRequest.result?.label ?? null,
+            modelCount: modelCountRequest.result,
+            version: database.version,
+          });
+          database.close();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error ?? new Error("label inspection failed"));
+        };
+      };
+      request.onerror = () => reject(request.error ?? new Error("upgraded database open failed"));
+    })
+  )).toEqual({
+    count: 4_001,
+    hasEvictionIndex: true,
+    manualLabel: "person-owned name",
+    modelCount: 4_000,
+    version: 4,
+  });
+});
+
 test("the material index names a thought instead of previewing it", async ({ page }) => {
   const labelRequests: string[] = [];
   page.on("request", (request) => {
@@ -88,6 +182,28 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   await reloaded.locator(".material-file__rename").fill("");
   await reloaded.locator(".material-file__rename").press("Enter");
   await expect(reloaded.locator(".material-file__title")).not.toHaveText("过去的另一种生活");
+});
+
+test("a manual name survives locale-owned label-driver replacement", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const row = page.locator(".material-file").first();
+  await expect(row).toBeVisible();
+  await row.focus();
+  await row.press("F2");
+  const editor = row.locator(".material-file__rename");
+  await expect(editor).toBeFocused();
+  await editor.fill("跨语言保留的名字");
+  await editor.press("Enter");
+  await expect(row.locator(".material-file__title")).toHaveText("跨语言保留的名字");
+
+  await page.locator('[data-chrome-control="language"]').click();
+  await page.getByRole("menuitemradio", { name: "English", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
+  await expect(row.locator(".material-file__title")).toHaveText("跨语言保留的名字");
+  await expect(row).toHaveAttribute("data-label-origin", "user");
 });
 
 test("a label is generated once, not once per reload", async ({ page }) => {

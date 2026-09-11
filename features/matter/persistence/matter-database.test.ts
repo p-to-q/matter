@@ -18,12 +18,17 @@ describe("Matter database upgrades", () => {
     vi.stubGlobal("IDBKeyRange", { bound: vi.fn(() => range) });
     const createIndex = vi.fn();
     const deleted: number[] = [];
-    const cursorAt = (position: number): unknown => position >= MAX_CACHED_MODEL_LABELS + 2
-      ? null
-      : {
-          delete: vi.fn(async () => { deleted.push(position); }),
-          continue: vi.fn(async () => cursorAt(position + 1)),
-        };
+    let resolveOpen: ((database: unknown) => void) | null = null;
+    const cursorAt = (position: number): unknown => {
+      if (position >= 2) {
+        resolveOpen?.(database);
+        return null;
+      }
+      return {
+        delete: vi.fn(async () => { deleted.push(position); }),
+        continue: vi.fn(async () => cursorAt(position + 1)),
+      };
+    };
     const openCursor = vi.fn(async () => cursorAt(0));
     const count = vi.fn(async () => MAX_CACHED_MODEL_LABELS + 2);
     const labels = {
@@ -36,28 +41,31 @@ describe("Matter database upgrades", () => {
       close: vi.fn(),
     };
     const transaction = { objectStore: vi.fn(() => labels) };
-    vi.mocked(openDB).mockResolvedValue(database as never);
+    vi.mocked(openDB).mockImplementation((_name, _version, callbacks) =>
+      new Promise((resolve) => {
+        resolveOpen = resolve;
+        callbacks?.upgrade?.(
+          database as never,
+          3,
+          4,
+          transaction as never,
+          new Event("upgradeneeded") as IDBVersionChangeEvent,
+        );
+      }) as never,
+    );
     const handle = createMatterDatabaseHandle();
 
     await handle.open();
-    const callbacks = vi.mocked(openDB).mock.calls[0]?.[2];
-    callbacks?.upgrade?.(
-      database as never,
-      3,
-      4,
-      transaction as never,
-      new Event("upgradeneeded") as IDBVersionChangeEvent,
-    );
 
     expect(transaction.objectStore).toHaveBeenCalledWith("labels");
     expect(createIndex).toHaveBeenCalledExactlyOnceWith(
       "originUpdatedAt",
       ["origin", "updatedAt"],
     );
-    await vi.waitFor(() => expect(deleted).toEqual([
+    expect(deleted).toEqual([
       0,
       1,
-    ]));
+    ]);
     expect(count).toHaveBeenCalledExactlyOnceWith(range);
     expect(openCursor).toHaveBeenCalledExactlyOnceWith(range);
   });
@@ -75,23 +83,28 @@ describe("Matter database upgrades", () => {
       objectStoreNames: { contains: () => true },
       close: vi.fn(),
     };
+    let rejectOpen: ((reason: unknown) => void) | null = null;
+    const migrationFailure = new Error("versionchange aborted");
     const transaction = {
-      abort: vi.fn(),
+      abort: vi.fn(() => rejectOpen?.(migrationFailure)),
       objectStore: vi.fn(() => labels),
     };
-    vi.mocked(openDB).mockResolvedValue(database as never);
+    vi.mocked(openDB).mockImplementation((_name, _version, callbacks) =>
+      new Promise((_resolve, reject) => {
+        rejectOpen = reject;
+        callbacks?.upgrade?.(
+          database as never,
+          3,
+          4,
+          transaction as never,
+          new Event("upgradeneeded") as IDBVersionChangeEvent,
+        );
+      }) as never,
+    );
     const handle = createMatterDatabaseHandle();
 
-    await handle.open();
-    vi.mocked(openDB).mock.calls[0]?.[2]?.upgrade?.(
-      database as never,
-      3,
-      4,
-      transaction as never,
-      new Event("upgradeneeded") as IDBVersionChangeEvent,
-    );
-
-    await vi.waitFor(() => expect(transaction.abort).toHaveBeenCalledOnce());
+    await expect(handle.open()).rejects.toBe(migrationFailure);
+    expect(transaction.abort).toHaveBeenCalledOnce();
     expect(count).toHaveBeenCalledOnce();
     expect(openCursor).toHaveBeenCalledOnce();
   });

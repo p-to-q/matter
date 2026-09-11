@@ -3321,11 +3321,13 @@ Boundary:   the label driver owns per-node mutation order; one IndexedDB write
 Invariants: a user name is never cache-evicted or overwritten by a late model result;
             deterministic labels are never stored; malformed and over-bound repository
             input opens no database; storage failure keeps the deterministic floor
-Proof:      81 focused tests; blocked model-put then rename; put then remove; stale
-            cross-tab model versus user; raw/unique 2,000-node bounds; invalid owner,
-            timestamp and basis; fresh/existing DB-v4 upgrade with immediate legacy
-            convergence and abort-on-failure; commit failure; atomic oldest-model
-            capacity reclaim and user-quota retry
+Proof:      82 focused unit tests plus real Chromium; blocked model-put then rename;
+            put then remove; stale cross-tab model versus user; raw/unique 2,000-node
+            bounds; invalid owner, timestamp and basis; fresh/existing DB-v4 upgrade
+            with immediate legacy convergence and abort-on-failure; early request
+            plus transaction failure; real v3 convergence from 4,002 to 4,000 model
+            rows while preserving a manual name; locale replacement retaining a
+            manual name; atomic oldest-model capacity reclaim and user-quota retry
 Non-goals:  automatic retention policy for historical user names, names in archives or
             material, a generic cache service, or foreground dependence on IndexedDB
 ```
@@ -3356,7 +3358,9 @@ Invariants: Text Swap selection, protocol, provider policy, voice, failure recov
 Proof:      105 focused tests plus real Chromium: a 1.2 s material-plane transition
             samples over 40 frames with zero stale address paint; reopen under a new
             selected surface changes the path; 240/241 astral code-point boundary;
-            375 px placement, 170 px fail-closed, one painted mark, exact commit and Undo
+            paper-modal and index-visibility changes each trigger a fresh bounded
+            measurement without unmounting; 375 px placement, 170 px fail-closed,
+            one painted mark, exact commit and Undo
 Non-goals:  a global interaction reducer, new visual tokens, changing the AI glyph,
             production provider promotion, passage focus semantics, or text policy
 ```
@@ -3366,6 +3370,10 @@ while the addressed material had no visible owner and hover could remount Contro
 Fog over the active field. Point Talk now consumes the same disposable receipt for
 both glyph address and placement. Temporary receipt invalidation hides placement
 until fresh geometry arrives; it does not invent coordinates or cancel valid work.
+The field observes only the paper modal and index visibility owners that change
+its available bounds, while a cached receipt carries the exact positioning and
+query DOM owners that produced it. Missing or replacement owners therefore fail
+closed without a synchronous effect-driven render.
 
 ### Maintainer correction — performance attribution cannot relax the gate
 

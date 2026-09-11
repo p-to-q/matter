@@ -33,7 +33,11 @@ row in the same IndexedDB write transaction; model write plus capacity reclaim
 also commits atomically. If a manual write reaches quota, one atomic retry first
 reclaims model rows, never another manual name. The v4 database upgrade itself
 converges any older model cache to the same limit; migration failure aborts the
-version change instead of committing an unbounded half-upgrade.
+version change instead of committing an unbounded half-upgrade. Repository
+transactions attach a completion observer before their first request, so a
+request error plus automatic transaction abort cannot leave an unhandled
+rejection; callers still await that same completion promise before claiming a
+successful commit.
 
 `llms.txt` and `llms-full.txt` are public product-description documents with a
 one-hour browser cache. They contain no person-specific state. The health probe

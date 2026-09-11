@@ -268,6 +268,33 @@ describe("IndexedDB label repository Unicode boundary", () => {
     })).resolves.toEqual({ ok: false, code: "STORAGE_UNAVAILABLE" });
   });
 
+  it("observes transaction completion before an earlier request rejects", async () => {
+    let rejectDone: ((reason: unknown) => void) | null = null;
+    const done = new Promise<void>((_resolve, reject) => {
+      rejectDone = reject;
+    });
+    const failure = new DOMException("aborted", "AbortError");
+    const get = vi.fn().mockImplementation(async () => {
+      rejectDone?.(failure);
+      throw failure;
+    });
+    const transaction = {
+      store: { get, put: vi.fn(), index: vi.fn() },
+      done,
+    };
+    vi.mocked(openDB).mockResolvedValue({ transaction: () => transaction } as never);
+    const repository = createIndexedDbLabelRepository();
+
+    await expect(repository.put("tree_1", {
+      nodeId: "node_1",
+      label: "model name",
+      origin: "model",
+      basis: "0123456789abcdef12",
+      updatedAt: "2026-09-08T00:00:00.000Z",
+    })).resolves.toEqual({ ok: false, code: "STORAGE_UNAVAILABLE" });
+    expect(get).toHaveBeenCalledOnce();
+  });
+
   it("reclaims model cache and retries once when a manual name reaches quota", async () => {
     const range = Object.freeze({ kind: "model-range" });
     vi.stubGlobal("IDBKeyRange", { bound: vi.fn(() => range) });

@@ -144,6 +144,30 @@ export function PointTalkComposer({
       ? null
       : visiblePointTalkToolRail(boundaryRef.current);
     if (toolRail !== null) observer?.observe(toolRail);
+    const paper = boundaryRef.current;
+    const shell = paper?.closest<HTMLElement>(".matter-shell") ?? null;
+    let observedFiles: HTMLElement | null = null;
+    const chromeObserver = paper === null
+      ? null
+      : new MutationObserver(() => {
+          observeFiles();
+          scheduleMeasure();
+        });
+    const observeFiles = () => {
+      const files = shell?.querySelector<HTMLElement>(".material-files") ?? null;
+      if (files === null || files === observedFiles) return;
+      observedFiles = files;
+      chromeObserver?.observe(files, {
+        attributes: true,
+        attributeFilter: ["data-open"],
+      });
+    };
+    if (paper !== null) chromeObserver?.observe(paper, {
+      attributes: true,
+      attributeFilter: ["data-canvas-modal-open"],
+    });
+    if (shell !== null) chromeObserver?.observe(shell, { childList: true, subtree: true });
+    observeFiles();
     const visual = window.visualViewport;
     window.addEventListener("resize", scheduleMeasure);
     window.addEventListener("scroll", scheduleMeasure, true);
@@ -151,6 +175,7 @@ export function PointTalkComposer({
     visual?.addEventListener("scroll", scheduleMeasure);
     return () => {
       observer?.disconnect();
+      chromeObserver?.disconnect();
       if (measurementFrameRef.current !== null) cancelAnimationFrame(measurementFrameRef.current);
       measurementFrameRef.current = null;
       window.removeEventListener("resize", scheduleMeasure);

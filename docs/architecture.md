@@ -132,8 +132,11 @@ material plane, and visual viewport. A pure geometry policy intersects those
 surfaces, projects a bounded optical response from the current canvas zoom, and
 returns the fixed position plus usable width; damaged or unusably narrow
 geometry fails closed. Resize, scroll, and observer invalidations coalesce into
-one animation-frame measurement. No measured value enters the tree, store,
-protocol, or history.
+one animation-frame measurement. The composer observes only the paper modal and
+material-index visibility attributes that change its usable field; cached line
+boxes remain authoritative only for the exact positioning and query DOM owners
+that produced them. Replacement or missing owners therefore cannot revive old
+pixels. No measured value enters the tree, store, protocol, or history.
 Admission and Elastic share one client-side ownership gate: while admission is
 not idle, Elastic receives no actionable selection, renders no grips, and can
 send no turn. Returning to idle revalidates the transient lasso address before
@@ -266,7 +269,11 @@ The material index and its label driver are one secondary lazy client surface:
 canvas geometry can publish before that chunk arrives, while index actions wait
 for the index's own DOM rather than borrowing canvas readiness. The IndexedDB
 repository is a second lazy boundary inside that surface and retries a failed
-load on the next explicit operation.
+load on the next explicit operation. Each locale-owned label driver constructs
+and closes its own repository instance; replacing a driver can never hand its
+closed adapter to the successor. Explicit IndexedDB transactions observe
+completion before issuing their first fallible request, then still await the
+original completion promise when reporting whether the commit settled.
 
 The complete canvas retains one bounded native geometry owner per live thought
 across transient focus and fold projections. Only the active projection carries
