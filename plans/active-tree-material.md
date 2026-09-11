@@ -3413,6 +3413,27 @@ scrolling and chrome-only fonts cannot revoke or republish canvas-owned geometry
 Unknown or material-owned font events remain fail-closed. The formal three-round
 production receipt remains the release authority.
 
+### Preview.56 publication — source deployed, immutable release withheld
+
+State: Production deployed and independently verified on 2026-09-11; strict
+publication gate failed.
+
+```text
+Outcome:    reviewed source is live from main 536d792, while the tag and GitHub
+            prerelease remain absent because the exact live model proof failed
+Boundary:   topic/main CI, automatic Preview/Production, bounded public identity,
+            and one paced six-round release-profile observation
+Invariants: deployment success and deterministic floors cannot substitute for
+            Repair, Label, and Inquiry each producing an accepted model result
+            on every release-gate call
+Proof:      topic run 34557892540 and main run 34558357704 passed; Production
+            6385805166 and the one-probe public identity check passed; Repair
+            accepted 5/6, Label accepted 1/6, and Inquiry accepted 6/6; the probe
+            reported pool-degraded and surface-degraded
+Non-goals:  immediate retries, inferred prompt changes, weakened adjudication,
+            provider or Vercel configuration changes, or partial publication
+```
+
 ### Preview.55 publication — source deployed, immutable release withheld
 
 State: Production deployed and independently verified on 2026-09-09; strict

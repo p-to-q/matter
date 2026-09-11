@@ -1,13 +1,13 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.55 is the current deployed
-public-origin product source: PR #94 merged as `main` `989d3d1`, exact CI run
-`34257149975` passed, automatic Production deployment
-`79EU4MxFmfEGU9XdhnwPJLozubtQ` succeeded, and the bounded no-store public check
-identified `0.2.0-preview.55` after one probe. Publication is withheld because
-its exact strict model-pool release
-probe failed. The latest annotated tag and GitHub prerelease therefore remain
+the complete generative product loop yet. Preview.56 is the current deployed
+public-origin product source: PR #96 merged as `main` `536d792`, exact CI run
+`34558357704` passed, automatic Production deployment
+`GcFQr3beW677Y6easpT2JobKuHzo` succeeded, and the bounded no-store public check
+identified `0.2.0-preview.56` after one probe. Publication is withheld because
+its exact strict model-pool release probe failed. The latest annotated tag and
+GitHub prerelease therefore remain
 Preview.52 at `6a4931b`; neither may be advanced by borrowing an older pool
 receipt. The repository maintainer operates only through GitHub: a topic push
 triggers Preview and a `main` update triggers Production. No manual Vercel
@@ -68,10 +68,11 @@ dependency monitor.
 
 ## Release boundary — 0.2.0-preview.56
 
-Preview.56 is a maintainer hardening candidate, not a wider product or provider
-claim. Elastic now treats a drag as degree selection only: release never spends
-a model turn, while Enter, Space, the painted address, and the opened pocket are
-the explicit confirmation surfaces. A stationary grip click remains inert.
+Preview.56 is a deployed maintainer hardening source, not a wider product or
+provider claim. Elastic now treats a drag as degree selection only: release
+never spends a model turn, while Enter, Space, the painted address, and the
+opened pocket are the explicit confirmation surfaces. A stationary grip click
+remains inert.
 Point Talk owns one visible whole-node address, rejects stale geometry, and
 keeps its bounded direction input and mutation authority separate from Lasso.
 
@@ -114,8 +115,9 @@ type generation, TypeScript, zero-warning lint, production build, and runtime
 artifact inspection. The final controlled Chromium sweep passed 141 cases with
 15 explicit skips and reported three timing failures while the contended host
 took 10.2 minutes rather than its prior 3.6-minute baseline; each failed case
-then passed in one isolated run against the same source and artifact. Topic CI
-remains the independent full-suite authority before merge.
+then passed in one isolated run against the same source and artifact. Final
+topic CI passed run `34557892540`; merged-main CI independently passed the same
+complete suite in run `34558357704`.
 
 The existing dependency surface is patched to Next 16.3.4, Sharp 0.35.4,
 js-yaml 4.3.2, Vitest 4.1.11, and the matching Next lint rules. `npm audit`
@@ -132,6 +134,23 @@ out of the initial graph.
 This release adds no dependency, durable material field, provider SDK, prompt
 authority, remote audio path, hidden retrieval, service worker, or manual
 deployment route.
+
+```text
+source proof           PR #96 final head e88d06c passed topic CI run
+                       34557892540; merged main 536d792 passed run 34558357704
+automatic deploy proof Preview A1HV4GbsmLw7Cocrq8ubcntZMR9p and Production
+                       GcFQr3beW677Y6easpT2JobKuHzo completed; GitHub Production
+                       deployment 6385805166 settled success
+public identity proof  the bounded no-store check matched Preview.56 after one
+                       probe at https://matter.ptoq.io
+publication state      withheld: the exact paced six-round release profile
+                       reported pool-degraded and surface-degraded. Repair
+                       reached a model 5/6 with one MODEL_TIMEOUT; Label reached
+                       the pool 5/6 but produced only one accepted model label,
+                       with four MODEL_REJECTED and one MODEL_TIMEOUT; Inquiry
+                       produced an accepted model answer 6/6. No annotated tag
+                       or GitHub prerelease was created
+```
 
 ## Release boundary — 0.2.0-preview.55
 
