@@ -25,8 +25,6 @@ Only the active projection carries `data-thought-id`, enters geometry queries,
 or participates in display, pointer, focus, and accessibility; durable tree
 changes still add and remove owners normally. The material index and its label
 runtime now form one secondary lazy surface, independent of canvas readiness.
-Each label driver owns its closeable repository, and disposable line geometry
-belongs to the exact render-edge elements that measured it.
 
 Why: production evidence isolated repeated destruction and rebuilding of roughly
 6,000 DOM nodes and 24,000 attributes as the cause of 178–235ms main-thread
@@ -40,9 +38,7 @@ Forecloses: treating fold or focus as permission to discard and recreate the
 same bounded geometry, counting a hidden resident owner as visible material,
 using canvas `data-layout-ready` as a readiness signal for a lazy secondary
 surface, letting sibling scroll or chrome-only font loading revoke a canvas-owned
-stroke, reusing a closed repository after locale replacement, reviving pixels
-from a replaced DOM owner, and weakening the 100ms target or runtime ceiling to
-absorb avoidable work.
+stroke, and weakening the 100ms target or runtime ceiling to absorb avoidable work.
 
 ## 2026-09-08 — transient owners and exact text fail closed
 
