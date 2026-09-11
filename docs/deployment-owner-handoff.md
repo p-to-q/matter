@@ -1,10 +1,10 @@
 # Preview deployment-owner handoff
 
-Status: Preview.55 is the current deployed public-origin product source through
-the automatic GitHub-linked Production path. Topic `132e670` passed CI run
-`34255465066` and automatic Preview `G2VtUt486jLhShhLHNNvjRpnPSxY`; PR #94
-merged as `main` `989d3d1`, which passed CI run `34257149975`, automatic
-Production `79EU4MxFmfEGU9XdhnwPJLozubtQ`, and the bounded no-store public
+Status: Preview.56 is the current deployed public-origin product source through
+the automatic GitHub-linked Production path. Topic `e88d06c` passed CI run
+`34557892540` and automatic Preview `A1HV4GbsmLw7Cocrq8ubcntZMR9p`; PR #96
+merged as `main` `536d792`, which passed CI run `34558357704`, automatic
+Production `GcFQr3beW677Y6easpT2JobKuHzo`, and the bounded no-store public
 version check after one probe. Its GitHub prerelease and annotated tag are
 withheld because the exact strict pool release probe failed; the latest
 immutable publication remains Preview.52 at `6a4931b`. The repository
@@ -14,20 +14,22 @@ preserves the current process-local admission perimeter and live label,
 transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
-Preview.55 is the reviewed and deployed source. It changes no provider gate,
-secret, route, cache identity, or deployment ownership. Repository, browser,
-GitHub CI, automatic Production, and bounded public-origin identity evidence are
-complete. The exact Preview.55 model-pool gate failed, so immutable publication
-is withheld.
+Preview.56 is the reviewed and deployed source. It changes no provider gate,
+secret, deployment ownership, or public Transform/Text Swap authority.
+Repository, browser, GitHub CI, automatic Production, and bounded public-origin
+identity evidence are complete. The exact Preview.56 model-pool gate failed, so
+immutable publication is withheld.
 
-Exact runtime candidate `5db2c62` passed the complete repository check and all
-139 controlled Chromium cases, with 15 explicit historical or capability skips
-and no retries. Its formal production 2,000-node receipt passed at 188ms FCP,
-322.1ms layout ready, 90ms cold-attributed long task, and 61ms interaction-task
-p95; three additional independent cold runs passed at 87/78/93ms with 2,000
-nodes, 4,483 elements, and zero blocking rounds. The deterministic persistence
-and Chromium IndexedDB benchmark also passed. These are local source receipts,
-not substitutes for the GitHub, deployment, public-origin, or model-pool gates.
+Exact Preview.56 source `e88d06c` passed 97 Node checks, 48-document link proof,
+the 462-file seven-layer architecture gate, 2,224 Vitest cases with four
+explicit skips, type generation, TypeScript, zero-warning lint, production
+build, and runtime artifact inspection. Its formal production 2,000-node
+receipt passed all three rounds with whole-session and measurement long-task
+maxima of 69ms and 68ms, 4,474 DOM elements, and an initial runtime of
+1,196,550 raw / 379,215 gzip bytes. A contended local Chromium sweep reported
+three timing failures and each passed alone against the same artifact; both
+final topic and merged-main CI then passed the complete browser suite. These
+are source receipts, not substitutes for the public model-pool gate.
 
 The source ceilings below are active only per warm instance and are not evidence
 of distributed edge control.
@@ -40,9 +42,9 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.55 prerelease after the exact
+The repository owner has directed one Preview.56 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
-deployment gates. This is fresh Preview.55-only authority; it does not extend
+deployment gates. This is fresh Preview.56-only authority; it does not extend
 the historical Preview.49 authorization or permit the repository maintainer to
 run a manual Vercel command or edit Vercel configuration. The automatic
 promotion does not prove that external controls exist. Issues #34 and #68
@@ -144,22 +146,45 @@ whose failure reaches a person, and a recorded expectation for inquiry latency
 so that "slow" is distinguishable from "down" without reading this file. Until
 that exists, every occurrence of this will be found the same way.
 
-### Current Preview.55 publication gate
+### Current Preview.56 publication gate
 
-After the exact Preview.55 source has passed merged-main CI, its automatic
+After the exact Preview.56 source has passed merged-main CI, its automatic
 Production deployment, and the bounded public-origin version check, run:
 
-`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.55`
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.56`
 
 Publication is allowed only when that one exact, paced run identifies
-Preview.55 and reports both `pool-healthy` and `surface-usable`, with repair,
+Preview.56 and reports both `pool-healthy` and `surface-usable`, with repair,
 label, and Inquiry producing a real accepted result on every call. A partial
 result, an older successful receipt, or a successful deployment is not a
-substitute. If it fails, Preview.55 source may remain deployed but its annotated
+substitute. If it fails, Preview.56 source may remain deployed but its annotated
 tag and GitHub prerelease stay withheld. Healthy Inquiry latency has been under
 two seconds, so a correct result is fast, not marginal. Pacing beyond the local
 health window reduces one attribution ambiguity; it does not prove requests hit
 the same instance or that provider intermittence is gone.
+
+### Preview.56 withheld receipt
+
+The exact Preview.56 run failed after topic and merged-main CI, automatic
+Preview and Production, and the bounded public-origin identity check all
+passed. Repair produced an accepted model result 5/6; one call used the
+deterministic floor after `MODEL_TIMEOUT`, at 1,729 / 2,046 / 7,725ms minimum,
+median, and maximum latency. Label reached a provider completion 5/6 but
+produced an accepted model name only 1/6: four completions were refused as
+`MODEL_REJECTED` and one used the deterministic floor after `MODEL_TIMEOUT`, at
+1,198 / 1,448 / 13,163ms. Inquiry produced an accepted model answer 6/6 at
+1,203 / 1,656 / 2,024ms. The probe reported `pool-degraded` and
+`surface-degraded`.
+
+This is a failed release gate, not a deployment or fail-closed-product failure:
+Preview.56 remains online, deterministic Repair and Label floors remained
+available, and no annotated tag or GitHub prerelease was created. The result is
+also not authority to weaken label adjudication. The public response and
+production scalar receipt intentionally contain neither model text nor user
+material, and do not distinguish `invalid-label` from
+`not-better-than-provisional`; a prompt or policy change therefore needs its own
+synthetic corpus evidence rather than inference from this aggregate run. Do not
+turn an immediate retry into an apparent recovery receipt.
 
 ### Preview.55 withheld receipt
 
