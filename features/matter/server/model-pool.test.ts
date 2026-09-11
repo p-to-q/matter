@@ -185,6 +185,21 @@ describe("pool adapter", () => {
     expect(call?.init.redirect).toBe("error");
   });
 
+  it("owns response bytes before a provider reuses its stream buffer", async () => {
+    const payload = JSON.stringify({
+      choices: [{ finish_reason: "stop", message: { content: "exact material" } }],
+    });
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => new Response(reusedByteStream(new TextEncoder().encode(payload))),
+    );
+
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .resolves.toEqual({ text: "exact material" });
+  });
+
   it("sends a configured non-thinking mode at the provider boundary", async () => {
     let body: Record<string, unknown> = {};
     const adapter = createPoolAdapter(
@@ -1228,3 +1243,21 @@ describe("pool adapter", () => {
       .rejects.not.toThrow(/sk-secret-value/u);
   });
 });
+
+function reusedByteStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  const backing = new Uint8Array(8);
+  let offset = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      if (offset === bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      const length = Math.min(backing.byteLength, bytes.byteLength - offset);
+      backing.set(bytes.subarray(offset, offset + length));
+      offset += length;
+      controller.enqueue(backing.subarray(0, length));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    },
+  });
+}

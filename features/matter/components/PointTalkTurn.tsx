@@ -8,6 +8,7 @@ import type { SegmentSelection } from "../material/text-segments";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import type { TextSwapCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
+import type { PointTalkBounds } from "./point-talk-placement";
 import { PointTalkComposer } from "./PointTalkComposer";
 
 /** The complete generative turn stays out of the initial canvas bundle. */
@@ -25,6 +26,7 @@ export function PointTalkTurn({
   onClose,
   onCommitted,
   positioningRef,
+  targetBounds,
   tree,
   voiceAvailable,
 }: Readonly<{
@@ -45,6 +47,7 @@ export function PointTalkTurn({
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
   positioningRef: RefObject<HTMLElement | null>;
+  targetBounds: PointTalkBounds | null;
   tree: ThoughtTree;
   voiceAvailable: boolean;
 }>) {
@@ -99,6 +102,7 @@ export function PointTalkTurn({
         controller.submit();
       }}
       positioningRef={positioningRef}
+      targetBounds={targetBounds}
       voiceAvailable={voiceAvailable}
     />
   );

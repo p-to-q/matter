@@ -132,8 +132,11 @@ material plane, and visual viewport. A pure geometry policy intersects those
 surfaces, projects a bounded optical response from the current canvas zoom, and
 returns the fixed position plus usable width; damaged or unusably narrow
 geometry fails closed. Resize, scroll, and observer invalidations coalesce into
-one animation-frame measurement. No measured value enters the tree, store,
-protocol, or history.
+one animation-frame measurement. The composer observes only the paper modal and
+material-index visibility attributes that change its usable field; cached line
+boxes remain authoritative only for the exact positioning and query DOM owners
+that produced them. Replacement or missing owners therefore cannot revive old
+pixels. No measured value enters the tree, store, protocol, or history.
 Admission and Elastic share one client-side ownership gate: while admission is
 not idle, Elastic receives no actionable selection, renders no grips, and can
 send no turn. Returning to idle revalidates the transient lasso address before
@@ -189,9 +192,11 @@ guessed target.
 
 A label is derived presentation, not material: it never enters `ThoughtTree`,
 material history, the material snapshot, or an archive, so it needs no document
-protocol field and no migration. Accepted model labels and manual names may live
-in their own browser repository; the deterministic label remains the authority
-on a miss. Failure is invisible by construction, because the label a person is
+protocol field or material migration. Accepted model labels and manual names may live
+in their own browser repository. Model rows are a globally bounded disposable
+cache; manual names are durable local choices and are never selected by cache
+eviction. The deterministic label remains the authority on a miss. Failure is
+invisible by construction, because the label a person is
 reading was already usable before the request was sent.
 [`reference/thought-label.md`](reference/thought-label.md) records the rejected
 alternatives.
@@ -260,9 +265,31 @@ Only the tree engine applies durable mutations. Pointer, audio level, partial
 transcript, selection geometry, focus, and fold remain transient. Derived labels
 stay outside material and history; accepted model labels and manual names may
 persist only in their separate browser repository under the boundary above.
+The material index and its label driver are one secondary lazy client surface:
+canvas geometry can publish before that chunk arrives, while index actions wait
+for the index's own DOM rather than borrowing canvas readiness. The IndexedDB
+repository is a second lazy boundary inside that surface and retries a failed
+load on the next explicit operation. Each locale-owned label driver constructs
+and closes its own repository instance; replacing a driver can never hand its
+closed adapter to the successor. Explicit IndexedDB transactions observe
+completion before issuing their first fallible request, then still await the
+original completion promise when reporting whether the commit settled.
+
+The complete canvas retains one bounded native geometry owner per live thought
+across transient focus and fold projections. Only the active projection carries
+`data-thought-id` and enters layout queries; every other resident owner is
+`display:none`, absent from hit testing, focus, and the accessibility tree.
+Durable mutations still reconcile the resident set from `ThoughtTree`, so this
+render cache cannot preserve removed material or become document state.
 Canvas pan, node-drag targeting, and lasso drawing are mutually exclusive
 pointer modes. An outside-paper lasso particle echo is render-only; the semantic
 stroke and text targets remain client-space geometry over visible canvas text.
+Only scrolling that shares the canvas coordinate space may revoke an in-flight
+lasso receipt; an independently scrolling secondary surface cannot take that
+pointer authority through a capture-phase document listener. Likewise a named
+font loaded only for sibling chrome cannot republish material layout or revoke
+its stroke; unknown font events and families present in the active material's
+computed stack remain fail-closed.
 Node drag uses one O(n) target projection at gesture start, then DOM hit testing
 and lane-local binary search during pointer movement. Preview never enters React
 state or `ThoughtTree`; pointer release commits one parent/index command.

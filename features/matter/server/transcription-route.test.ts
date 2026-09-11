@@ -392,6 +392,23 @@ describe("Matter transcription route", () => {
     });
   });
 
+  it("owns multipart bytes before the sender reuses its stream buffer", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_FIXTURE_ADMISSION_TRANSCRIPT = "字节保持原样。";
+    const boundary = "MatterReusableBoundary";
+    const body = reusedByteStream(validMultipartBytes(boundary));
+
+    const response = await POST(requestFromStream(body, {
+      "content-type": `multipart/form-data; boundary=${boundary}`,
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      interactionId: "voice_01",
+      transcript: "字节保持原样。",
+    });
+  });
+
   it("rejects empty, unsupported, and overlong recordings with stable codes", async () => {
     const empty = validForm();
     empty.set("audio", new Blob([], { type: "audio/webm" }), "voice.webm");
@@ -492,4 +509,22 @@ function validMultipartBytes(boundary: string): Uint8Array {
     `--${boundary}--`,
     "",
   ].join("\r\n"));
+}
+
+function reusedByteStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  const backing = new Uint8Array(64);
+  let offset = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      if (offset === bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      const length = Math.min(backing.byteLength, bytes.byteLength - offset);
+      backing.set(bytes.subarray(offset, offset + length));
+      offset += length;
+      controller.enqueue(backing.subarray(0, length));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    },
+  });
 }

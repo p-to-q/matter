@@ -60,6 +60,25 @@ describe("selected material address", () => {
     for (const body of bodies) expect(body).not.toMatch(/opacity:\s*0\s*(;|$)/);
   });
 
+  it("gives Point Talk one shared material address and withholds the competing lens", () => {
+    expect(rooted).toContain('source: "point-talk"');
+    expect(rooted).toMatch(
+      /<MaterialAddressLayer\s+projection=\{pointTalkAddressProjection\}\s+variant="actionable"/,
+    );
+    expect(rooted).toContain("addressVisible={activePointTalkNodeId === null}");
+    expect(rooted).toContain("{addressVisible ? <MaterialAddressLayer");
+    expect(rooted).toContain("targetBounds={pointTalkTargetBounds}");
+    expect(rooted).toMatch(/const nodeActionsEnabled =[^;]*activePointTalkNodeId === null/s);
+    expect(css).toMatch(
+      /\.material-address-layer\[data-address-variant="actionable"\]\[data-address-partition="point-talk"\]\s*\{\s*z-index:\s*32;/,
+    );
+    expect(css).toMatch(/\.point-talk\s*\{[^}]*z-index:\s*33;/);
+    expect(css).toMatch(/\.matter-document\s*\{[^}]*z-index:\s*2;/);
+    expect(css).toMatch(
+      /data-address-partition="point-talk"\]\[data-material-address-painted\][^}]*\.spatial-thought\[data-selected="true"\] \.spatial-thought__label\s*\{\s*background:\s*transparent;/,
+    );
+  });
+
   it("gives the reference the upper grip's displacement and nothing else", () => {
     const bodies = engagedFragmentRules();
     expect(bodies.some((body) => body.includes("translateY(var(--address-displacement-y"))).toBe(true);

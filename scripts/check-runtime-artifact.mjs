@@ -110,6 +110,9 @@ export function inspectRuntimeArtifact(metrics) {
   for (const file of metrics.forbiddenTraceFiles) {
     failures.push(`Runtime trace includes repository-only file ${file}.`);
   }
+  for (const file of metrics.browserFallbackNodeTraceFiles) {
+    failures.push(`Server trace includes browser-fallback-only package ${file}.`);
+  }
   if (metrics.productionSourceMaps > 0) {
     failures.push(`Production artifact contains ${metrics.productionSourceMaps} browser/server source map(s).`);
   }
@@ -190,6 +193,11 @@ export async function readRuntimeArtifact(root = process.cwd()) {
       prerender.routes?.["/"]?.initialRevalidateSeconds === false,
     prerenderedApiRoutes: Object.freeze(API_ROUTES.filter((route) => prerendered.includes(route))),
     forbiddenTraceFiles: Object.freeze(normalizedTrace.filter(isRepositoryOnlyTrace)),
+    browserFallbackNodeTraceFiles: Object.freeze(
+      normalizedTrace.filter((file) =>
+        /(?:^|\/)node_modules\/(?:adm-zip|onnxruntime-node)(?:\/|$)/u.test(file)
+      ),
+    ),
     productionSourceMaps: staticFiles.filter((file) => file.endsWith(".map")).length +
       serverFiles.filter((file) => file.endsWith(".map")).length,
   });
@@ -269,7 +277,7 @@ async function main() {
     `lazy WASM ${formatKiB(metrics.wasmBytes)}; public ${formatKiB(metrics.publicBytes)}; ` +
     `visual media ${formatKiB(metrics.visualMediaBytes)}; ` +
     `metadata images ${formatKiB(metrics.metadataImageBytes)}; ` +
-    "0 repository-only trace files",
+    "0 repository-only or browser-fallback Node trace files",
   );
 }
 

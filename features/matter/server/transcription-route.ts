@@ -16,6 +16,7 @@ import { transcribeRecording } from "./transcriber";
 import { hasMultipartFormDataBoundary } from "./content-type";
 import { createPublicRequestAdmission } from "./public-request-admission";
 import { isWellFormedUnicodeText } from "../tree/unicode-text";
+import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 
 const FIELD_NAMES = new Set([
   "protocolVersion",
@@ -165,8 +166,7 @@ async function readBoundedBody(
     throw requestInterruptionError(signal);
   }
   const interruption = rejectOnAbort(signal);
-  const chunks: Uint8Array[] = [];
-  let byteLength = 0;
+  const bytes = new BoundedByteAccumulator(MAX_AUDIO_REQUEST_BYTES);
   let completed = false;
   try {
     while (true) {
@@ -175,11 +175,9 @@ async function readBoundedBody(
         completed = true;
         break;
       }
-      if (next.value.byteLength > MAX_AUDIO_REQUEST_BYTES - byteLength) {
+      if (!bytes.append(next.value)) {
         throw audioTooLarge();
       }
-      chunks.push(next.value);
-      byteLength += next.value.byteLength;
     }
   } catch (error) {
     cancelReader(reader);
@@ -191,13 +189,7 @@ async function readBoundedBody(
     if (completed) reader.releaseLock();
   }
 
-  const result = new Uint8Array(byteLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return result.buffer;
+  return bytes.snapshot().buffer;
 }
 
 function createRequestBoundary(requestSignal: AbortSignal): {

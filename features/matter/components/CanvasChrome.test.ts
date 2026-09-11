@@ -46,23 +46,14 @@ describe("CanvasChrome", () => {
     expect(markup).toContain("询问 Matter");
   });
 
-  it("exposes one closed inquiry field without a persistent chat surface", () => {
+  it("keeps the closed inquiry entirely unmounted without a persistent prompt surface", () => {
     const markup = renderChrome();
 
-    expect(markup.match(/<textarea\b/g)).toHaveLength(1);
+    expect(markup).not.toMatch(/<textarea\b/);
     expect(markup).not.toMatch(/<(?:input|form)\b/);
-    expect(markup).toContain('id="matter-inquiry"');
-    expect(markup).toContain('data-inquiry-phase="idle"');
-    expect(markup).toMatch(/id="matter-inquiry"[^>]*hidden|hidden[^>]*id="matter-inquiry"/);
     expect(markup).toContain('aria-controls="matter-inquiry"');
-    expect(markup).toMatch(/<p[^>]*aria-atomic="true"[^>]*aria-live="polite"[^>]*role="status"/);
     expect(markup).not.toContain("data-inquiry-thread");
     expect(markup).not.toMatch(/chat|assistant|history/i);
-  });
-
-  it("hides the inquiry in CSS even though the component owns display", () => {
-    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.inquiry\[hidden\]\s*\{[^}]*display:\s*none/);
   });
 
   it("keeps the inquiry waiting mark compact and cyclic", () => {

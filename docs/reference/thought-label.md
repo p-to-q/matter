@@ -95,6 +95,16 @@ exactly once more. While storage is still loading, the deterministic label is
 already on screen and *nothing is asked*; the node keeps a `deferred` mark so it
 is asked afterwards only if storage had nothing for it.
 
+The two durable origins do not share a retention policy. Model rows are a
+disposable browser cache capped globally at 4,000 entries (two maximum-sized
+documents); the oldest generated rows are reclaimed first. A manual name is a
+human decision, not a cache entry, and is never selected by that eviction. A
+model transaction also preserves an existing manual row at the same key. If a
+manual write reaches browser quota, model rows are reclaimed and that exact
+write is retried once in the same atomic transaction before failure is reported.
+Existing databases converge during the v4 upgrade itself, so the bound does not
+depend on a later model write; a failed migration aborts as one version change.
+
 **The model's output surface is `{ text }`**, matching the transform turn. It
 cannot name a node, a revision, or an action, because none of those exist in its
 output channel.

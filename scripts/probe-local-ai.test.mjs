@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -10,6 +11,10 @@ import {
   parseLocalAiProbeArguments,
   probeLocalAi,
 } from "./probe-local-ai.mjs";
+
+const CURRENT_APP_VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 test("is dry by default and accepts only an explicit loopback execution", () => {
   assert.deepEqual(parseLocalAiProbeArguments([]), { execute: false, origin: "http://127.0.0.1:3000/matter" });
@@ -168,7 +173,7 @@ test("checks the expected health identity before issuing at most five posts", as
       if (url.endsWith("/api/health")) return json({
         status: "ok",
         protocolVersion: "0.2",
-        appVersion: "0.2.0-preview.55",
+        appVersion: CURRENT_APP_VERSION,
         basePath: "/matter",
         surfaces,
       });
@@ -256,7 +261,7 @@ test("does not mistake an all-fixture development server for the AI demo profile
     fetchImpl: async () => new Response(JSON.stringify({
       status: "ok",
       protocolVersion: "0.2",
-      appVersion: "0.2.0-preview.55",
+      appVersion: CURRENT_APP_VERSION,
       basePath: "/matter",
       surfaces: {
         material: "available",
@@ -292,7 +297,7 @@ test("rejects a route response without no-store before classifying it", async ()
         return new Response(JSON.stringify({
           status: "ok",
           protocolVersion: "0.2",
-          appVersion: "0.2.0-preview.55",
+          appVersion: CURRENT_APP_VERSION,
           basePath: "/matter",
           surfaces: {
             material: "available",
@@ -374,7 +379,7 @@ function localAiHealthResponse() {
   return new Response(JSON.stringify({
     status: "ok",
     protocolVersion: "0.2",
-    appVersion: "0.2.0-preview.55",
+    appVersion: CURRENT_APP_VERSION,
     basePath: "/matter",
     surfaces: {
       material: "available",

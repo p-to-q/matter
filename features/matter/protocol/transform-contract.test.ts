@@ -193,6 +193,39 @@ describe("transform/2 contract", () => {
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
 
+  it("rechecks replacement and composed-node code-unit ceilings at browser commit", () => {
+    const replacement = translatorCapacityFixture(200, 800);
+    expect(replacement.plan.action.text.length).toBe(800);
+    expect(planToTreeCommand(replacement.tree, replacement.envelope, replacement.plan).ok).toBe(true);
+    const oversizedReplacement = `${replacement.plan.action.text}b`;
+    expect(oversizedReplacement.length).toBe(801);
+    expect(planToTreeCommand(replacement.tree, replacement.envelope, {
+      ...replacement.plan,
+      action: { ...replacement.plan.action, text: oversizedReplacement },
+    })).toEqual({ ok: false, reason: "INVALID_PLAN" });
+
+    const composed = translatorCapacityFixture(1_201, 799);
+    expect(composed.plan.action.text.length).toBe(799);
+    expect(
+      composed.tree.nodes.thought!.text.length -
+      (composed.plan.action.end - composed.plan.action.start) +
+      composed.plan.action.text.length,
+    )
+      .toBe(2_000);
+    expect(planToTreeCommand(composed.tree, composed.envelope, composed.plan).ok).toBe(true);
+    const oversizedComposition = `${composed.plan.action.text}b`;
+    expect(
+      composed.tree.nodes.thought!.text.length -
+      (composed.plan.action.end - composed.plan.action.start) +
+      oversizedComposition.length,
+    )
+      .toBe(2_001);
+    expect(planToTreeCommand(composed.tree, composed.envelope, {
+      ...composed.plan,
+      action: { ...composed.plan.action, text: oversizedComposition },
+    })).toEqual({ ok: false, reason: "INVALID_PLAN" });
+  });
+
   it("rejects an ancestor edit or reparent even when the target text is unchanged", () => {
     const source = envelope({
       context: { lineage: [
@@ -217,6 +250,40 @@ describe("transform/2 contract", () => {
     expect(planToTreeCommand(reparented, parsed.envelope, plan)).toEqual({ ok: false, reason: "STALE" });
   });
 });
+
+function translatorCapacityFixture(
+  afterLength: number,
+  candidateLength: 799 | 800,
+) {
+  const source = `${"a ".repeat(199)}aa`;
+  const extraLength = candidateLength - source.length;
+  const candidate = source + " b".repeat(Math.floor(extraLength / 2)) +
+    (extraLength % 2 === 0 ? "" : "b");
+  const after = `.${"y".repeat(afterLength - 1)}`;
+  const nodeText = source + after;
+  const rawEnvelope = envelope({
+    gesture: { type: "stretch", axis: "vertical", amount: 1 },
+    selection: {
+      type: "segment-range",
+      nodeId: "thought",
+      start: 0,
+      end: source.length,
+      selectedText: source,
+    },
+    context: { lineage: [
+      { id: "thought", text: nodeText, parentId: null, createdAt: TIME, updatedAt: TIME },
+    ] },
+  });
+  const parsed = parseTransformEnvelope(rawEnvelope);
+  if (!parsed.ok) throw new Error("capacity envelope must parse");
+  const current = tree();
+  current.nodes.thought!.text = nodeText;
+  return Object.freeze({
+    envelope: parsed.envelope,
+    plan: buildTransformPlan(parsed.envelope, candidate),
+    tree: current,
+  });
+}
 
 function lineageTree(): ThoughtTree {
   const current = tree();

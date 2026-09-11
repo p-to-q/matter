@@ -6,6 +6,7 @@ import {
   isRepairSuccess,
   type RepairSuccess,
 } from "../protocol/repair-contract";
+import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 import { PROTOCOL_VERSION } from "../tree/model";
 
 /**
@@ -114,8 +115,8 @@ async function readBoundedText(
   const body = response.body;
   if (body === null) return "";
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const bytes = new BoundedByteAccumulator(maxBytes);
+  let oversized = false;
   const cancelReader = () => {
     void reader.cancel(signal.reason).catch(() => undefined);
   };
@@ -126,24 +127,19 @@ async function readBoundedText(
       const { done, value } = await reader.read();
       if (done) break;
       if (value === undefined) continue;
-      total += value.byteLength;
-      if (total > maxBytes) throw new RepairUnavailable();
-      chunks.push(value);
+      if (!bytes.append(value)) {
+        oversized = true;
+        throw new RepairUnavailable();
+      }
     }
   } finally {
     signal.removeEventListener("abort", cancelReader);
     reader.releaseLock();
-    if (total > maxBytes) await body.cancel().catch(() => undefined);
+    if (oversized) await body.cancel().catch(() => undefined);
   }
 
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes.snapshot());
   } catch {
     throw new RepairUnavailable();
   }

@@ -37,6 +37,10 @@ import { isCurrentLassoStroke, type LassoMeasurementEpoch } from "./lasso-stroke
 import { projectOutsideLassoParticles } from "../material/lasso-particles";
 import { planLassoMaterialTransition } from "./lasso-material-validity";
 import { projectMaterialAddressTextRange } from "../material/language-projection";
+import {
+  fontFamiliesFromLoadingEvent,
+  fontLoadAffectsMaterialGeometry,
+} from "./lasso-font-ownership";
 
 export type LassoController = Readonly<{
   active: boolean;
@@ -67,6 +71,9 @@ export type LassoController = Readonly<{
 export type LassoPointerSettlement = "selection" | "empty-closed" | "click" | "uncommitted" | "ambiguous";
 
 type MeasurementEpoch = LassoMeasurementEpoch;
+
+const ACTIVE_TEXT_ROOT_SELECTOR =
+  "[data-layout-node-id][data-thought-id] > [data-thought-text-id]";
 
 /**
  * Binds one transient lasso operation to client-space DOM geometry. Pointer
@@ -425,16 +432,41 @@ export function useLasso(input: {
       });
     };
     const invalidate = () => releaseGeometry(true);
-    const beginFontLoading = () => {
+    const invalidateRelevantScroll = (event: Event) => {
+      const canvas = input.canvasRef.current;
+      const target = event.target;
+      if (
+        canvas === null || target === window || target === document ||
+        (target instanceof Node && (target.contains(canvas) || canvas.contains(target)))
+      ) invalidate();
+    };
+    const fontEventAffectsMaterial = (event: Event, emptyIsRelevant = false) => {
+      const loadedFamilies = fontFamiliesFromLoadingEvent(event);
+      if (emptyIsRelevant && loadedFamilies?.length === 0) return true;
+      const canvas = input.canvasRef.current;
+      const materialFonts = canvas === null
+        ? []
+        : Array.from(canvas.querySelectorAll<HTMLElement>(ACTIVE_TEXT_ROOT_SELECTOR))
+          .map((root) => getComputedStyle(root).fontFamily);
+      return fontLoadAffectsMaterialGeometry(loadedFamilies, materialFonts);
+    };
+    const beginFontLoading = (event: Event) => {
+      const affectsMaterial = fontEventAffectsMaterial(event);
+      if (!affectsMaterial) return;
       fontMeasurementSuspendedRef.current = true;
       releaseGeometry(false);
     };
-    const finishFontLoading = () => {
+    const finishFontLoading = (event: Event) => {
+      const affectsMaterial = fontEventAffectsMaterial(event, true);
+      if (!fontMeasurementSuspendedRef.current && !affectsMaterial) return;
       fontMeasurementSuspendedRef.current = false;
       releaseGeometry(true);
     };
     window.addEventListener("resize", invalidate);
-    window.addEventListener("scroll", invalidate, true);
+    // Capture is needed for nested material scrollers, but sibling chrome such
+    // as the lazy index has an independent coordinate space. Its first scroll
+    // must not revoke a stroke already owned by the canvas.
+    window.addEventListener("scroll", invalidateRelevantScroll, true);
     window.addEventListener("pagehide", invalidate);
     window.addEventListener("blur", invalidate);
     const handleVisibility = () => {
@@ -452,7 +484,7 @@ export function useLasso(input: {
     fonts?.addEventListener?.("loadingerror", finishFontLoading);
     return () => {
       window.removeEventListener("resize", invalidate);
-      window.removeEventListener("scroll", invalidate, true);
+      window.removeEventListener("scroll", invalidateRelevantScroll, true);
       window.removeEventListener("pagehide", invalidate);
       window.removeEventListener("blur", invalidate);
       document.removeEventListener("visibilitychange", handleVisibility);
@@ -464,7 +496,7 @@ export function useLasso(input: {
       fontMeasurementSuspendedRef.current = false;
       cancelScheduledMeasurement();
     };
-  }, [clearAllMeasuredGeometry, commitSelections, dispatch, onGeometryInvalidated, remeasureSelection, remeasureSelectionSet, writeInk]);
+  }, [clearAllMeasuredGeometry, commitSelections, dispatch, input.canvasRef, onGeometryInvalidated, remeasureSelection, remeasureSelectionSet, writeInk]);
 
   const activate = useCallback(() => dispatch({ type: "activate" }), [dispatch]);
   const deactivate = useCallback(() => {
@@ -773,7 +805,7 @@ function measureLassoTargets(
   if (canvas === null) return Object.freeze([]);
   const viewport = clientViewportBounds();
   const targets: LassoTarget[] = [];
-  for (const root of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
+  for (const root of canvas.querySelectorAll<HTMLElement>(ACTIVE_TEXT_ROOT_SELECTOR)) {
     const nodeId = root.dataset.thoughtTextId ?? "";
     if (eligibleNodeIds !== undefined && !eligibleNodeIds.has(nodeId)) continue;
     const node = tree.nodes[nodeId];
@@ -842,7 +874,7 @@ function clientRectsOverlap(
 
 function findTextRoot(canvas: HTMLDivElement | null, nodeId: string): HTMLElement | null {
   if (canvas === null) return null;
-  return Array.from(canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]"))
+  return Array.from(canvas.querySelectorAll<HTMLElement>(ACTIVE_TEXT_ROOT_SELECTOR))
     .find((element) => element.dataset.thoughtTextId === nodeId) ?? null;
 }
 

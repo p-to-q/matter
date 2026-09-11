@@ -215,11 +215,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
       ? props.navigation.focusNodeId
       : props.navigation.selectedNodeId;
   const collapsedNodeIds = useMemo(() => {
-    const closed = new Set(collapsedState.epoch === props.documentEpoch ? collapsedState.ids : []);
-    if (activeNodeId !== null) {
-      for (const ancestorId of projectMaterialAncestry(props.tree, activeNodeId)) closed.delete(ancestorId);
-    }
-    return closed;
+    const closed = collapsedState.epoch === props.documentEpoch
+      ? collapsedState.ids
+      : new Set<string>();
+    if (activeNodeId === null || closed.size === 0) return closed;
+    const ancestry = projectMaterialAncestry(props.tree, activeNodeId);
+    if (!ancestry.some((nodeId) => closed.has(nodeId))) return closed;
+    const visible = new Set(closed);
+    for (const ancestorId of ancestry) visible.delete(ancestorId);
+    return visible;
   }, [activeNodeId, collapsedState, props.documentEpoch, props.tree]);
   const compactedNodeIds = useMemo(() => {
     if (props.heldAsideRootIds === undefined || props.heldAsideRootIds.size === 0) return collapsedNodeIds;
@@ -414,7 +418,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     reportVisibleNodes(visibleNodeIds);
   }, [reportVisibleNodes, visibleNodeIds]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const wide = window.matchMedia("(min-width: 960px)");
     const applyViewportDefault = () => {
       setDocked(wide.matches);

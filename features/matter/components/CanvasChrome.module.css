@@ -579,10 +579,6 @@
   pointer-events: auto;
 }
 
-.inquiry[hidden] {
-  display: none;
-}
-
 /* The inquiry borrows the paper's empty space instead of drawing a panel. */
 .inquiry {
   display: flex;

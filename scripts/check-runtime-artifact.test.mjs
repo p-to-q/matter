@@ -28,6 +28,7 @@ function validMetrics() {
     rootStatic: true,
     prerenderedApiRoutes: [],
     forbiddenTraceFiles: [],
+    browserFallbackNodeTraceFiles: [],
     productionSourceMaps: 0,
   };
 }
@@ -36,18 +37,20 @@ test("accepts a static shell with a separate bounded speech fallback", () => {
   assert.deepEqual(inspectRuntimeArtifact(validMetrics()).failures, []);
 });
 
-test("rejects initial model work, dynamic shell drift, and repository-only traces", () => {
+test("rejects initial model work, dynamic shell drift, and forbidden traces", () => {
   const metrics = validMetrics();
   metrics.rootStatic = false;
   metrics.initialAssets.push("chunks/matter-local-transcription.12345678.js");
   metrics.prerenderedApiRoutes.push("/api/inquiry");
   metrics.forbiddenTraceFiles.push("../../docs/private.md");
+  metrics.browserFallbackNodeTraceFiles.push("../../node_modules/onnxruntime-node/index.js");
   metrics.productionSourceMaps = 1;
   const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
   assert.match(failures, /root is not a permanent static prerender/u);
   assert.match(failures, /local speech fallback entered the initial graph/u);
   assert.match(failures, /api\/inquiry was prerendered/u);
   assert.match(failures, /docs\/private\.md/u);
+  assert.match(failures, /browser-fallback-only package/u);
   assert.match(failures, /source map/u);
 });
 
@@ -164,7 +167,12 @@ test("reads root and server traces while budgeting every public asset", async ()
       ),
       writeFile(
         join(root, ".next/server/app/page.js.nft.json"),
-        JSON.stringify({ files: ["../../../e2e/browser.ts"] }),
+        JSON.stringify({
+          files: [
+            "../../../e2e/browser.ts",
+            "../../../node_modules/adm-zip/adm_zip.js",
+          ],
+        }),
       ),
       writeFile(
         join(root, ".next/cache/ignored.nft.json"),
@@ -195,6 +203,9 @@ test("reads root and server traces while budgeting every public asset", async ()
       false,
       ".next/cache must not become a runtime-trace input",
     );
+    assert.deepEqual(metrics.browserFallbackNodeTraceFiles, [
+      "../../../node_modules/adm-zip/adm_zip.js",
+    ]);
     assert.deepEqual(metrics.seedLocalizationAssets, [
       "chunks/seed-localization.12345678.js",
     ]);
@@ -203,6 +214,7 @@ test("reads root and server traces while budgeting every public asset", async ()
     assert.match(failures, /docs\/root\.md/u);
     assert.match(failures, /\.env\.local/u);
     assert.match(failures, /root\.test\.ts/u);
+    assert.match(failures, /adm-zip/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

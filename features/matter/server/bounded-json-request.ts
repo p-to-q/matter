@@ -1,3 +1,4 @@
+import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 import { isJsonContentType } from "./content-type";
 
 /**
@@ -70,13 +71,13 @@ export async function withBoundedJsonRequest<T>(
     const body = await readBoundedText(request, policy, boundary.signal);
     let payload: unknown;
     try {
-      payload = JSON.parse(body) as unknown;
+      payload = JSON.parse(body.text) as unknown;
     } catch {
       throw policy.fail("not-json");
     }
     try {
       return await handle(payload, boundary.signal, Object.freeze({
-        requestBytes: new TextEncoder().encode(body).byteLength,
+        requestBytes: body.byteLength,
       }));
     } catch (error) {
       // The boundary covers `handle` too, but only the body read raises the
@@ -118,24 +119,21 @@ async function readBoundedText(
   request: Request,
   policy: BoundedRequestPolicy,
   signal: AbortSignal,
-): Promise<string> {
+): Promise<Readonly<{ text: string; byteLength: number }>> {
   const body = request.body;
   if (body === null) throw policy.fail("missing-body");
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const bytes = new BoundedByteAccumulator(policy.maxBytes);
   try {
     for (;;) {
       const { done, value } = await readWithSignal(reader, policy, signal);
       if (done) break;
       if (value === undefined) continue;
-      total += value.byteLength;
       // A declared length may be absent or untrue, so the real bound is here.
-      if (total > policy.maxBytes) {
+      if (!bytes.append(value)) {
         cancelReader(reader);
         throw policy.fail("too-large");
       }
-      chunks.push(value);
     }
   } finally {
     try {
@@ -145,14 +143,12 @@ async function readBoundedText(
     }
   }
 
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+    const snapshot = bytes.snapshot();
+    return Object.freeze({
+      text: new TextDecoder("utf-8", { fatal: true }).decode(snapshot),
+      byteLength: snapshot.byteLength,
+    });
   } catch {
     throw policy.fail("not-utf8");
   }

@@ -11,6 +11,91 @@ const FIRST_SELECTABLE_INDEX = 1;
 const WINDOWED_ROW_BUDGET = 64;
 const TOTAL_ELEMENT_BUDGET = 4_700;
 
+test("keeps bounded canvas geometry resident while folded material leaves interaction", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter/performance");
+  await expect(page.locator("[data-thought-id]")).toHaveCount(PERFORMANCE_ROW_COUNT);
+  await expect.poll(() => page.evaluate(() =>
+    window.__matterPerformanceNavigation !== undefined,
+  )).toBe(true);
+
+  const rootId = "perf_thought_0000";
+  const deepId = "perf_thought_0009";
+  const deepOwner = page.locator(`[data-layout-node-id="${deepId}"]`);
+  const deepControl = page.locator(`[data-thought-text-id="${deepId}"]`);
+  await deepOwner.evaluate((element) => {
+    element.dataset.residencyReceipt = "same-owner";
+  });
+  await page.evaluate((nodeId) => window.__matterPerformanceNavigation?.toggleFold(nodeId), rootId);
+
+  await expect(page.locator("[data-thought-id]")).toHaveCount(1);
+  await expect(page.locator("[data-layout-node-id]")).toHaveCount(PERFORMANCE_ROW_COUNT);
+  await expect(deepControl).toBeHidden();
+  expect(await deepOwner.evaluate((element) => {
+    const control = element.querySelector<HTMLElement>("[data-thought-text-id]");
+    control?.focus();
+    return {
+      active: element.hasAttribute("data-thought-id"),
+      connected: element.isConnected,
+      display: getComputedStyle(element).display,
+      focused: document.activeElement === control,
+    };
+  })).toEqual({ active: false, connected: true, display: "none", focused: false });
+
+  await page.evaluate(() => {
+    const probe = window as typeof window & {
+      __matterHiddenTextRectReads?: number;
+      __matterActiveTextRectReads?: number;
+    };
+    probe.__matterHiddenTextRectReads = 0;
+    probe.__matterActiveTextRectReads = 0;
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    HTMLElement.prototype.getBoundingClientRect = function measuredBoundingClientRect() {
+      if (this instanceof HTMLElement && this.hasAttribute("data-thought-text-id")) {
+        const active = this.closest<HTMLElement>("[data-layout-node-id]")
+          ?.hasAttribute("data-thought-id") === true;
+        if (active) probe.__matterActiveTextRectReads = (probe.__matterActiveTextRectReads ?? 0) + 1;
+        else probe.__matterHiddenTextRectReads = (probe.__matterHiddenTextRectReads ?? 0) + 1;
+      }
+      return original.call(this);
+    };
+  });
+  const rootControl = page.locator(`[data-thought-text-id="${rootId}"]`);
+  const rootBounds = await rootControl.boundingBox();
+  expect(rootBounds).not.toBeNull();
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  await page.evaluate(() => {
+    const probe = window as typeof window & {
+      __matterHiddenTextRectReads?: number;
+      __matterActiveTextRectReads?: number;
+    };
+    probe.__matterHiddenTextRectReads = 0;
+    probe.__matterActiveTextRectReads = 0;
+  });
+  await page.mouse.move(rootBounds!.x + rootBounds!.width / 2, rootBounds!.y + rootBounds!.height / 2);
+  await page.mouse.down();
+  await page.mouse.up();
+  const lassoGeometryReads = await page.evaluate(() => ({
+    active: (window as typeof window & { __matterActiveTextRectReads?: number })
+      .__matterActiveTextRectReads ?? 0,
+    hidden: (window as typeof window & { __matterHiddenTextRectReads?: number })
+      .__matterHiddenTextRectReads ?? 0,
+  }));
+  expect(lassoGeometryReads.hidden).toBe(0);
+  expect(lassoGeometryReads.active).toBeGreaterThan(0);
+
+  await page.evaluate((nodeId) => window.__matterPerformanceNavigation?.toggleFold(nodeId), rootId);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(PERFORMANCE_ROW_COUNT);
+  await expect(deepOwner).toHaveAttribute("data-residency-receipt", "same-owner");
+  await expect(deepControl).toBeVisible();
+  expect(await page.locator("*").count()).toBeLessThanOrEqual(TOTAL_ELEMENT_BUDGET);
+});
+
 test("windows the 2,000-row material index without losing deep selection or copy", async ({
   context,
   page,
@@ -327,6 +412,10 @@ test.describe("1024px coarse-pointer material index", () => {
       ".material-file__context-control:not(:disabled)",
       ".material-file__open:not(:disabled)",
     ].join(","));
+    // The index is an independent lazy surface; canvas readiness deliberately
+    // says nothing about whether its controls have mounted.
+    await expect(sidebar).toHaveAttribute("data-open", "true");
+    await expect(targets.first()).toBeVisible();
     const sizes = await targets.evaluateAll((elements) => elements.map((element) => {
       const rect = element.getBoundingClientRect();
       return {
