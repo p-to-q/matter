@@ -1393,7 +1393,8 @@ its bootstrap history is cleared so it is not presented as a person's undo.
 The renderer uses native nested `ul` / `li` flow. It does not claim ARIA treeview
 semantics, which would require a different composite-widget keyboard model.
 Buttons own select, disclosure, focus, add-child, exit-focus, and undo actions;
-folded descendants are unmounted. Depth appears through spacing and one quiet
+folded descendants leave the active, visible, and accessible projection. Their
+bounded native geometry owners may remain mounted as a render cache. Depth appears through spacing and one quiet
 lineage spine, not cards, links, coordinates, or measured geometry. The page
 scrolls vertically and must not overflow horizontally at `390×844`.
 
@@ -1405,7 +1406,8 @@ history, and navigation ownership references; navigation reconciles in the same
 successful publication as material.
 
 CI proves semantic behavior at `1280×800` and `390×844` without calling
-`page.keyboard`: DOM node ids equal the pure projection, fold removes descendants,
+`page.keyboard`: active DOM node ids equal the pure projection, fold removes descendants
+from display, pointer, focus, and accessibility,
 focus equals exact lineage, insertion and undo are pointer-complete, and no page,
 console, or horizontal-overflow error occurs. Native keyboard accessibility is
 still retained and checked separately; “pointer primary” does not remove it.
@@ -3277,6 +3279,131 @@ share only with a measurement showing a healthy answer approaching the window,
 not after a timeout.
 
 ## Current risks
+
+### Maintainer correction — external bytes become owned on arrival
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    every bounded runtime reader preserves the exact bytes that arrived,
+            even when its external stream reuses or later mutates a backing buffer
+Boundary:   one adapter-neutral bounded byte accumulator, then the existing browser
+            JSON/text, server JSON/provider, and transcription readers; each caller
+            retains its current deadline, cancellation, drain, and error owner
+Invariants: no response, request, audio, transcript, or model content is cached;
+            exact byte ceilings, fatal UTF-8, no-store, redirect refusal, and all
+            current public error shapes remain unchanged
+Proof:      exact-limit and limit-plus-one; source mutation and reusable one-byte
+            backing buffers; one million tiny chunks without retained chunk views;
+            caller-specific oversize, stalled-abort, deadline, drain, and UTF-8 tests
+Non-goals:  archive-inflate ownership, HTTP caching, protocol versions, model policy,
+            provider deadlines, release thresholds, or a generic stream framework
+```
+
+The current readers count bytes correctly but retain externally owned
+`Uint8Array` views until end-of-stream. A valid stream that reuses one one-byte
+buffer turns the four bytes of `null` into `llll` before decoding; the same
+shape retains one object per fragment. The accumulator therefore copies each
+fragment into its own geometrically growing bounded storage at `append`, then
+returns one exact final snapshot. It deliberately knows nothing about streams,
+signals, JSON, text, routes, or product errors.
+
+### Maintainer correction — durable names outrank a bounded model-label cache
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    exact live-node restore cannot be displaced by stale rows; manual writes,
+            resets, model writes, and subtree removal settle in durable node order;
+            cross-document model rows have one global 4,000-entry capacity
+Boundary:   the label driver owns per-node mutation order; one IndexedDB write
+            transaction owns cross-tab precedence, exact keys, and model-only reclaim
+Invariants: a user name is never cache-evicted or overwritten by a late model result;
+            deterministic labels are never stored; malformed and over-bound repository
+            input opens no database; storage failure keeps the deterministic floor
+Proof:      81 focused tests; blocked model-put then rename; put then remove; stale
+            cross-tab model versus user; raw/unique 2,000-node bounds; invalid owner,
+            timestamp and basis; fresh/existing DB-v4 upgrade with immediate legacy
+            convergence and abort-on-failure; commit failure; atomic oldest-model
+            capacity reclaim and user-quota retry
+Non-goals:  automatic retention policy for historical user names, names in archives or
+            material, a generic cache service, or foreground dependence on IndexedDB
+```
+
+Manual names are durable local decisions, not cache entries. Their cross-document total
+cannot be capped without a separate product freeze that either carries names inside
+archives or gives the person an explicit document-lifecycle policy. Model labels are
+different: a miss costs regeneration but no human decision, so the compound
+`origin + updatedAt` index identifies the oldest disposable rows without selecting a
+user row. A model transaction first reads its exact key, preserves any concurrent user
+owner, then writes and reclaims capacity atomically. If a manual write reaches quota,
+one atomic retry reclaims model rows before writing that exact manual name.
+The v4 upgrade also reclaims older model rows in its versionchange transaction,
+so an existing database cannot remain over capacity until another generation.
+
+### Maintainer correction — Point Talk keeps one visible material owner
+
+State: Implemented and independently verified on 2026-09-09.
+
+```text
+Outcome:    opening Point Talk replaces Control Fog with one whole-node material
+            address that remains visible while the local direction field is active
+Boundary:   the existing whole-node render-edge receipt, material-address projection,
+            Point Talk placement, and root-owned NodeActionLens eligibility
+Invariants: Text Swap selection, protocol, provider policy, voice, failure recovery,
+            current-basis commit, result settle, pointer Undo, and canvas geometry
+            remain unchanged; no presentation state enters the material document
+Proof:      105 focused tests plus real Chromium: a 1.2 s material-plane transition
+            samples over 40 frames with zero stale address paint; reopen under a new
+            selected surface changes the path; 240/241 astral code-point boundary;
+            375 px placement, 170 px fail-closed, one painted mark, exact commit and Undo
+Non-goals:  a global interaction reducer, new visual tokens, changing the AI glyph,
+            production provider promotion, passage focus semantics, or text policy
+```
+
+The direction field previously remeasured the same node through its own DOM Range,
+while the addressed material had no visible owner and hover could remount Control
+Fog over the active field. Point Talk now consumes the same disposable receipt for
+both glyph address and placement. Temporary receipt invalidation hides placement
+until fresh geometry arrives; it does not invent coordinates or cancel valid work.
+
+### Maintainer correction — performance attribution cannot relax the gate
+
+State: Implemented and formally verified in three production rounds on 2026-09-11.
+
+```text
+Outcome:    the 2,000-node receipt again refuses every observed long task at
+            100 ms while retaining cold, warmup, and measured attribution
+Boundary:   the existing production-only Chromium receipt and its attached JSON;
+            bounded layout/height caches and root-owned browser invalidation
+Invariants: element, structural-action p95, cold-start, and browser-support gates
+            remain; cached geometry is reused only under exact tree/document/locale/
+            text/width authority; no work is sampled away or hidden from the receipt
+Proof:      Long Task API support; all three rounds keep whole-session, cold, and
+            measurement max below 100 ms; whole-session and measurement max are
+            69/68 ms; fold p95 94.4–97.7 ms, focus p95 88.2–89.9 ms, selection p95
+            49.8–57.2 ms, 4,474 elements; initial runtime is 1,196,550 bytes raw /
+            379,215 bytes gzip, 26,289 bytes below the cross-platform ceiling
+Non-goals:  inventing count/total thresholds from one machine, treating p95<200 ms
+            as an equivalent long-task gate, or changing production behavior
+```
+
+The earlier cold/interaction split was useful attribution but replaced the
+unchanged session ceiling with an interaction percentile twice as large and left
+three warmup cycles outside either assertion. The receipt now makes those
+populations explainable without granting any of them a looser limit. Count and
+total density remain observations: the three completed formal rounds prove the
+frozen ceiling but do not by themselves justify a new density gate. Ordinary page show and an already
+settled font set no longer invalidate a complete 2,000-node measurement; resize,
+BFCache restoration, and real font-loading settlement coalesce into one frame. The
+closed Inquiry surface is absent rather than mounted as a hidden textarea, and the
+empty collapsed-set identity is reused so selection alone does not rebuild the file
+projection. Focus and fold retain at most 2,000 native owners while only active
+owners enter display, hit testing, accessibility, or DOM geometry queries. The
+secondary material index and label repository are separately lazy; its independent
+scrolling and chrome-only fonts cannot revoke or republish canvas-owned geometry.
+Unknown or material-owned font events remain fail-closed. The formal three-round
+production receipt remains the release authority.
 
 ### Preview.55 publication — source deployed, immutable release withheld
 

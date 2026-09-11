@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  excludePointTalkRightOccluder,
   intersectPointTalkBounds,
   projectPointTalkPlacement,
   projectPointTalkScale,
@@ -32,6 +33,25 @@ describe("Point-and-Talk visible field", () => {
     expect(intersectPointTalkBounds(
       { left: 0, top: 0, right: 100, bottom: 100 },
       { left: 100, top: 0, right: 200, bottom: 100 },
+    )).toBeNull();
+  });
+
+  it("reserves a visible right-side instrument lane", () => {
+    expect(excludePointTalkRightOccluder(
+      { left: 12, top: 12, right: 363, bottom: 655 },
+      { left: 303, top: 216, right: 363, bottom: 504 },
+    )).toEqual({ left: 12, top: 12, right: 303, bottom: 655 });
+  });
+
+  it("ignores an occluder outside the horizontal field and rejects damaged input", () => {
+    const viewport = { left: 12, top: 12, right: 363, bottom: 655 };
+    expect(excludePointTalkRightOccluder(
+      viewport,
+      { left: 380, top: 10, right: 420, bottom: 500 },
+    )).toEqual(viewport);
+    expect(excludePointTalkRightOccluder(
+      viewport,
+      { left: Number.NaN, top: 10, right: 420, bottom: 500 },
     )).toBeNull();
   });
 });

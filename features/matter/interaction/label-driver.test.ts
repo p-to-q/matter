@@ -99,6 +99,53 @@ type FakeRepository = LabelRepository & {
   allowRemove: () => void;
 };
 
+type FirstPutBlockedRepository = LabelRepository & {
+  readonly stored: Map<string, LabelRecord>;
+  readonly putCalls: LabelRecord[];
+  readonly removed: string[];
+  resolveFirstPut: () => void;
+};
+
+/** A storage adapter that exposes completion-order bugs hidden by IndexedDB. */
+function firstPutBlockedRepository(): FirstPutBlockedRepository {
+  const stored = new Map<string, LabelRecord>();
+  const putCalls: LabelRecord[] = [];
+  const removed: string[] = [];
+  let releaseFirstPut!: () => void;
+  const firstPutGate = new Promise<void>((resolve) => {
+    releaseFirstPut = resolve;
+  });
+  return {
+    stored,
+    putCalls,
+    removed,
+    resolveFirstPut: releaseFirstPut,
+    async loadAll(_treeId, liveNodeIds) {
+      const live = new Set(liveNodeIds);
+      return [...stored.values()].filter((record) => live.has(record.nodeId));
+    },
+    async put(_treeId, record) {
+      putCalls.push(record);
+      if (putCalls.length === 1) await firstPutGate;
+      stored.set(record.nodeId, record);
+      return { ok: true } as const;
+    },
+    async remove(_treeId, nodeIds) {
+      for (const nodeId of nodeIds) {
+        removed.push(nodeId);
+        stored.delete(nodeId);
+      }
+      return { ok: true } as const;
+    },
+    async clear() {
+      stored.clear();
+    },
+    close() {
+      // Nothing to release in the fake.
+    },
+  };
+}
+
 function repository(
   seed: readonly LabelRecord[] = [],
   defer = false,
@@ -129,9 +176,10 @@ function repository(
     allowRemove: () => { removeFails = false; },
     resolveLoad: () => release(),
     resolvePut: () => releasePut(),
-    async loadAll() {
+    async loadAll(_treeId, liveNodeIds) {
       await gate;
-      return [...stored.values()];
+      const live = new Set(liveNodeIds);
+      return [...stored.values()].filter((record) => live.has(record.nodeId));
     },
     async put(_treeId, record) {
       await putGate;
@@ -566,6 +614,31 @@ describe("LabelDriver", () => {
     expect(recorded.calls).toHaveLength(1);
   });
 
+  it("keeps its repository through an effect replay and closes it with the session", async () => {
+    const recorded = recorder();
+    const backing = repository();
+    let closes = 0;
+    const store: LabelRepository = {
+      ...backing,
+      close() {
+        closes += 1;
+      },
+    };
+    const instance = driver(recorded.request, { repository: store });
+
+    instance.retain();
+    instance.release();
+    instance.retain();
+    await Promise.resolve();
+    expect(closes).toBe(0);
+
+    instance.release();
+    await Promise.resolve();
+    expect(closes).toBe(1);
+    instance.dispose();
+    expect(closes).toBe(1);
+  });
+
   it("asks nothing for a node whose label was stored in an earlier session", async () => {
     const recorded = recorder();
     const store = repository([
@@ -671,6 +744,52 @@ describe("LabelDriver", () => {
     await settle();
     expect(store.stored.get("root")).toMatchObject({ label: "想象的生活", origin: "model" });
     expect(store.stored.get("root")?.basis).not.toBeNull();
+  });
+
+  it("serializes a manual rename after an already-started model write", async () => {
+    const recorded = recorder();
+    const store = firstPutBlockedRepository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+
+    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "想象的生活"));
+    await settle();
+    expect(store.putCalls).toHaveLength(1);
+    expect(store.putCalls[0]?.origin).toBe("model");
+
+    const rename = instance.rename("root", "我给它的新名字");
+    await Promise.resolve();
+    expect(store.putCalls).toHaveLength(1);
+
+    store.resolveFirstPut();
+    await expect(rename).resolves.toEqual({ ok: true });
+    expect(store.putCalls).toHaveLength(2);
+    expect(store.stored.get("root")).toMatchObject({
+      label: "我给它的新名字",
+      origin: "user",
+    });
+  });
+
+  it("serializes deletion after an already-started put so the row stays absent", async () => {
+    const recorded = recorder();
+    const store = firstPutBlockedRepository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+
+    recorded.pending[0]?.resolve(success(recorded.calls[0]!, "想象的生活"));
+    await settle();
+    expect(store.putCalls).toHaveLength(1);
+
+    instance.observe(scope([node("child", OTHER, null)], "tree-1", 0, 2), ["child"]);
+    await Promise.resolve();
+    expect(store.removed).not.toContain("root");
+
+    store.resolveFirstPut();
+    await settle();
+    expect(store.removed).toContain("root");
+    expect(store.stored.has("root")).toBe(false);
   });
 
   it("stores a name a person typed and stops asking about that node", async () => {
@@ -812,6 +931,37 @@ describe("LabelDriver", () => {
     instance.observe(scope([node("root", SPOKEN, null)]), ["root"]);
     await settle();
     expect(store.removed).toContain("child");
+  });
+
+  it("cleans a same-tree-id replacement even when it is the first observation", async () => {
+    const recorded = recorder();
+    const store = repository([
+      { nodeId: "child", label: "只属于旧归档", origin: "user", basis: null, updatedAt: "t" },
+    ]);
+    const instance = driver(recorded.request, { repository: store });
+    expect(store.stored.has("child")).toBe(true);
+
+    const replacement = scope([node("root", SPOKEN, null)], "tree-1", 1, 1);
+    instance.observe(replacement, ["root"]);
+    await settle();
+
+    expect(store.removed).toContain("child");
+    expect(store.stored.has("child")).toBe(false);
+  });
+
+  it("does not delete the previous document's labels when the tree id changes", async () => {
+    const recorded = recorder();
+    const store = repository([
+      { nodeId: "child", label: "旧文档仍应保留", origin: "user", basis: null, updatedAt: "t" },
+    ]);
+    const instance = driver(recorded.request, { repository: store });
+
+    const otherDocument = scope([node("other-root", SPOKEN, null)], "tree-2", 1, 1);
+    instance.observe(otherDocument, ["other-root"]);
+    await settle();
+
+    expect(store.removed).not.toContain("child");
+    expect(store.stored.has("child")).toBe(true);
   });
 
   it("survives storage that fails on every call", async () => {

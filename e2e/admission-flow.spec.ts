@@ -100,14 +100,19 @@ for (const viewport of [
     // MediaRecorder chunks are asynchronous; this crosses one 250 ms capture
     // interval so Stop can prove the final dataavailable boundary with audio.
     await page.waitForTimeout(350);
-    await stop.click();
-
     const heard = page.locator('[data-thought-id^="thought_"]').filter({ hasText: heardTranscript });
     const admitted = page.locator('[data-thought-id^="thought_"]').filter({ hasText: repairedTranscript });
-    // The fixture model resolves immediately. The raw transcript must still be
-    // the first canonical material for the complete visibility floor.
-    await expect(heard).toHaveCount(1);
-    const rawSeenAt = await page.evaluate(() => performance.now());
+    // The fixture model resolves immediately. Observe the paint directly;
+    // waiting for click() and then polling the DOM can miss a correctly shown
+    // baseline that has already entered its repair reveal.
+    const rawSeenAtPromise = (async () => {
+      await expect(heard).toHaveCount(1);
+      return page.evaluate(() => new Promise<number>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())));
+      }));
+    })();
+    await stop.click();
+    const rawSeenAt = await rawSeenAtPromise;
     await expect(admitted).toHaveCount(1, { timeout: FIXTURE_REPAIR_SETTLE_TIMEOUT_MS });
     await expect(heard).toHaveCount(0);
     const reveal = admitted.locator(".repair-text");

@@ -64,6 +64,43 @@ export type MaterialAddressProjection = Readonly<{
   writingMode: ProjectedLayoutReceipt["writingMode"];
 }>;
 
+/** Returns the glyph bounds already owned by a receipt; it never remeasures DOM. */
+export function projectedLayoutReceiptBounds(
+  receipt: ProjectedLayoutReceipt,
+): ClientBounds {
+  return Object.freeze({
+    left: Math.min(...receipt.rows.map((row) => row.inlineStart)),
+    top: Math.min(...receipt.rows.map((row) => row.blockStart)),
+    right: Math.max(...receipt.rows.map((row) => row.inlineEnd)),
+    bottom: Math.max(...receipt.rows.map((row) => row.blockEnd)),
+  });
+}
+
+/** Reissues unchanged client geometry under a newly proven publication basis. */
+export function rebaseProjectedLayoutReceipt(
+  receipt: ProjectedLayoutReceipt,
+  basis: ProjectedLayoutBasis,
+): ProjectedLayoutReceipt | null {
+  if (!validBasis(basis)) return null;
+  const current = receipt.basis;
+  // Client geometry can survive publication epochs, never a change of owner
+  // or coordinate space. Enforce that at this low-level boundary so a future
+  // caller cannot silently rebind one node's pixels to another material.
+  if (
+    current.addressKey !== basis.addressKey ||
+    current.documentEpoch !== basis.documentEpoch ||
+    current.nodeId !== basis.nodeId ||
+    current.partitionKey !== basis.partitionKey ||
+    current.treeId !== basis.treeId ||
+    current.viewportKey !== basis.viewportKey
+  ) return null;
+  if (
+    current.documentEpoch === basis.documentEpoch &&
+    current.layoutEpoch === basis.layoutEpoch
+  ) return receipt;
+  return Object.freeze({ ...receipt, basis: ownBasis(basis) });
+}
+
 export const MATERIAL_ADDRESS_ENGAGEMENT_AMOUNT = 0.1;
 export const MATERIAL_ADDRESS_NATIVE_FRAGMENT_LIMIT = 256;
 export const MATERIAL_ADDRESS_NATIVE_ROW_LIMIT = 64;

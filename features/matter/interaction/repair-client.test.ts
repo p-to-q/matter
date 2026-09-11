@@ -72,4 +72,46 @@ describe("requestTranscriptRepair", () => {
       source: "model",
     });
   });
+
+  it("owns streamed bytes before a producer reuses its buffer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => responseFromReusedByteView(JSON.stringify({
+      protocolVersion: "0.2",
+      promptVersion: TRANSCRIPT_REPAIR_PROMPT_VERSION,
+      operationId: "voice_reused_buffer",
+      attempt: 1,
+      text: "The bytes remain exact.",
+      source: "model",
+    }))));
+
+    await expect(requestTranscriptRepair({
+      operationId: "voice_reused_buffer",
+      attempt: 1,
+      locale: "en-US",
+      text: "the bytes remain exact",
+      signal: new AbortController().signal,
+      timeoutMs: 1_000,
+    })).resolves.toMatchObject({
+      operationId: "voice_reused_buffer",
+      text: "The bytes remain exact.",
+    });
+  });
 });
+
+function responseFromReusedByteView(text: string): Response {
+  const encoded = new TextEncoder().encode(text);
+  const backing = new Uint8Array(8);
+  let offset = 0;
+  return new Response(new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (offset === encoded.byteLength) {
+        controller.close();
+        return;
+      }
+      const length = Math.min(backing.byteLength, encoded.byteLength - offset);
+      backing.set(encoded.subarray(offset, offset + length));
+      offset += length;
+      controller.enqueue(backing.subarray(0, length));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    },
+  }));
+}

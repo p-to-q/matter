@@ -1,11 +1,12 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.54 is the current deployed
-public-origin product source: PR #92 merged as `main` `08e346c`, exact CI run
-`34202824083` passed, automatic Production deployment `6323365156` succeeded,
-and the bounded no-store public check identified `0.2.0-preview.54` after 35
-probes. Publication is withheld because its exact strict model-pool release
+the complete generative product loop yet. Preview.55 is the current deployed
+public-origin product source: PR #94 merged as `main` `989d3d1`, exact CI run
+`34257149975` passed, automatic Production deployment
+`79EU4MxFmfEGU9XdhnwPJLozubtQ` succeeded, and the bounded no-store public check
+identified `0.2.0-preview.55` after one probe. Publication is withheld because
+its exact strict model-pool release
 probe failed. The latest annotated tag and GitHub prerelease therefore remain
 Preview.52 at `6a4931b`; neither may be advanced by borrowing an older pool
 receipt. The repository maintainer operates only through GitHub: a topic push
@@ -64,6 +65,53 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Release boundary — 0.2.0-preview.56
+
+Preview.56 is a maintainer hardening candidate, not a wider product or provider
+claim. Elastic now treats a drag as degree selection only: release never spends
+a model turn, while Enter, Space, the painted address, and the opened pocket are
+the explicit confirmation surfaces. A stationary grip click remains inert.
+Point Talk owns one visible whole-node address, rejects stale geometry, and
+keeps its bounded direction input and mutation authority separate from Lasso.
+
+The 2,000-node canvas retains a bounded native owner set across transient focus
+and fold views, while only active owners participate in layout, hit testing,
+focus, or accessibility. This removes repeated DOM reconstruction without
+changing the material tree. The material index and label runtime are a secondary
+lazy surface with their own readiness; its independent scrolling cannot revoke
+an in-flight canvas lasso, and a named font used only by sibling chrome cannot
+republish material geometry. Unknown or material-owned font events remain
+fail-closed. Label persistence now preserves manual names through quota pressure
+and cross-tab races, applies the same global 4,000-row model-cache limit during
+v4 migration and ordinary writes, and retries a failed lazy repository load
+only on a later explicit operation.
+
+All streamed request and response seams share one bounded, ownership-copying
+byte accumulator, including fragmented and adversarial bodies. Layout and
+height caches are keyed by exact document, projection, locale, text, width, and
+measurement authority rather than presentation coincidence. The formal local
+production receipt completed three 20-cycle rounds with whole-session and
+measurement long-task maxima of 69ms and 68ms, 4,474 DOM elements, and an initial runtime
+of 1,196,550 raw / 379,215 gzip bytes. CI, Production identity, strict live model-pool proof,
+the annotated tag, and the GitHub prerelease remain publication gates; none is
+claimed by this local receipt.
+
+The existing dependency surface is patched to Next 16.3.4, Sharp 0.35.4,
+js-yaml 4.3.2, Vitest 4.1.11, and the matching Next lint rules. `npm audit`
+reports no high or critical vulnerability. Its three remaining moderate entries
+are one transitive chain from the browser speech package through
+`onnxruntime-node` to `adm-zip`, for which no patched `adm-zip` release exists;
+changing Transformers.js back to its older major
+would trade away the proven browser worker for an audit-number shortcut. Matter
+imports Transformers.js only from the deferred local-transcription worker, and
+the runtime verifier now rejects either Node-only package from every server
+trace. The exact production artifact contains neither and still keeps the worker
+out of the initial graph.
+
+This release adds no dependency, durable material field, provider SDK, prompt
+authority, remote audio path, hidden retrieval, service worker, or manual
+deployment route.
 
 ## Release boundary — 0.2.0-preview.55
 

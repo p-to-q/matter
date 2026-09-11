@@ -110,6 +110,9 @@ export class LabelDriver {
     this.now = dependencies.now ?? Date.now;
     this.canonicalNow = dependencies.canonicalNow ?? (() => new Date().toISOString());
     this.state = createLabelSessionState(scope.tree.id, scope.documentEpoch);
+    // Keep the constructor document as the cleanup baseline even if an archive
+    // replacement arrives before the first projection observation.
+    this.lastScope = scope;
   }
 
   getState(): LabelSessionState {
@@ -152,7 +155,7 @@ export class LabelDriver {
     this.applyDocument(scope);
     this.lastScope = scope;
     this.lastNodeIds = nodeIds;
-    this.restoreOnce(scope.tree.id);
+    this.restoreOnce(scope);
 
     const items = planLabelWork(scope.tree, nodeIds, this.state, this.dependencies.locale);
     let cancelledSupersededWork = false;
@@ -270,6 +273,10 @@ export class LabelDriver {
     this.active.clear();
     this.queue.length = 0;
     this.listeners.clear();
+    // The driver and repository are one session owner. Closing from a separate
+    // React effect would permanently close a lazy repository during Strict
+    // Mode's setup/cleanup replay, before the retained driver is disposed.
+    this.dependencies.repository?.close();
   }
 
   /** Hidden documents release derived model work without touching durable names. */
@@ -299,6 +306,14 @@ export class LabelDriver {
   }
 
   private applyDocument(scope: LabelScope): void {
+    const previousScope = this.lastScope;
+    const live = new Set(Object.keys(scope.tree.nodes));
+    // Replacing an archive can keep its tree id while changing document epoch.
+    // Diff the actual documents, not label-session entries: an old node may
+    // have a durable manual name even when it was never projected this session.
+    const removed = previousScope?.tree.id === scope.tree.id
+      ? Object.keys(previousScope.tree.nodes).filter((nodeId) => !live.has(nodeId))
+      : [];
     const next = reduceLabelSession(this.state, {
       type: "document-changed",
       treeId: scope.tree.id,
@@ -313,18 +328,34 @@ export class LabelDriver {
       this.active.clear();
       this.queue.length = 0;
       this.publish(next);
+      this.forgetRemovedNodes(scope.tree.id, removed);
       return;
     }
-    const live = new Set(Object.keys(scope.tree.nodes));
-    const removed = [...this.state.entries.keys()].filter((nodeId) => !live.has(nodeId));
     const pruned = reduceLabelSession(this.state, { type: "prune", liveNodeIds: live });
-    if (pruned === this.state) return;
-    this.publish(pruned);
-    if (removed.length > 0) {
-      for (const nodeId of removed) this.cancelPending(nodeId);
-      this.drain();
-      void this.dependencies.repository?.remove(this.state.treeId, removed);
+    if (pruned !== this.state) this.publish(pruned);
+    this.forgetRemovedNodes(scope.tree.id, removed);
+  }
+
+  private forgetRemovedNodes(treeId: string, nodeIds: readonly string[]): void {
+    if (nodeIds.length === 0) return;
+    for (const nodeId of nodeIds) {
+      this.cancelPending(nodeId);
+      this.unpersistedNames.delete(`${treeId} ${nodeId}`);
     }
+    this.drain();
+    void this.enqueueDurableMutationForNodes(treeId, nodeIds, async () => {
+      let receipt: LabelWriteReceipt;
+      try {
+        receipt = await this.dependencies.repository?.remove(treeId, nodeIds) ?? WRITE_SKIPPED;
+      } catch {
+        receipt = Object.freeze({ ok: false, code: "STORAGE_UNAVAILABLE" });
+      }
+      // A preceding manual write may have failed after this deletion was
+      // scheduled. The node is gone either way, so that retry marker must not
+      // grow for the rest of the session.
+      for (const nodeId of nodeIds) this.unpersistedNames.delete(`${treeId} ${nodeId}`);
+      return receipt;
+    });
   }
 
   /**
@@ -333,13 +364,14 @@ export class LabelDriver {
    * asked about again — that is what makes a label cost one generation rather
    * than one per reload.
    */
-  private restoreOnce(treeId: string): void {
+  private restoreOnce(scope: LabelScope): void {
+    const treeId = scope.tree.id;
     if (this.restoredTreeId === treeId || this.dependencies.repository === undefined) return;
     this.restoredTreeId = treeId;
     this.restoring = true;
     const documentEpoch = this.state.documentEpoch;
     const generation = ++this.restoreGeneration;
-    void this.dependencies.repository.loadAll(treeId).then(
+    void this.dependencies.repository.loadAll(treeId, Object.keys(scope.tree.nodes)).then(
       (records) => this.applyRestored(treeId, documentEpoch, generation, records),
       () => this.applyRestored(treeId, documentEpoch, generation, []),
     );
@@ -436,12 +468,33 @@ export class LabelDriver {
     nodeId: string,
     mutation: () => Promise<Result>,
   ): Promise<Result> {
-    const key = `${treeId} ${nodeId}`;
-    const previous = this.durableMutations.get(key) ?? Promise.resolve();
-    const current = previous.catch(() => undefined).then(mutation);
-    this.durableMutations.set(key, current);
+    return this.enqueueDurableMutationForNodes(treeId, [nodeId], mutation);
+  }
+
+  /**
+   * One ordering owner covers every durable mutation of a tree/node pair.
+   * A batched deletion waits for prior writes of every affected node, while a
+   * later write waits for that deletion, so completion order cannot resurrect
+   * stale rows or overwrite a person's newer name.
+   */
+  private enqueueDurableMutationForNodes<Result>(
+    treeId: string,
+    nodeIds: readonly string[],
+    mutation: () => Promise<Result>,
+  ): Promise<Result> {
+    const keys = [...new Set(nodeIds)].map((nodeId) => `${treeId} ${nodeId}`);
+    const predecessors = [...new Set(keys.flatMap((key) => {
+      const predecessor = this.durableMutations.get(key);
+      return predecessor === undefined ? [] : [predecessor];
+    }))];
+    const current = Promise.all(predecessors.map((predecessor) => (
+      predecessor.catch(() => undefined)
+    ))).then(mutation);
+    for (const key of keys) this.durableMutations.set(key, current);
     const cleanUp = () => {
-      if (this.durableMutations.get(key) === current) this.durableMutations.delete(key);
+      for (const key of keys) {
+        if (this.durableMutations.get(key) === current) this.durableMutations.delete(key);
+      }
     };
     void current.then(cleanUp, cleanUp);
     return current;
@@ -553,12 +606,20 @@ export class LabelDriver {
     if (next === this.state) return;
     this.publish(next);
     if (success.source === "model") {
-      void this.dependencies.repository?.put(this.state.treeId, {
+      const treeId = this.state.treeId;
+      const record = Object.freeze({
         nodeId: item.nodeId,
         label,
-        origin: "model",
+        origin: "model" as const,
         basis: item.basis,
         updatedAt: this.canonicalNow(),
+      });
+      void this.enqueueDurableMutation(treeId, item.nodeId, async () => {
+        try {
+          return await this.dependencies.repository?.put(treeId, record) ?? WRITE_SKIPPED;
+        } catch {
+          return Object.freeze({ ok: false, code: "STORAGE_UNAVAILABLE" });
+        }
       });
     }
   }

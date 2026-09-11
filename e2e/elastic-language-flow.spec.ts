@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { settleLassoGeometry } from "./lasso-driver";
 import { fixtureUiCopy, fixtureVoiceAdmissionName } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
@@ -21,7 +22,7 @@ test("both literal grips stay visible in the paper's light and dark appearances"
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
 
@@ -73,10 +74,7 @@ test("font loading revokes actionable geometry until either font outcome settles
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", {
-    name: fixtureUiCopy.toolRail.circleSelectLanguage,
-    exact: true,
-  }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
 
@@ -84,6 +82,24 @@ test("font loading revokes actionable geometry until either font outcome settles
   const grips = page.locator(".stretch-handle");
   await expect(address).toHaveAttribute("data-material-address-painted", "true");
   await expect(grips).toHaveCount(2);
+
+  const unrelatedFontReceipt = await page.evaluate(() => {
+    const face = new FontFace("Independent Chrome Font", 'local("Arial")');
+    document.fonts.dispatchEvent(new FontFaceSetLoadEvent("loading", { fontfaces: [] }));
+    document.fonts.dispatchEvent(new FontFaceSetLoadEvent("loadingdone", { fontfaces: [face] }));
+    return {
+      semanticSelection: document.querySelector(".lasso-layer")?.getAttribute("data-selected"),
+      painted: document.querySelector<HTMLElement>(
+        '.material-address-layer[data-address-variant="actionable"]',
+      )?.hasAttribute("data-material-address-painted") ?? false,
+      grips: document.querySelectorAll(".stretch-handle").length,
+    };
+  });
+  expect(unrelatedFontReceipt).toEqual({
+    semanticSelection: "true",
+    painted: true,
+    grips: 2,
+  });
 
   for (const outcome of ["loadingdone", "loadingerror"] as const) {
     const immediate = await page.evaluate(() => {
@@ -327,7 +343,7 @@ test("one outline owns the address from neutral through both grips", async ({ pa
   await expect(page.locator('.spatial-thought[data-selected="true"] .spatial-thought__label'))
     .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
 
@@ -447,19 +463,51 @@ test("a structural address settles with the narrow index transition", async ({ p
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
+  await page.addStyleTag({
+    content: ".matter-material-plane { transition-duration: 1200ms !important; }",
+  });
 
+  const layer = page.locator(
+    '.material-address-layer[data-address-variant="structural"]',
+  );
   const path = page.locator(
     '.material-address-layer[data-address-variant="structural"] .material-address-layer__path',
   );
   const label = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
+  const plane = page.locator(".matter-material-plane");
   const [pathBefore, labelBefore] = await Promise.all([path.boundingBox(), label.boundingBox()]);
   expect(pathBefore).not.toBeNull();
   expect(labelBefore).not.toBeNull();
   const inlineOffset = pathBefore!.x - labelBefore!.x;
 
+  await plane.evaluate((element) => {
+    element.addEventListener("transitionrun", (event) => {
+      if (
+        event instanceof TransitionEvent && event.target === element &&
+        event.propertyName === "transform"
+      ) {
+        element.setAttribute("data-e2e-transition-phase", "running");
+      }
+    });
+    element.addEventListener("transitionend", (event) => {
+      if (
+        event instanceof TransitionEvent && event.target === element &&
+        event.propertyName === "transform"
+      ) {
+        element.setAttribute("data-e2e-transition-phase", "ended");
+      }
+    });
+  });
   await page.locator(".material-files-toggle").click({ force: true });
-  await expect(page.locator(".matter-material-plane"))
+  await expect(plane).toHaveAttribute("data-e2e-transition-phase", "running");
+  await expect(layer).not.toHaveAttribute("data-material-address-painted", "true");
+  await page.waitForTimeout(300);
+  await expect(plane).toHaveAttribute("data-e2e-transition-phase", "running");
+  await expect(layer).not.toHaveAttribute("data-material-address-painted", "true");
+  await expect(plane)
     .toHaveAttribute("data-index-disclosure", "open");
+  await expect(plane).toHaveAttribute("data-e2e-transition-phase", "ended");
+  await expect(layer).toHaveAttribute("data-material-address-painted", "true");
   await expect.poll(async () => (await label.boundingBox())?.x ?? 0)
     .toBeGreaterThan(labelBefore!.x + 100);
   await expect.poll(async () => {
@@ -482,10 +530,7 @@ test("forced colors keeps structural, actionable, and native text readable", asy
   expect(await path.evaluate((node) => getComputedStyle(node).stroke)).not.toBe("none");
   expect(await label.evaluate((node) => getComputedStyle(node).color)).not.toBe("rgba(0, 0, 0, 0)");
 
-  await page.getByRole("button", {
-    name: fixtureUiCopy.toolRail.circleSelectLanguage,
-    exact: true,
-  }).click();
+  await activateLasso(page);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(label, 0));
   const actionable = page.locator(
     '.material-address-layer[data-address-variant="actionable"]',
@@ -541,7 +586,7 @@ test("the upper moving partition reflows in the full column and never splits a l
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   // A segment that starts mid-line, so the prefix and the moving partition
   // share a canonical line and the split has to be real.
@@ -625,7 +670,7 @@ test("the upper grip keeps its upper boundary fixed and pushes selected language
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 1));
 
@@ -686,7 +731,7 @@ test("the upper grip on the opening segment pushes every lower material row down
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
 
@@ -764,7 +809,7 @@ test("Elastic Language cancels an unstarted gesture and a late turn without chan
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   const grip = page.getByRole("slider", {
@@ -810,10 +855,7 @@ test("the first positive degree after the deadzone can be confirmed from the add
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", {
-    name: fixtureUiCopy.toolRail.circleSelectLanguage,
-    exact: true,
-  }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   const grip = page.getByRole("slider", {
@@ -885,7 +927,7 @@ test("Elastic Language provider failure stays quiet and leaves material unchange
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   const grip = page.getByRole("slider", {
@@ -919,10 +961,7 @@ test("clicking outside a settled Elastic address cancels without a request", asy
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", {
-    name: fixtureUiCopy.toolRail.circleSelectLanguage,
-    exact: true,
-  }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   const grip = page.getByRole("slider", {
@@ -956,7 +995,7 @@ test("Voice recording suspends selected-language grips while both stop controls 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
   await expect(page.locator(".stretch-handle")).toHaveCount(2);
@@ -1026,7 +1065,7 @@ async function runElasticReceipt(
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await selectRoot(page);
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
+  await activateLasso(page);
   const text = page.locator(`[data-thought-text-id="${ROOT_ID}"] .spatial-thought__label`);
   await expect(text).toContainText(SOURCE);
   await drawEarlyReleaseLoop(page, await segmentProbeRect(text, 0));
@@ -1103,7 +1142,10 @@ async function runElasticReceipt(
     window.dispatchEvent(new Event("resize"));
   });
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
-  await expect(text).toContainText(EXPANDED);
+  // A fresh development server may compile the fixture route only after this
+  // first explicit confirmation. Keep that infrastructure wait local; the
+  // interaction and request-count assertions above retain the normal budget.
+  await expect(text).toContainText(EXPANDED, { timeout: 15_000 });
   expect(turnRequests).toBe(1);
   expect(requestReceipt).toEqual({
     amount: 0.5,
@@ -1386,6 +1428,15 @@ async function selectRoot(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
+}
+
+async function activateLasso(page: Page): Promise<void> {
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+  await settleLassoGeometry(page);
 }
 
 async function segmentProbeRect(

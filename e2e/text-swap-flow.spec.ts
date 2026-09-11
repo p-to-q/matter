@@ -60,6 +60,26 @@ test.describe("passage-local Point and Talk", () => {
     const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
     await expect(composer).toBeVisible();
     await expect(direction).toBeFocused();
+    const pointTalkAddress = page.locator(
+      '.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"]',
+    );
+    await expect(pointTalkAddress).toHaveAttribute("data-material-address-painted", "true");
+    expect(await pointTalkAddress.evaluate((layer) => {
+      const paper = document.querySelector<HTMLElement>(".matter-document");
+      const field = document.querySelector<HTMLElement>(".point-talk");
+      return {
+        address: Number(getComputedStyle(layer).zIndex),
+        field: field === null ? null : Number(getComputedStyle(field).zIndex),
+        paper: paper === null ? null : Number(getComputedStyle(paper).zIndex),
+      };
+    })).toEqual({ address: 32, field: 33, paper: 2 });
+    await expect(page.locator("main.matter-shell"))
+      .toHaveAttribute("data-material-address-owner", "point-talk");
+    await page.mouse.move(4, 4);
+    await passage.hover();
+    await page.waitForTimeout(250);
+    await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
+    await expect(composer).toBeVisible();
     expect(await page.evaluate((rootId) => {
       const target = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
       const field = document.querySelector<HTMLElement>(".point-talk");
@@ -73,7 +93,9 @@ test.describe("passage-local Point and Talk", () => {
         fieldHeight: Math.round(fieldRect.height),
         fieldWidth: Math.round(fieldRect.width),
         leftDifference: Math.abs(fieldRect.left - Math.min(...targetRects.map((rect) => rect.left))),
-        upperGap: Math.min(...targetRects.map((rect) => rect.top)) - fieldRect.bottom,
+        upperGap: Math.round(
+          Math.min(...targetRects.map((rect) => rect.top)) - fieldRect.bottom,
+        ),
       };
     }, ROOT_ID)).toEqual({
       fieldHeight: 38,
@@ -97,6 +119,42 @@ test.describe("passage-local Point and Talk", () => {
 
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(passage).toContainText(SOURCE_TEXT);
+  });
+
+  test("a reopened turn measures the current selection surface and keeps the direction bound Unicode-complete", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const pointTalkAddress = page.locator(
+      '.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"]',
+    );
+    const path = pointTalkAddress.locator(".material-address-layer__path");
+
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await expect(pointTalkAddress).toHaveAttribute("data-material-address-painted", "true");
+    const unselectedPath = await path.getAttribute("d");
+    expect(unselectedPath).not.toBeNull();
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+
+    await passage.click();
+    await expect(passage).toHaveAttribute("aria-pressed", "true");
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await expect(pointTalkAddress).toHaveAttribute("data-material-address-painted", "true");
+    expect(await path.getAttribute("d")).not.toBe(unselectedPath);
+    await expect(passage.locator(".spatial-thought__label"))
+      .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(passage.locator(".spatial-thought__label")).toHaveCSS("box-shadow", "none");
+
+    const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
+    const exact = "😀".repeat(240);
+    await direction.fill(exact);
+    await expect(direction).toHaveValue(exact);
+    await direction.fill(`${exact}😀`);
+    await expect(direction).toHaveValue(exact);
   });
 
   test("a retryable provider failure keeps the direction and retries one exact node", async ({ page }) => {
@@ -357,7 +415,7 @@ test.describe("passage-local Point and Talk", () => {
   });
 
   test.describe("coarse pointer", () => {
-    test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+    test.use({ hasTouch: true, isMobile: true, viewport: { width: 375, height: 667 } });
 
     test("the local composer stays inside a coarse visual viewport", async ({ page }) => {
       await page.goto("/matter");
@@ -368,11 +426,19 @@ test.describe("passage-local Point and Talk", () => {
       await expect(composer).toBeVisible();
       expect(await composer.evaluate((element) => {
         const rect = element.getBoundingClientRect();
-        return rect.left >= 11 && rect.right <= innerWidth - 11 && rect.top >= 11 && rect.bottom <= innerHeight - 11;
-      })).toBe(true);
-      expect(await composer.locator("button").evaluateAll((buttons) => buttons.every((button) =>
-        button.getBoundingClientRect().height >= 48
-      ))).toBe(true);
+        const rail = document.querySelector<HTMLElement>(".tool-rail")?.getBoundingClientRect();
+        return {
+          insideViewport: rect.left >= 11 && rect.top >= 11 && rect.bottom <= innerHeight - 11,
+          clearsToolRail: rail !== undefined && rect.right <= rail.left,
+        };
+      })).toEqual({ insideViewport: true, clearsToolRail: true });
+      expect(await composer.locator("button").evaluateAll((buttons) => buttons.every((button) => {
+        const bounds = button.getBoundingClientRect();
+        return bounds.width >= 48 && bounds.height >= 48;
+      }))).toBe(true);
+      await expect(page.locator(
+        '.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"]',
+      )).toHaveAttribute("data-material-address-painted", "true");
     });
 
     test("an unusably narrow paper revokes the local turn without hidden focus", async ({ page }) => {

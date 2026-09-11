@@ -1,3 +1,5 @@
+import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
+
 /** A strict browser response boundary shared by bounded Matter JSON clients. */
 export async function readBoundedJsonResponse(
   response: Response,
@@ -27,8 +29,7 @@ export async function readBoundedJsonResponse(
   }
 
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const bytes = new BoundedByteAccumulator(maxBytes);
   let oversized = false;
   const cancel = () => {
     void reader.cancel(signal.reason).catch(() => undefined);
@@ -40,12 +41,10 @@ export async function readBoundedJsonResponse(
       signal.throwIfAborted();
       if (done) break;
       if (value === undefined) continue;
-      total += value.byteLength;
-      if (total > maxBytes) {
+      if (!bytes.append(value)) {
         oversized = true;
         throw new Error("The response is too large.");
       }
-      chunks.push(value);
     }
   } finally {
     signal.removeEventListener("abort", cancel);
@@ -53,12 +52,6 @@ export async function readBoundedJsonResponse(
     reader.releaseLock();
   }
 
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  const text = new TextDecoder("utf-8", { fatal: true }).decode(merged);
+  const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes.snapshot());
   return JSON.parse(text) as unknown;
 }

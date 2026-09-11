@@ -9,6 +9,7 @@ import {
   type LabelReference,
   type LabelSuccess,
 } from "../protocol/label-contract";
+import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 import { PROTOCOL_VERSION } from "../tree/model";
 
 export class LabelClientError extends Error {
@@ -119,8 +120,8 @@ async function readBoundedText(
     signal.throwIfAborted();
   }
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const bytes = new BoundedByteAccumulator(maxBytes);
+  let oversized = false;
   const cancel = () => {
     void reader.cancel(signal.reason).catch(() => undefined);
   };
@@ -131,26 +132,19 @@ async function readBoundedText(
       signal.throwIfAborted();
       if (done) break;
       if (value === undefined) continue;
-      total += value.byteLength;
-      if (total > maxBytes) {
+      if (!bytes.append(value)) {
+        oversized = true;
         throw new LabelClientError("LABEL_FAILED", "The label response is too large.", false);
       }
-      chunks.push(value);
     }
   } finally {
     signal.removeEventListener("abort", cancel);
-    if (signal.aborted || total > maxBytes) cancel();
+    if (signal.aborted || oversized) cancel();
     reader.releaseLock();
   }
 
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes.snapshot());
   } catch {
     throw new LabelClientError("LABEL_FAILED", "The label response was not valid UTF-8.", false);
   }

@@ -21,7 +21,8 @@ for (const viewport of [
     const sidebar = page.locator("aside.material-files");
     // The index has no handle at desk widths; below them it is a drawer.
     const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).first();
-    if (await toggle.count() > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
+    if (viewport.name === "narrow") {
+      await expect(toggle).toBeVisible();
       await toggle.click();
     }
     await expect(sidebar).toHaveAttribute("data-open", "true");
@@ -69,9 +70,11 @@ for (const viewport of [
     const sidebar = page.locator("aside.material-files");
     // The index has no handle at desk widths; below them it is a drawer.
     const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).first();
-    if (await toggle.count() > 0 && (await toggle.getAttribute("aria-expanded")) !== "true") {
+    if (viewport.name === "narrow") {
+      await expect(toggle).toBeVisible();
       await toggle.click();
     }
+    await expect(sidebar).toHaveAttribute("data-open", "true");
     await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
     const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
 
@@ -99,13 +102,19 @@ for (const viewport of [
 
     const sidebar = page.locator("aside.material-files");
     const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles }).first();
-    const hasToggle = await toggle.count() > 0;
-    if (hasToggle && (await toggle.getAttribute("aria-expanded")) === "true" && viewport.name === "narrow") {
-      await toggle.click();
+    if (viewport.name === "narrow") {
+      await expect(toggle).toBeVisible();
+      if ((await toggle.getAttribute("aria-expanded")) === "true") await toggle.click();
+      await expect(sidebar).not.toHaveAttribute("data-open", "true");
+    } else {
+      await expect(sidebar).toHaveAttribute("data-open", "true");
     }
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
-    if (hasToggle && (await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+    if (viewport.name === "narrow") {
+      await toggle.click();
+      await expect(sidebar).toHaveAttribute("data-open", "true");
+    }
     await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
 
     const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });

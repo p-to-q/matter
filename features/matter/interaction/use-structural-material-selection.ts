@@ -1,21 +1,29 @@
 "use client";
 
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { RefObject } from "react";
 import { normalizeClientRects } from "./range-measurement";
 import {
   createProjectedLayoutReceipt,
+  type ProjectedLayoutBasis,
   type ProjectedLayoutReceipt,
 } from "./projected-layout-receipt";
+import {
+  rebaseStructuralMaterialMeasurement,
+  type StructuralMaterialGeometryBasis,
+  type StructuralMaterialMeasurement,
+} from "./structural-material-geometry";
 
 type StructuralSelectionInput = Readonly<{
   documentEpoch: number;
   enabled: boolean;
+  geometryBasis: StructuralMaterialGeometryBasis | null;
   layoutEpoch: number;
   nodeId: string | null;
   positioningRef: RefObject<HTMLElement | null>;
   scopeRef: RefObject<HTMLElement | null>;
+  source: "point-talk" | "structural-selection";
   treeId: string;
   viewportKey: string;
 }>;
@@ -27,13 +35,73 @@ type StructuralSelectionInput = Readonly<{
 export function useStructuralMaterialSelection(
   input: StructuralSelectionInput,
 ): ProjectedLayoutReceipt | null {
-  const [receipt, setReceipt] = useState<ProjectedLayoutReceipt | null>(null);
+  const [measurement, setMeasurement] = useState<StructuralMaterialMeasurement | null>(null);
+  const receiptBasis = useMemo<ProjectedLayoutBasis>(() => ({
+    addressKey: wholeNodeAddressKey(input.nodeId ?? "", input.source),
+    documentEpoch: input.documentEpoch,
+    layoutEpoch: input.layoutEpoch,
+    nodeId: input.nodeId ?? "",
+    partitionKey: input.source,
+    treeId: input.treeId,
+    viewportKey: input.viewportKey,
+  }), [
+    input.documentEpoch,
+    input.layoutEpoch,
+    input.nodeId,
+    input.source,
+    input.treeId,
+    input.viewportKey,
+  ]);
+  const receipt = useMemo(
+    () => !input.enabled || input.nodeId === null
+      ? null
+      : rebaseStructuralMaterialMeasurement(measurement, input.geometryBasis, receiptBasis),
+    [input.enabled, input.geometryBasis, input.nodeId, measurement, receiptBasis],
+  );
+  const receiptRef = useRef(receipt);
+  const transitioningRef = useRef(new Set<EventTarget>());
+  const transitionOwnerRef = useRef<Readonly<{
+    documentEpoch: number;
+    element: HTMLElement;
+    treeId: string;
+  }> | null>(null);
+  useLayoutEffect(() => {
+    receiptRef.current = receipt;
+  });
+  useLayoutEffect(() => () => {
+    transitioningRef.current.clear();
+    transitionOwnerRef.current = null;
+  }, []);
 
   useLayoutEffect(() => {
+    const positioningElement = input.positioningRef.current;
+    if (
+      !input.enabled || input.nodeId === null || input.geometryBasis === null ||
+      positioningElement === null
+    ) {
+      transitioningRef.current.clear();
+      transitionOwnerRef.current = null;
+      return;
+    }
+    const transitionOwner = transitionOwnerRef.current;
+    if (
+      transitionOwner === null ||
+      transitionOwner.documentEpoch !== input.documentEpoch ||
+      transitionOwner.element !== positioningElement ||
+      transitionOwner.treeId !== input.treeId
+    ) transitioningRef.current.clear();
+    transitionOwnerRef.current = Object.freeze({
+      documentEpoch: input.documentEpoch,
+      element: positioningElement,
+      treeId: input.treeId,
+    });
+    const geometryBasis = input.geometryBasis;
+    const nodeId = input.nodeId;
+    let disposed = false;
     let frame: number | null = null;
     const fonts = document.fonts;
     let fontLoading = fonts?.status === "loading";
-    const transitioning = new Set<EventTarget>();
+    const transitioning = transitioningRef.current;
     const cancelScheduledMeasurement = () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
       frame = null;
@@ -42,36 +110,34 @@ export function useStructuralMaterialSelection(
     const measure = () => {
       frame = null;
       const scope = input.scopeRef.current;
-      if (!input.enabled || input.nodeId === null || scope === null) {
-        setReceipt(null);
+      if (scope === null) {
+        setMeasurement(null);
         return;
       }
-      const root = Array.from(
-        scope.querySelectorAll<HTMLElement>("[data-thought-text-id]"),
-      ).find((candidate) => candidate.dataset.thoughtTextId === input.nodeId) ?? null;
+      const root = scope.querySelector<HTMLElement>(
+        `[data-layout-node-id][data-thought-id="${CSS.escape(nodeId)}"] > ` +
+          `[data-thought-text-id="${CSS.escape(nodeId)}"]`,
+      );
       const label = root?.querySelector<HTMLElement>(".spatial-thought__label") ?? null;
-      if (root === null || label === null || !scope.contains(root)) {
-        setReceipt(null);
+      const material = input.source === "point-talk" ? label ?? root : label;
+      if (root === null || material === null || !scope.contains(root)) {
+        setMeasurement(null);
         return;
       }
 
       try {
         const range = root.ownerDocument.createRange();
-        range.selectNodeContents(label);
-        const rects = normalizeClientRects(range.getClientRects());
-        range.detach();
+        let rects: ReturnType<typeof normalizeClientRects>;
+        try {
+          range.selectNodeContents(material);
+          rects = normalizeClientRects(range.getClientRects());
+        } finally {
+          range.detach();
+        }
         const column = root.getBoundingClientRect();
         const style = getComputedStyle(root);
-        setReceipt(createProjectedLayoutReceipt({
-          basis: {
-            addressKey: `${input.nodeId}:whole-node`,
-            documentEpoch: input.documentEpoch,
-            layoutEpoch: input.layoutEpoch,
-            nodeId: input.nodeId,
-            partitionKey: "structural-selection",
-            treeId: input.treeId,
-            viewportKey: input.viewportKey,
-          },
+        const nextReceipt = createProjectedLayoutReceipt({
+          basis: receiptBasis,
           column: {
             left: column.left,
             top: column.top,
@@ -81,27 +147,30 @@ export function useStructuralMaterialSelection(
           rects,
           textDirection: style.direction,
           writingMode: style.writingMode,
+        });
+        setMeasurement(nextReceipt === null ? null : Object.freeze({
+          geometryBasis,
+          receipt: nextReceipt,
         }));
       } catch {
-        setReceipt(null);
+        setMeasurement(null);
       }
     };
     const schedule = () => {
-      if (frame !== null || measurementSuspended()) return;
+      if (disposed || frame !== null || measurementSuspended()) return;
       frame = window.requestAnimationFrame(() => {
-        if (!measurementSuspended()) measure();
+        if (!disposed && !measurementSuspended()) measure();
         else frame = null;
       });
     };
     const invalidateAndSchedule = () => {
-      flushSync(() => setReceipt(null));
+      flushSync(() => setMeasurement(null));
       schedule();
     };
     const invalidateOnly = () => {
       cancelScheduledMeasurement();
-      flushSync(() => setReceipt(null));
+      flushSync(() => setMeasurement(null));
     };
-    const positioningElement = input.positioningRef.current;
     const finishPositioningTransition = (event: TransitionEvent) => {
       const target = event.target;
       if (
@@ -130,7 +199,7 @@ export function useStructuralMaterialSelection(
       fontLoading = false;
       invalidateAndSchedule();
     };
-    schedule();
+    if (receiptRef.current === null) schedule();
     window.addEventListener("resize", invalidateAndSchedule);
     window.addEventListener("scroll", invalidateAndSchedule, true);
     window.visualViewport?.addEventListener("resize", invalidateAndSchedule);
@@ -142,6 +211,7 @@ export function useStructuralMaterialSelection(
     positioningElement?.addEventListener("transitioncancel", finishPositioningTransition);
     positioningElement?.addEventListener("transitionend", finishPositioningTransition);
     return () => {
+      disposed = true;
       window.removeEventListener("resize", invalidateAndSchedule);
       window.removeEventListener("scroll", invalidateAndSchedule, true);
       window.visualViewport?.removeEventListener("resize", invalidateAndSchedule);
@@ -157,28 +227,25 @@ export function useStructuralMaterialSelection(
   }, [
     input.documentEpoch,
     input.enabled,
+    input.geometryBasis,
     input.layoutEpoch,
     input.nodeId,
     input.positioningRef,
     input.scopeRef,
+    input.source,
     input.treeId,
     input.viewportKey,
+    receiptBasis,
   ]);
 
-  return structuralReceiptMatchesInput(receipt, input) ? receipt : null;
+  return receipt;
 }
 
-function structuralReceiptMatchesInput(
-  receipt: ProjectedLayoutReceipt | null,
-  input: StructuralSelectionInput,
-): receipt is ProjectedLayoutReceipt {
-  if (!input.enabled || input.nodeId === null || receipt === null) return false;
-  const basis = receipt.basis;
-  return basis.addressKey === `${input.nodeId}:whole-node` &&
-    basis.documentEpoch === input.documentEpoch &&
-    basis.layoutEpoch === input.layoutEpoch &&
-    basis.nodeId === input.nodeId &&
-    basis.partitionKey === "structural-selection" &&
-    basis.treeId === input.treeId &&
-    basis.viewportKey === input.viewportKey;
+function wholeNodeAddressKey(
+  nodeId: string,
+  source: StructuralSelectionInput["source"],
+): string {
+  return source === "structural-selection"
+    ? `${nodeId}:whole-node`
+    : `${nodeId}:point-talk`;
 }

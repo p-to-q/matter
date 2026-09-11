@@ -50,6 +50,19 @@ describe("withBoundedJsonRequest", () => {
     expect(requestBytes).toBe(new TextEncoder().encode(JSON.stringify({ ok: true })).byteLength);
   });
 
+  it("owns streamed request bytes before the sender reuses its buffer", async () => {
+    const json = JSON.stringify({ material: "exact" });
+    const request = requestFromReusedByteView(json);
+
+    await expect(withBoundedJsonRequest(request, policy(10_000), async (payload, _signal, metadata) => ({
+      payload,
+      requestBytes: metadata.requestBytes,
+    }))).resolves.toEqual({
+      payload: { material: "exact" },
+      requestBytes: new TextEncoder().encode(json).byteLength,
+    });
+  });
+
   it("attributes a deadline reached while the handler is running", async () => {
     const failure = await withBoundedJsonRequest(post(), policy(10), (_payload, signal) =>
       stallUntilAborted(signal),
@@ -118,3 +131,30 @@ describe("withBoundedJsonRequest", () => {
     expect(cancelled).toHaveBeenCalledOnce();
   });
 });
+
+function requestFromReusedByteView(text: string): Request {
+  return new Request("https://example.test/matter/api/probe", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: reusedByteStream(new TextEncoder().encode(text)),
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+}
+
+function reusedByteStream(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  const backing = new Uint8Array(8);
+  let offset = 0;
+  return new ReadableStream({
+    async pull(controller) {
+      if (offset === bytes.byteLength) {
+        controller.close();
+        return;
+      }
+      const length = Math.min(backing.byteLength, bytes.byteLength - offset);
+      backing.set(bytes.subarray(offset, offset + length));
+      offset += length;
+      controller.enqueue(backing.subarray(0, length));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    },
+  });
+}

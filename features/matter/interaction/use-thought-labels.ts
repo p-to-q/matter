@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { createIndexedDbLabelRepository } from "../persistence/label-repository";
 import type { LabelWriteReceipt } from "../persistence/label-repository";
+import { createLazyLabelRepository } from "../persistence/lazy-label-repository";
 import type { LabelSessionState } from "../runtime/label-session";
 import type { ThoughtTree } from "../tree/model";
 import { LabelDriver } from "./label-driver";
@@ -32,7 +32,7 @@ export function useThoughtLabels(input: Readonly<{
   const locale = input.locale ?? "zh-CN";
   const enabled = input.enabled ?? true;
   const repository = useMemo(
-    () => (enabled ? createIndexedDbLabelRepository() : undefined),
+    () => (enabled ? createLazyLabelRepository() : undefined),
     [enabled],
   );
   const driver = useMemo(
@@ -53,8 +53,6 @@ export function useThoughtLabels(input: Readonly<{
     driver.retain();
     return () => driver.release();
   }, [driver]);
-
-  useEffect(() => () => repository?.close(), [repository]);
 
   useEffect(() => subscribePageSuspension(
     () => driver.suspend(),

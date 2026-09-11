@@ -60,6 +60,27 @@ export function intersectPointTalkBounds(
 }
 
 /**
+ * Reserves the right-side instrument lane without turning its chrome into
+ * Point-and-Talk state. The caller owns visibility; this pure boundary only
+ * accepts the measured occluder that is actually present.
+ */
+export function excludePointTalkRightOccluder(
+  viewport: PointTalkBounds,
+  occluder: PointTalkBounds | null,
+): PointTalkBounds | null {
+  if (occluder === null) return intersectPointTalkBounds(viewport);
+  const validViewport = intersectPointTalkBounds(viewport);
+  if (validViewport === null || intersectPointTalkBounds(occluder) === null) return null;
+  if (occluder.left >= validViewport.right || occluder.right <= validViewport.left) {
+    return validViewport;
+  }
+  return intersectPointTalkBounds(validViewport, {
+    ...validViewport,
+    right: Math.min(validViewport.right, occluder.left),
+  });
+}
+
+/**
  * Projects viewport-fixed UI from measured client geometry. DOM ownership
  * stays at the rendering edge; this policy remains deterministic and testable.
  */

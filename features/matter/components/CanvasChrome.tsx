@@ -837,16 +837,15 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
               {copy.inquiry}
             </button>
             <div className={styles.inquiryAnchor} ref={inquiryAnchorRef}>
-              <InquiryBubble
+              {overlay === "inquiry" ? <InquiryBubble
                 context={inquiryContext}
                 copy={copy}
-                hidden={overlay !== "inquiry"}
                 hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
                 language={preferences.language}
                 owner={inquiryOwner}
                 record={inquiryRecord}
                 ref={inquiryBubbleRef}
-              />
+              /> : null}
             </div>
           </div>
           <div className={styles.popoverAnchor}>
@@ -1046,7 +1045,6 @@ type InquiryBubbleHandle = Readonly<{ invalidate: () => void }>;
 const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   context?: () => InquiryContextPayload;
   copy: CanvasChromeCopy;
-  hidden: boolean;
   hint: string;
   language: CanvasLanguage;
   owner: InquiryContextOwner;
@@ -1054,7 +1052,6 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
 }>(function InquiryBubble({
   context,
   copy,
-  hidden,
   hint,
   language,
   owner,
@@ -1136,10 +1133,6 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
 
   useLayoutEffect(() => {
     ownerRef.current = owner;
-    if (hidden) {
-      ownerSnapshotRef.current = undefined;
-      return;
-    }
     const previousOwner = ownerSnapshotRef.current;
     ownerSnapshotRef.current = owner;
     if (previousOwner === undefined || sameInquiryContextOwner(previousOwner, owner)) {
@@ -1155,16 +1148,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     pendingSubmissionRef.current = null;
     cancelDictation();
     dispatch({ type: "scope-changed" });
-  }, [cancelDictation, context, hidden, owner]);
+  }, [cancelDictation, context, owner]);
 
   useLayoutEffect(() => {
-    if (hidden) {
-      invalidate();
-      return;
-    }
     const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
     return () => cancelAnimationFrame(frame);
-  }, [hidden, invalidate]);
+  }, []);
 
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
@@ -1231,7 +1220,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     if (field === null) return;
     field.style.height = "auto";
     field.style.height = `${Math.min(field.scrollHeight, INQUIRY_FIELD_MAX_HEIGHT)}px`;
-  }, [hidden, text]);
+  }, [text]);
 
   useLayoutEffect(() => {
     const thread = threadRef.current;
@@ -1264,7 +1253,6 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
       aria-label={copy.inquiry}
       className={styles.inquiry}
       data-inquiry-phase={state.phase}
-      hidden={hidden}
       id="matter-inquiry"
       role="dialog"
     >

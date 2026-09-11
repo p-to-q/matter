@@ -17,6 +17,29 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-09 — transient views retain bounded material geometry owners
+
+Changed: the complete canvas keeps the current document's at-most 2,000 native
+thought geometry owners mounted across transient fold and focus projections.
+Only the active projection carries `data-thought-id`, enters geometry queries,
+or participates in display, pointer, focus, and accessibility; durable tree
+changes still add and remove owners normally. The material index and its label
+runtime now form one secondary lazy surface, independent of canvas readiness.
+
+Why: production evidence isolated repeated destruction and rebuilding of roughly
+6,000 DOM nodes and 24,000 attributes as the cause of 178–235ms main-thread
+tasks. Reusing the bounded owners and switching one active discriminator brought
+the final formal three-round whole-session and measurement maxima to 69ms without
+changing layout coordinates or visible material. Moving the large index off the
+initial graph also restored more than 25KiB of cross-platform gzip headroom
+without delaying the primary canvas.
+
+Forecloses: treating fold or focus as permission to discard and recreate the
+same bounded geometry, counting a hidden resident owner as visible material,
+using canvas `data-layout-ready` as a readiness signal for a lazy secondary
+surface, letting sibling scroll or chrome-only font loading revoke a canvas-owned
+stroke, and weakening the 100ms target or runtime ceiling to absorb avoidable work.
+
 ## 2026-09-08 — transient owners and exact text fail closed
 
 Changed: keyboard focus now reveals its complete passage inside the unobscured

@@ -173,6 +173,12 @@ describe("requestLabel", () => {
     expect(cancelled).toBe(false);
   });
 
+  it("owns streamed bytes before a producer reuses its buffer", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => responseFromReusedByteView(JSON.stringify(SUCCESS))));
+
+    await expect(request({ timeoutMs: 1_000 })).resolves.toEqual(SUCCESS);
+  });
+
   it("reports an unreachable endpoint as unavailable", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new TypeError("Failed to fetch");
@@ -180,3 +186,22 @@ describe("requestLabel", () => {
     await expect(request()).rejects.toMatchObject({ code: "LABEL_UNAVAILABLE", retryable: true });
   });
 });
+
+function responseFromReusedByteView(text: string): Response {
+  const encoded = new TextEncoder().encode(text);
+  const backing = new Uint8Array(8);
+  let offset = 0;
+  return new Response(new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      if (offset === encoded.byteLength) {
+        controller.close();
+        return;
+      }
+      const length = Math.min(backing.byteLength, encoded.byteLength - offset);
+      backing.set(encoded.subarray(offset, offset + length));
+      offset += length;
+      controller.enqueue(backing.subarray(0, length));
+      await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    },
+  }));
+}

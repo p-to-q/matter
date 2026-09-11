@@ -9,6 +9,7 @@ import type {
   ScenarioCall,
   ScenarioCandidateEvent,
 } from "./harness";
+import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 
 /**
  * One ordered pool of OpenAI-compatible endpoints, shared by every scenario.
@@ -583,8 +584,7 @@ async function readBounded(
   }
   signal.throwIfAborted();
   const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
+  const bytes = new BoundedByteAccumulator(maxBytes);
   let oversized = false;
   const boundary = rejectOnAbort(signal);
   let cancellation: Promise<void> | undefined;
@@ -599,12 +599,10 @@ async function readBounded(
       const { done, value } = await Promise.race([reader.read(), boundary.promise]);
       if (done) break;
       if (value === undefined) continue;
-      total += value.byteLength;
-      if (total > maxBytes) {
+      if (!bytes.append(value)) {
         oversized = true;
         throw new Error("The model provider response was too large.");
       }
-      chunks.push(value);
     }
   } finally {
     signal.removeEventListener("abort", cancel);
@@ -612,13 +610,7 @@ async function readBounded(
     if (signal.aborted || oversized) cancel();
     reader.releaseLock();
   }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder("utf-8", { fatal: true }).decode(merged);
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes.snapshot());
 }
 
 function rejectOnAbort(signal: AbortSignal): {

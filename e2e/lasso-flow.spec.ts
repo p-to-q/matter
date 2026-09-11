@@ -677,6 +677,43 @@ test("a loop across two passages enters selection mode without Elastic grips", a
   await expect(page.locator(".lasso-layer[data-selected=true]")).toHaveCount(0);
 });
 
+test("independent index scrolling cannot revoke a canvas-owned lasso stroke", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await expect(page.locator("aside.material-files")).toHaveAttribute("data-open", "true");
+  await selectRoot(page);
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  await settleLassoGeometry(page);
+
+  const rect = await segmentProbeRect(
+    page.locator(`[data-thought-text-id="${rootId}"] .spatial-thought__label`),
+    0,
+  );
+  const margin = 9;
+  await page.mouse.move(rect.x - margin, rect.y - margin);
+  await page.mouse.down();
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
+  await page.mouse.move(rect.x + rect.width + margin, rect.y - margin, { steps: 5 });
+  await page.locator(".material-files__body").dispatchEvent("scroll");
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
+  await page.mouse.move(rect.x + rect.width + margin, rect.y + rect.height + margin, { steps: 4 });
+  await page.mouse.move(rect.x - margin, rect.y + rect.height + margin, { steps: 5 });
+  await page.mouse.move(rect.x - margin, rect.y + Math.min(18, rect.height * .45), { steps: 2 });
+  await page.mouse.up();
+  await expect(page.locator(".lasso-layer[data-selected=true]")).toBeVisible();
+
+  await page.mouse.move(rect.x - margin, rect.y - margin);
+  await page.mouse.down();
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
+  await page.evaluate(() => window.dispatchEvent(new Event("scroll")));
+  await expect(page.locator(".lasso-layer")).not.toHaveAttribute("data-drawing", "true");
+  await page.mouse.up();
+});
+
 test("one Full-view punctuation segment keeps the full canvas and reveals both grips", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");

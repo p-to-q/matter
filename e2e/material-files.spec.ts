@@ -1032,6 +1032,9 @@ test("a mixed sibling group renders one directed arrow-to-terminal guide", async
 
   const sidebar = page.locator("aside.material-files");
   const rows = sidebar.locator(".material-file");
+  // The index is a secondary lazy surface; wait for its own complete small
+  // projection instead of treating canvas geometry as an index-ready signal.
+  await expect(rows).toHaveCount(10);
   const initialIds = await rows.evaluateAll((elements) =>
     elements.map((element) => element.dataset.nodeId ?? ""),
   );

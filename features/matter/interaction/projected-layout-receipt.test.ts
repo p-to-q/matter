@@ -3,6 +3,8 @@ import {
   MATERIAL_ADDRESS_ENGAGEMENT_AMOUNT,
   createProjectedLayoutReceipt,
   projectMaterialAddress,
+  projectedLayoutReceiptBounds,
+  rebaseProjectedLayoutReceipt,
   type ProjectedLayoutBasis,
 } from "./projected-layout-receipt";
 
@@ -50,6 +52,37 @@ describe("projected layout receipt", () => {
     expect(metrics.blockOutset).toBe(4.9);
     expect(metrics.inlineOutset / metrics.blockOutset).toBeCloseTo(7.2 / 4.9, 5);
     expect(metrics.cornerRadius).toBe(3);
+  });
+
+  it("projects whole-run bounds from the same measured receipt", () => {
+    expect(projectedLayoutReceiptBounds(RECEIPT)).toEqual({
+      left: 120,
+      top: 100,
+      right: 880,
+      bottom: 152,
+    });
+  });
+
+  it("reissues unchanged geometry under one newly proven layout epoch", () => {
+    const rebased = rebaseProjectedLayoutReceipt(RECEIPT, { ...BASIS, layoutEpoch: 8 });
+    expect(rebased?.basis.layoutEpoch).toBe(8);
+    expect(rebased?.rows).toBe(RECEIPT.rows);
+    expect(rebased?.column).toBe(RECEIPT.column);
+    expect(Object.isFrozen(rebased)).toBe(true);
+    expect(rebaseProjectedLayoutReceipt(RECEIPT, { ...BASIS, layoutEpoch: -1 })).toBeNull();
+  });
+
+  it("never rebinds client geometry to another owner or coordinate space", () => {
+    for (const basis of [
+      { ...BASIS, addressKey: "other:whole-node" },
+      { ...BASIS, documentEpoch: 4 },
+      { ...BASIS, nodeId: "other" },
+      { ...BASIS, partitionKey: "point-talk" },
+      { ...BASIS, treeId: "other-tree" },
+      { ...BASIS, viewportKey: "10:0:1" },
+    ]) {
+      expect(rebaseProjectedLayoutReceipt(RECEIPT, basis)).toBeNull();
+    }
   });
 
   it("scales the optical family with glyph geometry and bounds extreme zoom", () => {

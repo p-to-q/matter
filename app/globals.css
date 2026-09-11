@@ -289,6 +289,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .spatial-thought { position: absolute; top: 0; left: 0; width: var(--matter-column-width); contain: layout style; }
 .matter-canvas:not([data-layout-revealed="true"]) .spatial-thought { visibility: hidden; pointer-events: none; }
 .matter-canvas:not([data-layout-revealed="true"]) .spatial-thought:first-child { visibility: visible; opacity: .62; }
+.spatial-thought[data-layout-node-id]:not([data-thought-id]) { display: none; }
 .spatial-thought__text { --material-text-color: var(--ink); position: relative; z-index: 1; display: block; width: 100%; margin: 0; padding: 0; border: 0; background: transparent; color: var(--material-text-color); font: 400 clamp(22px, 2.2vw, 34px)/1.62 var(--matter-face); letter-spacing: 0; overflow-wrap: anywhere; text-align: center; text-wrap: pretty; cursor: inherit; user-select: text; }
 .spatial-thought__label { -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 .matter-shell::selection,
@@ -474,6 +475,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-address-layer[data-address-variant="native"],
 .material-address-layer[data-address-variant="structural"] { z-index: 27; }
 .material-address-layer[data-address-variant="actionable"] { z-index: 1; }
+/* Lasso actionable material inherits the lasso overlay's stacking context.
+   Point Talk is a sibling of the opaque paper, so its explicit partition must
+   lift the same address above the paper and keep it below the local field. */
+.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"] { z-index: 32; }
 .material-address-layer__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .material-address-layer__path { fill: rgba(var(--selection-control-rgb),var(--address-density, .18)); stroke: none; }
 .material-address-layer[data-address-confirmable="true"] .material-address-layer__path { cursor: pointer; pointer-events: fill; touch-action: manipulation; }
@@ -484,7 +489,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 /* Each older paint is only released once the outline has actually written a
    path, so no frame can show grips or a focus ring with no address. */
 .lasso-layer:has(.material-address-layer[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback[data-single-address-fallback] { display: none; }
-.matter-shell:has(.material-address-layer[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
+.matter-shell:has(.material-address-layer[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label,
+.matter-shell:has(.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
 .matter-shell[data-material-address-owner="native"] .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: transparent; }

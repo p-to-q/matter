@@ -36,6 +36,15 @@ type LensPlacement = Readonly<{
   metrics: NodeHandleMetrics;
   relation: NodeHandlePosition["relation"];
   materialCorner: NodeHandlePosition["materialCorner"];
+  owner: Readonly<{
+    actionCount: number;
+    coarse: boolean;
+    compact: boolean;
+    element: HTMLElement;
+    geometryKey: string;
+    nodeId: string;
+    target: LensTarget;
+  }>;
 }>;
 
 export type NodeActionLensProps = Readonly<{
@@ -256,6 +265,16 @@ export function NodeActionLens({
       : retainedTarget;
 
   const actionCount = activeTarget === null ? 0 : 2;
+  const currentPlacement = placement !== null && activeTarget !== null &&
+    placement.owner.actionCount === actionCount &&
+    placement.owner.coarse === coarse &&
+    placement.owner.compact === compact &&
+    placement.owner.element.isConnected &&
+    placement.owner.geometryKey === geometryKey &&
+    placement.owner.nodeId === activeTarget.nodeId &&
+    placement.owner.target === activeTarget
+    ? placement
+    : null;
 
   useLayoutEffect(() => {
     const paper = documentRef.current;
@@ -274,8 +293,19 @@ export function NodeActionLens({
       return;
     }
     targetElementRef.current = text;
+    const owner = Object.freeze({
+      actionCount,
+      coarse,
+      compact,
+      element: text,
+      geometryKey,
+      nodeId: activeTarget.nodeId,
+      target: activeTarget,
+    });
+    let disposed = false;
 
     const update = () => {
+      if (disposed || !text.isConnected || !canvas.contains(text)) return;
       const paperRect = paper.getBoundingClientRect();
       const positioningRect = positioningRef.current?.getBoundingClientRect() ?? paperRect;
       const textRect = measureFirstLineInkRect(text);
@@ -305,8 +335,10 @@ export function NodeActionLens({
             metrics,
             relation: result.relation,
             materialCorner: result.materialCorner,
+            owner,
           };
       setPlacement((current) => current !== null && next !== null &&
+        current.owner === next.owner &&
         current.left === next.left && current.top === next.top &&
         current.relation === next.relation &&
         current.materialCorner?.x === next.materialCorner?.x &&
@@ -316,7 +348,9 @@ export function NodeActionLens({
         ? current
         : next);
     };
-    update();
+    // Initial ResizeObserver delivery runs after the browser has completed
+    // layout. Reading here in React's layout effect forces a full 2,000-node
+    // document layout whenever focus returns to the complete tree.
     const resizeObserver = new ResizeObserver(update);
     resizeObserver.observe(paper);
     resizeObserver.observe(text);
@@ -328,6 +362,7 @@ export function NodeActionLens({
     positioningElement?.addEventListener("transitionend", finishPositioningTransition);
     window.addEventListener("resize", update);
     return () => {
+      disposed = true;
       resizeObserver.disconnect();
       positioningElement?.removeEventListener("transitioncancel", finishPositioningTransition);
       positioningElement?.removeEventListener("transitionend", finishPositioningTransition);
@@ -336,11 +371,11 @@ export function NodeActionLens({
   }, [actionCount, activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, positioningRef]);
 
   useLayoutEffect(() => {
-    if (placement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
+    if (currentPlacement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
     focusPendingKeyboardEntry(activeTarget.nodeId);
-  }, [activeTarget, focusPendingKeyboardEntry, placement]);
+  }, [activeTarget, currentPlacement, focusPendingKeyboardEntry]);
 
-  if (activeTarget === null || placement === null || actionCount === 0) return null;
+  if (activeTarget === null || currentPlacement === null || actionCount === 0) return null;
 
   const restoreTargetFocus = () => {
     canvasRef.current?.querySelector<HTMLElement>(
@@ -380,7 +415,7 @@ export function NodeActionLens({
       data-canvas-interactive
       data-node-action-lens
       data-node-id={activeTarget.nodeId}
-      data-relation={placement.relation}
+      data-relation={currentPlacement.relation}
       onBlur={(event) => {
         if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
         scheduleClose();
@@ -397,14 +432,14 @@ export function NodeActionLens({
       role="toolbar"
       aria-orientation="horizontal"
       style={{
-        left: placement.left,
-        top: placement.top,
-        "--lens-button": `${placement.metrics.button}px`,
-        "--lens-gap": `${placement.metrics.gap}px`,
-        "--lens-pad-x": `${placement.metrics.paddingX}px`,
-        "--lens-pad-y": `${placement.metrics.paddingY}px`,
-        "--lens-material-x": `${placement.materialCorner?.x ?? placement.metrics.paddingX}px`,
-        "--lens-material-y": `${placement.materialCorner?.y ?? placement.metrics.paddingY}px`,
+        left: currentPlacement.left,
+        top: currentPlacement.top,
+        "--lens-button": `${currentPlacement.metrics.button}px`,
+        "--lens-gap": `${currentPlacement.metrics.gap}px`,
+        "--lens-pad-x": `${currentPlacement.metrics.paddingX}px`,
+        "--lens-pad-y": `${currentPlacement.metrics.paddingY}px`,
+        "--lens-material-x": `${currentPlacement.materialCorner?.x ?? currentPlacement.metrics.paddingX}px`,
+        "--lens-material-y": `${currentPlacement.materialCorner?.y ?? currentPlacement.metrics.paddingY}px`,
       } as CSSProperties}
     >
       <button

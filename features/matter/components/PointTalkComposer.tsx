@@ -14,11 +14,14 @@ import type { TextSwapController } from "../interaction/use-text-swap";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
 import {
+  excludePointTalkRightOccluder,
   intersectPointTalkBounds,
   projectPointTalkPlacement,
   projectPointTalkScale,
+  type PointTalkBounds,
   type PointTalkPlacement,
 } from "./point-talk-placement";
+import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
 
 export function PointTalkComposer({
   boundaryRef,
@@ -34,6 +37,7 @@ export function PointTalkComposer({
   onStopVoice,
   onSubmit,
   positioningRef,
+  targetBounds,
   voiceAvailable,
 }: Readonly<{
   boundaryRef: RefObject<HTMLElement | null>;
@@ -49,6 +53,7 @@ export function PointTalkComposer({
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
   positioningRef: RefObject<HTMLElement | null>;
+  targetBounds: PointTalkBounds | null;
   voiceAvailable: boolean;
 }>) {
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -60,7 +65,7 @@ export function PointTalkComposer({
   const phase = controller.state.phase;
   const retryableError = controller.state.phase === "error" && controller.state.retryable &&
     controller.state.direction !== undefined;
-  const placementReady = placement !== null;
+  const placementReady = placement !== null && targetBounds !== null;
   const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
   const copy = pointTalkCopy(locale);
@@ -80,22 +85,24 @@ export function PointTalkComposer({
     // The controller renders one idle pass before entering its usable phase;
     // no bubble exists yet, so absence here is not damaged geometry.
     if (bubble === null) return;
+    if (targetBounds === null) {
+      setPlacement(null);
+      return;
+    }
     if (boundary === null || canvas === null || positioningSurface === null) {
       onCancel();
       return;
     }
-    const target = findPointTalkTarget(canvas, nodeId);
-    if (target === undefined) {
-      onCancel();
-      return;
-    }
-    const bounds = contentBounds(target);
     const bubbleRect = bubble.getBoundingClientRect();
-    const viewport = intersectPointTalkBounds(
+    const visibleField = intersectPointTalkBounds(
       visualViewportBounds(),
       boundary.getBoundingClientRect(),
       positioningSurface.getBoundingClientRect(),
     );
+    const toolRail = visiblePointTalkToolRail(boundary);
+    const viewport = visibleField === null
+      ? null
+      : excludePointTalkRightOccluder(visibleField, toolRail?.getBoundingClientRect() ?? null);
     if (viewport === null) {
       onCancel();
       return;
@@ -103,7 +110,7 @@ export function PointTalkComposer({
     const width = bubbleRect.width || 264;
     const height = bubbleRect.height || 38;
     const next = projectPointTalkPlacement({
-      target: bounds,
+      target: targetBounds,
       bubble: { width, height },
       viewport,
       gap: 14 * visualScale,
@@ -117,7 +124,7 @@ export function PointTalkComposer({
       && current.maxWidth === next.maxWidth
       ? current
       : next);
-  }, [boundaryRef, canvasRef, nodeId, onCancel, positioningRef, visualScale]);
+  }, [boundaryRef, canvasRef, onCancel, positioningRef, targetBounds, visualScale]);
 
   const scheduleMeasure = useCallback(() => {
     if (measurementFrameRef.current !== null) return;
@@ -128,15 +135,15 @@ export function PointTalkComposer({
   }, [measure]);
 
   useLayoutEffect(() => {
-    measure();
-    const target = canvasRef.current === null
-      ? undefined
-      : findPointTalkTarget(canvasRef.current, nodeId);
+    scheduleMeasure();
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(scheduleMeasure);
-    if (target !== undefined) observer?.observe(target);
     if (bubbleRef.current !== null) observer?.observe(bubbleRef.current);
     if (boundaryRef.current !== null) observer?.observe(boundaryRef.current);
     if (positioningRef.current !== null) observer?.observe(positioningRef.current);
+    const toolRail = boundaryRef.current === null
+      ? null
+      : visiblePointTalkToolRail(boundaryRef.current);
+    if (toolRail !== null) observer?.observe(toolRail);
     const visual = window.visualViewport;
     window.addEventListener("resize", scheduleMeasure);
     window.addEventListener("scroll", scheduleMeasure, true);
@@ -196,7 +203,7 @@ export function PointTalkComposer({
       data-phase={phase}
       ref={bubbleRef}
       role={formVisible ? undefined : "status"}
-      style={placement === null
+      style={placement === null || targetBounds === null
         ? { visibility: "hidden" }
         : {
             left: placement.left,
@@ -261,8 +268,9 @@ function PointTalkForm({
       <input
         dir="auto"
         id={inputId}
-        maxLength={240}
-        onChange={(event) => setDirection(event.currentTarget.value)}
+        onChange={(event) => setDirection(
+          constrainPointTalkDirectionInput(event.currentTarget.value),
+        )}
         placeholder={copy.placeholder}
         ref={inputRef}
         type="text"
@@ -292,25 +300,12 @@ function findPointTalkTarget(canvas: HTMLElement, nodeId: string): HTMLElement |
   return undefined;
 }
 
-function contentBounds(element: HTMLElement): Readonly<{
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}> {
-  const range = document.createRange();
-  range.selectNodeContents(element);
-  const rects = Array.from(range.getClientRects()).filter(
-    (rect) => rect.width > 0 && rect.height > 0,
-  );
-  range.detach();
-  if (rects.length === 0) return element.getBoundingClientRect();
-  return Object.freeze({
-    left: Math.min(...rects.map((rect) => rect.left)),
-    top: Math.min(...rects.map((rect) => rect.top)),
-    right: Math.max(...rects.map((rect) => rect.right)),
-    bottom: Math.max(...rects.map((rect) => rect.bottom)),
-  });
+function visiblePointTalkToolRail(boundary: HTMLElement): HTMLElement | null {
+  const rail = boundary.closest<HTMLElement>(".matter-shell")
+    ?.querySelector<HTMLElement>(".tool-rail") ?? null;
+  if (rail === null || !rail.isConnected) return null;
+  const style = getComputedStyle(rail);
+  return style.display === "none" || style.visibility === "hidden" ? null : rail;
 }
 
 function visualViewportBounds(): Readonly<{

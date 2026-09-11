@@ -32,6 +32,10 @@ import {
 import type { AdmissionController } from "../interaction/use-admission";
 import type { AdmissionAnchor as InteractionAdmissionAnchor } from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
+import {
+  fontFamiliesFromLoadingEvent,
+  fontLoadAffectsMaterialGeometry,
+} from "../interaction/lasso-font-ownership";
 import { useStretch } from "../interaction/use-stretch";
 import type { StretchPreviewSignal } from "../interaction/use-stretch";
 import {
@@ -48,10 +52,17 @@ import {
 import {
   createProjectedLayoutReceipt,
   projectMaterialAddress,
+  projectedLayoutReceiptBounds,
 } from "../interaction/projected-layout-receipt";
 import { measureTextRange, normalizeClientRects } from "../interaction/range-measurement";
 import { useNativeMaterialSelection } from "../interaction/use-native-material-selection";
 import { useStructuralMaterialSelection } from "../interaction/use-structural-material-selection";
+import { projectStructuralMaterialGeometryBasis } from "../interaction/structural-material-geometry";
+import {
+  createPointTalkOwner,
+  currentPointTalkNodeId,
+  type PointTalkOwner,
+} from "../interaction/point-talk-owner";
 import { subscribePageSuspension } from "../interaction/page-suspension";
 import {
   admissionFocusRestorationIsCurrent,
@@ -73,8 +84,7 @@ import {
   clientDepthToWorld,
   projectLanguageFlow,
 } from "../interaction/language-flow";
-import { MaterialFiles, type MaterialArchiveActions } from "./MaterialFiles";
-import { useThoughtLabels } from "../interaction/use-thought-labels";
+import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
@@ -103,6 +113,13 @@ import {
 } from "./MaterialAddressLayer";
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
+import {
+  materialLayoutDocumentKey,
+  reconcileMaterialHeightCache,
+  retainMaterialHeight,
+  type MaterialHeightCacheBasis,
+  type MaterialHeightMeasurement,
+} from "./material-height-cache";
 import {
   canMoveNodeToParent,
   createNodeMovePolicy,
@@ -160,10 +177,16 @@ const NodeActionLens = dynamic(
   () => import("./NodeActionLens").then((module) => module.NodeActionLens),
   { ssr: false },
 );
+const MaterialFilesWithLabels = dynamic(
+  () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
+  { ssr: false },
+);
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
 // cheap bound admits every ordinary passage the exact policy can safely size;
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
+const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -358,7 +381,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const { canvasPreferences } = props;
   const inquiryRecord = useInquiryRecord(tree.id, props.performanceMarking !== true);
   const canvasChromeRef = useRef<CanvasChromeHandle>(null);
-  const [pointTalkNodeId, setPointTalkNodeId] = useState<string | null>(null);
+  const [pointTalkOwner, setPointTalkOwner] = useState<PointTalkOwner | null>(null);
   const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
@@ -467,12 +490,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const viewportWindowEpochRef = useRef(0);
   const revealedDocumentEpochRef = useRef<number | null>(null);
   const measuredLayoutCacheRef = useRef(new Map<string, ColumnarLayout>());
-  const measuredHeightCacheRef = useRef(new Map<string, Readonly<{
+  const measuredLayoutMetricsRef = useRef<Readonly<{
+    canvas: HTMLDivElement;
+    columnGap: number;
     columnWidth: number;
-    height: number;
-    root: boolean;
-    text: string;
-  }>>());
+    measureRevision: number;
+    siblingGap: number;
+  }> | null>(null);
+  const measuredHeightCacheRef = useRef(new Map<string, MaterialHeightMeasurement>());
+  const measuredHeightCacheBasisRef = useRef<MaterialHeightCacheBasis | null>(null);
   const initialPerformanceMarksRef = useRef({
     canvasCommitted: false,
     heightReadStarted: false,
@@ -593,9 +619,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => projectLayoutProjection(layoutInput),
     [layoutInput],
   );
+  // Focus and fold change the active address, not the bounded document. Keep
+  // one native geometry owner per live thought so returning to full view does
+  // not destroy and rebuild the same 2,000-node render edge.
+  const residentProjection = useMemo(
+    () => projectLayoutProjection(createLayoutProjectionInput(tree, {
+      mode: "full",
+      focusNodeId: null,
+      foldedNodeIds: EMPTY_NODE_IDS,
+    })),
+    [tree],
+  );
+  const layoutDocumentKey = materialLayoutDocumentKey(
+    props.documentEpoch,
+    props.locale,
+    projectionKey,
+  );
   const publicationKey = viewportRenderer
-    ? `${projectionKey}::viewport-research:${measureRevision}`
-    : projectionKey;
+    ? `${layoutDocumentKey}:${measureRevision}:viewport-research`
+    : `${layoutDocumentKey}:${measureRevision}`;
   const activeWorkingProjection = useMemo(
     () => projection
       .filter(({ node }) => workingContext.activeNodeIds.has(node.id))
@@ -646,7 +688,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const canvas = canvasRef.current;
     const world = worldRef.current;
     if (canvas === null || world === null) return;
-    const owner = Array.from(canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]"))
+    const owner = Array.from(canvas.querySelectorAll<HTMLElement>(ACTIVE_LAYOUT_NODE_SELECTOR))
       .find((element) => element.dataset.layoutNodeId === request.nodeId);
     const target = owner?.querySelector<HTMLElement>(".spatial-thought__text") ?? null;
     const visual = clientViewport();
@@ -784,7 +826,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (layout === null) return;
     publishCanvasGeometry(
       canvas,
-      canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]"),
+      canvas.querySelectorAll<HTMLElement>(ACTIVE_LAYOUT_NODE_SELECTOR),
       layout,
     );
   }, []);
@@ -815,28 +857,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     stretchInvalidationRef.current();
   }, []);
-  const labels = useThoughtLabels({
-    tree,
-    documentEpoch: props.documentEpoch,
-    locale: props.locale,
-    enabled: props.performanceMarking !== true,
-  });
-  const labelByNodeId = useMemo(() => {
-    const values = new Map<string, string>();
-    if (labels.session.treeId !== tree.id || labels.session.documentEpoch !== props.documentEpoch) {
-      return values;
-    }
-    for (const [nodeId, entry] of labels.session.entries) values.set(nodeId, entry.label);
-    return values;
-  }, [labels.session, props.documentEpoch, tree.id]);
-  const labelOriginByNodeId = useMemo(() => {
-    const values = new Map<string, string>();
-    if (labels.session.treeId !== tree.id || labels.session.documentEpoch !== props.documentEpoch) {
-      return values;
-    }
-    for (const [nodeId, entry] of labels.session.entries) values.set(nodeId, entry.origin);
-    return values;
-  }, [labels.session, props.documentEpoch, tree.id]);
   const lassoEligibleNodeIds = useMemo<ReadonlySet<string>>(() => {
     if (navigation.mode === "full") return workingContext.activeNodeIds;
     const focusNodeId = navigation.focusNodeId;
@@ -1102,13 +1122,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
         node.text.length > 0 && node.text.length <= POINT_TALK_FAST_SOURCE_LIMIT;
     }),
   ), [tree, workingContext.activeNodeIds]);
-  const pointTalkSelectionCurrent = pointTalkNodeId !== null &&
-    pointTalkEligibleNodeIds.has(pointTalkNodeId);
-  const activePointTalkNodeId = pointTalkSelectionCurrent ? pointTalkNodeId : null;
-  if (pointTalkNodeId !== null && activePointTalkNodeId === null) {
-    // Reconcile before a removed or held target can reopen if it later returns.
-    // The derived target above keeps the current render fail-closed as well.
-    setPointTalkNodeId(null);
+  const activePointTalkNodeId = currentPointTalkNodeId(
+    pointTalkOwner,
+    props.documentEpoch,
+    tree.id,
+    pointTalkEligibleNodeIds,
+  );
+  const pointTalkSelectionCurrent = activePointTalkNodeId !== null;
+  if (pointTalkOwner !== null && activePointTalkNodeId === null) {
+    // Reconcile before a removed, replaced, or held target can later return
+    // under an obsolete local-turn owner. The derived target already keeps
+    // this render fail-closed.
+    setPointTalkOwner(null);
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1158,7 +1183,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [cancelPointTalkFocusRestore]);
   const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
     publishMaterialTextChange(change);
-    setPointTalkNodeId(null);
+    setPointTalkOwner(null);
     cancelPointTalkFocusRestore();
     const basis = Object.freeze({
       documentEpoch: change.documentEpoch,
@@ -1178,7 +1203,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       )) return;
       const canvas = canvasRef.current;
       if (canvas === null || document.visibilityState !== "visible") return;
-      for (const candidate of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
+      for (const candidate of canvas.querySelectorAll<HTMLElement>(
+        `${ACTIVE_LAYOUT_NODE_SELECTOR} > [data-thought-text-id]`,
+      )) {
         if (candidate.dataset.thoughtTextId !== pending.basis.nodeId) continue;
         candidate.focus({ preventScroll: true });
         break;
@@ -1232,7 +1259,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
   const closePointTalk = useCallback(() => {
-    setPointTalkNodeId(null);
+    setPointTalkOwner(null);
   }, []);
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
     transformState.phase !== "idle";
@@ -1337,13 +1364,84 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }),
     [nativeSelectionReceipt],
   );
+  const pointTalkGeometryBasis = useMemo(
+    () => projectStructuralMaterialGeometryBasis(
+      activeLayout,
+      renderedProjection,
+      activePointTalkNodeId,
+      props.locale,
+      measureRevision,
+      navigation.selectedNodeId === activePointTalkNodeId ? "label" : "root",
+      `${props.documentEpoch}:point-talk:${pointTalkOpeningId}`,
+    ),
+    [
+      activeLayout,
+      activePointTalkNodeId,
+      measureRevision,
+      navigation.selectedNodeId,
+      pointTalkOpeningId,
+      props.documentEpoch,
+      props.locale,
+      renderedProjection,
+    ],
+  );
+  const pointTalkSelectionReceipt = useStructuralMaterialSelection({
+    documentEpoch: props.documentEpoch,
+    enabled: !lasso.active && !lassoHasSelectionGeometry && activePointTalkNodeId !== null,
+    geometryBasis: pointTalkGeometryBasis,
+    layoutEpoch: activeLayout?.layoutEpoch ?? 0,
+    nodeId: activePointTalkNodeId,
+    positioningRef: materialPlaneRef,
+    scopeRef: canvasRef,
+    source: "point-talk",
+    treeId: tree.id,
+    viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`,
+  });
+  const pointTalkAddressProjection = useMemo(
+    () => pointTalkSelectionReceipt === null
+      ? null
+      : projectMaterialAddress({
+          amount: 0,
+          handle: null,
+          maximumDepth: 0,
+          receipt: pointTalkSelectionReceipt,
+        }),
+    [pointTalkSelectionReceipt],
+  );
+  const pointTalkTargetBounds = useMemo(
+    () => pointTalkSelectionReceipt === null
+      ? null
+      : projectedLayoutReceiptBounds(pointTalkSelectionReceipt),
+    [pointTalkSelectionReceipt],
+  );
+  const structuralGeometryBasis = useMemo(
+    () => projectStructuralMaterialGeometryBasis(
+      activeLayout,
+      renderedProjection,
+      navigation.selectedNodeId,
+      props.locale,
+      measureRevision,
+      "label",
+      `${props.documentEpoch}:structural`,
+    ),
+    [
+      activeLayout,
+      measureRevision,
+      navigation.selectedNodeId,
+      props.documentEpoch,
+      props.locale,
+      renderedProjection,
+    ],
+  );
   const structuralSelectionReceipt = useStructuralMaterialSelection({
     documentEpoch: props.documentEpoch,
     enabled: !lasso.active && !lassoHasSelectionGeometry && activePointTalkNodeId === null,
+    geometryBasis: structuralGeometryBasis,
     layoutEpoch: activeLayout?.layoutEpoch ?? 0,
     nodeId: navigation.selectedNodeId,
     positioningRef: materialPlaneRef,
     scopeRef: canvasRef,
+    source: "structural-selection",
     treeId: tree.id,
     viewportKey: `${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`,
   });
@@ -1361,7 +1459,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const visibleStructuralAddressProjection = nativeOwnsAddress
     ? null
     : structuralAddressProjection;
-  const materialAddressOwner = lasso.selections.length > 0
+  const materialAddressOwner = activePointTalkNodeId !== null
+    ? "point-talk"
+    : lasso.selections.length > 0
     ? "actionable"
     : nativeOwnsAddress
       ? "native"
@@ -2132,27 +2232,45 @@ export function RootedMaterial(props: RootedMaterialProps) {
 
   useEffect(() => {
     let mounted = true;
+    let remeasureFrame: number | null = null;
     const remeasure = () => {
+      remeasureFrame = null;
+      if (!mounted) return;
       measuredLayoutCacheRef.current.clear();
       measuredHeightCacheRef.current.clear();
       requestMeasurement();
     };
-    const remeasureWhenVisible = () => {
-      if (!document.hidden) remeasure();
+    const scheduleRemeasure = () => {
+      if (mounted && remeasureFrame === null) remeasureFrame = requestAnimationFrame(remeasure);
     };
-    window.addEventListener("resize", remeasure);
-    window.addEventListener("pageshow", remeasureWhenVisible);
-    document.addEventListener("visibilitychange", remeasureWhenVisible);
-    const initialFrame = requestAnimationFrame(remeasure);
-    void document.fonts?.ready.then(() => {
-      if (mounted) remeasure();
-    });
+    const remeasureAfterPageRestore = (event: PageTransitionEvent) => {
+      if (event.persisted) scheduleRemeasure();
+    };
+    const remeasureForMaterialFont = (event: Event) => {
+      const canvas = canvasRef.current;
+      const materialFonts = canvas === null
+        ? []
+        : Array.from(canvas.querySelectorAll<HTMLElement>(
+            `${ACTIVE_LAYOUT_NODE_SELECTOR} > [data-thought-text-id]`,
+          )).map((root) => getComputedStyle(root).fontFamily);
+      if (fontLoadAffectsMaterialGeometry(
+        fontFamiliesFromLoadingEvent(event),
+        materialFonts,
+      )) scheduleRemeasure();
+    };
+    const fonts = document.fonts;
+    window.addEventListener("resize", scheduleRemeasure);
+    window.addEventListener("pageshow", remeasureAfterPageRestore);
+    fonts?.addEventListener?.("loadingdone", remeasureForMaterialFont);
+    fonts?.addEventListener?.("loadingerror", remeasureForMaterialFont);
+    if (fonts?.status === "loading") void fonts.ready.then(scheduleRemeasure);
     return () => {
       mounted = false;
-      cancelAnimationFrame(initialFrame);
-      window.removeEventListener("resize", remeasure);
-      window.removeEventListener("pageshow", remeasureWhenVisible);
-      document.removeEventListener("visibilitychange", remeasureWhenVisible);
+      if (remeasureFrame !== null) cancelAnimationFrame(remeasureFrame);
+      window.removeEventListener("resize", scheduleRemeasure);
+      window.removeEventListener("pageshow", remeasureAfterPageRestore);
+      fonts?.removeEventListener?.("loadingdone", remeasureForMaterialFont);
+      fonts?.removeEventListener?.("loadingerror", remeasureForMaterialFont);
     };
   }, []);
 
@@ -2176,17 +2294,30 @@ export function RootedMaterial(props: RootedMaterialProps) {
       markPerformance("matter:performance:initial-canvas-committed");
     }
 
-    const style = getComputedStyle(canvas);
-    const columnWidth = readCssPixels(style, "--matter-column-width", 300);
-    const columnGap = readCssPixels(style, "--matter-column-gap", 72);
-    const siblingGap = readCssPixels(style, "--matter-sibling-gap", 28);
-    const elements = canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]");
+    const cachedMetrics = measuredLayoutMetricsRef.current;
+    const metrics = cachedMetrics?.canvas === canvas &&
+      cachedMetrics.measureRevision === measureRevision
+      ? cachedMetrics
+      : (() => {
+          const style = getComputedStyle(canvas);
+          const measured = Object.freeze({
+            canvas,
+            columnWidth: readCssPixels(style, "--matter-column-width", 300),
+            columnGap: readCssPixels(style, "--matter-column-gap", 72),
+            measureRevision,
+            siblingGap: readCssPixels(style, "--matter-sibling-gap", 28),
+          });
+          measuredLayoutMetricsRef.current = measured;
+          return measured;
+        })();
+    const { columnWidth, columnGap, siblingGap } = metrics;
+    const elements = canvas.querySelectorAll<HTMLElement>(ACTIVE_LAYOUT_NODE_SELECTOR);
     if (elements.length !== projection.length) return;
     for (let index = 0; index < projection.length; index += 1) {
       if (elements[index]?.dataset.layoutNodeId !== projection[index]?.node.id) return;
     }
     const layoutCacheKey = presentationDamage === null
-      ? `${projectionKey}:${columnWidth}:${columnGap}:${siblingGap}`
+      ? `${layoutDocumentKey}:${columnWidth}:${columnGap}:${siblingGap}`
       : null;
     const cachedLayout = layoutCacheKey === null
       ? undefined
@@ -2201,13 +2332,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
       });
       if (!publishCanvasGeometry(canvas, elements, layout)) return;
       layoutEpochRef.current = layout.layoutEpoch;
-      setPublished({ baseLayout: layout, key: projectionKey, layout });
+      setPublished({ baseLayout: layout, key: publicationKey, layout });
       return;
     }
     const baseNodes: LayoutNode[] = [];
     const admissionNodes: LayoutNode[] | null = admissionPresentationDamage === null
       ? null
       : [];
+    const previousHeightBasis = measuredHeightCacheBasisRef.current;
+    const nextHeightBasis = Object.freeze({
+      documentEpoch: props.documentEpoch,
+      locale: props.locale,
+      tree,
+    });
+    reconcileMaterialHeightCache(
+      measuredHeightCacheRef.current,
+      previousHeightBasis,
+      nextHeightBasis,
+    );
+    measuredHeightCacheBasisRef.current = nextHeightBasis;
     if (!initialPerformanceMarksRef.current.heightReadStarted) {
       initialPerformanceMarksRef.current.heightReadStarted = true;
       markPerformance("matter:performance:height-read-start");
@@ -2231,9 +2374,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         // bounded pair of frames; an unbounded zero-height loop would compete
         // with real browser resize/font invalidation forever.
         const retry = measurementRetryRef.current;
-        if (retry.key !== projectionKey) {
+        if (retry.key !== publicationKey) {
           if (retry.frame !== null) cancelAnimationFrame(retry.frame);
-          retry.key = projectionKey;
+          retry.key = publicationKey;
           retry.attempts = 0;
           retry.frame = null;
         }
@@ -2249,7 +2392,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         return;
       }
       if (!heightCacheHit) {
-        measuredHeightCacheRef.current.set(item.node.id, Object.freeze({
+        retainMaterialHeight(measuredHeightCacheRef.current, item.node.id, Object.freeze({
           columnWidth,
           height,
           root,
@@ -2312,7 +2455,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     if (layout === null) return;
     const retry = measurementRetryRef.current;
     if (retry.frame !== null) cancelAnimationFrame(retry.frame);
-    retry.key = projectionKey;
+    retry.key = publicationKey;
     retry.attempts = 0;
     retry.frame = null;
     if (layoutCacheKey !== null) {
@@ -2324,8 +2467,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       initialPerformanceMarksRef.current.geometryPublished = true;
       markPerformance("matter:performance:geometry-dom-published");
     }
-    setPublished({ baseLayout, key: projectionKey, layout });
-  }, [admissionPresentationDamage, languagePresentationDamage, markPerformance, measureRevision, presentationDamage, projection, projectionKey, props.documentEpoch, tree.rootId, viewportRenderer]);
+    setPublished({ baseLayout, key: publicationKey, layout });
+  }, [admissionPresentationDamage, languagePresentationDamage, layoutDocumentKey, markPerformance, measureRevision, presentationDamage, projection, props.documentEpoch, props.locale, publicationKey, tree, viewportRenderer]);
 
   useLayoutEffect(() => {
     if (!viewportRenderer || viewportResearchRuntime === null) return;
@@ -2437,7 +2580,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       return;
     }
     canvas.removeAttribute("data-layout-ready");
-    const elements = canvas.querySelectorAll<HTMLElement>("[data-layout-node-id]");
+    const elements = canvas.querySelectorAll<HTMLElement>(ACTIVE_LAYOUT_NODE_SELECTOR);
     const cameraBeforeWrite = readRenderedViewportCamera(world);
     if (
       cameraBeforeWrite === null ||
@@ -2508,6 +2651,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     !stretch.dragging &&
     stretch.amount === 0 &&
     transformState.phase === "idle" &&
+    activePointTalkNodeId === null &&
     !wheelMotionActive &&
     viewport.gesture?.dragging !== true;
 
@@ -2874,13 +3018,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span aria-hidden="true" className="matter-brand__divider">/</span>
         <span className="matter-brand__product">matter</span>
       </header>
-      <MaterialFiles
+      <MaterialFilesWithLabels
         archive={archiveAfterAbort}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
         lassoSelectedNodeIds={lassoSelectedNodeIds}
-        labels={labelByNodeId}
-        labelOrigins={labelOriginByNodeId}
+        labelsEnabled={props.performanceMarking !== true}
         locale={props.canvasPreferences.preferences.language}
         navigation={navigation}
         heldAsideNodeIds={workingContext.heldAsideNodeIds}
@@ -2895,12 +3038,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           if (lasso.active) exitLasso();
         }}
         onOverlayChange={setIndexOverlayOpen}
-        onRenameNode={labels.rename}
         onRenameDocument={(title) => {
           abortFixedExpansion();
           props.onRenameDocument(title);
         }}
-        onResetNodeName={labels.resetName}
         onRestoreNode={(nodeId) => {
           restoreIndexNodeAfterAbort(nodeId);
         }}
@@ -2909,7 +3050,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
           abortFixedExpansion();
           toggleHeldAside(nodeId);
         }}
-        onVisibleNodes={labels.observe}
         persistence={props.persistence}
         tree={tree}
       />
@@ -3035,6 +3175,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               <ViewportMaterialGlimpse text={projection[0]?.node.text ?? ""} />
             ) : (
             <CanvasThoughtList
+              activeProjection={renderedProjection}
               documentEpoch={props.documentEpoch}
               interactionPending={interactionPending}
               lassoActive={lasso.active}
@@ -3052,7 +3193,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               activeNodeIds={workingContext.activeNodeIds}
               heldAsideRootIds={heldAsideRootIds}
               heldAsideNodeIds={workingContext.heldAsideNodeIds}
-              projection={renderedProjection}
+              projection={viewportRenderer ? renderedProjection : residentProjection}
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
               transformChange={currentTransformChange}
@@ -3098,7 +3239,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               abortElasticExpansion();
               props.admission.discardPendingRepairs();
               setPointTalkOpeningId((current) => current + 1);
-              setPointTalkNodeId(nodeId);
+              setPointTalkOwner(createPointTalkOwner(props.documentEpoch, tree.id, nodeId));
             }}
             onToggleHeldAside={(nodeId) => {
               abortFixedExpansion();
@@ -3139,6 +3280,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         variant="structural"
       />
       {activePointTalkNodeId === null ? null : (
+        <MaterialAddressLayer
+          projection={pointTalkAddressProjection}
+          variant="actionable"
+        />
+      )}
+      {activePointTalkNodeId === null ? null : (
         <PointTalkTurn
           boundaryRef={documentRef}
           canvasRef={canvasRef}
@@ -3154,12 +3301,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           onClose={closePointTalk}
           onCommitted={publishPointTalkChange}
           positioningRef={materialPlaneRef}
+          targetBounds={pointTalkTargetBounds}
           tree={tree}
           voiceAvailable={voiceReadiness.status === "ready"}
         />
       )}
       <LassoOverlay
         active={lasso.active}
+        addressVisible={activePointTalkNodeId === null}
         addressLayerRef={actionableAddressLayerRef}
         drawing={lasso.drawing}
         closurePathRef={lasso.closurePathRef}
@@ -3205,6 +3354,7 @@ function ViewportMaterialGlimpse({ text }: Readonly<{ text: string }>) {
  * retain their normal declarative ownership.
  */
 const CanvasThoughtList = memo(function CanvasThoughtList({
+  activeProjection,
   documentEpoch,
   interactionPending,
   lassoActive,
@@ -3229,6 +3379,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   transformStatus,
   tree,
 }: {
+  activeProjection: readonly LayoutProjectionItem[];
   documentEpoch: number;
   interactionPending: boolean;
   lassoActive: boolean;
@@ -3260,6 +3411,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
 }) {
   const repairPresentationScope = { treeId: tree.id, documentEpoch };
   const lassoKeyboardDescriptionId = useId();
+  const activeProjectionById = new Map(activeProjection.map((item) => [item.node.id, item]));
   const handleThoughtClick = useCallback((event: ReactMouseEvent<HTMLOListElement>) => {
     if (interactionPending) return;
     const target = event.target instanceof Element
@@ -3286,6 +3438,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
     ) : null}
     <ol className="spatial-thoughts" onClick={handleThoughtClick}>
       {projection.map(({ node, parentId }) => {
+        const activeProjectionItem = activeProjectionById.get(node.id);
+        const projectionActive = activeProjectionItem !== undefined;
         const isSelected = node.id === navigation.selectedNodeId;
         const isHeldAside = heldAsideNodeIds.has(node.id);
         const isHeldAsideRoot = heldAsideRootIds.has(node.id);
@@ -3320,8 +3474,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             data-layout-node-id={node.id}
             data-selected={isSelected || undefined}
             data-lasso-selected={isLassoSelected || undefined}
-            data-thought-id={node.id}
-            data-parent-id={parentId ?? undefined}
+            data-thought-id={projectionActive ? node.id : undefined}
+            data-parent-id={(projectionActive ? activeProjectionItem.parentId : parentId) ?? undefined}
             data-tree-parent-id={node.parentId ?? undefined}
             data-movable={node.parentId !== null || undefined}
             data-material-motion={isTransformSettling ? "transform" : isRepairSettling ? "repair" : undefined}
@@ -3537,6 +3691,7 @@ function retainBoundedCache<T>(
 
 function LassoOverlay({
   active,
+  addressVisible,
   addressLayerRef,
   drawing,
   closurePathRef,
@@ -3560,6 +3715,7 @@ function LassoOverlay({
   stretch,
 }: {
   active: boolean;
+  addressVisible: boolean;
   addressLayerRef: React.RefObject<HTMLDivElement | null>;
   drawing: boolean;
   closurePathRef: React.RefObject<SVGPathElement | null>;
@@ -3621,7 +3777,7 @@ function LassoOverlay({
           {`${accessibility.selectedLanguage}: ${summarizeSelectedLanguage(selectedText, locale)}`}
         </span>
       )}
-      <MaterialAddressLayer
+      {addressVisible ? <MaterialAddressLayer
         confirmable={status === "idle" && stretch.mode === "adjusted" &&
           stretch.amount > 0}
         layerRef={addressLayerRef}
@@ -3631,7 +3787,7 @@ function LassoOverlay({
         }}
         projection={addressProjection}
         variant="actionable"
-      />
+      /> : null}
       {rects.length === 0 || previewMode === "expand" ? null : (
         <div
           aria-hidden="true"

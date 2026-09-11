@@ -16,10 +16,19 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       firstContentfulPaint: number | null;
       layoutReady: number | null;
       longTasks: Array<{ startTime: number; duration: number }>;
+      longTaskSupported: boolean;
       longAnimationFrames: Array<{
         startTime: number;
         duration: number;
         blockingDuration: number | null;
+        scripts: Array<{
+          duration: number;
+          forcedStyleAndLayoutDuration: number;
+          invoker: string;
+          invokerType: string;
+          sourceFunctionName: string;
+          sourceURL: string;
+        }>;
       }>;
       longAnimationFrameSupported: boolean;
       marks: Record<string, number | null>;
@@ -28,6 +37,7 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       firstContentfulPaint: null,
       layoutReady: null,
       longTasks: [],
+      longTaskSupported: false,
       longAnimationFrames: [],
       longAnimationFrameSupported: false,
       marks: {},
@@ -44,24 +54,45 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
         }
       });
       paints.observe({ type: "paint", buffered: true });
-      const longTasks = new PerformanceObserver((list) => {
-        for (const entry of list.getEntries()) {
-          receipt.longTasks.push({ startTime: entry.startTime, duration: entry.duration });
-        }
-      });
-      longTasks.observe({ type: "longtask", buffered: true });
       const supportedEntryTypes = PerformanceObserver.supportedEntryTypes ?? [];
+      if (supportedEntryTypes.includes("longtask")) {
+        receipt.longTaskSupported = true;
+        const longTasks = new PerformanceObserver((list) => {
+          for (const entry of list.getEntries()) {
+            receipt.longTasks.push({ startTime: entry.startTime, duration: entry.duration });
+          }
+        });
+        longTasks.observe({ type: "longtask", buffered: true });
+      }
       if (supportedEntryTypes.includes("long-animation-frame")) {
         receipt.longAnimationFrameSupported = true;
         const longAnimationFrames = new PerformanceObserver((list) => {
           for (const entry of list.getEntries()) {
-            const frame = entry as PerformanceEntry & { blockingDuration?: number };
+            const frame = entry as PerformanceEntry & {
+              blockingDuration?: number;
+              scripts?: Array<{
+                duration?: number;
+                forcedStyleAndLayoutDuration?: number;
+                invoker?: string;
+                invokerType?: string;
+                sourceFunctionName?: string;
+                sourceURL?: string;
+              }>;
+            };
             receipt.longAnimationFrames.push({
               startTime: frame.startTime,
               duration: frame.duration,
               blockingDuration: typeof frame.blockingDuration === "number"
                 ? frame.blockingDuration
                 : null,
+              scripts: (frame.scripts ?? []).map((script) => ({
+                duration: script.duration ?? 0,
+                forcedStyleAndLayoutDuration: script.forcedStyleAndLayoutDuration ?? 0,
+                invoker: script.invoker ?? "",
+                invokerType: script.invokerType ?? "",
+                sourceFunctionName: script.sourceFunctionName ?? "",
+                sourceURL: script.sourceURL ?? "",
+              })),
             });
           }
         });
@@ -98,10 +129,19 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       firstContentfulPaint: number | null;
       layoutReady: number | null;
       longTasks: Array<{ startTime: number; duration: number }>;
+      longTaskSupported: boolean;
       longAnimationFrames: Array<{
         startTime: number;
         duration: number;
         blockingDuration: number | null;
+        scripts: Array<{
+          duration: number;
+          forcedStyleAndLayoutDuration: number;
+          invoker: string;
+          invokerType: string;
+          sourceFunctionName: string;
+          sourceURL: string;
+        }>;
       }>;
       longAnimationFrameSupported: boolean;
       marks: Record<string, number | null>;
@@ -135,7 +175,12 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
         mutationObserver = new MutationObserver(() => {
           check();
         });
-        mutationObserver.observe(document.body, { childList: true, subtree: true });
+        mutationObserver.observe(document.body, {
+          attributes: true,
+          attributeFilter: ["data-thought-id"],
+          childList: true,
+          subtree: true,
+        });
         timer = window.setTimeout(
           () => finish(new Error(`Timed out waiting for ${count} rendered thoughts.`)),
           5_100,
@@ -187,6 +232,7 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
     const foldSamples: number[][] = [];
     const focusSamples: number[][] = [];
     const selectionSamples: number[][] = [];
+    const measurementRoundWindows: Array<{ startTime: number; endTime: number }> = [];
 
     for (let warmup = 0; warmup < 3; warmup += 1) {
       await select(root);
@@ -199,6 +245,7 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
 
     const measurementStartTime = performance.now();
     for (let round = 0; round < rounds; round += 1) {
+      const roundStartTime = performance.now();
       const folds: number[] = [];
       const focuses: number[] = [];
       const selections: number[] = [];
@@ -217,8 +264,16 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       foldSamples.push(folds);
       focusSamples.push(focuses);
       selectionSamples.push(selections);
+      measurementRoundWindows.push({
+        startTime: roundStartTime,
+        endTime: performance.now(),
+      });
     }
     const measurementEndTime = performance.now();
+    // PerformanceObserver delivery is asynchronous. Yield one task after the
+    // measured window so its final action cannot escape the receipt merely by
+    // being newer than the last observer callback.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
 
     const summarize = (rounds: number[][]) =>
       rounds.map((values) => ({
@@ -248,6 +303,7 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       focus: summarize(focusSamples),
       selection: summarize(selectionSamples),
       longTasks: {
+        supported: initial?.longTaskSupported ?? false,
         count: initial?.longTasks.length ?? 0,
         max: initial?.longTasks.length === 0
           ? 0
@@ -268,6 +324,7 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
         startTime: measurementStartTime,
         endTime: measurementEndTime,
       },
+      measurementRoundWindows,
       elementCount: document.querySelectorAll("*").length,
     };
   }, { rounds: measurementRounds, samplesPerRound: measurementSamples });
@@ -300,6 +357,12 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
     rawReceipt.longAnimationFrames.entries,
     rawReceipt.marks,
   );
+  const measurementLongTaskEntries = entriesInsideMeasurement(rawReceipt.longTasks.entries);
+  const measurementLongTasks = summarizeTimingEntries(measurementLongTaskEntries);
+  const structuralActions = measurementRounds * measurementSamples * 4;
+  const fullTreeReturns = measurementRounds * measurementSamples * 2;
+  const measurementWindowMs =
+    rawReceipt.measurementWindow.endTime - rawReceipt.measurementWindow.startTime;
   const receipt = {
     ...rawReceipt,
     longTasks: {
@@ -307,7 +370,12 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       cold: summarizeTimingEntries(attributedLongTasks.filter(({ overlapsColdCanvas }) =>
         overlapsColdCanvas
       )),
-      measurement: summarizeTimingEntries(entriesInsideMeasurement(rawReceipt.longTasks.entries)),
+      measurement: measurementLongTasks,
+      rounds: rawReceipt.measurementRoundWindows.map((window) => summarizeTimingEntries(
+        rawReceipt.longTasks.entries.filter(({ startTime, duration }) =>
+          startTime >= window.startTime && startTime + duration <= window.endTime
+        ),
+      )),
       coldAttribution: attributedLongTasks,
     },
     longAnimationFrames: {
@@ -320,9 +388,43 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
       ),
       coldAttribution: attributedLongAnimationFrames,
     },
+    longTaskDensity: {
+      structuralActions,
+      fullTreeReturns,
+      measurementWindowMs,
+      countPerStructuralAction: measurementLongTasks.count / structuralActions,
+      longTaskMsPerStructuralAction: measurementLongTasks.total / structuralActions,
+      countPerFullTreeReturn: measurementLongTasks.count / fullTreeReturns,
+      longTaskMsPerFullTreeReturn: measurementLongTasks.total / fullTreeReturns,
+      dutyCycle: measurementLongTasks.total / measurementWindowMs,
+    },
   };
 
-  console.log(`Matter 2k production receipt: ${JSON.stringify(receipt)}`);
+  console.log(`Matter 2k production receipt: ${JSON.stringify({
+    initial: receipt.initial,
+    fold: receipt.fold,
+    focus: receipt.focus,
+    selection: receipt.selection,
+    longTasks: {
+      supported: receipt.longTasks.supported,
+      count: receipt.longTasks.count,
+      max: receipt.longTasks.max,
+      cold: {
+        count: receipt.longTasks.cold.count,
+        max: receipt.longTasks.cold.max,
+        p95: receipt.longTasks.cold.p95,
+      },
+      measurement: {
+        count: receipt.longTasks.measurement.count,
+        max: receipt.longTasks.measurement.max,
+        p95: receipt.longTasks.measurement.p95,
+      },
+      rounds: receipt.longTasks.rounds.map(({ count, max, p95 }) => ({ count, max, p95 })),
+    },
+    marks: receipt.marks,
+    elementCount: receipt.elementCount,
+    longTaskDensity: receipt.longTaskDensity,
+  })}`);
   await test.info().attach("production-2k-receipt.json", {
     body: JSON.stringify(receipt, null, 2),
     contentType: "application/json",
@@ -340,18 +442,10 @@ test("records the production 2,000-node renderer receipt", async ({ page }) => {
   expect(receipt.marks["matter:performance:published-canvas-commit"]).not.toBeNull();
   expect(receipt.elementCount).toBeLessThanOrEqual(4_700);
   expect(blockingRounds).toBeLessThan(2);
-  // Cold start is one event; the session holds ~127 long tasks, of which all but
-  // that one are fold/focus rebuilds. Asserting the session `max` made a slow
-  // mount and a slow interaction the same number, and because a max is set by
-  // whichever single task met a GC pause, the figure ranged 138-238ms across
-  // four consecutive runs with no renderer change. The cold population is
-  // already attributed here and was computed and then discarded; assert it, so
-  // that a cold regression is distinguishable from interaction noise.
-  expect(receipt.longTasks.cold.count).toBeGreaterThan(0);
+  expect(receipt.longTasks.supported).toBe(true);
+  // Attribution explains a regression; it does not relax the original
+  // interaction ceiling or leave the warmup interval outside the gate.
+  expect(receipt.longTasks.max).toBeLessThan(100);
   expect(receipt.longTasks.cold.max).toBeLessThan(100);
-  // The interaction population stays bounded, on a percentile rather than a max
-  // for the same reason, at the 200ms ceiling the fold and focus rounds already
-  // hold above. Tightening it toward the ~100ms these tasks actually measure is
-  // a separate decision with its own evidence.
-  expect(receipt.longTasks.measurement.p95).toBeLessThan(200);
+  expect(receipt.longTasks.measurement.max).toBeLessThan(100);
 });

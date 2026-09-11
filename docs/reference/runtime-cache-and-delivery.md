@@ -13,7 +13,7 @@ material. It is reference context, not a license to cache a new response.
 | stable-name `/matter-ui/*` visuals | browser HTTP cache, exact URL | `max-age=14400, must-revalidate`; a later deployment may change the bytes | revalidate after four hours | reproducible artwork |
 | on-device Whisper files | Transformers.js Cache Storage, pinned model-revision URL | browser-quota bounded and disposable; a code change must deliberately change revision | redownload, then fail the voice turn recoverably if unavailable | reproducible model weights, never a transcript |
 | thought label proposal | `label-generator`, fingerprint of complete normalized input (material, locale, bound, ordered reference context) + prompt version | 256 process-local entries, ten minutes; validate again on read | deterministic label | disposable model proposal |
-| accepted model label | browser `LabelRepository`, tree/node key + current material basis | best-effort IndexedDB, at most the tree's 2,000-node bound on load; stale/deleted material invalidates it | regenerate from the deterministic label and bounded model path | disposable local presentation cache |
+| accepted model label | browser `LabelRepository`, tree/node key + current material basis | best-effort IndexedDB; exact live-key reads are bounded by the 2,000-node tree limit; 4,000 model rows globally, oldest generation first; stale/deleted material invalidates it | regenerate from the deterministic label and bounded model path | disposable local presentation cache |
 | CI compiler output | GitHub Actions, OS + lockfile + source hashes | restored only for a compatible build; Next validates entries internally | cold build | disposable compiler work |
 
 No HTTP, Next, CDN, browser, or shared application cache may retain raw audio,
@@ -28,7 +28,12 @@ A manual name may use the same browser label repository, but it is durable local
 choice rather than a cache: it is written before presentation, is never evicted
 while its node exists, and a write failure remains explicit. Neither accepted
 model labels nor manual names enter `ThoughtTree`, history, a material snapshot,
-or an archive.
+or an archive. Model writes read the exact key and preserve an existing manual
+row in the same IndexedDB write transaction; model write plus capacity reclaim
+also commits atomically. If a manual write reaches quota, one atomic retry first
+reclaims model rows, never another manual name. The v4 database upgrade itself
+converges any older model cache to the same limit; migration failure aborts the
+version change instead of committing an unbounded half-upgrade.
 
 `llms.txt` and `llms-full.txt` are public product-description documents with a
 one-hour browser cache. They contain no person-specific state. The health probe
@@ -120,6 +125,8 @@ regression contract, not a claim that this release invented a new cache hit.
 - the four requested stable-name visual files exceed 400 KiB; this subset is
   measured separately from the complete `public/` budget and does not classify
   a font or licence as visual media;
+- `onnxruntime-node` or its archive reader enters a production server trace;
+  local transcription owns the browser worker and browser WASM path only;
 - a production source map, document, E2E file, archive trace, temporary file,
   environment file, or test enters a runtime trace.
 

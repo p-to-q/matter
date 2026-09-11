@@ -1,7 +1,13 @@
-import type { DBSchema, IDBPDatabase } from "idb";
+import type {
+  DBSchema,
+  IDBPDatabase,
+  IDBPObjectStore,
+  StoreNames,
+} from "idb";
 import { openDB } from "idb";
 import type { SnapshotBundle } from "./snapshot-codec";
 import type { TreeHistory } from "../tree/history";
+import { MAX_NODES_PER_TREE } from "../tree/invariants";
 
 /**
  * Opens the one browser database Matter owns.
@@ -10,9 +16,9 @@ import type { TreeHistory } from "../tree/history";
  * named database: two modules opening `ptoq-matter` with different versions
  * would deadlock each other. The schema therefore moves as a whole.
  *
- * `snapshots` is durable material. `labels` is a derived cache — losing it
- * costs a regeneration, never a thought — and is kept out of the snapshot so
- * the archive stays exactly the material a person wrote.
+ * `snapshots` is durable material. `labels` keeps bounded derived model rows
+ * beside durable manual names; neither is material, so both stay outside the
+ * snapshot and the archive remains exactly what a person wrote.
  */
 
 export const STORAGE_SCHEMA_VERSION = 1 as const;
@@ -99,7 +105,10 @@ export interface MatterDatabase extends DBSchema {
   labels: {
     key: string;
     value: StoredLabel;
-    indexes: { treeId: string };
+    indexes: {
+      treeId: string;
+      originUpdatedAt: [StoredLabelOrigin, string];
+    };
   };
   inquiryRecords: {
     key: string;
@@ -108,7 +117,9 @@ export interface MatterDatabase extends DBSchema {
 }
 
 const DATABASE_NAME = "ptoq-matter";
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
+/** Two maximum documents stay warm; manual names are not part of this cache. */
+export const MAX_CACHED_MODEL_LABELS = MAX_NODES_PER_TREE * 2;
 
 /**
  * Tree and node ids are drawn from `[A-Za-z0-9_-]`, so a space can never occur
@@ -136,13 +147,31 @@ export function createMatterDatabaseHandle(): {
       if (databasePromise === owner.opening) databasePromise = null;
     };
     const opening = openDB<MatterDatabase>(DATABASE_NAME, DATABASE_VERSION, {
-      upgrade(db) {
+      upgrade(db, oldVersion, _newVersion, transaction) {
         if (!db.objectStoreNames.contains("snapshots")) {
           db.createObjectStore("snapshots", { keyPath: "treeId" });
         }
-        if (!db.objectStoreNames.contains("labels")) {
-          const labels = db.createObjectStore("labels", { keyPath: "key" });
+        const existingLabels = db.objectStoreNames.contains("labels");
+        const labels = existingLabels
+          ? transaction.objectStore("labels")
+          : db.createObjectStore("labels", { keyPath: "key" });
+        if (!labels.indexNames.contains("treeId")) {
           labels.createIndex("treeId", "treeId");
+        }
+        if (!labels.indexNames.contains("originUpdatedAt")) {
+          labels.createIndex("originUpdatedAt", ["origin", "updatedAt"]);
+        }
+        if (existingLabels && oldVersion < 4) {
+          // Queue the first cursor request before the upgrade callback returns.
+          // The versionchange transaction then remains the sole owner until the
+          // complete legacy cache has converged to the new global bound.
+          void retainNewestModelLabels(labels, MAX_CACHED_MODEL_LABELS).catch(() => {
+            try {
+              transaction.abort();
+            } catch {
+              // The transaction already failed; the open will reject as well.
+            }
+          });
         }
         if (!db.objectStoreNames.contains("inquiryRecords")) {
           db.createObjectStore("inquiryRecords", { keyPath: "treeId" });
@@ -170,4 +199,23 @@ export function createMatterDatabaseHandle(): {
       databasePromise = null;
     },
   };
+}
+
+/** Reclaims only derived rows, oldest first, inside the caller's transaction. */
+export async function retainNewestModelLabels<
+  TxStores extends ArrayLike<StoreNames<MatterDatabase>>,
+  Mode extends "readwrite" | "versionchange",
+>(
+  store: IDBPObjectStore<MatterDatabase, TxStores, "labels", Mode>,
+  maximum: number,
+): Promise<void> {
+  const index = store.index("originUpdatedAt");
+  const range = IDBKeyRange.bound(["model", ""], ["model", "\uffff"]);
+  let remaining = Math.max(0, await index.count(range) - maximum);
+  let cursor = remaining === 0 ? null : await index.openCursor(range);
+  while (cursor !== null && remaining > 0) {
+    await cursor.delete();
+    remaining -= 1;
+    cursor = await cursor.continue();
+  }
 }
