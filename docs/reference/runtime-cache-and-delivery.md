@@ -14,6 +14,8 @@ material. It is reference context, not a license to cache a new response.
 | on-device Whisper files | Transformers.js Cache Storage, pinned model-revision URL | browser-quota bounded and disposable; a code change must deliberately change revision | redownload, then fail the voice turn recoverably if unavailable | reproducible model weights, never a transcript |
 | thought label proposal | `label-generator`, fingerprint of complete normalized input (material, locale, bound, ordered reference context) + prompt version | 256 process-local entries, ten minutes; validate again on read | deterministic label | disposable model proposal |
 | accepted model label | browser `LabelRepository`, tree/node key + current material basis | best-effort IndexedDB; exact live-key reads are bounded by the 2,000-node tree limit; 4,000 model rows globally, oldest generation first; stale/deleted material invalidates it | regenerate from the deterministic label and bounded model path | disposable local presentation cache |
+| user-provider lease | browser cookie, opaque AES-GCM token scoped to the Matter API path | fixed 30 days from explicit verified save; no sliding read renewal; remove, expiry, tamper, unknown rotation key, or invalid status clears it | unchanged managed pool or honest unavailable surface | request-local credential authority, never material |
+| user-candidate health | server process, reviewed provider/model + opaque credential scope + scenario | 256 entries, five-minute disposable TTL; a new verified lease has a new scope | try ordered managed candidates | nearby transport evidence only |
 | CI compiler output | GitHub Actions, OS + lockfile + source hashes | restored only for a compatible build; Next validates entries internally | cold build | disposable compiler work |
 
 No HTTP, Next, CDN, browser, or shared application cache may retain raw audio,
@@ -23,6 +25,19 @@ The server-to-provider POST is also `no-store`; its body is bounded, cancelled
 with the owning request, and never becomes a Next data-cache entry. The label
 exception above is intentionally process-local and revalidated: it can improve
 a derived index label but cannot mutate or recover material.
+
+Provider-session GET/POST/DELETE and their browser client are also `no-store`.
+GET decrypts only local cookie state and never probes the saved endpoint. Test
+performs explicit bounded provider work without persistence; save writes only
+after the same proof succeeds and leaves an older credential intact on failure.
+The sealed cookie is a bounded bearer lease, not an answer cache: scripts cannot
+read it, but same-origin model actions can spend it until removal or expiry. A
+request decrypts its already-selected server profile only long enough to prepend
+one ephemeral pool candidate; runtime never repeats model discovery.
+The plaintext key, sealed token, and key-derived value never enter cache or
+health identity. Labels produced while that candidate is present use its opaque
+credential scope, so neither a user answer nor a managed fallback reached on
+that request becomes a cross-credential cache hit.
 
 A manual name may use the same browser label repository, but it is durable local
 choice rather than a cache: it is written before presentation, is never evicted

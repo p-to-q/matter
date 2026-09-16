@@ -14,6 +14,18 @@ preserves the current process-local admission perimeter and live label,
 transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
+Preview.57 is the next locally proven candidate. In addition to preserving the
+same public gates, it introduces an optional fixed-lifetime Model API lease. The
+source fails closed without `MATTER_PROVIDER_SESSION_KEYS`: managed model calls
+continue unchanged, while `GET /api/provider-session` reports
+`available: false` and the form remains disabled. That is a safe deployment,
+but it is not evidence that the requested Model API feature is available. The
+deployment owner must generate and store the independent AES-256 key ring as
+described in `deployment-handoff.md`; the repository maintainer is not
+authorized to invent, derive, print, or install it. No provider key belongs in
+Vercel configuration—the user's provider key exists only inside the encrypted
+30-day lease created after an explicit verified save.
+
 Preview.56 is the reviewed and deployed source. It changes no provider gate,
 secret, deployment ownership, or public Transform/Text Swap authority.
 Repository, browser, GitHub CI, automatic Production, and bounded public-origin
@@ -42,15 +54,15 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.56 prerelease after the exact
+The repository owner has directed one Preview.57 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
-deployment gates. This is fresh Preview.56-only authority; it does not extend
-the historical Preview.49 authorization or permit the repository maintainer to
-run a manual Vercel command or edit Vercel configuration. The automatic
-promotion does not prove that external controls exist. Issues #34 and #68
-remain open; label, repair, inquiry, and browser/local voice stay as configured,
-while Elastic and Text Swap remain unavailable. The source admission ceilings
-below are per warm instance only.
+deployment gates. This is fresh Preview.57-only authority; it does not extend
+the Preview.56 direction or permit the repository maintainer to run a manual
+Vercel command or edit Vercel configuration. The automatic promotion does not
+prove that external controls or the new session-sealing ring exist. Issues #34
+and #68 remain open; label, repair, inquiry, and browser/local voice stay as
+configured, while Elastic and Text Swap remain unavailable. The source
+admission ceilings below are per warm instance only.
 
 ## Resolved-by-itself incident — inquiry reached no model on Production
 
@@ -146,7 +158,30 @@ whose failure reaches a person, and a recorded expectation for inquiry latency
 so that "slow" is distinguishable from "down" without reading this file. Until
 that exists, every occurrence of this will be found the same way.
 
-### Current Preview.56 publication gate
+### Current Preview.57 publication gate
+
+After the exact Preview.57 source has passed topic and merged-main CI, its
+automatic Preview and Production deployments, and the bounded public-origin
+version check, first read `GET https://matter.ptoq.io/api/provider-session`.
+The no-store strict status must identify protocol `3`, report
+`available: true`, `credentialPresent: false`, and `endpoint: null` without an
+operator cookie. It performs no provider request. If it reports
+`available: false`, the source remains safe but the new Model API feature is not
+deployable; do not publish a Preview.57 prerelease and do not derive a sealing
+key from another deployment secret.
+
+Then run:
+
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.57`
+
+Publication is allowed only when that exact paced run reports both
+`pool-healthy` and `surface-usable`, with Repair, Label, and Inquiry accepted on
+every call. Provider-session availability does not substitute for the managed
+pool gate, and a healthy managed pool does not substitute for availability of
+the feature introduced in this candidate. A paid user key is not a release
+fixture and must never be placed in a probe, log, issue, or this handoff.
+
+### Preview.56 publication gate
 
 After the exact Preview.56 source has passed merged-main CI, its automatic
 Production deployment, and the bounded public-origin version check, run:

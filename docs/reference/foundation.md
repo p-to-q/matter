@@ -77,6 +77,15 @@ The tree, material, layout, and interaction machine need no new runtime
 dependency. A boundary parser is added with the first Matter-native HTTP schema,
 not retained while no application boundary imports it.
 
+The user-provider slice adds `server-only@0.0.1` as the official Next.js import
+sentinel on modules that can hold a plaintext credential. It contributes no
+provider client, transport, state, or browser code; Next recognizes the marker
+and rejects accidental client imports at the framework boundary. Recreating a
+private marker would lose that build-time integration, while relying only on
+folder naming would turn a secret boundary into convention. Matter's local
+architecture check remains a complementary repository rule; it cannot replace
+the framework's build-time client-import failure.
+
 Two small dependencies are approved only when their slice begins:
 
 - [`idb`](https://github.com/jakearchibald/idb) for IndexedDB transaction
@@ -85,7 +94,7 @@ Two small dependencies are approved only when their slice begins:
 - [`fflate`](https://github.com/101arrowz/fflate) for ZIP import/export. Writing
   ZIP, CRC, and decompression locally would be unsafe and substantially larger.
 
-Neither belongs in `package.json` before the feature that uses it. No layout,
+Neither entered `package.json` before the feature that uses it. No layout,
 geometry, immutable-update, state-machine, editor, or CRDT package is approved.
 
 ## Evidence gate

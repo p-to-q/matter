@@ -56,8 +56,12 @@ accessible name remain complete and steady. It never renders an old-text copy,
 announces status, or enters history, persistence, archive, or context. Undo,
 Redo, replacement, expiry, failure, reload, and reduced-motion rendering do not
 replay it.
-Lasso, stretch, node drag, and Undo/Redo synchronously discard pending repair
-capabilities: precise material control has priority over optional correction.
+A submitted repair owns a store-unique capability and exact node memento rather
+than the currently visible tool. Lasso, stretch, node drag, navigation, and an
+unrelated revision may proceed without discarding it. Delivery waits for a
+visible, pointer-idle window and the exact target node to be rendered; same-node change,
+removal, Undo/Redo to a different timestamp, document replacement, expiry, page
+exit, or unmount consumes or invalidates the capability.
 
 Human structure changes through the same durable kernel:
 
@@ -230,6 +234,66 @@ bounded upstream by five scenario-owned governors: label 4, repair 4, inquiry
 Direct adapter calls in tests remain intentionally outside that product
 admission boundary.
 
+The optional user-provider path is a request-local extension of this same
+foundation, not a second process-wide registry. `provider-session/3` accepts
+only an explicit test/save action, one canonical HTTPS endpoint, and an optional
+replacement key; the browser cannot choose provider, model, operation path,
+transport profile, or arbitrary request shape. `PoolTransport` owns the full
+reviewed wire profile: completion URL, authentication, serialization, accepted
+response envelope, and strict parsing. Exact official OpenAI, DeepSeek, and
+Anthropic endpoints select fixed reviewed models. A custom endpoint performs at
+most two parallel, bounded model-list operations. The registry rejects
+non-generative catalog entries, prefers a reviewed inexpensive text alias when
+present, and otherwise selects at most one stable catalog candidate per
+supported wire format. At most two short `MATTER_READY` generations then prove
+the actual model and wire before either can be sealed. The catalog heuristic is
+never authority by itself. No key-prefix inference or error-body vocabulary
+participates in selection.
+
+Custom-host model-list and completion operations pass through one closed public
+fetch boundary. It resolves the complete DNS answer set afresh, rejects the set
+if any member is private or special, and pins the TLS socket to one checked
+address while hostname SNI and certificate verification remain active.
+Redirects, credentials, fragments, queries, non-443 ports, IP literals, local
+names, and unreviewed paths fail closed. `GET /api/provider-session` performs no
+provider I/O; it only reports whether a credential exists plus its non-secret
+canonical endpoint and fixed expiry. A missing POST key can reuse the sealed key
+only at that exact canonical endpoint. Test never writes. Save verifies first
+and atomically replaces the credential only after success, so a failed edit
+preserves the previous user action.
+
+The successful profile and key are AES-256-GCM sealed in an `HttpOnly`, `Secure`,
+`SameSite=Strict` bearer cookie with a fixed 30-day lifetime; status reads do not
+extend it. The active sealing key writes and up to three older keys read during
+rotation. The key ring is deployment-only, and the cookie is attached only
+below the normalized Matter `/api` path. Legacy v2 and invalid cookies fail
+closed and are cleared rather than migrated ambiguously.
+
+Each model route decrypts the cookie for that request, constructs one ephemeral
+candidate, combines it with only the managed candidates authorized for that
+scenario, and then discards the plaintext key with request-local memory. A
+healthy user candidate remains first. Its opaque credential scope also owns a
+short health lane, so repeated transport failures temporarily move it behind a
+healthy managed candidate without affecting another person's lease. Provider
+transport, health, and label-cache
+identity use an opaque credential scope rather than key or endpoint text. The existing
+scenario governor remains global, so a new user credential cannot mint a new
+concurrency or spend lane. The key and cookie token never enter material,
+history, local documents, routine observations, logs, health/drain keys, or answer
+cache keys. Reviewed provider/model identifiers may index disposable server
+health, but never enter material, browser status, or routine model observations.
+A saved user candidate may supply the already-public repair, label, and Inquiry
+surfaces independently of Matter's managed-provider gate. Elastic and Text Swap
+remain excluded until their separate product gate opens; configuration cannot
+promote an unreleased action.
+
+Candidate transport fallback and scenario policy stay separate. Label and
+repair have useful floors and stop after the first transport-complete answer is
+rejected. Inquiry, Elastic, and Text Swap are explicit submitted actions: the
+scenario passes a pure adjudication seam to the pool, which may try a later
+candidate inside the same immutable call and remaining deadline. A semantic
+rejection never cools a provider or changes the submitted material basis.
+
 The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
 
@@ -242,16 +306,18 @@ short question + lassoed passages, or bounded active-working projection when no 
     reopening begins with a clean exchange
 ```
 
-The canvas root owns one transient AI-operation slot. Point and Talk, an active
-Elastic adjustment or turn, and Inquiry close one another synchronously; a
-neutral lasso may coexist with Inquiry because it is an address and may be that
-request's explicit context, not yet a model operation. Inquiry captures its
-bounded basis at submit time and may settle that read-only answer across later
-material or selection changes. Closing the surface, switching AI operations,
-page exit, unmount, or a different local `{ treeId, documentEpoch }` owner
-increments client authority before a delayed promise can settle. A revoked
-answer therefore cannot render or append a record even in the render-to-effect
-interval.
+The canvas root owns one transient AI-presentation slot, not one lifetime for
+all accepted work. Point and Talk, an active Elastic adjustment, and Inquiry
+detach one another's visible controls synchronously; a neutral lasso may coexist
+with Inquiry because it is an address and may be that request's explicit
+context, not yet a model operation. Each operation owner holds at most one
+submitted job, so another gesture cannot replace paid work in that owner. An
+Inquiry captures its bounded basis at submit time and may settle that read-only
+answer across later material, selection, presentation, and temporary visibility
+changes. Page exit, unmount, or a different local `{ treeId, documentEpoch }`
+owner increments client authority before a delayed promise can settle. A
+revoked answer therefore cannot render or append a record even in the
+render-to-effect interval.
 
 Inquiry projection is bounded while it walks the working tree: it stops reading
 node text once the 64-node or 4,000-code-point wire ceiling is full instead of
@@ -392,14 +458,16 @@ their visible precedence and pointer availability. Each lifecycle owns its
 start, event, commit or cancel, and cleanup transitions. An async lifecycle also
 carries its operation identity, attempt, document, and revision basis.
 
-Pointer cancel, lost capture, unmount, and a newer interaction interrupt the
-relevant owner and clean up audio, ranges, highlights, workers, and timers.
-`visibilitychange:hidden` and `pagehide` are the same interruption boundary for
-transient capture, model workers, and material-writing requests: returning
-visible may offer a new pointer action, but never resumes or eagerly recreates
-old work. Read-only Inquiry is narrower: its bounded snapshot request may finish
-while a tab is hidden, and only page exit, explicit close, surface switch,
-unmount, or document-owner replacement revokes it.
+Pointer cancel and lost capture interrupt only work that still belongs to that
+pointer or capture. Presentation dismissal and a newer gesture retire transient
+capture, ranges, highlights, workers, and timers, but do not revoke an immutable
+request that already crossed submit. `visibilitychange:hidden` cancels live
+capture and closes material delivery; it does not discard finalized
+transcription or a submitted model request. Returning visible reopens delivery
+after global pointer-idle and exact target checks. `pagehide`, unmount, document
+owner replacement, explicit cancellation, or exact-basis conflict are terminal
+operation boundaries. Read-only Inquiry follows the same submitted-owner rule
+without a material commit.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.
 
@@ -522,12 +590,16 @@ app/
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
   api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; live gate off
+  api/provider-session/route.ts    no-store persistent provider status, explicit test/save, and removal
 
 features/matter/
-  server/harness.ts                the only place a model is awaited; one scenario contract
+  server/harness.ts                the only product-result model await; one scenario contract
   server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
   server/*-harness.ts              one scenario each: repair, label, inquiry, transform, text swap
-  server/model-pool.ts             the only place an endpoint, model name, or key appears
+  server/model-pool.ts             shared managed/request-local execution, health, and fallback
+  server/user-provider-registry.ts finite wire profiles and bounded model discovery
+  server/public-provider-fetch.ts  closed DNS-checked, address-pinned HTTPS operations
+  server/provider-session-*.ts     sealed fixed-lifetime credential and route boundary
   config/inquiry.ts                neutral inquiry bounds and current scope vocabulary
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules

@@ -52,6 +52,86 @@ whole-node Point Talk presenter was introduced. Point Talk is now a visible
 local workflow with its own strict Text Swap boundary, while public live
 promotion remains independently gated and outside the first-release promise.
 
+## Active correction — submitted intent, precise lasso, and private provider session
+
+State: implemented and independently verified locally; GitHub, deployment, and
+publication proof remain pending.
+
+```text
+Outcome:    a submitted human action keeps running across unrelated presentation
+            changes; one lasso has the same bounded visible and semantic path;
+            a person may attach one reviewed private provider session from API
+            settings and that candidate is attempted before the managed pool
+Boundary:   Admission repair, Elastic, Point Talk, and Inquiry job ownership;
+            lasso sampling/hit-testing/rendering and material-address outline;
+            one versioned provider-session route, bounded provider/model registry,
+            canonical compatible-mirror URL, address-pinned HTTPS boundary,
+            encrypted HttpOnly cookie, and request-local pool augmentation
+Invariants: capture and drafts remain transient and easy to dismiss; submission
+            freezes intent; unrelated UI, selection, revision, and temporary
+            page hiding cannot erase submitted work; any material result waits
+            for a visible, pointer-idle delivery window and revalidates its exact
+            write basis; target conflict, document replacement, page exit, or
+            owner unmount revokes authority; only the tree engine commits; lasso
+            optimization fails open and never becomes selection authority; the
+            browser can supply only one compatible endpoint and key, never the
+            selected model, wire profile, or generated request; a supplied key
+            never enters material, history, response JSON, logs, or a cache key;
+            global scenario backpressure and public capability gates still apply
+Proof:      focused lifecycle, geometry, protocol, crypto, route, model-pool,
+            accessibility, and store tests; independent verifier passes for each
+            slice; full source/e2e gates; desktop and narrow localhost walkthrough
+Non-goals:  chat history, unbounded provider negotiation, arbitrary methods or
+            generated request shapes, client-selected paths or models,
+            client-side key storage, exact-once vendor billing, background service
+            work after page exit, widening public Transform/Text Swap gates,
+            changing material format, or redesigning the quiet Matter interface
+```
+
+The provider session is deliberately an operational preference rather than a
+second account or material store. The browser sends a key and compatible
+endpoint once to the same-origin server. Official endpoints use a reviewed
+model; a custom endpoint receives at most two bounded model-list reads and two
+short candidate sentinels. The server seals only the proven model/wire pair and
+returns safe connection status. It seals the credential and proven profile for a
+bounded lifetime; scripts cannot read it, but requests to the selected external
+provider necessarily include both that credential and the bounded material for
+the already-authorized Matter action. Removing the connection expires the same
+cookie path immediately. Deployment still must supply a rotatable server sealing
+key before the surface can be available.
+
+The 2026-09-11 Preview.57 draft receipt is superseded: its browser proof targets
+the former provider-selection UI and its source counts predate bounded model
+discovery and scenario-aware fallback. The exact integrated source must produce
+a fresh source, browser, artifact, and independent-review receipt before it can
+be called a release candidate. No earlier count proves the current tree or a
+live paid provider.
+
+### Active correction — mobile Pan keeps one continuous touch owner
+
+State: implemented and independently verified locally; physical-device receipt
+remains a non-blocking follow-up.
+
+```text
+Outcome:    one touch moves the canvas continuously until release, including
+            when the finger leaves the paper, without repeated short drags
+Boundary:   Pan-only browser gesture negotiation, the existing transient camera
+            reducer, and explicit capture release when another tool takes over
+Invariants: camera motion remains transient; material, layout, Lasso, node move,
+            wheel zoom, desktop input, and browser chrome keep their owners
+Proof:      sparse/off-surface reducer samples plus real mobile Chromium touch
+            travel, cancellation, capture release, and mid-gesture tool switch
+Non-goals:  multi-touch or pinch zoom, inertia, camera persistence, or changing
+            the eight-pixel accidental-touch threshold
+```
+
+Independent proof passed 26/26 viewport-reducer cases, 2/2 real CDP touch
+flows, and 4/4 cross-surface browser cases covering laptop/narrow Pan, text
+start, wheel, Lasso, file scrolling, and mobile Model API. It also proves
+Move-off, Pan-to-Lasso, `pointercancel`, lost capture, off-paper travel, and late
+events remain inert. Real iOS Safari and Android Chrome hardware remain useful
+device coverage, not evidence of an open source defect.
+
 ## Release line
 
 The release is complete when a person can, without a keyboard:
@@ -739,23 +819,23 @@ header-only.
 ### Completed hardening — hidden-page browser-resource release
 
 ```text
-Outcome:    leaving Matter or moving it into the background promptly releases
-            voice capture, material-writing voice requests, derived-label
-            requests, and the lazy local speech worker instead of carrying
-            microphone, model memory, or background compute through a long
-            browser session; a submitted read-only Inquiry may finish against
-            its captured snapshot while the same document owner remains
+Outcome:    moving Matter into the background promptly releases live capture,
+            draft-only voice work and derived-label requests, while finalized
+            user submissions keep their bounded owner; leaving the page releases
+            every request and the lazy local speech worker
 Boundary:   one page-suspension adapter, admission/inquiry/material-turn/label
             adapters, and the local Whisper/readiness leases; no tree, provider,
             persistence, or interface changes
-Invariants: hidden work cannot commit material or alter a question draft;
-            returning visible never restarts capture, a request, or model
-            loading; a retained Inquiry result cannot cross document owner,
-            explicit close, AI-surface switch, page exit, or unmount; raw audio
-            and transcript remain transient and uncached
+Invariants: hidden finalized work may compute but cannot deliver a material
+            mutation until visible, pointer-idle and exact-target-visible;
+            returning visible never starts capture, a new request, or model
+            loading; page exit, document replacement, explicit cancellation and
+            owner disposal revoke their exact work; raw audio and transcript
+            remain transient and uncached
 Proof:      focused pagehide/visibility coalescing, BFCache re-entry,
-            request cancellation and worker-retirement tests, existing voice
-            lifecycle tests, typecheck and lint
+            request retention/cancellation and page-exit worker-retirement tests,
+            exact-node delivery tests, existing voice lifecycle tests, typecheck
+            and lint
 Non-goals:  viewport rendering, persistence scheduling, model-pool policy,
             service workers, a generic resource manager, or release operations
 ```
@@ -770,6 +850,14 @@ no user material or raw voice data gained a cache. Superseding Inquiry
 ownership work on 2026-08-28 retained only an already-submitted, read-only
 snapshot request through `visibilitychange:hidden`; `pagehide` and every owner
 boundary still revoke it synchronously.
+
+The 2026-09-11 submitted-action correction supersedes the earlier blanket
+hidden-page cancellation rule. It retains finalized Admission, Point Talk,
+Elastic, Inquiry, and late Admission-repair work across temporary visibility and
+presentation changes, while holding material delivery behind the shared visible,
+pointer-idle, exact-target-visible gate. The local Whisper worker now follows the
+same distinction: temporary hidden state preserves finalized inference;
+`pagehide` and exact owner revocation retire it.
 
 ### Completed sub-slice — bounded model transport and external pool configuration
 

@@ -184,6 +184,30 @@ MATTER_REPAIR_ADAPTER=live
 MATTER_INQUIRY_ADAPTER=live
 ```
 
+The Model API settings item is separately available only when the deployment has a
+valid credential-sealing key ring:
+
+```text
+MATTER_PROVIDER_SESSION_KEYS=202609:<32-byte-base64url>,202608:<previous-32-byte-base64url>
+```
+
+Each value is exactly 32 random bytes encoded as unpadded base64url (43
+characters); the short id before `:` is unique. The first entry seals new
+cookies and at most three later entries decrypt leases issued before rotation.
+Generate and store values only in the Vercel encrypted server environment—never
+in this repository, `.env.example`, a shell transcript, CI output, issue, or
+deployment receipt. Normal rotation prepends a new key, leaves the previous key
+for at least the fixed 30-day lease window, then removes it. Emergency removal is
+immediate revocation for every lease sealed by that key. A malformed or absent
+ring keeps the settings UI honestly unavailable and does not affect the managed
+pool.
+
+The lease cookie path derives only from a strict normalized
+`MATTER_BASE_PATH`. Control characters, semicolons, dot segments, or other
+unsafe path syntax fall back to the default API path instead of entering a
+`Set-Cookie` header. Changing the base path also changes cookie reach and should
+be treated as session invalidation during deployment review.
+
 `MATTER_MODEL_*` is the canonical scenario-neutral namespace for a new or
 deliberately migrated deployment. The currently deployed `MATTER_LABEL_*`
 namespace remains a complete compatibility fallback; it does not make the pool
@@ -220,8 +244,10 @@ These are hard ownership boundaries, not claimed production SLOs:
 
 The platform allowances remain 20 s for labels, 15 s for repair, 25 s for
 inquiry/Elastic/Text Swap, and 35 s for server transcription. Candidate fallback
-happens only inside one scenario call: it never resamples an adjudicator
-rejection and never retries a completed browser action. A candidate that ignores
+happens only inside one scenario call and never retries a completed browser
+action. Label and repair settle their useful floor after a policy rejection;
+Inquiry, Elastic, and Text Swap may pass the same immutable call to a later
+candidate while budget remains. A candidate that ignores
 cancellation still loses its bounded attempt when the timer expires, preserving
 the remaining deadline for the next configured candidate.
 
@@ -282,6 +308,7 @@ The event and field set is closed:
 | `candidateFailures` | integer `0..255` | Fast transport, HTTP, body-bound, decoding, or envelope failures; no body or status is logged. |
 | `candidateTruncations` | integer `0..255` | Attempts whose explicit terminator says the returned text was incomplete. |
 | `candidateRefusals` | integer `0..255` | Attempts ending in a guardrail/refusal, tool/continuation state, or unknown explicit terminator. A conflict containing a known truncation and otherwise complete metadata is counted as truncation. |
+| `candidateRejections` | integer `0..255` | Transport-complete answers rejected by explicit-action scenario policy before a later candidate was tried; never provider-health evidence. |
 | `candidateUnknownTerminators` | integer `0..255` | Modifier count for explicit stop vocabulary this build does not recognize; it accompanies a refused attempt. |
 | `candidateMissingTerminators` | integer `0..255` | Modifier count for accepted compatibility responses that omitted stop metadata; it accompanies an answered attempt. |
 
@@ -304,7 +331,8 @@ Attribution is deliberately narrow. The four completion fields describe only
 the pool's closed classification; they do not identify a relay or prove why it
 produced that state. `candidateUnknownTerminators` and
 `candidateMissingTerminators` modify an already counted attempt rather than
-adding another one. `timeout` proves the scenario deadline;
+adding another one. `candidateRejections` counts a completed attempt while the
+scenario terminal may still be `answered` by a later candidate. `timeout` proves the scenario deadline;
 `candidateTimeouts` counts only pool attempts whose own boundary settled before
 that terminal, so it may be zero when the parent deadline won the race. `busy`
 proves process-local governor shedding, not edge saturation. `unavailable` may

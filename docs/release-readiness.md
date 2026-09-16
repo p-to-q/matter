@@ -1,7 +1,9 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.56 is the current deployed
+the complete generative product loop yet. Preview.57 is under local integration;
+its earlier draft source and browser receipts are superseded and must not be
+used for publication. Preview.56 is the current deployed
 public-origin product source: PR #96 merged as `main` `536d792`, exact CI run
 `34558357704` passed, automatic Production deployment
 `GcFQr3beW677Y6easpT2JobKuHzo` succeeded, and the bounded no-store public check
@@ -74,6 +76,50 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate release boundary — 0.2.0-preview.57
+
+Preview.57 separates accepted work from its temporary presentation. Admission,
+Elastic, Point Talk, and Inquiry keep one immutable submitted basis across
+unrelated selection, navigation, revision, dismissal, and temporary page
+hiding. Material delivery waits for a visible, pointer-idle, target-visible
+window and revalidates the exact text and lineage before the tree engine makes
+one undoable commit. Exact conflict, document replacement, explicit cancel,
+page exit, or unmount still revokes authority.
+
+Lasso now retains a bounded complete stroke, simplifies it with an explicit
+client-space error ceiling, and uses the same path for paint and hit testing.
+Projected layout is only a fail-open candidate prefilter. Multi-line address
+corners are glyph-relative and bounded; zero-size microsteps no longer create
+visual teeth. Mobile Pan owns the browser gesture only on the material plane
+while Move is active, so one touch continues beyond the paper without disabling
+ordinary chrome, Lasso, index scrolling, or desktop input.
+
+Settings adds one quiet Model API surface. The browser supplies one HTTPS API
+address and an optional replacement key; the server detects a finite reviewed
+OpenAI, DeepSeek, or Anthropic profile and owns the model, completion path,
+request shape, response vocabulary, DNS/public-address check, TLS address pin,
+global admission, and fallback. Test never saves. A successful explicit save
+is AES-GCM sealed for a fixed 30 days in a path-scoped HttpOnly cookie; failure
+preserves the prior credential. The key does not enter material, browser-readable
+storage, response JSON, logs, cache keys, or process health/drain identity. The
+non-secret canonical address may be returned so the form can be restored.
+Configuration remains subject to every existing product capability gate.
+
+```text
+source proof           pending on the exact integrated Preview.57 source
+runtime proof          pending on the exact integrated production artifact
+browser proof          pending; the former 152-case / 18-repeat receipt targets
+                       a superseded Model API contract and is not reusable
+independent review     pending per coherent integration slice and final tree
+GitHub CI proof         pending on the exact topic and merged-main identities
+automatic deploy proof pending from GitHub-triggered Preview and Production;
+                       Model API additionally requires a deployment-owned
+                       MATTER_PROVIDER_SESSION_KEYS ring
+publication state      pending; no tag or prerelease unless the exact public
+                       version, strict six-round model-pool release probe, and
+                       non-secret provider-session availability all pass
+```
 
 ## Release boundary — 0.2.0-preview.56
 

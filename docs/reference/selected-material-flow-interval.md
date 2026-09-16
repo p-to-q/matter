@@ -74,8 +74,9 @@ language, still resolves to a single region.
 
 The contact impression follows one glyph-relative optical family. Top and
 bottom outset are the same measured value; inline outset remains wider at a
-`.245 / .36` glyph-box proportion. The precise address uses a fixed `3px`
-client-space corner, while structural whole-node material keeps its independent
+`.245 / .36` glyph-box proportion. The precise address derives its client-space
+corner from `.18` of the median measured row height, clamped to `4–9px`, while
+structural whole-node material keeps its independent
 `.08` block outset and `.44` row-height corner so the older whole-node state
 does not become a full-line marker; those two structural proportions are one
 optical pair and must be retuned together. Known inter-row leading is a safety
@@ -89,7 +90,9 @@ opposite edge stayed on the glyphs and left the first row visibly lopsided.
 A precise range is painted as one rounded orthogonal outline. A structural
 whole-node address paints one glyph-bounded capsule per visual line. Neither
 topology uses fragment connectors, neck, body, seam overlap, or
-density-compounding children.
+density-compounding children. Coordinates are normalized to the same `0.01px`
+precision used for the final SVG path, and serialization skips zero-length
+segments so subpixel measurement noise cannot create visible microsteps.
 
 ## Measurement and projection boundary
 

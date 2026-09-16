@@ -69,8 +69,9 @@ they never infer a record from a current transient composer.
   latest durable version, and clear ordering cannot resurrect a stale epoch;
 - each request writes only its original `{ treeId, revision, scope }` receipt;
   ordinary material, scope, lineage, selection, and tab-visibility changes do
-  not erase that captured read-only answer, while a different local document
-  owner, explicit close, AI-surface switch, page exit, or unmount revokes it;
+  not erase that captured read-only answer; explicit close and AI-surface switch
+  detach only the transient presentation, while a different local document
+  owner, page exit, or unmount revokes the submitted operation;
 - internal clear, quota, malformed data, and cross-tab generation conflict
   cannot modify material or command history;
 - only bounded, terminal outcomes are encoded; provider content and material

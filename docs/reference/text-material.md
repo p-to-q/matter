@@ -33,10 +33,11 @@ layout. This is the correct tool for the selection fill.
 **[Excalidraw](https://github.com/excalidraw/excalidraw/blob/786ab266ff3a9cfffaed16804cf9132b44bc08ae/packages/excalidraw/lasso/index.ts)
 and [tldraw](https://github.com/tldraw/tldraw/blob/0527a7d5172819d8a1fbf2767295e6752918d2ec/apps/examples/src/examples/editor-api/lasso-select-tool/LassoOverlayUtil.ts)
 lasso paths.** Useful source for explicit polygon closure, bounded pointer input
-and a separate smoothed display projection.
-Matter keeps their important separation: smoothing never changes the polygon
-used to address text. Their shape-selection policies do not define Matter's
-punctuation address or ambiguity rules.
+and deliberate visible-path construction. Matter takes a narrower rule: the
+painted and semantic paths are one error-bounded complete polyline, so the
+person never sees a curve different from the one that addresses text. Their
+shape-selection policies do not define Matter's punctuation address or
+ambiguity rules.
 
 **ProseMirror / TipTap.** Text as a validated model rather than as DOM state.
 Relevant as a warning more than a template: they are the right answer when a
@@ -90,10 +91,20 @@ A generous loop around one node resolves to its contiguous range, including a
 multi-clause title. Disconnected runs or hits in more than one node settle as a
 transient material selection set with no Elastic controls.
 
+A whole-node fallback is legal only when that node has one derived segment. A
+loop through blank space between multiple segments cannot silently address the
+whole node. Before DOM measurement, a pure projected-layout broad phase may
+exclude nodes that are certainly outside the visible viewport plus a bounded
+client-space margin. Invalid, duplicate, or non-finite projected layout fails
+open to normal DOM measurement; projection is never selection authority.
+
 **Painting.** Selection fill via the Custom Highlight API where available, with
 an absolutely-positioned overlay as the fallback. Lasso ink is a separate SVG
-overlay that never participates in layout. Its visible stroke is a midpoint
-quadratic projection of the bounded semantic polyline. A quiet closing seam
+overlay that never participates in layout. Capture is bounded at 4,096 points,
+then simplified over the complete stroke to at most 256 points while preserving
+a maximum `1.5px` client-space error. If that guarantee cannot fit the point
+budget, the stroke saturates and cannot replace the current selection. The
+visible stroke and semantic polygon are the same straight-line polyline. A quiet closing seam
 appears only when the current closed path resolves to a trustworthy contiguous
 range or material selection set in the stroke's measurement snapshot. Empty,
 incomplete, failed, self-crossing, and unmeasured results keep it hidden. The seam
@@ -140,7 +151,10 @@ inquiry context; they never create grips or a transform request. Clicking
 ordinary material, blank paper, or the active Lasso tool clears either form.
 Width, font, visual viewport, canvas transform,
 or any tree/layout commit retains an address only if it still validates, advances
-the epoch, and remeasures before handles or stretch can operate. Scroll retains
+the epoch, and remeasures before handles or stretch can operate. Address
+invalidation does not cancel an already-submitted request: that immutable job
+survives unrelated view, selection, revision, and temporary visibility changes,
+then validates its exact document and target basis again before delivery. Scroll retains
 the address; handles and fallback rects remeasure on animation frame. Custom
 Highlight follows layout itself. An old async turn cleans up only resources
 tagged with its own interaction id.
@@ -193,19 +207,22 @@ node's top in the same layout coordinate stable while descendants flow downward.
 
 Lasso thresholds are exported code constants in client CSS pixels, including
 minimum path length, two-dimensional extent, sample distance, maximum points,
-closure intent, and edge margin. A literal close is within `14px` of the start.
+closure intent, compaction budget, and edge margin. A literal close is within
+`32px` of the start.
 An early release instead compares the endpoint direction with the direction at
-`12px` of starting arc: the unsigned angle must be at least `60deg`, while the
-closing gap is at most `50%` of drawn path length and `78%` of bounds diagonal.
+`12px` of starting arc: the unsigned angle must be at least `45deg`, while the
+closing gap is at most `68%` of drawn path length and `92%` of bounds diagonal.
 This admits three sides of a rectangle but rejects two sides, a half-circle, and
 a scale-enlarged loop whose endpoint remains far away. Bounding-box broad phase
 expands by its single shared margin.
-Sampling is stable: accepting later points cannot move already-painted history.
+The complete accepted capture is resimplified under the same fixed error after
+each new point, so an old sampled vertex may disappear but the visible and
+semantic path remain within the same bound.
 The completed polygon owns an explicit closing edge. Tiny and degenerate input
 is uncommitted, a qualified empty loop is an intentional deselection, and
-self-crossing or structurally ambiguous hits restore the prior address rather
-than guessing. A normal pointer-up never waits for a guessed continuation: it
-closes the already-visible seam. Pointer cancellation, capture loss, hidden or
+self-crossing, saturated, or structurally ambiguous hits restore the prior
+address rather than guessing. A normal pointer-up never waits for a guessed
+continuation: it closes the already-visible seam. Pointer cancellation, capture loss, hidden or
 blurred page state, and layout invalidation cancel instead. Unit tests assert
 values immediately inside and outside each threshold rather than relying on
 words such as "small" or "near."

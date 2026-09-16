@@ -17,6 +17,101 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-17 — explicit model actions own semantic fallback
+
+Changed: Inquiry, Transform, and Text Swap may continue to the next healthy
+candidate when a transport-complete answer fails their pure scenario
+adjudicator, inside the same immutable action basis and deadline. Label and
+Repair settle their deterministic floor instead. Semantic rejection is recorded
+separately and never cools a provider; transport failure still does.
+
+Why: the first reachable provider must not consume a person's submitted action
+with unusable text, while background enhancements should not multiply latency
+or spend when their existing floor is already correct.
+
+Forecloses: one global retry rule, provider-owned product semantics, cooling a
+healthy relay for bad prose, resampling background labels, and retrying against
+newer material state.
+
+## 2026-09-12 — saved provider access is explicit and server-owned
+
+Changed: the Model API surface sends only endpoint, optional replacement key,
+and explicit test/save intent. GET is local to a fixed 30-day sealed HttpOnly
+credential. Test never persists; save performs finite server-side profile
+detection, bounded model discovery, and at most two short sentinels. Surrounding
+sentinel whitespace is ignored, but any additional content fails. Save replaces
+the credential only after success. An omitted key is reusable only at the saved
+canonical endpoint, and any non-empty bounded opaque key is accepted regardless
+of vendor prefix or length convention.
+
+Why: a saved key is a deliberate device preference, not proof that a remote is
+currently connected. Preserving an existing credential across a failed edit,
+while refusing to forward it to a changed host, protects both the person's
+action and secret. Server-owned profiles make two-field setup honest without
+making the route a universal proxy.
+
+Forecloses: browser-readable key storage, GET-time probes, key-prefix provider
+inference, client-selected model or wire format, silent key reuse at a new host,
+save-before-verify, failed-save deletion, sliding status renewal, and runtime
+profile renegotiation.
+
+## 2026-09-11 — submitted work outlives its presentation
+
+Changed: capture and draft still follow the visible control, but submit freezes
+one immutable operation and exact material/document basis. Unrelated selection,
+navigation, revision, presentation dismissal, and temporary page hiding do not
+discard accepted work. Material delivery waits for visible, pointer-idle,
+target-visible revalidation; conflict, document replacement, explicit cancel,
+page exit, or unmount revokes it.
+
+Why: closing a surface is not evidence that a person withdrew the action they
+already paid for, while late output still must not overwrite newer human
+material or land beneath another direct manipulation.
+
+Forecloses: React-component lifetime as request authority, blanket cancellation
+on global revision, background mutation while a pointer is active, and
+exactly-once billing claims without a durable distributed operation service.
+
+## 2026-09-11 — one bounded lasso path owns sight and selection
+
+Changed: lasso capture retains the complete stroke under an explicit
+4,096-point input bound and simplifies it to at most 256 points with a `1.5px`
+maximum error. Paint and hit testing use the same straight polyline; saturation
+is inert. Projected layout is fail-open prefilter only, multi-segment blank space
+cannot become whole-node selection, and precise outlines use type-relative
+`4–9px` corners plus SVG-precision microstep removal.
+
+Why: an accurate prefix plus a replaced tail, or a smoothed path different from
+the semantic polygon, makes the visible hand gesture lie about its address. The
+old fixed corner and raw subpixel comparisons also exaggerated wrapped-line
+steps in the selected material.
+
+Forecloses: tail-chord approximation, learned or decorative selection widening,
+DOM measurement of certainly offscreen nodes, fixed `3px` precise corners, and
+painting geometry that the resolver did not use.
+
+## 2026-09-11 — private provider choice is a closed server lease
+
+Changed: settings exposes one quiet Model API surface for a reviewed provider,
+key, and compatible-mirror base URL. The server retains model and completion-path
+ownership, verifies an exact bounded generation profile, pins custom TLS calls
+to a DNS-checked public address, and seals the key, base, and proven adapter in
+an eight-hour path-scoped HttpOnly cookie with a rotatable AES-GCM key ring, and
+prepends one request-local candidate to the unchanged managed pool. Opaque
+credential scope, rather than key or base URL, isolates disposable health,
+drain, and label cache while scenario governors and
+live product gates remain global.
+
+Why: a person's own key should survive failing managed relays and provider
+mirrors without entering material or browser-readable storage. A fixed model,
+path, small adapter matrix, DNS/connect binding, and global admission preserve
+that freedom without creating an arbitrary proxy or spend lane.
+
+Forecloses: localStorage keys, key or custom-host re-echo, arbitrary paths/models,
+global-fetch after a separate DNS check, redirects, unbounded "OpenAI-compatible"
+guessing, cross-person candidate state, credential-minted load lanes, and
+provider configuration as permission to promote a closed action.
+
 ## 2026-09-09 — transient views retain bounded material geometry owners
 
 Changed: the complete canvas keeps the current document's at-most 2,000 native

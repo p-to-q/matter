@@ -108,7 +108,16 @@ type LassoAddress = {
 - failed measurement or mixed authority is ambiguous and preserves the last
   trustworthy state;
 - a trustworthy empty closed loop clears the address;
-- one range may cover the whole node, including a multi-clause title.
+- one range may cover the whole node when its measured segments are actually
+  hit, including a multi-clause title; blank space can trigger a whole-node
+  fallback only for a node with exactly one derived segment.
+
+The captured hand path is bounded to 4,096 points and simplified over the
+complete stroke to at most 256 points with no more than `1.5px` client-space
+error. Paint and hit testing consume that same straight polyline. A path that
+cannot fit the bound saturates and is inert rather than replacing a trustworthy
+selection. Projected layout may remove certainly offscreen DOM candidates, but
+invalid projection fails open and never becomes address authority.
 
 One successful Elastic address stays in the current Full or Focus view, revalidates
 against the current material and layout, and then exposes two Elastic grips plus
@@ -120,10 +129,12 @@ down. The gesture never
 navigates, hides surrounding material, chooses a nearby sentence, or promotes a
 convenient first hit.
 
-The address contains node id, exact UTF-16 bounds, and selected text. Request
-start freezes tree id, revision, and document epoch around it. Both are transient
-render/domain state, not tree, history, persistence, archive, or model context;
-a mismatch clears the controls and revokes late work.
+The address contains node id, exact UTF-16 bounds, and selected text. Submit
+freezes tree id, revision receipt, document epoch, target memento, and complete
+visible lineage around it. Both are transient render/domain state, not tree,
+history, persistence, archive, or model context. Address geometry may clear
+without revoking that submitted job; only a document or exact read/write-basis
+mismatch makes its late material result inert.
 
 `SegmentSelection` uses the strict discriminator `type: "segment-range"`.
 Offsets are UTF-16 code units, must start and end on a contiguous run of current
@@ -150,7 +161,8 @@ Other   newline, start of text, end of text
 - Text Swap accepts one exact segment or one exact whole node; Control Fog owns
   the whole-node Point-and-Talk entry while Lasso continues to expose Elastic;
 - offsets are UTF-16 code-unit offsets and must land on grapheme boundaries;
-- text changes, resize, or zoom invalidate selection geometry.
+- text changes, resize, or zoom invalidate selection geometry; they do not by
+  themselves cancel an already-submitted job whose exact basis remains valid.
 
 The derived address is precise:
 
@@ -231,10 +243,11 @@ lineage. Elastic Language requires a positive settled stretch; release preserves
 that exact degree locally, and one following confirmation inside the same shaped
 address starts the fixed `expand-in-place` turn without recording, audio, or
 transcript.
-Starting Voice admission cancels any pending Elastic turn and passes a null
-selection to the stretch lifecycle until admission is idle again. The semantic
-lasso address may remain transiently available for revalidation, but its grips
-and network authority do not coexist with recording or transcription.
+Starting Voice capture detaches the Elastic presentation and passes a null
+selection to the stretch lifecycle until capture is idle again. The semantic
+lasso address may remain transiently available for revalidation. An
+already-submitted Elastic job keeps its immutable basis, but delivery cannot
+coexist with capture, a hidden page, an active pointer, or an invisible target.
 Point and Talk publishes one whole-node Text Swap address from the passage-local
 AI mark. Its direction, recording, request, and status are transient; Full-view
 Voice admission remains separate and unchanged.
