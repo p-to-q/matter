@@ -14,6 +14,15 @@ triggers Preview and a `main` update triggers Production. No manual Vercel
 command, project binding, credential, or environment edit is part of this
 release. A package version alone proves neither source nor live identity.
 
+## Receipt verification — 0.2.0-preview.57
+
+A "97 Node boundary checks, 49-document link proof" receipt for Preview.57
+appears only in codex session records as a local-candidate claim dated
+2026-09-11. Verification on 2026-09-16 found no Preview.57 commit, PR, tag
+(`v0.2.0-preview.57` is absent), or GitHub release on `origin/main`; the latest
+merged preview is Preview.56 at `af7b1c1`. The receipt is not confirmed and is
+not cited here as publication evidence.
+
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
 `6053793739` succeeded and the first final public-origin probe matched
