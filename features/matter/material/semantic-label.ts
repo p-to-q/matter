@@ -41,8 +41,15 @@ export const MAX_PARENT_EXCERPT_CODE_UNITS = 240;
 /**
  * Bumping this invalidates every cached label without a schema change, because
  * it participates in the label fingerprint on both sides of the boundary.
+ *
+ * thought-label/4 hardens the prompt against per-case evidence from A4:
+ * TOO_LONG (12) — the length line now states a hard ceiling and forbids
+ * restating the material; not-grounded-in-material (5) — the keep line
+ * requires every word to derive from the material; EMPTY (4) — the answer
+ * line requires a non-empty name; SIBLING_DUPLICATE (3) — the sibling line
+ * requires distinguishability, not mere difference.
  */
-export const SEMANTIC_LABEL_PROMPT_VERSION = "thought-label/3";
+export const SEMANTIC_LABEL_PROMPT_VERSION = "thought-label/4";
 
 export type SemanticLabelSource = "provisional" | "model";
 

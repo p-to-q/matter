@@ -29,7 +29,7 @@ import { isInquiryAnswerProse } from "../features/matter/protocol/inquiry-answer
 
 export const PROTOCOL_VERSION = "0.2";
 export const REPAIR_PROMPT_VERSION = "transcript-repair/4";
-export const LABEL_PROMPT_VERSION = "thought-label/3";
+export const LABEL_PROMPT_VERSION = "thought-label/4";
 export const APP_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ).version;
