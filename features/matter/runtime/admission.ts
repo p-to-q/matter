@@ -86,7 +86,7 @@ export function createAdmissionAnchor(
  */
 export function admissionToTreeCommand(
   tree: ThoughtTree,
-  navigation: NavigationState,
+  _navigation: NavigationState,
   anchor: AdmissionAnchor,
   values: AdmissionValues,
 ): AdmissionCommandResult {
@@ -101,8 +101,8 @@ export function admissionToTreeCommand(
   if (!hasNonEmptyString(values.nodeId) || !isCanonicalTimestamp(values.createdAt)) {
     return invalidInteraction("Admission material values are invalid.");
   }
-  if (tree.id !== anchor.treeId || tree.revision !== anchor.baseRevision) {
-    return invalidInteraction("The material changed before admission completed.");
+  if (tree.id !== anchor.treeId) {
+    return invalidInteraction("The material document changed before admission completed.");
   }
 
   const base = {
@@ -117,9 +117,7 @@ export function admissionToTreeCommand(
   if (anchor.target === "root") {
     if (
       tree.rootId !== null ||
-      Object.keys(tree.nodes).length !== 0 ||
-      navigation.mode !== "full" ||
-      navigation.selectedNodeId !== null
+      Object.keys(tree.nodes).length !== 0
     ) {
       return invalidInteraction("The root admission handle is no longer current.");
     }
@@ -143,9 +141,7 @@ export function admissionToTreeCommand(
   }
 
   if (
-    navigation.mode !== "full" ||
-    !Object.hasOwn(tree.nodes, anchor.parentNodeId) ||
-    (navigation.selectedNodeId !== null && navigation.selectedNodeId !== anchor.parentNodeId)
+    !Object.hasOwn(tree.nodes, anchor.parentNodeId)
   ) {
     return invalidInteraction("The admission parent is no longer current.");
   }

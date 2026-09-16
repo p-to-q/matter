@@ -105,7 +105,8 @@ export function PerformanceMatterApp({
         cancel: () => undefined,
         retry: () => undefined,
         dismiss: () => undefined,
-        discardPendingRepairs: () => undefined,
+        setDeliveryTargetVisible: () => undefined,
+        setDeliveryVisibleNodeIds: () => undefined,
         clearRepairPresentations: () => undefined,
       }}
       admissionAnchor={null}

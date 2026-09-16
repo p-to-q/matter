@@ -114,6 +114,7 @@ export function resolveLassoTargets(
     if (
       target.measurement !== "pending" &&
       target.measurement !== "failed" &&
+      target.measurement.length === 1 &&
       lassoHitsRectFragment(lasso, boundsRect(target.bounds))
     ) {
       const whole = selectionFromSegmentHits(
@@ -242,4 +243,61 @@ export function boundsIntersectLasso(
     bounds.left <= lasso.bounds.right + margin &&
     bounds.bottom >= lasso.bounds.top - margin &&
     bounds.top <= lasso.bounds.bottom + margin;
+}
+
+export type LassoLayoutBox = Readonly<{
+  nodeId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>;
+
+/**
+ * Pure broad phase for the DOM measurement edge. Layout coordinates are
+ * projected through the canvas origin and current scale into client pixels,
+ * then compared with the visual viewport using the exact lasso hit margin.
+ *
+ * `null` is deliberately fail-open. A malformed or duplicate layout receipt
+ * must cost extra DOM reads, never make visible material impossible to lasso.
+ */
+export function visibleLassoLayoutNodeIds(input: Readonly<{
+  boxes: readonly LassoLayoutBox[];
+  canvasOrigin: Readonly<{ x: number; y: number }>;
+  scale: number;
+  viewport: ClientBounds;
+}>): ReadonlySet<string> | null {
+  if (
+    !Array.isArray(input.boxes) ||
+    !Number.isFinite(input.canvasOrigin.x) ||
+    !Number.isFinite(input.canvasOrigin.y) ||
+    !Number.isFinite(input.scale) ||
+    input.scale <= 0 ||
+    !validBounds(input.viewport)
+  ) return null;
+
+  const visible = new Set<string>();
+  const seen = new Set<string>();
+  const margin = LASSO_THRESHOLDS.edgeMargin;
+  for (const box of input.boxes) {
+    if (
+      typeof box?.nodeId !== "string" || box.nodeId.length === 0 ||
+      seen.has(box.nodeId) ||
+      ![box.x, box.y, box.width, box.height].every(Number.isFinite) ||
+      box.width <= 0 || box.height <= 0
+    ) return null;
+    seen.add(box.nodeId);
+    const left = input.canvasOrigin.x + box.x * input.scale;
+    const top = input.canvasOrigin.y + box.y * input.scale;
+    const right = left + box.width * input.scale;
+    const bottom = top + box.height * input.scale;
+    if (![left, top, right, bottom].every(Number.isFinite)) return null;
+    if (
+      right >= input.viewport.left - margin &&
+      left <= input.viewport.right + margin &&
+      bottom >= input.viewport.top - margin &&
+      top <= input.viewport.bottom + margin
+    ) visible.add(box.nodeId);
+  }
+  return visible;
 }

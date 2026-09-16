@@ -240,7 +240,7 @@ describe("runtime session", () => {
     expect(rejected.state.navigation).toBe(state.navigation);
   });
 
-  it("rejects stale and history-capacity admission without publishing any owned state", () => {
+  it("rebases admission across an unrelated revision but rejects history capacity", () => {
     const state = emptyState();
     const anchored = createAdmissionAnchor(state.tree, state.navigation);
     if (!anchored.ok) throw new Error(anchored.error.code);
@@ -251,13 +251,16 @@ describe("runtime session", () => {
       createdAt: T0,
       transcript: "unfinished",
     };
-    const stale = commitHumanAdmission(
+    const rebased = commitHumanAdmission(
       { ...state, tree: { ...state.tree, revision: 1 } },
       anchored.anchor,
       values,
       LIMITS,
     );
-    expect(stale).toMatchObject({ ok: false, receipt: { errorCode: "INVALID_INTERACTION" } });
+    expect(rebased).toMatchObject({
+      ok: true,
+      receipt: { status: "committed", revision: 2 },
+    });
 
     const capacity = commitHumanAdmission(state, anchored.anchor, values, {
       maxEntries: 1,

@@ -1,4 +1,5 @@
 import type { StretchHandle } from "../runtime/stretch-interaction";
+import { materialAddressOutline } from "./material-address-outline";
 import {
   createProjectedLayoutReceipt,
   projectMaterialAddress,
@@ -40,6 +41,8 @@ export type ElasticPreview = Readonly<{
   pocket: ElasticPreviewBounds;
   topHandle: ElasticPreviewLine;
   bottomHandle: ElasticPreviewLine;
+  topControlCenter: number;
+  bottomControlCenter: number;
   handleViewportInset: number;
   pocketDepth: number;
   maximumDepth: number;
@@ -190,8 +193,6 @@ export function projectElasticPreview(
   const pocketDepth = roundClientValue(normalizedAmount * maximumDepth);
   const movingHandle = activeHandle ?? lastHandle ?? "bottom";
 
-  const topCenter = clampHandleX((topLine.left + topLine.right) / 2, viewport);
-  const bottomCenter = clampHandleX((bottomLine.left + bottomLine.right) / 2, viewport);
   const unclampedTopY = clampHandleY(
     topBase,
     viewport,
@@ -208,8 +209,6 @@ export function projectElasticPreview(
     viewport,
     handleViewportInset,
   );
-  const topHandle = cueAt(topCenter, topY);
-  const bottomHandle = cueAt(bottomCenter, bottomY);
   const horizontal = pocketHorizontalBounds(
     source.textColumn ?? sourceBounds,
     layoutReceipt.metrics.inlineOutset,
@@ -230,6 +229,21 @@ export function projectElasticPreview(
     receipt: layoutReceipt,
   });
   if (addressProjection === null) return null;
+  const outline = materialAddressOutline(addressProjection);
+  if (outline === null) return null;
+  const topCenter = roundClientValue(
+    (outline.topBoundary.left + outline.topBoundary.right) / 2,
+  );
+  const bottomCenter = roundClientValue(
+    (outline.bottomBoundary.left + outline.bottomBoundary.right) / 2,
+  );
+  // The visible cue belongs to the exact outline edge. Its larger hit target
+  // may move inward at a viewport edge, but that accessibility clamp must not
+  // visually mis-centre the cue on the material it controls.
+  const topControlCenter = clampHandleX(topCenter, viewport);
+  const bottomControlCenter = clampHandleX(bottomCenter, viewport);
+  const topHandle = cueAt(topCenter, topY);
+  const bottomHandle = cueAt(bottomCenter, bottomY);
   return Object.freeze({
     mode: normalizedAmount === 0 ? "neutral" : "expand",
     amount: normalizedAmount,
@@ -241,6 +255,8 @@ export function projectElasticPreview(
     pocket,
     topHandle,
     bottomHandle,
+    topControlCenter,
+    bottomControlCenter,
     handleViewportInset,
     pocketDepth,
     maximumDepth,
@@ -288,10 +304,13 @@ function cueAt(center: number, y: number): ElasticPreviewLine {
 
 function clampHandleX(x: number, viewport: ElasticPreviewViewport | undefined): number {
   if (viewport === undefined) return roundClientValue(x);
+  const minimum = viewport.left + ELASTIC_PREVIEW_METRICS.handleHalfWidth;
+  const maximum = viewport.right - ELASTIC_PREVIEW_METRICS.handleHalfWidth;
+  if (minimum > maximum) return roundClientValue((viewport.left + viewport.right) / 2);
   return roundClientValue(clamp(
     x,
-    viewport.left + ELASTIC_PREVIEW_METRICS.handleHalfWidth,
-    viewport.right - ELASTIC_PREVIEW_METRICS.handleHalfWidth,
+    minimum,
+    maximum,
   ));
 }
 

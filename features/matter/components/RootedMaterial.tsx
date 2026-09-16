@@ -30,7 +30,10 @@ import {
   reconcileCanvasNavigationSession,
 } from "../interaction/canvas-navigation-session";
 import type { AdmissionController } from "../interaction/use-admission";
-import type { AdmissionAnchor as InteractionAdmissionAnchor } from "../runtime/admission-interaction";
+import {
+  admissionCaptureIsActive,
+  type AdmissionAnchor as InteractionAdmissionAnchor,
+} from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
 import {
   fontFamiliesFromLoadingEvent,
@@ -104,7 +107,12 @@ import {
   findAdmissionFeedbackParentBox,
   projectAdmissionFeedbackPresentation,
 } from "./admission-feedback-geometry";
-import { CanvasChrome, type CanvasChromeHandle } from "./CanvasChrome";
+import {
+  CanvasChrome,
+  canvasOverlayOwnsSurface,
+  type CanvasChromeHandle,
+  type CanvasChromeOverlay,
+} from "./CanvasChrome";
 import { CanvasRuling } from "./CanvasRuling";
 import {
   MaterialAddressLayer,
@@ -381,7 +389,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const { canvasPreferences } = props;
   const inquiryRecord = useInquiryRecord(tree.id, props.performanceMarking !== true);
   const canvasChromeRef = useRef<CanvasChromeHandle>(null);
+  const [canvasOverlay, setCanvasOverlay] = useState<CanvasChromeOverlay>(null);
+  const materialPresentationAvailable = !canvasOverlayOwnsSurface(canvasOverlay);
   const [pointTalkOwner, setPointTalkOwner] = useState<PointTalkOwner | null>(null);
+  const [pointTalkPresented, setPointTalkPresented] = useState(false);
   const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
@@ -869,6 +880,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     documentEpoch: props.documentEpoch,
     canvasRef,
     surfaceRef: documentRef,
+    layout: activeLayout,
     epoch: {
       treeRevision: tree.revision,
       layoutEpoch: activeLayout?.layoutEpoch ?? 0,
@@ -1087,19 +1099,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
         });
       }
     }
-    const visible = clientViewport();
-    // The pure projection owns viewport clamping and deterministic separation;
-    // duplicating just the clamp here made the two controls merge at an edge.
     const topY = preview.topHandle.y;
     const bottomY = preview.bottomHandle.y;
     const rawTopCenter = (preview.topHandle.x1 + preview.topHandle.x2) / 2;
     const rawBottomCenter = (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2;
-    const topCenter = clampClient(rawTopCenter, visible?.left, visible?.right, 26);
-    const bottomCenter = clampClient(rawBottomCenter, visible?.left, visible?.right, 26);
     element.style.setProperty("--elastic-anchor-top", `${topY}px`);
     element.style.setProperty("--elastic-handle-top", `${bottomY}px`);
-    element.style.setProperty("--elastic-top-center", `${topCenter}px`);
-    element.style.setProperty("--elastic-bottom-center", `${bottomCenter}px`);
+    element.style.setProperty("--elastic-top-center", `${preview.topControlCenter}px`);
+    element.style.setProperty("--elastic-bottom-center", `${preview.bottomControlCenter}px`);
+    element.style.setProperty(
+      "--elastic-top-cue-offset",
+      `${rawTopCenter - preview.topControlCenter}px`,
+    );
+    element.style.setProperty(
+      "--elastic-bottom-cue-offset",
+      `${rawBottomCenter - preview.bottomControlCenter}px`,
+    );
     const addressLayer = element.closest<HTMLElement>(".lasso-layer");
     addressLayer?.style.setProperty(
       "--address-displacement-y",
@@ -1122,18 +1137,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
         node.text.length > 0 && node.text.length <= POINT_TALK_FAST_SOURCE_LIMIT;
     }),
   ), [tree, workingContext.activeNodeIds]);
-  const activePointTalkNodeId = currentPointTalkNodeId(
+  const visiblyLaidOutNodeIds = useMemo(
+    () => new Set(activeLayout === null ? [] : renderedProjection.map(({ node }) => node.id)),
+    [activeLayout, renderedProjection],
+  );
+  const setAdmissionDeliveryVisibleNodeIds = props.admission.setDeliveryVisibleNodeIds;
+  useLayoutEffect(() => {
+    setAdmissionDeliveryVisibleNodeIds(visiblyLaidOutNodeIds);
+  }, [setAdmissionDeliveryVisibleNodeIds, visiblyLaidOutNodeIds]);
+  const pointTalkHostNodeIds = useMemo(() => new Set(
+    Object.values(tree.nodes).filter((node) => node.role !== "document-root" &&
+      node.text.length > 0 && node.text.length <= POINT_TALK_FAST_SOURCE_LIMIT)
+      .map((node) => node.id),
+  ), [tree.nodes]);
+  const pointTalkHostNodeId = currentPointTalkNodeId(
     pointTalkOwner,
     props.documentEpoch,
     tree.id,
-    pointTalkEligibleNodeIds,
+    pointTalkHostNodeIds,
   );
-  const pointTalkSelectionCurrent = activePointTalkNodeId !== null;
-  if (pointTalkOwner !== null && activePointTalkNodeId === null) {
+  const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null;
+  const pointTalkSelectionCurrent = pointTalkHostNodeId !== null;
+  if (pointTalkOwner !== null && pointTalkHostNodeId === null) {
     // Reconcile before a removed, replaced, or held target can later return
     // under an obsolete local-turn owner. The derived target already keeps
     // this render fail-closed.
     setPointTalkOwner(null);
+    setPointTalkPresented(false);
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1184,6 +1214,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
     publishMaterialTextChange(change);
     setPointTalkOwner(null);
+    setPointTalkPresented(false);
     cancelPointTalkFocusRestore();
     const basis = Object.freeze({
       documentEpoch: change.documentEpoch,
@@ -1218,10 +1249,30 @@ export function RootedMaterial(props: RootedMaterialProps) {
     publishMaterialTextChange,
     tree,
   ]);
+  useLayoutEffect(() => {
+    const state = props.admission.state;
+    if (state.phase === "idle" || state.phase === "error") {
+      props.admission.setDeliveryTargetVisible(true);
+      return;
+    }
+    const anchor = state.anchor;
+    const targetExists = anchor.kind === "root"
+      ? tree.rootId === null && Object.keys(tree.nodes).length === 0
+      : tree.nodes[anchor.parentNodeId] !== undefined;
+    if (!targetExists) {
+      props.admission.cancel();
+      return;
+    }
+    const targetVisible = navigation.mode === "full" && activeLayout !== null && (
+      anchor.kind === "root" ||
+      anchor.parentNodeId === tree.rootId ||
+      visiblyLaidOutNodeIds.has(anchor.parentNodeId)
+    );
+    props.admission.setDeliveryTargetVisible(targetVisible);
+  }, [activeLayout, navigation.mode, props.admission, tree, visiblyLaidOutNodeIds]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
-  const admissionInteractionPending =
-    props.admission.state.phase !== "idle" && props.admission.state.phase !== "error";
-  const elasticSelection = persistenceLoading || admissionInteractionPending
+  const admissionCapturePending = admissionCaptureIsActive(props.admission.state);
+  const elasticSelection = persistenceLoading || admissionCapturePending
     ? null
     : stretchSelection;
   const transform = useFixedExpandTurn({
@@ -1230,13 +1281,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     selection: elasticSelection,
     locale: props.locale,
     enabled: elasticSelection !== null,
-    interactionScopeKey: `${navigationKey}:${workingContextState.epoch}`,
+    deliveryWindowAvailable: materialPresentationAvailable,
+    deliveryVisibleNodeIds: visiblyLaidOutNodeIds,
     commit: props.onTransformCommit,
     onCommitted: publishMaterialTextChange,
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
-    cancel: cancelTransform,
     start: startTransform,
     state: transformState,
   } = transform;
@@ -1258,19 +1309,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useLayoutEffect(() => {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
+  const changeCanvasOverlay = useCallback((next: CanvasChromeOverlay) => {
+    if (materialPresentationAvailable && canvasOverlayOwnsSurface(next)) {
+      // A modal may arrive from another pointer while a surface gesture still
+      // owns capture. Roll back only that unfinished gesture; settled intent,
+      // submitted work, and the semantic lasso address remain owned.
+      const lassoPointerId = lasso.cancelActiveStroke();
+      stretch.cancelActiveDrag();
+      const shell = shellRef.current;
+      if (lassoPointerId !== null && shell?.hasPointerCapture(lassoPointerId)) {
+        shell.releasePointerCapture(lassoPointerId);
+      }
+    }
+    setCanvasOverlay(next);
+  }, [lasso, materialPresentationAvailable, stretch]);
   const closePointTalk = useCallback(() => {
+    setPointTalkPresented(false);
+  }, []);
+  const releasePointTalkJob = useCallback(() => {
     setPointTalkOwner(null);
+    setPointTalkPresented(false);
   }, []);
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
     transformState.phase !== "idle";
   const beginStretchAdjustment = useCallback(() => {
     canvasChromeRef.current?.closeInquiry();
-    if (transformState.phase === "requesting") cancelTransform();
-  }, [cancelTransform, transformState.phase]);
+  }, []);
   const abortElasticExpansion = useCallback(() => {
-    if (transformState.phase === "requesting") cancelTransform();
+    // Presentation can close while an immutable submitted turn keeps owning
+    // its exact material basis. Conflict/page-exit handling lives in the turn.
     stretchKeyDown("Escape");
-  }, [cancelTransform, stretchKeyDown, transformState.phase]);
+  }, [stretchKeyDown]);
   const abortFixedExpansion = useCallback(() => {
     closePointTalk();
     abortElasticExpansion();
@@ -1338,7 +1407,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     tree,
   ) ? transformPresentation.change : null;
   const lassoHasSelectionGeometry = lasso.selectionRects.length > 0;
-  const interactionPending = persistenceLoading || admissionInteractionPending;
+  const interactionPending = persistenceLoading || admissionCapturePending;
   const nativeSelectionPresentation = useNativeMaterialSelection({
     documentEpoch: props.documentEpoch,
     enabled: !lasso.active && !lassoHasSelectionGeometry &&
@@ -1940,7 +2009,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     voiceAdmissionIsEnabled() &&
     voiceReadiness.status === "ready";
   const voiceAvailable = admissionVoiceAvailable;
-  const voiceToolAvailable = voiceAvailable && props.admission.state.phase !== "error";
+  const voiceToolAvailable = voiceAvailable &&
+    (props.admission.state.phase === "idle" || props.admission.state.phase === "recording");
   const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
   const admissionFocusFrameRef = useRef<Readonly<{
     basis: AdmissionFocusRestorationBasis;
@@ -2651,7 +2721,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     !stretch.dragging &&
     stretch.amount === 0 &&
     transformState.phase === "idle" &&
-    activePointTalkNodeId === null &&
+    pointTalkHostNodeId === null &&
     !wheelMotionActive &&
     viewport.gesture?.dragging !== true;
 
@@ -2662,6 +2732,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
       const result = reduceCanvasViewport(current, event);
       return result.ok ? result.state : current;
     });
+  };
+
+  const cancelViewportGesture = () => {
+    // A tool transfer ends the old camera owner and its browser capture as one
+    // boundary; later events from that pointer cannot enter the new tool.
+    const pointerId = viewport.gesture?.pointerId;
+    if (pointerId === undefined) return;
+    pointerOriginNodeRef.current = null;
+    updateViewport({ type: "pointer-cancel", pointerId });
+    const shell = shellRef.current;
+    if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
   };
 
   useEffect(() => {
@@ -2720,6 +2801,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-canvas-mode={lasso.active ? "lasso" : canvasMode}
       data-interaction-pending={interactionPending || undefined}
       data-lasso-mode={lasso.active || undefined}
+      data-material-presentation={materialPresentationAvailable ? "available" : "occluded"}
       data-material-address-owner={materialAddressOwner}
       data-native-address-ready={nativeAddressProjection !== null || undefined}
       data-structural-address-ready={visibleStructuralAddressProjection !== null || undefined}
@@ -2771,7 +2853,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
           lassoClickOriginNodeRef.current = originNodeId !== null && workingContext.activeNodeIds.has(originNodeId)
             ? originNodeId
             : null;
-          props.admission.discardPendingRepairs();
           event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -2855,7 +2936,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
           if (!nodeDrag.dragging && Math.hypot(event.clientX - nodeDrag.startX, event.clientY - nodeDrag.startY) >= (event.pointerType === "touch" ? 8 : 4)) {
             nodeDrag.dragging = true;
             if (nodeDrag.sourceId !== null && nodeDrag.policy !== null && nodeDrag.sourceElement !== null) {
-              props.admission.discardPendingRepairs();
               event.currentTarget.dataset.nodeDragging = "true";
               nodeDrag.sourceElement.dataset.dragSource = "true";
             }
@@ -3072,6 +3152,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             // chosen but before its first measured pointer event.
             indexCenterRequestRef.current = null;
             interruptIndexCameraMotion();
+            cancelViewportGesture();
             setCanvasMode("material");
             lasso.activate();
           }
@@ -3079,6 +3160,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onMove={() => {
           abortFixedExpansion();
           if (canvasMode === "pan" && !lasso.active) {
+            cancelViewportGesture();
             setCanvasMode("material");
             return;
           }
@@ -3235,11 +3317,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
             locale={props.locale}
             navigation={navigation}
             onOpenPointTalk={(nodeId) => {
+              if (pointTalkHostNodeId !== null) return;
               canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
-              props.admission.discardPendingRepairs();
               setPointTalkOpeningId((current) => current + 1);
               setPointTalkOwner(createPointTalkOwner(props.documentEpoch, tree.id, nodeId));
+              setPointTalkPresented(true);
             }}
             onToggleHeldAside={(nodeId) => {
               abortFixedExpansion();
@@ -3268,69 +3351,81 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
           onInquiryOpen={abortFixedExpansion}
+          onOverlayChange={changeCanvasOverlay}
+          overlay={canvasOverlay}
           ref={canvasChromeRef}
         />
       </section>
-      <MaterialAddressLayer
-        projection={nativeAddressProjection}
-        variant="native"
-      />
-      <MaterialAddressLayer
-        projection={visibleStructuralAddressProjection}
-        variant="structural"
-      />
-      {activePointTalkNodeId === null ? null : (
+      <div
+        aria-hidden={!materialPresentationAvailable || undefined}
+        className="material-interaction-presentation"
+        data-available={materialPresentationAvailable || undefined}
+        inert={!materialPresentationAvailable || undefined}
+      >
         <MaterialAddressLayer
-          projection={pointTalkAddressProjection}
-          variant="actionable"
+          projection={materialPresentationAvailable ? nativeAddressProjection : null}
+          variant="native"
         />
-      )}
-      {activePointTalkNodeId === null ? null : (
-        <PointTalkTurn
-          boundaryRef={documentRef}
-          canvasRef={canvasRef}
-          canvasZoom={viewport.zoom}
-          commit={props.onTextSwapCommit}
-          documentEpoch={props.documentEpoch}
-          enabled={pointTalkSelectionCurrent && !persistenceLoading}
-          geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
-          interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
-          key={`${props.documentEpoch}:${activePointTalkNodeId}:${pointTalkOpeningId}`}
+        <MaterialAddressLayer
+          projection={materialPresentationAvailable ? visibleStructuralAddressProjection : null}
+          variant="structural"
+        />
+        {activePointTalkNodeId === null ? null : (
+          <MaterialAddressLayer
+            projection={materialPresentationAvailable ? pointTalkAddressProjection : null}
+            variant="actionable"
+          />
+        )}
+        {pointTalkHostNodeId === null ? null : (
+          <PointTalkTurn
+            boundaryRef={documentRef}
+            canvasRef={canvasRef}
+            canvasZoom={viewport.zoom}
+            commit={props.onTextSwapCommit}
+            documentEpoch={props.documentEpoch}
+            enabled={pointTalkSelectionCurrent && !persistenceLoading}
+            geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}:${materialPresentationAvailable ? "surface" : "occluded"}`}
+            interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
+            key={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
+            locale={props.locale}
+            nodeId={pointTalkHostNodeId}
+            onClose={closePointTalk}
+            onCommitted={publishPointTalkChange}
+            onReleased={releasePointTalkJob}
+            presented={pointTalkPresented}
+            positioningRef={materialPlaneRef}
+            surfaceAvailable={materialPresentationAvailable}
+            targetBounds={pointTalkTargetBounds}
+            tree={tree}
+            deliveryVisibleNodeIds={visiblyLaidOutNodeIds}
+            voiceAvailable={voiceReadiness.status === "ready"}
+          />
+        )}
+        <LassoOverlay
+          active={lasso.active}
+          addressVisible={materialPresentationAvailable && activePointTalkNodeId === null}
+          addressLayerRef={actionableAddressLayerRef}
+          drawing={lasso.drawing}
+          closurePathRef={lasso.closurePathRef}
+          inkRef={lasso.inkRef}
+          inkPathRef={lasso.inkPathRef}
+          particleCanvasRef={lasso.particleCanvasRef}
+          rects={lasso.selections.length > 1 ? lasso.selectionSetRects : lasso.selectionRects}
+          previewMode={visibleSplitPreviewMode}
+          selectedText={lasso.selections.length === 1 ? lasso.selection?.selectedText ?? null : null}
+          selectionCount={lasso.selections.length}
+          elasticRef={elasticRef}
+          previewSource={paintableElasticPreviewSource}
           locale={props.locale}
-          nodeId={activePointTalkNodeId}
-          onClose={closePointTalk}
-          onCommitted={publishPointTalkChange}
-          positioningRef={materialPlaneRef}
-          targetBounds={pointTalkTargetBounds}
-          tree={tree}
-          voiceAvailable={voiceReadiness.status === "ready"}
+          onBeginAdjustment={beginStretchAdjustment}
+          onFocusRestored={finishStretchFocusRestore}
+          onRequestFocusRestore={requestStretchFocusRestore}
+          restoreFocusHandle={stretchFocusRestoreHandle}
+          status={transformState.phase}
+          stretchVisible={materialPresentationAvailable && elasticSelection !== null}
+          stretch={stretch}
         />
-      )}
-      <LassoOverlay
-        active={lasso.active}
-        addressVisible={activePointTalkNodeId === null}
-        addressLayerRef={actionableAddressLayerRef}
-        drawing={lasso.drawing}
-        closurePathRef={lasso.closurePathRef}
-        inkRef={lasso.inkRef}
-        inkPathRef={lasso.inkPathRef}
-        particleCanvasRef={lasso.particleCanvasRef}
-        rects={lasso.selections.length > 1 ? lasso.selectionSetRects : lasso.selectionRects}
-        previewMode={visibleSplitPreviewMode}
-        selectedText={lasso.selections.length === 1 ? lasso.selection?.selectedText ?? null : null}
-        selectionCount={lasso.selections.length}
-        elasticRef={elasticRef}
-        previewSource={paintableElasticPreviewSource}
-        locale={props.locale}
-        onBeginAdjustment={beginStretchAdjustment}
-        onFocusRestored={finishStretchFocusRestore}
-        onPreciseGesture={props.admission.discardPendingRepairs}
-        onRequestFocusRestore={requestStretchFocusRestore}
-        restoreFocusHandle={stretchFocusRestoreHandle}
-        status={transformState.phase}
-        stretchVisible={elasticSelection !== null}
-        stretch={stretch}
-      />
+      </div>
     </main>
   );
 }
@@ -3707,7 +3802,6 @@ function LassoOverlay({
   locale,
   onBeginAdjustment,
   onFocusRestored,
-  onPreciseGesture,
   onRequestFocusRestore,
   restoreFocusHandle,
   status,
@@ -3731,7 +3825,6 @@ function LassoOverlay({
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
   onFocusRestored: (handle: StretchHandle) => void;
-  onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
@@ -3783,7 +3876,7 @@ function LassoOverlay({
         layerRef={addressLayerRef}
         onConfirm={() => {
           onBeginAdjustment();
-          if (stretch.confirm()) onPreciseGesture();
+          stretch.confirm();
         }}
         projection={addressProjection}
         variant="actionable"
@@ -3811,7 +3904,7 @@ function LassoOverlay({
         ))}
       </div>
       )}
-      {bounds === null || previewSource === null || !stretchVisible ? null : (
+      {bounds === null || previewSource === null || preview === null || !stretchVisible ? null : (
         <>
           <div
             aria-label={accessibility.groupLabel}
@@ -3823,10 +3916,12 @@ function LassoOverlay({
             role="group"
             lang={locale}
             style={{
-              "--elastic-anchor-top": `${preview?.topHandle.y ?? bounds.top}px`,
-              "--elastic-handle-top": `${preview?.bottomHandle.y ?? bounds.bottom}px`,
-              "--elastic-top-center": `${preview === null ? bounds.left : (preview.topHandle.x1 + preview.topHandle.x2) / 2}px`,
-              "--elastic-bottom-center": `${preview === null ? bounds.left : (preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2}px`,
+              "--elastic-anchor-top": `${preview.topHandle.y}px`,
+              "--elastic-handle-top": `${preview.bottomHandle.y}px`,
+              "--elastic-top-center": `${preview.topControlCenter}px`,
+              "--elastic-bottom-center": `${preview.bottomControlCenter}px`,
+              "--elastic-top-cue-offset": `${(preview.topHandle.x1 + preview.topHandle.x2) / 2 - preview.topControlCenter}px`,
+              "--elastic-bottom-cue-offset": `${(preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2 - preview.bottomControlCenter}px`,
             } as CSSProperties}
           >
             <span className="visually-hidden" id={descriptionId}>
@@ -3847,7 +3942,6 @@ function LassoOverlay({
               locale={locale}
               onBeginAdjustment={onBeginAdjustment}
               onFocusRestored={onFocusRestored}
-              onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
@@ -3859,7 +3953,6 @@ function LassoOverlay({
               locale={locale}
               onBeginAdjustment={onBeginAdjustment}
               onFocusRestored={onFocusRestored}
-              onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
@@ -3950,7 +4043,6 @@ function StretchHandleButton({
   locale,
   onBeginAdjustment,
   onFocusRestored,
-  onPreciseGesture,
   onRequestFocusRestore,
   restoreFocusHandle,
   status,
@@ -3961,7 +4053,6 @@ function StretchHandleButton({
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
   onFocusRestored: (handle: StretchHandle) => void;
-  onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
@@ -4005,12 +4096,10 @@ function StretchHandleButton({
       }}
       onPointerDown={(event) => {
         event.stopPropagation();
+        if (status === "requesting") return;
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
-          // Only a primary edge-grip gesture may supersede a pending turn.
-          // Rejected secondary or foreign pointers leave its authority intact.
           onBeginAdjustment();
-          onPreciseGesture();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
@@ -4035,7 +4124,7 @@ function StretchHandleButton({
         }
         if (!isStretchInteractionKey(event.key)) return;
         event.preventDefault();
-        if (status === "requesting" && (event.key === "Enter" || event.key === " ")) return;
+        if (status === "requesting" && event.key !== "Escape") return;
         onBeginAdjustment();
         if (event.key !== "Escape" && event.key !== "Enter" && event.key !== " ") {
           onRequestFocusRestore(handle);
@@ -4044,7 +4133,6 @@ function StretchHandleButton({
         }
         if (status !== "idle" && event.key !== "Escape") stretch.reopen();
         stretch.keyDown(event.key, handle);
-        onPreciseGesture();
       }}
       role="slider"
       ref={controlRef}
@@ -4215,17 +4303,6 @@ function rangeClientRectsAroundContents(
   const rects = normalizeClientRects(range.getClientRects());
   range.detach();
   return rects;
-}
-
-/** Clips a fixed control without changing the material-space projection. */
-function clampClient(
-  value: number,
-  minimum: number | undefined,
-  maximum: number | undefined,
-  inset: number,
-): number {
-  if (minimum === undefined || maximum === undefined) return value;
-  return Math.max(minimum + inset, Math.min(maximum - inset, value));
 }
 
 function selectionBounds(

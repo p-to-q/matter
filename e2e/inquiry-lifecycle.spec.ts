@@ -60,11 +60,11 @@ test("Ask Matter and material-local AI surfaces own one transient slot", async (
   await expect(inquiry).toBeHidden();
 });
 
-test("closing Inquiry revokes a delayed answer before UI or durable record", async ({ page }) => {
+test("closing Inquiry detaches UI while the submitted answer reaches its record", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();
   const routeSettled = deferred<void>();
-  const lateText = "这条迟到的回答绝不能出现。";
+  const lateText = "这条后台完成的回答只进入记录。";
   const freshQuestion = "这份材料现在在怀念什么？";
   const freshText = "这是当前请求的回答。";
   let requestCount = 0;
@@ -80,8 +80,8 @@ test("closing Inquiry revokes a delayed answer before UI or durable record", asy
     try {
       await fulfillInquiry(route, request, lateText);
     } catch {
-      // A revoked browser request may reject route fulfillment. Either outcome
-      // must settle before the fresh request below proves the stale turn inert.
+      // A browser disconnect remains advisory after submit. The route must
+      // settle before the fresh request below checks the retained operation.
     } finally {
       routeSettled.resolve();
     }
@@ -100,13 +100,17 @@ test("closing Inquiry revokes a delayed answer before UI or durable record", asy
   await expect(inquiry).toBeHidden();
   gate.resolve();
   await routeSettled.promise;
+  await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 
   await ask.click();
+  await expect(inquiry.locator('[data-inquiry-role="person"]')).toHaveCount(0);
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toHaveCount(0);
+  await expect(field).toHaveValue("");
   await field.fill(freshQuestion);
   await field.press("Enter");
   await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(freshText);
   await expect(inquiry).not.toContainText(lateText);
-  await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
+  await expect.poll(() => inquiryExchangeCount(page)).toBe(2);
 });
 
 test("an unavailable answer restores the exact draft and can be asked again", async ({ page }) => {

@@ -48,7 +48,13 @@ export function subscribePageSuspension(
  * intentionally narrower than subscribePageSuspension.
  */
 export function subscribePageExit(onExit: () => void): () => void {
-  if (typeof window === "undefined") return () => undefined;
+  if (
+    typeof window === "undefined" ||
+    typeof window.addEventListener !== "function" ||
+    typeof window.removeEventListener !== "function"
+  ) {
+    return () => undefined;
+  }
   const pageWindow = window;
   pageWindow.addEventListener("pagehide", onExit);
   return () => pageWindow.removeEventListener("pagehide", onExit);

@@ -53,6 +53,8 @@ describe("material address outline", () => {
       [100, 600],
       [100, 260],
     ]);
+    expect(outline.topBoundary).toEqual({ left: 300, right: 600, y: 100 });
+    expect(outline.bottomBoundary).toEqual({ left: 100, right: 260, y: 220 });
   });
 
   it("keeps a centred multi-row range continuous through the column", () => {
@@ -149,6 +151,8 @@ describe("material address outline", () => {
       [100, 600],
       [140, 600],
     ]);
+    expect(outline.topBoundary).toEqual({ left: 100, right: 560, y: 100 });
+    expect(outline.bottomBoundary).toEqual({ left: 140, right: 600, y: 220 });
   });
 
   it("continues the interval into the slot for the lower grip", () => {
@@ -166,6 +170,8 @@ describe("material address outline", () => {
       [100, 600],
     ]);
     expect(outline.bands.at(-1)!.blockEnd).toBe(300);
+    expect(outline.topBoundary).toEqual({ left: 300, right: 600, y: 100 });
+    expect(outline.bottomBoundary).toEqual({ left: 100, right: 600, y: 300 });
   });
 
   it("mirrors the interval for the upper grip", () => {
@@ -182,6 +188,8 @@ describe("material address outline", () => {
       [100, 260],
     ]);
     expect(outline.bands[0]!.blockStart).toBe(20);
+    expect(outline.topBoundary).toEqual({ left: 100, right: 600, y: 20 });
+    expect(outline.bottomBoundary).toEqual({ left: 100, right: 260, y: 220 });
   });
 
   it("opens the slot flush with its own row so no edge can jump", () => {
@@ -252,6 +260,23 @@ describe("material address outline", () => {
     // A concave turn takes the opposite sweep, which is what makes the step
     // between two rows read as one material instead of two boxes.
     expect(outline.path).toContain("A4 4 0 0 0");
+  });
+
+  it("removes steps that become identical in the serialized SVG path", () => {
+    const outline = materialAddressOutline(projection({
+      column: { blockEnd: 220, blockStart: 80, inlineEnd: 600, inlineStart: 104 },
+      metrics: { blockOutset: 0, cornerRadius: 4, inlineOutset: 0, medianRowExtent: 20 },
+      rows: [
+        { blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 103.999 },
+        { blockEnd: 180, blockStart: 140, inlineEnd: 200, inlineStart: 104 },
+      ],
+      run: { endInline: 200, endRow: 1, startInline: 103.999, startRow: 0 },
+    }))!;
+    // 103.999 and 104 both serialize to 104 at the painter's 0.01px
+    // precision. Keeping the pre-serialization step emits a zero-length line
+    // and arc, which becomes a dark notch at a wrapped corner.
+    expect(outline.path).not.toContain("A0 0");
+    expect(outline.path).not.toContain("L104 140");
   });
 
   it("never proximity-snaps either real endpoint to the column", () => {

@@ -1,4 +1,4 @@
-import { subscribePageSuspension } from "./page-suspension";
+import { subscribePageExit } from "./page-suspension";
 import {
   transcriptionTextFitsCapacity,
   type TranscriptionPurpose,
@@ -35,7 +35,7 @@ const readiness = new WeakMap<Worker, Readonly<{
   resolve: () => void;
   reject: (error: LocalTranscriptionError) => void;
 }>>();
-const pageSuspensionCleanup = new WeakMap<Worker, () => void>();
+const pageExitCleanup = new WeakMap<Worker, () => void>();
 
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
@@ -168,11 +168,12 @@ type LocalTranscriptionDeadline = Readonly<{
 
 function createLocalTranscriptionDeadline(parent: AbortSignal): LocalTranscriptionDeadline {
   const controller = new AbortController();
+  const pageWindow = window;
   let timedOut = false;
   const abortFromParent = () => controller.abort(parent.reason);
   if (parent.aborted) abortFromParent();
   else parent.addEventListener("abort", abortFromParent, { once: true });
-  const timeout = window.setTimeout(() => {
+  const timeout = pageWindow.setTimeout(() => {
     timedOut = true;
     controller.abort(new DOMException("Local transcription timed out.", "TimeoutError"));
   }, LOCAL_TRANSCRIPTION_TIMEOUT_MS);
@@ -180,7 +181,7 @@ function createLocalTranscriptionDeadline(parent: AbortSignal): LocalTranscripti
     signal: controller.signal,
     didTimeout: () => timedOut,
     dispose: () => {
-      window.clearTimeout(timeout);
+      pageWindow.clearTimeout(timeout);
       parent.removeEventListener("abort", abortFromParent);
     },
   });
@@ -262,19 +263,12 @@ function localTranscriptionWorker(): Worker {
   worker.addEventListener("error", () => {
     retireWorker(target, new LocalTranscriptionError("failed"));
   });
-  const suspensionCleanup = subscribePageSuspension(() => {
+  const exitCleanup = subscribePageExit(() => {
     if (worker === target) {
       retireWorker(target, new LocalTranscriptionError("failed"));
     }
   });
-  // Initial-hidden synchronization may retire the worker before the
-  // subscription returns. Do not publish that dead lease to its caller or
-  // retain the just-installed lifecycle listeners.
-  if (worker !== target) {
-    suspensionCleanup();
-    throw new LocalTranscriptionError("failed");
-  }
-  pageSuspensionCleanup.set(target, suspensionCleanup);
+  pageExitCleanup.set(target, exitCleanup);
   return worker;
 }
 
@@ -394,8 +388,8 @@ function cancelRequest(id: string, target: Worker, error: LocalTranscriptionErro
 
 function retireWorker(target: Worker, error: LocalTranscriptionError): void {
   if (worker === target) worker = null;
-  pageSuspensionCleanup.get(target)?.();
-  pageSuspensionCleanup.delete(target);
+  pageExitCleanup.get(target)?.();
+  pageExitCleanup.delete(target);
   cancelled.delete(target);
   readiness.get(target)?.reject(error);
   readiness.delete(target);

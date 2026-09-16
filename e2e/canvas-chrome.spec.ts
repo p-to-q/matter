@@ -192,10 +192,11 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     "定价",
     "隐私政策",
     "服务条款",
+    "模型 API",
   ]);
   const settingsMenuBox = await settingsMenu.boundingBox();
   expect(settingsMenuBox?.width).toBeCloseTo(160, 0);
-  expect(settingsMenuBox?.height).toBeCloseTo(104, 0);
+  expect(settingsMenuBox?.height).toBeCloseTo(136, 0);
 
   await settingsMenu.getByRole("menuitem", { name: "定价", exact: true }).click();
   const pricing = page.getByRole("dialog", { name: "定价" });

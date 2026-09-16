@@ -7,9 +7,17 @@ export type MaterialAddressBand = Readonly<{
   right: number;
 }>;
 
+export type MaterialAddressBoundary = Readonly<{
+  left: number;
+  right: number;
+  y: number;
+}>;
+
 export type MaterialAddressOutline = Readonly<{
   bands: readonly MaterialAddressBand[];
+  bottomBoundary: MaterialAddressBoundary;
   path: string;
+  topBoundary: MaterialAddressBoundary;
 }>;
 
 export type MaterialAddressOutlineOptions = Readonly<{
@@ -29,6 +37,7 @@ export type MaterialAddressOutlineOptions = Readonly<{
 type LogicalSpan = Readonly<{ from: number; to: number }>;
 
 const MINIMUM_BAND_EXTENT = 0.5;
+const SVG_COORDINATE_SCALE = 100;
 
 /**
  * Projects one addressed interval into a single rounded orthogonal outline.
@@ -183,7 +192,28 @@ export function materialAddressOutline(
     ? joined.map((band) => outlinePath([band], cornerRadius)).filter(Boolean).join("")
     : outlinePath(joined, cornerRadius);
   if (path.length === 0) return null;
-  return Object.freeze({ bands: Object.freeze(joined), path });
+  const topBand = joined[0];
+  const bottomBand = joined.at(-1);
+  if (topBand === undefined || bottomBand === undefined) return null;
+  // Controls that belong to the outline consume these exact physical edges.
+  // Keeping the ownership here prevents a second row-grouping approximation
+  // from drifting away when an Elastic slot changes the first or last band.
+  const topBoundary = Object.freeze({
+    left: topBand.left,
+    right: topBand.right,
+    y: topBand.blockStart,
+  });
+  const bottomBoundary = Object.freeze({
+    left: bottomBand.left,
+    right: bottomBand.right,
+    y: bottomBand.blockEnd,
+  });
+  return Object.freeze({
+    bands: Object.freeze(joined),
+    bottomBoundary,
+    path,
+    topBoundary,
+  });
 }
 
 /**
@@ -228,6 +258,7 @@ function outlinePath(
   if (ring.length < 4) return "";
 
   const segments: string[] = [];
+  let cursor: readonly [number, number] | null = null;
   for (const [index, point] of ring.entries()) {
     const previous = ring[(index - 1 + ring.length) % ring.length]!;
     const next = ring[(index + 1) % ring.length]!;
@@ -236,15 +267,25 @@ function outlinePath(
       distance(previous, point) / 2,
       distance(point, next) / 2,
     );
-    const entry = towards(point, previous, radius);
-    const exit = towards(point, next, radius);
-    if (index === 0) segments.push(`M${format(entry[0])} ${format(entry[1])}`);
-    else segments.push(`L${format(entry[0])} ${format(entry[1])}`);
-    if (radius > 0) {
+    const entry = serializePoint(towards(point, previous, radius));
+    const exit = serializePoint(towards(point, next, radius));
+    const serializedRadius = serializeCoordinate(radius);
+    if (index === 0) {
+      segments.push(`M${format(entry[0])} ${format(entry[1])}`);
+      cursor = entry;
+    } else if (cursor === null || !sameSerializedPoint(cursor, entry)) {
+      segments.push(`L${format(entry[0])} ${format(entry[1])}`);
+      cursor = entry;
+    }
+    if (serializedRadius > 0 && !sameSerializedPoint(entry, exit)) {
       const turn = cross(point, previous, next);
       segments.push(
-        `A${format(radius)} ${format(radius)} 0 0 ${turn > 0 ? 1 : 0} ${format(exit[0])} ${format(exit[1])}`,
+        `A${format(serializedRadius)} ${format(serializedRadius)} 0 0 ${turn > 0 ? 1 : 0} ${format(exit[0])} ${format(exit[1])}`,
       );
+      cursor = exit;
+    } else if (cursor === null || !sameSerializedPoint(cursor, exit)) {
+      segments.push(`L${format(exit[0])} ${format(exit[1])}`);
+      cursor = exit;
     }
   }
   segments.push("Z");
@@ -255,17 +296,21 @@ function simplifyRing(
   points: readonly (readonly [number, number])[],
 ): readonly (readonly [number, number])[] {
   const deduped: Array<readonly [number, number]> = [];
-  for (const point of points) {
+  for (const rawPoint of points) {
+    const point = serializePoint(rawPoint);
     const previous = deduped.at(-1);
-    if (previous !== undefined && near(previous, point)) continue;
+    if (previous !== undefined && sameSerializedPoint(previous, point)) continue;
     deduped.push(point);
   }
-  while (deduped.length > 1 && near(deduped[0]!, deduped.at(-1)!)) deduped.pop();
+  while (
+    deduped.length > 1 &&
+    sameSerializedPoint(deduped[0]!, deduped.at(-1)!)
+  ) deduped.pop();
   const ring: Array<readonly [number, number]> = [];
   for (const [index, point] of deduped.entries()) {
     const previous = deduped[(index - 1 + deduped.length) % deduped.length]!;
     const next = deduped[(index + 1) % deduped.length]!;
-    if (Math.abs(cross(point, previous, next)) < 1e-6) continue;
+    if (cross(point, previous, next) === 0) continue;
     ring.push(point);
   }
   return ring;
@@ -298,8 +343,11 @@ function distance(left: readonly [number, number], right: readonly [number, numb
   return Math.hypot(right[0] - left[0], right[1] - left[1]);
 }
 
-function near(left: readonly [number, number], right: readonly [number, number]): boolean {
-  return Math.abs(left[0] - right[0]) < 1e-6 && Math.abs(left[1] - right[1]) < 1e-6;
+function sameSerializedPoint(
+  left: readonly [number, number],
+  right: readonly [number, number],
+): boolean {
+  return left[0] === right[0] && left[1] === right[1];
 }
 
 function mix(from: number, to: number, progress: number): number {
@@ -311,5 +359,16 @@ function clamp01(value: number): number {
 }
 
 function format(value: number): string {
-  return String(Math.round(value * 100) / 100);
+  return String(serializeCoordinate(value));
+}
+
+function serializePoint(
+  point: readonly [number, number],
+): readonly [number, number] {
+  return [serializeCoordinate(point[0]), serializeCoordinate(point[1])];
+}
+
+function serializeCoordinate(value: number): number {
+  const rounded = Math.round(value * SVG_COORDINATE_SCALE) / SVG_COORDINATE_SCALE;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }

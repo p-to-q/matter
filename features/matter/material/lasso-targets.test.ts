@@ -4,6 +4,7 @@ import { settleLassoSelectionSet } from "./lasso-selection";
 import {
   lassoTargetFromMeasurements,
   resolveLassoTargets,
+  visibleLassoLayoutNodeIds,
   type LassoTarget,
 } from "./lasso-targets";
 
@@ -51,6 +52,23 @@ describe("punctuation-bounded lasso target resolution", () => {
       kind: "selection",
       selection: { selectedText: "身体怎样保存这种怀念" },
     });
+  });
+
+  it("does not promote the blank between segments to a whole-node selection", () => {
+    const blank = prepareLasso([
+      { x: 40, y: 0 },
+      { x: 90, y: 0 },
+      { x: 90, y: 50 },
+      { x: 40, y: 50 },
+    ])!;
+    expect(resolveLassoTargets(blank, [target({
+      bounds: { left: 45, top: 5, right: 85, bottom: 45 },
+      measurement: [
+        { index: 0, rects: [{ x: 5, y: 10, width: 20, height: 12 }] },
+        { index: 1, rects: [{ x: 105, y: 10, width: 20, height: 12 }] },
+        { index: 2, rects: [{ x: 135, y: 10, width: 20, height: 12 }] },
+      ],
+    })])).toEqual({ kind: "empty-closed" });
   });
 
   it("joins adjacent hits and promotes disconnected or cross-node runs to selection mode", () => {
@@ -161,5 +179,52 @@ describe("punctuation-bounded lasso target resolution", () => {
       mode: "contiguous-segment-range",
       selection: { nodeId: "node_a", selectedText: "第一句，第二句" },
     });
+  });
+});
+
+describe("pure visible-layout prefilter", () => {
+  const boxes = [
+    { nodeId: "visible", x: 10, y: 20, width: 40, height: 20 },
+    { nodeId: "outside", x: 400, y: 500, width: 40, height: 20 },
+  ] as const;
+
+  it("projects non-unit scale and a negative camera-derived canvas origin", () => {
+    expect(Array.from(visibleLassoLayoutNodeIds({
+      boxes,
+      canvasOrigin: { x: -50, y: -20 },
+      scale: 2,
+      viewport: { left: 0, top: 0, right: 200, bottom: 160 },
+    }) ?? [])).toEqual(["visible"]);
+  });
+
+  it("retains a node within the shared client-pixel hit margin", () => {
+    const margin = 6;
+    expect(Array.from(visibleLassoLayoutNodeIds({
+      boxes: [{ nodeId: "near", x: 100 + margin - 0.001, y: 10, width: 10, height: 10 }],
+      canvasOrigin: { x: 0, y: 0 },
+      scale: 1,
+      viewport: { left: 0, top: 0, right: 100, bottom: 100 },
+    }) ?? [])).toEqual(["near"]);
+    expect(Array.from(visibleLassoLayoutNodeIds({
+      boxes: [{ nodeId: "far", x: 100 + margin + 0.001, y: 10, width: 10, height: 10 }],
+      canvasOrigin: { x: 0, y: 0 },
+      scale: 1,
+      viewport: { left: 0, top: 0, right: 100, bottom: 100 },
+    }) ?? [])).toEqual([]);
+  });
+
+  it("fails open on invalid or duplicate layout authority", () => {
+    expect(visibleLassoLayoutNodeIds({
+      boxes: [...boxes, { ...boxes[0] }],
+      canvasOrigin: { x: 0, y: 0 },
+      scale: 1,
+      viewport: { left: 0, top: 0, right: 100, bottom: 100 },
+    })).toBeNull();
+    expect(visibleLassoLayoutNodeIds({
+      boxes,
+      canvasOrigin: { x: 0, y: 0 },
+      scale: 0,
+      viewport: { left: 0, top: 0, right: 100, bottom: 100 },
+    })).toBeNull();
   });
 });

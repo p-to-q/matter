@@ -438,10 +438,36 @@ test.describe("passage-local Point and Talk", () => {
     expect(requestedDirection).toBe(`${DIRECTION}。`);
   });
 
-  test("an outside canvas pointer cancels a pending local turn and its late result", async ({ page }) => {
+  test("an outside canvas pointer detaches a pending local turn while its result still commits", async ({ page }) => {
     await page.route("**/api/text-swap", async (route) => {
+      const envelope = route.request().postDataJSON() as {
+        protocolVersion: "0.2";
+        requestVersion: "text-swap/2";
+        id: string;
+        treeId: string;
+        treeRevision: number;
+      };
       await new Promise((resolve) => setTimeout(resolve, 500));
-      await route.continue().catch(() => undefined);
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          protocolVersion: envelope.protocolVersion,
+          requestVersion: envelope.requestVersion,
+          id: envelope.id,
+          treeId: envelope.treeId,
+          treeRevision: envelope.treeRevision,
+          action: {
+            id: envelope.id,
+            type: "replace-text-range",
+            nodeId: ROOT_ID,
+            start: 0,
+            end: SOURCE_TEXT.length,
+            text: REWRITTEN_TEXT,
+            intent: "paraphrase",
+          },
+          presentation: { motionHint: "settle" },
+        }),
+      }).catch(() => undefined);
     });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/matter");
@@ -456,7 +482,7 @@ test.describe("passage-local Point and Talk", () => {
     await passage.click();
     await expect(page.locator(".point-talk")).toBeHidden();
     await page.waitForTimeout(650);
-    await expect(passage).toContainText(SOURCE_TEXT);
+    await expect(passage).toContainText(REWRITTEN_TEXT);
   });
 
   test.describe("coarse pointer", () => {

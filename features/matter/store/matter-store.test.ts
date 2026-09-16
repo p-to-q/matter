@@ -305,7 +305,7 @@ describe("Matter store", () => {
     expect(store.getState()).toBe(before);
   });
 
-  it("does not preserve repair authority through undo", () => {
+  it("does not revive repair authority when undo and redo restore the same node", () => {
     let nowMs = 100;
     const store = createMatterStore("root", { monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
@@ -328,6 +328,7 @@ describe("Matter store", () => {
     if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
 
     expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().redo()).toMatchObject({ status: "committed" });
     nowMs = 200;
     expect(store.getState().settleHumanTranscriptRepair({
       repairLeaseId: admission.repairLeaseId,
@@ -336,10 +337,10 @@ describe("Matter store", () => {
       source: "rules",
       createdAt: "2026-08-11T10:00:00.100Z",
     })).toMatchObject({ status: "rejected", errorCode: "REPAIR_STALE" });
-    expect(store.getState().tree.nodes.voice_node_undo_only).toBeUndefined();
+    expect(store.getState().tree.nodes.voice_node_undo_only?.text).toBe("呃，我觉得可以。");
   });
 
-  it("consumes repair authority when an unrelated structural drag commits", () => {
+  it("preserves repair authority when an unrelated structural drag commits", () => {
     let nowMs = 100;
     const store = createMatterStore("expanded", { monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
@@ -375,8 +376,8 @@ describe("Matter store", () => {
       text: "我觉得可以。",
       source: "rules",
       createdAt: "2026-08-11T10:00:00.100Z",
-    })).toMatchObject({ status: "rejected", errorCode: "REPAIR_STALE" });
-    expect(store.getState().tree.nodes.voice_node_move_repair.text).toBe("呃，我觉得可以。");
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_move_repair.text).toBe("我觉得可以。");
   });
 
   it("uses the store clock to expire a repair capability", () => {

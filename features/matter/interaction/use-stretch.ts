@@ -31,6 +31,8 @@ export type StretchController = Readonly<{
   pointerMove: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerUp: (event: React.PointerEvent<HTMLButtonElement>) => boolean;
   pointerCancel: (pointerId: number) => boolean;
+  /** Rolls back only an owned, unfinished drag and returns its pointer. */
+  cancelActiveDrag: () => number | null;
   confirm: () => boolean;
   reopen: () => void;
   keyDown: (key: string, handle?: StretchHandle) => boolean;
@@ -230,6 +232,15 @@ export function useStretch(input: {
     return true;
   }, [flushPreview, send]);
 
+  const cancelActiveDrag = useCallback(() => {
+    const current = stateRef.current;
+    if (current.mode !== "dragging") return null;
+    const pointerId = current.pointerId;
+    const next = send({ type: "pointer-cancel", pointerId });
+    flushPreview(previewSignal(next));
+    return pointerId;
+  }, [flushPreview, send]);
+
   const confirm = useCallback(() => {
     const current = stateRef.current;
     const next = send({ type: "confirm" });
@@ -273,6 +284,7 @@ export function useStretch(input: {
     pointerMove,
     pointerUp,
     pointerCancel,
+    cancelActiveDrag,
     confirm,
     reopen,
     keyDown,

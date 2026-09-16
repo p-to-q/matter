@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   clickExposedMaterial,
 } from "./material-index-driver";
@@ -23,6 +23,7 @@ for (const viewport of [
       if (message.type() === "error") browserErrors.push(message.text());
     });
     await page.setViewportSize(viewport);
+    await prewarmAdmissionRouteModules(page);
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     await expect(page.locator("#material-files")).toHaveAttribute(
@@ -226,6 +227,17 @@ for (const viewport of [
     // controls; ending the test keeps this geometry proof independent of the
     // browser's device-specific transcription ending.
   });
+}
+
+async function prewarmAdmissionRouteModules(page: Page): Promise<void> {
+  // Next's development server compiles each dynamic route on first access.
+  // Keep that test-only startup work outside the human interaction receipt;
+  // production deployments already contain compiled route artifacts.
+  for (const path of ["/matter/api/transcribe", "/matter/api/repair"]) {
+    const response = await page.request.get(path);
+    expect(response.status()).toBe(405);
+    await response.dispose();
+  }
 }
 
 test("a denied microphone leaves material unchanged and Record again starts a fresh attempt", async ({ page }) => {

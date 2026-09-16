@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  admissionCaptureIsActive,
   createAdmissionInteractionState,
   reduceAdmissionInteraction,
   type AdmissionAnchor,
@@ -52,6 +53,16 @@ function transcribing(): AdmissionInteractionState {
 }
 
 describe("admission interaction reducer", () => {
+  it("locks the shared canvas only for live microphone capture", () => {
+    const stopping = reduceAdmissionInteraction(recording(), { type: "stop" }).state;
+    expect(admissionCaptureIsActive(createAdmissionInteractionState())).toBe(false);
+    expect(admissionCaptureIsActive(start().state)).toBe(true);
+    expect(admissionCaptureIsActive(recording())).toBe(true);
+    expect(admissionCaptureIsActive(stopping)).toBe(true);
+    expect(admissionCaptureIsActive(transcribing())).toBe(false);
+    expect(admissionCaptureIsActive(committing())).toBe(false);
+  });
+
   it.each([ROOT, CHILD])("starts one frozen %s attempt and requests a microphone", (anchor) => {
     const result = start(anchor);
 

@@ -93,7 +93,7 @@ describe("VoiceLeaseCoordinator", () => {
     port.cancel(FIRST);
   });
 
-  it("keeps the logical lease through transcription so a new owner can revoke it", async () => {
+  it("releases a finalized recording before another owner begins capture", async () => {
     const coordinator = new VoiceLeaseCoordinator();
     const firstRaw = new ControlledVoice();
     const secondRaw = new ControlledVoice();
@@ -109,8 +109,8 @@ describe("VoiceLeaseCoordinator", () => {
     await expect(stopping).resolves.toMatchObject({ operation: FIRST });
 
     const secondStarting = second.start(SECOND);
-    expect(revoked).toHaveBeenCalledTimes(1);
-    expect(firstRaw.cancel).toHaveBeenCalledWith(FIRST);
+    expect(revoked).not.toHaveBeenCalled();
+    expect(firstRaw.cancel).not.toHaveBeenCalled();
     secondRaw.grant();
     await secondStarting;
     second.cancel(SECOND);

@@ -25,6 +25,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell { --selection-control-ink: #161d27; --selection-control-field: #f5f5f2; --selection-control-rgb: 22,29,39; --address-density-native: .12; --address-density-actionable: .18; --address-density-structural: .08; --address-ring-structural: .13; --corner-optical-outer-filter: blur(.8px); --corner-optical-inner-filter: blur(3.25px); --corner-optical-outer-mask: radial-gradient(ellipse at center, rgb(0 0 0 / .72) 0%, rgb(0 0 0 / .72) 30%, rgb(0 0 0 / .62) 44%, rgb(0 0 0 / .44) 58%, rgb(0 0 0 / .24) 70%, rgb(0 0 0 / .1) 81%, rgb(0 0 0 / .03) 89%, rgb(0 0 0 / .008) 94%, rgb(0 0 0 / .004) 97%, transparent 100%); --corner-optical-inner-mask: radial-gradient(ellipse at center, #000 0%, #000 58%, rgb(0 0 0 / .96) 66%, rgb(0 0 0 / .9) 72%, rgb(0 0 0 / .72) 77%, rgb(0 0 0 / .32) 81%, rgb(0 0 0 / .1) 86%, rgb(0 0 0 / .02) 91%, rgb(0 0 0 / .004) 96%, transparent 100%); --compact-corner-target: 48px; --corner-instrument-glyph: 14px; --mobile-corner-glyph: 20px; --narrow-paper-top: 66px; --narrow-paper-inset: 8px; --narrow-paper-radius: 16px; --narrow-index-width: min(304px, calc(100vw - 64px)); --index-navigation-return-centering: 0; position: relative; isolation: isolate; width: 100vw; height: 100dvh; overflow: hidden; background: var(--field); cursor: default; user-select: none; touch-action: auto; }
 .matter-shell[data-canvas-theme="dark"] { --selection-control-ink: #f0f2f3; --selection-control-field: #202831; --selection-control-rgb: 240,242,243; --address-density-native: .08; --address-density-actionable: .1; --address-density-structural: .15; --address-ring-structural: .16; }
 .matter-shell[data-canvas-mode="pan"] { cursor: grab; }
+.matter-shell[data-canvas-mode="pan"] .matter-material-plane { touch-action: none; }
 .matter-shell[data-dragging="true"] { cursor: grabbing; }
 .matter-shell[data-node-dragging="true"] { cursor: grabbing; }
 .matter-shell[data-lasso-mode="true"] { cursor: crosshair; }
@@ -250,6 +251,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-document[data-canvas-theme="light"] { --canvas-chrome: #161d27; --chrome-hover-bg: #161d27; --chrome-hover-text: #f5f5f2; --canvas-ruling-line: #161d27; --canvas-ruling-opacity: .16; --canvas-ruling-peak-opacity: .2; --selection-bg: rgba(22,29,39,.08); --selection-ring: rgba(22,29,39,.13); --selection-shadow: none; color-scheme: light; }
 .matter-document[data-canvas-theme="dark"] { --paper: #202831; --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; --faint: #89929b; --line: rgba(240,242,243,.16); --canvas-chrome: #f0f2f3; --chrome-hover-bg: #f5f5f2; --chrome-hover-text: #161d27; --canvas-ruling-line: #f0f2f3; --canvas-ruling-opacity: .13; --canvas-ruling-peak-opacity: .16; --selection-bg: rgba(245,245,242,.15); --selection-ring: rgba(245,245,242,.16); --selection-shadow: 0 1px 12px rgba(0,0,0,.28); color-scheme: dark; }
 .matter-shell:has(.matter-document[data-canvas-modal-open="true"]) .tool-rail { visibility: hidden; opacity: 0; pointer-events: none; }
+.material-interaction-presentation { display: contents; }
+/* Modal chrome owns presentation, never the underlying semantic selection or
+   submitted job. React gates the individual painters in the same commit; this
+   rule is the fail-safe for fixed descendants and a newly mounted layer. */
+.matter-shell[data-material-presentation="occluded"] .material-interaction-presentation { visibility: hidden; pointer-events: none; }
+.matter-shell[data-material-presentation="occluded"]::selection,
+.matter-shell[data-material-presentation="occluded"] ::selection { background: transparent; color: inherit; }
 .matter-material-plane { position: absolute; inset: 0; }
 .matter-document__empty { position: absolute; top: 43%; left: 50%; margin: 0; color: var(--muted); transform: translate(-50%, -50%); }
 .matter-guidance,
@@ -456,13 +464,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .lasso-layer[data-selection-projection="true"] .lasso-selection-fragment,
 .lasso-layer:has(.elastic-preview[data-preview-mode="expand"]) .lasso-selection-fragment { animation: none; transform: translateY(var(--address-displacement-y, 0px)); }
 .stretch-handle { position: fixed; z-index: 30; width: 52px; height: 40px; border: 0; background: transparent; color: var(--selection-control-ink); }
-.stretch-handle::after { position: absolute; left: 15px; top: var(--stretch-grip-y); width: 22px; height: 2px; border-radius: 2px; background: currentColor; box-shadow: 0 0 0 3px var(--selection-control-field); content: ""; opacity: .76; transform: translateY(-50%); transition: left 140ms ease, width 140ms ease, opacity 140ms ease; animation: stretch-grip-arrive 180ms cubic-bezier(.2,.8,.2,1); }
+.stretch-handle::after { position: absolute; left: calc(15px + var(--stretch-cue-offset-x, 0px)); top: var(--stretch-grip-y); width: 22px; height: 2px; border-radius: 2px; background: currentColor; box-shadow: 0 0 0 3px var(--selection-control-field); content: ""; opacity: .76; transform: translateY(-50%); transition: left 140ms ease, width 140ms ease, opacity 140ms ease; animation: stretch-grip-arrive 180ms cubic-bezier(.2,.8,.2,1); }
 .stretch-handle { display: block; margin: 0; padding: 0; cursor: ns-resize; pointer-events: auto; touch-action: none; }
-.stretch-handle--top { --stretch-arrival-y: 4px; --stretch-grip-y: 100%; left: var(--elastic-top-center, 0px); top: var(--elastic-anchor-top, 0px); transform: translate(-50%, calc(-100% - 5px)); }
-.stretch-handle--bottom { --stretch-arrival-y: -4px; --stretch-grip-y: 0%; left: var(--elastic-bottom-center, 0px); top: var(--elastic-handle-top, 0px); transform: translateX(-50%); }
+.stretch-handle--top { --stretch-arrival-y: 4px; --stretch-cue-offset-x: var(--elastic-top-cue-offset, 0px); --stretch-grip-y: 100%; left: var(--elastic-top-center, 0px); top: var(--elastic-anchor-top, 0px); transform: translate(-50%, calc(-100% - 5px)); }
+.stretch-handle--bottom { --stretch-arrival-y: -4px; --stretch-cue-offset-x: var(--elastic-bottom-cue-offset, 0px); --stretch-grip-y: 0%; left: var(--elastic-bottom-center, 0px); top: var(--elastic-handle-top, 0px); transform: translateX(-50%); }
 .stretch-handle:hover::after,
 .stretch-handle:active::after,
-.stretch-handle[data-active="true"]::after { left: 11px; width: 30px; opacity: 1; }
+.stretch-handle[data-active="true"]::after { left: calc(11px + var(--stretch-cue-offset-x, 0px)); width: 30px; opacity: 1; }
 .stretch-handle:focus-visible { outline: 1px solid var(--selection-control-ink); outline-offset: -5px; border-radius: 12px; }
 .elastic-preview { position: fixed; z-index: 29; inset: 0; pointer-events: none; }
 .matter-shell[data-canvas-theme="dark"] .lasso-ink__trace { opacity: .58; }

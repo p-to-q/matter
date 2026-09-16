@@ -14,7 +14,7 @@ import type { StretchCommitBasis } from "../runtime/stretch-interaction";
 import type { TransformCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
-import { subscribePageSuspension } from "../interaction/page-suspension";
+import { subscribePageExit, subscribePageSuspension } from "../interaction/page-suspension";
 
 export type FixedExpandTurnState = Readonly<{
   phase: "idle" | "requesting";
@@ -33,7 +33,9 @@ type FixedExpandInput = Readonly<{
   selection: SegmentSelection | null;
   locale: CanvasLanguage;
   enabled: boolean;
-  interactionScopeKey: string;
+  deliveryVisibleNodeIds?: ReadonlySet<string>;
+  /** False holds a resolved plan until the material surface is usable again. */
+  deliveryWindowAvailable?: boolean;
   commit: (
     envelope: TransformEnvelope,
     plan: TransformPlan,
@@ -45,28 +47,81 @@ type FixedExpandInput = Readonly<{
 
 const IDLE: FixedExpandTurnState = Object.freeze({ phase: "idle", basis: null });
 
+type OwnedFixedExpandRequest = {
+  readonly controller: AbortController;
+  readonly documentEpoch: number;
+  readonly envelope: TransformEnvelope;
+  readonly basis: StretchCommitBasis;
+  plan?: TransformPlan;
+};
+
 /** Owns one immutable fixed-expand request; material remains store-owned. */
 export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   const [state, setState] = useState<FixedExpandTurnState>(IDLE);
   const [invariantFailure, setInvariantFailure] = useState<Readonly<{ error: unknown }> | null>(null);
   const inputRef = useRef(input);
-  const requestRef = useRef<AbortController | null>(null);
-  const generationRef = useRef(0);
-  const scopeRef = useRef(scopeSignature(input));
+  const requestRef = useRef<OwnedFixedExpandRequest | null>(null);
+  const activePointersRef = useRef(new Set<number>());
+  const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
+  const deliveryWindowOpenRef = useRef(
+    typeof document === "undefined" || document.visibilityState === "visible",
+  );
   useLayoutEffect(() => {
     inputRef.current = input;
+    deliveryAvailableRef.current = input.deliveryWindowAvailable !== false;
+    if (!deliveryAvailableRef.current) deliveryWindowOpenRef.current = false;
   }, [input]);
   if (invariantFailure !== null) throw invariantFailure.error;
 
   const cancel = useCallback(() => {
-    generationRef.current += 1;
-    requestRef.current?.abort(new DOMException("Aborted", "AbortError"));
+    requestRef.current?.controller.abort(new DOMException("Aborted", "AbortError"));
     requestRef.current = null;
     setState(IDLE);
   }, []);
 
+  const deliver = useCallback((request: OwnedFixedExpandRequest) => {
+    if (
+      requestRef.current !== request ||
+      request.controller.signal.aborted ||
+      request.plan === undefined ||
+      !deliveryWindowOpenRef.current
+    ) return;
+    const current = inputRef.current;
+    if (!fixedExpandRequestIsCurrent(request, current)) {
+      requestRef.current = null;
+      setState(IDLE);
+      current.onUnavailable?.();
+      return;
+    }
+    if (
+      current.deliveryVisibleNodeIds !== undefined &&
+      !current.deliveryVisibleNodeIds.has(request.basis.selection.nodeId)
+    ) return;
+    requestRef.current = null;
+    try {
+      const change = current.commit(
+        request.envelope,
+        request.plan,
+        request.documentEpoch,
+      );
+      if (change === null) {
+        current.onUnavailable?.();
+        setState(IDLE);
+        return;
+      }
+      current.onCommitted(change);
+      setState(IDLE);
+    } catch (error) {
+      setState(IDLE);
+      setInvariantFailure(Object.freeze({ error }));
+    }
+  }, []);
+
   const start = useCallback((basis: StretchCommitBasis): boolean => {
     const current = inputRef.current;
+    // One bounded owner means a second gesture cannot silently replace a
+    // submitted request. The surface stays unavailable until it settles.
+    if (requestRef.current !== null) return false;
     const envelope = current.enabled
       ? createFixedExpandEnvelope({
           tree: current.tree,
@@ -76,9 +131,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
           basis,
         })
       : null;
-    generationRef.current += 1;
-    requestRef.current?.abort(new DOMException("Superseded", "AbortError"));
-    requestRef.current = null;
     if (envelope === null) {
       // A release can race a bounded-context or scope refusal. It is not a new
       // material state: reopen the same local degree without vendor chrome.
@@ -87,48 +139,28 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       return false;
     }
 
-    const generation = generationRef.current;
-    const requestScope = scopeSignature(current);
     const controller = new AbortController();
-    requestRef.current = controller;
+    const request: OwnedFixedExpandRequest = {
+      controller,
+      documentEpoch: basis.documentEpoch,
+      envelope,
+      basis,
+    };
+    requestRef.current = request;
     setState(Object.freeze({ phase: "requesting", basis }));
     void requestTransform(envelope, controller.signal).then(
       (plan) => {
-        if (generation !== generationRef.current || controller.signal.aborted) return;
-        if (scopeSignature(inputRef.current) !== requestScope) {
-          requestRef.current = null;
-          setState(IDLE);
-          return;
-        }
-        requestRef.current = null;
-        try {
-          const change = inputRef.current.commit(envelope, plan, basis.documentEpoch);
-          if (change === null) {
-            // Current material wins, but the local degree must remain usable.
-            // Reopen the bounded address instead of stranding its reducer in a
-            // committed state that rejects every subsequent keyboard change.
-            inputRef.current.onUnavailable?.();
-            setState(IDLE);
-            return;
-          }
-          inputRef.current.onCommitted(change);
-          setState(IDLE);
-        } catch (error) {
-          // Transport refusal is expected and quiet. A local commit or
-          // presentation exception is an invariant failure and must reach the
-          // nearest React error boundary on the following render.
-          setState(IDLE);
-          setInvariantFailure(Object.freeze({ error }));
-        }
+        if (requestRef.current !== request || controller.signal.aborted) return;
+        request.plan = plan;
+        deliver(request);
       },
       () => {
-        if (generation !== generationRef.current || controller.signal.aborted) return;
-        if (scopeSignature(inputRef.current) !== requestScope) {
-          requestRef.current = null;
+        if (requestRef.current !== request || controller.signal.aborted) return;
+        requestRef.current = null;
+        if (!fixedExpandRequestIsCurrent(request, inputRef.current)) {
           setState(IDLE);
           return;
         }
-        requestRef.current = null;
         // Provider and transport availability are operational facts, not new
         // material. Leave the selection and document untouched without drawing
         // a vendor failure into the paper.
@@ -137,29 +169,69 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       },
     );
     return true;
-  }, []);
+  }, [deliver]);
 
   useEffect(() => {
-    const nextScope = scopeSignature(input);
-    if (scopeRef.current === nextScope) return;
-    scopeRef.current = nextScope;
-    if (state.phase !== "idle") queueMicrotask(cancel);
-  }, [cancel, input, state.phase]);
+    const request = requestRef.current;
+    if (request === null) return;
+    if (!fixedExpandRequestIsCurrent(request, input)) queueMicrotask(cancel);
+    else deliver(request);
+  }, [cancel, deliver, input]);
+
+  useEffect(() => {
+    deliveryWindowOpenRef.current = deliveryAvailableRef.current &&
+      document.visibilityState === "visible" && activePointersRef.current.size === 0;
+    const request = requestRef.current;
+    if (request !== null) deliver(request);
+  }, [deliver, input.deliveryWindowAvailable]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || requestRef.current === null) return;
+      if (
+        !deliveryAvailableRef.current || event.key !== "Escape" ||
+        requestRef.current === null
+      ) return;
       event.preventDefault();
       cancel();
     };
     window.addEventListener("keydown", onKeyDown);
-    const unsubscribePageSuspension = subscribePageSuspension(cancel);
+    const openDeliveryIfUsable = () => {
+      deliveryWindowOpenRef.current =
+        deliveryAvailableRef.current && document.visibilityState === "visible" &&
+          activePointersRef.current.size === 0;
+      const request = requestRef.current;
+      if (request !== null) deliver(request);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      activePointersRef.current.add(event.pointerId);
+      deliveryWindowOpenRef.current = false;
+    };
+    const onPointerDone = (event: PointerEvent) => {
+      activePointersRef.current.delete(event.pointerId);
+      openDeliveryIfUsable();
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointerup", onPointerDone, true);
+    window.addEventListener("pointercancel", onPointerDone, true);
+    const unsubscribePageSuspension = subscribePageSuspension(
+      () => {
+        activePointersRef.current.clear();
+        deliveryWindowOpenRef.current = false;
+      },
+      openDeliveryIfUsable,
+    );
+    const unsubscribePageExit = subscribePageExit(cancel);
+    openDeliveryIfUsable();
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointerup", onPointerDone, true);
+      window.removeEventListener("pointercancel", onPointerDone, true);
       unsubscribePageSuspension();
+      unsubscribePageExit();
       cancel();
     };
-  }, [cancel]);
+  }, [cancel, deliver]);
 
   return { state, start, cancel };
 }
@@ -196,42 +268,54 @@ export function createFixedExpandEnvelope(input: Readonly<{
     gesture: { type: "stretch", axis: "vertical", amount: basis.amount },
     locale: input.locale,
     context: {
-      lineage: materialLineage.map((node, index) => ({
-        id: node.id,
-        text: node.text,
-        // The invisible document-root is storage structure, not model context.
-        // Normalize the first visible passage into the wire lineage root.
-        parentId: index === 0 ? null : node.parentId,
-        createdAt: node.createdAt,
-        updatedAt: node.updatedAt,
-      })),
+      lineage: wireLineage(materialLineage),
     },
   });
   return parsed.ok ? parsed.envelope : null;
 }
 
-function scopeSignature(input: FixedExpandInput): string {
-  const selection = input.selection;
-  const lineage = selection === null
-    ? null
-    : selectLineage(input.tree, selection.nodeId)?.map((node) => [
-        node.id,
-        node.text,
-        node.parentId,
-        node.createdAt,
-        node.updatedAt,
-      ]) ?? null;
-  return JSON.stringify([
-    input.documentEpoch,
-    input.tree.id,
-    input.enabled ? "enabled" : "disabled",
-    input.interactionScopeKey,
-    selection?.nodeId ?? "",
-    selection?.start ?? "",
-    selection?.end ?? "",
-    selection?.selectedText ?? "",
-    lineage,
-  ]);
+function fixedExpandRequestIsCurrent(
+  request: OwnedFixedExpandRequest,
+  input: FixedExpandInput,
+): boolean {
+  if (
+    request.documentEpoch !== input.documentEpoch ||
+    request.envelope.treeId !== input.tree.id
+  ) return false;
+  const node = input.tree.nodes[request.basis.selection.nodeId];
+  if (
+    node === undefined ||
+    node.text.slice(request.basis.selection.start, request.basis.selection.end) !==
+      request.basis.selection.selectedText
+  ) return false;
+  const lineage = selectLineage(input.tree, request.basis.selection.nodeId);
+  return lineage !== null && sameWireLineage(
+    request.envelope.context.lineage,
+    wireLineage(lineage),
+  );
+}
+
+function wireLineage(lineage: NonNullable<ReturnType<typeof selectLineage>>) {
+  return lineage.map((node, index) => ({
+    id: node.id,
+    text: node.text,
+    // The invisible document-root is storage structure, not model context.
+    parentId: index === 0 ? null : node.parentId,
+    createdAt: node.createdAt,
+    updatedAt: node.updatedAt,
+  }));
+}
+
+function sameWireLineage(
+  left: TransformEnvelope["context"]["lineage"],
+  right: TransformEnvelope["context"]["lineage"],
+): boolean {
+  return left.length === right.length && left.every((node, index) => {
+    const other = right[index];
+    return other !== undefined && node.id === other.id && node.text === other.text &&
+      node.parentId === other.parentId && node.createdAt === other.createdAt &&
+      node.updatedAt === other.updatedAt;
+  });
 }
 
 function sameSelection(left: SegmentSelection, right: SegmentSelection): boolean {

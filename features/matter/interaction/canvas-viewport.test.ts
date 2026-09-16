@@ -96,6 +96,35 @@ describe("reduceCanvasViewport", () => {
     expect(state.x).toBe(8);
   });
 
+  it("keeps one touch gesture continuous across sparse and off-surface samples", () => {
+    let state = apply(INITIAL_CANVAS_VIEWPORT, down("touch"));
+    for (const [clientX, clientY] of [
+      [105, 83],
+      [118, 94],
+      [-40, 640],
+      [250, -30],
+    ] as const) {
+      state = apply(state, {
+        type: "pointer-move",
+        pointerId: 3,
+        clientX,
+        clientY,
+      });
+    }
+
+    expect(state).toMatchObject({
+      x: 150,
+      y: -110,
+      userMoved: true,
+      gesture: {
+        pointerId: 3,
+        lastX: 250,
+        lastY: -30,
+        dragging: true,
+      },
+    });
+  });
+
   it("commits terminal pointer movement and recovers from cancel or lost capture", () => {
     let state = apply(INITIAL_CANVAS_VIEWPORT, down());
     state = apply(state, {

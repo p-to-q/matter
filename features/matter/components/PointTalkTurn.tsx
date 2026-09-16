@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useMemo, type RefObject } from "react";
 import type { MatterLocale } from "../config/locales";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
-import { useTextSwap } from "../interaction/use-text-swap";
+import {
+  useTextSwap,
+  type TextSwapController,
+} from "../interaction/use-text-swap";
 import type { SegmentSelection } from "../material/text-segments";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import type { TextSwapCommittedChange } from "../store/matter-store";
@@ -18,6 +21,7 @@ export function PointTalkTurn({
   canvasZoom,
   commit,
   documentEpoch,
+  deliveryVisibleNodeIds,
   enabled,
   geometryKey,
   interactionScopeKey,
@@ -25,6 +29,9 @@ export function PointTalkTurn({
   nodeId,
   onClose,
   onCommitted,
+  onReleased,
+  presented,
+  surfaceAvailable,
   positioningRef,
   targetBounds,
   tree,
@@ -39,6 +46,7 @@ export function PointTalkTurn({
     expectedDocumentEpoch: number,
   ) => TextSwapCommitResult<TextSwapCommittedChange>;
   documentEpoch: number;
+  deliveryVisibleNodeIds?: ReadonlySet<string>;
   enabled: boolean;
   geometryKey: string;
   interactionScopeKey: string;
@@ -46,6 +54,9 @@ export function PointTalkTurn({
   nodeId: string;
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
+  onReleased: () => void;
+  presented: boolean;
+  surfaceAvailable: boolean;
   positioningRef: RefObject<HTMLElement | null>;
   targetBounds: PointTalkBounds | null;
   tree: ThoughtTree;
@@ -71,19 +82,30 @@ export function PointTalkTurn({
     locale,
     enabled: selection !== null,
     interactionScopeKey,
+    deliveryVisibleNodeIds,
     commit,
     onCommitted,
+    deliveryWindowAvailable: surfaceAvailable,
   });
   const phase = controller.state.phase;
   useEffect(() => {
-    if (selection !== null && phase === "idle" && !controller.enter()) onClose();
-  }, [controller, onClose, phase, selection]);
+    if (presented && selection !== null && phase === "idle" && !controller.enter()) onClose();
+  }, [controller, onClose, phase, presented, selection]);
+  useEffect(() => {
+    if (!presented) controller.detachPresentation();
+  }, [controller, presented]);
+  useEffect(() => {
+    if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
+  }, [onReleased, phase, presented]);
   const close = useCallback(() => {
-    controller.cancel();
+    const retained = controller.detachPresentation();
     onClose();
-  }, [controller, onClose]);
+    // Geometry failure or dismissal before submit owns no durable job. Release
+    // the host synchronously so a stale idle effect cannot reopen the surface.
+    if (!retained) onReleased();
+  }, [controller, onClose, onReleased]);
 
-  if (selection === null) return null;
+  if (selection === null || !presented) return null;
   return (
     <PointTalkComposer
       boundaryRef={boundaryRef}
@@ -102,8 +124,19 @@ export function PointTalkTurn({
         controller.submit();
       }}
       positioningRef={positioningRef}
+      surfaceAvailable={surfaceAvailable}
       targetBounds={targetBounds}
       voiceAvailable={voiceAvailable}
     />
   );
+}
+
+export function pointTalkTurnReleasesOwner(
+  presented: boolean,
+  phase: TextSwapController["state"]["phase"],
+): boolean {
+  // A scope loss can make a still-presented draft stale before its geometry
+  // callback runs. Terminal work has no reason to keep the host reserved.
+  if (presented) return phase === "success" || phase === "stale";
+  return phase === "idle" || phase === "error" || phase === "stale" || phase === "success";
 }

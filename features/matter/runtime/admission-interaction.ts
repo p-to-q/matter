@@ -112,6 +112,13 @@ export function createAdmissionInteractionState(): AdmissionInteractionState {
   return IDLE;
 }
 
+/** Only live microphone phases own the exclusive pointer/audio surface. */
+export function admissionCaptureIsActive(state: AdmissionInteractionState): boolean {
+  return state.phase === "requesting" ||
+    state.phase === "recording" ||
+    state.phase === "stopping";
+}
+
 export function reduceAdmissionInteraction(
   state: AdmissionInteractionState,
   event: AdmissionInteractionEvent,

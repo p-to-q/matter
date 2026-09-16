@@ -112,9 +112,12 @@ const LINE_BLOCK_TOLERANCE_PX = 1;
 // reads the same receipt, so top/bottom can never drift.
 const BLOCK_OUTSET_RATIO = 0.245;
 const BLOCK_OUTSET_MAX_PX = 14;
-// Precise material keeps a client-pixel corner independent from glyph-relative
-// air. Whole-node material owns a separate type-relative radius.
-const PRECISE_CORNER_RADIUS_PX = 3;
+// Precise material uses a quieter fraction of the glyph box than whole-node
+// capsules, with client-pixel bounds at both zoom extremes. This keeps wrapped
+// steps soft without turning a selected phrase into a pill.
+const PRECISE_CORNER_RADIUS_RATIO = 0.18;
+const PRECISE_CORNER_RADIUS_MIN_PX = 4;
+const PRECISE_CORNER_RADIUS_MAX_PX = 9;
 const INLINE_OUTSET_RATIO = 0.36;
 
 /**
@@ -162,7 +165,11 @@ export function createProjectedLayoutReceipt(input: Readonly<{
     coordinateSpace: "client-css-px",
     metrics: Object.freeze({
       blockOutset: rounded(opticalBlockOutset(rows, medianHeight)),
-      cornerRadius: PRECISE_CORNER_RADIUS_PX,
+      cornerRadius: rounded(clamp(
+        medianHeight * PRECISE_CORNER_RADIUS_RATIO,
+        PRECISE_CORNER_RADIUS_MIN_PX,
+        PRECISE_CORNER_RADIUS_MAX_PX,
+      )),
       inlineOutset: rounded(clamp(medianHeight * INLINE_OUTSET_RATIO, 6, 22)),
       medianRowExtent: rounded(medianHeight),
     }),

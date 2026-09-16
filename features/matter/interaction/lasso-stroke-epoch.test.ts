@@ -16,6 +16,15 @@ describe("lasso stroke epoch", () => {
 
   it("accepts only an unchanged document and measurement epoch", () => {
     expect(isCurrentLassoStroke(epoch, epoch, 3, 3)).toBe(true);
-    expect(isCurrentLassoStroke(epoch, { ...epoch, viewportX: 1 }, 3, 3)).toBe(false);
+    for (const changed of [
+      { ...epoch, treeRevision: epoch.treeRevision + 1 },
+      { ...epoch, layoutEpoch: epoch.layoutEpoch + 1 },
+      { ...epoch, viewportX: epoch.viewportX + 1 },
+      { ...epoch, viewportY: epoch.viewportY + 1 },
+      { ...epoch, viewportZoom: epoch.viewportZoom + 0.1 },
+    ]) {
+      expect(isCurrentLassoStroke(epoch, changed, 3, 3)).toBe(false);
+    }
+    expect(isCurrentLassoStroke(null, epoch, 3, 3)).toBe(false);
   });
 });

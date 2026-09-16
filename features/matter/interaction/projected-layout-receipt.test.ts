@@ -41,7 +41,7 @@ describe("projected layout receipt", () => {
       ],
       run: { startRow: 0, startInline: 600, endRow: 1, endInline: 600 },
       textDirection: "ltr",
-      metrics: { blockOutset: 4.9, cornerRadius: 3, inlineOutset: 7.2, medianRowExtent: 20 },
+      metrics: { blockOutset: 4.9, cornerRadius: 4, inlineOutset: 7.2, medianRowExtent: 20 },
     });
     expect(Object.isFrozen(RECEIPT)).toBe(true);
     expect(Object.isFrozen(RECEIPT.rows)).toBe(true);
@@ -51,7 +51,7 @@ describe("projected layout receipt", () => {
     const metrics = RECEIPT.metrics;
     expect(metrics.blockOutset).toBe(4.9);
     expect(metrics.inlineOutset / metrics.blockOutset).toBeCloseTo(7.2 / 4.9, 5);
-    expect(metrics.cornerRadius).toBe(3);
+    expect(metrics.cornerRadius).toBe(4);
   });
 
   it("projects whole-run bounds from the same measured receipt", () => {
@@ -95,19 +95,19 @@ describe("projected layout receipt", () => {
     })!.metrics;
     expect(metricsAt(12)).toEqual({
       blockOutset: 2.94,
-      cornerRadius: 3,
+      cornerRadius: 4,
       inlineOutset: 6,
       medianRowExtent: 12,
     });
     expect(metricsAt(44)).toEqual({
       blockOutset: 10.78,
-      cornerRadius: 3,
+      cornerRadius: 7.92,
       inlineOutset: 15.84,
       medianRowExtent: 44,
     });
     expect(metricsAt(80)).toEqual({
       blockOutset: 14,
-      cornerRadius: 3,
+      cornerRadius: 9,
       inlineOutset: 22,
       medianRowExtent: 80,
     });

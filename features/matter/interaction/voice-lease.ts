@@ -16,8 +16,9 @@ type Lease = {
 
 /**
  * Arbitrates the one browser Voice lease shared by otherwise independent
- * Matter lifecycles. The lease remains authoritative through transcription;
- * the owning lifecycle releases it with `cancel` after its terminal effect.
+ * Matter lifecycles. The lease owns only live capture; a finalized immutable
+ * recording no longer needs the microphone and cannot be revoked by its next
+ * owner while transcription is running.
  */
 export class VoiceLeaseCoordinator {
   private active: Lease | null = null;
@@ -110,6 +111,7 @@ export class VoiceLeaseCoordinator {
           safelyCancel(lease);
           throw new VoiceError("RECORDING_FAILED");
         }
+        this.release(lease);
         return recording;
       },
       (error: unknown) => {

@@ -37,6 +37,7 @@ export function PointTalkComposer({
   onStopVoice,
   onSubmit,
   positioningRef,
+  surfaceAvailable,
   targetBounds,
   voiceAvailable,
 }: Readonly<{
@@ -53,6 +54,7 @@ export function PointTalkComposer({
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
   positioningRef: RefObject<HTMLElement | null>;
+  surfaceAvailable: boolean;
   targetBounds: PointTalkBounds | null;
   voiceAvailable: boolean;
 }>) {
@@ -78,6 +80,7 @@ export function PointTalkComposer({
   }, [canvasRef, nodeId, onCancel]);
 
   const measure = useCallback(() => {
+    if (!surfaceAvailable) return;
     const boundary = boundaryRef.current;
     const canvas = canvasRef.current;
     const bubble = bubbleRef.current;
@@ -124,7 +127,7 @@ export function PointTalkComposer({
       && current.maxWidth === next.maxWidth
       ? current
       : next);
-  }, [boundaryRef, canvasRef, onCancel, positioningRef, targetBounds, visualScale]);
+  }, [boundaryRef, canvasRef, onCancel, positioningRef, surfaceAvailable, targetBounds, visualScale]);
 
   const scheduleMeasure = useCallback(() => {
     if (measurementFrameRef.current !== null) return;
@@ -186,6 +189,7 @@ export function PointTalkComposer({
   }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
   useEffect(() => {
+    if (!surfaceAvailable) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -194,27 +198,28 @@ export function PointTalkComposer({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [cancelAndRestoreFocus]);
+  }, [cancelAndRestoreFocus, surfaceAvailable]);
 
   useEffect(() => {
+    if (!surfaceAvailable) return;
     const cancelFromOutsidePointer = (event: PointerEvent) => {
       if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
       onCancel();
     };
     document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
     return () => document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
-  }, [onCancel]);
+  }, [onCancel, surfaceAvailable]);
 
   useEffect(() => {
-    if (!formVisible || !placementReady) return;
+    if (!surfaceAvailable || !formVisible || !placementReady) return;
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
-  }, [formVisible, placementReady]);
+  }, [formVisible, placementReady, surfaceAvailable]);
 
   useLayoutEffect(() => {
-    if (!retryableError || !placementReady) return;
+    if (!surfaceAvailable || !retryableError || !placementReady) return;
     retryRef.current?.focus({ preventScroll: true });
-  }, [placementReady, retryableError]);
+  }, [placementReady, retryableError, surfaceAvailable]);
 
   const activeState = controller.state;
   if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
@@ -223,12 +228,15 @@ export function PointTalkComposer({
 
   return (
     <div
+      aria-hidden={!surfaceAvailable || undefined}
       className="point-talk"
       data-canvas-interactive
       data-phase={phase}
+      data-surface-available={surfaceAvailable || undefined}
+      inert={!surfaceAvailable || undefined}
       ref={bubbleRef}
       role={formVisible ? undefined : "status"}
-      style={placement === null || targetBounds === null
+      style={!surfaceAvailable || placement === null || targetBounds === null
         ? { visibility: "hidden" }
         : {
             left: placement.left,

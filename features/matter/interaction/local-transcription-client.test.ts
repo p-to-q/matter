@@ -38,7 +38,7 @@ describe("local transcription audio projection", () => {
     expect(workers[0]?.postMessage).not.toHaveBeenCalled();
   });
 
-  it("retires the lazy worker on pagehide and recreates it only on later intent", async () => {
+  it("keeps the lazy worker while hidden and retires it only on page exit", async () => {
     const workers: FakeWorker[] = [];
     const pageWindow = Object.assign(new EventTarget(), {
       AudioContext: FakeAudioContext,
@@ -64,10 +64,16 @@ describe("local transcription audio projection", () => {
 
     pageDocument.visibilityState = "hidden";
     pageDocument.dispatchEvent(new Event("visibilitychange"));
-    pageWindow.dispatchEvent(new Event("pagehide"));
-    pageWindow.dispatchEvent(new Event("pageshow"));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    expect(workers).toHaveLength(1);
+
     pageDocument.visibilityState = "visible";
     pageDocument.dispatchEvent(new Event("visibilitychange"));
+    await expect(prepareLocalTranscription()).resolves.toBeUndefined();
+    expect(workers).toHaveLength(1);
+
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    pageWindow.dispatchEvent(new Event("pageshow"));
     expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
     expect(workers).toHaveLength(1);
 
@@ -77,7 +83,7 @@ describe("local transcription audio projection", () => {
     await expect(secondPreparation).resolves.toBeUndefined();
   });
 
-  it("does not publish a worker constructed while the document is already hidden", async () => {
+  it("allows finalized preparation to finish while already hidden", async () => {
     const workers: FakeWorker[] = [];
     const pageWindow = Object.assign(new EventTarget(), {
       AudioContext: FakeAudioContext,
@@ -97,9 +103,14 @@ describe("local transcription audio projection", () => {
       }
     });
 
-    await expect(prepareLocalTranscription()).rejects.toEqual(
-      new LocalTranscriptionError("failed"),
-    );
+    const preparation = prepareLocalTranscription();
+    expect(workers).toHaveLength(1);
+    workers[0]?.emit({ status: "ready" });
+    await expect(preparation).resolves.toBeUndefined();
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
     pageWindow.dispatchEvent(new Event("pagehide"));
     expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
 
@@ -110,6 +121,45 @@ describe("local transcription audio projection", () => {
     expect(workers).toHaveLength(2);
     workers[1]?.emit({ status: "ready" });
     await expect(nextPreparation).resolves.toBeUndefined();
+  });
+
+  it("lets a submitted local transcript settle while the page is temporarily hidden", async () => {
+    const workers: FakeWorker[] = [];
+    const pageWindow = Object.assign(new EventTarget(), {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "visible";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const transcript = transcribeLocally(request(
+      new AbortController().signal,
+      "hidden-after-submit",
+    ));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[0]?.emit({ id: "hidden-after-submit:1:1", status: "started" });
+
+    pageDocument.visibilityState = "hidden";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    workers[0]?.emit({
+      id: "hidden-after-submit:1:1",
+      status: "complete",
+      text: "后台完成的转写。",
+    });
+
+    await expect(transcript).resolves.toBe("后台完成的转写。");
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
   });
 
   it("bounds a worker code graph that never becomes ready", async () => {

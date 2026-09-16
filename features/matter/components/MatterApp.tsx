@@ -155,17 +155,14 @@ export function MatterApp() {
     seededSessionRelocalizer,
   ]);
   const clearRepairPresentations = admission.clearRepairPresentations;
-  const discardPendingRepairs = admission.discardPendingRepairs;
   const undoWithPresentationReset = useCallback(() => {
-    discardPendingRepairs();
     clearRepairPresentations();
     undo();
-  }, [clearRepairPresentations, discardPendingRepairs, undo]);
+  }, [clearRepairPresentations, undo]);
   const redoWithPresentationReset = useCallback(() => {
-    discardPendingRepairs();
     clearRepairPresentations();
     redo();
-  }, [clearRepairPresentations, discardPendingRepairs, redo]);
+  }, [clearRepairPresentations, redo]);
   const admissionAnchor = createAdmissionAnchor(tree, navigation);
   const removeCurrentThought = useCallback(() => removeSelected({
     commandId: `human_removal_${createOperationId()}`,
