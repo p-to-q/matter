@@ -11,7 +11,7 @@
 | `codex/preview-46-ai-harness` | 2 | 48 | stash | Tag `codex-wip-preview-46-ai-harness` created |
 | `codex/selected-material-recovery` | 1 | 2 (add/add docs) | stash | Tag `codex-wip-selected-material-recovery` created |
 | `cloud/address-restore` | 0 | 0 | already-in-main | No action — HEAD `8d2d56a` is in main |
-| `codex/action-lasso-api-hardening` | 7 reviewable commits | 0 after rebase | integrated locally | Linked worktree rebased onto `9eb169b`; exact-tree gates green, push pending review |
+| `codex/action-lasso-api-hardening` | 8 reviewable commits | 0 after rebase | integrated locally | Linked worktree rebased onto `9eb169b`; exact-tree gates green, push pending release PR |
 | Stash `preview54-excluded-local-video` | n/a | n/a | isolate | Launch-video policy; not touched |
 
 ## Details
@@ -58,9 +58,9 @@
   forbidding their maintenance. The relevant changes preserve rather than
   replace their product invariants.
 - **Resolution**: the dirty worktree was split into three reviewable commits,
-  then closed through four focused follow-up commits. It was rebased without
-  conflict onto `9eb169b` and left unpushed pending localhost review. Launch
-  Video remains outside the branch.
+  then closed through five focused implementation, verification, and release-
+  evidence commits. It was rebased without conflict onto `9eb169b` and remains
+  unpushed pending its release PR. Launch Video remains outside the branch.
 - **Recovery evidence**: the original Codex JSONL conversation and the local
   Code Arts SQLite session tree, memory, task, and spec caches were inspected as
   historical evidence. None was copied into the repository. That review

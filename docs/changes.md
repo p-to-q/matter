@@ -99,7 +99,8 @@ detection, bounded model discovery, and at most two short sentinels. Surrounding
 sentinel whitespace is ignored, but any additional content fails. Save replaces
 the credential only after success. An omitted key is reusable only at the saved
 canonical endpoint, and any non-empty bounded opaque key is accepted regardless
-of vendor prefix or length convention.
+of vendor prefix or length convention. This 30-day explicit-save lease
+supersedes the eight-hour draft recorded on 2026-09-11.
 
 Why: a saved key is a deliberate device preference, not proof that a remote is
 currently connected. Preserving an existing credential across a failed edit,

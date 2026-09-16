@@ -86,7 +86,9 @@ publication proof remain pending.
 Outcome:    a submitted human action keeps running across unrelated presentation
             changes; one lasso has the same bounded visible and semantic path;
             a person may attach one reviewed private provider session from API
-            settings and that candidate is attempted before the managed pool
+            settings; a healthy request-local candidate is preferred, while its
+            bounded transport cooldown may temporarily prefer a healthy managed
+            candidate without sharing disposable health across requests
 Boundary:   Admission repair, Elastic, Point Talk, and Inquiry job ownership;
             lasso sampling/hit-testing/rendering and material-address outline;
             one versioned provider-session route, bounded provider/model registry,

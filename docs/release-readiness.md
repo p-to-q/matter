@@ -1,29 +1,31 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.57 is under local integration;
-its earlier draft source and browser receipts are superseded and must not be
-used for publication. Preview.56 is the current deployed
-public-origin product source: PR #96 merged as `main` `536d792`, exact CI run
-`34558357704` passed, automatic Production deployment
-`GcFQr3beW677Y6easpT2JobKuHzo` succeeded, and the bounded no-store public check
-identified `0.2.0-preview.56` after one probe. Publication is withheld because
-its exact strict model-pool release probe failed. The latest annotated tag and
-GitHub prerelease therefore remain
-Preview.52 at `6a4931b`; neither may be advanced by borrowing an older pool
-receipt. The repository maintainer operates only through GitHub: a topic push
-triggers Preview and a `main` update triggers Production. No manual Vercel
-command, project binding, credential, or environment edit is part of this
-release. A package version alone proves neither source nor live identity.
+the complete generative product loop yet. Preview.57 is an exact local release
+candidate; its earlier draft source and browser receipts are superseded and
+must not be used for publication. The public origin still identifies itself as
+`0.2.0-preview.56`, but its current Production source is `main` `9eb169b` from
+PR #101: exact CI run `35144776434` passed and GitHub Production deployment
+`6489479901` succeeded. The only exact Preview.56 publication probe targeted its
+earlier `536d792` source and failed. The later same-version source changed Label
+behaviour but never received a fresh complete release gate, so it cannot
+retroactively publish Preview.56. The latest annotated tag and GitHub
+prerelease therefore remain Preview.52 at `6a4931b`; neither may be advanced by
+borrowing an older pool receipt. The repository maintainer operates only
+through GitHub: a topic push triggers Preview and a `main` update triggers
+Production. No manual Vercel command, project binding, credential, or
+environment edit is part of this release. A package version alone proves
+neither source nor live identity.
 
 ## Receipt verification — 0.2.0-preview.57
 
-A "97 Node boundary checks, 49-document link proof" receipt for Preview.57
-appears only in codex session records as a local-candidate claim dated
-2026-09-11. Verification on 2026-09-16 found no Preview.57 commit, PR, tag
-(`v0.2.0-preview.57` is absent), or GitHub release on `origin/main`; the latest
-merged preview is Preview.56 at `af7b1c1`. The receipt is not confirmed and is
-not cited here as publication evidence.
+The "97 Node boundary checks, 49-document link proof" receipt for Preview.57
+appears only in Codex session records as a local-candidate claim dated
+2026-09-11. It remains invalid: its UI contract and source tree predate the
+current candidate. The replacement implementation tree through `663be3f`
+produced the local receipts below. No Preview.57 commit, PR, tag, or GitHub
+release exists remotely yet, so those receipts prove a reviewable candidate,
+not publication or a deployed origin.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -107,11 +109,20 @@ non-secret canonical address may be returned so the form can be restored.
 Configuration remains subject to every existing product capability gate.
 
 ```text
-source proof           pending on the exact integrated Preview.57 source
-runtime proof          pending on the exact integrated production artifact
-browser proof          pending; the former 152-case / 18-repeat receipt targets
-                       a superseded Model API contract and is not reusable
-independent review     pending per coherent integration slice and final tree
+source proof           implementation tree through 663be3f passed npm run check:
+                       111 Node boundary tests, 50-document link proof, the
+                       484-file architecture gate, 2,537 Vitest cases with four
+                       explicit skips, type generation, TypeScript, zero-warning
+                       lint, and the Next production build
+runtime proof          the same build passed the runtime-artifact budget at
+                       1,200.4 KiB initial raw / 379.0 KiB gzip
+browser proof          the complete local Chromium matrix passed 155 cases with
+                       15 historical or explicitly scoped skips; desktop,
+                       narrow, and real touch walkthroughs covered Model API,
+                       selection restoration, and continuous Pan
+independent review     provider health, Label evidence, modal selection, visible
+                       grip alignment, held-material targeting, and recorded-
+                       audio recovery closed with no release-blocking finding
 GitHub CI proof         pending on the exact topic and merged-main identities
 automatic deploy proof pending from GitHub-triggered Preview and Production;
                        Model API additionally requires a deployment-owned

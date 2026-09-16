@@ -455,10 +455,12 @@ which surface is unavailable.
 The default production gate remains completion of GitHub issue #34:
 
 1. Add distributed rate rules for `/api/label`, `/api/repair`, `/api/inquiry`,
-   and `/api/transcribe`. The in-process governors are intentionally only local
-   to a Vercel instance; they are not a distributed abuse control. The exact
-   per-instance source ceilings and the operator warning against multiplying
-   them by an unknown replica count live in
+   `/api/transcribe`, and `POST /api/provider-session`. The in-process governors
+   are intentionally only local to a Vercel instance; they are not a distributed
+   abuse control. A provider-session rule must not put its local no-provider
+   `GET` status read or same-origin `DELETE` revocation behind the expensive
+   connection-probe lane. The exact per-instance source ceilings and the
+   operator warning against multiplying them by an unknown replica count live in
    [`deployment-owner-handoff.md`](deployment-owner-handoff.md#external-controls-required-before-expanding-model-authority).
 2. Set a provider spend cap and alerts, then verify the provider account has no
    unrestricted key shared with another product.

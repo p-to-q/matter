@@ -1,17 +1,17 @@
 # Preview deployment-owner handoff
 
-Status: Preview.56 is the current deployed public-origin product source through
-the automatic GitHub-linked Production path. Topic `e88d06c` passed CI run
-`34557892540` and automatic Preview `A1HV4GbsmLw7Cocrq8ubcntZMR9p`; PR #96
-merged as `main` `536d792`, which passed CI run `34558357704`, automatic
-Production `GcFQr3beW677Y6easpT2JobKuHzo`, and the bounded no-store public
-version check after one probe. Its GitHub prerelease and annotated tag are
-withheld because the exact strict pool release probe failed; the latest
-immutable publication remains Preview.52 at `6a4931b`. The repository
-maintainer pushes only GitHub and observes the linked deployment; the deployment
-owner retains Vercel configuration and credential authority. The candidate
-preserves the current process-local admission perimeter and live label,
-transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
+Status: the public origin still identifies itself as Preview.56 through the
+automatic GitHub-linked Production path. Its current exact Production source is
+`main` `9eb169b` from PR #101: CI run `35144776434` and GitHub Production
+deployment `6489479901` both passed. Preview.56's original source boundary came
+through PR #96, and its exact `536d792` strict pool release probe failed. The
+later same-version source changed Label behaviour but never received a fresh
+complete release gate; it does not authorize a retrospective Preview.56 tag.
+The latest immutable publication remains Preview.52 at `6a4931b`. The
+repository maintainer pushes only GitHub and observes the linked deployment;
+the deployment owner retains Vercel configuration and credential authority.
+The candidate preserves the current process-local admission perimeter and live
+label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
 
 Preview.57 is the next locally proven candidate. In addition to preserving the
@@ -368,15 +368,21 @@ without its environment and SHA is insufficient.
    browser speech plus local fallback enabled, and `MATTER_TRANSCRIPTION_ADAPTER=browser`.
    The authoritative variable names and migration rule are in
    [`deployment-handoff.md`](deployment-handoff.md#required-vercel-configuration).
-4. Do not set `MATTER_TRANSFORM_ADAPTER=live` or `MATTER_TEXT_SWAP_ADAPTER=live`.
+4. Install an independent, rotatable `MATTER_PROVIDER_SESSION_KEYS` ring before
+   claiming that Model API is available. Generate and retain it only in the
+   encrypted Vercel server environment; never derive it from a provider key or
+   another deployment secret. The exact format and rotation window are in
+   [`deployment-handoff.md`](deployment-handoff.md#required-vercel-configuration).
+5. Do not set `MATTER_TRANSFORM_ADAPTER=live` or `MATTER_TEXT_SWAP_ADAPTER=live`.
    Their product and promotion gates remain closed.
 
 ## External controls required before expanding model authority
 
 1. Add distributed edge rate rules for `/api/label`, `/api/repair`,
-   `/api/inquiry`, and `/api/transcribe`. After the next-source candidate is
-   deployed, its source-side ceilings are a per-warm-instance first line of
-   defence, not a distributed promise:
+   `/api/inquiry`, `/api/transcribe`, and the external-probe lane at
+   `POST /api/provider-session`. After the next-source candidate is deployed,
+   its source-side ceilings are a per-warm-instance first line of defence, not a
+   distributed promise:
 
    | Route | Requests per identity / minute | Concurrent requests per instance |
    | --- | ---: | ---: |
@@ -384,10 +390,13 @@ without its environment and SHA is insufficient.
    | `/api/repair` | 12 | 4 |
    | `/api/inquiry` | 12 | 4 |
    | `/api/transcribe` | 12 | 3 |
+   | `POST /api/provider-session` | 8 | 3 |
 
    Record the edge identity, window, burst and concurrency semantics explicitly;
    do not infer a global limit by multiplying these numbers by an unknown
-   serverless replica count.
+   serverless replica count. Keep `GET /api/provider-session` as a local,
+   no-provider status read and keep same-origin `DELETE` revocation outside any
+   expensive-probe queue so a person can always remove a saved credential.
 2. Set a provider spend cap and delivery channel for budget alerts. Limit the
    key to this deployment and rotate any key that may have left the encrypted
    deployment store.
