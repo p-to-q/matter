@@ -397,19 +397,24 @@ export function ApiSettingsForm({
 
   const remove = () => {
     if (operationKindRef.current !== null || status?.credentialPresent !== true) return;
+    const submittedRevision = draftRevisionRef.current;
     const operation = beginOperation("remove");
     if (operation === null) return;
     void removeUserProvider(operation.signal).then((next) => {
       if (operation.signal.aborted) return;
       setStatus(next);
-      setApiKey("");
-      setFieldErrors({});
       setRemoveArmed(false);
-      endpointTouchedRef.current = endpoint.length > 0;
-      focusEndpointAfterRemoveRef.current = true;
-      setNotice({ kind: "status", code: "removed" });
+      if (draftRevisionRef.current === submittedRevision) {
+        setApiKey("");
+        setFieldErrors({});
+        endpointTouchedRef.current = endpoint.length > 0;
+        focusEndpointAfterRemoveRef.current = true;
+        setNotice({ kind: "status", code: "removed" });
+      }
     }).catch((error: unknown) => {
-      if (!operation.signal.aborted) setNotice({ kind: "error", code: clientNoticeCode(error) });
+      if (!operation.signal.aborted && draftRevisionRef.current === submittedRevision) {
+        setNotice({ kind: "error", code: clientNoticeCode(error) });
+      }
     }).finally(() => finishOperation(operation));
   };
 

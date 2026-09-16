@@ -190,6 +190,46 @@ test("accepted save and remove actions survive presentation and language changes
   await expect(dialog.getByRole("textbox", { name: "API Key" })).toBeEnabled();
 });
 
+test("an accepted remove updates saved state without erasing a newer draft or stealing focus", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let deletes = 0;
+  let releaseDelete!: () => void;
+  const deleteGate = new Promise<void>((resolve) => { releaseDelete = resolve; });
+  await page.route("**/api/provider-session", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deletes += 1;
+      await deleteGate;
+      await fulfillStatus(route, false);
+      return;
+    }
+    await fulfillStatus(route, true);
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
+  await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+  await expect(dialog).toContainText("已保存在此浏览器");
+
+  await dialog.getByRole("button", { name: "移除", exact: true }).click();
+  await dialog.getByRole("button", { name: "确认移除", exact: true }).click();
+  await expect.poll(() => deletes).toBe(1);
+
+  const endpoint = dialog.getByRole("textbox", { name: "API 地址" });
+  const key = dialog.getByRole("textbox", { name: "API Key" });
+  const nextEndpoint = "https://draft.vendor.ai/v1";
+  const nextKey = "sk-new-draft-remains-owned-by-the-user";
+  await endpoint.fill(nextEndpoint);
+  await key.fill(nextKey);
+  await expect(key).toBeFocused();
+
+  releaseDelete();
+  await expect(dialog.getByRole("button", { name: "移除", exact: true })).toHaveCount(0);
+  await expect(endpoint).toHaveValue(nextEndpoint);
+  await expect(key).toHaveValue(nextKey);
+  await expect(key).toBeFocused();
+  await expect(dialog).not.toContainText("已移除保存的访问。");
+});
+
 test("an explicit save supersedes the opening status read without losing the action or draft", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   let gets = 0;
