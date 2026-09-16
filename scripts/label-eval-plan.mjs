@@ -1,104 +1,131 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 
 /**
- * Eval-plan binding for the label attribution run.
+ * Authorization boundary for a paid Label evaluation.
  *
- * A paid attribution run must be bound to an authorization plan digest before
- * any provider call (spec 5.1.1 rule 6). The digest is rebuilt locally from
- * the same bindings and compared field by field; any mismatch stops the run
- * with zero provider requests. This is the fail-closed front gate.
- *
- * The adjudicator is wrapped, never reimplemented: this module binds metadata
- * about the adjudication policy version owned by semantic-label.ts, it does not
- * rejudge. Station and model names never appear in routine output; only their
- * declaration digest enters the plan artifact (spec 6.3.1).
+ * `plan` and `run` are deliberately separate invocations. Plan mode freezes a
+ * private artifact; run mode reconstructs the plan and requires both that
+ * artifact and its explicit digest. Building an expected and actual value in
+ * one process is not authorization.
  */
-
-export const EVAL_PLAN_SCHEMA_VERSION = "label-eval-plan/1";
-/**
- * Binds the eval request shape (temperature 0, max_tokens 32, stream false,
- * 20s deadline) and the closed-set judgement vocabulary. Advancing it
- * invalidates prior plan artifacts bound to an older completion shape.
- */
-export const COMPLETION_POLICY_VERSION = "label-eval-completion/1";
+export const EVAL_PLAN_SCHEMA_VERSION = "label-eval-plan/3";
+export const COMPLETION_POLICY_VERSION = "label-eval-completion/3";
+export const MAX_EVAL_REPEAT = 10;
+export const MAX_EVAL_WALL_CLOCK_MS = 2 * 60 * 60_000;
 
 const PLAN_FIELDS = Object.freeze([
   "schemaVersion",
+  "authorizationId",
   "scenarioId",
   "candidateDeclarationDigest",
+  "candidateCount",
   "promptVersion",
+  "compiledPromptDigest",
   "corpusVersion",
   "corpusContentDigest",
   "adjudicationPolicyVersion",
   "completionPolicyVersion",
-  "perCaseBudget",
+  "requestBudget",
+  "worstCaseProviderMs",
+  "wallClockCeilingMs",
   "totalCallCap",
   "totalOutputTokenCap",
 ]);
 
+export function parseEvalRepeat(value) {
+  if (value === undefined || value === "") return 1;
+  if (typeof value !== "string" || !/^[1-9]\d*$/u.test(value)) {
+    throw new Error(`MATTER_LABEL_EVAL_REPEAT must be a whole number from 1 to ${MAX_EVAL_REPEAT}.`);
+  }
+  const repeat = Number(value);
+  if (!Number.isSafeInteger(repeat) || repeat > MAX_EVAL_REPEAT) {
+    throw new Error(`MATTER_LABEL_EVAL_REPEAT must be a whole number from 1 to ${MAX_EVAL_REPEAT}.`);
+  }
+  return repeat;
+}
+
+export function assertSecureEvalTls(environment) {
+  if (environment?.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    throw new Error("Label evaluation refuses to run while TLS certificate verification is disabled.");
+  }
+}
+
+/** One private, single-use authorization identity and credential-binding key. */
+export function createEvalAuthority() {
+  return Object.freeze({
+    authorizationId: randomBytes(16).toString("hex"),
+    credentialBindingSalt: randomBytes(32).toString("base64url"),
+  });
+}
+
 /**
- * SHA-256 over the sorted-key JSON of each candidate's declaration. The digest
- * is the form that enters the plan artifact; the station and model names that
- * produced it do not.
+ * A private keyed digest over exact provider declarations and credentials.
+ * The salt exists only in the gitignored authorization artifact; neither it nor
+ * a reusable plain hash of a possibly low-entropy key enters safe output.
  */
-export function candidateDeclarationDigest(candidates) {
+export function candidateDeclarationDigest(candidates, credentialBindingSalt) {
+  assertCredentialBindingSalt(credentialBindingSalt);
   const declarations = [...candidates].map((candidate) => {
     const entry = {
       station: candidate.station,
       baseUrl: candidate.baseUrl,
       model: candidate.model,
+      apiKey: candidate.apiKey,
     };
-    if (candidate.enableThinking !== undefined) {
-      entry.enableThinking = candidate.enableThinking;
-    }
+    if (candidate.enableThinking !== undefined) entry.enableThinking = candidate.enableThinking;
     return entry;
   });
-  return sha256(stableJson(declarations));
+  return createHmac("sha256", Buffer.from(credentialBindingSalt, "base64url"))
+    .update("matter/label-eval/candidate-binding/1\0", "utf8")
+    .update(stableJson(declarations), "utf8")
+    .digest("hex");
 }
 
-/**
- * Builds the bound plan from the current run bindings. Pure and deterministic:
- * the same bindings always produce the same plan and digest, so a rebuild is
- * the verification.
- */
 export function buildEvalPlan(bindings) {
   return Object.freeze({
     schemaVersion: EVAL_PLAN_SCHEMA_VERSION,
+    authorizationId: bindings.authorizationId,
     scenarioId: bindings.scenarioId,
     candidateDeclarationDigest: bindings.candidateDeclarationDigest,
+    candidateCount: bindings.candidateCount,
     promptVersion: bindings.promptVersion,
+    compiledPromptDigest: bindings.compiledPromptDigest,
     corpusVersion: bindings.corpusVersion,
     corpusContentDigest: bindings.corpusContentDigest,
     adjudicationPolicyVersion: bindings.adjudicationPolicyVersion,
     completionPolicyVersion: bindings.completionPolicyVersion,
-    perCaseBudget: Object.freeze({ ...bindings.perCaseBudget }),
+    requestBudget: Object.freeze({ ...bindings.requestBudget }),
+    worstCaseProviderMs: bindings.worstCaseProviderMs,
+    wallClockCeilingMs: bindings.wallClockCeilingMs,
     totalCallCap: bindings.totalCallCap,
     totalOutputTokenCap: bindings.totalOutputTokenCap,
   });
 }
 
-/** Stable SHA-256 digest of a plan, independent of key insertion order. */
 export function evalPlanDigest(plan) {
   return sha256(stableJson(plan));
 }
 
-/**
- * Rebuilds the plan from the actual bindings and compares it field by field
- * against the expected plan. Returns the named mismatch fields on drift, so a
- * caller can report which binding changed rather than only that one did.
- */
+export function createEvalPlanArtifact(bindings, credentialBindingSalt) {
+  assertCredentialBindingSalt(credentialBindingSalt);
+  const plan = buildEvalPlan(bindings);
+  return Object.freeze({
+    schemaVersion: EVAL_PLAN_SCHEMA_VERSION,
+    digest: evalPlanDigest(plan),
+    credentialBindingSalt,
+    plan,
+  });
+}
+
 export function verifyEvalPlan(expectedPlan, actualBindings) {
   const actualPlan = buildEvalPlan(actualBindings);
   const expectedDigest = evalPlanDigest(expectedPlan);
   const actualDigest = evalPlanDigest(actualPlan);
-  if (expectedDigest === actualDigest) {
-    return Object.freeze({ ok: true, digest: actualDigest });
-  }
+  if (expectedDigest === actualDigest) return Object.freeze({ ok: true, digest: actualDigest });
+
   const mismatches = [];
   for (const field of PLAN_FIELDS) {
-    if (stableJson(expectedPlan[field]) !== stableJson(actualPlan[field])) {
-      mismatches.push(field);
-    }
+    if (stableJson(expectedPlan?.[field]) !== stableJson(actualPlan[field])) mismatches.push(field);
   }
   return Object.freeze({
     ok: false,
@@ -109,23 +136,62 @@ export function verifyEvalPlan(expectedPlan, actualBindings) {
 }
 
 /**
- * Front gate for a paid run. Rebuilds the plan from the current bindings and
- * throws a named error on any mismatch before the caller reaches a provider
- * loop. A thrown error here is the "zero provider calls" stop: the caller
- * places this call before `for (const candidate of pool)`, so the throw exits
- * the block before any fetch.
+ * Requires an artifact produced by an earlier plan invocation plus the digest
+ * copied explicitly by the operator. Neither one authorizes a run alone.
  */
-export function authorizeEvalRun(expectedPlan, actualBindings) {
-  const result = verifyEvalPlan(expectedPlan, actualBindings);
-  if (result.ok) return result.digest;
-  const error = new Error(
-    `Label eval plan binding mismatch: ${result.mismatches.join(", ")}`,
-  );
+export function authorizeEvalRun({ artifact, suppliedDigest, actualBindings }) {
+  const expectedPlan = artifact?.plan;
+  const artifactDigest = artifact?.digest;
+  const validAuthority = typeof expectedPlan?.authorizationId === "string" &&
+    /^[a-f0-9]{32}$/u.test(expectedPlan.authorizationId) &&
+    isCredentialBindingSalt(artifact?.credentialBindingSalt);
+  const validDigest = typeof suppliedDigest === "string" && /^[a-f0-9]{64}$/u.test(suppliedDigest);
+  const result = expectedPlan === undefined
+    ? null
+    : verifyEvalPlan(expectedPlan, actualBindings);
+  if (
+    artifact?.schemaVersion === EVAL_PLAN_SCHEMA_VERSION &&
+    validAuthority &&
+    validDigest &&
+    artifactDigest === suppliedDigest &&
+    result?.ok === true &&
+    result.digest === suppliedDigest
+  ) {
+    return result.digest;
+  }
+
+  const error = new Error("Label evaluation does not match its pre-generated private plan.");
   error.name = "EvalPlanBindingError";
-  error.mismatches = result.mismatches;
-  error.expectedDigest = result.expectedDigest;
-  error.actualDigest = result.actualDigest;
+  error.mismatches = result?.ok === false ? result.mismatches : Object.freeze(["artifact"]);
   throw error;
+}
+
+function assertCredentialBindingSalt(value) {
+  if (!isCredentialBindingSalt(value)) {
+    throw new Error("Label evaluation credential binding is invalid.");
+  }
+}
+
+function isCredentialBindingSalt(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{43}$/u.test(value);
+}
+
+/**
+ * The single paid-run lifecycle seam. Security, frozen authorization, and all
+ * durable output preflight finish before `execute` can obtain a fetch path.
+ */
+export async function executeAuthorizedEvalRun({
+  environment,
+  artifact,
+  suppliedDigest,
+  actualBindings,
+  initialize,
+  execute,
+}) {
+  assertSecureEvalTls(environment);
+  const digest = authorizeEvalRun({ artifact, suppliedDigest, actualBindings });
+  const initialized = await initialize(digest);
+  return execute(initialized, digest);
 }
 
 function sha256(text) {

@@ -253,12 +253,31 @@ with the canonical namespace.
 ## Measurement
 
 `scripts/label-eval.test.mjs` runs `scripts/label-corpus.mjs` against a live
-pool and prints, per case, the deterministic label, the model's answer, the
-verdict, and latency. It costs money, so it never runs by default:
+pool only after a separate invocation has frozen the exact candidates, corpus,
+compiled prompts, production budgets, repeat count, call ceiling, and token
+ceiling in a private plan. Plan mode makes no provider call. Run mode requires
+both that earlier artifact and the digest the operator copied from it:
 
 ```bash
-MATTER_LABEL_EVAL=1 npx vitest run scripts/label-eval.test.mjs
+MATTER_LABEL_EVAL=plan npx vitest run scripts/label-eval.test.mjs
+MATTER_LABEL_EVAL=run MATTER_LABEL_EVAL_PLAN_DIGEST=<plan-digest> \
+  npx vitest run scripts/label-eval.test.mjs
 ```
+
+The private plan carries a unique single-use authorization and a private keyed
+binding to the exact credentials as well as their provider declarations. It is
+stored with owner-only permissions and is a credential verifier: do not share,
+upload, or commit it. Run mode atomically claims that authorization; a replay
+or concurrent claimant fails without truncating earlier evidence. Its frozen
+worst-case provider time must fit the two-hour runner ceiling. The safe report
+contains only closed verdict/reason counts and latency buckets, plus attempted,
+recorded, and unrecorded completion counts so a journal failure cannot hide
+potentially billable work. Exact material and answers stay in a gitignored
+private journal beneath the plan digest; each record is flushed before another
+completion attempt may start.
+TLS, authorization, the atomic claim, and every journal/report file are
+preflighted before the run can obtain a provider execution path. A run is
+measurement, not a test pass and never release authority by itself.
 
 On an 18-case corpus through one relay, after the calibration above:
 
@@ -292,8 +311,8 @@ rejections, concentrated in DeepSeek-V3 verbose restatement), followed by
 
 The prompt moved to `thought-label/4` with stronger length, non-empty,
 terminal-punctuation, sibling-differentiation, and material-anchoring guidance.
-The character budget was not relaxed. A full corpus re-run against three
-working models measured the effect:
+The character budget was not relaxed. A historical corpus run against three
+working models produced the following exploratory comparison:
 
 | Model | Acceptance (v3) | Acceptance (v4) | Delta |
 | --- | --- | --- | --- |
@@ -302,12 +321,15 @@ working models measured the effect:
 | GLM-4.7-Flash | 62% (10/16) | 76% (13/17) | +14 pp |
 | **Average** | **50%** | **64%** | **+14 pp** |
 
-`EMPTY` (4 → 0) and `TERMINAL_PUNCTUATION` (1 → 0) were eliminated.
-`SIBLING_DUPLICATE` fell from 3 to 1. `TOO_LONG` (12) and
-`semantic:not-grounded` (5) were unchanged — the former is DeepSeek-V3's
-verbose restatement and the latter may require structural enforcement beyond
-prompt language. No new rejection subclasses appeared. The full attribution
-and before/after journals are in gitignored `tmp/label-eval/`.
+That run suggested `EMPTY` (4 → 0), `TERMINAL_PUNCTUATION` (1 → 0), and
+`SIBLING_DUPLICATE` (3 → 1) improved, while `TOO_LONG` (12) and
+`semantic:not-grounded` (5) did not. These figures are directional history,
+not promotion evidence: the old evaluator did not require an independently
+pre-generated plan and its comparison populations were not identical. They do
+not prove the exact delta, that a subclass was eliminated, or that no new one
+exists. No replacement paid run has been made. Any future claim must come from
+the two-invocation, digest-bound lifecycle above; its private journals remain
+gitignored under `tmp/label-eval/`.
 
 ## Open
 

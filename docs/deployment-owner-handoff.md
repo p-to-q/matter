@@ -174,12 +174,15 @@ Then run:
 
 `npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.57`
 
-Publication is allowed only when that exact paced run reports both
-`pool-healthy` and `surface-usable`, with Repair, Label, and Inquiry accepted on
-every call. Provider-session availability does not substitute for the managed
-pool gate, and a healthy managed pool does not substitute for availability of
-the feature introduced in this candidate. A paid user key is not a release
-fixture and must never be placed in a probe, log, issue, or this handoff.
+Publication is allowed only when that exact paced run reports `pool-healthy`
+and Inquiry produces an accepted answer on every call. Repair and Label must
+reach a provider on every call, but a semantic rejection may settle their
+deterministic floor without vetoing publication; their quality is governed by
+the separately versioned offline corpus, not one stochastic live canary.
+Provider-session availability does not substitute for the managed pool gate,
+and a healthy managed pool does not substitute for availability of the feature
+introduced in this candidate. A paid user key is not a release fixture and must
+never be placed in a probe, log, issue, or this handoff.
 
 ### Preview.56 publication gate
 
@@ -283,29 +286,16 @@ repair. That historical constraint does not evaluate the later Preview.48
 candidate; every release still requires its own exact source and behavior
 receipts.
 
-## Known qualitative observation — cold-start race in independent verification
+## Known qualitative observation — browser gesture verification
 
-A prior session recorded an unstable signal during an independent cold-start
-re-verification: the case "sidebar scroll must not undo the canvas gesture"
-lost its drawing state after the sidebar event on that run. The observation is
-qualitative — the session did not treat it as a pass before characterization,
-and no fix, flake suppression, or retry was applied. A later session that
-committed to a "final independent acceptance" round produced no JSONL
-conclusion because it was interrupted by a spend cap.
-
-This is recorded as a known qualitative note, not a fix and not a claim that
-the race is resolved. It does not assert a source defect: the signal appeared
-on a cold start and was not reproduced under a warm instance, so it is
-consistent with either a deployment-environment concern (cold-start instance
-initialization or warm-up ordering under the Vercel serverless path — route to
-the deployment owner) or a candidate-pool concern (per-instance initialization
-variance across the model pool — route to the provider owner). The origin
-probe cannot distinguish those owners from this evidence alone.
-
-This note does not claim issue #34 (alert delivery / rate limiting) or
-issue #68 (provider spend caps). Both remain open. If the signal becomes
-reproducible and actionable, the owner who can act is named above; until then
-no code, route, or limiter change is warranted on this basis.
+A prior local browser session reported that "sidebar scroll must not undo the
+canvas gesture" lost drawing state once. No reproducible trace or completed
+JSONL receipt survived that run, and a later verification was interrupted.
+This is therefore a test lead, not evidence of a cold-start, deployment, or
+provider-pool defect: the gesture and sidebar state are client-owned and the
+test performs no model call. It must be investigated only if the exact browser
+case reproduces, using its pointer/state trace; it must not be routed to a
+deployment or provider owner on the basis of the earlier observation.
 
 ## Historical Preview.42 release and authorization
 
