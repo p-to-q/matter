@@ -19,6 +19,7 @@ import {
 } from "./CanvasChrome";
 import { toolRailCopy } from "./tool-rail-copy";
 import { API_SETTINGS_COPY, ApiSettingsForm } from "./ApiSettingsForm";
+import { MIN_USER_PROVIDER_API_KEY_CODE_UNITS } from "../protocol/provider-session-contract";
 
 describe("CanvasChrome", () => {
   it("gives every dialog, and no transient menu, exclusive material-surface ownership", () => {
@@ -107,7 +108,7 @@ describe("CanvasChrome", () => {
       language: "en-US",
       presented: true,
     }));
-    expect(markup).toContain('minLength="8"');
+    expect(markup).toContain(`minLength="${MIN_USER_PROVIDER_API_KEY_CODE_UNITS}"`);
     expect(markup).toContain('maxLength="512"');
     expect(markup).toMatch(/<input[^>]*required=""[^>]*type="password"|<input[^>]*type="password"[^>]*required=""/u);
   });

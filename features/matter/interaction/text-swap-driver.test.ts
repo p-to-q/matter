@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import type { TextSwapBasis } from "../runtime/text-swap-interaction";
-import type {
-  VoiceCallbacks,
-  VoiceOperation,
-  VoicePort,
-  VoiceRecording,
+import {
+  VoiceError,
+  type VoiceCallbacks,
+  type VoiceOperation,
+  type VoicePort,
+  type VoiceRecording,
 } from "./voice-port";
 import { TextSwapClientError } from "./text-swap-client";
 import {
@@ -256,6 +257,27 @@ describe("TextSwapDriver", () => {
     });
     expect(h.buildEnvelope).not.toHaveBeenCalled();
     expect(h.request).not.toHaveBeenCalled();
+  });
+
+  it("starts a fresh voice attempt after a retryable capture failure", async () => {
+    const h = harness();
+    const first = await reachRecording(h);
+    h.voice.starts[0]?.callbacks.onError?.(new VoiceError("RECORDING_FAILED"));
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "RECORDING_FAILED",
+      retryable: true,
+    });
+    expect(h.driver.getState()).not.toHaveProperty("direction");
+    expect(h.driver.retry()).toBe(false);
+    expect(h.driver.startRecording()).toBe(true);
+    expect(h.voice.starts).toHaveLength(2);
+    expect(h.voice.starts[1]?.operation).toEqual({
+      interactionId: first.interactionId,
+      attempt: first.attempt + 1,
+    });
   });
 
   it("accepts a future typed carrier through the same bounded direction state", () => {

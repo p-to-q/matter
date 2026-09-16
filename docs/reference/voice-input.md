@@ -93,8 +93,10 @@ They never enter the store, tree, history, or a retry cache. Cancel invalidates
 the token and releases recorder handlers, chunks, tracks, optional meter,
 timers, and fetch. Since microphone permission cannot be aborted reliably, a
 stream that resolves after cancellation is immediately stopped. Stopping waits
-for the final `dataavailable` before using the recording; `timeslice` is never a
-duration clock.
+for the final `dataavailable` before using the recording. A four-second
+active-page stop-watchdog budget turns a browser that never publishes its
+terminal `stop` event into a recoverable recording failure and releases the
+stream; `timeslice` is never a duration clock.
 
 React does not interpret these effects directly. A small Matter-specific driver
 serializes reducer events, owns the operation registry, and disposes idempotently.

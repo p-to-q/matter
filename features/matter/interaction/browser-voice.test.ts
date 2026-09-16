@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAX_AUDIO_BYTES, RECORDING_LIMIT_MS } from "./audio-policy";
+import {
+  MAX_AUDIO_BYTES,
+  RECORDING_LIMIT_MS,
+  RECORDING_STOP_TIMEOUT_MS,
+} from "./audio-policy";
 import {
   BrowserVoicePort,
   resolveBrowserVoiceTransport,
@@ -173,7 +177,9 @@ describe("BrowserVoicePort", () => {
     });
     expect((await stopped).audio.size).toBe(5);
     expect(h.track.stop).toHaveBeenCalledTimes(1);
-    expect(h.dependencies.clearTimer).toHaveBeenCalledTimes(1);
+    // Stop replaces the duration timer with its own terminal-event watchdog;
+    // successful settlement clears both lifetimes exactly once.
+    expect(h.dependencies.clearTimer).toHaveBeenCalledTimes(2);
   });
 
   it("tries the next supported MIME when a hinted recorder cannot be constructed", async () => {
@@ -234,6 +240,29 @@ describe("BrowserVoicePort", () => {
     expect(settled).toBe(false);
     h.recorder.stopped();
     await expect(first).resolves.toBeDefined();
+  });
+
+  it("fails recoverably when a recorder never publishes its final stop event", async () => {
+    const h = harness();
+    const onError = vi.fn();
+    await h.port.start(OPERATION, { onError });
+    const lateData = h.recorder.ondataavailable;
+    const lateStop = h.recorder.onstop;
+
+    const stopping = h.port.stop(OPERATION);
+    expect(h.timer()).not.toBeNull();
+    h.advance(RECORDING_STOP_TIMEOUT_MS);
+    h.fireTimer();
+
+    await expectVoiceError(stopping, "RECORDING_FAILED");
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "RECORDING_FAILED" }));
+    expect(h.track.stop).toHaveBeenCalledTimes(1);
+    lateData?.({ data: new Blob(["late"]) } as BlobEvent);
+    lateStop?.(new Event("stop"));
+    expect(h.track.stop).toHaveBeenCalledTimes(1);
+
+    await expect(h.port.start({ ...OPERATION, attempt: 2 })).resolves.toBeUndefined();
+    h.port.cancel({ ...OPERATION, attempt: 2 });
   });
 
   it("maps permission failures to stable typed errors", async () => {

@@ -202,6 +202,40 @@ test.describe("passage-local Point and Talk", () => {
     await expect(direction).toHaveValue(exact);
   });
 
+  test("a retryable recording failure offers one direct pointer re-record", async ({ page }) => {
+    await page.addInitScript(() => {
+      const nativeStop = MediaRecorder.prototype.stop;
+      let failNextStop = true;
+      MediaRecorder.prototype.stop = function stopWithOneSyntheticFailure() {
+        if (!failNextStop) {
+          nativeStop.call(this);
+          return;
+        }
+        failNextStop = false;
+        queueMicrotask(() => this.dispatchEvent(new Event("error")));
+      };
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await page.getByRole("button", { name: "说出改写方向", exact: true }).click();
+    const composer = page.locator(".point-talk");
+    await expect(composer).toHaveAttribute("data-phase", "recording");
+    await composer.getByRole("button", { name: "完成", exact: true }).click();
+
+    await expect(composer).toHaveAttribute("data-phase", "error");
+    await expect(composer).toContainText("原文没有改变。");
+    const recordAgain = composer.getByRole("button", { name: "重新录音", exact: true });
+    await expect(recordAgain).toBeFocused();
+    await recordAgain.click();
+    await expect(composer).toHaveAttribute("data-phase", "recording");
+    await page.keyboard.press("Escape");
+    await expect(composer).toHaveCount(0);
+  });
+
   test("a retryable provider failure keeps the direction and retries one exact node", async ({ page }) => {
     let requestCount = 0;
     const requests: Array<Readonly<{

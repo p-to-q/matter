@@ -121,6 +121,9 @@ describe("selected material address", () => {
     expect(css).toMatch(
       /\.matter-shell\[data-material-presentation="occluded"\] ::selection \{ background: transparent; color: inherit; \}/,
     );
+    expect(css).toMatch(
+      /\.matter-shell\[data-material-presentation="occluded"\] \.spatial-thought\[data-selected="true"\] \.spatial-thought__label \{ background: transparent; box-shadow: none; text-shadow: none; \}/,
+    );
     // Settled selection, degree, and owned jobs are not cleared by the modal
     // transition; only in-progress pointer gestures are rolled back.
     const transition = rooted.slice(

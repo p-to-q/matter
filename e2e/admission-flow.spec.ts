@@ -121,6 +121,9 @@ for (const viewport of [
     await expect(reveal).toHaveText(repairedTranscript, { useInnerText: false });
     const revealCount = Number(await reveal.getAttribute("data-repair-reveal-count"));
     const changedInk = await reveal.locator('[data-repair-part="changed"]').allTextContents();
+    const authoredRevealDelays = await reveal.locator('[data-repair-part="changed"]')
+      .evaluateAll((parts) => parts.map((part) =>
+        Number.parseFloat(getComputedStyle(part).animationDelay) * 1_000));
     // The insertion-only admission floor already owns this semantic comma;
     // late repair must not animate it as if a model introduced it.
     expect(changedInk.join("")).not.toContain("，");
@@ -137,8 +140,11 @@ for (const viewport of [
     );
     expect(animations.every(({ name }) => name === "material-grapheme-arrive")).toBe(true);
     expect(Math.min(...animations.map(({ time }) => time)) - rawSeenAt).toBeGreaterThanOrEqual(120);
-    expect(Math.max(...animations.map(({ time }) => time)) -
-      Math.min(...animations.map(({ time }) => time))).toBeGreaterThan(40);
+    // Browser scheduling may dispatch separately delayed animationstart events
+    // in one busy frame. The CSS timeline, not event-delivery jitter, owns the
+    // reading-order stagger.
+    expect(Math.max(...authoredRevealDelays) - Math.min(...authoredRevealDelays))
+      .toBeGreaterThan(40);
     expect(await admitted.locator(".spatial-thought__text").evaluate((element) =>
       getComputedStyle(element).opacity,
     )).toBe("1");

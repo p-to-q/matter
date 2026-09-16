@@ -3,6 +3,7 @@ import {
   MAX_AUDIO_BYTES,
   RECORDING_MIME_CANDIDATES,
   RECORDING_LIMIT_MS,
+  RECORDING_STOP_TIMEOUT_MS,
 } from "./audio-policy";
 import { createBrowserSpeechVoicePort, isBrowserSpeechRecognitionAvailable } from "./browser-speech-voice";
 import {
@@ -324,6 +325,11 @@ export class BrowserVoicePort implements VoicePort {
     }
     session.phase = "stopping";
     this.clearTimer(session);
+    session.timer = this.dependencies.setTimer(() => {
+      session.timer = null;
+      if (this.session !== session || session.phase !== "stopping") return;
+      this.fail(session, new VoiceError("RECORDING_FAILED"));
+    }, RECORDING_STOP_TIMEOUT_MS);
     try {
       session.recorder?.stop();
     } catch {
@@ -372,7 +378,6 @@ export class BrowserVoicePort implements VoicePort {
   private fail(session: Session, failure: VoiceError): void {
     if (this.session !== session || session.phase === "settled") return;
     session.start.reject(failure);
-    session.stop?.reject(failure);
     const recorder = session.recorder;
     if (recorder !== null && recorder.state !== "inactive") {
       try {

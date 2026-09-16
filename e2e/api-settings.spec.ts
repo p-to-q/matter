@@ -15,6 +15,12 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   await page.setViewportSize({ width: 1280, height: 800 });
   const traffic = await mockProviderSession(page);
   await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const selectedThought = page.locator(".spatial-thought[data-thought-id]").first();
+  const selectedLabel = selectedThought.locator(".spatial-thought__label");
+  await selectedThought.locator(".spatial-thought__text").click();
+  await expect(selectedThought).toHaveAttribute("data-selected", "true");
 
   const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
   await settings.click();
@@ -22,6 +28,10 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   const dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("button", { name: "关闭: 模型 API" })).toBeFocused();
+  await expect(page.locator("main.matter-shell"))
+    .toHaveAttribute("data-material-presentation", "occluded");
+  await expect(selectedLabel).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(selectedLabel).toHaveCSS("box-shadow", "none");
 
   const endpoint = dialog.getByRole("textbox", { name: "API 地址" });
   const key = dialog.getByRole("textbox", { name: "API Key" });
@@ -72,6 +82,7 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(settings).toBeFocused();
+  await expect(selectedThought).toHaveAttribute("data-selected", "true");
 });
 
 test("mobile Model API uses the same two fields and coarse-pointer targets", async ({ page }) => {
@@ -177,6 +188,48 @@ test("accepted save and remove actions survive presentation and language changes
   dialog = await openApi("en-US");
   await expect(dialog.getByRole("button", { name: "Remove", exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("textbox", { name: "API Key" })).toBeEnabled();
+});
+
+test("an explicit save supersedes the opening status read without losing the action or draft", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let gets = 0;
+  let saves = 0;
+  let releaseGet!: () => void;
+  const getGate = new Promise<void>((resolve) => { releaseGet = resolve; });
+  await page.route("**/api/provider-session", async (route) => {
+    if (route.request().method() === "GET") {
+      gets += 1;
+      await getGate;
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify(statusBody(true, false)),
+      }).catch(() => undefined);
+      return;
+    }
+    if (route.request().method() === "POST") saves += 1;
+    await fulfillStatus(route, true);
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
+  await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+  await expect.poll(() => gets).toBe(1);
+
+  const endpoint = dialog.getByRole("textbox", { name: "API 地址" });
+  await endpoint.fill(EXAMPLE_ENDPOINT);
+  await dialog.getByRole("textbox", { name: "API Key" }).fill(EXAMPLE_KEY);
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  await expect.poll(() => saves).toBe(1);
+  await expect(dialog).toContainText("已保存并可用。");
+
+  await endpoint.fill("https://draft.vendor.ai/v1");
+  releaseGet();
+  await page.waitForTimeout(50);
+  await expect(endpoint).toHaveValue("https://draft.vendor.ai/v1");
+  // The submitted credential remains the saved source of truth while this
+  // newer draft stays editable; the superseded opening read owns neither.
+  await expect(dialog).toContainText("此前的设置仍已保存");
+  expect(saves).toBe(1);
 });
 
 test("a transient status failure leaves the draft editable and recovers on reopen", async ({ page }) => {

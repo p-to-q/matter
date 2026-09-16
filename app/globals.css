@@ -258,6 +258,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell[data-material-presentation="occluded"] .material-interaction-presentation { visibility: hidden; pointer-events: none; }
 .matter-shell[data-material-presentation="occluded"]::selection,
 .matter-shell[data-material-presentation="occluded"] ::selection { background: transparent; color: inherit; }
+.matter-shell[data-material-presentation="occluded"] .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
 .matter-material-plane { position: absolute; inset: 0; }
 .matter-document__empty { position: absolute; top: 43%; left: 50%; margin: 0; color: var(--muted); transform: translate(-50%, -50%); }
 .matter-guidance,

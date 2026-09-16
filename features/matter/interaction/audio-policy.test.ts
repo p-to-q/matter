@@ -9,11 +9,13 @@ import {
   MAX_AUDIO_REQUEST_BYTES,
   RECORDING_LIMIT_MS,
   RECORDING_MIME_CANDIDATES,
+  RECORDING_STOP_TIMEOUT_MS,
 } from "./audio-policy";
 
 describe("audio policy", () => {
   it("keeps recording and transport bounds explicit", () => {
     expect(RECORDING_LIMIT_MS).toBe(60_000);
+    expect(RECORDING_STOP_TIMEOUT_MS).toBe(4_000);
     expect(MAX_ACCEPTED_RECORDING_MS).toBe(65_000);
     expect(MAX_AUDIO_BYTES).toBe(2 * 1024 * 1024);
     expect(MAX_AUDIO_REQUEST_BYTES).toBe(MAX_AUDIO_BYTES + 128 * 1024);

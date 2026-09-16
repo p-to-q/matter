@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { settleLassoGeometry } from "./lasso-driver";
 import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
@@ -108,18 +108,24 @@ for (const viewport of [
     expect(new Set(gripSkin.map((grip) => grip.color)).size).toBe(1);
     expect(gripSkin[0]?.color).not.toBe("rgba(0, 0, 0, 0)");
     const sourceLayout = await sourceLayoutReceipt(page, text);
+    const topHandle = page.getByRole("slider", { name: "用上握点设置所选文字的展开程度" });
     const handle = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
     await expect(handle).toHaveAttribute("aria-valuenow", "0");
-    const selectedRows = (
-      await selectionProjectionParity(page, text, "，", { includeVisibleSeam: true })
-    ).sourceRects;
-    const lastSelectedRow = selectedRows.at(-1) ?? null;
+    await selectionProjectionParity(page, text, "，", { includeVisibleSeam: true });
     const bottomHandleInitial = await handle.boundingBox();
-    if (lastSelectedRow === null || bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
-    expect(Math.abs(
-      bottomHandleInitial.x + bottomHandleInitial.width / 2 -
-      (lastSelectedRow.x + lastSelectedRow.width / 2),
-    )).toBeLessThanOrEqual(3.1);
+    if (bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
+    const topCueCenter = await stretchCueCenter(topHandle);
+    const bottomCueCenter = await stretchCueCenter(handle);
+    const ownedBoundaryCenters = await page.locator(".elastic-preview").evaluate((element) => {
+      const style = getComputedStyle(element);
+      const read = (name: string): number => Number.parseFloat(style.getPropertyValue(name));
+      return {
+        top: read("--elastic-top-center") + read("--elastic-top-cue-offset"),
+        bottom: read("--elastic-bottom-center") + read("--elastic-bottom-cue-offset"),
+      };
+    });
+    expect(topCueCenter).toBeCloseTo(ownedBoundaryCenters.top, 1);
+    expect(bottomCueCenter).toBeCloseTo(ownedBoundaryCenters.bottom, 1);
     await page.evaluate(() => {
       const original = Element.prototype.setPointerCapture;
       Element.prototype.setPointerCapture = function failCaptureOnce(pointerId) {
@@ -1139,6 +1145,14 @@ async function segmentProbeRect(
     // One fragment center addresses the whole semantic punctuation segment.
     return { x: centerX - 2, y: centerY - 2, width: 4, height: 4 };
   }, segmentIndex);
+}
+
+async function stretchCueCenter(handle: Locator): Promise<number> {
+  return await handle.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const cue = getComputedStyle(element, "::after");
+    return bounds.left + Number.parseFloat(cue.left) + Number.parseFloat(cue.width) / 2;
+  });
 }
 
 async function textSliceProbeRect(

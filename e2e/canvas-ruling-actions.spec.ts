@@ -440,13 +440,13 @@ test("a held root exposes only local recovery", async ({ page }) => {
   const heldThought = page.locator(`[data-thought-id="${heldId}"]`);
   const heldText = heldThought.locator("[data-thought-text-id]");
   await selectThoughtThroughMaterialIndex(page, heldId);
-  await heldText.hover();
+  await hoverExposedMaterial(page, heldText);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
   await heldRow.hover();
   await heldRow.locator(".material-file__context-control--set-aside").click();
   await expect(heldThought).toHaveAttribute("data-context-excluded", "true");
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
-  await heldText.hover({ force: true });
+  await hoverExposedMaterial(page, heldText);
   const lens = page.locator("[data-node-action-lens]");
   await expect(lens.locator("[data-node-action=restore]")).toBeVisible();
   await expect(lens.locator("[data-node-action=point-talk]")).toBeDisabled();
