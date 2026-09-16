@@ -487,6 +487,103 @@ describe("pool adapter", () => {
     expect(governor.cooling(Date.now())).toBe(false);
   });
 
+  it("keeps a semantically rejected request credential first on the next action", async () => {
+    const tried: string[] = [];
+    const pool = [
+      { ...candidate("selected", "user"), credentialScopeId: "semantic-scope" },
+      candidate("managed", "managed"),
+    ];
+    const adapter = createPoolAdapter(
+      pool,
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        tried.push(model);
+        return chatResponse(model === "selected" ? "bad" : "good");
+      },
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: (answer) => answer === "good"
+        ? { ok: true as const, value: answer }
+        : { ok: false as const, reason: "invalid" },
+    });
+
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
+      .resolves.toEqual({ ok: true, value: "good" });
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
+      .resolves.toEqual({ ok: true, value: "good" });
+    expect(tried).toEqual(["selected", "managed", "selected", "managed"]);
+  });
+
+  it.each([
+    [["reject-first", "fail-second"]],
+    [["fail-first", "reject-second"]],
+  ] as const)("gives infrastructure failure stable precedence over semantic rejection: %j", async (order) => {
+    const adapter = createPoolAdapter(
+      order.map((model) => candidate(model)),
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        return model.startsWith("fail") ? chatResponse("", 503) : chatResponse("bad");
+      },
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: (answer) => answer === "good"
+        ? { ok: true as const, value: answer }
+        : { ok: false as const, reason: "invalid" },
+    });
+    const observations: ScenarioPerformanceObservation[] = [];
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+      observePerformance: (observation) => observations.push(observation),
+    })).resolves.toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+    expect(observations).toEqual([expect.objectContaining({
+      outcome: "unavailable",
+      candidateAttempts: 2,
+      candidateFailures: 1,
+      candidateRejections: 1,
+    })]);
+  });
+
+  it("records one completed attempt when local candidate adjudication throws", async () => {
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => chatResponse("answer"),
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: () => { throw new Error("policy defect"); },
+    });
+    const observations: ScenarioPerformanceObservation[] = [];
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+      observePerformance: (observation) => observations.push(observation),
+    })).resolves.toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+    expect(observations).toEqual([expect.objectContaining({
+      outcome: "unavailable",
+      candidateAttempts: 1,
+    })]);
+  });
+
   it("temporarily demotes one failed request credential without affecting another scope", async () => {
     const tried: string[] = [];
     const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1 };

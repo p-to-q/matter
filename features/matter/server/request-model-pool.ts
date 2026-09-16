@@ -56,9 +56,11 @@ export function resolveScenarioRequestModelAdapter(
 }
 
 /**
- * Inserts a session candidate only for a scenario the deployment already
- * enabled. The global pool array is never mutated, and the global scenario
- * governor remains the sole backpressure owner across all credentials.
+ * Inserts a session candidate only for an authorized product surface. Public
+ * Repair, Label, and Inquiry may use it without a managed gate; private
+ * mutation surfaces still require that gate. The global pool array is never
+ * mutated, and the global scenario governor remains the sole concurrency owner
+ * across credentials while request-owned health stays scoped.
  */
 export function resolveRequestModelAdapter(
   request: Request,

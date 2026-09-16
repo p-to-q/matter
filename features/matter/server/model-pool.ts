@@ -5,11 +5,12 @@ import {
   UnusableCompletionError,
   type UnusableCompletionCode,
 } from "./completion-outcome";
-import type {
-  MatterScenarioId,
-  ScenarioAdapter,
-  ScenarioCall,
-  ScenarioCandidateEvent,
+import {
+  withAdapterOwnedHealth,
+  type MatterScenarioId,
+  type ScenarioAdapter,
+  type ScenarioCall,
+  type ScenarioCandidateEvent,
 } from "./harness";
 import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 
@@ -228,7 +229,7 @@ export function createPoolAdapter(
   now: () => number = Date.now,
   fetchImpl?: typeof fetch,
 ): ScenarioAdapter {
-  return async (input, signal) => {
+  const adapter: ScenarioAdapter = async (input, signal) => {
     noteCandidate(input, "pool");
     const deadlineAtMs = now() + input.deadlineMs;
     let lastError: unknown = new Error("The model pool is empty.");
@@ -241,6 +242,8 @@ export function createPoolAdapter(
     let attempted = false;
     let skippedDraining = false;
     let lastRejection: CandidateRejectedError | null = null;
+    let lastNonRejectionError: unknown = null;
+    let sawNonRejectionFailure = false;
     for (let index = 0; index < ordered.length; index += 1) {
       const candidate = ordered[index]!;
       if (hasDrainingAttempt(healthKey(input.scenario, candidate))) {
@@ -261,7 +264,15 @@ export function createPoolAdapter(
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
         recordOutcome(candidate, input.scenario, "answered", limits, now);
-        const verdict = input.adjudicateCandidate?.(text);
+        let verdict: ReturnType<NonNullable<ScenarioCall["adjudicateCandidate"]>> | undefined;
+        try {
+          verdict = input.adjudicateCandidate?.(text);
+        } catch (error) {
+          // The transport still completed. Record one terminal attempt even
+          // though local scenario policy could not classify its text.
+          noteCandidate(input, "answered");
+          throw error;
+        }
         if (verdict !== undefined && !verdict.ok) {
           noteCandidate(input, "rejected");
           lastRejection = new CandidateRejectedError(verdict.reason);
@@ -280,6 +291,8 @@ export function createPoolAdapter(
           // behaviour, so fallback remains useful rather than deterministic.
           recordOutcome(candidate, input.scenario, "incomplete", limits, now);
           noteCandidate(input, error.code === "truncated" ? "truncated" : "refused");
+          sawNonRejectionFailure = true;
+          lastNonRejectionError = error;
           lastError = error;
           continue;
         }
@@ -299,13 +312,23 @@ export function createPoolAdapter(
           now,
         );
         noteCandidate(input, outcome);
+        sawNonRejectionFailure = true;
+        lastNonRejectionError = error;
         lastError = error;
       }
     }
     if (!attempted && skippedDraining) throw new PoolDrainingError();
-    if (lastError === lastRejection && lastRejection !== null) throw lastRejection;
+    if (lastRejection !== null && !sawNonRejectionFailure && !skippedDraining) {
+      throw lastRejection;
+    }
+    if (lastNonRejectionError !== null) throw lastNonRejectionError;
+    if (skippedDraining) throw new PoolDrainingError();
     throw lastError;
   };
+  // Candidate health, cooldown, and drain ownership already live in this
+  // module. The harness still meters concurrency, but a pool result must not
+  // also mutate its coarser process-wide health counter.
+  return withAdapterOwnedHealth(adapter);
 }
 
 /** Proves one reviewed user candidate before any credential cookie is issued. */

@@ -43,6 +43,10 @@ export const LABEL_CANARY_MATERIAL = Object.freeze(JSON.parse(
   readFileSync(new URL("./probe-model-pool-canaries.json", import.meta.url), "utf8"),
 ));
 export const SURFACES = Object.freeze(["repair", "label", "inquiry"]);
+// Inquiry has no deterministic product floor. Repair preserves the words as
+// heard and Label preserves its provisional name, so their live canaries prove
+// reachability but do not veto a release merely for semantic rejection.
+export const RELEASE_USABLE_SURFACES = Object.freeze(["inquiry"]);
 const HEALTH_SURFACE = Object.freeze({
   repair: "transcriptRepair",
   label: "thoughtLabel",
@@ -802,7 +806,7 @@ async function main() {
       );
     },
   });
-  const requiredUsableSurfaces = profile === "release" ? SURFACES : [];
+  const requiredUsableSurfaces = profile === "release" ? RELEASE_USABLE_SURFACES : [];
   console.log(formatReport(result.origin, result.summary, {
     paceMs,
     requireInquiryAnswer,

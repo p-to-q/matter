@@ -19,7 +19,12 @@ import {
   resolveRequestModelAdapter,
   resolveScenarioRequestModelAdapter,
 } from "./request-model-pool";
-import type { ScenarioAdapter } from "./harness";
+import {
+  ScenarioGovernor,
+  runScenario,
+  type MatterScenario,
+  type ScenarioAdapter,
+} from "./harness";
 import type { UserProviderSelection } from "./user-provider-registry";
 
 const KEY = Buffer.alloc(32, 5).toString("base64url");
@@ -35,8 +40,8 @@ function sealedRequest(selection: UserProviderSelection = {
   profileId: "openai-current" as const,
   model: "gpt-4.1-mini",
   baseUrl: "https://api.openai.com/v1",
-}): Request {
-  const sealed = sealProviderCredential(selection, "user-secret-key", ENVIRONMENT)!;
+}, apiKey = "user-secret-key"): Request {
+  const sealed = sealProviderCredential(selection, apiKey, ENVIRONMENT)!;
   return new Request("https://matter.example/matter/api/inquiry", {
     headers: { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` },
   });
@@ -106,6 +111,93 @@ describe("request model pool", () => {
         maxOutputTokens: 20,
       }, new AbortController().signal)).rejects.toThrow();
       expect(calls).toEqual(["https://api.openai.com/v1/chat/completions"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not let one user-only provider failure cool another credential", async () => {
+    let healthy = false;
+    vi.stubGlobal("fetch", vi.fn(async () => healthy
+      ? new Response(JSON.stringify({
+          choices: [{ finish_reason: "stop", message: { content: "second user answer" } }],
+        }), { headers: { "content-type": "application/json" } })
+      : new Response("{}", { status: 503 })));
+    try {
+      const environment = { ...ENVIRONMENT, MATTER_INQUIRY_ADAPTER: "fixture" };
+      const first = resolveScenarioRequestModelAdapter(
+        sealedRequest(undefined, "first-user-key"),
+        "matter-inquiry",
+        { fallback: null, limits: DEFAULT_POOL_LIMITS, environment },
+      );
+      const governor = new ScenarioGovernor();
+      const limits = Object.freeze({
+        maxConcurrentModelCalls: 2,
+        failuresBeforeCooldown: 1,
+        cooldownMs: 15_000,
+      });
+      await expect(runScenario(USER_INQUIRY, "first", first.adapter, governor, {
+        limits,
+        observe: () => undefined,
+      })).resolves.toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+      expect(governor.cooling(Date.now())).toBe(false);
+
+      healthy = true;
+      const second = resolveScenarioRequestModelAdapter(
+        sealedRequest(undefined, "second-user-key"),
+        "matter-inquiry",
+        { fallback: null, limits: DEFAULT_POOL_LIMITS, environment },
+      );
+      await expect(runScenario(USER_INQUIRY, "second", second.adapter, governor, {
+        limits,
+        observe: () => undefined,
+      })).resolves.toEqual({ ok: true, value: "second user answer" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not let a user-only deadline cool another credential", async () => {
+    let healthy = false;
+    vi.stubGlobal("fetch", vi.fn(async () => healthy
+      ? new Response(JSON.stringify({
+          choices: [{ finish_reason: "stop", message: { content: "second user answer" } }],
+        }), { headers: { "content-type": "application/json" } })
+      : await new Promise<Response>(() => undefined)));
+    try {
+      const environment = { ...ENVIRONMENT, MATTER_INQUIRY_ADAPTER: "fixture" };
+      const poolLimits = Object.freeze({
+        ...DEFAULT_POOL_LIMITS,
+        minimumAttemptMs: 20,
+        maxAttemptShare: 1,
+      });
+      const governor = new ScenarioGovernor();
+      const governorLimits = Object.freeze({
+        maxConcurrentModelCalls: 2,
+        failuresBeforeCooldown: 1,
+        cooldownMs: 15_000,
+      });
+      const first = resolveScenarioRequestModelAdapter(
+        sealedRequest(undefined, "hanging-user-key"),
+        "matter-inquiry",
+        { fallback: null, limits: poolLimits, environment },
+      );
+      await expect(runScenario(SHORT_USER_INQUIRY, "first", first.adapter, governor, {
+        limits: governorLimits,
+        observe: () => undefined,
+      })).resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+      expect(governor.cooling(Date.now())).toBe(false);
+
+      healthy = true;
+      const second = resolveScenarioRequestModelAdapter(
+        sealedRequest(undefined, "healthy-user-key"),
+        "matter-inquiry",
+        { fallback: null, limits: poolLimits, environment },
+      );
+      await expect(runScenario(SHORT_USER_INQUIRY, "second", second.adapter, governor, {
+        limits: governorLimits,
+        observe: () => undefined,
+      })).resolves.toEqual({ ok: true, value: "second user answer" });
     } finally {
       vi.unstubAllGlobals();
     }
@@ -257,4 +349,20 @@ describe("request model pool", () => {
     expect(String(publicFetches.chat.mock.calls[0]![0]))
       .toBe("https://mirror.vendor.ai/gateway/v1/chat/completions");
   });
+});
+
+const USER_INQUIRY: MatterScenario<string, string> = Object.freeze({
+  id: "matter-inquiry",
+  promptVersion: "request-pool-test/1",
+  locale: () => "en-US",
+  compile: (input) => input,
+  budget: () => Object.freeze({ deadlineMs: 3_000, maxOutputTokens: 20 }),
+  adjudicate: (answer) => typeof answer === "string" && answer.length > 0
+    ? Object.freeze({ ok: true as const, value: answer })
+    : Object.freeze({ ok: false as const, reason: "empty" }),
+});
+
+const SHORT_USER_INQUIRY: MatterScenario<string, string> = Object.freeze({
+  ...USER_INQUIRY,
+  budget: () => Object.freeze({ deadlineMs: 60, maxOutputTokens: 20 }),
 });

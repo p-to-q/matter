@@ -247,9 +247,16 @@ repair may still be healthy for a background label. Governors, cache policy,
 and adjudication are scenario-local; health follows the same ownership boundary.
 A healthy sealed user candidate is prepended without mutating either registry.
 Its opaque credential scope separates health and label-cache ownership, while
-the scenario's existing governor remains global across all credentials.
-Repeated transport failure cools only that scope and temporarily places it
-after a healthy managed candidate.
+the scenario's existing governor continues to share one concurrency lane across
+all credentials. Pool adapters own their candidate cooldowns and drain leases,
+so the governor does not duplicate that health in either direction: one user's
+failure cannot cool another credential, and one user's success cannot erase
+managed failure evidence. Repeated transport failure cools only that candidate
+scope and temporarily places it after a healthy managed candidate. Cooling is
+an ordering signal, not a veto: if every candidate is cooling, a new bounded
+action still tries them in order so a recovered provider can honor the person's
+action. Only an unresolved drain lease is skipped, because duplicating work that
+still exists would spend without increasing the chance of delivery.
 
 Adjudication remains scenario-owned even when ordered fallback needs its result.
 Label and repair settle their useful floor after the first transport-complete

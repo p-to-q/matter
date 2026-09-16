@@ -93,10 +93,29 @@ export type ScenarioCall = Readonly<{
   }>;
 }>;
 
-export type ScenarioAdapter = (
+const ADAPTER_OWNS_HEALTH = Symbol("matter.adapter-owns-health");
+
+export type ScenarioAdapter = ((
   call: ScenarioCall,
   signal: AbortSignal,
-) => Promise<Readonly<{ text: string }>>;
+) => Promise<Readonly<{ text: string }>>) & Readonly<{
+  [ADAPTER_OWNS_HEALTH]?: true;
+}>;
+
+/**
+ * Marks an adapter whose transport layer already owns health and cooldown.
+ * The scenario governor still owns its shared concurrency slot, but must not
+ * duplicate or cross-contaminate provider health in either direction.
+ */
+export function withAdapterOwnedHealth(adapter: ScenarioAdapter): ScenarioAdapter {
+  const owned = ((call, signal) => adapter(call, signal)) as ScenarioAdapter;
+  Object.defineProperty(owned, ADAPTER_OWNS_HEALTH, { value: true });
+  return owned;
+}
+
+function adapterOwnsHealth(adapter: ScenarioAdapter): boolean {
+  return adapter[ADAPTER_OWNS_HEALTH] === true;
+}
 
 /**
  * Why a scenario settled on its floor. Every value here means the same thing to
@@ -160,9 +179,11 @@ export const DEFAULT_GOVERNOR_LIMITS: ScenarioGovernorLimits = Object.freeze({
 });
 
 /**
- * Process-local health for one scenario. It is a counter, never authority:
- * every replica may hold a different view without changing what a person sees,
- * because the floor is always available.
+ * Process-local concurrency and direct-adapter health for one scenario. A
+ * provider pool marks that it owns finer candidate health; those calls still
+ * share this concurrency lane but neither read nor mutate its health counter.
+ * The counter is never authority: every replica may hold a different view
+ * without changing what a person sees, because the floor is always available.
  */
 export class ScenarioGovernor {
   private active = 0;
@@ -408,7 +429,8 @@ export async function runScenario<Input, Value>(
   };
   if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
   if (adapter === null) return fallback("MODEL_UNAVAILABLE");
-  if (governor.cooling(now())) return settle("MODEL_UNAVAILABLE");
+  const scenarioOwnsHealth = !adapterOwnsHealth(adapter);
+  if (scenarioOwnsHealth && governor.cooling(now())) return settle("MODEL_UNAVAILABLE");
   if (!governor.admit(limits)) return settle("MODEL_BUSY");
 
   // The slot is held until the adapter promise itself settles, not until this
@@ -464,7 +486,7 @@ export async function runScenario<Input, Value>(
     if (timer !== undefined) clearTimeout(timer);
     boundary?.dispose();
     options.signal?.removeEventListener("abort", cancel);
-    if (!options.signal?.aborted) governor.failed(now(), limits);
+    if (!options.signal?.aborted && scenarioOwnsHealth) governor.failed(now(), limits);
     return options.signal?.aborted ? fallback("MODEL_UNAVAILABLE") : settle("MODEL_UNAVAILABLE");
   }
 
@@ -488,17 +510,23 @@ export async function runScenario<Input, Value>(
       // fast answer instead. Three refusable requests in a row would otherwise
       // take the whole surface off a live provider for the cooldown, for every
       // person on that instance, while the provider was answering all along.
-      governor.succeeded();
+      if (scenarioOwnsHealth) governor.succeeded();
       return settle("MODEL_REJECTED", verdict.reason);
     }
-    governor.succeeded();
+    if (scenarioOwnsHealth) governor.succeeded();
     notePerformance("answered");
     return Object.freeze({ ok: true, value: verdict.value });
   } catch (error) {
     if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
     if (error instanceof CandidateRejectedError) {
-      governor.succeeded();
+      if (scenarioOwnsHealth) governor.succeeded();
       return settle("MODEL_REJECTED", error.reason);
+    }
+    if (error instanceof ScenarioPolicyError) {
+      // The provider answered; only local policy failed. Clear stale provider
+      // failure evidence without presenting the defective answer.
+      if (scenarioOwnsHealth) governor.succeeded();
+      return settle("MODEL_UNAVAILABLE");
     }
     if (error instanceof NeutralProviderError) {
       // An unusable completion or a pool-owned drain lease is unavailable, not
@@ -506,7 +534,7 @@ export async function runScenario<Input, Value>(
       // and neither is evidence that the whole surface should enter cooldown.
       return settle("MODEL_UNAVAILABLE");
     }
-    governor.failed(now(), limits);
+    if (scenarioOwnsHealth) governor.failed(now(), limits);
     return settle(deadline.signal.aborted ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
   } finally {
     clearTimeout(timer);

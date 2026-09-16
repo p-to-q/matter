@@ -99,9 +99,11 @@ planToTreeCommand → tree engine → exact inverse
 The request carries no transcript and no client-authored output target. The
 server derives the target from the validated selection, stretch amount, and
 UTF-16 capacity; it adjudicates one complete answer before constructing the
-plan. Provider or transport failure leaves the selected passage unchanged,
+plan. Provider or transport failure leaves the selected passage unchanged and
 returns the local control to its prior usable state without visible failure
-chrome, and is not retried automatically. The strict `transform/2` contract is
+chrome. The browser never resubmits the action automatically; inside that one
+immutable action, an explicit surface may try the next bounded provider
+candidate after semantic rejection. The strict `transform/2` contract is
 implemented; the deleted Voice-direction
 `transform/1` path remains historical trace only.
 
@@ -214,7 +216,10 @@ prompt has a shape and where each scenario's judgement differs.
 
 The provider registry, credentials, endpoint parsing, and transport stay shared
 and server-only. Mutable execution state does not: each scenario owns its
-governor, deadline, cache policy, and candidate-health lane. A short repair stall
+governor, deadline, cache policy, and candidate-health lane. The governor owns
+scenario concurrency and the health of a direct adapter; an ordered pool marks
+that it already owns candidate cooldown and drain state, so the governor never
+duplicates pool health. A short repair stall
 therefore cannot reorder the candidates used for a background label, and a label
 success cannot erase repair's own cooldown. This is one provider foundation,
 not one cross-product failure domain. Its canonical external configuration uses
@@ -277,8 +282,10 @@ short health lane, so repeated transport failures temporarily move it behind a
 healthy managed candidate without affecting another person's lease. Provider
 transport, health, and label-cache
 identity use an opaque credential scope rather than key or endpoint text. The existing
-scenario governor remains global, so a new user credential cannot mint a new
-concurrency or spend lane. The key and cookie token never enter material,
+scenario governor's admission remains global, so a new user credential cannot
+mint a new concurrency lane. Provider health does not: the pool owns it at the
+actual managed or opaque credential candidate, and a pool settlement neither
+advances nor clears the governor's coarser direct-adapter health. The key and cookie token never enter material,
 history, local documents, routine observations, logs, health/drain keys, or answer
 cache keys. Reviewed provider/model identifiers may index disposable server
 health, but never enter material, browser status, or routine model observations.
