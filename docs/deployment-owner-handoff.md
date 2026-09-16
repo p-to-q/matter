@@ -248,6 +248,30 @@ repair. That historical constraint does not evaluate the later Preview.48
 candidate; every release still requires its own exact source and behavior
 receipts.
 
+## Known qualitative observation — cold-start race in independent verification
+
+A prior session recorded an unstable signal during an independent cold-start
+re-verification: the case "sidebar scroll must not undo the canvas gesture"
+lost its drawing state after the sidebar event on that run. The observation is
+qualitative — the session did not treat it as a pass before characterization,
+and no fix, flake suppression, or retry was applied. A later session that
+committed to a "final independent acceptance" round produced no JSONL
+conclusion because it was interrupted by a spend cap.
+
+This is recorded as a known qualitative note, not a fix and not a claim that
+the race is resolved. It does not assert a source defect: the signal appeared
+on a cold start and was not reproduced under a warm instance, so it is
+consistent with either a deployment-environment concern (cold-start instance
+initialization or warm-up ordering under the Vercel serverless path — route to
+the deployment owner) or a candidate-pool concern (per-instance initialization
+variance across the model pool — route to the provider owner). The origin
+probe cannot distinguish those owners from this evidence alone.
+
+This note does not claim issue #34 (alert delivery / rate limiting) or
+issue #68 (provider spend caps). Both remain open. If the signal becomes
+reproducible and actionable, the owner who can act is named above; until then
+no code, route, or limiter change is warranted on this basis.
+
 ## Historical Preview.42 release and authorization
 
 The owner has directed one Preview.42 production promotion after the current
