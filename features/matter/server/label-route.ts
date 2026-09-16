@@ -4,13 +4,16 @@ import {
   parseLabelRequest,
 } from "../protocol/label-contract";
 import { LabelServerError, invalidLabelRequest } from "./label-errors";
-import { generateLabel } from "./label-generator";
+import { DEFAULT_LABEL_LIMITS, generateLabel, resolveLabelAdapter } from "./label-generator";
+import type { ScenarioAdapter } from "./harness";
 import {
   withBoundedJsonRequest,
   type BoundedRequestFailure,
   type BoundedRequestPolicy,
 } from "./bounded-json-request";
 import { createPublicRequestAdmission } from "./public-request-admission";
+import { DEFAULT_POOL_LIMITS } from "./model-pool";
+import { resolveScenarioRequestModelAdapter } from "./request-model-pool";
 
 /**
  * Parses, delegates, and translates. No labelling policy lives here: the route
@@ -18,7 +21,17 @@ import { createPublicRequestAdmission } from "./public-request-admission";
  * stable envelope the browser knows how to read. The request boundary itself is
  * shared with every other route that accepts a body.
  */
-export async function handleLabelRequest(request: Request): Promise<Response> {
+export async function handleLabelRequest(
+  request: Request,
+  adapter?: ScenarioAdapter | null,
+  cacheScope = "managed",
+): Promise<Response> {
+  const resolution = adapter === undefined
+    ? resolveScenarioRequestModelAdapter(request, "matter-thought-label", {
+        fallback: resolveLabelAdapter(),
+        limits: DEFAULT_POOL_LIMITS,
+      })
+    : Object.freeze({ adapter, cacheScope });
   const admission = labelAdmission.admit(request);
   if (!admission.ok) throw labelAdmissionError(admission.reason);
   try {
@@ -26,7 +39,14 @@ export async function handleLabelRequest(request: Request): Promise<Response> {
       const parsed = parseLabelRequest(payload);
       if (!parsed.ok) throw invalidLabelRequest(parsed.message);
 
-      return Response.json(await generateLabel(parsed.request, signal), {
+      return Response.json(await generateLabel(
+        parsed.request,
+        signal,
+        resolution.adapter,
+        DEFAULT_LABEL_LIMITS,
+        Date.now,
+        resolution.cacheScope,
+      ), {
         headers: { "Cache-Control": "no-store" },
       });
     });

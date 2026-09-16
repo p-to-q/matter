@@ -75,6 +75,7 @@ export async function generateLabel(
   adapter: ScenarioAdapter | null = resolveLabelAdapter(),
   limits: LabelGeneratorLimits = DEFAULT_LABEL_LIMITS,
   now: () => number = Date.now,
+  cacheScope = "managed",
 ): Promise<LabelSuccess> {
   const input = normalizeLabelInput({
     text: request.text,
@@ -93,7 +94,7 @@ export async function generateLabel(
     return settle(request, provisional.text, undefined, "provisional");
   }
 
-  const key = labelFingerprint(input, request.promptVersion);
+  const key = `${cacheScope}\u0000${labelFingerprint(input, request.promptVersion)}`;
   const cached = readCache(key, input, now());
   if (cached !== null) return settle(request, cached, undefined, "model");
 

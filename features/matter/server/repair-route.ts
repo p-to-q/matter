@@ -9,7 +9,9 @@ import {
   parseRepairRequest,
 } from "../protocol/repair-contract";
 import { RepairServerError, invalidRepairRequest } from "./repair-errors";
-import { repairTranscript } from "./repair-generator";
+import { REPAIR_POOL_LIMITS, repairTranscript, resolveRepairAdapter } from "./repair-generator";
+import type { ScenarioAdapter } from "./harness";
+import { resolveScenarioRequestModelAdapter } from "./request-model-pool";
 import { createPublicRequestAdmission } from "./public-request-admission";
 
 /**
@@ -18,7 +20,16 @@ import { createPublicRequestAdmission } from "./public-request-admission";
  * stable envelope the browser knows how to read. The request boundary itself is
  * shared with every other route that accepts a body.
  */
-export async function handleRepairRequest(request: Request): Promise<Response> {
+export async function handleRepairRequest(
+  request: Request,
+  adapter?: ScenarioAdapter | null,
+): Promise<Response> {
+  const resolvedAdapter = adapter === undefined
+    ? resolveScenarioRequestModelAdapter(request, "matter-transcript-repair", {
+        fallback: resolveRepairAdapter(),
+        limits: REPAIR_POOL_LIMITS,
+      }).adapter
+    : adapter;
   const admission = repairAdmission.admit(request);
   if (!admission.ok) throw repairAdmissionError(admission.reason);
   try {
@@ -26,7 +37,7 @@ export async function handleRepairRequest(request: Request): Promise<Response> {
       const parsed = parseRepairRequest(payload);
       if (!parsed.ok) throw invalidRepairRequest(parsed.message);
 
-      return Response.json(await repairTranscript(parsed.request, signal), {
+      return Response.json(await repairTranscript(parsed.request, signal, resolvedAdapter), {
         headers: { "Cache-Control": "no-store" },
       });
     });

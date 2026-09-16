@@ -1,4 +1,8 @@
-import { NeutralProviderError } from "./completion-outcome";
+import {
+  CandidateRejectedError,
+  NeutralProviderError,
+  ScenarioPolicyError,
+} from "./completion-outcome";
 
 /**
  * The one place Matter talks to a model.
@@ -47,6 +51,7 @@ export type ScenarioCandidateEvent =
   | "stalled"
   | "truncated"
   | "refused"
+  | "rejected"
   | "missing-terminator"
   | "unknown-terminator";
 
@@ -76,6 +81,16 @@ export type ScenarioCall = Readonly<{
    * key, prompt, material, or request identity can fit through this type.
    */
   observeCandidate?: (event: ScenarioCandidateEvent) => void;
+  /**
+   * Optional server-local policy seam used only by ordered pool adapters. It
+   * lets an explicit user action spend its remaining deadline on the next
+   * candidate after a semantically invalid answer, without moving scenario
+   * policy into provider code.
+   */
+  adjudicateCandidate?: (text: string) => Readonly<{ ok: true }> | Readonly<{
+    ok: false;
+    reason: string;
+  }>;
 }>;
 
 export type ScenarioAdapter = (
@@ -128,6 +143,8 @@ export type MatterScenario<Input, Value> = Readonly<{
    * asked for, and adjudication makes the rest cost nothing.
    */
   adjudicate: (answer: unknown, input: Input) => ScenarioVerdict<Value>;
+  /** Explicit user actions may try a later provider after policy rejection. */
+  rejectedCandidate?: "settle-floor" | "continue-if-budget";
 }>;
 
 export type ScenarioGovernorLimits = Readonly<{
@@ -254,6 +271,8 @@ export type ScenarioPerformanceObservation = Readonly<{
   candidateTruncations: number;
   /** Attempts that ended in a guardrail, refusal, tool call, or unknown state. */
   candidateRefusals: number;
+  /** Transport-complete answers rejected by the scenario before a later try. */
+  candidateRejections: number;
   /** Explicit stop vocabulary this build cannot name, for compatibility audits. */
   candidateUnknownTerminators: number;
   /** Accepted compatibility responses whose relay omitted a stop reason. */
@@ -290,6 +309,7 @@ export function recordScenarioPerformance(observation: ScenarioPerformanceObserv
     candidateFailures: boundedScalar(observation.candidateFailures, 255),
     candidateTruncations: boundedScalar(observation.candidateTruncations, 255),
     candidateRefusals: boundedScalar(observation.candidateRefusals, 255),
+    candidateRejections: boundedScalar(observation.candidateRejections, 255),
     candidateUnknownTerminators: boundedScalar(observation.candidateUnknownTerminators, 255),
     candidateMissingTerminators: boundedScalar(observation.candidateMissingTerminators, 255),
   });
@@ -317,6 +337,7 @@ export async function runScenario<Input, Value>(
   let candidateFailures = 0;
   let candidateTruncations = 0;
   let candidateRefusals = 0;
+  let candidateRejections = 0;
   let candidateUnknownTerminators = 0;
   let candidateMissingTerminators = 0;
   const noteCandidate = (event: ScenarioCandidateEvent): void => {
@@ -339,6 +360,7 @@ export async function runScenario<Input, Value>(
     if (event === "failed") candidateFailures = boundedIncrement(candidateFailures);
     if (event === "truncated") candidateTruncations = boundedIncrement(candidateTruncations);
     if (event === "refused") candidateRefusals = boundedIncrement(candidateRefusals);
+    if (event === "rejected") candidateRejections = boundedIncrement(candidateRejections);
   };
   const notePerformance = (outcome: ScenarioPerformanceOutcome): void => {
     if (performanceSettled || observePerformance === undefined) return;
@@ -353,6 +375,7 @@ export async function runScenario<Input, Value>(
       candidateFailures,
       candidateTruncations,
       candidateRefusals,
+      candidateRejections,
       candidateUnknownTerminators,
       candidateMissingTerminators,
     });
@@ -413,6 +436,21 @@ export async function runScenario<Input, Value>(
       maxOutputTokens: budget.maxOutputTokens,
       ...(budget.disableThinking === true ? { disableThinking: true as const } : {}),
       observeCandidate: noteCandidate,
+      ...(scenario.rejectedCandidate === "continue-if-budget"
+        ? {
+            adjudicateCandidate: (text: string) => {
+              let verdict: ScenarioVerdict<Value>;
+              try {
+                verdict = scenario.adjudicate(text, input);
+              } catch {
+                throw new ScenarioPolicyError();
+              }
+              return verdict.ok
+                ? Object.freeze({ ok: true as const })
+                : Object.freeze({ ok: false as const, reason: verdict.reason });
+            },
+          }
+        : {}),
     });
     timer = setTimeout(() => deadline.abort(), budget.deadlineMs);
     boundary = rejectOnAbort(deadline.signal);
@@ -434,7 +472,12 @@ export async function runScenario<Input, Value>(
     // Aborting is advisory, so the deadline is enforced by racing a boundary
     // that rejects on abort. Without it one provider can hang the route.
     const answer = await Promise.race([work, boundary.promise]);
-    const verdict = scenario.adjudicate(answer?.text, input);
+    let verdict: ScenarioVerdict<Value>;
+    try {
+      verdict = scenario.adjudicate(answer?.text, input);
+    } catch {
+      throw new ScenarioPolicyError();
+    }
     if (!verdict.ok) {
       // A rejection is a fact about this request, not about the relay. The
       // relay answered, inside the deadline, and the adjudicator declined what
@@ -453,6 +496,10 @@ export async function runScenario<Input, Value>(
     return Object.freeze({ ok: true, value: verdict.value });
   } catch (error) {
     if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
+    if (error instanceof CandidateRejectedError) {
+      governor.succeeded();
+      return settle("MODEL_REJECTED", error.reason);
+    }
     if (error instanceof NeutralProviderError) {
       // An unusable completion or a pool-owned drain lease is unavailable, not
       // scenario-policy rejection. Both are already bounded below the harness

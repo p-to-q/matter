@@ -192,6 +192,31 @@ describe("generateLabel", () => {
     expect(second).toMatchObject({ source: "model", label: "想象的生活" });
   });
 
+  it("does not reuse one credential scope's label in another credential scope", async () => {
+    let calls = 0;
+    const adapter: ScenarioAdapter = async () => {
+      calls += 1;
+      return { text: "想象的生活" };
+    };
+    await generateLabel(
+      labelRequest({ operationId: "first" }),
+      new AbortController().signal,
+      adapter,
+      DEFAULT_LABEL_LIMITS,
+      Date.now,
+      "credential-a",
+    );
+    await generateLabel(
+      labelRequest({ operationId: "second" }),
+      new AbortController().signal,
+      adapter,
+      DEFAULT_LABEL_LIMITS,
+      Date.now,
+      "credential-b",
+    );
+    expect(calls).toBe(2);
+  });
+
   it("drops a cached label that no longer fits a tighter bound", async () => {
     let calls = 0;
     const adapter: ScenarioAdapter = async () => {

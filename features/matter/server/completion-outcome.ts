@@ -28,3 +28,19 @@ export class PoolDrainingError extends NeutralProviderError {
     this.name = "PoolDrainingError";
   }
 }
+
+/** Every transport answered, but no candidate satisfied scenario policy. */
+export class CandidateRejectedError extends NeutralProviderError {
+  constructor(readonly reason: string) {
+    super("No model candidate satisfied the scenario policy.");
+    this.name = "CandidateRejectedError";
+  }
+}
+
+/** A local adjudicator defect is not evidence against any provider. */
+export class ScenarioPolicyError extends NeutralProviderError {
+  constructor() {
+    super("The scenario policy could not adjudicate a provider answer.");
+    this.name = "ScenarioPolicyError";
+  }
+}

@@ -50,12 +50,15 @@ import styles from "./CanvasChrome.module.css";
 import { isCancelEscape } from "./composition-safe-keys";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
 import { subscribePageExit } from "../interaction/page-suspension";
+import { ApiSettingsForm } from "./ApiSettingsForm";
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
   inquiryOwner: InquiryContextOwner;
   inquiryRecord?: InquiryRecordBinding;
   onInquiryOpen?: () => void;
+  onOverlayChange: (overlay: CanvasChromeOverlay) => void;
+  overlay: CanvasChromeOverlay;
 }>;
 
 export type CanvasChromeHandle = Readonly<{
@@ -68,6 +71,7 @@ export type CanvasChromeOverlay =
   | "settings"
   | "language"
   | "mobile"
+  | "api"
   | CanvasChromeInfoId
   | null;
 
@@ -82,6 +86,7 @@ type CanvasChromeInfo = Readonly<Record<CanvasChromeInfoId, Readonly<{
 }>> & { inquiry: CanvasChromeInquiryInfo }>;
 type CanvasChromeCopy = Readonly<{
   about: string;
+  api: string;
   ask: string;
   askPlaceholder: string;
   asking: string;
@@ -320,6 +325,7 @@ export const CANVAS_CHROME_INFO: Readonly<Record<CanvasLanguage, CanvasChromeInf
 const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = Object.freeze({
   "en-US": Object.freeze({
     about: "About",
+    api: "Model API",
     ask: "Ask",
     askPlaceholder: "Ask about this material",
     asking: "Asking…",
@@ -359,6 +365,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "zh-CN": Object.freeze({
     about: "关于",
+    api: "模型 API",
     ask: "询问",
     askPlaceholder: "问一句关于这份材料的话",
     asking: "正在询问…",
@@ -398,6 +405,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "zh-TW": Object.freeze({
     about: "關於",
+    api: "模型 API",
     ask: "詢問",
     askPlaceholder: "問一句關於這份材料的話",
     asking: "正在詢問…",
@@ -437,6 +445,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "ja-JP": Object.freeze({
     about: "概要",
+    api: "モデル API",
     ask: "尋ねる",
     askPlaceholder: "この素材について尋ねる",
     asking: "問い合わせ中…",
@@ -476,6 +485,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
   }),
   "de-DE": Object.freeze({
     about: "Über",
+    api: "Modell-API",
     ask: "Fragen",
     askPlaceholder: "Zu diesem Material fragen",
     asking: "Wird gefragt …",
@@ -524,8 +534,14 @@ const INFO_OVERLAYS = new Set<CanvasChromeInfoId>([
 
 const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
   ...INFO_OVERLAYS,
+  "api",
   "mobile",
 ]);
+
+/** Modal chrome temporarily owns the surface without owning its material state. */
+export function canvasOverlayOwnsSurface(overlay: CanvasChromeOverlay): boolean {
+  return MODAL_OVERLAYS.has(overlay);
+}
 
 // Inquiry stays over the material rather than making the material inert.
 const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language", "inquiry"]);
@@ -557,13 +573,14 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   inquiryOwner,
   inquiryRecord,
   onInquiryOpen,
+  onOverlayChange,
+  overlay,
   preferences,
   resolvedAppearance,
   setAppearance,
   setLanguage,
   setLeafFx,
 }: CanvasChromeProps, forwardedRef) {
-  const [overlay, setOverlay] = useState<CanvasChromeOverlay>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const settingsMenuRef = useRef<HTMLDivElement>(null);
@@ -581,51 +598,50 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     (option) => option.value === preferences.language,
   )?.label ?? preferences.language;
   const appearanceLabel = copy.appearance[preferences.appearance];
-  const modalOpen = MODAL_OVERLAYS.has(overlay);
+  const modalOpen = canvasOverlayOwnsSurface(overlay);
 
   const dismissInquiry = useCallback(() => {
-    inquiryBubbleRef.current?.invalidate();
+    inquiryBubbleRef.current?.detach();
     returnFocusRef.current = null;
-    setOverlay((current) => current === "inquiry" ? null : current);
-  }, []);
+    if (overlay === "inquiry") onOverlayChange(null);
+  }, [onOverlayChange, overlay]);
 
   useImperativeHandle(forwardedRef, () => ({ closeInquiry: dismissInquiry }), [dismissInquiry]);
 
   const closeOverlay = useCallback((restoreFocus = true) => {
-    if (overlay === "inquiry") inquiryBubbleRef.current?.invalidate();
-    setOverlay(null);
+    if (overlay === "inquiry") inquiryBubbleRef.current?.detach();
+    onOverlayChange(null);
     const returnTarget = returnFocusRef.current;
     returnFocusRef.current = null;
     if (restoreFocus && returnTarget?.isConnected) {
       requestAnimationFrame(() => focusWithoutScroll(returnTarget));
     }
-  }, [overlay]);
+  }, [onOverlayChange, overlay]);
 
   const openOverlay = useCallback((
     next: Exclude<CanvasChromeOverlay, null>,
     trigger: HTMLElement | null,
   ) => {
-    if (overlay === "inquiry" && next !== "inquiry") inquiryBubbleRef.current?.invalidate();
+    if (overlay === "inquiry" && next !== "inquiry") inquiryBubbleRef.current?.detach();
     if (next === "inquiry") onInquiryOpen?.();
     returnFocusRef.current = trigger;
-    setOverlay(next);
-  }, [onInquiryOpen, overlay]);
+    onOverlayChange(next);
+  }, [onInquiryOpen, onOverlayChange, overlay]);
 
   const toggleMenu = useCallback((
     next: "settings" | "language" | "inquiry",
     trigger: HTMLElement | null,
   ) => {
-    if (overlay === "inquiry") inquiryBubbleRef.current?.invalidate();
+    if (overlay === "inquiry") inquiryBubbleRef.current?.detach();
     if (next === "inquiry" && overlay !== "inquiry") onInquiryOpen?.();
-    setOverlay((current) => {
-      if (current === next) {
-        returnFocusRef.current = null;
-        return null;
-      }
-      returnFocusRef.current = trigger;
-      return next;
-    });
-  }, [onInquiryOpen, overlay]);
+    if (overlay === next) {
+      returnFocusRef.current = null;
+      onOverlayChange(null);
+      return;
+    }
+    returnFocusRef.current = trigger;
+    onOverlayChange(next);
+  }, [onInquiryOpen, onOverlayChange, overlay]);
 
   useEffect(() => {
     if (overlay === null) return;
@@ -667,13 +683,13 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
     const onBreakpointChange = () => {
-      inquiryBubbleRef.current?.invalidate();
+      inquiryBubbleRef.current?.detach();
       returnFocusRef.current = null;
-      setOverlay(null);
+      onOverlayChange(null);
     };
     query.addEventListener("change", onBreakpointChange);
     return () => query.removeEventListener("change", onBreakpointChange);
-  }, []);
+  }, [onOverlayChange]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -736,6 +752,12 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     if (overlay === "mobile") trigger = mobileTriggerRef.current;
     else if (overlay === "settings") trigger = settingsButtonRef.current;
     openOverlay(id, trigger);
+  }, [openOverlay, overlay]);
+
+  const openApi = useCallback((trigger: HTMLElement | null) => {
+    if (overlay === "mobile") trigger = mobileTriggerRef.current;
+    else if (overlay === "settings") trigger = settingsButtonRef.current;
+    openOverlay("api", trigger);
   }, [openOverlay, overlay]);
 
   const openMenuFromKeyboard = useCallback((
@@ -820,6 +842,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
           <MenuButton icon={<PricingIcon />} label={copy.pricing} onClick={(target) => openInfo("pricing", target)} />
           <MenuButton icon={<PrivacyIcon />} label={copy.privacy} onClick={(target) => openInfo("privacy", target)} />
           <MenuButton icon={<TermsIcon />} label={copy.terms} onClick={(target) => openInfo("terms", target)} />
+          <MenuButton icon={<ApiIcon />} label={copy.api} onClick={openApi} />
         </div>
 
         <div className={styles.bottomRight} data-chrome-region="bottom">
@@ -837,15 +860,16 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
               {copy.inquiry}
             </button>
             <div className={styles.inquiryAnchor} ref={inquiryAnchorRef}>
-              {overlay === "inquiry" ? <InquiryBubble
+              <InquiryBubble
                 context={inquiryContext}
                 copy={copy}
                 hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
                 language={preferences.language}
                 owner={inquiryOwner}
+                presented={overlay === "inquiry"}
                 record={inquiryRecord}
                 ref={inquiryBubbleRef}
-              /> : null}
+              />
             </div>
           </div>
           <div className={styles.popoverAnchor}>
@@ -970,6 +994,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
                 <MobileRow icon={<PricingIcon />} label={copy.pricing} onClick={(target) => openInfo("pricing", target)} />
                 <MobileRow icon={<PrivacyIcon />} label={copy.privacy} onClick={(target) => openInfo("privacy", target)} />
                 <MobileRow icon={<TermsIcon />} label={copy.terms} onClick={(target) => openInfo("terms", target)} />
+                <MobileRow icon={<ApiIcon />} label={copy.api} onClick={openApi} />
               </section>
               <section className={styles.mobileSection}>
                 <h3>{copy.preferences}</h3>
@@ -1036,11 +1061,39 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
           </section>
         </>
       ) : null}
+
+      <button
+        aria-label={`${copy.close}: ${copy.api}`}
+        className={styles.backdrop}
+        hidden={overlay !== "api"}
+        onClick={() => closeOverlay()}
+        tabIndex={-1}
+        type="button"
+      />
+      <section
+        aria-labelledby="matter-api-title"
+        aria-modal="true"
+        className={`${styles.infoDialog} ${styles.apiDialog}`}
+        hidden={overlay !== "api"}
+        ref={overlay === "api" ? dialogRef : undefined}
+        role="dialog"
+      >
+        <header className={styles.dialogHeader}>
+          <h2 id="matter-api-title">{copy.api}</h2>
+          <button aria-label={`${copy.close}: ${copy.api}`} onClick={() => closeOverlay()} type="button">
+            <CloseIcon />
+          </button>
+        </header>
+        <ApiSettingsForm
+          language={preferences.language}
+          presented={overlay === "api"}
+        />
+      </section>
     </div>
   );
 });
 
-type InquiryBubbleHandle = Readonly<{ invalidate: () => void }>;
+type InquiryBubbleHandle = Readonly<{ detach: () => void }>;
 
 const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   context?: () => InquiryContextPayload;
@@ -1048,6 +1101,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   hint: string;
   language: CanvasLanguage;
   owner: InquiryContextOwner;
+  presented: boolean;
   record?: InquiryRecordBinding;
 }>(function InquiryBubble({
   context,
@@ -1055,10 +1109,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   hint,
   language,
   owner,
+  presented,
   record,
 }, forwardedRef) {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
   const [threadScrollable, setThreadScrollable] = useState(false);
+  const [submissionPending, setSubmissionPending] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -1072,7 +1128,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   const transcribing = state.phase === "transcribing";
   const voiceBusy = listening || transcribing;
   const text = inquiryText(state);
-  const canAsk = canSubmitInquiry(state);
+  const canAsk = canSubmitInquiry(state) && !submissionPending;
   const hasPendingAnswer = state.turns.some(
     (turn) => turn.role === "matter" && turn.outcome.status === "pending",
   );
@@ -1092,30 +1148,29 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     cancelLabel: copy.dictateCancel,
   });
 
-  const invalidate = useCallback(() => {
-    authorityRef.current += 1;
-    requestRef.current?.abort();
-    requestRef.current = null;
-    submittingRef.current = false;
-    pendingSubmissionRef.current = null;
+  const detach = useCallback(() => {
     cancelDictation();
     dispatch({ type: "close" });
   }, [cancelDictation]);
 
-  useImperativeHandle(forwardedRef, () => ({ invalidate }), [invalidate]);
+  useImperativeHandle(forwardedRef, () => ({ detach }), [detach]);
 
   useEffect(() => () => {
     authorityRef.current += 1;
-    requestRef.current?.abort();
+    const request = requestRef.current;
+    requestRef.current = null;
+    pendingSubmissionRef.current = null;
+    submittingRef.current = false;
+    request?.abort();
   }, []);
 
   useEffect(() => subscribePageExit(() => {
-    // Keep completed local turns, but return an in-flight question to its
-    // editable draft through the request's existing abort/fallback path.
+    // Page exit retires the owner. Ordinary presentation dismissal does not.
     authorityRef.current += 1;
-    requestRef.current?.abort(new DOMException("Page suspended", "AbortError"));
+    requestRef.current?.abort(new DOMException("Page exited", "AbortError"));
     requestRef.current = null;
     submittingRef.current = false;
+    setSubmissionPending(false);
     const pending = pendingSubmissionRef.current;
     pendingSubmissionRef.current = null;
     if (pending !== null) {
@@ -1128,7 +1183,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   }), []);
 
   useEffect(() => {
-    if (!hasPendingAnswer) submittingRef.current = false;
+    if (!hasPendingAnswer && requestRef.current === null) submittingRef.current = false;
   }, [hasPendingAnswer]);
 
   useLayoutEffect(() => {
@@ -1145,15 +1200,17 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     requestRef.current?.abort();
     requestRef.current = null;
     submittingRef.current = false;
+    setSubmissionPending(false);
     pendingSubmissionRef.current = null;
     cancelDictation();
     dispatch({ type: "scope-changed" });
   }, [cancelDictation, context, owner]);
 
   useLayoutEffect(() => {
+    if (!presented) return;
     const frame = requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
     return () => cancelAnimationFrame(frame);
-  }, []);
+  }, [presented]);
 
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
@@ -1163,6 +1220,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     // where a double-click or repeated Enter could otherwise submit the same
     // transient question twice before the disabled button is rendered.
     submittingRef.current = true;
+    setSubmissionPending(true);
     followThreadRef.current = true;
     const answerId = pendingAnswerId(state);
     const exchangeId = createInquiryRequestId();
@@ -1173,6 +1231,8 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     if (payload === undefined) {
       dispatch({ type: "answer", id: answerId, outcome: NO_MATERIAL });
       pendingSubmissionRef.current = null;
+      submittingRef.current = false;
+      setSubmissionPending(false);
       return;
     }
     requestRef.current?.abort();
@@ -1211,6 +1271,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         if (requestRef.current === request) {
           requestRef.current = null;
           submittingRef.current = false;
+          setSubmissionPending(false);
         }
       });
   }, [canAsk, context, language, owner, record, state]);
@@ -1220,7 +1281,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     if (field === null) return;
     field.style.height = "auto";
     field.style.height = `${Math.min(field.scrollHeight, INQUIRY_FIELD_MAX_HEIGHT)}px`;
-  }, [text]);
+  }, [presented, text]);
 
   useLayoutEffect(() => {
     const thread = threadRef.current;
@@ -1241,12 +1302,14 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
       resizeObserver.disconnect();
       mutationObserver.disconnect();
     };
-  }, [state.turns]);
+  }, [presented, state.turns]);
 
   const trackThreadScroll = useCallback((event: ReactUIEvent<HTMLDivElement>) => {
     const thread = event.currentTarget;
     followThreadRef.current = thread.scrollHeight - thread.clientHeight - thread.scrollTop <= 2;
   }, []);
+
+  if (!presented) return null;
 
   return (
     <div
@@ -1500,21 +1563,36 @@ function trapTabKey(event: KeyboardEvent, dialog: HTMLElement | null) {
     focusWithoutScroll(dialog);
     return;
   }
-  const first = focusable[0]!;
-  const last = focusable.at(-1)!;
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    focusWithoutScroll(last);
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    focusWithoutScroll(first);
+  const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+  const nextIndex = nextDialogTabFocusIndex(activeIndex, focusable.length, event.shiftKey);
+  if (nextIndex === null) return;
+  event.preventDefault();
+  focusWithoutScroll(focusable[nextIndex]);
+}
+
+/** Re-enters the modal when its formerly focused action becomes disabled. */
+export function nextDialogTabFocusIndex(
+  activeIndex: number,
+  focusableCount: number,
+  backwards: boolean,
+): number | null {
+  if (focusableCount <= 0) return null;
+  if (activeIndex < 0 || activeIndex >= focusableCount) {
+    return backwards ? focusableCount - 1 : 0;
   }
+  if (backwards && activeIndex === 0) return focusableCount - 1;
+  if (!backwards && activeIndex === focusableCount - 1) return 0;
+  return null;
 }
 
 function getFocusable(container: HTMLElement | null): HTMLElement[] {
   if (container === null) return [];
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR))
-    .filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+    .filter((element) => (
+      !element.hidden &&
+      element.getAttribute("aria-hidden") !== "true" &&
+      !element.matches(":disabled")
+    ));
 }
 
 function focusWithoutScroll(element: HTMLElement | undefined): void {
@@ -1601,6 +1679,10 @@ function PrivacyIcon() {
 
 function TermsIcon() {
   return <ChromeSvg><path d="M12 6.04A8.97 8.97 0 0 0 6 3.75c-1.05 0-2.06.18-3 .51v14.25A8.99 8.99 0 0 1 6 18c2.3 0 4.41.87 6 2.29m0-14.25A8.97 8.97 0 0 1 18 3.75c1.05 0 2.06.18 3 .51v14.25A8.99 8.99 0 0 0 18 18a8.97 8.97 0 0 0-6 2.29m0-14.25v14.25" /></ChromeSvg>;
+}
+
+function ApiIcon() {
+  return <ChromeSvg><path d="M9 2v6m6-6v6m3 0v4a6 6 0 0 1-12 0V8h12M12 18v4" /></ChromeSvg>;
 }
 
 function AboutIcon() {

@@ -63,17 +63,19 @@ export function resolveTransformAdapter(
 ): ScenarioAdapter | null {
   const configured = environment.MATTER_TRANSFORM_ADAPTER;
   if (configured === "live") {
-    return resolvePoolAdapter(environment, {
-      minimumAttemptMs: 700,
-      maxAttemptShare: 0.6,
-      maxOutputTokens: 1_200,
-      maxResponseBytes: 40 * 1_024,
-      failuresBeforeCooldown: 2,
-      cooldownMs: 60_000,
-    });
+    return resolvePoolAdapter(environment, TRANSFORM_POOL_LIMITS);
   }
   if (configured === "fixture" || (configured === undefined && environment.NODE_ENV !== "production")) {
     return fixtureTransformAdapter;
   }
   return null;
 }
+
+export const TRANSFORM_POOL_LIMITS = Object.freeze({
+  minimumAttemptMs: 700,
+  maxAttemptShare: 0.6,
+  maxOutputTokens: 1_200,
+  maxResponseBytes: 40 * 1_024,
+  failuresBeforeCooldown: 2,
+  cooldownMs: 60_000,
+});

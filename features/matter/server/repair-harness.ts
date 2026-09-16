@@ -20,6 +20,7 @@ import { composePrompt, fence } from "./prompt-spine";
 export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string> = Object.freeze({
   id: "matter-transcript-repair",
   promptVersion: TRANSCRIPT_REPAIR_PROMPT_VERSION,
+  rejectedCandidate: "settle-floor",
   locale: (input) => input.locale,
   compile: compileRepairPrompt,
   budget: (input) => Object.freeze({

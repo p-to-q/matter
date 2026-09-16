@@ -89,6 +89,7 @@ describe("runScenario", () => {
       candidateFailures: 1,
       candidateTruncations: 0,
       candidateRefusals: 0,
+      candidateRejections: 0,
       candidateUnknownTerminators: 1,
       candidateMissingTerminators: 0,
     });
@@ -175,6 +176,7 @@ describe("runScenario", () => {
       candidateFailures: 0,
       candidateTruncations: 0,
       candidateRefusals: 0,
+      candidateRejections: 0,
       candidateUnknownTerminators: 0,
       candidateMissingTerminators: 0,
       material: "MATERIAL_SENTINEL",
@@ -188,6 +190,7 @@ describe("runScenario", () => {
       + '{"scenario":"matter-inquiry","outcome":"answered","elapsedMs":128,'
       + '"candidateTelemetry":"pool","candidateAttempts":2,"candidateTimeouts":1,'
       + '"candidateFailures":0,"candidateTruncations":0,"candidateRefusals":0,'
+      + '"candidateRejections":0,'
       + '"candidateUnknownTerminators":0,"candidateMissingTerminators":0}',
     );
     expect(line).not.toContain("MATERIAL_SENTINEL");

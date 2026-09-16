@@ -26,6 +26,7 @@ export type TextSwapRejection = TextSwapPolicyCode;
 export const TEXT_SWAP_SCENARIO: MatterScenario<TextSwapScenarioInput, string> = Object.freeze({
   id: "matter-text-swap",
   promptVersion: TEXT_SWAP_PROMPT_VERSION,
+  rejectedCandidate: "continue-if-budget",
   locale: (input) => input.locale,
   compile: compileTextSwapPrompt,
   budget: (input) => Object.freeze({

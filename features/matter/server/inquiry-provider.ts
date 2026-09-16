@@ -16,12 +16,14 @@ export function resolveInquiryAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ): ScenarioAdapter | null {
   if (environment.MATTER_INQUIRY_ADAPTER !== "live") return null;
-  return resolvePoolAdapter(environment, {
-    minimumAttemptMs: 600,
-    maxAttemptShare: 0.5,
-    maxOutputTokens: 720,
-    maxResponseBytes: 32 * 1_024,
-    failuresBeforeCooldown: 2,
-    cooldownMs: 60_000,
-  });
+  return resolvePoolAdapter(environment, INQUIRY_POOL_LIMITS);
 }
+
+export const INQUIRY_POOL_LIMITS = Object.freeze({
+  minimumAttemptMs: 600,
+  maxAttemptShare: 0.5,
+  maxOutputTokens: 720,
+  maxResponseBytes: 32 * 1_024,
+  failuresBeforeCooldown: 2,
+  cooldownMs: 60_000,
+});

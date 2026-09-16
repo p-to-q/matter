@@ -32,6 +32,7 @@ export const INQUIRY_PROVIDER_DEADLINE_MS = MODEL_DEADLINES.inquiry.providerMs;
 export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.freeze({
   id: "matter-inquiry",
   promptVersion: INQUIRY_PROMPT_VERSION,
+  rejectedCandidate: "continue-if-budget",
   locale: (request) => request.locale,
   compile: compileInquiryPrompt,
   budget: () => Object.freeze({

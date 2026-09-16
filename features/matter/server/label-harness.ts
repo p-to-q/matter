@@ -20,6 +20,7 @@ import { composePrompt, fence, fenceJson } from "./prompt-spine";
 export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Object.freeze({
   id: "matter-thought-label",
   promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
+  rejectedCandidate: "settle-floor",
   locale: (input) => input.locale,
   compile: buildLabelPrompt,
   budget: (input) => Object.freeze({
