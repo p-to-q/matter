@@ -22,6 +22,8 @@ export default defineConfig({
       "scripts/probe-model-pool.test.mjs",
       "scripts/local-ai-demo.test.mjs",
       "scripts/probe-local-ai.test.mjs",
+      "scripts/label-corpus.test.mjs",
+      "scripts/label-eval-plan.test.mjs",
     ],
   },
 });
