@@ -1,7 +1,7 @@
 # Codex Work Line Audit
 
 > **Date**: 2026-09-17
-> **Policy**: merge-or-stash, never abandon (`spec-v3 §Phase 4`, user policy)
+> **Scope**: evidence snapshot, not repository policy or current instruction
 > **Auditor**: maintainer role
 
 ## Summary
@@ -11,7 +11,7 @@
 | `codex/preview-46-ai-harness` | 2 | 48 | stash | Tag `codex-wip-preview-46-ai-harness` created |
 | `codex/selected-material-recovery` | 1 | 2 (add/add docs) | stash | Tag `codex-wip-selected-material-recovery` created |
 | `cloud/address-restore` | 0 | 0 | already-in-main | No action — HEAD `8d2d56a` is in main |
-| `tmp/action-lasso-api-hardening/` | 94 uncommitted files | n/a | adapt (pending) | Clone preserved in gitignored `tmp/`; needs scope split |
+| `codex/action-lasso-api-hardening` | 7 reviewable commits | 0 after rebase | integrated locally | Linked worktree rebased onto `9eb169b`; exact-tree gates green, push pending review |
 | Stash `preview54-excluded-local-video` | n/a | n/a | isolate | Launch-video policy; not touched |
 
 ## Details
@@ -46,15 +46,26 @@
 - **Action**: No action needed. `git merge-base --is-ancestor 8d2d56a origin/main` confirms HEAD is in main. The two-dot diff shows main's changes that the branch doesn't have, not unique work.
 - **Note**: Branch is stale (behind main). Can be deleted safely, but left in place per no-abandon policy.
 
-### `tmp/action-lasso-api-hardening/`
+### `codex/action-lasso-api-hardening`
 
-- **Structure**: Full clone of repo at `af7b1c1` with 94 uncommitted files
-- **Scope**: +3854/-801
-- **Content**: Significant doc changes (architecture.md +101, protocol.md +134, product.md +59, changes.md +76) and code changes (CanvasChrome.tsx +186, RootedMaterial.tsx +290, CanvasChrome.module.css +227)
-- **Concern**: Touches `docs/principles.md` (+11) and `docs/product.md` (+59) — protected by user policy ("不修改")
-- **Verdict**: adapt (pending)
-- **Preservation**: Clone preserved in gitignored `tmp/action-lasso-api-hardening/`. Work is not lost.
-- **Next steps**: Split scope into (a) protected-doc changes to exclude, (b) non-protected doc changes to evaluate, (c) code changes to evaluate. Requires careful review before any merge.
+- **Structure**: linked Git worktree, not a clone; it originally started at
+  `af7b1c1` while `main` had advanced to `9eb169b`.
+- **Content**: submitted-action ownership, lasso/Elastic/mobile interaction,
+  modal presentation ownership, a two-field sealed Model API, bounded provider
+  discovery, and request-local model fallback.
+- **Review correction**: `docs/product.md` and `docs/principles.md` are governed
+  by `AGENTS.md` and were required reading; there was no repository instruction
+  forbidding their maintenance. The relevant changes preserve rather than
+  replace their product invariants.
+- **Resolution**: the dirty worktree was split into three reviewable commits,
+  then closed through four focused follow-up commits. It was rebased without
+  conflict onto `9eb169b` and left unpushed pending localhost review. Launch
+  Video remains outside the branch.
+- **Recovery evidence**: the original Codex JSONL conversation and the local
+  Code Arts SQLite session tree, memory, task, and spec caches were inspected as
+  historical evidence. None was copied into the repository. That review
+  corrected the earlier “separate clone”, “no runtime BYOK”, and blanket
+  protected-document conclusions before implementation was accepted.
 
 ### Stash `preview54-excluded-local-video`
 

@@ -17,6 +17,47 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-17 — recorder stop is a bounded recoverable phase
+
+Changed: Recorded-audio Voice arms a four-second active-page watchdog budget
+for the browser to publish the final `dataavailable` and terminal `stop` event.
+A browser that never settles now releases capture and exposes a pointer retry
+instead of leaving the local action in “Finishing”. The reveal receipt verifies
+the authored CSS timeline rather than animation-event delivery jitter.
+
+Why: Stopping is part of the action the person already submitted. Waiting for
+the final chunk protects that action; waiting forever strands both the
+microphone lease and the product surface.
+
+Forecloses: Treating `MediaRecorder.stop()` as a completion guarantee, using
+`timeslice` as a duration clock, accepting a partial recording, or weakening
+the reveal because a test runner delivered two animation events in one busy
+frame.
+
+## 2026-09-17 — paid Label evidence requires prior private authority
+
+Changed: Label evaluation now has separate plan and run invocations. A run
+must match an earlier private artifact and its explicitly supplied digest;
+the plan has a unique single-use authorization, privately binds the exact
+credential with a keyed digest, is stored owner-only as a credential verifier,
+and freezes a bounded worst-case wall clock.
+TLS, frozen bindings, an atomic no-replay claim, and every journal/report
+target fail closed before the production completion path becomes callable.
+Each completion result is flushed to its journal before the next attempt. Safe output
+contains only closed verdicts, reasons, counts, latency buckets, and an honest
+attempted/recorded/unrecorded completion tally. Whether a provider bills an
+attempt remains provider-owned rather than inferred by the local evaluator.
+
+Why: a process cannot authorize its own paid comparison, and an unwritable
+journal or insecure transport must stop before the first charge rather than
+leave partial, unauditable evidence.
+
+Forecloses: self-built expected plans, permissive repeat parsing, warning-only
+TLS bypass, replayed or concurrent spend under one authorization, credential
+substitution, runner timeout below an authorized worst case, paid calls before
+durable preflight, parallel evaluation transport semantics, and stdout or
+safe-report disclosure of material or model answers.
+
 ## 2026-09-17 — explicit model actions own semantic fallback
 
 Changed: Inquiry, Transform, and Text Swap may continue to the next healthy
@@ -32,6 +73,22 @@ or spend when their existing floor is already correct.
 Forecloses: one global retry rule, provider-owned product semantics, cooling a
 healthy relay for bad prose, resampling background labels, and retrying against
 newer material state.
+
+## 2026-09-17 — release evidence separates reachability from output quality
+
+Changed: the live release probe requires every public scenario to reach the
+managed pool and requires every Inquiry call to produce an accepted answer.
+Repair and Label semantic rejection may use their correct deterministic floor;
+their quality gate belongs to the versioned offline corpus and frozen eval plan.
+
+Why: a random live Label canary cannot simultaneously prove provider
+availability, language quality, and product usability. Conflating those facts
+withheld a release even when the pool answered and the visible product retained
+its correct floor.
+
+Forecloses: treating every floor-backed enhancement as a release-blocking live
+answer, weakening the adjudicator to make a canary green, and describing a
+reachable provider as down because one completion was semantically rejected.
 
 ## 2026-09-12 — saved provider access is explicit and server-owned
 

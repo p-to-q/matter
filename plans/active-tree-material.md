@@ -7,6 +7,31 @@ Destination: the first usable public release at `ptoq.io/matter`
 This is the only roadmap. It ends at the first release; it is not a forecast of
 Matter as a platform.
 
+## Active correction — Label evidence is precommitted before spend
+
+State: implemented and independently verified locally; no paid run or
+quality promotion is authorized.
+
+```text
+Outcome:    a Label evaluation can spend only against an earlier private plan
+            and its separately supplied digest, using production transport and
+            budget semantics while publishing only low-cardinality safe output
+Boundary:   the Label corpus plan/run lifecycle, artifact preflight, production
+            pool adapter, one-time atomic claim, credential-bound candidate set,
+            strict repeat/wall-clock bounds, private journal, and safe report
+Invariants: plan mode makes zero provider calls; TLS, plan drift, and any output
+            initialization failure stop before a provider path is exposed;
+            each completion result is flushed before another attempt; an authorization
+            cannot replay or truncate evidence; material, answers, provider
+            identity, credentials, and raw errors stay private;
+            no local tooling run changes product adjudication or release policy
+Proof:      plan/corpus Node tests, focused Label/eval Vitest, lint, diff check,
+            and a separate verifier review of lifecycle and production parity
+Non-goals:  a paid run, new quality evidence, weakening the Label adjudicator,
+            provider promotion, or treating historical exploratory numbers as
+            an authoritative before/after experiment
+```
+
 ## Active correction — bounded localhost AI demonstration
 
 State: implemented and verified locally; no production promotion is authorized.
@@ -67,9 +92,11 @@ Boundary:   Admission repair, Elastic, Point Talk, and Inquiry job ownership;
             one versioned provider-session route, bounded provider/model registry,
             canonical compatible-mirror URL, address-pinned HTTPS boundary,
             encrypted HttpOnly cookie, and request-local pool augmentation
-Invariants: capture and drafts remain transient and easy to dismiss; submission
-            freezes intent; unrelated UI, selection, revision, and temporary
-            page hiding cannot erase submitted work; any material result waits
+Invariants: capture and drafts remain transient and easy to dismiss; recorded
+            audio stop yields its terminal chunk or a recoverable failure after
+            a four-second watchdog budget; submission freezes intent; unrelated
+            UI, selection, revision, and temporary page hiding cannot erase
+            submitted work; any material result waits
             for a visible, pointer-idle delivery window and revalidates its exact
             write basis; target conflict, document replacement, page exit, or
             owner unmount revokes authority; only the tree engine commits; lasso
@@ -77,8 +104,10 @@ Invariants: capture and drafts remain transient and easy to dismiss; submission
             browser can supply only one compatible endpoint and key, never the
             selected model, wire profile, or generated request; a supplied key
             never enters material, history, response JSON, logs, or a cache key;
-            global scenario backpressure and public capability gates still apply
-Proof:      focused lifecycle, geometry, protocol, crypto, route, model-pool,
+            global concurrency and public capability gates still apply; shared
+            cooldown advances only from shared managed failure, while disposable
+            request-credential health remains scope-local
+Proof:      focused voice, lifecycle, geometry, protocol, crypto, route, model-pool,
             accessibility, and store tests; independent verifier passes for each
             slice; full source/e2e gates; desktop and narrow localhost walkthrough
 Non-goals:  chat history, unbounded provider negotiation, arbitrary methods or
@@ -87,6 +116,17 @@ Non-goals:  chat history, unbounded provider negotiation, arbitrary methods or
             work after page exit, widening public Transform/Text Swap gates,
             changing material format, or redesigning the quiet Matter interface
 ```
+
+Local receipt, 2026-09-17: `npm run check` passed 111 Node boundary tests,
+2,537 Vitest cases with four explicit skips, type generation, typecheck,
+zero-warning lint, the Next production build, architecture checks, and the
+runtime-artifact budget (1,200.4 KiB initial raw / 379.0 KiB gzip). The complete
+Chromium matrix passed 155 cases with 15 historical or explicitly scoped skips.
+Independent verifiers closed provider health, Label evidence, modal selection,
+visible grip alignment, held-material targeting, and recorded-audio recovery.
+Desktop, narrow, and touch localhost walkthroughs covered the Model API,
+selection restoration, and continuous Pan. No paid or real-provider call was
+made.
 
 The provider session is deliberately an operational preference rather than a
 second account or material store. The browser sends a key and compatible
