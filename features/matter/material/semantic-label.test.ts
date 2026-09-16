@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_SEMANTIC_LABEL_GRAPHEMES,
+  SEMANTIC_LABEL_PROMPT_VERSION,
   adjudicateModelLabel,
   decideModelRequest,
   deriveProvisionalLabel,
@@ -294,5 +295,13 @@ describe("similarity", () => {
 
   it("ignores case, width, and punctuation", () => {
     expect(labelSimilarity("API v2", "api  v2!")).toBe(1);
+  });
+});
+describe("prompt version", () => {
+  // Bumping the version invalidates every cached label. The value is asserted
+  // so an accidental bump or rollback is caught by the structural test rather
+  // than by a corpus re-run.
+  it("is at thought-label/4 with per-case evidence from A4", () => {
+    expect(SEMANTIC_LABEL_PROMPT_VERSION).toBe("thought-label/4");
   });
 });

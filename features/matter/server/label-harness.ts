@@ -78,13 +78,19 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
     ],
     fixed: [
       "the language: name it in the language of the material.",
-      `the length: aim for ${preferred} to ${input.maxGraphemes} graphemes. Go shorter only when a shorter phrase genuinely says it better.`,
+      // TOO_LONG (A4: 12): state the hard ceiling and forbid restating, so a
+      // model compresses to a name instead of echoing the material back.
+      `the length: aim for ${preferred} to ${input.maxGraphemes} graphemes, and never exceed ${input.maxGraphemes}. Compress to a name; do not restate the material.`,
+      // SIBLING_DUPLICATE (A4: 3): require distinguishability, not mere
+      // difference, so a particle or punctuation apart does not pass.
       ...(context.siblingLabels.length === 0 ? [] : [
-        "the name must differ from every name inside <sibling-names>.",
+        "the name must be readily distinguishable from every name inside <sibling-names>, not merely punctuation or a particle apart.",
       ]),
     ],
     keep: [
-      "The material's own words, and the image, relation, or tension that makes it this thought and not a topic.",
+      // not-grounded-in-material (A4: 5): every word must derive from the
+      // material, so an outside concept cannot enter the name.
+      "The material's own words, and the image, relation, or tension that makes it this thought and not a topic. Every word must come from the material or a grammatical inflection of words that do; outside concepts are not permitted.",
     ],
     never: [
       "add anything the material does not say;",
@@ -92,7 +98,8 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
       "name a topic. A bare topic word is a failure: it could label anything. Name what the material actually claims or asks.",
     ],
     unsure: "When the material resists compression, keep its most specific phrase rather than inventing a general one.",
-    answer: ["Answer with the name only."],
+    // EMPTY (A4: 4): require a non-empty name explicitly.
+    answer: ["Answer with the name only. It must not be empty."],
     material: [
       ...(context.parentLabel === null ? [] : [
         fence("parent-name", context.parentLabel, "The node this one hangs under is named:"),

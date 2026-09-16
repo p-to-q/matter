@@ -10,6 +10,17 @@
  * correct name, and a harness that pretended otherwise would measure agreement
  * with whoever wrote the fixture.
  */
+
+import { createHash } from "node:crypto";
+
+/**
+ * Corpus version. The prior 18-entry corpus was an implicit v1; this advances
+ * to v2 by adding the probe-canary-sourced class (spec 5.1.1 rule 2) and
+ * exposing an explicit version + content digest so an eval-plan binding can
+ * fingerprint it.
+ */
+export const CORPUS_VERSION = "label-corpus/2";
+
 export const corpus = Object.freeze([
   {
     id: "contrast-long",
@@ -105,4 +116,54 @@ export const corpus = Object.freeze([
     text: "第三季度的留存掉了差不多十二个点，但新增没变，所以问题出在第二周。",
     expect: "retention drop / week two",
   },
+  // Probe-canary-sourced material (spec 5.1.1 rule 2, class 1). The release
+  // probe sends the English "Um, ..." short utterances in
+  // probe-model-pool-canaries.json with a synthetic sibling label as a run
+  // nonce and a roomy 28-grapheme label bound. These entries mirror that
+  // shape so an attribution run can distinguish "the probe load cannot be
+  // answered legally" from "the prompt induces a shape violation".
+  {
+    id: "canary-sourced-absence",
+    text: "Um, the room remembers absence after everyone leaves.",
+    locale: "en-US",
+    context: { siblingLabels: ["Canary room-absence"] },
+    expect: "the canary shape; a label that fits 28 graphemes beside the synthetic sibling",
+  },
+  {
+    id: "canary-sourced-outline",
+    text: "Um, the room keeps its outline after everyone leaves.",
+    locale: "en-US",
+    context: { siblingLabels: ["Canary room-outline"] },
+    expect: "same canary shape, different referent; distinguishable from the sibling",
+  },
+  {
+    id: "canary-sourced-footsteps",
+    text: "Um, the hallway keeps footsteps after walkers leave.",
+    locale: "en-US",
+    context: { siblingLabels: ["Canary hallway-footsteps"] },
+    expect: "canary shape again; the kept trace, not the walkers",
+  },
 ]);
+
+/**
+ * Deterministic content digest over the whole corpus, so an eval-plan binding
+ * can detect any drift in the material it fingerprinted. Order-sensitive by
+ * construction (entries are frozen in array order); fields are separated by
+ * NUL bytes that cannot appear in the field values.
+ */
+export function contentDigest() {
+  const hash = createHash("sha256");
+  for (const entry of corpus) {
+    hash.update(entry.id, "utf8");
+    hash.update("\0");
+    hash.update(entry.text, "utf8");
+    hash.update("\0");
+    hash.update(entry.locale ?? "", "utf8");
+    hash.update("\0");
+    if (entry.context) hash.update(JSON.stringify(entry.context), "utf8");
+    hash.update("\0");
+    hash.update(entry.expect, "utf8");
+    hash.update("\n");
+  }
+  return hash.digest("hex");
+}

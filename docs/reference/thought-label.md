@@ -280,6 +280,35 @@ the deterministic checks are. And on `sibling-collision` one model returned a
 label identical to an existing sibling, which validation rejected before
 adjudication ever ran.
 
+### Prompt calibration — thought-label/4
+
+The initial calibration above used `thought-label/3`. A six-round canary probe
+through the live pool showed Label acceptance at 1/6 (four `MODEL_REJECTED`,
+one `MODEL_TIMEOUT`), against Repair 5/6 and Inquiry 6/6. Attribution isolated
+the cause as shape-dominant: `TOO_LONG` was the largest subclass (12/20
+rejections, concentrated in DeepSeek-V3 verbose restatement), followed by
+`EMPTY` (4), `semantic:not-grounded` (5), `SIBLING_DUPLICATE` (3), and
+`TERMINAL_PUNCTUATION` (1).
+
+The prompt moved to `thought-label/4` with stronger length, non-empty,
+terminal-punctuation, sibling-differentiation, and material-anchoring guidance.
+The character budget was not relaxed. A full corpus re-run against three
+working models measured the effect:
+
+| Model | Acceptance (v3) | Acceptance (v4) | Delta |
+| --- | --- | --- | --- |
+| Qwen-flash | 65% (11/17) | 76% (13/17) | +11 pp |
+| DeepSeek-V3 | 24% (4/17) | 41% (7/17) | +17 pp |
+| GLM-4.7-Flash | 62% (10/16) | 76% (13/17) | +14 pp |
+| **Average** | **50%** | **64%** | **+14 pp** |
+
+`EMPTY` (4 → 0) and `TERMINAL_PUNCTUATION` (1 → 0) were eliminated.
+`SIBLING_DUPLICATE` fell from 3 to 1. `TOO_LONG` (12) and
+`semantic:not-grounded` (5) were unchanged — the former is DeepSeek-V3's
+verbose restatement and the latter may require structural enforcement beyond
+prompt language. No new rejection subclasses appeared. The full attribution
+and before/after journals are in gitignored `tmp/label-eval/`.
+
 ## Open
 
 - Corpus judgement is still structural. Acceptance says an answer is safe, not
