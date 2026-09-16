@@ -3654,3 +3654,62 @@ punctuation and expression still produced the accepted result.
   wrapping or font changes; Phase 2 requires browser proofs.
 - Durability makes protocol mistakes survive reload; Phase 3 ships version
   rejection with its first writer, never afterwards.
+## Active freeze — label gate attribution conclusion
+
+State: concluded from the A4 paid attribution run; this freeze authorizes no
+code, protocol, or product surface change.
+
+```text
+Outcome:    the label-gate attribution is concluded as shape-dominant (80% of
+            MODEL_REJECTED rejections) with a secondary semantic class
+            (not-grounded-in-material); the selected repair path is a
+            combination of B1 prompt hardening and B1 probe-load pruning;
+            no production subdivision deployment is required; the next
+            version is Preview.57
+Boundary:   plans/active-tree-material.md only; one freeze increment; no code,
+            no protocol, no product surface; cross-module span
+Invariants: the freeze names Outcome/Boundary/Invariants/Proof/Non-goals and
+            cites the A4 evidence digests; shape is dominant, so the conclusion
+            distinguishes prompt-induced shape violation (TOO_LONG concentrated
+            on DeepSeek-V3 verbose restatement, plus EMPTY/SIBLING_DUPLICATE/
+            TERMINAL_PUNCTUATION -> B1 prompt) from eval-load candidates that
+            cannot be legally answered (Qwen3.5-Flash all 20s timeout and
+            dots3-note-prev all no-text/403 -> B1 probe-load); semantic refusals
+            are all not-grounded-in-material, so the adjudicator is not relaxed;
+            the next version number Preview.57 is unoccupied and fixed here;
+            no sensitive content is recorded
+Proof:      this freeze text plus the A4 evidence digest match
+            (corpusVersion=label-corpus/2, corpusDigest=366636...a410,
+            promptVersion=thought-label/3, planDigest=b8ccd5...1aec); the A4 run
+            covered asked=17/model across five site/model pairs with four
+            not-asked, yielding 20 shape violations, 5 semantic refusals, and
+            34 transport errors separated from MODEL_REJECTED
+Non-goals:  implementing the repair (that is B1), reopening the product freeze,
+            relaxing the label adjudicator, deploying a production subdivision
+            (spec 5.2.1 rule 4 decides no from A4 evidence), referencing a
+            Preview.57 receipt (D3 verified none is recorded), or resolving
+            sporadic versus systematic from repeat=1 (B2 re-runs at repeat>=3)
+```
+
+The A4 paid attribution run produced 17 asked/model observations across five
+site/model pairs (abc/Qwen-flash, abc/DeepSeek-V3, aiping/Qwen3.5-Flash,
+aiping/GLM-4.7-Flash, note3/dots3-note-prev) with four not-asked.
+MODEL_REJECTED totalled 25: 20 shape violations and 5 semantic refusals. Shape
+is dominant at 80%, led by TOO_LONG (12, of which DeepSeek-V3 contributed 9 via
+verbose restatement that trips maxGraphemes), then EMPTY (4, GLM-4.7-Flash),
+SIBLING_DUPLICATE (3), and TERMINAL_PUNCTUATION (1). Semantic refusals are
+uniformly not-grounded-in-material (5), traced to canary-sourced English long
+scenarios that the prompt did not sufficiently anchor to material. 34 transport
+errors (Qwen3.5-Flash all 20s timeout; note3 all no-text/403) are pool
+availability failures, separated from MODEL_REJECTED and routed to B1 probe-load.
+
+The repair path is a combination: B1 prompt hardens output length/format
+constraints against TOO_LONG and strengthens material anchoring against
+not-grounded-in-material; B1 probe-load removes or downgrades the two
+unavailable candidates. Production subdivision is not deployed: A4 evidence
+already separates shape from semantic, so spec 5.2.1 rule 4 decides no and E1
+does not trigger. The next version is Preview.57, confirmed unoccupied by D3.
+
+repeat=1 cannot distinguish sporadic from systematic; B2 should re-run at
+repeat>=3 before any repair is promoted. This freeze records only digests, not
+provider material, transcripts, or secrets.
