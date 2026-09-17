@@ -127,16 +127,19 @@ Non-goals:  chat history, unbounded provider negotiation, arbitrary methods or
             changing material format, or redesigning the quiet Matter interface
 ```
 
-Local receipt, 2026-09-17: `npm run check` passed 111 Node boundary tests,
-2,537 Vitest cases with four explicit skips, type generation, typecheck,
-zero-warning lint, the Next production build, architecture checks, and the
-runtime-artifact budget (1,200.4 KiB initial raw / 379.0 KiB gzip). The complete
-Chromium matrix passed 155 cases with 15 historical or explicitly scoped skips.
-Independent verifiers closed provider health, Label evidence, modal selection,
-visible grip alignment, held-material targeting, and recorded-audio recovery.
-Desktop, narrow, and touch localhost walkthroughs covered the Model API,
-selection restoration, and continuous Pan. No paid or real-provider call was
-made.
+Local receipt, 2026-09-17, implementation `a101d5c`: `npm run check` passed
+111 Node boundary tests, 2,577 passing Vitest cases plus five explicit skips, type
+generation, typecheck, zero-warning lint, the Next production build, the
+485-file architecture gate, and the runtime-artifact budget (1,208.7 KiB
+initial raw / 381.2 KiB gzip). The complete serial Chromium matrix passed 161
+cases with 15 historical or explicitly scoped skips. The isolated production
+2,000-node receipt passed at 224ms FCP, 310.8ms layout-ready, 4,485 DOM elements,
+and a 91ms maximum measured long task. Independent verifiers passed 244/244
+focused UI tests, 11/11 focused browser cases, 57/57 Voice transport/lease
+tests, and 86/86 action-lifecycle tests with no P0-P3 finding. Desktop, narrow,
+and touch proof covered Model API, layout-neutral click/double-click selection,
+continuous Pan, and typed microphone-denial recovery. No paid or real-provider
+call was made.
 
 The provider session is deliberately an operational preference rather than a
 second account or material store. The browser sends a key and compatible

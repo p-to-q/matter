@@ -22,7 +22,7 @@ neither source nor live identity.
 The "97 Node boundary checks, 49-document link proof" receipt for Preview.57
 appears only in Codex session records as a local-candidate claim dated
 2026-09-11. It remains invalid: its UI contract and source tree predate the
-current candidate. The replacement implementation tree through `663be3f`
+current candidate. The replacement implementation tree at `a101d5c`
 produced the local receipts below. No Preview.57 commit, PR, tag, or GitHub
 release exists remotely yet, so those receipts prove a reviewable candidate,
 not publication or a deployed origin.
@@ -109,20 +109,25 @@ non-secret canonical address may be returned so the form can be restored.
 Configuration remains subject to every existing product capability gate.
 
 ```text
-source proof           implementation tree through 663be3f passed npm run check:
+source proof           implementation tree a101d5c passed npm run check:
                        111 Node boundary tests, 50-document link proof, the
-                       484-file architecture gate, 2,537 Vitest cases with four
-                       explicit skips, type generation, TypeScript, zero-warning
-                       lint, and the Next production build
+                       485-file architecture gate, 2,577 passing Vitest cases
+                       plus five explicit skips, type generation, TypeScript,
+                       zero-warning lint, and the Next production build
 runtime proof          the same build passed the runtime-artifact budget at
-                       1,200.4 KiB initial raw / 379.0 KiB gzip
-browser proof          the complete local Chromium matrix passed 155 cases with
-                       15 historical or explicitly scoped skips; desktop,
-                       narrow, and real touch walkthroughs covered Model API,
-                       selection restoration, and continuous Pan
-independent review     provider health, Label evidence, modal selection, visible
-                       grip alignment, held-material targeting, and recorded-
-                       audio recovery closed with no release-blocking finding
+                       1,208.7 KiB initial raw / 381.2 KiB gzip
+browser proof          the complete serial Chromium matrix passed 161 cases
+                       with 15 historical or explicitly scoped skips; desktop,
+                       narrow, real touch, Model API, paint-only click/double-
+                       click selection, continuous Pan, and Voice recovery all
+                       passed on the exact implementation tree
+performance proof      the isolated production 2,000-node receipt passed with
+                       224ms FCP, 310.8ms layout-ready, 4,485 DOM elements,
+                       129.2 / 146.7 / 70.1ms worst fold/focus/selection action,
+                       and a 91ms maximum measured long task
+independent review     focused UI proof passed 244/244 tests and 11/11 Chromium
+                       cases; Voice proof passed 57/57 transport/lease and 86/86
+                       action-lifecycle cases; no P0-P3 finding remained
 GitHub CI proof         pending on the exact topic and merged-main identities
 automatic deploy proof pending from GitHub-triggered Preview and Production;
                        Model API additionally requires a deployment-owned

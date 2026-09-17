@@ -17,6 +17,22 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-17 — Voice acquisition has one failure channel
+
+Changed: a Voice transport reports microphone acquisition failure through its
+`start()` result only. Runtime `onError` begins after a successful start, and
+the shared lease contains an adapter that nevertheless reports both without
+losing the original typed permission error or promoting a second owner early.
+
+Why: a browser permission denial used to release the lease through `onError`
+before the rejected start was observed, turning a precise denial into a generic
+recording or transcription failure. One terminal channel preserves truthful
+recovery while the lease still protects native singleton ordering.
+
+Forecloses: double-settling a Voice attempt, masking `MICROPHONE_DENIED` as
+cancelled, and using a callback from an unstarted transport as proof that raw
+capture ever began.
+
 ## 2026-09-17 — provider removal and save receipts are exact within the browser jar
 
 Changed: the provider-session wire is version 4. Each saved lease exposes one
