@@ -22,10 +22,11 @@ neither source nor live identity.
 The "97 Node boundary checks, 49-document link proof" receipt for Preview.57
 appears only in Codex session records as a local-candidate claim dated
 2026-09-11. It remains invalid: its UI contract and source tree predate the
-current candidate. The replacement implementation tree at `a101d5c`
-produced the local receipts below. No Preview.57 commit, PR, tag, or GitHub
-release exists remotely yet, so those receipts prove a reviewable candidate,
-not publication or a deployed origin.
+current candidate. The replacement implementation tree at `fb37ef8`, followed
+by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
+below. No Preview.57 commit, PR, tag, or GitHub release exists remotely yet, so
+those receipts prove a reviewable candidate, not publication or a deployed
+origin.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -109,25 +110,31 @@ non-secret canonical address may be returned so the form can be restored.
 Configuration remains subject to every existing product capability gate.
 
 ```text
-source proof           implementation tree a101d5c passed npm run check:
+source proof           implementation tree fb37ef8 passed npm run check:
                        111 Node boundary tests, 50-document link proof, the
-                       485-file architecture gate, 2,577 passing Vitest cases
+                       485-file architecture gate, 2,584 passing Vitest cases
                        plus five explicit skips, type generation, TypeScript,
                        zero-warning lint, and the Next production build
 runtime proof          the same build passed the runtime-artifact budget at
-                       1,208.7 KiB initial raw / 381.2 KiB gzip
-browser proof          the complete serial Chromium matrix passed 161 cases
-                       with 15 historical or explicitly scoped skips; desktop,
-                       narrow, real touch, Model API, paint-only click/double-
-                       click selection, continuous Pan, and Voice recovery all
-                       passed on the exact implementation tree
-performance proof      the isolated production 2,000-node receipt passed with
-                       224ms FCP, 310.8ms layout-ready, 4,485 DOM elements,
-                       129.2 / 146.7 / 70.1ms worst fold/focus/selection action,
-                       and a 91ms maximum measured long task
-independent review     focused UI proof passed 244/244 tests and 11/11 Chromium
-                       cases; Voice proof passed 57/57 transport/lease and 86/86
-                       action-lifecycle cases; no P0-P3 finding remained
+                       1,208.9 KiB initial raw / 381.3 KiB gzip
+browser proof          exact diagnostic successor 2f3d506 passed the complete
+                       serial Chromium matrix: 161 cases with 15 historical or
+                       explicitly scoped skips; desktop, narrow, real touch,
+                       Model API, paint-only click/double-click selection,
+                       continuous Pan, and Voice recovery all passed. Its only
+                       source change after fb37ef8 makes a coarse-target failure
+                       identify the exact control and measured dimensions
+performance diagnostic the fb37ef8 production artifact retained 4,485 DOM
+                       elements, 188–260ms FCP, and 302.8–425ms layout-ready.
+                       Two formal three-round receipts measured 145ms and 135ms
+                       maximum long tasks; the same-host a101d5c control measured
+                       122ms. All exceed the unchanged strict <100ms optimization
+                       target, so it remains honestly open; no renderer-path
+                       source changed and no threshold was relaxed to manufacture
+                       a pass
+independent review     provider, lifecycle, Model API, and corner-geometry proof
+                       passed 175/175 focused Vitest cases and 19/19 focused
+                       Chromium cases; the final verifier found no P0–P3 issue
 GitHub CI proof         pending on the exact topic and merged-main identities
 automatic deploy proof pending from GitHub-triggered Preview and Production;
                        Model API additionally requires a deployment-owned
@@ -136,6 +143,12 @@ publication state      pending; no tag or prerelease unless the exact public
                        version, strict six-round model-pool release probe, and
                        non-secret provider-session availability all pass
 ```
+
+One earlier full run reached 160 passes and reported one aggregate narrow-index
+target below 48 px without naming it. The unchanged product then passed that
+exact scenario in ten independent repeats. `2f3d506` replaced the aggregate
+boolean with per-control dimensions, and its complete serial matrix passed; no
+runtime rule was changed to hide or excuse the observation.
 
 ## Release boundary — 0.2.0-preview.56
 
