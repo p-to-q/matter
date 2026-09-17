@@ -51,7 +51,7 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
 
   await endpoint.fill("api.kfc.com");
   await endpoint.blur();
-  await expect(endpoint).toHaveValue(EXAMPLE_ENDPOINT);
+  await expect(endpoint).toHaveValue("api.kfc.com");
   await dialog.getByRole("button", { name: "测试", exact: true }).click();
   await expect.poll(() => traffic.tests).toBe(1);
   await expect(dialog).toContainText("连接可用。");
@@ -63,11 +63,12 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   });
   await expect.poll(() => traffic.saves).toBe(1);
   await expect(dialog).toContainText("已保存并可用。");
+  await expect(endpoint).toHaveValue(EXAMPLE_ENDPOINT);
   await expect(key).toHaveValue("");
   expect(traffic.lastPost).toEqual({
     protocolVersion: PROTOCOL_VERSION,
     action: "save",
-    endpoint: EXAMPLE_ENDPOINT,
+    endpoint: "https://api.kfc.com",
     apiKey: EXAMPLE_KEY,
   });
 

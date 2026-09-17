@@ -161,7 +161,10 @@ diagnosis; only valid model output can become visible material.
 The Model API item in settings is operational configuration, not product chrome
 on the paper. It always presents one API address and one key field. Testing is
 optional and does not save; an explicit save verifies the address and key before
-atomically replacing the prior setting. A blank key retains the saved secret
+atomically replacing the prior setting. While the person is editing, the address
+field preserves exactly what they typed; safe scheme repair and bounded path
+recovery stay invisible until a successful server result returns the canonical
+address. A blank key retains the saved secret
 only while the canonical address is unchanged. The server—not the person—owns
 provider detection, bounded model choice, completion path, request shape, and
 response contract. The saved credential has a fixed 30-day device lease, while

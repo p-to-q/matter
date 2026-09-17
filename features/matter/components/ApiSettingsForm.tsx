@@ -548,12 +548,6 @@ export function ApiSettingsForm({
             }
             if (notice !== null) setNotice(null);
           }}
-          onBlur={() => {
-            const canonical = normalizeUserProviderEndpoint(endpoint);
-            if (canonical === null || canonical === endpoint) return;
-            draftRevisionRef.current += 1;
-            setEndpoint(canonical);
-          }}
           placeholder={copy.endpointPlaceholder}
           ref={endpointInputRef}
           required
