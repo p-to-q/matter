@@ -25,7 +25,8 @@ const MAX_MODEL_LIST_BYTES = 64 * 1_024;
 // without excluding an otherwise ordinary multi-provider gateway.
 const MAX_MODEL_LIST_ENTRIES = 512;
 const MAX_MODEL_ID_CODE_UNITS = 128;
-const MAX_DISCOVERED_SELECTIONS = 2;
+const MAX_DISCOVERED_SELECTIONS = 3;
+const MAX_DISCOVERY_REQUESTS = 3;
 
 export type UserProviderProfileId =
   | "openai-current"
@@ -186,7 +187,7 @@ export function createUserProbeCandidate(
 /**
  * Resolves endpoint shape without provider or model hints from the browser.
  * Official endpoints use one reviewed model. A custom endpoint contributes at
- * most one bounded candidate per supported wire format; the connection route
+ * most one bounded candidate per admitted base/wire pair; the connection route
  * must still prove each candidate with the production transport before it can
  * seal a lease. Runtime material requests never repeat this negotiation.
  */
@@ -201,12 +202,14 @@ export async function resolveUserProviderSelections(
     return Object.freeze([]);
   }
   signal.throwIfAborted();
-  const shape = splitEndpoint(normalizedEndpoint);
-  const official = resolveOfficialSelection(shape);
-  if (official !== null) return Object.freeze([official]);
+  const shapes = endpointShapes(normalizedEndpoint);
+  for (const shape of shapes) {
+    const official = resolveOfficialSelection(shape);
+    if (official !== null) return Object.freeze([official]);
+  }
 
-  const requests = discoveryRequests(shape, apiKey);
-  if (requests.length === 0 || requests.length > MAX_DISCOVERED_SELECTIONS) {
+  const requests = discoveryRequests(shapes, apiKey);
+  if (requests.length === 0 || requests.length > MAX_DISCOVERY_REQUESTS) {
     return Object.freeze([]);
   }
   const deadline = new AbortController();
@@ -291,6 +294,21 @@ function splitEndpoint(endpoint: string): EndpointShape {
   return Object.freeze({ endpoint, baseUrl: endpoint, hint: null });
 }
 
+/**
+ * Keeps the supplied safe path first. One same-origin `/v1` base is the only
+ * hidden path recovery; explicit operation URLs are never rewritten.
+ */
+function endpointShapes(endpoint: string): readonly EndpointShape[] {
+  const exact = splitEndpoint(endpoint);
+  if (exact.hint !== null || new URL(exact.baseUrl).pathname.replace(/\/+$/u, "").endsWith("/v1")) {
+    return Object.freeze([exact]);
+  }
+  const fallback = normalizeUserProviderEndpoint(`${exact.baseUrl}/v1`);
+  return fallback === null
+    ? Object.freeze([exact])
+    : Object.freeze([exact, splitEndpoint(fallback)]);
+}
+
 function resolveOfficialSelection(shape: EndpointShape): UserProviderSelection | null {
   for (const profileId of ["openai-current", "deepseek-current", "anthropic-current"] as const) {
     const definition = DEFINITIONS[profileId];
@@ -314,28 +332,51 @@ type DiscoveryRequest = Readonly<{
   headers: Readonly<Record<string, string>>;
 }>;
 
-function discoveryRequests(shape: EndpointShape, apiKey: string): readonly DiscoveryRequest[] {
+function discoveryRequests(
+  shapes: readonly EndpointShape[],
+  apiKey: string,
+): readonly DiscoveryRequest[] {
   const requests: DiscoveryRequest[] = [];
-  if (shape.hint !== "anthropic-messages") {
-    requests.push(Object.freeze({
-      kind: "openai-models",
-      endpoint: shape.endpoint,
-      baseUrl: shape.baseUrl,
-      url: appendPath(shape.baseUrl, "models"),
-      headers: bearerHeaders(apiKey),
-    }));
+  const identities = new Set<string>();
+  // Prefer the overwhelmingly common compatible wire on the person's exact
+  // base, then its sole path recovery, before trying the native Anthropic wire.
+  // Promise.all preserves this order even though the catalog reads share one
+  // latency budget.
+  for (const shape of shapes) {
+    if (shape.hint !== "anthropic-messages") {
+      pushDiscoveryRequest(requests, identities, Object.freeze({
+        kind: "openai-models",
+        endpoint: shape.endpoint,
+        baseUrl: shape.baseUrl,
+        url: appendPath(shape.baseUrl, "models"),
+        headers: bearerHeaders(apiKey),
+      }));
+    }
   }
-  if (shape.hint !== "chat-completions") {
-    const versionedBase = ensureVersionedBase(shape.baseUrl);
-    requests.push(Object.freeze({
-      kind: "anthropic-models",
-      endpoint: shape.endpoint,
-      baseUrl: versionedBase,
-      url: appendPath(versionedBase, "models"),
-      headers: anthropicHeaders(apiKey),
-    }));
+  for (const shape of shapes) {
+    if (shape.hint !== "chat-completions") {
+      const versionedBase = ensureVersionedBase(shape.baseUrl);
+      pushDiscoveryRequest(requests, identities, Object.freeze({
+        kind: "anthropic-models",
+        endpoint: shape.endpoint,
+        baseUrl: versionedBase,
+        url: appendPath(versionedBase, "models"),
+        headers: anthropicHeaders(apiKey),
+      }));
+    }
   }
   return Object.freeze(requests);
+}
+
+function pushDiscoveryRequest(
+  requests: DiscoveryRequest[],
+  identities: Set<string>,
+  request: DiscoveryRequest,
+): void {
+  const identity = `${request.kind}\u0000${request.url}`;
+  if (identities.has(identity)) return;
+  identities.add(identity);
+  requests.push(request);
 }
 
 async function discoverSelection(

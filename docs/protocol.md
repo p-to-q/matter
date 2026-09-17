@@ -819,14 +819,18 @@ requires the key again, so a stored secret is never silently forwarded to a new
 host.
 
 `POST` accepts at most 2 KiB and is same-origin plus
-rate/concurrency/deadline bounded. Both explicit actions perform the same
+rate/concurrency/deadline bounded. Its 9.5-second route budget covers the
+2.25-second catalog window, three 2.25-second proof windows, and 0.5 seconds of
+bounded processing below the platform ceiling. Both explicit actions perform the same
 finite capability proof. An exact official OpenAI, DeepSeek, or Anthropic
-endpoint selects its reviewed fixed model directly. A custom endpoint performs
-at most two parallel model-list reads inside a 2.25-second discovery budget,
+endpoint selects its reviewed fixed model directly. A custom endpoint keeps the
+normalized supplied base first, adds at most one same-origin `/v1` base, and
+performs at most three parallel model-list reads inside a 2.25-second discovery budget,
 rejects known non-generative identifiers, and deterministically retains at most
-one inexpensive-looking text candidate for each of the two supported wire
-formats. A reviewed exact alias wins when present. The route then performs at
-most two short content-free `MATTER_READY` generations and seals only the
+one inexpensive-looking text candidate for each admitted base/wire pair. A
+reviewed exact alias wins when present. The route then performs at most three
+short content-free `MATTER_READY` generations in exact-compatible,
+versioned-compatible, then versioned-Anthropic order and seals only the
 candidate whose whitespace-trimmed real response proves that exact token and
 wire. Matter never infers a provider
 from a key prefix or parses an arbitrary error vocabulary. A custom service that
@@ -865,10 +869,13 @@ subject/generation compare on every use; Matter neither claims nor silently
 simulates that stronger service.
 
 The endpoint is 1–512 ASCII code units and canonicalized with the platform URL
-parser. It must use HTTPS on the default port, contain a multi-label DNS name,
-and contain no credentials, query, or fragment. A reviewed explicit
+parser. A missing or narrowly mistyped scheme is upgraded locally to HTTPS; the
+server never transmits the key over HTTP. The result must use HTTPS on the
+default port, contain a multi-label DNS name, and contain no credentials, query,
+or fragment. A reviewed explicit
 `/chat/completions` or `/v1/messages` operation may be supplied; the server
-reduces it to its profile-owned base. Each custom-host operation resolves all
+reduces it to its profile-owned base. A base without `/v1` stays first and may
+gain only one same-origin `/v1` discovery candidate. Each custom-host operation resolves all
 addresses afresh, rejects the set if any member is non-public, and pins the TLS
 connection to one accepted address while retaining hostname SNI and certificate
 verification. No redirect is followed. The public fetch boundary exposes only

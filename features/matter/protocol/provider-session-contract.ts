@@ -10,7 +10,7 @@
 export const PROVIDER_SESSION_PROTOCOL_VERSION = "4" as const;
 export const MAX_PROVIDER_SESSION_REQUEST_BYTES = 2 * 1_024;
 export const MAX_PROVIDER_SESSION_RESPONSE_BYTES = 8 * 1_024;
-/** Stays outside the route's 8s boundary and the platform's 10s ceiling. */
+/** Stays outside the route's 9.5s boundary and the platform's 10s ceiling. */
 export const PROVIDER_SESSION_CLIENT_TIMEOUT_MS = 12_000;
 export const MAX_USER_PROVIDER_API_KEY_CODE_UNITS = 512;
 export const MAX_USER_PROVIDER_API_KEY_UTF8_BYTES = 512;
@@ -135,16 +135,16 @@ export function isProviderSessionErrorEnvelope(value: unknown): value is Provide
 }
 
 /**
- * Canonicalises only a public-looking HTTPS endpoint. The server separately
- * resolves every DNS answer, pins the TLS socket, and admits only reviewed
- * model-list and completion paths derived from this value.
+ * Canonicalises a public-looking endpoint to HTTPS without choosing a provider
+ * path. The server tries this exact safe base first and owns any bounded `/v1`
+ * recovery. Common scheme omissions and typos are repaired locally; a key is
+ * never transmitted over plaintext HTTP.
  */
 export function normalizeUserProviderEndpoint(value: unknown): string | null {
   const normalized = normalizePublicProviderUrl(value, true);
-  if (normalized === null) return null;
-  const url = new URL(normalized);
-  const endpoint = url.pathname === "/" ? `${url.origin}/v1` : normalized;
-  return endpoint.length <= MAX_USER_PROVIDER_ENDPOINT_CODE_UNITS ? endpoint : null;
+  return normalized !== null && normalized.length <= MAX_USER_PROVIDER_ENDPOINT_CODE_UNITS
+    ? normalized
+    : null;
 }
 
 /**
@@ -166,8 +166,8 @@ function normalizePublicProviderUrl(value: unknown, allowMissingScheme: boolean)
     /[\\]/u.test(value) ||
     /%(?:00|0a|0d|2e|2f|5c)/iu.test(value)
   ) return null;
-  let candidate = value;
-  if (!value.includes("://")) {
+  let candidate = repairHttpsIntent(value);
+  if (candidate === null && !value.includes("://")) {
     const hostWithPort = /^[A-Za-z0-9.-]+:\d+(?:\/|$)/u.test(value);
     if (
       !allowMissingScheme ||
@@ -176,6 +176,7 @@ function normalizePublicProviderUrl(value: unknown, allowMissingScheme: boolean)
     ) return null;
     candidate = `https://${value}`;
   }
+  if (candidate === null) return null;
   let url: URL;
   try {
     url = new URL(candidate);
@@ -214,6 +215,24 @@ function normalizePublicProviderUrl(value: unknown, allowMissingScheme: boolean)
   const path = url.pathname.replace(/\/+$/u, "");
   const normalized = `${url.origin}${path}`;
   return normalized.length <= MAX_USER_PROVIDER_ENDPOINT_CODE_UNITS ? normalized : null;
+}
+
+/** Repairs only unambiguous scheme-local mistakes; host and path stay exact. */
+function repairHttpsIntent(value: string): string | null {
+  if (/^https:\/\//iu.test(value)) return value;
+  const repairs = [
+    /^http:\/\/([^/].*)$/iu,
+    /^htps:\/\/([^/].*)$/iu,
+    /^https\/\/([^/].*)$/iu,
+    /^http\/\/([^/].*)$/iu,
+    /^https:\/([^/].*)$/iu,
+    /^http:\/([^/].*)$/iu,
+  ];
+  for (const pattern of repairs) {
+    const match = pattern.exec(value);
+    if (match?.[1] !== undefined) return `https://${match[1]}`;
+  }
+  return null;
 }
 
 export function isValidUserProviderApiKey(value: unknown): value is string {

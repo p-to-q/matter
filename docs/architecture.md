@@ -246,11 +246,13 @@ replacement key; the browser cannot choose provider, model, operation path,
 transport profile, or arbitrary request shape. `PoolTransport` owns the full
 reviewed wire profile: completion URL, authentication, serialization, accepted
 response envelope, and strict parsing. Exact official OpenAI, DeepSeek, and
-Anthropic endpoints select fixed reviewed models. A custom endpoint performs at
-most two parallel, bounded model-list operations. The registry rejects
+Anthropic endpoints select fixed reviewed models. A custom endpoint preserves
+the supplied safe base as its first candidate and may add only the same-origin
+`/v1` base. It performs at most three parallel, bounded model-list operations
+across those bases and two reviewed authentication formats. The registry rejects
 non-generative catalog entries, prefers a reviewed inexpensive text alias when
 present, and otherwise selects at most one stable catalog candidate per
-supported wire format. At most two short `MATTER_READY` generations then prove
+admitted base/wire pair. At most three short `MATTER_READY` generations then prove
 the actual model and wire before either can be sealed. The catalog heuristic is
 never authority by itself. No key-prefix inference or error-body vocabulary
 participates in selection.

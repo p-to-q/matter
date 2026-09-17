@@ -144,8 +144,9 @@ call was made.
 The provider session is deliberately an operational preference rather than a
 second account or material store. The browser sends a key and compatible
 endpoint once to the same-origin server. Official endpoints use a reviewed
-model; a custom endpoint receives at most two bounded model-list reads and two
-short candidate sentinels. The server seals only the proven model/wire pair and
+model; a custom endpoint keeps the supplied safe base first, admits only one
+same-origin `/v1` recovery, and receives at most three bounded model-list reads
+and three short candidate sentinels. The server seals only the proven model/wire pair and
 returns safe connection status. It seals the credential and proven profile for a
 bounded lifetime; scripts cannot read it, but requests to the selected external
 provider necessarily include both that credential and the bounded material for

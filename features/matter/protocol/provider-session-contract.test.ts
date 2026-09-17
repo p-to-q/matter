@@ -41,8 +41,12 @@ describe("provider-session contract", () => {
   });
 
   it.each([
-    ["api.kfc.com", "https://api.kfc.com/v1"],
-    ["https://api.kfc.com", "https://api.kfc.com/v1"],
+    ["api.kfc.com", "https://api.kfc.com"],
+    ["https://api.kfc.com", "https://api.kfc.com"],
+    ["http://api.kfc.com/v1", "https://api.kfc.com/v1"],
+    ["htps://api.kfc.com/v1", "https://api.kfc.com/v1"],
+    ["https//api.kfc.com/v1", "https://api.kfc.com/v1"],
+    ["https:/api.kfc.com/v1", "https://api.kfc.com/v1"],
     ["https://mirror.vendor.ai/v1/", "https://mirror.vendor.ai/v1"],
     ["https://MIRROR.vendor.ai:443/v1", "https://mirror.vendor.ai/v1"],
     [
@@ -71,7 +75,7 @@ describe("provider-session contract", () => {
   });
 
   it.each([
-    "http://mirror.vendor.ai/v1",
+    "ftp://mirror.vendor.ai/v1",
     "https://user:secret@mirror.vendor.ai/v1",
     "https://mirror.vendor.ai:8443/v1",
     "https://127.0.0.1/v1",

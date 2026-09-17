@@ -174,12 +174,19 @@ the fixed completion body, and existing scenario governors remain independent
 bounds.
 
 Compatibility is negotiated once rather than guessed on every material action.
-Official bases have one current profile. A custom endpoint receives at most two
-parallel model-list reads: bearer-auth OpenAI-compatible and native Anthropic.
+Official bases have one current profile. A custom endpoint keeps its normalized
+safe path first, then admits only one same-origin `/v1` recovery. Across those
+two bases it receives at most three parallel model-list reads: bearer-auth
+OpenAI-compatible on the exact and, when distinct, versioned base, plus native
+Anthropic on its versioned base. Stable request ordering means a working exact
+base wins even though discovery shares one latency budget. Missing `https`,
+plaintext `http`, and narrowly recognized scheme typos normalize locally to
+HTTPS; no request ever carries the key over plaintext.
 Known embedding, moderation, realtime, transcription, audio, image, and rerank
 identifiers are excluded; a reviewed inexpensive alias wins, otherwise stable
-catalog order and conservative cost markers select one text candidate per wire.
-At most two 2.5-second sentinels prove those candidates. Matter does not parse an
+catalog order and conservative cost markers select one text candidate per
+base/wire pair. At most three 2.25-second sentinels prove those candidates in
+exact-compatible, versioned-compatible, then versioned-Anthropic order. Matter does not parse an
 arbitrary provider error body, so it does not pretend to know which field was
 rejected. All work shares the route deadline and process drain cap; the sealed
 lease records only the profile and model that produced the exact sentinel.

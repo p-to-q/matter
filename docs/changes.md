@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-17 — provider address recovery is same-origin and finite
+
+Changed: Model API keeps the person's safe HTTPS path as the first custom
+candidate, repairs only unambiguous local scheme mistakes, and may probe one
+same-host `/v1` base when the exact path cannot expose a usable catalog. The
+three catalog requests remain one connection-time budget; at most one candidate
+per base/wire pair receives a short proof, the proven canonical base alone is
+sealed, and runtime material calls never repeat discovery. The
+desktop corner wrappers now also own an explicit shared height so icon-bearing
+and text-only controls have the same measured vertical center.
+
+Why: compatible services differ mainly on whether their documented address
+already includes `/v1`, while people commonly omit or mistype `https`. Recovering
+that one distinction without changing host, following redirects, or sending a
+key over HTTP removes an avoidable setup threshold without turning Matter into
+a generic relay. Explicit wrapper geometry removes an inline-SVG baseline pixel
+that flex alignment alone could not see.
+
+Forecloses: arbitrary path guessing, plaintext key transmission, cross-host
+fallback, redirect-based recovery, runtime renegotiation, and baseline-dependent
+desktop control alignment.
+
 ## 2026-09-17 — Voice acquisition has one failure channel
 
 Changed: a Voice transport reports microphone acquisition failure through its

@@ -43,8 +43,10 @@ import {
   createPublicRequestAdmission,
 } from "./public-request-admission";
 
-const ROUTE_TIMEOUT_MS = 8_000;
-const SENTINEL_ATTEMPT_TIMEOUT_MS = 2_500;
+// 2.25s discovery + three 2.25s proofs leaves 500ms for bounded parsing and
+// sealing while remaining below the deployment platform's 10s ceiling.
+const ROUTE_TIMEOUT_MS = 9_500;
+const SENTINEL_ATTEMPT_TIMEOUT_MS = 2_250;
 const admission = createPublicRequestAdmission({
   requestsPerWindow: 8,
   maxConcurrent: 3,
@@ -113,10 +115,11 @@ export async function connectProviderSession(
       }
       const apiKey = parsed.request.apiKey ?? saved!.apiKey;
 
-      // Negotiation is deliberately connection-only: at most two bounded model
-      // catalog reads select one reviewed profile, and exactly one sentinel
-      // proves it. The resulting profile is sealed so runtime calls never
-      // discover, guess, or renegotiate under user material.
+      // Negotiation is deliberately connection-only: at most three bounded
+      // catalog reads cover the exact safe path plus one same-origin `/v1`
+      // recovery across reviewed wires. At most three sentinels prove the finite
+      // selections. The sealed runtime never discovers or renegotiates under
+      // user material.
       const selections: readonly UserProviderSelection[] = saved === null
         ? await resolveUserProviderSelections(
           parsed.request.endpoint,

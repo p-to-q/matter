@@ -290,6 +290,9 @@
 
 .popoverAnchor {
   position: relative;
+  display: flex;
+  height: 20px;
+  align-items: center;
 }
 
 .popover {

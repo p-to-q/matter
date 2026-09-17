@@ -167,6 +167,7 @@ describe("CanvasChrome", () => {
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);
+    expect(css).toMatch(/\.popoverAnchor\s*{[^}]*display:\s*flex;[^}]*height:\s*20px;[^}]*align-items:\s*center;/s);
     expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-14px -18px;/s);
     expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-7px -10px;/s);
     expect(css).toMatch(/\.bottomRight::before\s*{\s*inset:\s*-22px -28px;/s);

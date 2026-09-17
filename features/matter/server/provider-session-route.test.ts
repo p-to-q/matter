@@ -389,7 +389,7 @@ describe("provider-session route", () => {
     });
   });
 
-  it("uses at most two discovery reads and exactly one custom sentinel", async () => {
+  it("uses at most three bounded discovery reads and exactly one custom sentinel", async () => {
     const operations: Array<Readonly<{ method: string; url: string }>> = [];
     const provider = vi.fn<typeof fetch>(async (url, init) => {
       const method = init?.method ?? "GET";
@@ -408,7 +408,7 @@ describe("provider-session route", () => {
       provider,
     );
     expect(response.status).toBe(200);
-    expect(operations.filter(({ method }) => method === "GET")).toHaveLength(2);
+    expect(operations.filter(({ method }) => method === "GET")).toHaveLength(3);
     expect(operations.filter(({ method }) => method === "POST")).toEqual([{
       method: "POST",
       url: "https://mirror.vendor.ai/gateway/chat/completions",
@@ -453,7 +453,7 @@ describe("provider-session route", () => {
     });
   });
 
-  it("tries at most one proved candidate per compatible wire format", async () => {
+  it("tries at most one proved candidate per admitted base and wire", async () => {
     const sentinels: Array<Readonly<{ url: string; anthropic: boolean }>> = [];
     const provider = vi.fn<typeof fetch>(async (url, init) => {
       const headers = new Headers(init?.headers);
@@ -482,6 +482,80 @@ describe("provider-session route", () => {
       profileId: "anthropic-compatible",
       model: "claude-vendor-small",
     });
+  });
+
+  it("falls through from an exact catalog whose completion fails to the same-host /v1 wire", async () => {
+    const sentinels: string[] = [];
+    const provider = vi.fn<typeof fetch>(async (url, init) => {
+      const headers = new Headers(init?.headers);
+      if (init?.method === "GET") {
+        return headers.has("authorization")
+          ? modelList("vendor-chat-mini")
+          : new Response(null, { status: 404 });
+      }
+      sentinels.push(String(url));
+      return String(url).endsWith("/v1/chat/completions")
+        ? completion()
+        : new Response(null, { status: 404 });
+    });
+    const response = await connectProviderSession(
+      jsonRequest("POST", { ...BODY, endpoint: "https://mirror.vendor.ai/gateway" }),
+      ENVIRONMENT,
+      NOW,
+      provider,
+    );
+
+    expect(response.status).toBe(200);
+    expect(sentinels).toEqual([
+      "https://mirror.vendor.ai/gateway/chat/completions",
+      "https://mirror.vendor.ai/gateway/v1/chat/completions",
+    ]);
+    const token = response.headers.get("set-cookie")!.match(/=([^;]+)/u)?.[1];
+    expect(unsealProviderCredential(token!, ENVIRONMENT, NOW)).toMatchObject({
+      profileId: "openai-compatible",
+      baseUrl: "https://mirror.vendor.ai/gateway/v1",
+    });
+  });
+
+  it("reserves a complete proof window for the third candidate after slow discovery and two timeouts", async () => {
+    vi.useFakeTimers();
+    let proof = 0;
+    const provider = vi.fn<typeof fetch>((url, init) => {
+      const headers = new Headers(init?.headers);
+      if (init?.method === "GET") {
+        return new Promise<Response>((resolve) => setTimeout(() => resolve(
+          headers.has("authorization")
+            ? modelList("vendor-chat-mini")
+            : modelList("claude-vendor-small"),
+        ), 2_000));
+      }
+      proof += 1;
+      if (proof < 3) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(
+            new DOMException("Aborted", "AbortError"),
+          ), { once: true });
+        });
+      }
+      expect(String(url)).toBe("https://mirror.vendor.ai/gateway/v1/messages");
+      return new Promise<Response>((resolve) => setTimeout(() => resolve(
+        anthropicCompletion(),
+      ), 2_200));
+    });
+    const pending = connectProviderSession(
+      jsonRequest("POST", { ...BODY, endpoint: "https://mirror.vendor.ai/gateway" }),
+      ENVIRONMENT,
+      NOW,
+      provider,
+    );
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(2_250);
+    await vi.advanceTimersByTimeAsync(2_250);
+    await vi.advanceTimersByTimeAsync(2_200);
+    const response = await pending;
+    expect(response.status).toBe(200);
+    expect(proof).toBe(3);
   });
 
   it("does not spend a sentinel when discovery exposes only non-text models", async () => {
@@ -527,7 +601,7 @@ describe("provider-session route", () => {
       });
     }));
     const pending = connectProviderSession(jsonRequest("POST", BODY), ENVIRONMENT, NOW, provider);
-    await vi.advanceTimersByTimeAsync(2_500);
+    await vi.advanceTimersByTimeAsync(2_250);
     const response = await pending;
     expect(response.status).toBe(504);
     expect(provider).toHaveBeenCalledOnce();

@@ -110,7 +110,7 @@ describe("user-provider registry", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("discovers a custom OpenAI-compatible profile with at most two parallel catalog reads", async () => {
+  it("keeps the exact custom path first, with one bounded same-origin /v1 recovery", async () => {
     const releases: Array<(response: Response) => void> = [];
     const calls: Array<Readonly<{ url: string; authorization: string | null; anthropicKey: string | null }>> = [];
     const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
@@ -127,10 +127,15 @@ describe("user-provider registry", () => {
       new AbortController().signal,
       fetchMock,
     );
-    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    await vi.waitFor(() => expect(calls).toHaveLength(3));
     expect(calls).toEqual([
       {
         url: "https://mirror.vendor.ai/gateway/models",
+        authorization: `Bearer ${API_KEY}`,
+        anthropicKey: null,
+      },
+      {
+        url: "https://mirror.vendor.ai/gateway/v1/models",
         authorization: `Bearer ${API_KEY}`,
         anthropicKey: null,
       },
@@ -142,12 +147,41 @@ describe("user-provider registry", () => {
     ]);
     releases[0]!(json({ data: [{ id: "gpt-4.1-mini" }] }));
     releases[1]!(new Response(null, { status: 404 }));
+    releases[2]!(new Response(null, { status: 404 }));
     await expect(pending).resolves.toEqual([{
       profileId: "openai-compatible",
       model: "gpt-4.1-mini",
       baseUrl: "https://mirror.vendor.ai/gateway",
     }]);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("uses /v1 only when the exact OpenAI-compatible catalog cannot answer", async () => {
+    const calls: string[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      calls.push(`${String(url)}|${new Headers(init?.headers).has("authorization") ? "bearer" : "anthropic"}`);
+      if (
+        String(url) === "https://mirror.vendor.ai/gateway/v1/models" &&
+        new Headers(init?.headers).has("authorization")
+      ) return json({ data: [{ id: "vendor-chat-small" }] });
+      return new Response(null, { status: 404 });
+    });
+
+    await expect(resolveUserProviderSelections(
+      "https://mirror.vendor.ai/gateway",
+      API_KEY,
+      new AbortController().signal,
+      fetchMock,
+    )).resolves.toEqual([{
+      profileId: "openai-compatible",
+      model: "vendor-chat-small",
+      baseUrl: "https://mirror.vendor.ai/gateway/v1",
+    }]);
+    expect(calls).toEqual([
+      "https://mirror.vendor.ai/gateway/models|bearer",
+      "https://mirror.vendor.ai/gateway/v1/models|bearer",
+      "https://mirror.vendor.ai/gateway/v1/models|anthropic",
+    ]);
   });
 
   it.each([
