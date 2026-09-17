@@ -958,9 +958,19 @@ for (const viewport of [
         "button:not(:disabled), label.material-file__check",
       ).evaluateAll((targets) => targets.map((target) => {
         const rect = target.getBoundingClientRect();
-        return { width: rect.width, height: rect.height };
+        return {
+          name: target.getAttribute("aria-label") ?? target.textContent?.trim() ?? target.tagName,
+          className: target.className,
+          width: rect.width,
+          height: rect.height,
+        };
       }));
-      expect(coarseTargets.every((target) => target.width >= 48 && target.height >= 48)).toBe(true);
+      for (const target of coarseTargets) {
+        expect.soft(target.width, `${target.name} (${target.className}) width`)
+          .toBeGreaterThanOrEqual(48);
+        expect.soft(target.height, `${target.name} (${target.className}) height`)
+          .toBeGreaterThanOrEqual(48);
+      }
     }
     await checks.nth(0).check();
     // Undoing the newest thought must take its selection with it, rather than
