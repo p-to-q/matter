@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
@@ -15,6 +17,7 @@ import {
   parseArguments,
   probeModelPool,
   probeGateFailures,
+  RELEASE_MIN_PACE_MS,
   RELEASE_USABLE_SURFACES,
   REPAIR_PROMPT_VERSION,
   LABEL_PROMPT_VERSION,
@@ -492,14 +495,13 @@ test("bounds the run so a probe cannot become a load test", () => {
     "--rounds=3",
     "--pace=10",
     "--require-inquiry-answer",
-    "--profile=release",
     "--expected-version=0.2.0-preview.47",
   ]), {
     origin: "https://matter.ptoq.io",
     rounds: 3,
     paceMs: 10_000,
     requireInquiryAnswer: true,
-    profile: "release",
+    profile: "diagnostic",
     expectedVersion: "0.2.0-preview.47",
   });
   assert.throws(() => parseArguments(["--rounds=0"]), /--rounds/);
@@ -508,6 +510,54 @@ test("bounds the run so a probe cannot become a load test", () => {
   assert.throws(() => parseArguments(["--profile=unknown"]), /--profile/);
   assert.throws(() => parseArguments(["--expected-version=latest"]), /--expected-version/);
   assert.throws(() => parseArguments(["one", "two"]), /one origin/);
+});
+
+test("release profile accepts only the full cooldown-separated receipt shape", () => {
+  assert.equal(RELEASE_MIN_PACE_MS, POOL_COOLDOWN_MS + 5_000);
+  assert.deepEqual(parseArguments([
+    "https://matter.ptoq.io",
+    "--profile=release",
+    "--rounds=6",
+    "--pace=65",
+  ]), {
+    origin: "https://matter.ptoq.io",
+    rounds: 6,
+    paceMs: 65_000,
+    requireInquiryAnswer: false,
+    profile: "release",
+    expectedVersion: APP_VERSION,
+  });
+  assert.throws(
+    () => parseArguments(["--profile=release", "--rounds=5", "--pace=65"]),
+    /--profile=release requires exactly 6 rounds; pass --rounds=6\./u,
+  );
+  assert.throws(
+    () => parseArguments(["--rounds=6", "--pace=64", "--profile=release"]),
+    /--profile=release requires --pace=65 or greater.*60s model-pool cooldown window/u,
+  );
+});
+
+test("release CLI rejects diagnostic pacing before it can contact a deployment", () => {
+  const script = fileURLToPath(new URL("./probe-model-pool.mjs", import.meta.url));
+  const cases = [
+    {
+      args: ["--profile=release", "--rounds=5", "--pace=65"],
+      message: "--profile=release requires exactly 6 rounds; pass --rounds=6.",
+    },
+    {
+      args: ["--profile=release"],
+      message: "--profile=release requires --pace=65 or greater so every round begins outside the 60s model-pool cooldown window.",
+    },
+  ];
+  for (const entry of cases) {
+    const result = spawnSync(process.execPath, [script, ...entry.args], {
+      encoding: "utf8",
+      env: { ...process.env, MATTER_DEPLOYMENT_ORIGIN: "https://must-not-be-contacted.invalid" },
+    });
+    assert.equal(result.status, 1);
+    assert.equal(result.stdout, "");
+    assert.equal(result.stderr, `pool: ${entry.message}\n`);
+  }
 });
 
 test("release gate requires every Inquiry sample to contain a real answer", () => {
