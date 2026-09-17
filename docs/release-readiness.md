@@ -1,10 +1,11 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.57 is an exact local release
-candidate; its earlier draft source and browser receipts are superseded and
-must not be used for publication. The public origin still identifies itself as
-`0.2.0-preview.56`, but its current Production source is `main` `9eb169b` from
+the complete generative product loop yet. Preview.57 is an exact review
+candidate in PR #102; its earlier draft source and browser receipts are
+superseded and must not be used for publication. The public origin still
+identifies itself as `0.2.0-preview.56`, but its current Production source is
+`main` `9eb169b` from
 PR #101: exact CI run `35144776434` passed and GitHub Production deployment
 `6489479901` succeeded. The only exact Preview.56 publication probe targeted its
 earlier `536d792` source and failed. The later same-version source changed Label
@@ -24,9 +25,12 @@ appears only in Codex session records as a local-candidate claim dated
 2026-09-11. It remains invalid: its UI contract and source tree predate the
 current candidate. The replacement implementation tree at `fb37ef8`, followed
 by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
-below. Neither `fb37ef8`, `2f3d506`, nor this record exists remotely; no current
-Preview.57 PR, tag, or GitHub release exists. These receipts therefore prove a
-reviewable candidate, not publication or a deployed origin.
+below. Both are remotely reachable through topic branch
+`codex/action-lasso-api-hardening`; PR #102 opened at candidate head `260b16d`.
+Any successor becomes the authoritative PR head and must earn fresh exact-head
+CI and Preview evidence. No Preview.57 tag or GitHub release exists. These
+receipts therefore prove a reviewable candidate, not publication or a deployed
+origin.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment

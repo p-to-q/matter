@@ -11,7 +11,7 @@
 | `codex/preview-46-ai-harness` | 2 | 48 | stash | Tag `codex-wip-preview-46-ai-harness` created |
 | `codex/selected-material-recovery` | 1 | 2 (add/add docs) | stash | Tag `codex-wip-selected-material-recovery` created |
 | `cloud/address-restore` | 0 | 0 | already-in-main | No action — HEAD `8d2d56a` is in main |
-| `codex/action-lasso-api-hardening` | 11 commits including this proof record | 0 after rebase | integrated locally | Implementation `a101d5c` is locally proven; push pending release PR |
+| `codex/action-lasso-api-hardening` | 17 candidate commits through `260b16d`, followed by remote-state records | 0 after rebase | reviewable in PR #102 | Implementation `fb37ef8` and browser diagnostic `2f3d506` are locally proven; exact PR-head gates remain authoritative |
 | Stash `preview54-excluded-local-video` | n/a | n/a | isolate | Mixed 79-file historical snapshot; never restore or drop wholesale |
 
 ## Details
@@ -57,12 +57,13 @@
   by `AGENTS.md` and were required reading; there was no repository instruction
   forbidding their maintenance. The relevant changes preserve rather than
   replace their product invariants.
-- **Resolution**: the dirty worktree was split into three reviewable commits,
-  then closed through seven focused implementation, verification, and release-
-  evidence commits plus this proof record. It was rebased without conflict onto `9eb169b`; exact
-  implementation `a101d5c` passed the repository, complete serial Chromium,
-  and isolated production-performance gates and remains unpushed pending its
-  release PR. Launch Video remains outside the branch.
+- **Resolution**: the dirty worktree was split into reviewable implementation,
+  verification, and release-evidence commits, then rebased without conflict
+  onto `9eb169b`. Exact implementation `fb37ef8` passed the repository and
+  focused browser gates; browser-diagnostic-only successor `2f3d506` passed the
+  complete serial Chromium matrix. The candidate through `260b16d` was pushed
+  as PR #102. Any later documentation-only successor must pass its own exact
+  PR-head gates before merge. Launch Video remains outside the branch.
 - **Recovery evidence**: the original Codex JSONL conversation and the local
   Code Arts SQLite session tree, memory, task, and spec caches were inspected as
   historical evidence. None was copied into the repository. That review
