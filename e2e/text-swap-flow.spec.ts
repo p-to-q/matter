@@ -166,7 +166,7 @@ test.describe("passage-local Point and Talk", () => {
     await expect(passage).toContainText(SOURCE_TEXT);
   });
 
-  test("a reopened turn measures the current selection surface and keeps the direction bound Unicode-complete", async ({ page }) => {
+  test("a reopened turn keeps selection paint layout-neutral and the direction bound Unicode-complete", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -189,7 +189,9 @@ test.describe("passage-local Point and Talk", () => {
     await passage.hover();
     await page.locator("[data-node-action=point-talk]").click();
     await expect(pointTalkAddress).toHaveAttribute("data-material-address-painted", "true");
-    expect(await path.getAttribute("d")).not.toBe(unselectedPath);
+    // Structural selection is paint over the same material geometry. Opening
+    // Point Talk from that state must not inherit a padded or reflowed box.
+    expect(await path.getAttribute("d")).toBe(unselectedPath);
     await expect(passage.locator(".spatial-thought__label"))
       .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await expect(passage.locator(".spatial-thought__label")).toHaveCSS("box-shadow", "none");
@@ -517,6 +519,90 @@ test.describe("passage-local Point and Talk", () => {
     await expect(page.locator(".point-talk")).toBeHidden();
     await page.waitForTimeout(650);
     await expect(passage).toContainText(REWRITTEN_TEXT);
+  });
+
+  test("Model API occludes a submitted turn and returns its failed action for recovery", async ({ page }) => {
+    let releaseFailure: (() => void) | undefined;
+    const failureBarrier = new Promise<void>((resolve) => {
+      releaseFailure = resolve;
+    });
+    let markFailureFulfilled!: () => void;
+    const failureFulfilled = new Promise<void>((resolve) => {
+      markFailureFulfilled = resolve;
+    });
+    await page.route("**/api/text-swap", async (route) => {
+      await failureBarrier;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: { "Cache-Control": "no-store" },
+        body: JSON.stringify({
+          error: {
+            code: "TURN_UNAVAILABLE",
+            message: "Synthetic model unavailable.",
+            retryable: true,
+            fallbackReason: "MODEL_UNAVAILABLE",
+          },
+        }),
+      });
+      markFailureFulfilled();
+    });
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const shell = page.locator("main.matter-shell");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const revision = await shell.getAttribute("data-tree-revision");
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill("尚未提交的草稿");
+    const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
+    await settings.click();
+    await expect(page.getByRole("menu", { name: "Matter 设置" })).toBeVisible();
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    await settings.click();
+
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill("键盘打开弹窗前的草稿");
+    await settings.focus();
+    await settings.press("Enter");
+    const settingsMenu = page.getByRole("menu", { name: "Matter 设置" });
+    await expect(settingsMenu).toBeVisible();
+    await settingsMenu.getByRole("menuitem", { name: "模型 API", exact: true }).press("Enter");
+    let dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill(DIRECTION);
+    await page.getByRole("button", { name: "改写", exact: true }).click();
+    await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
+
+    await settings.click();
+    await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    await expect(shell).toHaveAttribute("data-material-presentation", "occluded");
+
+    releaseFailure?.();
+    await failureFulfilled;
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+
+    await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
+    const recovery = page.locator('.point-talk[data-phase="error"]');
+    await expect(recovery).toContainText("原文没有改变。");
+    await expect(recovery.getByRole("button", { name: "重试", exact: true })).toBeFocused();
+    await expect(passage).toContainText(SOURCE_TEXT);
+    await expect(shell).toHaveAttribute("data-tree-revision", revision ?? "");
   });
 
   test.describe("coarse pointer", () => {

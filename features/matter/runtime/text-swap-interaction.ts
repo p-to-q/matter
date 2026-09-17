@@ -65,6 +65,7 @@ export type TextSwapInteractionState =
       phase: "error";
       errorCode: TextSwapErrorCode;
       retryable: boolean;
+      submitted: boolean;
       direction?: string;
       requestId?: string;
     }>)
@@ -321,6 +322,7 @@ export function reduceTextSwapInteraction(
             phase: "error",
             errorCode: event.errorCode,
             retryable: event.retryable,
+            submitted: true,
             ...(event.retryable ? { direction: state.direction, requestId: state.requestId } : {}),
           }),
           [{ type: "cleanup-request", ...requestIdentity(state), reason: "failed" }],
@@ -346,7 +348,13 @@ function failVoice(
   retryable: boolean,
 ): TextSwapInteractionResult {
   return changed(
-    freezeState({ ...session(state), phase: "error", errorCode, retryable }),
+    freezeState({
+      ...session(state),
+      phase: "error",
+      errorCode,
+      retryable,
+      submitted: "phase" in state && state.phase === "transcribing",
+    }),
     [{ type: "cleanup-voice", ...voiceIdentity(state), reason: "failed" }],
   );
 }
@@ -356,7 +364,18 @@ function failWithoutDirection(
   errorCode: TextSwapErrorCode,
   retryable: boolean,
 ): TextSwapInteractionResult {
-  return changed(freezeState({ ...session(state), phase: "error", errorCode, retryable }));
+  return changed(freezeState({
+    ...session(state),
+    phase: "error",
+    errorCode,
+    retryable,
+    submitted: false,
+  }));
+}
+
+export function textSwapActionWasSubmitted(state: TextSwapInteractionState): boolean {
+  return state.phase === "pending" || state.phase === "transcribing" ||
+    (state.phase === "error" && state.submitted);
 }
 
 function exit(

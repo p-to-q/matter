@@ -17,6 +17,50 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-17 — provider removal and save receipts are exact within the browser jar
+
+Changed: the provider-session wire is version 4. Each saved lease exposes one
+non-secret opaque credential receipt, and the browser confirms that exact id
+after save rather than inferring identity from endpoint or time. DELETE expires
+the bearer and rotates an independent HttpOnly generation that every already-
+started save has already captured but can never write back. Active replay of a
+copied bearer plus matching generation remains explicitly outside this
+stateless boundary and ends only at lease expiry or sealing-key retirement.
+Only DELETE writes the generation; a fresh browser uses one write-free initial
+value so concurrent status reads cannot erase another tab's accepted save. The
+marker is high-priority and the bearer low-priority, but selective marker
+eviction remains an explicit stateless-revocation limit.
+
+Why: two tabs may save different keys for the same endpoint, and a slow verified
+save may return after a later removal. Endpoint comparison misreports ownership;
+aborting one tab cannot order serverless responses. Cookie-jar generation and
+the existing random lease scope solve those exact browser races without a
+process registry or a dishonest distributed-revocation claim.
+
+Forecloses: endpoint/time as credential identity, late-save resurrection after
+ordinary browser removal, Web Locks or in-memory tombstones as server or
+distributed revocation authority, and claiming global revocation without
+shared durable state. Supported same-origin UI mutations still use one stable
+Web Lock to serialize cooperative tabs before their server receipts are checked.
+
+## 2026-09-17 — Voice stop and visible delivery have separate authority
+
+Changed: recorded Voice becomes submitted synchronously at Stop, before the
+browser publishes its terminal recorder event. Page suspension, modal opening,
+outside pointers, and device-ownership revocation cannot erase that accepted
+work. Modal chrome still cancels raw microphone capture, while stopped work may
+finish privately but cannot commit material or a late repair until the modal is
+closed, the pointer is idle, and the material surface is perceivable again.
+
+Why: final audio chunks arrive asynchronously after Stop. Treating that interval
+as raw capture loses a paid action; treating it as freely deliverable lets a
+hidden modal background mutate material. Submission ownership and presentation
+availability are distinct facts and need distinct gates.
+
+Forecloses: `onstop` as the submit boundary, background microphone capture
+behind a modal, modal dismissal as cancellation, and hidden material commits
+merely because network work finished.
+
 ## 2026-09-17 — recorder stop is a bounded recoverable phase
 
 Changed: Recorded-audio Voice arms a four-second active-page watchdog budget

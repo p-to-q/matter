@@ -7,6 +7,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 const temporaryDirectories = [];
 const FIXTURE_START_TIMEOUT_MS = 12_000;
+// These are process-lifecycle proofs. A full Vitest run can be compiling many
+// unrelated module graphs while the child Node process starts, so the outer
+// test must outlive the fixture's own bounded startup clock.
+const PROCESS_FIXTURE_TEST_TIMEOUT_MS = 20_000;
 // Some restricted runners prohibit every loopback bind. The socket below is
 // the proof that process-group cleanup releases a grandchild resource, so
 // skip only when this host cannot create that proof at all.
@@ -116,7 +120,7 @@ process.exit(existsSync(${JSON.stringify(staleOutput)}) ? 7 : 0);
 
     const result = await runWrapper(directory, binDirectory);
     expect(result).toEqual({ code: 0, signal: null });
-  });
+  }, PROCESS_FIXTURE_TEST_TIMEOUT_MS);
 
   it("preserves a Playwright failure when next-env cleanup also fails", async () => {
     const directory = await mkdtemp(join(tmpdir(), "matter-e2e-runner-cleanup-failure-"));
@@ -138,7 +142,7 @@ process.exit(existsSync(${JSON.stringify(staleOutput)}) ? 7 : 0);
     expect(result).toEqual({ code: 7, signal: null });
     await expect(readFile(join(directory, ".next-e2e.lock"), "utf8"))
       .rejects.toMatchObject({ code: "ENOENT" });
-  });
+  }, PROCESS_FIXTURE_TEST_TIMEOUT_MS);
 });
 
 async function copyLocalScript(name, destination) {

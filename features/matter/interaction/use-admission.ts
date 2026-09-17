@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { AdmissionAnchor as RuntimeAdmissionAnchor } from "../runtime/admission";
 import type { MatterLocale } from "../config/locales";
 import {
@@ -45,6 +45,8 @@ export type AdmissionController = {
   cancel: () => void;
   retry: () => void;
   dismiss: () => void;
+  /** Gates canvas presentation without cancelling work submitted at Stop. */
+  setPresentationAvailable: (available: boolean) => void;
   setDeliveryTargetVisible: (visible: boolean) => void;
   setDeliveryVisibleNodeIds: (nodeIds: ReadonlySet<string>) => void;
   clearRepairPresentations: () => void;
@@ -89,6 +91,27 @@ export function useAdmission({
     (nodeIds: ReadonlySet<string>) => driver.setDeliveryVisibleNodeIds(nodeIds),
     [driver],
   );
+  const activePointersRef = useRef(new Set<number>());
+  const presentationAvailableRef = useRef(true);
+  const syncDeliveryWindow = useCallback(() => {
+    driver.setDeliveryWindowOpen(
+      presentationAvailableRef.current &&
+        document.visibilityState === "visible" &&
+        activePointersRef.current.size === 0,
+    );
+  }, [driver]);
+  const setPresentationAvailable = useCallback((available: boolean) => {
+    presentationAvailableRef.current = available;
+    if (!available) {
+      // Modal chrome must never leave an unseen live microphone behind. Stop,
+      // however, is already a submitted action: only its eventual delivery is
+      // held until the exact material surface is perceivable again.
+      driver.setDeliveryWindowOpen(false);
+      driver.cancelRawCapture();
+      return;
+    }
+    syncDeliveryWindow();
+  }, [driver, syncDeliveryWindow]);
 
   useEffect(() => {
     driver.updateScope({
@@ -104,30 +127,26 @@ export function useAdmission({
   }, [driver]);
 
   useEffect(() => {
-    const activePointers = new Set<number>();
-    const openDeliveryIfUsable = () => driver.setDeliveryWindowOpen(
-      document.visibilityState === "visible" && activePointers.size === 0,
-    );
     const onPointerDown = (event: PointerEvent) => {
-      activePointers.add(event.pointerId);
+      activePointersRef.current.add(event.pointerId);
       driver.setDeliveryWindowOpen(false);
     };
     const onPointerDone = (event: PointerEvent) => {
-      activePointers.delete(event.pointerId);
-      openDeliveryIfUsable();
+      activePointersRef.current.delete(event.pointerId);
+      syncDeliveryWindow();
     };
     window.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("pointerup", onPointerDone, true);
     window.addEventListener("pointercancel", onPointerDone, true);
     const unsubscribeSuspension = subscribePageSuspension(
       () => {
-        activePointers.clear();
+        activePointersRef.current.clear();
         driver.suspendCapture();
       },
-      openDeliveryIfUsable,
+      syncDeliveryWindow,
     );
     const unsubscribeExit = subscribePageExit(() => driver.exit());
-    openDeliveryIfUsable();
+    syncDeliveryWindow();
     return () => {
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("pointerup", onPointerDone, true);
@@ -135,7 +154,7 @@ export function useAdmission({
       unsubscribeSuspension();
       unsubscribeExit();
     };
-  }, [driver]);
+  }, [driver, syncDeliveryWindow]);
 
   return {
     state,
@@ -146,6 +165,7 @@ export function useAdmission({
     cancel: () => driver.cancel(),
     retry: () => driver.retry(locale),
     dismiss: () => driver.dismiss(),
+    setPresentationAvailable,
     setDeliveryTargetVisible: (visible) => driver.setDeliveryTargetVisible(visible),
     setDeliveryVisibleNodeIds,
     clearRepairPresentations: repairPresentation.clearAll,

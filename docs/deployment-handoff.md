@@ -202,6 +202,15 @@ immediate revocation for every lease sealed by that key. A malformed or absent
 ring keeps the settings UI honestly unavailable and does not affect the managed
 pool.
 
+The independent removal-generation cookie is opaque random state, not encrypted
+with this ring. It must remain readable across ordinary sealing-key rotation so
+a current lease does not fail merely because the key that created a prior
+generation marker retired. Same-origin DELETE rotates that marker and expires
+the bearer, ordering removal after every save already in flight in the same
+browser jar. It does not revoke a bearer-plus-generation pair copied elsewhere;
+emergency sealing-key retirement remains the available global cutoff for every
+lease written by that key.
+
 The lease cookie path derives only from a strict normalized
 `MATTER_BASE_PATH`. Control characters, semicolons, dot segments, or other
 unsafe path syntax fall back to the default API path instead of entering a

@@ -6,6 +6,11 @@ const mocks = vi.hoisted(() => ({
   recognize: vi.fn(),
 }));
 
+// Resetting and importing a worker module is an isolation proof, not a startup
+// performance receipt. Leave headroom for the complete suite compiling many
+// module graphs while retaining a finite failure bound.
+const WORKER_BOUNDARY_TEST_TIMEOUT_MS = 15_000;
+
 vi.mock("@huggingface/transformers", () => ({ pipeline: mocks.pipeline }));
 vi.mock("../runtime/spoken-transcript", () => ({
   normalizeSpokenTranscript: mocks.normalize,
@@ -40,7 +45,7 @@ describe("local transcription worker result boundary", () => {
       id: "silence",
       status: "failed",
     }));
-  });
+  }, WORKER_BOUNDARY_TEST_TIMEOUT_MS);
 
   it("rejects oversized model text before pause derivation or normalization", async () => {
     mocks.recognize.mockResolvedValue({ text: "念".repeat(2_001), chunks: [] });
@@ -58,7 +63,7 @@ describe("local transcription worker result boundary", () => {
       id: "raw-oversized",
       status: "complete",
     }));
-  });
+  }, WORKER_BOUNDARY_TEST_TIMEOUT_MS);
 
   it.each([
     ["empty", ""],
@@ -79,7 +84,7 @@ describe("local transcription worker result boundary", () => {
       id,
       status: "complete",
     }));
-  });
+  }, WORKER_BOUNDARY_TEST_TIMEOUT_MS);
 });
 
 async function workerHarness(): Promise<Readonly<{

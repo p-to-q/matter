@@ -211,7 +211,11 @@ export function useInquiryDictation(
         if (transcriptionRef.current === controller) transcriptionRef.current = null;
       }
     }).catch((error: unknown) => finish(current,
-      error instanceof VoiceError && error.code === "RECORDING_EMPTY"
+      error instanceof VoiceError && (
+        error.code === "RECORDING_EMPTY" ||
+        error.code === "RECORDING_NOT_ACTIVE" ||
+        error.code === "RECORDING_CANCELLED"
+      )
         ? "settled"
         : noticeForVoiceError(error),
     ));

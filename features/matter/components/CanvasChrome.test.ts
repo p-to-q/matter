@@ -292,11 +292,11 @@ describe("ApiSettingsForm", () => {
         "de-DE": "verschlüsselter Browser-Nachweis",
       }[locale]);
       expect(privacy).toContain({
-        "en-US": "relevant content",
-        "zh-CN": "相应内容",
-        "zh-TW": "相應內容",
-        "ja-JP": "該当する内容",
-        "de-DE": "jeweiligen Inhalte",
+        "en-US": "managed service",
+        "zh-CN": "托管服务",
+        "zh-TW": "託管服務",
+        "ja-JP": "管理サービス",
+        "de-DE": "verwalteten Dienst",
       }[locale]);
       expect(privacy).not.toMatch(/HttpOnly|cookie|mirror|compatible/i);
       expect(privacy.length).toBeGreaterThan(38);

@@ -304,7 +304,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell::selection,
 .matter-shell ::selection { background: rgba(var(--selection-control-rgb),var(--address-density-native)); text-shadow: none; }
 .spatial-thought[data-selected="true"] .spatial-thought__text { --material-text-color: var(--ink); }
-.spatial-thought[data-selected="true"] .spatial-thought__label { padding: .08em .32em; border-radius: .44em; background: var(--selection-bg); box-shadow: inset 0 0 0 1px var(--selection-ring); color: inherit; text-shadow: var(--selection-shadow); }
+.spatial-thought[data-selected="true"] .spatial-thought__label { padding: 0; border-radius: .44em; background: var(--selection-bg); box-shadow: inset 0 0 0 1px var(--selection-ring); color: inherit; text-shadow: var(--selection-shadow); }
 .spatial-thought[data-lasso-selected="true"] .spatial-thought__label { padding: 0; border-radius: 0; background: transparent; box-shadow: none; text-shadow: none; }
 .repair-text { display: inline; }
 .repair-text__grapheme { color: var(--material-text-color); animation-name: material-grapheme-arrive; animation-timing-function: cubic-bezier(.2,.75,.2,1); animation-fill-mode: both; }
@@ -499,7 +499,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    path, so no frame can show grips or a focus ring with no address. */
 .lasso-layer:has(.material-address-layer[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback[data-single-address-fallback] { display: none; }
 .matter-shell:has(.material-address-layer[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label,
-.matter-shell:has(.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
+.matter-shell:has(.material-address-layer[data-address-variant="actionable"][data-address-partition="point-talk"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label,
+.matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
 .matter-shell[data-material-address-owner="native"] .spatial-thought[data-selected="true"] .spatial-thought__label { background: transparent; box-shadow: none; text-shadow: none; }
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: transparent; }

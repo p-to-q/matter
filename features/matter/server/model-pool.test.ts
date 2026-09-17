@@ -558,6 +558,52 @@ describe("pool adapter", () => {
     })]);
   });
 
+  it("keeps a spent attempt deadline ahead of a later semantic rejection", async () => {
+    vi.useFakeTimers();
+    try {
+      const adapter = createPoolAdapter(
+        [candidate("stalls"), candidate("rejects")],
+        DEFAULT_POOL_LIMITS,
+        Date.now,
+        async (_url, init) => {
+          const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+          if (model === "rejects") return chatResponse("bad");
+          return await new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+            }, { once: true });
+          });
+        },
+      );
+      const scenario: MatterScenario<null, string> = Object.freeze({
+        id: "matter-inquiry",
+        promptVersion: "test/1",
+        rejectedCandidate: "continue-if-budget",
+        locale: () => "en-US",
+        compile: () => "answer",
+        budget: () => ({ deadlineMs: 1_000, maxOutputTokens: 16 }),
+        adjudicate: (answer) => answer === "good"
+          ? { ok: true as const, value: answer }
+          : { ok: false as const, reason: "invalid" },
+      });
+      const observations: ScenarioPerformanceObservation[] = [];
+      const outcome = runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+        observePerformance: (observation) => observations.push(observation),
+      });
+
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(outcome).resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+      expect(observations).toEqual([expect.objectContaining({
+        outcome: "timeout",
+        candidateAttempts: 2,
+        candidateTimeouts: 1,
+        candidateRejections: 1,
+      })]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("records one completed attempt when local candidate adjudication throws", async () => {
     const adapter = createPoolAdapter(
       [candidate("only")],
@@ -642,7 +688,7 @@ describe("pool adapter", () => {
     }
   });
 
-  it("uses only the opaque credential scope, never its URL, for a user drain lane", async () => {
+  it("uses only the opaque credential scope, never reflected model or URL text, for a user drain lane", async () => {
     vi.useFakeTimers();
     let release!: (response: Response) => void;
     try {
@@ -654,8 +700,8 @@ describe("pool adapter", () => {
           ? new Promise<Response>((resolve) => { release = resolve; })
           : chatResponse("managed");
       };
-      const userAt = (baseUrl: string) => ({
-        ...candidate("selected", "user"),
+      const userAt = (baseUrl: string, model = "selected") => ({
+        ...candidate(model, "user"),
         baseUrl,
         credentialScopeId: "opaque-scope",
       });
@@ -670,7 +716,7 @@ describe("pool adapter", () => {
 
       tried.length = 0;
       const sameScopeAtAnotherUrl = createPoolAdapter([
-        userAt("https://tenant-sensitive-b.example/v1"),
+        userAt("https://tenant-sensitive-b.example/v1", "sk-reflected-secret"),
         candidate("managed", "managed"),
       ], DEFAULT_POOL_LIMITS, Date.now, respond);
       await expect(sameScopeAtAnotherUrl(adapterInput(1_000), new AbortController().signal))

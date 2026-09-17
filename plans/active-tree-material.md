@@ -93,19 +93,27 @@ Boundary:   Admission repair, Elastic, Point Talk, and Inquiry job ownership;
             lasso sampling/hit-testing/rendering and material-address outline;
             one versioned provider-session route, bounded provider/model registry,
             canonical compatible-mirror URL, address-pinned HTTPS boundary,
-            encrypted HttpOnly cookie, and request-local pool augmentation
+            sealed bearer plus removal-generation HttpOnly cookies, and
+            request-local pool augmentation
 Invariants: capture and drafts remain transient and easy to dismiss; recorded
             audio stop yields its terminal chunk or a recoverable failure after
             a four-second watchdog budget; submission freezes intent; unrelated
             UI, selection, revision, and temporary page hiding cannot erase
             submitted work; any material result waits
             for a visible, pointer-idle delivery window and revalidates its exact
-            write basis; target conflict, document replacement, page exit, or
+            write basis; modal chrome cancels raw capture but holds work already
+            submitted at Voice Stop until the paper returns; target conflict,
+            document replacement, page exit, or
             owner unmount revokes authority; only the tree engine commits; lasso
             optimization fails open and never becomes selection authority; the
             browser can supply only one compatible endpoint and key, never the
             selected model, wire profile, or generated request; a supplied key
             never enters material, history, response JSON, logs, or a cache key;
+            exact opaque lease receipts distinguish same-endpoint concurrent
+            saves, and a browser generation prevents an older in-flight save
+            from reversing removal in ordinary cookie-jar ordering; only DELETE
+            writes that marker, cookie priority reduces selective-eviction risk,
+            and none of this claims global or eviction-proof active revocation;
             global concurrency and public capability gates still apply; shared
             cooldown advances only from shared managed failure, while disposable
             request-credential health remains scope-local
@@ -138,8 +146,13 @@ short candidate sentinels. The server seals only the proven model/wire pair and
 returns safe connection status. It seals the credential and proven profile for a
 bounded lifetime; scripts cannot read it, but requests to the selected external
 provider necessarily include both that credential and the bounded material for
-the already-authorized Matter action. Removing the connection expires the same
-cookie path immediately. Deployment still must supply a rotatable server sealing
+the already-authorized Matter action. Removing the connection expires the bearer
+and rotates a longer-lived browser generation so already-started saves cannot
+restore it in ordinary cookie-jar ordering. The initial state stays write-free,
+while the status receipt distinguishes a different same-endpoint lease. High
+marker / low bearer priority is best-effort
+eviction guidance, not a substitute for durable revocation state.
+Deployment still must supply a rotatable server sealing
 key before the surface can be available.
 
 The 2026-09-11 Preview.57 draft receipt is superseded: its browser proof targets
@@ -586,6 +599,21 @@ Non-goals:  a generic selection reducer, Point-and-Talk protocol changes, live
             Elastic promotion, a model-visible layout measurement, new chrome,
             a grip redesign, or weakening the 2,000-node optimization target
 ```
+
+The current candidate also repairs the structural click address without
+redefining its visual language: selecting or double-clicking material may mount
+one paint fallback for that passage, but its canonical glyph rows, line breaks,
+and material box must remain rect-for-rect unchanged. The fallback
+therefore owns no padding, margin, or border width; the shared SVG address owns
+all optical air. It stays conditional so the 2,000-node renderer pays at most
+one extra element instead of one per passage. Pointer selection, preselected
+native double-click, and direct native double-click are browser release gates.
+
+Per-row capsule shape, radius, and step rhythm remain a separate product
+calibration, intentionally deferred because structural click selection is not a
+primary Matter action. A later visual decision may simplify or demote that
+presentation, but it may not reopen text reflow, duplicate copy paint, or the
+bounded-DOM invariant.
 
 Receipt, 2026-08-21: Preview.37 closes the active browser-preview slice. The
 selection-local lane passed laptop, 390px coarse/reduced-motion, and 834px

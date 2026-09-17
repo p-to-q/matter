@@ -3,7 +3,10 @@ import type {
   TextSwapErrorCode,
   TextSwapInteractionState,
 } from "../runtime/text-swap-interaction";
-import { pointTalkRecoveryAction } from "./PointTalkComposer";
+import {
+  pointTalkOutsidePointerDismisses,
+  pointTalkRecoveryAction,
+} from "./PointTalkComposer";
 
 const BASIS = Object.freeze({
   treeId: "tree_1",
@@ -23,7 +26,7 @@ const BASIS = Object.freeze({
 
 function failure(
   errorCode: TextSwapErrorCode,
-  options: Readonly<{ direction?: string; retryable?: boolean }> = {},
+  options: Readonly<{ direction?: string; retryable?: boolean; submitted?: boolean }> = {},
 ): Extract<TextSwapInteractionState, { phase: "error" }> {
   return Object.freeze({
     phase: "error",
@@ -32,11 +35,35 @@ function failure(
     basis: BASIS,
     errorCode,
     retryable: options.retryable ?? true,
+    submitted: options.submitted ?? false,
     ...(options.direction === undefined ? {} : { direction: options.direction }),
   });
 }
 
 describe("Point Talk recovery", () => {
+  it("treats canvas chrome as temporary occlusion rather than dismissal", () => {
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: true,
+      insideCanvasChrome: false,
+      submitted: false,
+    })).toBe(false);
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: false,
+      insideCanvasChrome: true,
+      submitted: true,
+    })).toBe(false);
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: false,
+      insideCanvasChrome: true,
+      submitted: false,
+    })).toBe(true);
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: false,
+      insideCanvasChrome: false,
+      submitted: true,
+    })).toBe(true);
+  });
+
   it("keeps request retry and voice retry as distinct pointer actions", () => {
     expect(pointTalkRecoveryAction(
       failure("REQUEST_FAILED", { direction: "Make it quieter" }),

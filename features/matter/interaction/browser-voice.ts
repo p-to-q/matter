@@ -175,7 +175,6 @@ export class BrowserVoicePort implements VoicePort {
         const failure = permissionError(error);
         session.start.reject(failure);
         this.settle(session, failure);
-        notify(() => session.callbacks.onError?.(failure));
       });
 
     return session.start.promise;
@@ -260,7 +259,6 @@ export class BrowserVoicePort implements VoicePort {
           : new VoiceError("RECORDING_FAILED");
       session.start.reject(failure);
       this.settle(session, failure);
-      notify(() => session.callbacks.onError?.(failure));
     }
   }
 

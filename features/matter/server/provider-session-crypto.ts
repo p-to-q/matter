@@ -16,13 +16,19 @@ import {
 } from "./user-provider-registry";
 
 export const PROVIDER_SESSION_COOKIE = "__Secure-matter-provider";
+export const PROVIDER_SESSION_GENERATION_COOKIE = "__Secure-matter-provider-generation";
+export const PROVIDER_SESSION_INITIAL_GENERATION = "initial";
 // A saved provider is a deliberate device-level preference. Keep the lease
 // persistent across browser restarts, but fixed and finite rather than silently
 // extending it on every status read.
 export const PROVIDER_SESSION_TTL_MS = 30 * 24 * 60 * 60_000;
+// A removal generation must outlive every lease it revokes. Four hundred days
+// is the prevailing persistent-cookie ceiling and remains finite; ordinary
+// expiry therefore cannot make a removed 30-day credential current again.
+export const PROVIDER_SESSION_GENERATION_TTL_MS = 400 * 24 * 60 * 60_000;
 export const PROVIDER_SESSION_KEYS_ENV = "MATTER_PROVIDER_SESSION_KEYS";
-const TOKEN_VERSION = "v3";
-const PAYLOAD_VERSION = 3;
+const TOKEN_VERSION = "v4";
+const PAYLOAD_VERSION = 4;
 const IV_BYTES = 12;
 const TAG_BYTES = 16;
 // These ceilings admit the protocol's maximum endpoint and escaping-heavy key
@@ -33,9 +39,15 @@ const MAX_SEALING_KEYS = 4;
 const MAX_DATE_MS = 8_640_000_000_000_000;
 
 export type UserProviderCredential = UserProviderCandidateCredential & Readonly<{
+  generationId: string;
   issuedAtMs: number;
   expiresAtMs: number;
 }>;
+
+export type ProviderSessionGenerationState =
+  | Readonly<{ kind: "initial"; generationId: typeof PROVIDER_SESSION_INITIAL_GENERATION }>
+  | Readonly<{ kind: "valid"; generationId: string }>
+  | Readonly<{ kind: "invalid" }>;
 
 type SealedPayload = Readonly<{
   v: typeof PAYLOAD_VERSION;
@@ -44,6 +56,7 @@ type SealedPayload = Readonly<{
   baseUrl: string;
   apiKey: string;
   scopeId: string;
+  generationId: string;
   issuedAtMs: number;
   expiresAtMs: number;
 }>;
@@ -61,6 +74,7 @@ export function providerSessionAvailable(
 export function sealProviderCredential(
   selection: UserProviderSelection,
   apiKey: string,
+  generationId: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   nowMs = Date.now(),
   random: (size: number) => Buffer = randomBytes,
@@ -70,6 +84,7 @@ export function sealProviderCredential(
     keys === null ||
     !isUserProviderSelection(selection) ||
     !isValidUserProviderApiKey(apiKey) ||
+    !isProviderSessionGenerationId(generationId) ||
     !Number.isSafeInteger(nowMs) ||
     nowMs < 0 ||
     nowMs > MAX_DATE_MS - PROVIDER_SESSION_TTL_MS
@@ -86,6 +101,7 @@ export function sealProviderCredential(
     baseUrl: selection.baseUrl,
     apiKey,
     scopeId,
+    generationId,
     issuedAtMs,
     expiresAtMs,
   });
@@ -106,6 +122,18 @@ export function sealProviderCredential(
   return Object.freeze({ token, credential: Object.freeze(stripPayloadVersion(payload)) });
 }
 
+/**
+ * Creates the independent high-water mark used by removal. Save responses
+ * never write this cookie, so a response that began under an older generation
+ * cannot roll a later removal back when it arrives out of order.
+ */
+export function createProviderSessionGeneration(
+  random: (size: number) => Buffer = randomBytes,
+): string | null {
+  const generationId = random(16).toString("base64url");
+  return isRandomGenerationId(generationId) ? generationId : null;
+}
+
 export function unsealProviderCredential(
   token: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
@@ -114,8 +142,8 @@ export function unsealProviderCredential(
   const keys = readSealingKeys(environment);
   if (keys === null || token.length > MAX_TOKEN_CODE_UNITS || !Number.isSafeInteger(nowMs)) return null;
   const parts = token.split(".");
-  // v1/v2 and any future schema fail closed. The status route expires their
-  // cookie rather than attempting an ambiguous in-place migration.
+  // v1-v3 and any future schema fail closed. Read-only status never migrates
+  // them; explicit remove or a later verified save owns replacement.
   if (parts.length !== 5 || parts[0] !== TOKEN_VERSION || !/^[A-Za-z0-9_-]{1,16}$/u.test(parts[1]!)) {
     return null;
   }
@@ -142,13 +170,30 @@ export function unsealProviderCredential(
   }
 }
 
+export function readProviderSessionGeneration(
+  request: Request,
+): ProviderSessionGenerationState {
+  const cookie = readCookie(request.headers.get("cookie"), PROVIDER_SESSION_GENERATION_COOKIE);
+  if (cookie.kind === "missing") {
+    return Object.freeze({ kind: "initial", generationId: PROVIDER_SESSION_INITIAL_GENERATION });
+  }
+  if (cookie.kind === "invalid") return Object.freeze({ kind: "invalid" });
+  return !isRandomGenerationId(cookie.value)
+    ? Object.freeze({ kind: "invalid" })
+    : Object.freeze({ kind: "valid", generationId: cookie.value });
+}
+
 export function readProviderCredential(
   request: Request,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   nowMs = Date.now(),
 ): UserProviderCredential | null {
-  const cookie = readSingleCookie(request.headers.get("cookie"), PROVIDER_SESSION_COOKIE);
-  return cookie === null ? null : unsealProviderCredential(cookie, environment, nowMs);
+  const generation = readProviderSessionGeneration(request);
+  if (generation.kind === "invalid") return null;
+  const cookie = readCookie(request.headers.get("cookie"), PROVIDER_SESSION_COOKIE);
+  if (cookie.kind !== "value") return null;
+  const credential = unsealProviderCredential(cookie.value, environment, nowMs);
+  return credential?.generationId === generation.generationId ? credential : null;
 }
 
 export function providerSessionCookiePath(
@@ -176,6 +221,24 @@ export function providerSessionCookie(
     "HttpOnly",
     "Secure",
     "SameSite=Strict",
+    "Priority=Low",
+  ].join("; ");
+}
+
+export function providerSessionGenerationCookie(
+  generationId: string,
+  expiresAtMs: number,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): string {
+  return [
+    `${PROVIDER_SESSION_GENERATION_COOKIE}=${generationId}`,
+    `Path=${providerSessionCookiePath(environment)}`,
+    `Expires=${new Date(expiresAtMs).toUTCString()}`,
+    `Max-Age=${Math.floor(PROVIDER_SESSION_GENERATION_TTL_MS / 1_000)}`,
+    "HttpOnly",
+    "Secure",
+    "SameSite=Strict",
+    "Priority=High",
   ].join("; ");
 }
 
@@ -190,6 +253,7 @@ export function expiredProviderSessionCookie(
     "HttpOnly",
     "Secure",
     "SameSite=Strict",
+    "Priority=Low",
   ].join("; ");
 }
 
@@ -221,7 +285,7 @@ function readSealingKeys(
 }
 
 function additionalData(keyId: string): Buffer {
-  return Buffer.from(`matter/provider-session/v3/${keyId}`, "utf8");
+  return Buffer.from(`matter/provider-session/v4/${keyId}`, "utf8");
 }
 
 function isSafeCookiePathBase(value: string): boolean {
@@ -245,7 +309,7 @@ function decodeBase64Url(value: string, minimumBytes: number, maximumBytes = min
 
 function parsePayload(value: unknown): SealedPayload | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
-    "v", "profileId", "model", "baseUrl", "apiKey", "scopeId", "issuedAtMs", "expiresAtMs",
+    "v", "profileId", "model", "baseUrl", "apiKey", "scopeId", "generationId", "issuedAtMs", "expiresAtMs",
   ])) return null;
   if (
     value.v !== PAYLOAD_VERSION ||
@@ -257,6 +321,7 @@ function parsePayload(value: unknown): SealedPayload | null {
     !isValidUserProviderApiKey(value.apiKey)
   ) return null;
   if (typeof value.scopeId !== "string" || !/^[A-Za-z0-9_-]{22}$/u.test(value.scopeId)) return null;
+  if (typeof value.generationId !== "string" || !isProviderSessionGenerationId(value.generationId)) return null;
   if (
     typeof value.issuedAtMs !== "number" ||
     typeof value.expiresAtMs !== "number" ||
@@ -275,20 +340,35 @@ function stripPayloadVersion(payload: SealedPayload): UserProviderCredential {
     baseUrl: payload.baseUrl,
     apiKey: payload.apiKey,
     scopeId: payload.scopeId,
+    generationId: payload.generationId,
     issuedAtMs: payload.issuedAtMs,
     expiresAtMs: payload.expiresAtMs,
   };
 }
 
-function readSingleCookie(header: string | null, name: string): string | null {
-  if (header === null || header.length > 8 * 1_024) return null;
+function readCookie(
+  header: string | null,
+  name: string,
+): Readonly<{ kind: "missing" }> | Readonly<{ kind: "invalid" }> | Readonly<{ kind: "value"; value: string }> {
+  if (header === null) return Object.freeze({ kind: "missing" });
+  if (header.length > 8 * 1_024) return Object.freeze({ kind: "invalid" });
   const matches: string[] = [];
   for (const pair of header.split(";")) {
     const separator = pair.indexOf("=");
     if (separator < 0 || pair.slice(0, separator).trim() !== name) continue;
     matches.push(pair.slice(separator + 1).trim());
   }
-  return matches.length === 1 && matches[0]!.length > 0 ? matches[0]! : null;
+  if (matches.length === 0) return Object.freeze({ kind: "missing" });
+  if (matches.length !== 1 || matches[0]!.length === 0) return Object.freeze({ kind: "invalid" });
+  return Object.freeze({ kind: "value", value: matches[0]! });
+}
+
+function isRandomGenerationId(value: string): boolean {
+  return /^[A-Za-z0-9_-]{22}$/u.test(value);
+}
+
+function isProviderSessionGenerationId(value: string): boolean {
+  return value === PROVIDER_SESSION_INITIAL_GENERATION || isRandomGenerationId(value);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

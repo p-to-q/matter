@@ -28,15 +28,15 @@ export async function handleInquiryRequest(
   request: Request,
   adapter?: ScenarioAdapter | null,
 ): Promise<Response> {
-  const resolvedAdapter = adapter === undefined
-    ? resolveScenarioRequestModelAdapter(request, "matter-inquiry", {
-        fallback: resolveInquiryAdapter(),
-        limits: INQUIRY_POOL_LIMITS,
-      }).adapter
-    : adapter;
   const admission = admitInquiryRequest(request);
   if (!admission.ok) throw inquiryAdmissionError(admission.reason);
   try {
+    const resolvedAdapter = adapter === undefined
+      ? resolveScenarioRequestModelAdapter(request, "matter-inquiry", {
+          fallback: resolveInquiryAdapter(),
+          limits: INQUIRY_POOL_LIMITS,
+        }).adapter
+      : adapter;
     return await withBoundedJsonRequest(request, INQUIRY_REQUEST_POLICY, async (payload, signal) => {
       const parsed = parseInquiryRequest(payload);
       if (!parsed.ok) throw invalidInquiryRequest(parsed.message);

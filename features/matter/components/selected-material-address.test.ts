@@ -12,6 +12,10 @@ import type { MaterialAddressProjection } from "../interaction/projected-layout-
 const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
 const rooted = readFileSync(new URL("./RootedMaterial.tsx", import.meta.url), "utf8");
 const layer = readFileSync(new URL("./MaterialAddressLayer.tsx", import.meta.url), "utf8");
+const structuralSelection = readFileSync(
+  new URL("../interaction/use-structural-material-selection.ts", import.meta.url),
+  "utf8",
+);
 
 const ROWS = Object.freeze([
   Object.freeze({ blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 300 }),
@@ -111,8 +115,11 @@ describe("selected material address", () => {
     expect(rooted).toContain('projection={materialPresentationAvailable ? nativeAddressProjection : null}');
     expect(rooted).toContain('projection={materialPresentationAvailable ? visibleStructuralAddressProjection : null}');
     expect(rooted).toContain('stretchVisible={materialPresentationAvailable && elasticSelection !== null}');
-    expect(rooted).toContain('surfaceAvailable={materialPresentationAvailable}');
+    expect(rooted).toContain('surfaceAvailable={outcomePresentationAvailable}');
     expect(rooted).toContain('deliveryWindowAvailable: materialPresentationAvailable');
+    expect(rooted).toContain('if (nextOwnsSurface) setAdmissionPresentationAvailable(false)');
+    expect(rooted).toContain('if (materialPresentationAvailable) {');
+    expect(rooted).toContain('setAdmissionPresentationAvailable(true)');
     expect(rooted).toContain('const lassoPointerId = lasso.cancelActiveStroke()');
     expect(rooted).toContain('stretch.cancelActiveDrag()');
     expect(css).toMatch(
@@ -130,7 +137,24 @@ describe("selected material address", () => {
       rooted.indexOf("const changeCanvasOverlay"),
       rooted.indexOf("const closePointTalk"),
     );
-    expect(transition).not.toMatch(/clearSelection|setPointTalkOwner\(null\)|cancel\(\)/);
+    expect(transition).not.toMatch(/clearSelection|setPointTalkOwner\(null\)|props\.admission\.cancel\(\)/);
+  });
+
+  it("keeps structural selection paint outside text layout", () => {
+    // Only the selected material pays for the temporary fallback wrapper; the
+    // 2,000-node renderer must not gain one DOM element per passage.
+    expect(rooted).toMatch(
+      /isSelected\s*\?\s*<span className="spatial-thought__label">\{materialText\}<\/span>/,
+    );
+    const selectedLabelRules = [...css.matchAll(
+      /\.spatial-thought\[data-selected="true"\] \.spatial-thought__label \{([^}]*)\}/g,
+    )].map((match) => match[1]);
+    const selectedLabel = selectedLabelRules.find((body) => body.includes("padding:"));
+    expect(selectedLabel).toMatch(/padding:\s*0/);
+    expect(selectedLabel).not.toMatch(/margin:|border-width:|border:\s*(?!0)/);
+    expect(structuralSelection).toContain(
+      'const material = geometryBasis.surface === "label" ? label : root',
+    );
   });
 
   it("separates the viewport-safe hit target from the exact visible cue", () => {
@@ -248,6 +272,7 @@ describe("selected material address", () => {
     // with no address at all.
     expect(css).toContain('[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback');
     expect(css).toContain('[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label');
+    expect(css).toContain('[data-address-variant="native"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label');
     expect(css).toContain('[data-address-variant="native"][data-material-address-painted]) ::selection');
     // The flag is only set once a path has actually been written.
     expect(layer).toContain('path.setAttribute("d", outline.path)');

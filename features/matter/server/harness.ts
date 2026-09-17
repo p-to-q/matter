@@ -1,4 +1,5 @@
 import {
+  CandidateAttemptTimeoutError,
   CandidateRejectedError,
   NeutralProviderError,
   ScenarioPolicyError,
@@ -518,6 +519,11 @@ export async function runScenario<Input, Value>(
     return Object.freeze({ ok: true, value: verdict.value });
   } catch (error) {
     if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
+    if (error instanceof CandidateAttemptTimeoutError) {
+      // The pool's final attempt and this scenario can share one absolute
+      // deadline. Timer callback order must not change the public settlement.
+      return settle("MODEL_TIMEOUT");
+    }
     if (error instanceof CandidateRejectedError) {
       if (scenarioOwnsHealth) governor.succeeded();
       return settle("MODEL_REJECTED", error.reason);

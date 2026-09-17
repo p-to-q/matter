@@ -10,11 +10,14 @@ import {
   type ProviderSessionStatus,
 } from "../protocol/provider-session-contract";
 import {
-  PROVIDER_SESSION_COOKIE,
+  PROVIDER_SESSION_GENERATION_TTL_MS,
+  createProviderSessionGeneration,
   expiredProviderSessionCookie,
   providerSessionAvailable,
   providerSessionCookie,
+  providerSessionGenerationCookie,
   readProviderCredential,
+  readProviderSessionGeneration,
   sealProviderCredential,
   type UserProviderCredential,
 } from "./provider-session-crypto";
@@ -24,10 +27,12 @@ import {
   type UserProviderSelection,
 } from "./user-provider-registry";
 import {
-  CandidateAttemptTimeoutError,
   probePoolCandidate,
 } from "./model-pool";
-import { PoolDrainingError } from "./completion-outcome";
+import {
+  CandidateAttemptTimeoutError,
+  PoolDrainingError,
+} from "./completion-outcome";
 import {
   withBoundedJsonRequest,
   type BoundedRequestFailure,
@@ -52,15 +57,15 @@ export async function getProviderSessionStatus(
   nowMs = Date.now(),
 ): Promise<Response> {
   const available = providerSessionAvailable(environment);
-  const credential = available ? readProviderCredential(request, environment, nowMs) : null;
   const headers = responseHeaders();
-  // Old protocol cookies and malformed/current expired cookies all fail closed
-  // through the same path. Clearing them prevents every future request from
-  // repeating decryption work and gives the browser one unambiguous state.
-  if (request.headers.get("cookie")?.includes(`${PROVIDER_SESSION_COOKIE}=`) && credential === null) {
-    headers.set("Set-Cookie", expiredProviderSessionCookie(environment));
-  }
-  return Response.json(status(available, credential), { headers });
+  const generation = available ? readProviderSessionGeneration(request) : null;
+  const credential = available && generation?.kind !== "invalid"
+    ? readProviderCredential(request, environment, nowMs)
+    : null;
+  // GET is deliberately write-free. A stale status response must never expire
+  // a credential saved after that read began; the next explicit save or remove
+  // replaces any malformed, expired, or generation-mismatched bearer.
+  return Response.json(status(available, credential, generation?.kind === "invalid"), { headers });
 }
 
 export async function connectProviderSession(
@@ -76,6 +81,17 @@ export async function connectProviderSession(
       cancelRequestBody(request);
       return failure("FEATURE_UNAVAILABLE", "Custom API access is unavailable in this deployment.", false, 503);
     }
+    const generation = readProviderSessionGeneration(request);
+    if (generation.kind === "invalid") {
+      cancelRequestBody(request);
+      return failure(
+        "INVALID_REQUEST",
+        "Refresh the saved Model API status before testing or saving.",
+        true,
+        409,
+      );
+    }
+    const generationId = generation.generationId;
     return await withBoundedJsonRequest(request, REQUEST_POLICY, async (payload, signal) => {
       const parsed = parseProviderSessionRequest(payload);
       if (!parsed.ok) return failure("INVALID_REQUEST", parsed.message, false, 400);
@@ -160,6 +176,7 @@ export async function connectProviderSession(
       const sealed = sealProviderCredential(
         selection,
         apiKey,
+        generationId,
         environment,
         nowMs,
         randomBytes,
@@ -169,7 +186,7 @@ export async function connectProviderSession(
       }
       const headers = responseHeaders();
       headers.set("Set-Cookie", providerSessionCookie(sealed.token, sealed.credential.expiresAtMs, environment));
-      return Response.json(status(true, sealed.credential), { headers });
+      return Response.json(status(true, sealed.credential, false), { headers });
     });
   } catch (error) {
     if (error instanceof ProviderSessionBoundaryError) return error.response;
@@ -185,14 +202,23 @@ export async function connectProviderSession(
 export function removeProviderSession(
   request: Request,
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  nowMs = Date.now(),
 ): Response {
   const admitted = admitPublicMutationOrigin(request, environment);
   if (!admitted.ok) return admissionFailure(admitted.reason);
   try {
     cancelRequestBody(request);
     const headers = responseHeaders();
-    headers.set("Set-Cookie", expiredProviderSessionCookie(environment));
-    return Response.json(status(providerSessionAvailable(environment), null), { headers });
+    headers.append("Set-Cookie", expiredProviderSessionCookie(environment));
+    const generation = createProviderSessionGeneration(randomBytes);
+    if (generation !== null) {
+      headers.append("Set-Cookie", providerSessionGenerationCookie(
+        generation,
+        nowMs + PROVIDER_SESSION_GENERATION_TTL_MS,
+        environment,
+      ));
+    }
+    return Response.json(status(providerSessionAvailable(environment), null, false), { headers });
   } finally {
     admitted.release();
   }
@@ -217,12 +243,15 @@ class ProviderSessionBoundaryError extends Error {
 
 function status(
   available: boolean,
-  credential: Pick<UserProviderCredential, "baseUrl" | "expiresAtMs"> | null,
+  credential: Pick<UserProviderCredential, "baseUrl" | "expiresAtMs" | "scopeId"> | null,
+  resetRequired: boolean,
 ): ProviderSessionStatus {
   return Object.freeze({
     protocolVersion: PROVIDER_SESSION_PROTOCOL_VERSION,
     available,
     credentialPresent: credential !== null,
+    resetRequired: available && resetRequired,
+    credentialId: credential?.scopeId ?? null,
     endpoint: credential?.baseUrl ?? null,
     expiresAt: credential === null ? null : new Date(credential.expiresAtMs).toISOString(),
   });

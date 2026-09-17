@@ -191,6 +191,37 @@ describe("AdmissionDriver", () => {
     expect(h.commit).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a stopped recording owned while the page or modal suspends capture", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    const operation = { interactionId: "voice_1", attempt: 1 } as const;
+
+    h.driver.stop();
+    expect(h.driver.getState().phase).toBe("stopping");
+    h.driver.suspendCapture();
+    h.driver.cancelRawCapture();
+
+    expect(h.driver.getState().phase).toBe("stopping");
+    expect(h.voice.cancel).not.toHaveBeenCalled();
+    h.voice.finish(operation);
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets modal acquisition cancel only capture that has not crossed stop", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+
+    h.driver.cancelRawCapture();
+
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.voice.cancel).toHaveBeenCalledWith({ interactionId: "voice_1", attempt: 1 });
+  });
+
   it("discards an unsubmitted error surface when the page is suspended", async () => {
     const h = harness();
     await reachRecording(h.driver, h.voice);
@@ -203,6 +234,33 @@ describe("AdmissionDriver", () => {
     h.driver.suspendCapture();
 
     expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
+  it("retains a submitted failure across suspension for visible recovery", async () => {
+    const h = harness({
+      transcribe: vi.fn(async () => {
+        throw new Error("synthetic transcription outage");
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "TRANSCRIPTION_FAILED",
+      submitted: true,
+    });
+    h.driver.suspendCapture();
+    h.driver.resumeDelivery();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "TRANSCRIPTION_FAILED",
+      submitted: true,
+    });
     expect(h.commit).not.toHaveBeenCalled();
   });
 

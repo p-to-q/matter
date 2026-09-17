@@ -1,4 +1,5 @@
 import {
+  CandidateAttemptTimeoutError,
   CandidateRejectedError,
   PoolDrainingError,
   ScenarioPolicyError,
@@ -578,13 +579,6 @@ function registerDrainLease(key: string, disposer: Promise<void>): void {
   void cleanup;
 }
 
-export class CandidateAttemptTimeoutError extends Error {
-  constructor() {
-    super("The model relay did not answer inside its attempt window.");
-    this.name = "CandidateAttemptTimeoutError";
-  }
-}
-
 class ProviderHttpResponseError extends Error {
   constructor(readonly status: number) {
     super(`The model provider returned HTTP ${status}.`);
@@ -845,12 +839,10 @@ function makeHealthRoom(): void {
 /** Identity excludes secret text and user URLs while keeping credentials apart. */
 function candidateKey(candidate: PoolCandidate): string {
   if (candidate.credentialScopeId !== undefined) {
-    return [
-      candidate.station,
-      candidate.model,
-      candidate.transport?.id ?? "managed-openai-compatible/1",
-      candidate.credentialScopeId,
-    ].join("\u0000");
+    // A custom provider controls its catalog strings and can reflect the key or
+    // endpoint into a model id. The server-issued opaque scope is already fresh
+    // per verified lease and is therefore the only safe request-local identity.
+    return `user\u0000${candidate.credentialScopeId}`;
   }
   return [
     candidate.station,

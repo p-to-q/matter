@@ -11,6 +11,7 @@ import {
   type RefObject,
 } from "react";
 import type { TextSwapController } from "../interaction/use-text-swap";
+import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
 import {
@@ -65,6 +66,7 @@ export function PointTalkComposer({
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const inputId = useId();
   const phase = controller.state.phase;
+  const submitted = textSwapActionWasSubmitted(controller.state);
   const recoveryAction = pointTalkRecoveryAction(controller.state, voiceAvailable);
   const recoveryAvailable = recoveryAction !== null;
   const placementReady = placement !== null && targetBounds !== null;
@@ -203,21 +205,36 @@ export function PointTalkComposer({
   useEffect(() => {
     if (!surfaceAvailable) return;
     const cancelFromOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
-      onCancel();
+      const target = event.target;
+      const targetElement = target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null;
+      if (pointTalkOutsidePointerDismisses({
+        insideBubble: target instanceof Node && bubbleRef.current?.contains(target) === true,
+        insideCanvasChrome: targetElement?.closest("[data-canvas-chrome]") != null,
+        submitted,
+      })) onCancel();
     };
     document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
     return () => document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
-  }, [onCancel, surfaceAvailable]);
+  }, [onCancel, submitted, surfaceAvailable]);
 
   useEffect(() => {
-    if (!surfaceAvailable || !formVisible || !placementReady) return;
+    if (
+      !surfaceAvailable || !formVisible || !placementReady ||
+      document.visibilityState !== "visible"
+    ) return;
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
   }, [formVisible, placementReady, surfaceAvailable]);
 
   useLayoutEffect(() => {
-    if (!surfaceAvailable || !recoveryAvailable || !placementReady) return;
+    if (
+      !surfaceAvailable || !recoveryAvailable || !placementReady ||
+      document.visibilityState !== "visible"
+    ) return;
     retryRef.current?.focus({ preventScroll: true });
   }, [placementReady, recoveryAvailable, surfaceAvailable]);
 
@@ -271,6 +288,20 @@ export function PointTalkComposer({
       )}
     </div>
   );
+}
+
+export function pointTalkOutsidePointerDismisses({
+  insideBubble,
+  insideCanvasChrome,
+  submitted,
+}: Readonly<{
+  insideBubble: boolean;
+  insideCanvasChrome: boolean;
+  submitted: boolean;
+}>): boolean {
+  // Chrome may temporarily occlude accepted work, but draft and capture still
+  // follow their visible control and remain easy to dismiss.
+  return !insideBubble && (!insideCanvasChrome || !submitted);
 }
 
 function PointTalkForm({

@@ -18,7 +18,8 @@ Preview.57 is the next locally proven candidate. In addition to preserving the
 same public gates, it introduces an optional fixed-lifetime Model API lease. The
 source fails closed without `MATTER_PROVIDER_SESSION_KEYS`: managed model calls
 continue unchanged, while `GET /api/provider-session` reports
-`available: false` and the form remains disabled. That is a safe deployment,
+`available: false` and Test/Save/Remove actions remain unavailable while the
+two fields stay editable. That is a safe deployment,
 but it is not evidence that the requested Model API feature is available. The
 deployment owner must generate and store the independent AES-256 key ring as
 described in `deployment-handoff.md`; the repository maintainer is not
@@ -163,9 +164,10 @@ that exists, every occurrence of this will be found the same way.
 After the exact Preview.57 source has passed topic and merged-main CI, its
 automatic Preview and Production deployments, and the bounded public-origin
 version check, first read `GET https://matter.ptoq.io/api/provider-session`.
-The no-store strict status must identify protocol `3`, report
-`available: true`, `credentialPresent: false`, and `endpoint: null` without an
-operator cookie. It performs no provider request. If it reports
+The no-store strict status must identify protocol `4` and return the exact
+empty shape: `available: true`, `credentialPresent: false`,
+`resetRequired: false`, `credentialId: null`, `endpoint: null`, and
+`expiresAt: null` without an operator cookie. It performs no provider request. If it reports
 `available: false`, the source remains safe but the new Model API feature is not
 deployable; do not publish a Preview.57 prerelease and do not derive a sealing
 key from another deployment secret.
@@ -396,7 +398,10 @@ without its environment and SHA is insufficient.
    do not infer a global limit by multiplying these numbers by an unknown
    serverless replica count. Keep `GET /api/provider-session` as a local,
    no-provider status read and keep same-origin `DELETE` revocation outside any
-   expensive-probe queue so a person can always remove a saved credential.
+   expensive-probe queue so a person can always remove a saved credential. That
+   DELETE must preserve both `Set-Cookie` headers through the edge: bearer expiry
+   and the independent removal-generation rotation. Dropping or coalescing either
+   header breaks the cross-tab late-save ordering proof.
 2. Set a provider spend cap and delivery channel for budget alerts. Limit the
    key to this deployment and rotate any key that may have left the encrypted
    deployment store.

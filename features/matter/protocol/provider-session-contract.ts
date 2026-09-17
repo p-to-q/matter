@@ -7,7 +7,7 @@
  * operation path, and response vocabulary remain server-owned.
  */
 
-export const PROVIDER_SESSION_PROTOCOL_VERSION = "3" as const;
+export const PROVIDER_SESSION_PROTOCOL_VERSION = "4" as const;
 export const MAX_PROVIDER_SESSION_REQUEST_BYTES = 2 * 1_024;
 export const MAX_PROVIDER_SESSION_RESPONSE_BYTES = 8 * 1_024;
 /** Stays outside the route's 8s boundary and the platform's 10s ceiling. */
@@ -30,6 +30,10 @@ export type ProviderSessionStatus = Readonly<{
   protocolVersion: typeof PROVIDER_SESSION_PROTOCOL_VERSION;
   available: boolean;
   credentialPresent: boolean;
+  /** A malformed generation can only be repaired by an explicit DELETE. */
+  resetRequired: boolean;
+  /** Opaque per-lease receipt; it contains neither the key nor provider metadata. */
+  credentialId: string | null;
   endpoint: string | null;
   expiresAt: string | null;
 }>;
@@ -90,16 +94,22 @@ export function parseProviderSessionRequest(value: unknown): ProviderSessionRequ
 
 export function isProviderSessionStatus(value: unknown): value is ProviderSessionStatus {
   if (!isPlainObject(value) || !hasExactKeys(value, [
-    "protocolVersion", "available", "credentialPresent", "endpoint", "expiresAt",
+    "protocolVersion", "available", "credentialPresent", "resetRequired", "credentialId", "endpoint", "expiresAt",
   ])) return false;
   if (
     value.protocolVersion !== PROVIDER_SESSION_PROTOCOL_VERSION ||
     typeof value.available !== "boolean" ||
-    typeof value.credentialPresent !== "boolean"
+    typeof value.credentialPresent !== "boolean" ||
+    typeof value.resetRequired !== "boolean"
   ) return false;
-  if (!value.available && value.credentialPresent) return false;
-  if (!value.credentialPresent) return value.endpoint === null && value.expiresAt === null;
-  return typeof value.endpoint === "string" &&
+  if ((!value.available && (value.credentialPresent || value.resetRequired)) ||
+    (value.credentialPresent && value.resetRequired)) return false;
+  if (!value.credentialPresent) {
+    return value.credentialId === null && value.endpoint === null && value.expiresAt === null;
+  }
+  return typeof value.credentialId === "string" &&
+    /^[A-Za-z0-9_-]{22}$/u.test(value.credentialId) &&
+    typeof value.endpoint === "string" &&
     normalizeUserProviderEndpoint(value.endpoint) === value.endpoint &&
     isCanonicalTimestamp(value.expiresAt);
 }

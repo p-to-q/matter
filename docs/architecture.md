@@ -240,7 +240,7 @@ Direct adapter calls in tests remain intentionally outside that product
 admission boundary.
 
 The optional user-provider path is a request-local extension of this same
-foundation, not a second process-wide registry. `provider-session/3` accepts
+foundation, not a second process-wide registry. `provider-session/4` accepts
 only an explicit test/save action, one canonical HTTPS endpoint, and an optional
 replacement key; the browser cannot choose provider, model, operation path,
 transport profile, or arbitrary request shape. `PoolTransport` owns the full
@@ -269,14 +269,29 @@ preserves the previous user action.
 
 The successful profile and key are AES-256-GCM sealed in an `HttpOnly`, `Secure`,
 `SameSite=Strict` bearer cookie with a fixed 30-day lifetime; status reads do not
-extend it. The active sealing key writes and up to three older keys read during
-rotation. The key ring is deployment-only, and the cookie is attached only
-below the normalized Matter `/api` path. Legacy v2 and invalid cookies fail
-closed and are cleared rather than migrated ambiguously.
+extend it. A separate opaque HttpOnly removal-generation cookie orders DELETE
+against every already-started save without process memory: saves bind the
+generation they read and never write it, while DELETE rotates it and expires
+the bearer. Status exposes only the non-secret per-lease `credentialId` needed
+for an exact POST/GET save receipt. The active sealing key writes and up to
+three older keys read during rotation. The key ring is deployment-only, and the
+cookies are attached only below the normalized Matter `/api` path. Legacy v1–v3,
+generation-mismatched, duplicate, and invalid cookies fail closed and are
+reported by the zero-write status path rather than migrated ambiguously;
+explicit remove repairs damaged generation state, and a later verified save
+may replace an ordinary invalid bearer. Missing is the explicit initial
+generation so concurrent fresh status reads remain write-free and cannot erase
+an accepted action in another tab. The removal marker is `Priority=High` and the
+bearer `Priority=Low`, but priority is only eviction guidance. Copied
+bearer-plus-generation replay or selective marker eviction remains bounded by
+lease expiry/key retirement; exact active revocation requires shared durable
+state and is outside this stateless browser preference.
 
 Each model route decrypts the cookie for that request, constructs one ephemeral
 candidate, combines it with only the managed candidates authorized for that
-scenario, and then discards the plaintext key with request-local memory. A
+scenario, and then discards the plaintext key with request-local memory. Origin,
+rate, and concurrency admission happens first: refused traffic never parses a
+credential or constructs a provider adapter. A
 healthy user candidate remains first. Its opaque credential scope also owns a
 short health lane, so repeated transport failures temporarily move it behind a
 healthy managed candidate without affecting another person's lease. Provider

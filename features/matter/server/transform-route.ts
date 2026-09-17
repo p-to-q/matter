@@ -49,12 +49,6 @@ export async function handleTransformRequest(
   adapter?: ScenarioAdapter | null,
   observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
-  const resolvedAdapter = adapter === undefined
-    ? resolveScenarioRequestModelAdapter(request, "matter-transform", {
-        fallback: resolveTransformAdapter(),
-        limits: TRANSFORM_POOL_LIMITS,
-      }).adapter
-    : adapter;
   const observation = createMaterialTurnObservationOwner("expand-in-place", observationOptions);
   let admissionReason: "ORIGIN" | "RATE" | "BUSY" | undefined;
   try {
@@ -64,6 +58,12 @@ export async function handleTransformRequest(
       throw transformAdmissionError(admission.reason);
     }
     try {
+      const resolvedAdapter = adapter === undefined
+        ? resolveScenarioRequestModelAdapter(request, "matter-transform", {
+            fallback: resolveTransformAdapter(),
+            limits: TRANSFORM_POOL_LIMITS,
+          }).adapter
+        : adapter;
       return await withBoundedJsonRequest(request, TURN_REQUEST_POLICY, async (payload, signal, metadata) => {
         observation.noteRequestBytes(metadata.requestBytes);
         const parsed = parseTransformEnvelope(payload);

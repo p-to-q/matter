@@ -12,6 +12,7 @@ import {
   type ScenarioPerformanceObservation,
 } from "./harness";
 import {
+  CandidateAttemptTimeoutError,
   PoolDrainingError,
   ScenarioPolicyError,
   UnusableCompletionError,
@@ -266,6 +267,18 @@ describe("runScenario", () => {
     const hanging = withAdapterOwnedHealth(() => new Promise(() => undefined));
 
     await expect(runScenario(ECHO, "request-owned", hanging, governor, { limits }))
+      .resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+    expect(governor.cooling(Date.now())).toBe(false);
+  });
+
+  it("classifies an adapter-owned final-attempt deadline independently of timer order", async () => {
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 5_000 };
+    const timedOut = withAdapterOwnedHealth(async () => {
+      throw new CandidateAttemptTimeoutError();
+    });
+
+    await expect(runScenario(ECHO, "request-owned", timedOut, governor, { limits }))
       .resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
     expect(governor.cooling(Date.now())).toBe(false);
   });

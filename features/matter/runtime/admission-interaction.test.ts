@@ -224,9 +224,16 @@ describe("admission interaction reducer", () => {
     ["stopping", reduceAdmissionInteraction(recording(), { type: "stop" }).state, { type: "recording-failed", token: "voice_1", attempt: 1, errorCode: "RECORDING_FAILED" }],
     ["transcription", transcribing(), { type: "transcription-failed", token: "voice_1", attempt: 1, errorCode: "TRANSCRIPTION_TIMEOUT" }],
     ["commit", committing(), { type: "commit-failed", token: "voice_1", attempt: 1, errorCode: "STALE_TARGET" }],
-  ] as const)("makes %s failure recoverable after cleanup", (_name, state, event) => {
+  ] as const)("makes %s failure recoverable after cleanup", (name, state, event) => {
     const result = reduceAdmissionInteraction(state, event);
-    expect(result.state).toMatchObject({ phase: "error", token: "voice_1", attempt: 1, anchor: CHILD, errorCode: event.errorCode });
+    expect(result.state).toMatchObject({
+      phase: "error",
+      token: "voice_1",
+      attempt: 1,
+      anchor: CHILD,
+      errorCode: event.errorCode,
+      submitted: name === "stopping" || name === "transcription" || name === "commit",
+    });
     expect(result.effects).toEqual([
       { type: "cleanup-operation", token: "voice_1", attempt: 1, reason: "failed" },
     ]);

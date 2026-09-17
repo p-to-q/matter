@@ -66,6 +66,9 @@ export type VoiceCallbacks = VoiceCapture & Readonly<{
   onTranscript?: (transcript: string) => void;
   onDurationLimit?: (operation: VoiceOperation) => void;
   onRecording?: (recording: VoiceRecording) => void;
+  /** Reports a failure after `start()` has fulfilled. A failure while acquiring
+   * the transport is returned by `start()` alone, so one attempt has exactly
+   * one terminal error channel. */
   onError?: (error: VoiceError) => void;
   /** A different Matter voice lifecycle acquired the shared browser lease. */
   onOwnershipRevoked?: (operation: VoiceOperation) => void;

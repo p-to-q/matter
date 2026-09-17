@@ -769,7 +769,7 @@ independently server-gated. Its optional local completed record is not an answer
 adapter or model memory and never changes this visible-context, non-mutation
 contract.
 
-## User provider session provider-session/3
+## User provider session provider-session/4
 
 The settings surface stores a deliberate device-level provider preference; it
 does not widen any material envelope. The browser supplies only an action, one
@@ -779,29 +779,40 @@ vocabulary remain a finite server-only registry.
 
 ```ts
 type ProviderSessionRequest = {
-  protocolVersion: "3";
+  protocolVersion: "4";
   action: "test" | "save";
   endpoint: string;
   apiKey?: string; // omitted means retain; an empty string is never sent
 };
 
 type ProviderSessionStatus = {
-  protocolVersion: "3";
+  protocolVersion: "4";
   available: boolean;
   credentialPresent: boolean;
+  resetRequired: boolean; // damaged generation state needs explicit removal
+  credentialId: string | null; // opaque 128-bit per-lease save receipt
   endpoint: string | null; // non-secret server-canonical base
   expiresAt: string | null;
 };
 
 type ProviderSessionTestResult = {
-  protocolVersion: "3";
+  protocolVersion: "4";
   verified: true;
   endpoint: string;
 };
 ```
 
-`GET /api/provider-session` only decrypts the cookie and returns the exact
-non-secret status. It never contacts a provider and never slides the expiry.
+`GET /api/provider-session` only decrypts local cookie state and returns the
+exact non-secret status. It never contacts a provider, never writes a fresh
+generation for a new browser, and never slides the expiry.
+Invalid bearer state reports unavailable; malformed or mismatched generation
+state additionally reports `resetRequired`. This read is still zero-write:
+explicit remove repairs damaged state, while a later successful save replaces
+an ordinary invalid or expired bearer.
+The browser confirms a successful save with one such GET and accepts it only
+when `credentialId` still identifies the same lease returned by POST. Endpoint
+or expiry equality is not lease identity: another tab may save a different key
+for the same endpoint while the first response is in flight.
 An omitted POST key may reuse the sealed key only when the submitted canonical
 endpoint exactly equals the saved canonical base. Changing the endpoint
 requires the key again, so a stored secret is never silently forwarded to a new
@@ -827,12 +838,31 @@ be inferred safely from only endpoint and key and therefore fails closed.
 the sentinel succeeds; a failed replacement leaves the previous credential
 untouched. A different, incomplete, malformed, oversized, redirected, or late
 response also fails without writing. `DELETE` is same-origin protected and
-expires the same cookie path, but deliberately does not compete with provider
-probe rate or concurrency, so revocation remains available while checks are
-exhausted or stalled. Every response is `no-store` and varies on `Cookie`; the
-browser reads at most 8 KiB. Mutation errors use only `INVALID_REQUEST`,
-`FEATURE_UNAVAILABLE`, `CONNECTION_FAILED`, or `RATE_LIMITED` and never echo a
-provider body or key.
+expires the credential while rotating an independent opaque removal-generation
+cookie; every credential is sealed against the generation observed when its
+save began, and save responses never write that generation. Either response
+order therefore leaves a delete newer than every already-started save in the
+ordinary browser cookie jar. A missing marker is the explicit initial
+generation; only DELETE changes it. This avoids random status responses racing
+and invalidating an accepted save in another tab. The 400-day, `Priority=High`
+generation marker outlives every 30-day, `Priority=Low` bearer issued by a save
+already in flight when removal rotates it. Duplicate or malformed state fails
+closed. Cookie priority is eviction guidance, not authority: independent
+eviction of a removal marker while an initial-generation bearer remains is not
+revocation this stateless boundary can prove. DELETE deliberately does
+not compete with provider probe rate or concurrency, so removal remains
+available while checks are exhausted or stalled. Every response is `no-store`
+and varies on `Cookie`; the browser reads at most 8 KiB. Mutation errors use only
+`INVALID_REQUEST`, `FEATURE_UNAVAILABLE`, `CONNECTION_FAILED`, or `RATE_LIMITED`
+and never echo a provider body or key.
+
+This generation is ordinary browser-jar ordering, not distributed account
+revocation. An attacker who has already copied both an old bearer and its
+matching generation can replay that pair until the fixed lease expires or its
+sealing key is retired. Nor can stateless cookies prove removal after selective
+generation-cookie eviction. Preventing either case requires a shared durable
+subject/generation compare on every use; Matter neither claims nor silently
+simulates that stronger service.
 
 The endpoint is 1–512 ASCII code units and canonicalized with the platform URL
 parser. It must use HTTPS on the default port, contain a multi-label DNS name,
@@ -846,22 +876,26 @@ model-list, chat-completion, and Anthropic-message operations, so it is not a
 general relay.
 
 On a successful save the server seals `{ profileId, model, baseUrl, apiKey,
-scopeId, issuedAtMs, expiresAtMs }` with AES-256-GCM and a fresh 96-bit nonce.
+scopeId, generationId, issuedAtMs, expiresAtMs }` with AES-256-GCM and a fresh
+96-bit nonce.
 The first entry in the deployment key ring writes; at most three older entries
 remain read-only for rotation. The token is a `__Secure-` `HttpOnly`, `Secure`,
 `SameSite=Strict` cookie scoped to the normalized Matter API path. It has one
 fixed 30-day lifetime and is renewed only by another explicit successful save.
-Duplicate, v2, malformed, tampered, expired, future, unknown-key,
-unsafe-base-path, or over-bound tokens fail closed and are cleared by status
-requests. No key enters localStorage, IndexedDB, the material document, or a
-browser-visible response.
+Duplicate, v1–v3, malformed, tampered, expired, future, unknown-key,
+unsafe-base-path, invalid or mismatched generation, or over-bound tokens fail
+closed. Status reports them without writing cookies; explicit remove or a later
+successful save owns cleanup. No key enters localStorage, IndexedDB, the
+material document, or a browser-visible response. The server maps the already non-secret
+per-lease `scopeId` to `credentialId` only so the browser can confirm exact save
+ownership; provider profile, model, key, and sealed token stay hidden.
 
 The unsealed profile is request-local and is never rediscovered at runtime. Its
 candidate can supply the already-public repair, label, and Inquiry surfaces even
 when the corresponding managed adapter is disabled. Elastic and Text Swap still
 require their independent product gate. Only a live managed gate contributes
-managed candidates to the same request. The opaque `scopeId`, never key or
-endpoint text, separates disposable candidate health, drain, and label-cache
+managed candidates to the same request. The opaque `scopeId`, never key,
+endpoint, or provider-authored model text, separates disposable candidate health, drain, and label-cache
 ownership. A healthy user candidate is first; repeated transport failures cool
 only that scope and let a healthy managed candidate go first until the short
 cooldown expires. Scenario governors remain global across managed and user

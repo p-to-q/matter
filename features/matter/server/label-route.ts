@@ -26,15 +26,15 @@ export async function handleLabelRequest(
   adapter?: ScenarioAdapter | null,
   cacheScope = "managed",
 ): Promise<Response> {
-  const resolution = adapter === undefined
-    ? resolveScenarioRequestModelAdapter(request, "matter-thought-label", {
-        fallback: resolveLabelAdapter(),
-        limits: DEFAULT_POOL_LIMITS,
-      })
-    : Object.freeze({ adapter, cacheScope });
   const admission = labelAdmission.admit(request);
   if (!admission.ok) throw labelAdmissionError(admission.reason);
   try {
+    const resolution = adapter === undefined
+      ? resolveScenarioRequestModelAdapter(request, "matter-thought-label", {
+          fallback: resolveLabelAdapter(),
+          limits: DEFAULT_POOL_LIMITS,
+        })
+      : Object.freeze({ adapter, cacheScope });
     return await withBoundedJsonRequest(request, LABEL_REQUEST_POLICY, async (payload, signal) => {
       const parsed = parseLabelRequest(payload);
       if (!parsed.ok) throw invalidLabelRequest(parsed.message);

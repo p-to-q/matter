@@ -1,8 +1,9 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-const PROTOCOL_VERSION = "3" as const;
+const PROTOCOL_VERSION = "4" as const;
 const EXAMPLE_ENDPOINT = "https://api.kfc.com/v1";
 const EXAMPLE_KEY = "sk-kfcfkxqsvivowushiwoyaochishunzhiyuanweiji";
+const CREDENTIAL_ID = "AAAAAAAAAAAAAAAAAAAAAA";
 
 type ProviderTraffic = {
   deletes: number;
@@ -79,6 +80,9 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   await key.fill("sk-clear-on-pagehide");
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
   await expect(key).toHaveValue("");
+  // A real pagehide leaves no surface to click. Resume the synthetic page
+  // before proving that the still-mounted dialog and its focus return recover.
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow")));
   await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(settings).toBeFocused();
@@ -172,20 +176,24 @@ test("accepted save and remove actions survive presentation and language changes
   await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
   await page.locator('[data-chrome-control="language"]').click();
   await page.getByRole("menuitemradio", { name: "English" }).click();
+  dialog = await openApi("en-US");
+  await expect(dialog.getByRole("button", { name: "Saving…", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("textbox", { name: "API address" })).toHaveValue(EXAMPLE_ENDPOINT);
+  await expect(dialog.getByRole("textbox", { name: "API key" })).toHaveValue(EXAMPLE_KEY);
   releasePost();
   await expect.poll(() => connected).toBe(true);
-
-  dialog = await openApi("en-US");
   await expect(dialog).toContainText("Saved and ready.");
+  await expect(dialog.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  await expect(dialog.getByRole("textbox", { name: "API key" })).toHaveValue("");
   await expect(dialog).not.toContainText("已保存并可用。");
   await dialog.getByRole("button", { name: "Remove", exact: true }).click();
   await dialog.getByRole("button", { name: "Confirm remove", exact: true }).click();
   await expect.poll(() => deletes).toBe(1);
   await dialog.getByRole("button", { name: "Close: Model API" }).click();
+  dialog = await openApi("en-US");
+  await expect(dialog.getByRole("button", { name: "Removing…", exact: true })).toBeDisabled();
   releaseDelete();
   await expect.poll(() => connected).toBe(false);
-
-  dialog = await openApi("en-US");
   await expect(dialog.getByRole("button", { name: "Remove", exact: true })).toHaveCount(0);
   await expect(dialog.getByRole("textbox", { name: "API Key" })).toBeEnabled();
 });
@@ -230,23 +238,31 @@ test("an accepted remove updates saved state without erasing a newer draft or st
   await expect(dialog).not.toContainText("已移除保存的访问。");
 });
 
-test("an explicit save supersedes the opening status read without losing the action or draft", async ({ page }) => {
+test("the opening status read gates network actions without taking draft ownership", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   let gets = 0;
   let saves = 0;
+  let connected = false;
   let releaseGet!: () => void;
   const getGate = new Promise<void>((resolve) => { releaseGet = resolve; });
   await page.route("**/api/provider-session", async (route) => {
     if (route.request().method() === "GET") {
       gets += 1;
-      await getGate;
-      await route.fulfill({
-        contentType: "application/json",
-        body: JSON.stringify(statusBody(true, false)),
-      }).catch(() => undefined);
+      if (gets === 1) {
+        await getGate;
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify(statusBody(true, false)),
+        }).catch(() => undefined);
+      } else {
+        await fulfillStatus(route, connected);
+      }
       return;
     }
-    if (route.request().method() === "POST") saves += 1;
+    if (route.request().method() === "POST") {
+      saves += 1;
+      connected = true;
+    }
     await fulfillStatus(route, true);
   });
   await page.goto("/matter");
@@ -258,18 +274,62 @@ test("an explicit save supersedes the opening status read without losing the act
   const endpoint = dialog.getByRole("textbox", { name: "API 地址" });
   await endpoint.fill(EXAMPLE_ENDPOINT);
   await dialog.getByRole("textbox", { name: "API Key" }).fill(EXAMPLE_KEY);
+  await expect(dialog.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "测试", exact: true })).toBeDisabled();
+  expect(saves).toBe(0);
+  releaseGet();
+  await expect(dialog.getByRole("button", { name: "保存", exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "保存", exact: true }).click();
   await expect.poll(() => saves).toBe(1);
   await expect(dialog).toContainText("已保存并可用。");
 
   await endpoint.fill("https://draft.vendor.ai/v1");
-  releaseGet();
-  await page.waitForTimeout(50);
   await expect(endpoint).toHaveValue("https://draft.vendor.ai/v1");
   // The submitted credential remains the saved source of truth while this
-  // newer draft stays editable; the superseded opening read owns neither.
+  // newer draft stays editable; the completed status read owns neither.
   await expect(dialog).toContainText("此前的设置仍已保存");
   expect(saves).toBe(1);
+});
+
+test("damaged browser access resets explicitly without erasing the editable draft", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let damaged = true;
+  let deletes = 0;
+  await page.route("**/api/provider-session", async (route) => {
+    if (route.request().method() === "DELETE") {
+      deletes += 1;
+      damaged = false;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...statusBody(true, false),
+        resetRequired: damaged,
+      }),
+    });
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
+  await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+  await expect(dialog).toContainText("已保存的访问需要重置后才能继续使用。");
+
+  const endpoint = dialog.getByRole("textbox", { name: "API 地址" });
+  const key = dialog.getByRole("textbox", { name: "API Key" });
+  const draftEndpoint = "https://draft.vendor.ai/v1";
+  const draftKey = "sk-draft-remains-after-explicit-reset";
+  await endpoint.fill(draftEndpoint);
+  await key.fill(draftKey);
+  await expect(dialog.getByRole("button", { name: "测试", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "保存", exact: true })).toBeDisabled();
+
+  await dialog.getByRole("button", { name: "重置", exact: true }).click();
+  await expect.poll(() => deletes).toBe(1);
+  await expect(endpoint).toHaveValue(draftEndpoint);
+  await expect(key).toHaveValue(draftKey);
+  await expect(dialog).toContainText("浏览器访问状态已重置，现在可以保存这些内容。");
+  await expect(dialog.getByRole("button", { name: "测试", exact: true })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: "保存", exact: true })).toBeEnabled();
 });
 
 test("a transient status failure leaves the draft editable and recovers on reopen", async ({ page }) => {
@@ -361,6 +421,8 @@ function statusBody(available: boolean, connected: boolean) {
     protocolVersion: PROTOCOL_VERSION,
     available,
     credentialPresent: available && connected,
+    resetRequired: false,
+    credentialId: available && connected ? CREDENTIAL_ID : null,
     endpoint: available && connected ? EXAMPLE_ENDPOINT : null,
     expiresAt: available && connected ? "2026-10-17T09:00:00.000Z" : null,
   };

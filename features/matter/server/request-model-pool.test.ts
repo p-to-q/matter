@@ -14,7 +14,11 @@ vi.mock("./public-provider-fetch", () => ({
 }));
 
 import { DEFAULT_POOL_LIMITS } from "./model-pool";
-import { PROVIDER_SESSION_COOKIE, sealProviderCredential } from "./provider-session-crypto";
+import {
+  PROVIDER_SESSION_COOKIE,
+  PROVIDER_SESSION_GENERATION_COOKIE,
+  sealProviderCredential,
+} from "./provider-session-crypto";
 import {
   resolveRequestModelAdapter,
   resolveScenarioRequestModelAdapter,
@@ -28,6 +32,7 @@ import {
 import type { UserProviderSelection } from "./user-provider-registry";
 
 const KEY = Buffer.alloc(32, 5).toString("base64url");
+const GENERATION_ID = Buffer.alloc(16, 4).toString("base64url");
 const ENVIRONMENT = Object.freeze({
   MATTER_PROVIDER_SESSION_KEYS: `active:${KEY}`,
   MATTER_MODEL_POOL: "managed",
@@ -41,9 +46,17 @@ function sealedRequest(selection: UserProviderSelection = {
   model: "gpt-4.1-mini",
   baseUrl: "https://api.openai.com/v1",
 }, apiKey = "user-secret-key"): Request {
-  const sealed = sealProviderCredential(selection, apiKey, ENVIRONMENT)!;
+  const sealed = sealProviderCredential(
+    selection,
+    apiKey,
+    GENERATION_ID,
+    ENVIRONMENT,
+  )!;
   return new Request("https://matter.example/matter/api/inquiry", {
-    headers: { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` },
+    headers: { cookie: [
+      `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+      `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+    ].join("; ") },
   });
 }
 
@@ -62,7 +75,12 @@ describe("request model pool", () => {
     ["text-swap-route.ts", "matter-text-swap"],
   ] as const)("wires %s to the exact request-local scenario gate", (file, scenario) => {
     const source = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
-    expect(source).toContain(`resolveScenarioRequestModelAdapter(request, "${scenario}", {`);
+    const admissionIndex = source.indexOf("const admission =");
+    const resolutionIndex = source.indexOf(
+      `resolveScenarioRequestModelAdapter(request, "${scenario}", {`,
+    );
+    expect(admissionIndex).toBeGreaterThanOrEqual(0);
+    expect(resolutionIndex).toBeGreaterThan(admissionIndex);
     expect(source).toMatch(/adapter\?: ScenarioAdapter \| null/u);
     expect(source).toContain("adapter === undefined");
   });
@@ -158,6 +176,7 @@ describe("request model pool", () => {
   });
 
   it("does not let a user-only deadline cool another credential", async () => {
+    vi.useFakeTimers();
     let healthy = false;
     vi.stubGlobal("fetch", vi.fn(async () => healthy
       ? new Response(JSON.stringify({
@@ -182,10 +201,16 @@ describe("request model pool", () => {
         "matter-inquiry",
         { fallback: null, limits: poolLimits, environment },
       );
-      await expect(runScenario(SHORT_USER_INQUIRY, "first", first.adapter, governor, {
+      const firstOutcome = runScenario(SHORT_USER_INQUIRY, "first", first.adapter, governor, {
         limits: governorLimits,
         observe: () => undefined,
-      })).resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+      });
+      const firstAssertion = expect(firstOutcome).resolves.toEqual({
+        ok: false,
+        fallback: "MODEL_TIMEOUT",
+      });
+      await vi.advanceTimersByTimeAsync(60);
+      await firstAssertion;
       expect(governor.cooling(Date.now())).toBe(false);
 
       healthy = true;
@@ -199,6 +224,7 @@ describe("request model pool", () => {
         observe: () => undefined,
       })).resolves.toEqual({ ok: true, value: "second user answer" });
     } finally {
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     }
   });

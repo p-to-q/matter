@@ -105,6 +105,7 @@ export function PerformanceMatterApp({
         cancel: () => undefined,
         retry: () => undefined,
         dismiss: () => undefined,
+        setPresentationAvailable: () => undefined,
         setDeliveryTargetVisible: () => undefined,
         setDeliveryVisibleNodeIds: () => undefined,
         clearRepairPresentations: () => undefined,

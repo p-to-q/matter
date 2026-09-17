@@ -193,7 +193,18 @@ prefix, Matter follows the
 with a `__Secure-` name and the normalized Matter API path. The UI states the
 actual boundary: scripts cannot read the sealed cookie, but the browser stores
 it temporarily and selected material is sent to the chosen provider when a
-model action runs. Removal expires the same path immediately.
+model action runs. Removal expires the bearer and rotates an independent
+HttpOnly generation marker. A save binds the generation present when it began
+but never writes that marker, so a late save response cannot restore access in
+an ordinary browser jar. A browser with no marker uses one write-free initial
+generation so concurrent status reads cannot invalidate another tab's accepted
+save. Only DELETE writes the random marker. If that marker is later selectively
+evicted, stateless code cannot distinguish the jar from its initial state. The
+marker has high cookie priority and the bearer low priority, reducing—but not
+proving against—selective marker eviction. This does not revoke an
+attacker-copied bearer plus matching
+generation or survive arbitrary selective cookie eviction; those stronger
+promises require shared durable state.
 
 Provider wire behavior is checked against the current
 [OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
@@ -240,11 +251,13 @@ URL normalization and path duplication, credentials/fragments/ports/IP literals,
 mixed DNS answers, private and IPv4-mapped IPv6 addresses, connect pinning,
 redirects, lookup/socket/body abort, profile-attempt bounds, tampering, expiry,
 key rotation, duplicate cookies, base-path normalization, cross-origin
-submission, replay after removal, inaccessible form states, coarse-pointer
+submission, late-save replay after removal in the browser jar, explicit active-
+replay limitations, inaccessible form states, coarse-pointer
 targets, provider-specific request bodies, pool ordering and fallback, global
 load shedding, credential-scoped health/cache/drain identity, and proof that no
-key or custom URL reaches status JSON, material, history, logs, cache keys, or
-health/drain keys.
+key reaches status JSON, material, history, logs, cache keys, or health/drain
+keys; status returns only the canonical endpoint plus one opaque non-secret
+lease receipt.
 
 ## Decision rule
 

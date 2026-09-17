@@ -24,15 +24,15 @@ export async function handleRepairRequest(
   request: Request,
   adapter?: ScenarioAdapter | null,
 ): Promise<Response> {
-  const resolvedAdapter = adapter === undefined
-    ? resolveScenarioRequestModelAdapter(request, "matter-transcript-repair", {
-        fallback: resolveRepairAdapter(),
-        limits: REPAIR_POOL_LIMITS,
-      }).adapter
-    : adapter;
   const admission = repairAdmission.admit(request);
   if (!admission.ok) throw repairAdmissionError(admission.reason);
   try {
+    const resolvedAdapter = adapter === undefined
+      ? resolveScenarioRequestModelAdapter(request, "matter-transcript-repair", {
+          fallback: resolveRepairAdapter(),
+          limits: REPAIR_POOL_LIMITS,
+        }).adapter
+      : adapter;
     return await withBoundedJsonRequest(request, REPAIR_REQUEST_POLICY, async (payload, signal) => {
       const parsed = parseRepairRequest(payload);
       if (!parsed.ok) throw invalidRepairRequest(parsed.message);

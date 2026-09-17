@@ -63,11 +63,16 @@ export function projectNodeHandleMetrics(input: MetricsInput): NodeHandleMetrics
   const scale = Math.min(1, Math.max(0.7, ratio));
   const floor = input.coarse ? COARSE_POINTER_FLOOR : FINE_POINTER_FLOOR;
   const button = Math.max(floor, Math.round((input.coarse ? 48 : 44) * scale));
+  // Once a finger target reaches its accessibility floor, its surrounding
+  // carrier must stay equally addressable too. In particular, a paint-only
+  // selection may not shrink this chrome by changing the inline line box that
+  // supplied the optical ink measurement.
+  const carrierScale = input.coarse ? 1 : scale;
   return Object.freeze({
     button,
-    gap: Math.max(4, Math.round(6 * scale)),
-    paddingX: Math.max(9, Math.round(12 * scale)),
-    paddingY: Math.max(8, Math.round(11 * scale)),
+    gap: Math.max(4, Math.round(6 * carrierScale)),
+    paddingX: Math.max(9, Math.round(12 * carrierScale)),
+    paddingY: Math.max(8, Math.round(11 * carrierScale)),
   });
 }
 

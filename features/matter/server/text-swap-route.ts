@@ -44,12 +44,6 @@ export async function handleTextSwapRequest(
   adapter?: ScenarioAdapter | null,
   observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
-  const resolvedAdapter = adapter === undefined
-    ? resolveScenarioRequestModelAdapter(request, "matter-text-swap", {
-        fallback: resolveTextSwapAdapter(),
-        limits: TEXT_SWAP_POOL_LIMITS,
-      }).adapter
-    : adapter;
   // Swap and fixed expand share one public generative-mutation perimeter while
   // keeping separate protocol, provider switch, scenario health, and prompt.
   const observation = createMaterialTurnObservationOwner("paraphrase-in-place", observationOptions);
@@ -61,6 +55,12 @@ export async function handleTextSwapRequest(
       throw admissionError(admission.reason);
     }
     try {
+      const resolvedAdapter = adapter === undefined
+        ? resolveScenarioRequestModelAdapter(request, "matter-text-swap", {
+            fallback: resolveTextSwapAdapter(),
+            limits: TEXT_SWAP_POOL_LIMITS,
+          }).adapter
+        : adapter;
       return await withBoundedJsonRequest(request, REQUEST_POLICY, async (payload, signal, metadata) => {
         observation.noteRequestBytes(metadata.requestBytes);
         const parsed = parseTextSwapEnvelope(payload);

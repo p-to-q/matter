@@ -391,9 +391,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const canvasChromeRef = useRef<CanvasChromeHandle>(null);
   const [canvasOverlay, setCanvasOverlay] = useState<CanvasChromeOverlay>(null);
   const materialPresentationAvailable = !canvasOverlayOwnsSurface(canvasOverlay);
+  const [pagePresentationAvailable, setPagePresentationAvailable] = useState(true);
+  const outcomePresentationAvailable = materialPresentationAvailable && pagePresentationAvailable;
+  const setAdmissionPresentationAvailable = props.admission.setPresentationAvailable;
   const [pointTalkOwner, setPointTalkOwner] = useState<PointTalkOwner | null>(null);
   const [pointTalkPresented, setPointTalkPresented] = useState(false);
   const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
+  useEffect(() => subscribePageSuspension(
+    () => setPagePresentationAvailable(false),
+    () => setPagePresentationAvailable(true),
+  ), []);
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
   // bootstrap so hydration can never discard a load-window edit.
@@ -1234,6 +1241,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       )) return;
       const canvas = canvasRef.current;
       if (canvas === null || document.visibilityState !== "visible") return;
+      if (documentFocusIsOwned()) return;
       for (const candidate of canvas.querySelectorAll<HTMLElement>(
         `${ACTIVE_LAYOUT_NODE_SELECTOR} > [data-thought-text-id]`,
       )) {
@@ -1310,7 +1318,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretchRecoveryRef.current = stretch.reopen;
   }, [stretch.reopen]);
   const changeCanvasOverlay = useCallback((next: CanvasChromeOverlay) => {
-    if (materialPresentationAvailable && canvasOverlayOwnsSurface(next)) {
+    const nextOwnsSurface = canvasOverlayOwnsSurface(next);
+    if (nextOwnsSurface) setAdmissionPresentationAvailable(false);
+    if (materialPresentationAvailable && nextOwnsSurface) {
       // A modal may arrive from another pointer while a surface gesture still
       // owns capture. Roll back only that unfinished gesture; settled intent,
       // submitted work, and the semantic lasso address remain owned.
@@ -1322,7 +1332,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
     }
     setCanvasOverlay(next);
-  }, [lasso, materialPresentationAvailable, stretch]);
+  }, [lasso, materialPresentationAvailable, setAdmissionPresentationAvailable, stretch]);
+  useLayoutEffect(() => {
+    // Reopen delivery only after React has removed modal ownership from the
+    // committed tree. Opening remains synchronous in changeCanvasOverlay.
+    if (materialPresentationAvailable) {
+      setAdmissionPresentationAvailable(true);
+    }
+  }, [materialPresentationAvailable, setAdmissionPresentationAvailable]);
   const closePointTalk = useCallback(() => {
     setPointTalkPresented(false);
   }, []);
@@ -2059,6 +2076,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         context.documentEpoch,
         document.visibilityState === "visible",
       )) return;
+      if (documentFocusIsOwned()) return;
       shellRef.current
         ?.querySelector<HTMLButtonElement>('[data-tool-id="voice"]')
         ?.focus({ preventScroll: true });
@@ -3300,6 +3318,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               }}
               onReturnFocus={restoreVoiceToolFocus}
               onHeightChange={setAdmissionFeedbackHeight}
+              presented={outcomePresentationAvailable}
             />
           </div>
           </div>
@@ -3394,7 +3413,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onReleased={releasePointTalkJob}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
-            surfaceAvailable={materialPresentationAvailable}
+            surfaceAvailable={outcomePresentationAvailable}
             targetBounds={pointTalkTargetBounds}
             tree={tree}
             deliveryVisibleNodeIds={visiblyLaidOutNodeIds}
@@ -4321,6 +4340,11 @@ function normalizePointerType(value: string): CanvasPointerType {
   return value === "touch" || value === "pen" ? value : "mouse";
 }
 
+function documentFocusIsOwned(): boolean {
+  const active = document.activeElement;
+  return active instanceof HTMLElement && active !== document.body && active.isConnected;
+}
+
 function AdmissionFeedback({
   anchor,
   parentBox,
@@ -4329,6 +4353,7 @@ function AdmissionFeedback({
   onDismiss,
   onReturnFocus,
   onHeightChange,
+  presented,
 }: {
   anchor: InteractionAdmissionAnchor | null;
   parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
@@ -4337,6 +4362,7 @@ function AdmissionFeedback({
   onDismiss: () => void;
   onReturnFocus: (basis: AdmissionFocusRestorationBasis | null) => void;
   onHeightChange: (height: number) => void;
+  presented: boolean;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
   const retryFocusRef = useRef(false);
@@ -4357,10 +4383,11 @@ function AdmissionFeedback({
       observer.disconnect();
       onHeightChange(0);
     };
-  }, [anchor, onHeightChange, phase]);
+  }, [anchor, onHeightChange, phase, presented]);
   useLayoutEffect(() => {
     const previousState = previousStateRef.current;
     previousStateRef.current = controller.state;
+    if (!presented || document.visibilityState !== "visible") return;
     if (phase === "error") {
       retryFocusRef.current = false;
       feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
@@ -4374,8 +4401,8 @@ function AdmissionFeedback({
       retryFocusRef.current = false;
       if (previousState.phase !== "idle") onReturnFocus(controller.settlement);
     }
-  }, [controller.settlement, controller.state, onReturnFocus, phase]);
-  if (controller.state.phase === "idle" || anchor === null) return null;
+  }, [controller.settlement, controller.state, onReturnFocus, phase, presented]);
+  if (!presented || controller.state.phase === "idle" || anchor === null) return null;
   const style = {
     transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
   } as CSSProperties;

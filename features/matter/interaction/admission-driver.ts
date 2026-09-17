@@ -187,6 +187,11 @@ export class AdmissionDriver {
     this.send({ type: "cancel" });
   }
 
+  /** Cancels only microphone work that the person has not submitted yet. */
+  cancelRawCapture(): void {
+    if (admissionRawCaptureOwnsOperation(this.state)) this.send({ type: "cancel" });
+  }
+
   retry(locale = this.dependencies.locale): void {
     if (this.state.phase !== "error") return;
     const operation = {
@@ -206,13 +211,17 @@ export class AdmissionDriver {
 
   suspendCapture(): void {
     this.setDeliveryWindowOpen(false);
-    if (admissionCaptureOwnsOperation(this.state)) {
-      this.send({ type: "cancel" });
+    if (admissionRawCaptureOwnsOperation(this.state)) {
+      this.cancelRawCapture();
       return;
     }
-    // An error owns no finalized material and its retry surface is transient UI.
-    // Do not leave that surface (or its focus) behind when the page is hidden.
-    if (this.state.phase === "error") this.send({ type: "dismiss" });
+    // Permission and live-capture errors precede submission, so their surface
+    // can leave with the hidden capture UI. A failure after Stop still belongs
+    // to an accepted user action; keep its recovery state for the next visible
+    // delivery window instead of making event timing decide whether it exists.
+    if (this.state.phase === "error" && !this.state.submitted) {
+      this.send({ type: "dismiss" });
+    }
   }
 
   resumeDelivery(): void {
@@ -363,7 +372,7 @@ export class AdmissionDriver {
           onOwnershipRevoked: (revoked) => {
             if (
               sameVoiceOperation(operation, revoked) &&
-              admissionCaptureOwnsOperation(this.state, operation)
+              admissionRawCaptureOwnsOperation(this.state, operation)
             ) this.send({ type: "cancel" });
           },
         }).then(
@@ -707,15 +716,14 @@ function stateOwnsOperation(
     state.attempt === operation.attempt;
 }
 
-function admissionCaptureOwnsOperation(
+function admissionRawCaptureOwnsOperation(
   state: AdmissionInteractionState,
   operation?: VoiceOperation,
 ): boolean {
-  if (
-    state.phase !== "requesting" &&
-    state.phase !== "recording" &&
-    state.phase !== "stopping"
-  ) return false;
+  // Stop is the submission boundary. The recorder may still be flushing final
+  // chunks in `stopping`, but visibility, modal acquisition, or a late device
+  // revocation must not reinterpret that accepted action as raw capture.
+  if (state.phase !== "requesting" && state.phase !== "recording") return false;
   return operation === undefined || (
     state.token === operation.interactionId && state.attempt === operation.attempt
   );

@@ -707,8 +707,10 @@ function submittedState(state: TextSwapInteractionState): state is Extract<
   TextSwapInteractionState,
   { readonly phase: "pending" | "transcribing" }
 > {
-  return state.phase === "pending" ||
-    (state.phase === "transcribing" && state.recorderSettled);
+  // Stopping Voice is the person's submit. `recorderSettled` describes only
+  // whether the browser has flushed its final chunks; it is not an authority
+  // boundary and must not make presentation loss cancel accepted work.
+  return state.phase === "pending" || state.phase === "transcribing";
 }
 
 function stateOwnsTextSwapCapture(
@@ -716,8 +718,7 @@ function stateOwnsTextSwapCapture(
   resources: VoiceResources | null,
 ): boolean {
   if (resources === null) return false;
-  return state.phase === "permission" || state.phase === "recording" ||
-    (state.phase === "transcribing" && !state.recorderSettled);
+  return state.phase === "permission" || state.phase === "recording";
 }
 
 function materialSelectionOf(scope: TextSwapScope): SegmentSelection | null {

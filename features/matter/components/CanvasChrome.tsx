@@ -610,11 +610,18 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
 
   const closeOverlay = useCallback((restoreFocus = true) => {
     if (overlay === "inquiry") inquiryBubbleRef.current?.detach();
+    const closingFocus = document.activeElement;
     onOverlayChange(null);
     const returnTarget = returnFocusRef.current;
     returnFocusRef.current = null;
     if (restoreFocus && returnTarget?.isConnected) {
-      requestAnimationFrame(() => focusWithoutScroll(returnTarget));
+      requestAnimationFrame(() => {
+        // A released material error may already have moved focus to its
+        // recovery action. Return focus only when the closing surface still
+        // owns it (or the browser dropped it to the body).
+        if (documentFocusChangedToUsableTarget(closingFocus)) return;
+        focusWithoutScroll(returnTarget);
+      });
     }
   }, [onOverlayChange, overlay]);
 
@@ -691,7 +698,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     return () => query.removeEventListener("change", onBreakpointChange);
   }, [onOverlayChange]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!modalOpen) return;
     const frame = requestAnimationFrame(() => {
       focusWithoutScroll(getFocusable(dialogRef.current)[0]);
@@ -699,7 +706,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     return () => cancelAnimationFrame(frame);
   }, [modalOpen, overlay]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!modalOpen) return;
     const root = rootRef.current;
     const canvas = root?.closest<HTMLElement>(".matter-document");
@@ -1597,6 +1604,14 @@ function getFocusable(container: HTMLElement | null): HTMLElement[] {
 
 function focusWithoutScroll(element: HTMLElement | undefined): void {
   element?.focus({ preventScroll: true });
+}
+
+function documentFocusChangedToUsableTarget(closingFocus: Element | null): boolean {
+  const active = document.activeElement;
+  return active !== closingFocus &&
+    active instanceof HTMLElement &&
+    active !== document.body &&
+    active.isConnected;
 }
 
 function MenuButton({

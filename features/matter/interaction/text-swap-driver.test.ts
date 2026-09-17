@@ -254,6 +254,7 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState()).toMatchObject({
       phase: "error",
       errorCode: "TRANSCRIPTION_FAILED",
+      submitted: true,
     });
     expect(h.buildEnvelope).not.toHaveBeenCalled();
     expect(h.request).not.toHaveBeenCalled();
@@ -269,6 +270,7 @@ describe("TextSwapDriver", () => {
       phase: "error",
       errorCode: "RECORDING_FAILED",
       retryable: true,
+      submitted: false,
     });
     expect(h.driver.getState()).not.toHaveProperty("direction");
     expect(h.driver.retry()).toBe(false);
@@ -373,6 +375,28 @@ describe("TextSwapDriver", () => {
     expect(h.request).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps Voice submit while the recorder flushes behind a hidden surface", async () => {
+    const h = harness();
+    const operation = await reachRecording(h);
+    h.driver.stopRecording();
+    expect(h.driver.getState()).toMatchObject({ phase: "transcribing", recorderSettled: false });
+
+    expect(h.driver.detachPresentation()).toBe(true);
+    h.driver.suspendCapture();
+    h.voice.starts[0]?.callbacks.onOwnershipRevoked?.(operation);
+
+    expect(h.driver.getState()).toMatchObject({ phase: "transcribing", recorderSettled: false });
+    expect(h.voice.cancel).not.toHaveBeenCalled();
+    h.voice.finish(operation, "Use a calmer rhythm");
+    await settle(30);
+    expect(h.commit).not.toHaveBeenCalled();
+
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.driver.getState().phase).toBe("success");
+  });
+
   it("aborts a pending request on selection loss and gives its late plan no commit authority", async () => {
     let resolveRequest!: (plan: TextSwapPlan) => void;
     const observedSignal: { current?: AbortSignal } = {};
@@ -414,6 +438,7 @@ describe("TextSwapDriver", () => {
       retryable: true,
       direction: "Use a calmer rhythm",
       requestId: "text_swap_request_1",
+      submitted: true,
     });
     expect(h.driver.retry()).toBe(true);
     await settle();

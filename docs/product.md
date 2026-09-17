@@ -148,6 +148,9 @@ Different submitted owners may coexist, but every material result waits for a
 visible, pointer-idle delivery window and exact target revalidation. A neutral
 lasso is not itself an AI operation: it may remain visible as the person's
 explicit Inquiry context until a grip actually begins an Elastic adjustment.
+Modal chrome cancels only raw microphone capture; a Voice action already
+submitted at Stop may finish processing, but its material change remains held
+until the paper is perceivable again.
 
 Provider, pool, timeout, and transport failures are operational events, not
 material. They leave the exact source intact and return the current Elastic,
@@ -163,6 +166,12 @@ only while the canonical address is unchanged. The server—not the person—own
 provider detection, bounded model choice, completion path, request shape, and
 response contract. The saved credential has a fixed 30-day device lease, while
 status reading itself makes no network request and does not extend that lease.
+One opaque non-secret receipt lets the form confirm that its exact save still
+owns the browser slot. Removing access rotates a separate browser generation,
+so a verified save that began earlier cannot restore itself when its response
+arrives late. This is browser-jar ordering, not revocation of credentials an
+attacker copied out of the browser before removal, nor a guarantee after the
+browser selectively evicts only the removal marker.
 The key is never written to material, history, the local document, or
 browser-readable storage. On the already-public repair, label, and Inquiry
 surfaces, that verified lease remains usable even when Matter's managed provider

@@ -9,6 +9,7 @@ import {
 } from "../interaction/use-text-swap";
 import type { SegmentSelection } from "../material/text-segments";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
+import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
 import type { TextSwapCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import type { PointTalkBounds } from "./point-talk-placement";
@@ -95,6 +96,12 @@ export function PointTalkTurn({
     if (!presented) controller.detachPresentation();
   }, [controller, presented]);
   useEffect(() => {
+    if (surfaceAvailable || !presented || textSwapActionWasSubmitted(controller.state)) return;
+    const retained = controller.detachPresentation();
+    onClose();
+    if (!retained) onReleased();
+  }, [controller, onClose, onReleased, presented, surfaceAvailable]);
+  useEffect(() => {
     if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
   }, [onReleased, phase, presented]);
   const close = useCallback(() => {
@@ -105,7 +112,11 @@ export function PointTalkTurn({
     if (!retained) onReleased();
   }, [controller, onClose, onReleased]);
 
-  if (selection === null || !presented) return null;
+  // Keep the controller alive while submitted work settles, but mount its
+  // status/recovery surface only when it can actually be perceived. A failure
+  // reached behind a modal or hidden tab is then announced and focused once,
+  // when the material surface returns.
+  if (selection === null || !presented || !surfaceAvailable) return null;
   return (
     <PointTalkComposer
       boundaryRef={boundaryRef}

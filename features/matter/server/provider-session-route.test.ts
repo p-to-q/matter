@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import { PROVIDER_SESSION_PROTOCOL_VERSION } from "../protocol/provider-session-contract";
 import {
   PROVIDER_SESSION_COOKIE,
+  PROVIDER_SESSION_GENERATION_COOKIE,
   PROVIDER_SESSION_TTL_MS,
   sealProviderCredential,
   unsealProviderCredential,
@@ -19,6 +20,7 @@ import type { UserProviderSelection } from "./user-provider-registry";
 
 const KEY = Buffer.alloc(32, 6).toString("base64url");
 const NOW = Date.UTC(2026, 8, 11, 1, 0, 0);
+const GENERATION_ID = Buffer.alloc(16, 7).toString("base64url");
 const ENVIRONMENT = Object.freeze({
   MATTER_PROVIDER_SESSION_KEYS: `active:${KEY}`,
   MATTER_BASE_PATH: "/matter",
@@ -93,9 +95,11 @@ describe("provider-session route", () => {
     const response = await getProviderSessionStatus(new Request("https://matter.example/matter/api/provider-session"), {});
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      protocolVersion: "3",
+      protocolVersion: "4",
       available: false,
       credentialPresent: false,
+      resetRequired: false,
+      credentialId: null,
       endpoint: null,
       expiresAt: null,
     });
@@ -104,7 +108,67 @@ describe("provider-session route", () => {
     expect(connect.headers.get("set-cookie")).toBeNull();
   });
 
-  it("performs exactly one official sentinel before issuing a v3 HttpOnly cookie", async () => {
+  it("keeps the implicit initial generation write-free on a fresh status read", async () => {
+    const status = await getProviderSessionStatus(
+      new Request("https://matter.example/matter/api/provider-session"),
+      ENVIRONMENT,
+      NOW,
+    );
+    expect(await status.json()).toMatchObject({
+      available: true,
+      credentialPresent: false,
+    });
+    expect(status.headers.getSetCookie()).toHaveLength(0);
+  });
+
+  it("reports a malformed generation without rewriting it and recovers only through explicit remove", async () => {
+    const status = await getProviderSessionStatus(new Request(
+      "https://matter.example/matter/api/provider-session",
+      { headers: { cookie: `${PROVIDER_SESSION_GENERATION_COOKIE}=malformed` } },
+    ), ENVIRONMENT, NOW);
+
+    expect(await status.json()).toEqual({
+      protocolVersion: "4",
+      available: true,
+      credentialPresent: false,
+      resetRequired: true,
+      credentialId: null,
+      endpoint: null,
+      expiresAt: null,
+    });
+    expect(status.headers.getSetCookie()).toHaveLength(0);
+
+    const reset = removeProviderSession(sameOriginRequest("DELETE"), ENVIRONMENT, NOW + 1);
+    expect(await reset.json()).toMatchObject({
+      credentialPresent: false,
+      resetRequired: false,
+    });
+    expect(reset.headers.getSetCookie()).toContainEqual(
+      expect.stringContaining(`${PROVIDER_SESSION_GENERATION_COOKIE}=`),
+    );
+  });
+
+  it("fails closed without mutating cookies when a non-initial generation is absent", async () => {
+    const sealed = sealProviderCredential(
+      OPENAI_SELECTION,
+      BODY.apiKey,
+      GENERATION_ID,
+      ENVIRONMENT,
+      NOW,
+    )!;
+    const response = await getProviderSessionStatus(new Request(
+      "https://matter.example/matter/api/provider-session",
+      { headers: { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` } },
+    ), ENVIRONMENT, NOW + 1);
+
+    expect(await response.json()).toMatchObject({
+      credentialPresent: false,
+      resetRequired: false,
+    });
+    expect(response.headers.getSetCookie()).toHaveLength(0);
+  });
+
+  it("performs exactly one official sentinel before issuing a v4 HttpOnly cookie", async () => {
     const calls: Array<Readonly<{ url: string; body: Record<string, unknown>; authorization: string | null }>> = [];
     const provider = vi.fn<typeof fetch>(async (url, init) => {
       calls.push(Object.freeze({
@@ -129,17 +193,38 @@ describe("provider-session route", () => {
     });
     expect(JSON.stringify(calls[0]!.body)).toContain("MATTER_READY");
     const cookie = response.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain(`${PROVIDER_SESSION_COOKIE}=v3.active.`);
+    expect(cookie).toContain(`${PROVIDER_SESSION_COOKIE}=v4.active.`);
     expect(cookie).toContain("Path=/matter/api");
     const payload = await response.json();
     expect(payload).toEqual({
-      protocolVersion: "3",
+      protocolVersion: "4",
       available: true,
       credentialPresent: true,
+      resetRequired: false,
+      credentialId: expect.stringMatching(/^[A-Za-z0-9_-]{22}$/u),
       endpoint: "https://api.openai.com/v1",
       expiresAt: new Date(NOW + PROVIDER_SESSION_TTL_MS).toISOString(),
     });
     expect(JSON.stringify(payload)).not.toContain(BODY.apiKey);
+  });
+
+  it("keeps a stale status response incapable of erasing a later accepted save", async () => {
+    const staleStatus = await getProviderSessionStatus(new Request(
+      "https://matter.example/matter/api/provider-session",
+      { headers: { cookie: `${PROVIDER_SESSION_COOKIE}=v4.invalid` } },
+    ), ENVIRONMENT, NOW);
+    const saved = await connectProviderSession(
+      jsonRequest("POST", BODY),
+      ENVIRONMENT,
+      NOW + 1,
+      async () => completion(),
+    );
+
+    expect(saved.status).toBe(200);
+    expect(saved.headers.getSetCookie()).toContainEqual(
+      expect.stringContaining(`${PROVIDER_SESSION_COOKIE}=v4.active.`),
+    );
+    expect(staleStatus.headers.getSetCookie()).toHaveLength(0);
   });
 
   it("supports the reviewed Anthropic wire format without exposing profile or key", async () => {
@@ -183,7 +268,7 @@ describe("provider-session route", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-      protocolVersion: "3",
+      protocolVersion: "4",
       verified: true,
       endpoint: "https://api.openai.com/v1",
     });
@@ -193,7 +278,7 @@ describe("provider-session route", () => {
   it("does not externalize an omitted key when no credential is saved", async () => {
     const provider = vi.fn<typeof fetch>(async () => completion());
     const response = await connectProviderSession(jsonRequest("POST", {
-      protocolVersion: "3",
+      protocolVersion: "4",
       action: "save",
       endpoint: "https://api.openai.com/v1",
     }), ENVIRONMENT, NOW, provider);
@@ -203,12 +288,21 @@ describe("provider-session route", () => {
   });
 
   it("reads saved state without any external request or sliding renewal", async () => {
-    const sealed = sealProviderCredential(OPENAI_SELECTION, BODY.apiKey, ENVIRONMENT, NOW)!;
+    const sealed = sealProviderCredential(
+      OPENAI_SELECTION,
+      BODY.apiKey,
+      GENERATION_ID,
+      ENVIRONMENT,
+      NOW,
+    )!;
     const external = vi.fn<typeof fetch>();
     vi.stubGlobal("fetch", external);
     const response = await getProviderSessionStatus(new Request(
       "https://matter.example/matter/api/provider-session",
-      { headers: { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` } },
+      { headers: { cookie: [
+        `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+        `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+      ].join("; ") } },
     ), ENVIRONMENT, NOW + 7 * 24 * 60 * 60_000);
     expect(response.status).toBe(200);
     expect(external).not.toHaveBeenCalled();
@@ -223,13 +317,22 @@ describe("provider-session route", () => {
   it.each(["test", "save"] as const)(
     "%s reuses a saved key only for the exact canonical endpoint",
     async (action) => {
-      const sealed = sealProviderCredential(OPENAI_SELECTION, BODY.apiKey, ENVIRONMENT, NOW)!;
+      const sealed = sealProviderCredential(
+        OPENAI_SELECTION,
+        BODY.apiKey,
+        GENERATION_ID,
+        ENVIRONMENT,
+        NOW,
+      )!;
       const provider = vi.fn<typeof fetch>(async () => completion());
       const response = await connectProviderSession(jsonRequest("POST", {
-        protocolVersion: "3",
+        protocolVersion: "4",
         action,
         endpoint: OPENAI_SELECTION.baseUrl,
-      }, { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` }), ENVIRONMENT, NOW + 1, provider);
+      }, { cookie: [
+        `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+        `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+      ].join("; ") }), ENVIRONMENT, NOW + 1, provider);
       expect(response.status).toBe(200);
       expect(provider).toHaveBeenCalledOnce();
       expect(new Headers(provider.mock.calls[0]![1]?.headers).get("authorization"))
@@ -239,25 +342,43 @@ describe("provider-session route", () => {
   );
 
   it("requires the key again before sending it to a changed endpoint", async () => {
-    const sealed = sealProviderCredential(OPENAI_SELECTION, BODY.apiKey, ENVIRONMENT, NOW)!;
+    const sealed = sealProviderCredential(
+      OPENAI_SELECTION,
+      BODY.apiKey,
+      GENERATION_ID,
+      ENVIRONMENT,
+      NOW,
+    )!;
     const provider = vi.fn<typeof fetch>(async () => completion());
     const response = await connectProviderSession(jsonRequest("POST", {
-      protocolVersion: "3",
+      protocolVersion: "4",
       action: "test",
       endpoint: "https://api.deepseek.com",
-    }, { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` }), ENVIRONMENT, NOW + 1, provider);
+    }, { cookie: [
+      `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+      `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+    ].join("; ") }), ENVIRONMENT, NOW + 1, provider);
     expect(response.status).toBe(400);
     expect(provider).not.toHaveBeenCalled();
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   it("leaves the previous credential untouched when a replacement save fails", async () => {
-    const sealed = sealProviderCredential(OPENAI_SELECTION, BODY.apiKey, ENVIRONMENT, NOW)!;
+    const sealed = sealProviderCredential(
+      OPENAI_SELECTION,
+      BODY.apiKey,
+      GENERATION_ID,
+      ENVIRONMENT,
+      NOW,
+    )!;
     const response = await connectProviderSession(jsonRequest("POST", {
       ...BODY,
       endpoint: "https://api.deepseek.com",
       apiKey: "replacement-secret",
-    }, { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` }), ENVIRONMENT, NOW + 1, async () => (
+    }, { cookie: [
+      `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+      `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+    ].join("; ") }), ENVIRONMENT, NOW + 1, async () => (
       new Response(null, { status: 401 })
     ));
     expect(response.status).toBe(502);
@@ -423,7 +544,7 @@ describe("provider-session route", () => {
         async () => completion(answer),
       );
       expect(response.status).toBe(200);
-      expect(response.headers.get("set-cookie")).toContain(`${PROVIDER_SESSION_COOKIE}=v3.active.`);
+      expect(response.headers.get("set-cookie")).toContain(`${PROVIDER_SESSION_COOKIE}=v4.active.`);
     },
   );
 
@@ -479,9 +600,18 @@ describe("provider-session route", () => {
   });
 
   it("returns only non-secret status and removes the lease with the same narrow path", async () => {
-    const sealed = sealProviderCredential(OPENAI_SELECTION, BODY.apiKey, ENVIRONMENT, NOW)!;
+    const sealed = sealProviderCredential(
+      OPENAI_SELECTION,
+      BODY.apiKey,
+      GENERATION_ID,
+      ENVIRONMENT,
+      NOW,
+    )!;
     const request = new Request("https://matter.example/matter/api/provider-session", {
-      headers: { cookie: `${PROVIDER_SESSION_COOKIE}=${sealed.token}` },
+      headers: { cookie: [
+        `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+        `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+      ].join("; ") },
     });
     const response = await getProviderSessionStatus(request, ENVIRONMENT, NOW + 1);
     const text = await response.text();
@@ -489,18 +619,22 @@ describe("provider-session route", () => {
     expect(text).toContain(OPENAI_SELECTION.baseUrl);
     expect(text).not.toContain(OPENAI_SELECTION.model);
     expect(JSON.parse(text)).toEqual({
-      protocolVersion: "3",
+      protocolVersion: "4",
       available: true,
       credentialPresent: true,
+      resetRequired: false,
+      credentialId: sealed.credential.scopeId,
       endpoint: "https://api.openai.com/v1",
       expiresAt: new Date(NOW + PROVIDER_SESSION_TTL_MS).toISOString(),
     });
 
     const removed = removeProviderSession(jsonRequest("DELETE"), ENVIRONMENT);
     expect(await removed.json()).toEqual({
-      protocolVersion: "3",
+      protocolVersion: "4",
       available: true,
       credentialPresent: false,
+      resetRequired: false,
+      credentialId: null,
       endpoint: null,
       expiresAt: null,
     });
@@ -510,26 +644,37 @@ describe("provider-session route", () => {
 
   it.each([
     ["old v2", `${PROVIDER_SESSION_COOKIE}=v2.active.invalid.invalid.invalid`],
-    ["malformed", `${PROVIDER_SESSION_COOKIE}=v3.invalid`],
+    ["old v3", `${PROVIDER_SESSION_COOKIE}=v3.active.invalid.invalid.invalid`],
+    ["malformed", `${PROVIDER_SESSION_COOKIE}=v4.invalid`],
     ["expired", (() => {
-      const sealed = sealProviderCredential(OPENAI_SELECTION, BODY.apiKey, ENVIRONMENT, NOW)!;
-      return `${PROVIDER_SESSION_COOKIE}=${sealed.token}`;
+      const sealed = sealProviderCredential(
+        OPENAI_SELECTION,
+        BODY.apiKey,
+        GENERATION_ID,
+        ENVIRONMENT,
+        NOW,
+      )!;
+      return [
+        `${PROVIDER_SESSION_COOKIE}=${sealed.token}`,
+        `${PROVIDER_SESSION_GENERATION_COOKIE}=${GENERATION_ID}`,
+      ].join("; ");
     })()],
-  ])("clears a %s cookie instead of migrating it", async (kind, cookie) => {
+  ])("fails a %s cookie closed without allowing a stale GET to mutate it", async (kind, cookie) => {
     const now = kind === "expired" ? NOW + PROVIDER_SESSION_TTL_MS : NOW;
     const response = await getProviderSessionStatus(new Request(
       "https://matter.example/matter/api/provider-session",
       { headers: { cookie } },
     ), ENVIRONMENT, now);
     expect(await response.json()).toEqual({
-      protocolVersion: "3",
+      protocolVersion: "4",
       available: true,
       credentialPresent: false,
+      resetRequired: false,
+      credentialId: null,
       endpoint: null,
       expiresAt: null,
     });
-    expect(response.headers.get("set-cookie")).toContain(`${PROVIDER_SESSION_COOKIE}=;`);
-    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(response.headers.getSetCookie()).toHaveLength(0);
   });
 
   it("rejects cross-origin mutation before reading or probing a key", async () => {
@@ -570,7 +715,7 @@ describe("provider-session route", () => {
     expect(removed.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
-  it("keeps removal outside the occupied probe concurrency lane", async () => {
+  it("keeps removal outside the occupied probe lane and makes every older save unusable", async () => {
     const releases: Array<(response: Response) => void> = [];
     const checks = Array.from({ length: 3 }, () => connectProviderSession(
       sameOriginRequest("POST", BODY),
@@ -579,9 +724,38 @@ describe("provider-session route", () => {
       async () => new Promise<Response>((resolve) => releases.push(resolve)),
     ));
     await vi.waitFor(() => expect(releases).toHaveLength(3));
-    const removed = removeProviderSession(sameOriginRequest("DELETE"), PRODUCTION_ENVIRONMENT);
+    const removed = removeProviderSession(
+      sameOriginRequest("DELETE"),
+      PRODUCTION_ENVIRONMENT,
+      NOW + 1,
+    );
     expect(removed.status).toBe(200);
+    const removalCookies = removed.headers.getSetCookie();
+    expect(removalCookies).toHaveLength(2);
+    const generationCookie = removalCookies.find((cookie) => (
+      cookie.startsWith(`${PROVIDER_SESSION_GENERATION_COOKIE}=`)
+    ));
+    expect(generationCookie).toBeDefined();
     for (const release of releases) release(completion());
-    await expect(Promise.all(checks)).resolves.toHaveLength(3);
+    const olderSaves = await Promise.all(checks);
+    for (const response of olderSaves) {
+      expect(response.status).toBe(200);
+      const credentialCookie = response.headers.getSetCookie().find((cookie) => (
+        cookie.startsWith(`${PROVIDER_SESSION_COOKIE}=`)
+      ));
+      expect(credentialCookie).toBeDefined();
+      const replay = new Request("https://matter.example/matter/api/provider-session", {
+        headers: { cookie: [credentialCookie!, generationCookie!]
+          .map((cookie) => cookie.split(";", 1)[0])
+          .join("; ") },
+      });
+      const statusAfterLateSave = await getProviderSessionStatus(
+        replay,
+        PRODUCTION_ENVIRONMENT,
+        NOW + 2,
+      );
+      expect(await statusAfterLateSave.json()).toMatchObject({ credentialPresent: false });
+      expect(statusAfterLateSave.headers.getSetCookie()).toHaveLength(0);
+    }
   });
 });

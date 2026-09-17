@@ -16,18 +16,18 @@ const valid = Object.freeze({
 });
 
 describe("provider-session contract", () => {
-  it("accepts only an exact v3 test/save request with an optional replacement key", () => {
-    expect(PROVIDER_SESSION_PROTOCOL_VERSION).toBe("3");
+  it("accepts only an exact v4 test/save request with an optional replacement key", () => {
+    expect(PROVIDER_SESSION_PROTOCOL_VERSION).toBe("4");
     expect(parseProviderSessionRequest(valid).ok).toBe(true);
     expect(parseProviderSessionRequest({
-      protocolVersion: "3",
+      protocolVersion: "4",
       action: "test",
       endpoint: valid.endpoint,
     })).toEqual({
       ok: true,
-      request: { protocolVersion: "3", action: "test", endpoint: valid.endpoint },
+      request: { protocolVersion: "4", action: "test", endpoint: valid.endpoint },
     });
-    expect(parseProviderSessionRequest({ ...valid, protocolVersion: "2" }).ok).toBe(false);
+    expect(parseProviderSessionRequest({ ...valid, protocolVersion: "3" }).ok).toBe(false);
     expect(parseProviderSessionRequest({ ...valid, action: "connect" }).ok).toBe(false);
     expect(parseProviderSessionRequest({ ...valid, apiKey: "" }).ok).toBe(false);
     expect(parseProviderSessionRequest({ ...valid, provider: "openai" }).ok).toBe(false);
@@ -62,7 +62,7 @@ describe("provider-session contract", () => {
     expect(parseProviderSessionRequest({ ...valid, endpoint: input })).toEqual({
       ok: true,
       request: {
-        protocolVersion: "3",
+        protocolVersion: "4",
         action: "save",
         endpoint: expected,
         apiKey: valid.apiKey,
@@ -105,6 +105,8 @@ describe("provider-session contract", () => {
       protocolVersion: PROVIDER_SESSION_PROTOCOL_VERSION,
       available: true,
       credentialPresent: true,
+      resetRequired: false,
+      credentialId: "AAAAAAAAAAAAAAAAAAAAAA",
       endpoint: valid.endpoint,
       expiresAt: "2026-09-11T08:00:00.000Z",
     };
@@ -113,6 +115,7 @@ describe("provider-session contract", () => {
     expect(isProviderSessionStatus({ ...status, endpoint: "https://mirror.vendor.ai/v1/" })).toBe(false);
     expect(isProviderSessionStatus({ ...status, provider: "openai" })).toBe(false);
     expect(isProviderSessionStatus({ ...status, model: "gpt-4.1-mini" })).toBe(false);
+    expect(isProviderSessionStatus({ ...status, credentialId: "short" })).toBe(false);
     expect(isProviderSessionStatus({ ...status, credentialPresent: false })).toBe(false);
     expect(isProviderSessionStatus({ ...status, endpoint: null })).toBe(false);
     expect(isProviderSessionStatus({ ...status, expiresAt: "0" })).toBe(false);
@@ -122,6 +125,8 @@ describe("provider-session contract", () => {
       protocolVersion: PROVIDER_SESSION_PROTOCOL_VERSION,
       available: true,
       credentialPresent: false,
+      resetRequired: false,
+      credentialId: null,
       endpoint: null,
       expiresAt: null,
     })).toBe(true);
@@ -129,6 +134,8 @@ describe("provider-session contract", () => {
       protocolVersion: PROVIDER_SESSION_PROTOCOL_VERSION,
       available: false,
       credentialPresent: false,
+      resetRequired: false,
+      credentialId: null,
       endpoint: null,
       expiresAt: null,
     })).toBe(true);
@@ -136,9 +143,21 @@ describe("provider-session contract", () => {
       protocolVersion: PROVIDER_SESSION_PROTOCOL_VERSION,
       available: false,
       credentialPresent: true,
+      resetRequired: false,
+      credentialId: status.credentialId,
       endpoint: valid.endpoint,
       expiresAt: status.expiresAt,
     })).toBe(false);
+    expect(isProviderSessionStatus({
+      protocolVersion: PROVIDER_SESSION_PROTOCOL_VERSION,
+      available: true,
+      credentialPresent: false,
+      resetRequired: true,
+      credentialId: null,
+      endpoint: null,
+      expiresAt: null,
+    })).toBe(true);
+    expect(isProviderSessionStatus({ ...status, resetRequired: true })).toBe(false);
   });
 
   it("strictly recognizes a non-secret test result", () => {
