@@ -24,9 +24,9 @@ appears only in Codex session records as a local-candidate claim dated
 2026-09-11. It remains invalid: its UI contract and source tree predate the
 current candidate. The replacement implementation tree at `fb37ef8`, followed
 by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
-below. No Preview.57 commit, PR, tag, or GitHub release exists remotely yet, so
-those receipts prove a reviewable candidate, not publication or a deployed
-origin.
+below. Neither `fb37ef8`, `2f3d506`, nor this record exists remotely; no current
+Preview.57 PR, tag, or GitHub release exists. These receipts therefore prove a
+reviewable candidate, not publication or a deployed origin.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
