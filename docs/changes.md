@@ -22,9 +22,9 @@ Forecloses: what this makes harder or impossible
 Changed: Model API keeps the person's safe HTTPS path as the first custom
 candidate, repairs only unambiguous local scheme mistakes, and may probe one
 same-host `/v1` base when the exact path cannot expose a usable catalog. The
-address field preserves the person's draft verbatim; normalization stays inside
-the request boundary, and only a successful response may replace it with the
-proven canonical address. The
+address field preserves the person's draft verbatim through editing and testing;
+normalization stays inside the request boundary, and only a successful explicit
+save may replace it with the proven canonical address. The
 three catalog requests remain one connection-time budget; at most one candidate
 per base/wire pair receives a short proof, the proven canonical base alone is
 sealed, and runtime material calls never repeat discovery. The

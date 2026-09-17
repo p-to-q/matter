@@ -55,6 +55,7 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   await dialog.getByRole("button", { name: "测试", exact: true }).click();
   await expect.poll(() => traffic.tests).toBe(1);
   await expect(dialog).toContainText("连接可用。");
+  await expect(endpoint).toHaveValue("api.kfc.com");
   await expect(key).toHaveValue(EXAMPLE_KEY);
 
   await dialog.locator("form").evaluate((form) => {
@@ -401,7 +402,7 @@ async function mockProviderSession(page: Page): Promise<ProviderTraffic> {
           body: JSON.stringify({
             protocolVersion: PROTOCOL_VERSION,
             verified: true,
-            endpoint: body.endpoint,
+            endpoint: EXAMPLE_ENDPOINT,
           }),
         });
         return;
