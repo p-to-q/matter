@@ -1,13 +1,17 @@
 import {
+  CandidateAttemptTimeoutError,
+  CandidateRejectedError,
   PoolDrainingError,
+  ScenarioPolicyError,
   UnusableCompletionError,
   type UnusableCompletionCode,
 } from "./completion-outcome";
-import type {
-  MatterScenarioId,
-  ScenarioAdapter,
-  ScenarioCall,
-  ScenarioCandidateEvent,
+import {
+  withAdapterOwnedHealth,
+  type MatterScenarioId,
+  type ScenarioAdapter,
+  type ScenarioCall,
+  type ScenarioCandidateEvent,
 } from "./harness";
 import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 
@@ -17,11 +21,11 @@ import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
  * The pool exists because each endpoint is a relay that may disappear without
  * notice. Ordered fallback is therefore normal operation, not an error path.
  *
- * This module is the only place an endpoint host, a model name, or a key
- * appears. Keys are read from the environment at call time and never enter a
- * request that reaches the browser, a log line, an error message, or a cache
- * key. An answer carries no provider identity, so a person cannot tell — and
- * does not need to tell — which relay named their thought.
+ * This module owns the managed environment pool. Reviewed user-provider hosts,
+ * models, and transports live in the server-only registry; their request-local
+ * credentials arrive only through the sealed provider-session boundary. No
+ * key enters a log line, error message, material cache key, or browser-visible
+ * response. An answer carries no provider identity.
  *
  * New deployments use the scenario-neutral `MATTER_MODEL_*` namespace. The
  * deployed `MATTER_LABEL_*` layout remains a complete legacy fallback so a
@@ -35,9 +39,43 @@ export type PoolCandidate = Readonly<{
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** Separates disposable health for request-local user credentials. */
+  credentialScopeId?: string;
+  /** A reviewed provider owns its request shape; arbitrary clients do not. */
+  transport?: PoolTransport;
   /** Provider-compatible top-level thinking switch, when explicitly set. */
   enableThinking?: boolean;
 }>;
+
+export type PoolTransport = Readonly<{
+  id: string;
+  /** Custom mirrors use a DNS-pinned HTTPS boundary instead of global fetch. */
+  fetch?: typeof fetch;
+  /** The reviewed wire profile, not the caller, owns its operation path. */
+  completionUrl: (baseUrl: string) => string;
+  /** Authentication and provider-version headers never cross into browser code. */
+  authHeaders: (apiKey: string) => Readonly<Record<string, string>>;
+  /** Status and media type are part of the reviewed provider wire contract. */
+  acceptsResponse: (response: Response) => boolean;
+  serialize: (
+    call: ScenarioCall,
+    maximumOutputTokens: number,
+    model: string,
+  ) => Readonly<Record<string, unknown>>;
+  /** The reviewed provider owns the complete response vocabulary. */
+  parseCompletion: (payload: unknown) => PoolParsedCompletion;
+}>;
+
+export type PoolParsedCompletion = Readonly<{
+  content: unknown;
+  disposition: PoolCompletionDisposition;
+  unusable?: UnusableCompletionCode;
+}>;
+
+export type PoolCompletionDisposition =
+  | "complete"
+  | "missing"
+  | UnusableCompletionCode;
 
 export type PoolLimits = Readonly<{
   /** Below this, a further attempt cannot finish inside the caller's deadline. */
@@ -190,9 +228,9 @@ export function createPoolAdapter(
   pool: readonly PoolCandidate[],
   limits: PoolLimits = DEFAULT_POOL_LIMITS,
   now: () => number = Date.now,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl?: typeof fetch,
 ): ScenarioAdapter {
-  return async (input, signal) => {
+  const adapter: ScenarioAdapter = async (input, signal) => {
     noteCandidate(input, "pool");
     const deadlineAtMs = now() + input.deadlineMs;
     let lastError: unknown = new Error("The model pool is empty.");
@@ -204,13 +242,16 @@ export function createPoolAdapter(
     );
     let attempted = false;
     let skippedDraining = false;
+    let lastRejection: CandidateRejectedError | null = null;
+    let lastNonRejectionError: unknown = null;
+    let sawNonRejectionFailure = false;
     for (let index = 0; index < ordered.length; index += 1) {
       const candidate = ordered[index]!;
       if (hasDrainingAttempt(healthKey(input.scenario, candidate))) {
         skippedDraining = true;
         continue;
       }
-      if (drainingAttemptCount >= MAX_DRAINING_ATTEMPTS) throw new PoolDrainingError();
+      assertDrainCapacity();
       const remaining = deadlineAtMs - now();
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       // Starting an attempt that cannot finish spends the caller's deadline on
@@ -224,10 +265,26 @@ export function createPoolAdapter(
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
         recordOutcome(candidate, input.scenario, "answered", limits, now);
+        let verdict: ReturnType<NonNullable<ScenarioCall["adjudicateCandidate"]>> | undefined;
+        try {
+          verdict = input.adjudicateCandidate?.(text);
+        } catch (error) {
+          // The transport still completed. Record one terminal attempt even
+          // though local scenario policy could not classify its text.
+          noteCandidate(input, "answered");
+          throw error;
+        }
+        if (verdict !== undefined && !verdict.ok) {
+          noteCandidate(input, "rejected");
+          lastRejection = new CandidateRejectedError(verdict.reason);
+          lastError = lastRejection;
+          continue;
+        }
         noteCandidate(input, "answered");
         return { text };
       } catch (error) {
         if (signal.aborted) throw error;
+        if (error instanceof ScenarioPolicyError) throw error;
         if (error instanceof UnusableCompletionError) {
           // A relay that repeatedly returns no usable final text is demoted for
           // this scenario, while the surface-wide governor stays neutral. A
@@ -235,6 +292,8 @@ export function createPoolAdapter(
           // behaviour, so fallback remains useful rather than deterministic.
           recordOutcome(candidate, input.scenario, "incomplete", limits, now);
           noteCandidate(input, error.code === "truncated" ? "truncated" : "refused");
+          sawNonRejectionFailure = true;
+          lastNonRejectionError = error;
           lastError = error;
           continue;
         }
@@ -254,12 +313,60 @@ export function createPoolAdapter(
           now,
         );
         noteCandidate(input, outcome);
+        sawNonRejectionFailure = true;
+        lastNonRejectionError = error;
         lastError = error;
       }
     }
     if (!attempted && skippedDraining) throw new PoolDrainingError();
+    if (lastRejection !== null && !sawNonRejectionFailure && !skippedDraining) {
+      throw lastRejection;
+    }
+    if (lastNonRejectionError !== null) throw lastNonRejectionError;
+    if (skippedDraining) throw new PoolDrainingError();
     throw lastError;
   };
+  // Candidate health, cooldown, and drain ownership already live in this
+  // module. The harness still meters concurrency, but a pool result must not
+  // also mutate its coarser process-wide health counter.
+  return withAdapterOwnedHealth(adapter);
+}
+
+/** Proves one reviewed user candidate before any credential cookie is issued. */
+export async function probePoolCandidate(
+  candidate: PoolCandidate,
+  signal: AbortSignal,
+  fetchImpl?: typeof fetch,
+  attemptMs = 6_000,
+): Promise<void> {
+  signal.throwIfAborted();
+  // A connection check can outlive its route when a third-party transport
+  // ignores abort just like an ordinary model attempt. It therefore shares
+  // the same process-wide drain ceiling instead of creating an unbounded lane
+  // merely because no credential cookie has been issued yet.
+  assertDrainCapacity();
+  const limits: PoolLimits = Object.freeze({
+    minimumAttemptMs: 400,
+    maxAttemptShare: 1,
+    maxOutputTokens: 12,
+    maxResponseBytes: 8 * 1_024,
+    failuresBeforeCooldown: 1,
+    cooldownMs: 30_000,
+  });
+  const answer = await completeOnce(candidate, {
+    scenario: "matter-inquiry",
+    prompt: "Return exactly MATTER_READY. This is a connection check; do not add any other text.",
+    locale: "en",
+    input: null,
+    deadlineMs: attemptMs,
+    maxOutputTokens: 12,
+  }, signal, limits, attemptMs, fetchImpl);
+  // Text providers commonly preserve a final newline even for deterministic
+  // output. Ignore surrounding whitespace only; any additional token still
+  // fails the capability proof.
+  if (answer.trim() !== "MATTER_READY") {
+    throw new Error("The provider check did not return the expected capability proof.");
+  }
 }
 
 /**
@@ -273,14 +380,23 @@ function orderedCandidates(
   nowMs: number,
 ): readonly PoolCandidate[] {
   pruneExpiredHealth(nowMs);
+  const healthyRequestCredentials: PoolCandidate[] = [];
+  const coolingRequestCredentials: PoolCandidate[] = [];
   const healthy: PoolCandidate[] = [];
   const cooling: PoolCandidate[] = [];
   for (const candidate of pool) {
+    // A person's selected provider remains first across completed failures.
+    // An actually draining attempt is still skipped by the caller loop so an
+    // advisory abort cannot multiply live third-party work.
     const entry = health.get(healthKey(scenario, candidate));
-    if (entry !== undefined && nowMs < entry.cooldownUntilMs) cooling.push(candidate);
-    else healthy.push(candidate);
+    const candidateCooling = entry !== undefined && nowMs < entry.cooldownUntilMs;
+    if (candidate.credentialScopeId !== undefined) {
+      (candidateCooling ? coolingRequestCredentials : healthyRequestCredentials).push(candidate);
+    } else {
+      (candidateCooling ? cooling : healthy).push(candidate);
+    }
   }
-  return [...healthy, ...cooling];
+  return [...healthyRequestCredentials, ...healthy, ...coolingRequestCredentials, ...cooling];
 }
 
 async function completeOnce(
@@ -289,8 +405,11 @@ async function completeOnce(
   signal: AbortSignal,
   limits: PoolLimits,
   attemptMs: number,
-  fetchImpl: typeof fetch,
+  fetchImpl?: typeof fetch,
 ): Promise<string> {
+  // AbortSignal listeners observe only future transitions. Guard the current
+  // state too, so no direct caller can spend a request after authority ended.
+  signal.throwIfAborted();
   const attempt = new AbortController();
   let attemptTimedOut = false;
   const timer = setTimeout(() => {
@@ -315,39 +434,23 @@ async function completeOnce(
     // adapters. The hard race is what preserves time for the next relay when a
     // transport ignores AbortSignal; the signal still performs best-effort
     // socket and response-body cleanup underneath it.
-    request = fetchImpl(`${candidate.baseUrl}/chat/completions`, {
+    const maximumOutputTokens = Math.min(
+      limits.maxOutputTokens,
+      Number.isSafeInteger(input.maxOutputTokens) && input.maxOutputTokens > 0
+        ? input.maxOutputTokens
+        : limits.maxOutputTokens,
+    );
+    const requestFetch = fetchImpl ?? candidate.transport?.fetch ?? fetch;
+    const transport = candidate.transport;
+    request = requestFetch(transport?.completionUrl(candidate.baseUrl) ?? `${candidate.baseUrl}/chat/completions`, {
         method: "POST",
         headers: {
+          ...(transport?.authHeaders(candidate.apiKey) ?? { authorization: `Bearer ${candidate.apiKey}` }),
           accept: "application/json",
-          authorization: `Bearer ${candidate.apiKey}`,
           "content-type": "application/json",
         },
-        body: JSON.stringify({
-          model: candidate.model,
-          // Every Matter scenario is deterministic by intent: an unchanged node
-          // must not rename itself on a cache miss, and one utterance must not be
-          // repaired differently on a retry. Sampling has nothing to offer here.
-          temperature: 0,
-          // The scenario's own ceiling wins when it asked for one. A short
-          // thought must not buy a long generation, and a long one must be
-          // given room to finish: a completion the relay reports as cut off is
-          // refused below, so a ceiling set too low costs the scenario its
-          // floor rather than delivering half a sentence.
-          max_tokens: Math.min(
-            limits.maxOutputTokens,
-            Number.isSafeInteger(input.maxOutputTokens) && input.maxOutputTokens > 0
-              ? input.maxOutputTokens
-              : limits.maxOutputTokens,
-          ),
-          stream: false,
-          // `enable_thinking` is a provider extension, not an OpenAI-compatible
-          // field. Omit it unless this candidate explicitly declared support;
-          // a scenario may only narrow that declared capability to `false`.
-          ...(candidate.enableThinking === undefined
-            ? {}
-            : { enable_thinking: input.disableThinking === true ? false : candidate.enableThinking }),
-          messages: [{ role: "user", content: input.prompt }],
-        }),
+        body: JSON.stringify(transport?.serialize(input, maximumOutputTokens, candidate.model) ??
+          serializeManagedOpenAiCompatible(candidate, input, maximumOutputTokens)),
         cache: "no-store",
         redirect: "error",
         signal: attempt.signal,
@@ -358,7 +461,11 @@ async function completeOnce(
       // relay that has already refused hold the fallback lane open by streaming
       // or withholding an irrelevant body.
       handOffResponseBody(cancelResponseBody(response));
-      throw new Error(`Model provider returned HTTP ${response.status}.`);
+      throw new ProviderHttpResponseError(response.status);
+    }
+    if (transport !== undefined && !transport.acceptsResponse(response)) {
+      handOffResponseBody(cancelResponseBody(response));
+      throw new Error("The reviewed provider returned an unexpected response envelope.");
     }
     const body = await readBounded(
       response,
@@ -367,17 +474,22 @@ async function completeOnce(
       handOffResponseBody,
     );
     responseBodyConsumed = true;
-    const completion = extractCompletion(JSON.parse(body) as unknown);
-    const disposition = classifyTerminators(completion.terminators);
+    const payload = JSON.parse(body) as unknown;
+    const completion = transport?.parseCompletion(payload) ?? parseManagedCompletion(payload);
+    const disposition = completion.disposition;
     if (disposition === "unknown-terminator") noteCandidate(input, "unknown-terminator");
     if (completion.unusable !== undefined) throw new UnusableCompletionError(completion.unusable);
-    if (disposition !== "complete" && disposition !== "missing") {
-      throw new UnusableCompletionError(disposition);
-    }
     if (typeof completion.content !== "string") {
       throw new Error("The model provider response had no text.");
     }
-    if (disposition === "missing") noteCandidate(input, "missing-terminator");
+    if (disposition === "missing") {
+      noteCandidate(input, "missing-terminator");
+      if (transport !== undefined) {
+        throw new UnusableCompletionError("unknown-terminator");
+      }
+    } else if (disposition !== "complete") {
+      throw new UnusableCompletionError(disposition);
+    }
     return completion.content;
   } catch (error) {
     if (attemptTimedOut && !signal.aborted) throw new CandidateAttemptTimeoutError();
@@ -394,8 +506,32 @@ async function completeOnce(
   }
 }
 
+function serializeManagedOpenAiCompatible(
+  candidate: PoolCandidate,
+  input: ScenarioCall,
+  maximumOutputTokens: number,
+): Readonly<Record<string, unknown>> {
+  return {
+    model: candidate.model,
+    // Matter retries must not silently redraw unchanged material.
+    temperature: 0,
+    max_tokens: maximumOutputTokens,
+    stream: false,
+    // This extension belongs only to managed relays that declare it. Reviewed
+    // user-provider adapters own their own capability vocabulary.
+    ...(candidate.enableThinking === undefined
+      ? {}
+      : { enable_thinking: input.disableThinking === true ? false : candidate.enableThinking }),
+    messages: [{ role: "user", content: input.prompt }],
+  };
+}
+
 function hasDrainingAttempt(key: string): boolean {
   return (drainingAttempts.get(key)?.size ?? 0) > 0;
+}
+
+function assertDrainCapacity(): void {
+  if (drainingAttemptCount >= MAX_DRAINING_ATTEMPTS) throw new PoolDrainingError();
 }
 
 /**
@@ -443,10 +579,10 @@ function registerDrainLease(key: string, disposer: Promise<void>): void {
   void cleanup;
 }
 
-class CandidateAttemptTimeoutError extends Error {
-  constructor() {
-    super("The model relay did not answer inside its attempt window.");
-    this.name = "CandidateAttemptTimeoutError";
+class ProviderHttpResponseError extends Error {
+  constructor(readonly status: number) {
+    super(`The model provider returned HTTP ${status}.`);
+    this.name = "ProviderHttpResponseError";
   }
 }
 
@@ -518,6 +654,15 @@ function classifyTerminators(report: TerminatorReport): "complete" | "missing" |
   if (kinds.includes("blocked-or-refused")) return "blocked-or-refused";
   if (kinds.includes("tool-or-continuation")) return "tool-or-continuation";
   return "truncated";
+}
+
+function parseManagedCompletion(payload: unknown): PoolParsedCompletion {
+  const completion = extractCompletion(payload);
+  return Object.freeze({
+    content: completion.content,
+    disposition: classifyTerminators(completion.terminators),
+    ...(completion.unusable === undefined ? {} : { unusable: completion.unusable }),
+  });
 }
 
 function extractCompletion(payload: unknown): Readonly<{
@@ -691,9 +836,21 @@ function makeHealthRoom(): void {
   }
 }
 
-/** Identity excludes the key, so rotating a key does not reset health. */
+/** Identity excludes secret text and user URLs while keeping credentials apart. */
 function candidateKey(candidate: PoolCandidate): string {
-  return `${candidate.station}\u0000${candidate.baseUrl}\u0000${candidate.model}`;
+  if (candidate.credentialScopeId !== undefined) {
+    // A custom provider controls its catalog strings and can reflect the key or
+    // endpoint into a model id. The server-issued opaque scope is already fresh
+    // per verified lease and is therefore the only safe request-local identity.
+    return `user\u0000${candidate.credentialScopeId}`;
+  }
+  return [
+    candidate.station,
+    candidate.baseUrl,
+    candidate.model,
+    candidate.transport?.id ?? "managed-openai-compatible/1",
+    "managed",
+  ].join("\u0000");
 }
 
 function healthKey(scenario: MatterScenarioId, candidate: PoolCandidate): string {

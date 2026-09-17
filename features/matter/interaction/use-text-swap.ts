@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -31,7 +32,7 @@ import {
 } from "./text-swap-driver";
 import { requestTextSwap } from "./text-swap-client";
 import { requestTranscription } from "./transcription-client";
-import { subscribePageSuspension } from "./page-suspension";
+import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
 
 export type UseTextSwapInput<TCommitted> = Readonly<{
   tree: ThoughtTree;
@@ -40,6 +41,9 @@ export type UseTextSwapInput<TCommitted> = Readonly<{
   locale: MatterLocale;
   enabled: boolean;
   interactionScopeKey: string;
+  deliveryVisibleNodeIds?: ReadonlySet<string>;
+  /** False pauses capture and durable delivery without aborting submitted work. */
+  deliveryWindowAvailable?: boolean;
   commit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -58,6 +62,8 @@ export type TextSwapController = Readonly<{
   retry: () => boolean;
   dismiss: () => void;
   cancel: () => void;
+  /** Returns true only when already-submitted work keeps its detached owner. */
+  detachPresentation: () => boolean;
 }>;
 
 /** React binds current material to the focused driver; it owns no second state machine. */
@@ -74,6 +80,8 @@ export function useTextSwap<TCommitted>(
     createRequestId: () => createTextSwapId("request"),
     monotonicNow,
   }));
+  const activePointersRef = useRef(new Set<number>());
+  const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
 
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -84,8 +92,21 @@ export function useTextSwap<TCommitted>(
 
   useLayoutEffect(() => {
     driver.updateBindings(toDriverBindings(input));
-    driver.updateScope(toScope(input));
-  }, [driver, input]);
+    driver.updateScope(toScope(input, state.phase === "idle" ? null : state.basis));
+  }, [driver, input, state]);
+
+  useLayoutEffect(() => {
+    deliveryAvailableRef.current = input.deliveryWindowAvailable !== false;
+    if (!deliveryAvailableRef.current) {
+      // Raw capture may not continue behind an unavailable surface. A request
+      // that was already submitted remains owned; only its delivery is held.
+      driver.suspendCapture();
+      return;
+    }
+    driver.setDeliveryWindowOpen(
+      document.visibilityState === "visible" && activePointersRef.current.size === 0,
+    );
+  }, [driver, input.deliveryWindowAvailable]);
 
   useLayoutEffect(() => {
     // Retain in the commit phase. React's development replay performs the
@@ -98,15 +119,45 @@ export function useTextSwap<TCommitted>(
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || driver.getState().phase === "idle") return;
+      if (
+        !deliveryAvailableRef.current || event.key !== "Escape" ||
+        driver.getState().phase === "idle"
+      ) return;
       event.preventDefault();
-      driver.cancel();
+      driver.detachPresentation();
     };
     window.addEventListener("keydown", onKeyDown);
-    const unsubscribePageSuspension = subscribePageSuspension(() => driver.cancel());
+    const openDeliveryIfUsable = () => driver.setDeliveryWindowOpen(
+      deliveryAvailableRef.current && document.visibilityState === "visible" &&
+        activePointersRef.current.size === 0,
+    );
+    const onPointerDown = (event: PointerEvent) => {
+      activePointersRef.current.add(event.pointerId);
+      driver.setDeliveryWindowOpen(false);
+    };
+    const onPointerDone = (event: PointerEvent) => {
+      activePointersRef.current.delete(event.pointerId);
+      openDeliveryIfUsable();
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointerup", onPointerDone, true);
+    window.addEventListener("pointercancel", onPointerDone, true);
+    const unsubscribePageSuspension = subscribePageSuspension(
+      () => {
+        activePointersRef.current.clear();
+        driver.suspendCapture();
+      },
+      openDeliveryIfUsable,
+    );
+    const unsubscribePageExit = subscribePageExit(() => driver.cancel());
+    openDeliveryIfUsable();
     return () => {
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointerup", onPointerDone, true);
+      window.removeEventListener("pointercancel", onPointerDone, true);
       unsubscribePageSuspension();
+      unsubscribePageExit();
     };
   }, [driver]);
 
@@ -129,6 +180,7 @@ export function useTextSwap<TCommitted>(
     retry: () => driver.retry(),
     dismiss: () => driver.dismiss(),
     cancel: () => driver.cancel(),
+    detachPresentation: () => driver.detachPresentation(),
   };
 }
 
@@ -138,7 +190,7 @@ function toDriverBindings<TCommitted>(input: UseTextSwapInput<TCommitted>) {
       createTextSwapEnvelope({
         tree: input.tree,
         documentEpoch: input.documentEpoch,
-        selection: input.selection,
+        selection: basis.selection,
         basis,
         direction,
         id: requestId,
@@ -222,7 +274,10 @@ export function createTextSwapEnvelope(input: Readonly<{
   return parsed.ok ? parsed.envelope : null;
 }
 
-function toScope<TCommitted>(input: UseTextSwapInput<TCommitted>): TextSwapScope {
+function toScope<TCommitted>(
+  input: UseTextSwapInput<TCommitted>,
+  basis: TextSwapBasis | null,
+): TextSwapScope {
   return {
     treeId: input.tree.id,
     revision: input.tree.revision,
@@ -233,6 +288,15 @@ function toScope<TCommitted>(input: UseTextSwapInput<TCommitted>): TextSwapScope
       : currentTextSwapLineage(input.tree, input.selection.nodeId),
     enabled: input.enabled,
     interactionScopeKey: input.interactionScopeKey,
+    materialSelection: basis?.selection ?? input.selection,
+    materialLineage: basis === null
+      ? input.selection === null
+        ? null
+        : currentTextSwapLineage(input.tree, input.selection.nodeId)
+      : currentTextSwapLineage(input.tree, basis.selection.nodeId),
+    deliveryTargetVisible: basis === null || input.deliveryVisibleNodeIds === undefined
+      ? true
+      : input.deliveryVisibleNodeIds.has(basis.selection.nodeId),
   };
 }
 

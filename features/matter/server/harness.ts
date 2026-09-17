@@ -1,4 +1,9 @@
-import { NeutralProviderError } from "./completion-outcome";
+import {
+  CandidateAttemptTimeoutError,
+  CandidateRejectedError,
+  NeutralProviderError,
+  ScenarioPolicyError,
+} from "./completion-outcome";
 
 /**
  * The one place Matter talks to a model.
@@ -47,6 +52,7 @@ export type ScenarioCandidateEvent =
   | "stalled"
   | "truncated"
   | "refused"
+  | "rejected"
   | "missing-terminator"
   | "unknown-terminator";
 
@@ -76,12 +82,41 @@ export type ScenarioCall = Readonly<{
    * key, prompt, material, or request identity can fit through this type.
    */
   observeCandidate?: (event: ScenarioCandidateEvent) => void;
+  /**
+   * Optional server-local policy seam used only by ordered pool adapters. It
+   * lets an explicit user action spend its remaining deadline on the next
+   * candidate after a semantically invalid answer, without moving scenario
+   * policy into provider code.
+   */
+  adjudicateCandidate?: (text: string) => Readonly<{ ok: true }> | Readonly<{
+    ok: false;
+    reason: string;
+  }>;
 }>;
 
-export type ScenarioAdapter = (
+const ADAPTER_OWNS_HEALTH = Symbol("matter.adapter-owns-health");
+
+export type ScenarioAdapter = ((
   call: ScenarioCall,
   signal: AbortSignal,
-) => Promise<Readonly<{ text: string }>>;
+) => Promise<Readonly<{ text: string }>>) & Readonly<{
+  [ADAPTER_OWNS_HEALTH]?: true;
+}>;
+
+/**
+ * Marks an adapter whose transport layer already owns health and cooldown.
+ * The scenario governor still owns its shared concurrency slot, but must not
+ * duplicate or cross-contaminate provider health in either direction.
+ */
+export function withAdapterOwnedHealth(adapter: ScenarioAdapter): ScenarioAdapter {
+  const owned = ((call, signal) => adapter(call, signal)) as ScenarioAdapter;
+  Object.defineProperty(owned, ADAPTER_OWNS_HEALTH, { value: true });
+  return owned;
+}
+
+function adapterOwnsHealth(adapter: ScenarioAdapter): boolean {
+  return adapter[ADAPTER_OWNS_HEALTH] === true;
+}
 
 /**
  * Why a scenario settled on its floor. Every value here means the same thing to
@@ -128,6 +163,8 @@ export type MatterScenario<Input, Value> = Readonly<{
    * asked for, and adjudication makes the rest cost nothing.
    */
   adjudicate: (answer: unknown, input: Input) => ScenarioVerdict<Value>;
+  /** Explicit user actions may try a later provider after policy rejection. */
+  rejectedCandidate?: "settle-floor" | "continue-if-budget";
 }>;
 
 export type ScenarioGovernorLimits = Readonly<{
@@ -143,9 +180,11 @@ export const DEFAULT_GOVERNOR_LIMITS: ScenarioGovernorLimits = Object.freeze({
 });
 
 /**
- * Process-local health for one scenario. It is a counter, never authority:
- * every replica may hold a different view without changing what a person sees,
- * because the floor is always available.
+ * Process-local concurrency and direct-adapter health for one scenario. A
+ * provider pool marks that it owns finer candidate health; those calls still
+ * share this concurrency lane but neither read nor mutate its health counter.
+ * The counter is never authority: every replica may hold a different view
+ * without changing what a person sees, because the floor is always available.
  */
 export class ScenarioGovernor {
   private active = 0;
@@ -254,6 +293,8 @@ export type ScenarioPerformanceObservation = Readonly<{
   candidateTruncations: number;
   /** Attempts that ended in a guardrail, refusal, tool call, or unknown state. */
   candidateRefusals: number;
+  /** Transport-complete answers rejected by the scenario before a later try. */
+  candidateRejections: number;
   /** Explicit stop vocabulary this build cannot name, for compatibility audits. */
   candidateUnknownTerminators: number;
   /** Accepted compatibility responses whose relay omitted a stop reason. */
@@ -290,6 +331,7 @@ export function recordScenarioPerformance(observation: ScenarioPerformanceObserv
     candidateFailures: boundedScalar(observation.candidateFailures, 255),
     candidateTruncations: boundedScalar(observation.candidateTruncations, 255),
     candidateRefusals: boundedScalar(observation.candidateRefusals, 255),
+    candidateRejections: boundedScalar(observation.candidateRejections, 255),
     candidateUnknownTerminators: boundedScalar(observation.candidateUnknownTerminators, 255),
     candidateMissingTerminators: boundedScalar(observation.candidateMissingTerminators, 255),
   });
@@ -317,6 +359,7 @@ export async function runScenario<Input, Value>(
   let candidateFailures = 0;
   let candidateTruncations = 0;
   let candidateRefusals = 0;
+  let candidateRejections = 0;
   let candidateUnknownTerminators = 0;
   let candidateMissingTerminators = 0;
   const noteCandidate = (event: ScenarioCandidateEvent): void => {
@@ -339,6 +382,7 @@ export async function runScenario<Input, Value>(
     if (event === "failed") candidateFailures = boundedIncrement(candidateFailures);
     if (event === "truncated") candidateTruncations = boundedIncrement(candidateTruncations);
     if (event === "refused") candidateRefusals = boundedIncrement(candidateRefusals);
+    if (event === "rejected") candidateRejections = boundedIncrement(candidateRejections);
   };
   const notePerformance = (outcome: ScenarioPerformanceOutcome): void => {
     if (performanceSettled || observePerformance === undefined) return;
@@ -353,6 +397,7 @@ export async function runScenario<Input, Value>(
       candidateFailures,
       candidateTruncations,
       candidateRefusals,
+      candidateRejections,
       candidateUnknownTerminators,
       candidateMissingTerminators,
     });
@@ -385,7 +430,8 @@ export async function runScenario<Input, Value>(
   };
   if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
   if (adapter === null) return fallback("MODEL_UNAVAILABLE");
-  if (governor.cooling(now())) return settle("MODEL_UNAVAILABLE");
+  const scenarioOwnsHealth = !adapterOwnsHealth(adapter);
+  if (scenarioOwnsHealth && governor.cooling(now())) return settle("MODEL_UNAVAILABLE");
   if (!governor.admit(limits)) return settle("MODEL_BUSY");
 
   // The slot is held until the adapter promise itself settles, not until this
@@ -413,6 +459,21 @@ export async function runScenario<Input, Value>(
       maxOutputTokens: budget.maxOutputTokens,
       ...(budget.disableThinking === true ? { disableThinking: true as const } : {}),
       observeCandidate: noteCandidate,
+      ...(scenario.rejectedCandidate === "continue-if-budget"
+        ? {
+            adjudicateCandidate: (text: string) => {
+              let verdict: ScenarioVerdict<Value>;
+              try {
+                verdict = scenario.adjudicate(text, input);
+              } catch {
+                throw new ScenarioPolicyError();
+              }
+              return verdict.ok
+                ? Object.freeze({ ok: true as const })
+                : Object.freeze({ ok: false as const, reason: verdict.reason });
+            },
+          }
+        : {}),
     });
     timer = setTimeout(() => deadline.abort(), budget.deadlineMs);
     boundary = rejectOnAbort(deadline.signal);
@@ -426,7 +487,7 @@ export async function runScenario<Input, Value>(
     if (timer !== undefined) clearTimeout(timer);
     boundary?.dispose();
     options.signal?.removeEventListener("abort", cancel);
-    if (!options.signal?.aborted) governor.failed(now(), limits);
+    if (!options.signal?.aborted && scenarioOwnsHealth) governor.failed(now(), limits);
     return options.signal?.aborted ? fallback("MODEL_UNAVAILABLE") : settle("MODEL_UNAVAILABLE");
   }
 
@@ -434,7 +495,12 @@ export async function runScenario<Input, Value>(
     // Aborting is advisory, so the deadline is enforced by racing a boundary
     // that rejects on abort. Without it one provider can hang the route.
     const answer = await Promise.race([work, boundary.promise]);
-    const verdict = scenario.adjudicate(answer?.text, input);
+    let verdict: ScenarioVerdict<Value>;
+    try {
+      verdict = scenario.adjudicate(answer?.text, input);
+    } catch {
+      throw new ScenarioPolicyError();
+    }
     if (!verdict.ok) {
       // A rejection is a fact about this request, not about the relay. The
       // relay answered, inside the deadline, and the adjudicator declined what
@@ -445,21 +511,36 @@ export async function runScenario<Input, Value>(
       // fast answer instead. Three refusable requests in a row would otherwise
       // take the whole surface off a live provider for the cooldown, for every
       // person on that instance, while the provider was answering all along.
-      governor.succeeded();
+      if (scenarioOwnsHealth) governor.succeeded();
       return settle("MODEL_REJECTED", verdict.reason);
     }
-    governor.succeeded();
+    if (scenarioOwnsHealth) governor.succeeded();
     notePerformance("answered");
     return Object.freeze({ ok: true, value: verdict.value });
   } catch (error) {
     if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
+    if (error instanceof CandidateAttemptTimeoutError) {
+      // The pool's final attempt and this scenario can share one absolute
+      // deadline. Timer callback order must not change the public settlement.
+      return settle("MODEL_TIMEOUT");
+    }
+    if (error instanceof CandidateRejectedError) {
+      if (scenarioOwnsHealth) governor.succeeded();
+      return settle("MODEL_REJECTED", error.reason);
+    }
+    if (error instanceof ScenarioPolicyError) {
+      // The provider answered; only local policy failed. Clear stale provider
+      // failure evidence without presenting the defective answer.
+      if (scenarioOwnsHealth) governor.succeeded();
+      return settle("MODEL_UNAVAILABLE");
+    }
     if (error instanceof NeutralProviderError) {
       // An unusable completion or a pool-owned drain lease is unavailable, not
       // scenario-policy rejection. Both are already bounded below the harness
       // and neither is evidence that the whole surface should enter cooldown.
       return settle("MODEL_UNAVAILABLE");
     }
-    governor.failed(now(), limits);
+    if (scenarioOwnsHealth) governor.failed(now(), limits);
     return settle(deadline.signal.aborted ? "MODEL_TIMEOUT" : "MODEL_UNAVAILABLE");
   } finally {
     clearTimeout(timer);

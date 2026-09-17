@@ -8,6 +8,12 @@ Update 2026-09-02: the address/receipt/lifecycle boundaries remain useful, but
 the raw-fragment render sketches are superseded by the post-reflow combined
 interval in `selected-material-flow-interval.md`.
 
+Update 2026-09-11: section 4's operation-wide revocation lease is superseded.
+The root owns one visible presentation slot only; each submitted operation keeps
+its own immutable, exact-basis owner across presentation changes and unrelated
+work. See `action-lasso-provider-research.md` and the current architecture
+contract. The shared address/receipt/render split below remains useful.
+
 ## Product intent
 
 Matter's subject is unfinished language made touchable. The person working with

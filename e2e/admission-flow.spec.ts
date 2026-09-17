@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   clickExposedMaterial,
 } from "./material-index-driver";
@@ -23,6 +23,7 @@ for (const viewport of [
       if (message.type() === "error") browserErrors.push(message.text());
     });
     await page.setViewportSize(viewport);
+    await prewarmAdmissionRouteModules(page);
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     await expect(page.locator("#material-files")).toHaveAttribute(
@@ -120,6 +121,9 @@ for (const viewport of [
     await expect(reveal).toHaveText(repairedTranscript, { useInnerText: false });
     const revealCount = Number(await reveal.getAttribute("data-repair-reveal-count"));
     const changedInk = await reveal.locator('[data-repair-part="changed"]').allTextContents();
+    const authoredRevealDelays = await reveal.locator('[data-repair-part="changed"]')
+      .evaluateAll((parts) => parts.map((part) =>
+        Number.parseFloat(getComputedStyle(part).animationDelay) * 1_000));
     // The insertion-only admission floor already owns this semantic comma;
     // late repair must not animate it as if a model introduced it.
     expect(changedInk.join("")).not.toContain("，");
@@ -136,8 +140,11 @@ for (const viewport of [
     );
     expect(animations.every(({ name }) => name === "material-grapheme-arrive")).toBe(true);
     expect(Math.min(...animations.map(({ time }) => time)) - rawSeenAt).toBeGreaterThanOrEqual(120);
-    expect(Math.max(...animations.map(({ time }) => time)) -
-      Math.min(...animations.map(({ time }) => time))).toBeGreaterThan(40);
+    // Browser scheduling may dispatch separately delayed animationstart events
+    // in one busy frame. The CSS timeline, not event-delivery jitter, owns the
+    // reading-order stagger.
+    expect(Math.max(...authoredRevealDelays) - Math.min(...authoredRevealDelays))
+      .toBeGreaterThan(40);
     expect(await admitted.locator(".spatial-thought__text").evaluate((element) =>
       getComputedStyle(element).opacity,
     )).toBe("1");
@@ -228,6 +235,17 @@ for (const viewport of [
   });
 }
 
+async function prewarmAdmissionRouteModules(page: Page): Promise<void> {
+  // Next's development server compiles each dynamic route on first access.
+  // Keep that test-only startup work outside the human interaction receipt;
+  // production deployments already contain compiled route artifacts.
+  for (const path of ["/matter/api/transcribe", "/matter/api/repair"]) {
+    const response = await page.request.get(path);
+    expect(response.status()).toBe(405);
+    await response.dispose();
+  }
+}
+
 test("a denied microphone leaves material unchanged and Record again starts a fresh attempt", async ({ page }) => {
   await page.addInitScript(() => {
     const mediaDevices = navigator.mediaDevices;
@@ -304,11 +322,82 @@ test("a hidden page cancels Voice without restoring focus into the background", 
   await expect(voiceTool).not.toBeFocused();
 });
 
+test("modal chrome cancels raw Voice but holds a stopped admission until material returns", async ({ page }) => {
+  let releaseTranscription!: () => void;
+  const transcriptionGate = new Promise<void>((resolve) => {
+    releaseTranscription = resolve;
+  });
+  let markTranscriptionFulfilled!: () => void;
+  const transcriptionFulfilled = new Promise<void>((resolve) => {
+    markTranscriptionFulfilled = resolve;
+  });
+  let transcriptionRequested = false;
+  await page.route("**/api/transcribe", async (route) => {
+    transcriptionRequested = true;
+    await transcriptionGate;
+    const response = await route.fetch();
+    await route.fulfill({ response });
+    markTranscriptionFulfilled();
+  });
+
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialNodeCount = await page.locator("[data-thought-id]").count();
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
+
+  await voiceTool.click();
+  await expect(page.locator('.admission-feedback[data-phase="recording"]')).toBeVisible();
+  await settings.click();
+  await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator(".admission-feedback")).toHaveCount(0);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+  await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
+  await expect(voiceTool).toBeEnabled();
+
+  // A fresh capture proves that modal cancellation released the microphone.
+  await voiceTool.click();
+  const recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible();
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect.poll(() => transcriptionRequested).toBe(true);
+
+  await settings.click();
+  await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+  await expect(dialog).toBeVisible();
+  releaseTranscription();
+  await transcriptionFulfilled;
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+
+  // Network work may finish, but an occluded material surface cannot receive
+  // the visible change until modal ownership and its opening pointer are gone.
+  await expect(page.locator(".admission-feedback")).toHaveCount(0);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+  await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount + 1);
+  await expect(settings).toBeFocused();
+});
+
 test("a transcription outage keeps material unchanged and Record again can recover", async ({ page }) => {
   let transcriptionRequests = 0;
+  let releaseOutage!: () => void;
+  const outageGate = new Promise<void>((resolve) => {
+    releaseOutage = resolve;
+  });
+  let markOutageFulfilled!: () => void;
+  const outageFulfilled = new Promise<void>((resolve) => {
+    markOutageFulfilled = resolve;
+  });
   await page.route("**/api/transcribe", async (route) => {
     transcriptionRequests += 1;
     if (transcriptionRequests === 1) {
+      await outageGate;
       await route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -321,6 +410,7 @@ test("a transcription outage keeps material unchanged and Record again can recov
           },
         }),
       });
+      markOutageFulfilled();
       return;
     }
     await route.continue();
@@ -335,11 +425,22 @@ test("a transcription outage keeps material unchanged and Record again can recov
   await expect(recording).toBeVisible();
   await page.waitForTimeout(350);
   await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect.poll(() => transcriptionRequests).toBe(1);
 
   const failure = page.locator('.admission-feedback[data-phase="error"]');
-  await expect(failure).toContainText("没能把这段录音变成文字。");
+  // Stop already submitted the person's action. Hiding presentation may
+  // unmount its recovery surface, but a failure reached while hidden cannot
+  // erase that recoverable owner.
+  await setDocumentVisibility(page, "hidden");
+  releaseOutage();
+  await outageFulfilled;
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  await expect(failure).toHaveCount(0);
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
-  expect(transcriptionRequests).toBe(1);
+  await setDocumentVisibility(page, "visible");
+  await expect(failure).toContainText("没能把这段录音变成文字。");
 
   const retry = failure.getByRole("button", { name: "重新录音", exact: true });
   await expect(retry).toBeFocused();

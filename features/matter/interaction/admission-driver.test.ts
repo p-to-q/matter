@@ -10,6 +10,7 @@ import type {
   VoicePort,
   VoiceRecording,
 } from "./browser-voice";
+import { VoiceError } from "./browser-voice";
 import {
   AdmissionDriver,
   type AdmissionDriverDependencies,
@@ -108,6 +109,7 @@ function harness(options: {
     locale: "zh-CN",
   });
   driver.updateScope(SCOPE);
+  driver.setDeliveryVisibleNodeIds(new Set(["thought_1"]));
   return { commit, disposeRepair, driver, onRepairCommitted, repair, settleRepair, transcribe, voice };
 }
 
@@ -156,6 +158,124 @@ describe("AdmissionDriver", () => {
       token: "voice_1",
     });
     expect(h.voice.cancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("freezes locale at start even if settings change before finalization", async () => {
+    const h = harness();
+    h.driver.start(ANCHOR, "ja-JP");
+    expect(h.voice.starts[0]?.callbacks.locale).toBe("ja-JP");
+    h.voice.grantPermission();
+    await settle();
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.transcribe).toHaveBeenCalledWith(expect.objectContaining({ locale: "ja-JP" }));
+    expect(h.commit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      repairLocale: "ja-JP",
+    }));
+  });
+
+  it("holds a resolved admission until the delivery window reopens", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.driver.setDeliveryWindowOpen(false);
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.driver.getState().phase).toBe("committing");
+    expect(h.commit).not.toHaveBeenCalled();
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a stopped recording owned while the page or modal suspends capture", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    const operation = { interactionId: "voice_1", attempt: 1 } as const;
+
+    h.driver.stop();
+    expect(h.driver.getState().phase).toBe("stopping");
+    h.driver.suspendCapture();
+    h.driver.cancelRawCapture();
+
+    expect(h.driver.getState().phase).toBe("stopping");
+    expect(h.voice.cancel).not.toHaveBeenCalled();
+    h.voice.finish(operation);
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets modal acquisition cancel only capture that has not crossed stop", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+
+    h.driver.cancelRawCapture();
+
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.voice.cancel).toHaveBeenCalledWith({ interactionId: "voice_1", attempt: 1 });
+  });
+
+  it("discards an unsubmitted error surface when the page is suspended", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.voice.starts[0]?.callbacks.onError?.(new VoiceError("RECORDING_FAILED"));
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "RECORDING_FAILED",
+    });
+
+    h.driver.suspendCapture();
+
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
+  it("retains a submitted failure across suspension for visible recovery", async () => {
+    const h = harness({
+      transcribe: vi.fn(async () => {
+        throw new Error("synthetic transcription outage");
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "TRANSCRIPTION_FAILED",
+      submitted: true,
+    });
+    h.driver.suspendCapture();
+    h.driver.resumeDelivery();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "TRANSCRIPTION_FAILED",
+      submitted: true,
+    });
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
+  it("holds a resolved admission until its exact target is visible", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.driver.setDeliveryTargetVisible(false);
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.commit).not.toHaveBeenCalled();
+    h.driver.setDeliveryTargetVisible(true);
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
   });
 
   it("admits immediately, then applies an in-window repair as a second command", async () => {
@@ -224,6 +344,63 @@ describe("AdmissionDriver", () => {
     releasePaint();
     await settle();
     expect(h.settleRepair).toHaveBeenCalledWith(expect.objectContaining({ outcome: "candidate" }));
+  });
+
+  it("retains a ready repair while delivery is suspended and commits it once on resume", async () => {
+    let releaseRepair!: () => void;
+    const h = harness({
+      repair: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        return { text: "修好了。", source: "model" as const };
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle(4);
+
+    h.driver.setDeliveryWindowOpen(false);
+    releaseRepair();
+    await settle();
+    expect(h.settleRepair).not.toHaveBeenCalled();
+
+    h.driver.setDeliveryWindowOpen(true);
+    h.driver.setDeliveryWindowOpen(true);
+    await settle();
+    expect(h.settleRepair).toHaveBeenCalledTimes(1);
+    expect(h.settleRepair).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "candidate",
+    }));
+  });
+
+  it("retains a ready repair until its exact admitted node is rendered", async () => {
+    let releaseRepair!: () => void;
+    const h = harness({
+      repair: vi.fn(async () => {
+        await new Promise<void>((resolve) => {
+          releaseRepair = resolve;
+        });
+        return { text: "修好了。", source: "model" as const };
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle(4);
+
+    h.driver.setDeliveryVisibleNodeIds(new Set());
+    releaseRepair();
+    await settle();
+    expect(h.settleRepair).not.toHaveBeenCalled();
+
+    h.driver.setDeliveryVisibleNodeIds(new Set(["another_node"]));
+    expect(h.settleRepair).not.toHaveBeenCalled();
+    h.driver.setDeliveryVisibleNodeIds(new Set(["thought_1"]));
+    h.driver.setDeliveryVisibleNodeIds(new Set(["thought_1"]));
+    await settle();
+    expect(h.settleRepair).toHaveBeenCalledTimes(1);
   });
 
   it("publishes presentation only from a successfully committed repair receipt", async () => {
@@ -307,7 +484,7 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
-  it("lets a precise material gesture discard an optional pending repair", async () => {
+  it("preserves an optional pending repair across another precise gesture", async () => {
     let releaseRepair!: () => void;
     const h = harness({
       repair: vi.fn(async () => {
@@ -322,18 +499,17 @@ describe("AdmissionDriver", () => {
     h.voice.finish({ interactionId: "voice_1", attempt: 1 });
     await settle(4);
 
-    h.driver.discardPendingRepairs();
     releaseRepair();
     await settle();
 
-    expect(h.settleRepair).toHaveBeenCalledWith({
+    expect(h.settleRepair).toHaveBeenCalledWith(expect.objectContaining({
       repairLeaseId: "repair_lease_voice_1",
-      outcome: "discarded",
-    });
+      outcome: "candidate",
+    }));
     expect(h.settleRepair).toHaveBeenCalledTimes(1);
   });
 
-  it("discards an older pending repair before a new microphone operation starts", async () => {
+  it("preserves an older pending repair when a new microphone operation starts", async () => {
     let releaseRepair!: () => void;
     const h = harness({
       repair: vi.fn(async () => {
@@ -350,17 +526,17 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
 
     h.driver.start(ANCHOR);
-    expect(h.settleRepair).toHaveBeenCalledWith({
-      repairLeaseId: "repair_lease_voice_1",
-      outcome: "discarded",
-    });
+    expect(h.settleRepair).not.toHaveBeenCalled();
     h.voice.grantPermission();
     await settle();
     expect(h.driver.getState().phase).toBe("recording");
 
     releaseRepair();
     await settle();
-    expect(h.settleRepair).toHaveBeenCalledTimes(1);
+    expect(h.settleRepair).toHaveBeenCalledWith(expect.objectContaining({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "candidate",
+    }));
     expect(h.driver.getState().phase).toBe("recording");
   });
 
@@ -399,7 +575,7 @@ describe("AdmissionDriver", () => {
     expect(h.voice.cancel).toHaveBeenCalledWith({ interactionId: "voice_1", attempt: 1 });
   });
 
-  it("aborts transcription on scope invalidation and ignores its late result", async () => {
+  it("preserves finalized transcription across an unrelated revision", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";
       interactionId: string;
@@ -421,7 +597,7 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState().phase).toBe("transcribing");
 
     h.driver.updateScope({ treeId: "tree_1", revision: 5 });
-    expect(observedSignal?.aborted).toBe(true);
+    expect(observedSignal?.aborted).toBe(false);
     resolveTranscript({
       protocolVersion: "0.2",
       interactionId: "voice_1",
@@ -430,7 +606,7 @@ describe("AdmissionDriver", () => {
     });
     await Promise.resolve();
 
-    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.commit).toHaveBeenCalledTimes(1);
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
@@ -459,7 +635,7 @@ describe("AdmissionDriver", () => {
     });
   });
 
-  it("cancels a revoked shared Voice lease and ignores its late transcription", async () => {
+  it("ignores late capture revocation after the recording is finalized", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";
       interactionId: string;
@@ -483,8 +659,8 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState().phase).toBe("transcribing");
 
     h.voice.starts[0]?.callbacks.onOwnershipRevoked?.(operation);
-    expect(h.driver.getState()).toEqual({ phase: "idle" });
-    expect(observedSignal?.aborted).toBe(true);
+    expect(h.driver.getState().phase).toBe("transcribing");
+    expect(observedSignal?.aborted).toBe(false);
     resolveTranscript({
       protocolVersion: "0.2",
       interactionId: operation.interactionId,
@@ -493,7 +669,7 @@ describe("AdmissionDriver", () => {
     });
     await Promise.resolve();
 
-    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.commit).toHaveBeenCalledTimes(1);
   });
 
   it("disposes idempotently and makes queued browser callbacks inert", async () => {

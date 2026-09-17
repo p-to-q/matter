@@ -28,7 +28,8 @@ import {
 import { admitTransformRequest } from "./transform-admission";
 import { TransformServerError, invalidTransformRequest } from "./transform-errors";
 import { TRANSFORM_SCENARIO, type TransformScenarioInput } from "./transform-harness";
-import { resolveTransformAdapter } from "./transform-provider";
+import { TRANSFORM_POOL_LIMITS, resolveTransformAdapter } from "./transform-provider";
+import { resolveScenarioRequestModelAdapter } from "./request-model-pool";
 
 const governor = new ScenarioGovernor();
 const TURN_LIMITS = Object.freeze({
@@ -45,7 +46,7 @@ export const TRANSFORM_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.transform.routeMs;
  */
 export async function handleTransformRequest(
   request: Request,
-  adapter: ScenarioAdapter | null = resolveTransformAdapter(),
+  adapter?: ScenarioAdapter | null,
   observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
   const observation = createMaterialTurnObservationOwner("expand-in-place", observationOptions);
@@ -57,6 +58,12 @@ export async function handleTransformRequest(
       throw transformAdmissionError(admission.reason);
     }
     try {
+      const resolvedAdapter = adapter === undefined
+        ? resolveScenarioRequestModelAdapter(request, "matter-transform", {
+            fallback: resolveTransformAdapter(),
+            limits: TRANSFORM_POOL_LIMITS,
+          }).adapter
+        : adapter;
       return await withBoundedJsonRequest(request, TURN_REQUEST_POLICY, async (payload, signal, metadata) => {
         observation.noteRequestBytes(metadata.requestBytes);
         const parsed = parseTransformEnvelope(payload);
@@ -73,7 +80,7 @@ export async function handleTransformRequest(
         const plan = await createTransformPlanFromInput(
           parsed.envelope,
           input,
-          adapter,
+          resolvedAdapter,
           signal,
           observation.noteScenario,
         );

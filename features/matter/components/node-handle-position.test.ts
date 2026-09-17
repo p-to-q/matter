@@ -20,7 +20,12 @@ describe("projectNodeHandleMetrics", () => {
   });
 
   it("holds the coarse-pointer target floor however small the material is", () => {
-    expect(metricsFor(8, true).button).toBe(48);
+    expect(metricsFor(8, true)).toEqual({
+      button: 48,
+      gap: 6,
+      paddingX: 12,
+      paddingY: 11,
+    });
   });
 
   it("holds the fine-pointer target floor however small the material is", () => {

@@ -162,7 +162,7 @@ describe("human material admission", () => {
     expect(overBound).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
   });
 
-  it("rejects stale tree identity, revision, and focus while ignoring a later selection", () => {
+  it("rejects document replacement but rebases across unrelated revision and navigation", () => {
     const tree = rootedTree();
     const selected = selectNode(tree, createNavigationState(), "root");
     if (!selected.ok) throw new Error(selected.error.code);
@@ -172,9 +172,9 @@ describe("human material admission", () => {
     if (!focused.ok) throw new Error(focused.error.code);
 
     expect(admissionToTreeCommand({ ...tree, id: "other" }, selected.navigation, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
-    expect(admissionToTreeCommand({ ...tree, revision: 2 }, selected.navigation, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
+    expect(admissionToTreeCommand({ ...tree, revision: 2 }, selected.navigation, anchored.anchor, values())).toMatchObject({ ok: true, command: { expectedRevision: 2 } });
     expect(admissionToTreeCommand(tree, { ...selected.navigation, selectedNodeId: null }, anchored.anchor, values())).toMatchObject({ ok: true });
-    expect(admissionToTreeCommand(tree, focused.navigation, anchored.anchor, values())).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
+    expect(admissionToTreeCommand(tree, focused.navigation, anchored.anchor, values())).toMatchObject({ ok: true });
   });
 
   it("rejects creating a child admission anchor in focus view", () => {

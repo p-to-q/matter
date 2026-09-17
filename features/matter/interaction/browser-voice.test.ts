@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAX_AUDIO_BYTES, RECORDING_LIMIT_MS } from "./audio-policy";
+import {
+  MAX_AUDIO_BYTES,
+  RECORDING_LIMIT_MS,
+  RECORDING_STOP_TIMEOUT_MS,
+} from "./audio-policy";
 import {
   BrowserVoicePort,
   resolveBrowserVoiceTransport,
@@ -8,9 +12,14 @@ import {
   type VoiceOperation,
   type VoiceRecording,
 } from "./browser-voice";
+import { VoiceLeaseCoordinator } from "./voice-lease";
 
 const OPERATION: VoiceOperation = Object.freeze({
   interactionId: "interaction-1",
+  attempt: 1,
+});
+const SUCCESSOR_OPERATION: VoiceOperation = Object.freeze({
+  interactionId: "interaction-2",
   attempt: 1,
 });
 
@@ -173,7 +182,9 @@ describe("BrowserVoicePort", () => {
     });
     expect((await stopped).audio.size).toBe(5);
     expect(h.track.stop).toHaveBeenCalledTimes(1);
-    expect(h.dependencies.clearTimer).toHaveBeenCalledTimes(1);
+    // Stop replaces the duration timer with its own terminal-event watchdog;
+    // successful settlement clears both lifetimes exactly once.
+    expect(h.dependencies.clearTimer).toHaveBeenCalledTimes(2);
   });
 
   it("tries the next supported MIME when a hinted recorder cannot be constructed", async () => {
@@ -236,6 +247,29 @@ describe("BrowserVoicePort", () => {
     await expect(first).resolves.toBeDefined();
   });
 
+  it("fails recoverably when a recorder never publishes its final stop event", async () => {
+    const h = harness();
+    const onError = vi.fn();
+    await h.port.start(OPERATION, { onError });
+    const lateData = h.recorder.ondataavailable;
+    const lateStop = h.recorder.onstop;
+
+    const stopping = h.port.stop(OPERATION);
+    expect(h.timer()).not.toBeNull();
+    h.advance(RECORDING_STOP_TIMEOUT_MS);
+    h.fireTimer();
+
+    await expectVoiceError(stopping, "RECORDING_FAILED");
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ code: "RECORDING_FAILED" }));
+    expect(h.track.stop).toHaveBeenCalledTimes(1);
+    lateData?.({ data: new Blob(["late"]) } as BlobEvent);
+    lateStop?.(new Event("stop"));
+    expect(h.track.stop).toHaveBeenCalledTimes(1);
+
+    await expect(h.port.start({ ...OPERATION, attempt: 2 })).resolves.toBeUndefined();
+    h.port.cancel({ ...OPERATION, attempt: 2 });
+  });
+
   it("maps permission failures to stable typed errors", async () => {
     for (const [name, code] of [
       ["NotAllowedError", "MICROPHONE_DENIED"],
@@ -244,7 +278,9 @@ describe("BrowserVoicePort", () => {
     ] as const) {
       const error = Object.assign(new Error(name), { name });
       const h = harness({ permission: Promise.reject(error) });
-      await expectVoiceError(h.port.start(OPERATION), code);
+      const onError = vi.fn();
+      await expectVoiceError(h.port.start(OPERATION, { onError }), code);
+      expect(onError).not.toHaveBeenCalled();
     }
   });
 
@@ -262,6 +298,40 @@ describe("BrowserVoicePort", () => {
     await Promise.resolve();
     expect(h.track.stop).toHaveBeenCalledTimes(1);
     expect(h.dependencies.createRecorder).not.toHaveBeenCalled();
+  });
+
+  it("contains immediate Stop during permission before a successor can capture", async () => {
+    let grantPermission!: (stream: MediaStream) => void;
+    const permission = new Promise<MediaStream>((resolve) => {
+      grantPermission = resolve;
+    });
+    const firstRaw = harness({ permission });
+    const secondRaw = harness();
+    const coordinator = new VoiceLeaseCoordinator();
+    const first = coordinator.coordinate(firstRaw.port);
+    const second = coordinator.coordinate(secondRaw.port);
+
+    const starting = first.start(OPERATION);
+    const startOutcome = expect(starting).rejects.toMatchObject({
+      code: "RECORDING_CANCELLED",
+    });
+    const stopping = first.stop(OPERATION);
+    const stopOutcome = expect(stopping).rejects.toMatchObject({
+      code: "RECORDING_NOT_ACTIVE",
+    });
+    const successor = second.start(SUCCESSOR_OPERATION);
+
+    await Promise.all([startOutcome, stopOutcome]);
+    await expect(successor).resolves.toBeUndefined();
+    expect(firstRaw.dependencies.createRecorder).not.toHaveBeenCalled();
+
+    grantPermission(firstRaw.stream);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(firstRaw.track.stop).toHaveBeenCalledTimes(1);
+    expect(firstRaw.dependencies.createRecorder).not.toHaveBeenCalled();
+
+    second.cancel(SUCCESSOR_OPERATION);
   });
 
   it("rejects empty and oversized recordings and cleans resources", async () => {

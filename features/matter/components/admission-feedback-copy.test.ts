@@ -16,6 +16,7 @@ describe("admission feedback copy", () => {
       attempt: 1,
       anchor: ANCHOR,
       errorCode: "MICROPHONE_DENIED",
+      submitted: false,
     })).toBe("麦克风权限已被阻止。");
     expect(admissionFeedbackActions("zh-CN")).toEqual({
       stop: "停止录音",
@@ -50,6 +51,7 @@ describe("admission feedback copy", () => {
           attempt: 1,
           anchor: ANCHOR,
           errorCode,
+          submitted: false,
         }).length).toBeGreaterThan(0);
       }
     }

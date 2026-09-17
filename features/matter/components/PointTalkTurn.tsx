@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useMemo, type RefObject } from "react";
 import type { MatterLocale } from "../config/locales";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
-import { useTextSwap } from "../interaction/use-text-swap";
+import {
+  useTextSwap,
+  type TextSwapController,
+} from "../interaction/use-text-swap";
 import type { SegmentSelection } from "../material/text-segments";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
+import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
 import type { TextSwapCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import type { PointTalkBounds } from "./point-talk-placement";
@@ -18,6 +22,7 @@ export function PointTalkTurn({
   canvasZoom,
   commit,
   documentEpoch,
+  deliveryVisibleNodeIds,
   enabled,
   geometryKey,
   interactionScopeKey,
@@ -25,6 +30,9 @@ export function PointTalkTurn({
   nodeId,
   onClose,
   onCommitted,
+  onReleased,
+  presented,
+  surfaceAvailable,
   positioningRef,
   targetBounds,
   tree,
@@ -39,6 +47,7 @@ export function PointTalkTurn({
     expectedDocumentEpoch: number,
   ) => TextSwapCommitResult<TextSwapCommittedChange>;
   documentEpoch: number;
+  deliveryVisibleNodeIds?: ReadonlySet<string>;
   enabled: boolean;
   geometryKey: string;
   interactionScopeKey: string;
@@ -46,6 +55,9 @@ export function PointTalkTurn({
   nodeId: string;
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
+  onReleased: () => void;
+  presented: boolean;
+  surfaceAvailable: boolean;
   positioningRef: RefObject<HTMLElement | null>;
   targetBounds: PointTalkBounds | null;
   tree: ThoughtTree;
@@ -71,19 +83,40 @@ export function PointTalkTurn({
     locale,
     enabled: selection !== null,
     interactionScopeKey,
+    deliveryVisibleNodeIds,
     commit,
     onCommitted,
+    deliveryWindowAvailable: surfaceAvailable,
   });
   const phase = controller.state.phase;
   useEffect(() => {
-    if (selection !== null && phase === "idle" && !controller.enter()) onClose();
-  }, [controller, onClose, phase, selection]);
-  const close = useCallback(() => {
-    controller.cancel();
+    if (presented && selection !== null && phase === "idle" && !controller.enter()) onClose();
+  }, [controller, onClose, phase, presented, selection]);
+  useEffect(() => {
+    if (!presented) controller.detachPresentation();
+  }, [controller, presented]);
+  useEffect(() => {
+    if (surfaceAvailable || !presented || textSwapActionWasSubmitted(controller.state)) return;
+    const retained = controller.detachPresentation();
     onClose();
-  }, [controller, onClose]);
+    if (!retained) onReleased();
+  }, [controller, onClose, onReleased, presented, surfaceAvailable]);
+  useEffect(() => {
+    if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
+  }, [onReleased, phase, presented]);
+  const close = useCallback(() => {
+    const retained = controller.detachPresentation();
+    onClose();
+    // Geometry failure or dismissal before submit owns no durable job. Release
+    // the host synchronously so a stale idle effect cannot reopen the surface.
+    if (!retained) onReleased();
+  }, [controller, onClose, onReleased]);
 
-  if (selection === null) return null;
+  // Keep the controller alive while submitted work settles, but mount its
+  // status/recovery surface only when it can actually be perceived. A failure
+  // reached behind a modal or hidden tab is then announced and focused once,
+  // when the material surface returns.
+  if (selection === null || !presented || !surfaceAvailable) return null;
   return (
     <PointTalkComposer
       boundaryRef={boundaryRef}
@@ -102,8 +135,19 @@ export function PointTalkTurn({
         controller.submit();
       }}
       positioningRef={positioningRef}
+      surfaceAvailable={surfaceAvailable}
       targetBounds={targetBounds}
       voiceAvailable={voiceAvailable}
     />
   );
+}
+
+export function pointTalkTurnReleasesOwner(
+  presented: boolean,
+  phase: TextSwapController["state"]["phase"],
+): boolean {
+  // A scope loss can make a still-presented draft stale before its geometry
+  // callback runs. Terminal work has no reason to keep the host reserved.
+  if (presented) return phase === "success" || phase === "stale";
+  return phase === "idle" || phase === "error" || phase === "stale" || phase === "success";
 }

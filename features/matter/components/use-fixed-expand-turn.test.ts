@@ -129,7 +129,6 @@ describe("useFixedExpandTurn", () => {
       selection: SELECTION,
       locale: "en-US",
       enabled: true,
-      interactionScopeKey: "focus:thought",
       commit,
       onCommitted: vi.fn(),
       onUnavailable,
@@ -153,7 +152,6 @@ describe("useFixedExpandTurn", () => {
       selection: SELECTION,
       locale: "en-US",
       enabled: true,
-      interactionScopeKey: "focus:thought",
       commit: vi.fn(),
       onCommitted: vi.fn(),
       onUnavailable,
@@ -188,7 +186,6 @@ describe("useFixedExpandTurn", () => {
         selection: SELECTION,
         locale: "en-US",
         enabled: true,
-        interactionScopeKey: "focus:thought",
         commit,
         onCommitted,
         onUnavailable,
@@ -201,7 +198,7 @@ describe("useFixedExpandTurn", () => {
     },
   );
 
-  it("aborts a superseded request and gives its late plan no commit authority", async () => {
+  it("refuses a second submit without replacing the owned request", async () => {
     const pending: Array<{
       envelope: TransformEnvelope;
       signal: AbortSignal;
@@ -216,24 +213,20 @@ describe("useFixedExpandTurn", () => {
       selection: SELECTION,
       locale: "en-US",
       enabled: true,
-      interactionScopeKey: "focus:thought",
       commit,
       onCommitted: vi.fn(),
     });
 
     expect(turn.start(BASIS)).toBe(true);
-    expect(turn.start(BASIS)).toBe(true);
-    expect(pending).toHaveLength(2);
-    expect(pending[0]!.signal.aborted).toBe(true);
+    expect(turn.start(BASIS)).toBe(false);
+    expect(pending).toHaveLength(1);
+    expect(pending[0]!.signal.aborted).toBe(false);
     pending[0]!.resolve(buildTransformPlan(pending[0]!.envelope, "source more"));
-    await Promise.resolve();
-    expect(commit).not.toHaveBeenCalled();
-    pending[1]!.resolve(buildTransformPlan(pending[1]!.envelope, "source more"));
     await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
   });
 
   it.each(["plan", "refusal"] as const)(
-    "gives a stale-scope %s no authority before passive cancellation",
+    "preserves a submitted %s across presentation-scope changes",
     async (outcome) => {
       let pending: {
         envelope: TransformEnvelope;
@@ -253,7 +246,6 @@ describe("useFixedExpandTurn", () => {
         selection: SELECTION,
         locale: "en-US" as const,
         enabled: true,
-        interactionScopeKey: "full:thought:working-1",
         commit,
         onCommitted,
         onUnavailable,
@@ -261,9 +253,9 @@ describe("useFixedExpandTurn", () => {
       const turn = useFixedExpandTurn(input);
 
       expect(turn.start(BASIS)).toBe(true);
-      // A navigation or working-context render publishes the new input in a
-      // layout effect. The response guard must not wait for passive cancellation.
-      input.interactionScopeKey = "focus:thought:working-2";
+      // Closing the transient presentation must not revoke the already frozen
+      // material basis or wait for a passive cleanup.
+      input.enabled = false;
       if (pending === undefined) throw new Error("Transform request did not start.");
       if (outcome === "plan") {
         pending.resolve(buildTransformPlan(pending.envelope, "source more"));
@@ -276,9 +268,15 @@ describe("useFixedExpandTurn", () => {
         basis: null,
       }));
       expect(input.tree.revision).toBe(BASIS.baseRevision);
-      expect(commit).not.toHaveBeenCalled();
-      expect(onCommitted).not.toHaveBeenCalled();
-      expect(onUnavailable).not.toHaveBeenCalled();
+      if (outcome === "plan") {
+        expect(commit).toHaveBeenCalledTimes(1);
+        expect(onCommitted).toHaveBeenCalledTimes(1);
+        expect(onUnavailable).not.toHaveBeenCalled();
+      } else {
+        expect(commit).not.toHaveBeenCalled();
+        expect(onCommitted).not.toHaveBeenCalled();
+        expect(onUnavailable).toHaveBeenCalledTimes(1);
+      }
     },
   );
 
@@ -304,7 +302,6 @@ describe("useFixedExpandTurn", () => {
       selection: SELECTION,
       locale: "en-US" as const,
       enabled: true,
-      interactionScopeKey: "focus:thought",
       commit,
       onCommitted: vi.fn(),
     };
@@ -315,6 +312,89 @@ describe("useFixedExpandTurn", () => {
     if (pending === undefined) throw new Error("Transform request did not start.");
     pending.resolve(buildTransformPlan(pending.envelope, "source more"));
     await vi.waitFor(() => expect(commit).toHaveBeenCalledOnce());
+  });
+
+  it("keeps a resolved expansion while hidden and delivers it after visibility resumes", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
+      pending = { envelope, resolve };
+    }));
+    const commit = vi.fn(() => null);
+    const turn = useFixedExpandTurn({
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US",
+      enabled: true,
+      commit,
+      onCommitted: vi.fn(),
+    });
+    expect(turn.start(BASIS)).toBe(true);
+    const pageDocument = document as Document & { visibilityState: DocumentVisibilityState };
+    pageDocument.visibilityState = "hidden";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await Promise.resolve();
+    expect(commit).not.toHaveBeenCalled();
+
+    pageDocument.visibilityState = "visible";
+    pageDocument.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+  });
+
+  it("holds a resolved expansion while its exact target is outside the rendered window", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
+      pending = { envelope, resolve };
+    }));
+    const commit = vi.fn(() => null);
+    const input = {
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US" as const,
+      enabled: true,
+      deliveryVisibleNodeIds: new Set<string>(),
+      commit,
+      onCommitted: vi.fn(),
+    };
+    const turn = useFixedExpandTurn(input);
+    expect(turn.start(BASIS)).toBe(true);
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await Promise.resolve();
+    expect(commit).not.toHaveBeenCalled();
+
+    input.deliveryVisibleNodeIds.add("thought");
+    window.dispatchEvent(Object.assign(new Event("pointerup"), { pointerId: 1 }));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+  });
+
+  it("holds a resolved expansion while another pointer gesture is active", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
+      pending = { envelope, resolve };
+    }));
+    const commit = vi.fn(() => null);
+    const turn = useFixedExpandTurn({
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US",
+      enabled: true,
+      commit,
+      onCommitted: vi.fn(),
+    });
+    expect(turn.start(BASIS)).toBe(true);
+    window.dispatchEvent(Object.assign(new Event("pointerdown"), { pointerId: 7 }));
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await Promise.resolve();
+    expect(commit).not.toHaveBeenCalled();
+
+    window.dispatchEvent(Object.assign(new Event("pointerup"), { pointerId: 7 }));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
   });
 
   it("revokes an in-flight expansion when its addressed material changes", async () => {
@@ -330,7 +410,6 @@ describe("useFixedExpandTurn", () => {
       selection: SELECTION,
       locale: "en-US" as const,
       enabled: true,
-      interactionScopeKey: "focus:thought",
       commit,
       onCommitted: vi.fn(),
     };
@@ -378,7 +457,6 @@ describe("useFixedExpandTurn", () => {
         selection: SELECTION,
         locale: "en-US",
         enabled: true,
-        interactionScopeKey: "focus:thought",
         commit,
         onCommitted: vi.fn(),
         onUnavailable,
@@ -417,7 +495,6 @@ describe("useFixedExpandTurn", () => {
       selection: SELECTION,
       locale: "en-US",
       enabled: true,
-      interactionScopeKey: "focus:thought",
       commit,
       onCommitted,
       onUnavailable,

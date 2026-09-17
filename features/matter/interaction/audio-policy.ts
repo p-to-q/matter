@@ -1,4 +1,6 @@
 export const RECORDING_LIMIT_MS = 60_000;
+/** A stopped recorder must either publish its final chunk or fail recoverably. */
+export const RECORDING_STOP_TIMEOUT_MS = 4_000;
 export const MAX_ACCEPTED_RECORDING_MS = 65_000;
 export const MAX_AUDIO_BYTES = 2 * 1024 * 1024;
 export const MAX_AUDIO_REQUEST_BYTES = MAX_AUDIO_BYTES + 128 * 1024;

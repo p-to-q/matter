@@ -301,6 +301,8 @@ test("a real double-click gives native copy sole paint ownership over structural
   const structural = page.locator('.material-address-layer[data-address-variant="structural"]');
   const revision = await shell.getAttribute("data-tree-revision");
   await expect(structural).toHaveAttribute("data-material-address-painted", "true");
+  await page.evaluate(() => document.fonts.ready);
+  const before = await materialTextLayoutReceipt(root);
 
   await label.dblclick({ position: { x: 80, y: 12 } });
   await expect.poll(() => page.evaluate(() => {
@@ -312,6 +314,51 @@ test("a real double-click gives native copy sole paint ownership over structural
   await expect(structural).not.toHaveAttribute("data-material-address-painted", "true");
   await expect(root).toHaveAttribute("aria-pressed", "true");
   await expect(shell).toHaveAttribute("data-tree-revision", revision ?? "");
+  await expect(label).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(label).toHaveCSS("box-shadow", "none");
+  expect(await materialTextLayoutReceipt(root)).toEqual(before);
+});
+
+test("structural selection paint never changes text wrapping or material geometry", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const root = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+  await page.evaluate(() => document.fonts.ready);
+  const before = await materialTextLayoutReceipt(root);
+  expect(before.rows.length).toBeGreaterThan(1);
+
+  await root.click();
+  await expect(root).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.locator('.material-address-layer[data-address-variant="structural"]'),
+  ).toHaveAttribute("data-material-address-painted", "true");
+  const after = await materialTextLayoutReceipt(root);
+
+  expect(after).toEqual(before);
+});
+
+test("a direct double-click keeps canonical geometry while native copy takes ownership", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const shell = page.locator("main.matter-shell");
+  const root = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+  await page.evaluate(() => document.fonts.ready);
+  const before = await materialTextLayoutReceipt(root);
+
+  await root.dblclick({ position: { x: 80, y: 12 } });
+  await expect.poll(() => page.evaluate(() => {
+    const selection = window.getSelection();
+    return selection !== null && !selection.isCollapsed && selection.toString().length > 0;
+  })).toBe(true);
+  await expect(shell).toHaveAttribute("data-material-address-owner", "native");
+  await expect(
+    page.locator('.material-address-layer[data-address-variant="native"]'),
+  ).toHaveAttribute("data-material-address-painted", "true");
+  expect(await materialTextLayoutReceipt(root)).toEqual(before);
 });
 
 test("one outline owns the address from neutral through both grips", async ({ page }) => {
@@ -1428,6 +1475,47 @@ async function selectRoot(page: Page): Promise<void> {
   await page.evaluate(() => new Promise<void>((resolve) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
   }));
+}
+
+async function materialTextLayoutReceipt(target: ReturnType<Page["locator"]>) {
+  return target.evaluate((element) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const textNodes: Text[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if (node instanceof Text && node.data.length > 0) textNodes.push(node);
+    }
+    const first = textNodes[0];
+    const last = textNodes.at(-1);
+    if (first === undefined || last === undefined) {
+      throw new Error("material text receipt requires canonical text");
+    }
+    const range = document.createRange();
+    // Element ranges include both an inline wrapper's box and its descendant
+    // text rects after selection mounts. Span only canonical text nodes so the
+    // receipt compares glyph geometry, independent of paint-only DOM shape.
+    range.setStart(first, 0);
+    range.setEnd(last, last.data.length);
+    const own = (value: number) => Math.round(value * 100) / 100;
+    const rect = element.getBoundingClientRect();
+    const rows = [...range.getClientRects()]
+      .filter((row) => row.width > 0 && row.height > 0)
+      .map((row) => ({
+        x: own(row.x),
+        y: own(row.y),
+        width: own(row.width),
+        height: own(row.height),
+      }));
+    range.detach();
+    return {
+      box: {
+        x: own(rect.x),
+        y: own(rect.y),
+        width: own(rect.width),
+        height: own(rect.height),
+      },
+      rows,
+    };
+  });
 }
 
 async function activateLasso(page: Page): Promise<void> {

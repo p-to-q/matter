@@ -85,10 +85,12 @@ lineage     why it grew here      authored root → selected node
 
 The channels stay separate. Voice does not direct Elastic Language. The lasso
 fixes scope, stretch fixes degree, the tool fixes the only allowed operation,
-and the model decides none of them. When Full-view Voice admission starts, it
-cancels any pending Elastic turn and temporarily removes both grips. The
-validated lasso address may re-arm them only after admission returns to idle,
-so human admission and generated expansion never own the material together.
+and the model decides none of them. When Full-view Voice capture starts, it
+temporarily removes both grips; an already-submitted Elastic job keeps its
+immutable basis and may deliver only after capture ends, the target is visible,
+the pointer is idle, and that exact basis still validates. The lasso address may
+re-arm after admission returns to idle, so capture and generated delivery never
+change the material together.
 
 A loop that resolves two or more passage ranges enters material selection
 instead. That higher-level transient state highlights the source nodes in the
@@ -126,27 +128,64 @@ points. The node click fixes reference, the person fixes direction, and the clos
 tool policy fixes a seed output band near the source length; the model may not
 choose another target, operation, or scope.
 
-Opening Point and Talk cancels any Elastic degree or pending Elastic turn. One complete result
-atomically replaces the addressed node or exact segment in place and is pointer-undoable.
-Closing, changing the target, or losing its exact document, tree, selection, or
-visible-lineage basis clears the transient direction and gives any late result
-no authority. An unrelated history revision does not reinterpret or revoke that
+Opening Point and Talk closes any Elastic adjustment presentation; an already
+submitted Elastic job retains its own authority. One complete result atomically
+replaces the addressed node or exact segment in place and is pointer-undoable.
+Before submit, closing or changing the target clears the transient direction.
+After submit, closing the field or moving elsewhere only detaches its
+presentation; the immutable job continues until completion. Losing its exact
+document, tree, target, or visible-lineage basis gives a late result no
+authority. An unrelated history revision does not reinterpret or revoke the
 frozen direction. Full-view Voice admission remains a separate human-material
 channel.
 
-The paper has one transient AI-operation slot. Point and Talk, an Elastic grip
-adjustment or pending turn, and the corner Inquiry cannot remain active behind
-one another. Opening one revokes the prior operation synchronously. A neutral
+The paper has one transient AI-presentation slot. Point and Talk, an Elastic
+grip adjustment, and the corner Inquiry cannot remain visibly active behind one
+another. Opening one detaches the prior presentation synchronously. Submission
+is the separate operation boundary: accepted work keeps its immutable basis and
+cannot be replaced by another gesture in the same owner while it is pending.
+Different submitted owners may coexist, but every material result waits for a
+visible, pointer-idle delivery window and exact target revalidation. A neutral
 lasso is not itself an AI operation: it may remain visible as the person's
 explicit Inquiry context until a grip actually begins an Elastic adjustment.
-This keeps selection available without letting two generators compete for the
-same material or focus.
+Modal chrome cancels only raw microphone capture; a Voice action already
+submitted at Stop may finish processing, but its material change remains held
+until the paper is perceivable again.
 
 Provider, pool, timeout, and transport failures are operational events, not
 material. They leave the exact source intact and return the current Elastic,
 Point-and-Talk, or inquiry control to its prior usable state without drawing a model-error message
 on the paper. Strict receipts and server-side observation remain available for
 diagnosis; only valid model output can become visible material.
+
+The Model API item in settings is operational configuration, not product chrome
+on the paper. It always presents one API address and one key field. Testing is
+optional and does not save; an explicit save verifies the address and key before
+atomically replacing the prior setting. While the person is editing or testing,
+the address field preserves exactly what they typed; safe scheme repair and
+bounded path recovery stay invisible. Only a successful explicit save replaces
+the draft with the canonical address that was actually persisted. A blank key
+retains the saved secret
+only while the canonical address is unchanged. The server—not the person—owns
+provider detection, bounded model choice, completion path, request shape, and
+response contract. The saved credential has a fixed 30-day device lease, while
+status reading itself makes no network request and does not extend that lease.
+One opaque non-secret receipt lets the form confirm that its exact save still
+owns the browser slot. Removing access rotates a separate browser generation,
+so a verified save that began earlier cannot restore itself when its response
+arrives late. This is browser-jar ordering, not revocation of credentials an
+attacker copied out of the browser before removal, nor a guarantee after the
+browser selectively evicts only the removal marker.
+The key is never written to material, history, the local document, or
+browser-readable storage. On the already-public repair, label, and Inquiry
+surfaces, that verified lease remains usable even when Matter's managed provider
+is disabled; managed-provider availability is not product authorization. When
+an available model action runs, its
+bounded material is sent to the chosen provider endpoint first; existing
+managed candidates remain fallback, and a repeatedly failing user candidate is
+briefly tried after a healthy managed candidate instead of spending every
+action's first attempt. An unpromoted product action does not
+become public merely because a user key is present.
 
 ## The handle stays with the person
 
@@ -165,10 +204,12 @@ it arrives. The bubble is
 transient: each opening begins clean and no exchange is replayed after closing
 or reload. A bounded local completed-record may remain separately for passive
 look-back, but it is not a resumed inquiry surface and is never material,
-history, archive content, or later model context. Closing the surface, switching
-to another AI operation, replacing the local document owner, leaving the page,
-or unmounting revokes the current request before a late answer may enter either
-the bubble or that record. Once an exchange has already been accepted, its record write remains
+history, archive content, or later model context. Closing the surface or
+switching to another operation detaches only the visible bubble; the submitted
+answer may still settle into its bounded local record. Replacing the local
+document owner, leaving the page, or unmounting revokes the current request
+before a late answer may enter either the bubble or that record. Once an
+exchange has already been accepted, its record write remains
 owned by the addressed tree even if the person navigates elsewhere before
 local storage settles.
 On desktop, the upper-right About/settings pair, bottom-right utility row, and

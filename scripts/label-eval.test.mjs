@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   SEMANTIC_LABEL_PROMPT_VERSION,
@@ -10,381 +12,219 @@ import {
   validateSemanticLabel,
 } from "../features/matter/material/semantic-label";
 import { LABEL_SCENARIO, buildLabelPrompt } from "../features/matter/server/label-harness";
-import { readModelPool } from "../features/matter/server/model-pool";
+import { createPoolAdapter, readModelPool, resetPoolHealth } from "../features/matter/server/model-pool";
 import { CORPUS_VERSION, contentDigest, corpus } from "./label-corpus.mjs";
+import {
+  COMPLETION_POLICY_VERSION,
+  MAX_EVAL_WALL_CLOCK_MS,
+  assertSecureEvalTls,
+  candidateDeclarationDigest,
+  createEvalAuthority,
+  createEvalPlanArtifact,
+  executeAuthorizedEvalRun,
+  parseEvalRepeat,
+} from "./label-eval-plan.mjs";
 
 /**
  * Measures a live model against the deterministic label it would replace.
  *
  * This is a measurement, not a test: it needs a key, it spends money, and its
  * result is a judgement a person makes from the table it prints. It therefore
- * never runs by default — `npm run check` skips it — and only an explicit
- * `MATTER_LABEL_EVAL=1` turns it on:
+ * never runs by default. Plan and run are separate invocations: plan mode
+ * freezes a private authorization artifact without calling a provider; run
+ * mode reconstructs it and requires its explicitly supplied digest.
  *
- *   MATTER_LABEL_EVAL=1 npx vitest run scripts/label-eval.test.mjs
- *   MATTER_LABEL_EVAL=1 MATTER_LABEL_EVAL_MODELS=Qwen-flash npx vitest run scripts/label-eval.test.mjs
- *   MATTER_LABEL_EVAL=1 MATTER_LABEL_EVAL_REPEAT=3 npx vitest run scripts/label-eval.test.mjs
+ *   MATTER_LABEL_EVAL=plan npx vitest run scripts/label-eval.test.mjs
+ *   MATTER_LABEL_EVAL=run MATTER_LABEL_EVAL_PLAN_DIGEST=<digest> npx vitest run scripts/label-eval.test.mjs
  */
-const enabled = process.env.MATTER_LABEL_EVAL === "1";
-const REQUEST_TIMEOUT_MS = 20_000;
-
-/**
- * Eval-plan binding (spec 5.1.1 rule 6, §6.3).
- *
- * Before a paid attribution run starts, the tool builds an authorization plan
- * digest over every input that can change the result: the scenario, the
- * candidate station/model/thinking-mode declarations and endpoint digests, the
- * prompt and corpus versions with the full corpus content digest, the
- * adjudication and completion policy versions, the per-case budget, and the
- * total call and output-token ceilings. The runtime rebuilds the same digest
- * from the same inputs; any disagreement stops the run before a single
- * provider call.
- *
- * Station and model names live in the binding object so the artefact can be
- * rebuilt, but they never appear in regular output — only the digest and the
- * version strings do.
- */
+const mode = process.env.MATTER_LABEL_EVAL;
+const planMode = mode === "plan";
+const runMode = mode === "run" || mode === "1";
 const LABEL_ADJUDICATION_POLICY_VERSION = "label-adjudication/1";
-const LABEL_COMPLETION_POLICY_VERSION = "label-completion/1";
-const PER_CASE_MAX_OUTPUT_TOKENS = 32;
+const REPORT_ROOT = new URL("../tmp/label-eval/", import.meta.url);
+const PLAN_PATH = new URL("plan.private.json", REPORT_ROOT);
+const RELEASE_CANARY_MAX_GRAPHEMES = 28;
+const EVAL_RUNNER_OVERHEAD_MS = 60_000;
 
-function thinkingModeOf(enableThinking) {
-  if (enableThinking === true) return "on";
-  if (enableThinking === false) return "off";
-  return "default";
-}
-
-function endpointDigestOf(baseUrl) {
-  return createHash("sha256").update(baseUrl, "utf8").digest("hex");
-}
-
-function buildEvalPlanBinding(inputs) {
-  const candidates = Object.freeze(inputs.candidates.map((candidate) => Object.freeze({
-    station: candidate.station,
-    model: candidate.model,
-    thinkingMode: candidate.thinkingMode,
-    endpointDigest: candidate.endpointDigest,
-  })));
-  const binding = {
-    scenarioId: inputs.scenarioId,
-    promptVersion: inputs.promptVersion,
-    corpusVersion: inputs.corpusVersion,
-    corpusDigest: inputs.corpusDigest,
-    adjudicationPolicyVersion: inputs.adjudicationPolicyVersion,
-    completionPolicyVersion: inputs.completionPolicyVersion,
-    candidates,
-    perCaseBudget: Object.freeze({
-      deadlineMs: inputs.perCaseDeadlineMs,
-      maxOutputTokens: inputs.perCaseMaxOutputTokens,
-    }),
-    totalCalls: inputs.totalCalls,
-    totalOutputTokenCeiling: inputs.totalOutputTokenCeiling,
-  };
-  return Object.freeze({ ...binding, digest: bindingDigest(binding) });
-}
-
-function bindingDigest(binding) {
-  const hash = createHash("sha256");
-  hash.update(binding.scenarioId, "utf8"); hash.update("\0");
-  hash.update(binding.promptVersion, "utf8"); hash.update("\0");
-  hash.update(binding.corpusVersion, "utf8"); hash.update("\0");
-  hash.update(binding.corpusDigest, "utf8"); hash.update("\0");
-  hash.update(binding.adjudicationPolicyVersion, "utf8"); hash.update("\0");
-  hash.update(binding.completionPolicyVersion, "utf8"); hash.update("\0");
-  for (const candidate of binding.candidates) {
-    hash.update(candidate.station, "utf8"); hash.update("\0");
-    hash.update(candidate.model, "utf8"); hash.update("\0");
-    hash.update(candidate.thinkingMode, "utf8"); hash.update("\0");
-    hash.update(candidate.endpointDigest, "utf8"); hash.update("\0");
-  }
-  hash.update(String(binding.perCaseBudget.deadlineMs), "utf8"); hash.update("\0");
-  hash.update(String(binding.perCaseBudget.maxOutputTokens), "utf8"); hash.update("\0");
-  hash.update(String(binding.totalCalls), "utf8"); hash.update("\0");
-  hash.update(String(binding.totalOutputTokenCeiling), "utf8"); hash.update("\n");
-  return hash.digest("hex");
-}
-
-function checkEvalPlanBinding(expected, actual) {
-  const scalarFields = [
-    "scenarioId",
-    "promptVersion",
-    "corpusVersion",
-    "corpusDigest",
-    "adjudicationPolicyVersion",
-    "completionPolicyVersion",
-  ];
-  for (const field of scalarFields) {
-    if (expected[field] !== actual[field]) {
-      return { ok: false, field, expected: expected[field], actual: actual[field] };
-    }
-  }
-  if (expected.perCaseBudget.deadlineMs !== actual.perCaseBudget.deadlineMs) {
-    return {
-      ok: false,
-      field: "perCaseBudget.deadlineMs",
-      expected: expected.perCaseBudget.deadlineMs,
-      actual: actual.perCaseBudget.deadlineMs,
-    };
-  }
-  if (expected.perCaseBudget.maxOutputTokens !== actual.perCaseBudget.maxOutputTokens) {
-    return {
-      ok: false,
-      field: "perCaseBudget.maxOutputTokens",
-      expected: expected.perCaseBudget.maxOutputTokens,
-      actual: actual.perCaseBudget.maxOutputTokens,
-    };
-  }
-  if (expected.totalCalls !== actual.totalCalls) {
-    return { ok: false, field: "totalCalls", expected: expected.totalCalls, actual: actual.totalCalls };
-  }
-  if (expected.totalOutputTokenCeiling !== actual.totalOutputTokenCeiling) {
-    return {
-      ok: false,
-      field: "totalOutputTokenCeiling",
-      expected: expected.totalOutputTokenCeiling,
-      actual: actual.totalOutputTokenCeiling,
-    };
-  }
-  if (expected.candidates.length !== actual.candidates.length) {
-    return {
-      ok: false,
-      field: "candidates.length",
-      expected: expected.candidates.length,
-      actual: actual.candidates.length,
-    };
-  }
-  for (let index = 0; index < expected.candidates.length; index += 1) {
-    const want = expected.candidates[index];
-    const got = actual.candidates[index];
-    if (want.station !== got.station) {
-      return { ok: false, field: `candidates[${index}].station`, expected: want.station, actual: got.station };
-    }
-    if (want.model !== got.model) {
-      return { ok: false, field: `candidates[${index}].model`, expected: want.model, actual: got.model };
-    }
-    if (want.thinkingMode !== got.thinkingMode) {
-      return { ok: false, field: `candidates[${index}].thinkingMode`, expected: want.thinkingMode, actual: got.thinkingMode };
-    }
-    if (want.endpointDigest !== got.endpointDigest) {
-      return { ok: false, field: `candidates[${index}].endpointDigest`, expected: want.endpointDigest, actual: got.endpointDigest };
-    }
-  }
-  return { ok: true };
-}
-
-class EvalPlanBindingMismatchError extends Error {
-  constructor(check) {
-    super(
-      `eval-plan binding mismatch: ${check.field} expected ${JSON.stringify(check.expected)} but got ${JSON.stringify(check.actual)}`,
+describe.runIf(planMode)("label model evaluation plan", () => {
+  it("freezes a private plan without calling a provider", async () => {
+    await loadLocalEnvironment();
+    assertSecureEvalTls(process.env);
+    const authority = createEvalAuthority();
+    const setup = prepareEvaluation(process.env, authority);
+    const artifact = createEvalPlanArtifact(setup.bindings, authority.credentialBindingSalt);
+    await mkdir(REPORT_ROOT, { recursive: true, mode: 0o700 });
+    await writePrivateFile(PLAN_PATH, `${JSON.stringify(artifact, null, 2)}\n`);
+    writeSafeOutput(
+      `label-eval: plan calls<=${setup.bindings.totalCallCap}` +
+      ` output-tokens<=${setup.bindings.totalOutputTokenCap}` +
+      ` provider-ms<=${setup.bindings.worstCaseProviderMs}`,
     );
-    this.name = "EvalPlanBindingMismatchError";
-    this.check = check;
-  }
-}
+    writeSafeOutput(`label-eval: plan digest ${artifact.digest}`);
+    writeSafeOutput("label-eval: private plan tmp/label-eval/plan.private.json");
+  });
+});
 
-function readBindingInputsFromEnv() {
-  const requested = (process.env.MATTER_LABEL_EVAL_MODELS ?? "")
+describe.runIf(runMode)("label model evaluation run", () => {
+  it("reports every corpus case against the authorized live pool", {
+    timeout: MAX_EVAL_WALL_CLOCK_MS + EVAL_RUNNER_OVERHEAD_MS,
+  }, async () => {
+    await loadLocalEnvironment();
+    const artifact = JSON.parse(await readFile(PLAN_PATH, "utf8"));
+    const setup = prepareEvaluation(process.env, {
+      authorizationId: artifact?.plan?.authorizationId,
+      credentialBindingSalt: artifact?.credentialBindingSalt,
+    });
+    await executeAuthorizedEvalRun({
+      environment: process.env,
+      artifact,
+      suppliedDigest: process.env.MATTER_LABEL_EVAL_PLAN_DIGEST ?? "",
+      actualBindings: setup.bindings,
+      initialize: (planDigest) => initializeEvalArtifacts(setup.pool.length, planDigest),
+      execute: async (artifacts) => {
+        resetPoolHealth();
+        for (const [index, candidate] of setup.pool.entries()) {
+          const result = await runCaseSequence({
+            corpusItems: corpus,
+            candidate,
+            repeat: setup.repeat,
+            complete: (ownCandidate, prompt, budget, input) =>
+              complete(ownCandidate, prompt, budget, input, fetch),
+            writeJournal: (record) => appendCaseJournal(artifacts[index].journalPath, record),
+          });
+          await report(index, result.rows, artifacts[index].reportPath, {
+            journalStopped: result.journalStopped,
+            attemptedCalls: result.attemptedCalls,
+          });
+          if (result.journalStopped) break;
+        }
+      },
+    });
+  });
+});
+
+function prepareEvaluation(environment, authority) {
+  const requested = (environment.MATTER_LABEL_EVAL_MODELS ?? "")
     .split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
-  const repeat = Math.max(1, Number(process.env.MATTER_LABEL_EVAL_REPEAT ?? 1));
-  const pool = readModelPool(process.env).filter(
+  const repeat = parseEvalRepeat(environment.MATTER_LABEL_EVAL_REPEAT);
+  const pool = readModelPool(environment).filter(
     (candidate) => requested.length === 0 ||
       requested.some((model) => model.toLowerCase() === candidate.model.toLowerCase()),
   );
-  return {
+  if (pool.length === 0) {
+    throw new Error("Configure MATTER_MODEL_POOL (or the complete legacy MATTER_LABEL_POOL) before evaluation.");
+  }
+
+  const caseBudgets = corpus.map((item) => {
+    const input = normalizeCorpusItem(item);
+    const budget = LABEL_SCENARIO.budget(input);
+    const provisional = deriveProvisionalLabel(input);
+    return Object.freeze({
+      id: item.id,
+      requested: decideModelRequest(input, provisional).request,
+      maxGraphemes: input.maxGraphemes,
+      deadlineMs: budget.deadlineMs,
+      maxOutputTokens: budget.maxOutputTokens,
+      disableThinking: budget.disableThinking === true,
+    });
+  });
+  const caseBudgetDigest = createHash("sha256")
+    .update(JSON.stringify(caseBudgets), "utf8")
+    .digest("hex");
+  const compiledPromptDigest = createHash("sha256");
+  for (const item of corpus) {
+    compiledPromptDigest.update(item.id, "utf8");
+    compiledPromptDigest.update("\0");
+    compiledPromptDigest.update(buildLabelPrompt(normalizeCorpusItem(item)), "utf8");
+    compiledPromptDigest.update("\n");
+  }
+  const requestedBudgets = caseBudgets.filter((budget) => budget.requested);
+  const outputTokensPerCandidate = requestedBudgets.reduce(
+    (total, budget) => total + budget.maxOutputTokens,
+    0,
+  );
+  const providerMsPerCandidate = requestedBudgets.reduce(
+    (total, budget) => total + budget.deadlineMs,
+    0,
+  );
+  const deadlines = new Set(caseBudgets.map((budget) => budget.deadlineMs));
+  if (deadlines.size !== 1 || caseBudgets.some((budget) => !budget.disableThinking)) {
+    throw new Error("The Label evaluation request policy no longer matches one production budget.");
+  }
+  const totalCallCap = pool.length * requestedBudgets.length * repeat;
+  const totalOutputTokenCap = pool.length * outputTokensPerCandidate * repeat;
+  const worstCaseProviderMs = pool.length * providerMsPerCandidate * repeat;
+  if (
+    !Number.isSafeInteger(totalCallCap) ||
+    !Number.isSafeInteger(totalOutputTokenCap) ||
+    !Number.isSafeInteger(worstCaseProviderMs) ||
+    worstCaseProviderMs > MAX_EVAL_WALL_CLOCK_MS
+  ) {
+    throw new Error("The Label evaluation plan exceeds its bounded wall-clock authority.");
+  }
+  const bindings = Object.freeze({
+    authorizationId: authority.authorizationId,
     scenarioId: LABEL_SCENARIO.id,
+    candidateDeclarationDigest: candidateDeclarationDigest(
+      pool,
+      authority.credentialBindingSalt,
+    ),
+    candidateCount: pool.length,
     promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
+    compiledPromptDigest: compiledPromptDigest.digest("hex"),
     corpusVersion: CORPUS_VERSION,
-    corpusDigest: contentDigest(),
+    corpusContentDigest: contentDigest(),
     adjudicationPolicyVersion: LABEL_ADJUDICATION_POLICY_VERSION,
-    completionPolicyVersion: LABEL_COMPLETION_POLICY_VERSION,
-    candidates: pool.map((candidate) => ({
-      station: candidate.station,
-      model: candidate.model,
-      thinkingMode: thinkingModeOf(candidate.enableThinking),
-      endpointDigest: endpointDigestOf(candidate.baseUrl),
-    })),
-    perCaseDeadlineMs: REQUEST_TIMEOUT_MS,
-    perCaseMaxOutputTokens: PER_CASE_MAX_OUTPUT_TOKENS,
-    totalCalls: pool.length * corpus.length * repeat,
-    totalOutputTokenCeiling: pool.length * corpus.length * repeat * PER_CASE_MAX_OUTPUT_TOKENS,
-  };
+    completionPolicyVersion: COMPLETION_POLICY_VERSION,
+    requestBudget: Object.freeze({
+      deadlineMs: caseBudgets[0].deadlineMs,
+      disableThinking: true,
+      repeat,
+      releaseCanaryMaxGraphemes: RELEASE_CANARY_MAX_GRAPHEMES,
+      requestedCaseCount: requestedBudgets.length,
+      caseBudgetDigest,
+    }),
+    worstCaseProviderMs,
+    wallClockCeilingMs: MAX_EVAL_WALL_CLOCK_MS,
+    totalCallCap,
+    totalOutputTokenCap,
+  });
+  return Object.freeze({ pool, repeat, bindings });
 }
 
-async function writeBindingArtefact(plan) {
-  const directory = new URL("../tmp/", import.meta.url);
-  await mkdir(directory, { recursive: true });
-  const path = new URL("label-eval-binding.json", directory);
-  await writeFile(path, `${JSON.stringify(plan, null, 2)}\n`, "utf8");
+async function initializeEvalArtifacts(candidateCount, planDigest, reportRoot = REPORT_ROOT) {
+  if (!/^[a-f0-9]{64}$/u.test(planDigest)) throw new Error("Invalid Label evaluation plan digest.");
+  const runDirectory = new URL(`run-${planDigest}/`, reportRoot);
+  // Directory creation is the single-use authorization claim. EEXIST means
+  // this digest already ran or is running; neither evidence nor spend may be
+  // replayed or truncated under the same authorization.
+  await mkdir(runDirectory, { mode: 0o700 });
+  const artifacts = [];
+  for (let index = 0; index < candidateCount; index += 1) {
+    const ordinal = String(index + 1).padStart(2, "0");
+    const journalPath = new URL(`candidate-${ordinal}.private.jsonl`, runDirectory);
+    const reportPath = new URL(`candidate-${ordinal}.safe.txt`, runDirectory);
+    // Exclusive creation is the durable preflight. A failure throws and the
+    // lifecycle gate never exposes the provider execution callback.
+    await writeFile(journalPath, "", { encoding: "utf8", flag: "wx", mode: 0o600 });
+    await writeFile(reportPath, "", { encoding: "utf8", flag: "wx", mode: 0o600 });
+    artifacts.push(Object.freeze({ journalPath, reportPath }));
+  }
+  return Object.freeze(artifacts);
 }
 
-describe("eval-plan binding", () => {
-  const fixtureInputs = () => ({
-    scenarioId: LABEL_SCENARIO.id,
-    promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
-    corpusVersion: CORPUS_VERSION,
-    corpusDigest: contentDigest(),
-    adjudicationPolicyVersion: LABEL_ADJUDICATION_POLICY_VERSION,
-    completionPolicyVersion: LABEL_COMPLETION_POLICY_VERSION,
-    candidates: [
-      {
-        station: "alpha",
-        model: "Qwen-flash",
-        thinkingMode: "off",
-        endpointDigest: endpointDigestOf("https://alpha.example/v1"),
-      },
-      {
-        station: "beta",
-        model: "DeepSeek-V3",
-        thinkingMode: "default",
-        endpointDigest: endpointDigestOf("https://beta.example/v1"),
-      },
-    ],
-    perCaseDeadlineMs: REQUEST_TIMEOUT_MS,
-    perCaseMaxOutputTokens: PER_CASE_MAX_OUTPUT_TOKENS,
-    totalCalls: 2 * corpus.length * 1,
-    totalOutputTokenCeiling: 2 * corpus.length * 1 * PER_CASE_MAX_OUTPUT_TOKENS,
+function normalizeCorpusItem(item) {
+  return normalizeLabelInput({
+    text: item.text,
+    locale: item.locale ?? "zh-CN",
+    context: item.context,
+    ...(item.id.startsWith("canary-sourced-")
+      ? { maxGraphemes: RELEASE_CANARY_MAX_GRAPHEMES }
+      : {}),
   });
-
-  it("continues when the rebuilt digest matches", () => {
-    const plan = buildEvalPlanBinding(fixtureInputs());
-    const rebuilt = buildEvalPlanBinding(fixtureInputs());
-    expect(checkEvalPlanBinding(plan, rebuilt)).toEqual({ ok: true });
-    expect(plan.digest).toBe(rebuilt.digest);
-  });
-
-  it.each([
-    ["scenarioId", "drifted-scenario"],
-    ["promptVersion", "thought-label/drifted"],
-    ["corpusVersion", "label-corpus/drifted"],
-    ["corpusDigest", "0".repeat(64)],
-    ["adjudicationPolicyVersion", "label-adjudication/drifted"],
-    ["completionPolicyVersion", "label-completion/drifted"],
-  ])("stops with zero provider calls when %s drifts", (field, value) => {
-    const plan = buildEvalPlanBinding(fixtureInputs());
-    let providerCalls = 0;
-    const drifted = { ...fixtureInputs(), [field]: value };
-    const rebuilt = buildEvalPlanBinding(drifted);
-    const check = checkEvalPlanBinding(plan, rebuilt);
-    expect(check.ok).toBe(false);
-    expect(check.field).toBe(field);
-    expect(() => {
-      if (!check.ok) throw new EvalPlanBindingMismatchError(check);
-      providerCalls += 1;
-    }).toThrow(EvalPlanBindingMismatchError);
-    expect(providerCalls).toBe(0);
-  });
-
-  it("stops with zero provider calls when a candidate endpoint drifts", () => {
-    const plan = buildEvalPlanBinding(fixtureInputs());
-    let providerCalls = 0;
-    const inputs = fixtureInputs();
-    const drifted = {
-      ...inputs,
-      candidates: inputs.candidates.map((candidate, index) => (
-        index === 0
-          ? { ...candidate, endpointDigest: endpointDigestOf("https://drifted.example/v1") }
-          : candidate
-      )),
-    };
-    const rebuilt = buildEvalPlanBinding(drifted);
-    const check = checkEvalPlanBinding(plan, rebuilt);
-    expect(check.ok).toBe(false);
-    expect(check.field).toBe("candidates[0].endpointDigest");
-    expect(() => {
-      if (!check.ok) throw new EvalPlanBindingMismatchError(check);
-      providerCalls += 1;
-    }).toThrow(EvalPlanBindingMismatchError);
-    expect(providerCalls).toBe(0);
-  });
-
-  it("stops with zero provider calls when the per-case deadline drifts", () => {
-    const plan = buildEvalPlanBinding(fixtureInputs());
-    let providerCalls = 0;
-    const drifted = { ...fixtureInputs(), perCaseDeadlineMs: REQUEST_TIMEOUT_MS - 1 };
-    const rebuilt = buildEvalPlanBinding(drifted);
-    const check = checkEvalPlanBinding(plan, rebuilt);
-    expect(check.ok).toBe(false);
-    expect(check.field).toBe("perCaseBudget.deadlineMs");
-    expect(() => {
-      if (!check.ok) throw new EvalPlanBindingMismatchError(check);
-      providerCalls += 1;
-    }).toThrow(EvalPlanBindingMismatchError);
-    expect(providerCalls).toBe(0);
-  });
-
-  it("stops with zero provider calls when the total call ceiling drifts", () => {
-    const plan = buildEvalPlanBinding(fixtureInputs());
-    let providerCalls = 0;
-    const drifted = { ...fixtureInputs(), totalCalls: plan.totalCalls + 1 };
-    const rebuilt = buildEvalPlanBinding(drifted);
-    const check = checkEvalPlanBinding(plan, rebuilt);
-    expect(check.ok).toBe(false);
-    expect(check.field).toBe("totalCalls");
-    expect(() => {
-      if (!check.ok) throw new EvalPlanBindingMismatchError(check);
-      providerCalls += 1;
-    }).toThrow(EvalPlanBindingMismatchError);
-    expect(providerCalls).toBe(0);
-  });
-
-  it("produces a byte-stable digest across rebuilds", () => {
-    const first = buildEvalPlanBinding(fixtureInputs());
-    const second = buildEvalPlanBinding(fixtureInputs());
-    expect(first.digest).toBe(second.digest);
-    expect(first.digest).toMatch(/^[0-9a-f]{64}$/u);
-  });
-});
-
-describe.runIf(enabled)("label model evaluation", () => {
-  it("reports every corpus case against the live pool", { timeout: 15 * 60_000 }, async () => {
-    await loadLocalEnvironment();
-    const requested = (process.env.MATTER_LABEL_EVAL_MODELS ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-    const repeat = Math.max(1, Number(process.env.MATTER_LABEL_EVAL_REPEAT ?? 1));
-
-    const pool = readModelPool(process.env).filter(
-      (candidate) => requested.length === 0 ||
-        requested.some((model) => model.toLowerCase() === candidate.model.toLowerCase()),
-    );
-    expect(pool, "configure MATTER_MODEL_POOL (or the complete legacy MATTER_LABEL_POOL) in .env.local").not.toHaveLength(0);
-
-    // Eval-plan binding (spec 5.1.1 rule 6): build the authorization plan
-    // digest, rebuild it from the live environment, and fail closed before
-    // any provider call if the two disagree. The artefact is written to the
-    // git-ignored scratch directory so a later verifier can replay it.
-    const plan = buildEvalPlanBinding(readBindingInputsFromEnv());
-    const rebuilt = buildEvalPlanBinding(readBindingInputsFromEnv());
-    const bindingCheck = checkEvalPlanBinding(plan, rebuilt);
-    if (!bindingCheck.ok) throw new EvalPlanBindingMismatchError(bindingCheck);
-    await writeBindingArtefact(plan);
-
-    const scratchDirectory = new URL("../tmp/", import.meta.url);
-    await mkdir(scratchDirectory, { recursive: true });
-    for (const candidate of pool) {
-      const journalPath = new URL(
-        `label-eval-journal-${candidate.model.replaceAll(/[^\w.-]/gu, "_")}.jsonl`,
-        scratchDirectory,
-      );
-      await writeFile(journalPath, "", "utf8").catch(() => {});
-      const result = await runCaseSequence({
-        corpusItems: corpus,
-        candidate,
-        repeat,
-        complete,
-        writeJournal: (record) => appendCaseJournal(journalPath, record),
-      });
-      await report(`${candidate.model} @ ${candidate.station}`, result.rows, {
-        journalStopped: result.journalStopped,
-        journalStopReason: result.journalStopReason,
-      });
-      if (result.journalStopped) break;
-    }
-  });
-});
+}
 
 /**
  * Closed-set policy codes (spec 5.1.1 rule 6, §6.4). A shape violation or a
@@ -501,14 +341,19 @@ function judgeCase(input, provisionalText, answers, latencies) {
       judgeAnswer(input, provisionalText, answer, index, latencies[index] ?? 0),
     ),
   );
+  return summarizeJudgements(provisionalText, judgements, judgements.length);
+}
+
+function summarizeJudgements(provisionalText, judgements, expectedAttempts) {
   const verdicts = new Set(judgements.map((judgement) => judgement.verdict));
   const acceptedCount = judgements.filter((judgement) => judgement.verdict === "accepted").length;
   return Object.freeze({
     provisional: provisionalText,
-    answers: judgements,
+    answers: Object.freeze([...judgements]),
     unstable: verdicts.size > 1,
     acceptedCount,
     askedCount: judgements.length,
+    complete: judgements.length === expectedAttempts,
   });
 }
 
@@ -525,52 +370,63 @@ function notAskedCase(provisionalText) {
     unstable: false,
     acceptedCount: 0,
     askedCount: 0,
+    complete: true,
   });
 }
 
-async function complete(candidate, prompt) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+async function complete(candidate, prompt, budget, input, fetchImpl) {
   try {
-    const response = await fetch(`${candidate.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        authorization: `Bearer ${candidate.apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: candidate.model,
-        temperature: 0,
-        max_tokens: PER_CASE_MAX_OUTPUT_TOKENS,
-        stream: false,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: controller.signal,
-    });
-    if (!response.ok) return { ok: false, error: `http-${response.status}` };
-    const payload = await response.json();
-    const text = payload?.choices?.[0]?.message?.content;
-    if (typeof text !== "string") return { ok: false, error: "no-text" };
-    return { ok: true, text: text.trim() };
+    const adapter = createPoolAdapter([candidate], undefined, Date.now, fetchImpl);
+    const result = await adapter(Object.freeze({
+      scenario: LABEL_SCENARIO.id,
+      prompt,
+      locale: input.locale,
+      input,
+      deadlineMs: budget.deadlineMs,
+      maxOutputTokens: budget.maxOutputTokens,
+      ...(budget.disableThinking === true ? { disableThinking: true } : {}),
+      observeCandidate: () => undefined,
+    }), new AbortController().signal);
+    return { ok: true, text: result.text.trim() };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.name : "failed" };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
 /**
- * Appends one case record as a JSONL line to the per-candidate journal. A write
+ * Appends one case or completion-attempt record to the per-candidate journal. A write
  * failure returns `{ ok: false }` rather than throwing, so the caller can stop
- * the run cleanly instead of leaving a partial paid sequence behind.
+ * the run cleanly instead of leaving a partial attempt sequence behind.
  */
-async function appendCaseJournal(journalPath, caseRecord) {
+async function appendCaseJournal(journalPath, caseRecord, { openFile = open } = {}) {
+  let handle;
   try {
-    await appendFile(journalPath, `${JSON.stringify(caseRecord)}\n`, "utf8");
+    handle = await openFile(journalPath, "a");
+    await handle.appendFile(`${JSON.stringify(caseRecord)}\n`, "utf8");
+    await handle.datasync();
+    await handle.close();
+    handle = undefined;
     return { ok: true };
   } catch (error) {
+    try {
+      await handle?.close();
+    } catch {
+      // Preserve the first filesystem failure as the bounded stop reason.
+    }
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+async function writePrivateFile(path, contents) {
+  const handle = await open(path, "w", 0o600);
+  try {
+    // `open` does not narrow an existing file's mode, so enforce it before
+    // writing the credential verifier and flush before announcing its digest.
+    await handle.chmod(0o600);
+    await handle.writeFile(contents, "utf8");
+    await handle.datasync();
+  } finally {
+    await handle.close();
   }
 }
 
@@ -578,138 +434,158 @@ async function appendCaseJournal(journalPath, caseRecord) {
  * Runs the per-case sequence for one candidate with injected `complete` and
  * `writeJournal` dependencies, so the stop-on-failure discipline is testable
  * without a live provider. When a journal write fails the run ends in
- * `stopped/partial`: no further paid call is made, and the rows already
+ * `stopped/partial`: no further completion attempt is made, and the rows already
  * collected stay intact for inspection.
  */
 async function runCaseSequence({ corpusItems, candidate, repeat, complete, writeJournal, now }) {
   const rows = [];
   let journalStopped = false;
   let journalStopReason = null;
-  let paidCalls = 0;
+  let attemptedCalls = 0;
   const clock = now ?? Date.now;
-  for (const item of corpusItems) {
+  corpusLoop: for (const item of corpusItems) {
     if (journalStopped) break;
-    const input = normalizeLabelInput({
-      text: item.text,
-      locale: item.locale ?? "zh-CN",
-      context: item.context,
-    });
+    const input = normalizeCorpusItem(item);
     const provisional = deriveProvisionalLabel(input);
-    let caseRecord;
-    if (!decideModelRequest(input, provisional).request) {
-      caseRecord = { id: item.id, ...notAskedCase(provisional.text) };
-    } else {
-      const prompt = buildLabelPrompt(input);
-      const answers = [];
-      const latencies = [];
-      for (let attempt = 0; attempt < repeat; attempt += 1) {
-        const startedAt = clock();
-        answers.push(await complete(candidate, prompt));
-        latencies.push(clock() - startedAt);
-        paidCalls += 1;
-      }
-      caseRecord = { id: item.id, ...judgeCase(input, provisional.text, answers, latencies) };
-    }
-    rows.push({ id: item.id, caseRecord });
-    const journalResult = await writeJournal(caseRecord);
-    if (!journalResult.ok) {
+    const requested = decideModelRequest(input, provisional).request;
+    const headerResult = await writeJournal(Object.freeze({
+      kind: "case",
+      id: item.id,
+      provisional: provisional.text,
+      requested,
+    }));
+    if (!headerResult.ok) {
       journalStopped = true;
-      journalStopReason = journalResult.error;
+      journalStopReason = headerResult.error;
+      break;
     }
-  }
-  return { rows, journalStopped, journalStopReason, paidCalls };
-}
-
-function caseVerdictSummary(record) {
-  if (record.notAsked || record.answers.length === 0) return "not-asked";
-  const verdicts = new Set(record.answers.map((answer) => answer.verdict));
-  if (verdicts.size === 1) return [...verdicts][0];
-  return [...verdicts].sort().join("|");
-}
-
-function caseLatencyMs(record) {
-  if (record.answers.length === 0) return 0;
-  return Math.max(...record.answers.map((answer) => answer.latencyMs));
-}
-
-function caseAnswerPreview(record) {
-  if (record.notAsked || record.answers.length === 0) return "—";
-  const first = record.answers[0];
-  return first.text ?? `<${first.transportError}>`;
-}
-
-async function report(title, rows, { journalStopped, journalStopReason } = {}) {
-  const columns = [["case", 20], ["deterministic", 24], ["model", 24], ["verdict", 36], ["ms", 6]];
-  const lines = [
-    `\n=== ${title} ===`,
-    columns.map(([name, size]) => pad(name, size)).join(""),
-  ];
-  for (const row of rows) {
-    const record = row.caseRecord;
-    lines.push([
-      pad(row.id, 20),
-      pad(record.provisional, 24),
-      pad(caseAnswerPreview(record), 24),
-      pad(caseVerdictSummary(record) + (record.unstable ? " !unstable" : ""), 36),
-      pad(String(caseLatencyMs(record) || ""), 6),
-    ].join(""));
-    for (const answer of record.answers) {
-      const detail = answer.transportError
-        ? `transport:${answer.transportError}`
-        : `${answer.verdict} shape=${answer.shape.ok ? "ok" : answer.shape.code}` +
-          (answer.semantic && !answer.semantic.ok
-            ? ` semantic=${answer.semantic.reasons.join("+")}`
-            : "");
-      lines.push(`    attempt ${answer.attempt}: ${detail} ${answer.latencyMs}ms`);
+    if (!requested) {
+      const caseRecord = { id: item.id, ...notAskedCase(provisional.text) };
+      rows.push({ id: item.id, caseRecord });
+      continue;
     }
-  }
 
+    const prompt = buildLabelPrompt(input);
+    const budget = LABEL_SCENARIO.budget(input);
+    const judgements = [];
+    for (let attempt = 0; attempt < repeat; attempt += 1) {
+      const startedAt = clock();
+      const answer = await complete(candidate, prompt, budget, input);
+      const judgement = judgeAnswer(
+        input,
+        provisional.text,
+        answer,
+        attempt,
+        clock() - startedAt,
+      );
+      attemptedCalls += 1;
+      const journalResult = await writeJournal(Object.freeze({
+        kind: "attempt",
+        id: item.id,
+        ...judgement,
+      }));
+      if (!journalResult.ok) {
+        journalStopped = true;
+        journalStopReason = journalResult.error;
+        if (judgements.length > 0) {
+          rows.push({
+            id: item.id,
+            caseRecord: {
+              id: item.id,
+              ...summarizeJudgements(provisional.text, judgements, repeat),
+            },
+          });
+        }
+        break corpusLoop;
+      }
+      judgements.push(judgement);
+    }
+    rows.push({
+      id: item.id,
+      caseRecord: { id: item.id, ...summarizeJudgements(provisional.text, judgements, repeat) },
+    });
+  }
+  return { rows, journalStopped, journalStopReason, attemptedCalls };
+}
+
+async function report(candidateIndex, rows, reportPath, options = {}) {
+  const reportText = formatSafeReport(candidateIndex, rows, options);
+  await writeFile(reportPath, `${reportText}\n`, "utf8");
+  writeSafeOutput(reportText);
+}
+
+function formatSafeReport(candidateIndex, rows, {
+  journalStopped = false,
+  attemptedCalls,
+} = {}) {
   const asked = rows.filter((row) => !row.caseRecord.notAsked && row.caseRecord.answers.length > 0);
   const accepted = asked.filter(
-    (row) => row.caseRecord.acceptedCount > 0 && row.caseRecord.acceptedCount === row.caseRecord.askedCount,
+    (row) => row.caseRecord.complete &&
+      row.caseRecord.acceptedCount > 0 &&
+      row.caseRecord.acceptedCount === row.caseRecord.askedCount,
   );
-  const latencies = asked.map((row) => caseLatencyMs(row.caseRecord)).sort((left, right) => left - right);
-  lines.push(
-    `\nasked ${asked.length}/${rows.length} · accepted ${accepted.length} (${percent(accepted.length, asked.length)})` +
-    ` · p50 ${quantile(latencies, 0.5)}ms · p95 ${quantile(latencies, 0.95)}ms · max ${latencies.at(-1) ?? 0}ms`,
-  );
-  const reasons = new Map();
-  for (const row of asked) {
-    for (const answer of row.caseRecord.answers) {
-      if (answer.verdict === "accepted") continue;
-      reasons.set(answer.verdict, (reasons.get(answer.verdict) ?? 0) + 1);
+  const attempts = asked.flatMap((row) => row.caseRecord.answers);
+  const completionAttempts = attemptedCalls ?? attempts.length;
+  const unrecordedAttempts = Math.max(0, completionAttempts - attempts.length);
+  const verdicts = new Map([
+    ["accepted", 0],
+    ["rejected:shape", 0],
+    ["rejected:semantic", 0],
+    ["transport-error", 0],
+    ["unknown", 0],
+  ]);
+  const shapeCodes = new Map([...LABEL_REJECTION_CODES, "unknown"].map((code) => [code, 0]));
+  const semanticReasons = new Map([...LABEL_ADJUDICATION_REASONS, "unknown"].map((reason) => [reason, 0]));
+  const latencyBuckets = new Map([
+    ["lt-250ms", 0],
+    ["250-999ms", 0],
+    ["1-4.999s", 0],
+    ["gte-5s", 0],
+  ]);
+  for (const answer of attempts) {
+    const verdict = verdicts.has(answer.verdict) ? answer.verdict : "unknown";
+    verdicts.set(verdict, verdicts.get(verdict) + 1);
+    if (!answer.shape.ok) {
+      const code = shapeCodes.has(answer.shape.code) ? answer.shape.code : "unknown";
+      shapeCodes.set(code, shapeCodes.get(code) + 1);
     }
+    if (answer.semantic && !answer.semantic.ok) {
+      for (const reason of answer.semantic.reasons) {
+        const safeReason = semanticReasons.has(reason) ? reason : "unknown";
+        semanticReasons.set(safeReason, semanticReasons.get(safeReason) + 1);
+      }
+    }
+    const bucket = answer.latencyMs < 250
+      ? "lt-250ms"
+      : answer.latencyMs < 1_000
+        ? "250-999ms"
+        : answer.latencyMs < 5_000
+          ? "1-4.999s"
+          : "gte-5s";
+    latencyBuckets.set(bucket, (latencyBuckets.get(bucket) ?? 0) + 1);
   }
-  for (const [reason, count] of [...reasons].sort((left, right) => right[1] - left[1])) {
-    lines.push(`  ${count}x ${reason}`);
-  }
-  if (journalStopped) {
-    lines.push(`\njournal stopped: ${journalStopReason} — run ended partial, no further paid calls`);
-  }
-  // Vitest intercepts console output in run mode, so the readable artefact is
-  // a file under the git-ignored scratch directory.
-  const reportText = lines.join("\n");
-  const directory = new URL("../tmp/", import.meta.url);
-  await mkdir(directory, { recursive: true });
-  const path = new URL(`label-eval-${title.split(" ")[0].replaceAll(/[^\w.-]/gu, "_")}.txt`, directory);
-  await writeFile(path, `${reportText}\n`, "utf8");
-  process.stdout.write(`${reportText}\n\nwritten to ${path.pathname}\n`);
+  const lines = [
+    `label-eval: candidate-${String(candidateIndex + 1).padStart(2, "0")}`,
+    `status=${journalStopped ? "stopped-journal" : "completed"}`,
+    `cases total=${rows.length} asked=${asked.length} not-asked=${rows.length - asked.length}` +
+      ` accepted-all=${accepted.length}` +
+      ` partial=${rows.filter((row) => row.caseRecord.complete === false).length}` +
+      ` unstable=${rows.filter((row) => row.caseRecord.unstable).length}`,
+    `attempts attempted=${completionAttempts} recorded=${attempts.length}` +
+      ` unrecorded=${unrecordedAttempts} ${formatClosedCounts(verdicts)}`,
+    `shape ${formatClosedCounts(shapeCodes)}`,
+    `semantic ${formatClosedCounts(semanticReasons)}`,
+    `latency ${formatClosedCounts(latencyBuckets)}`,
+  ];
+  return lines.join("\n");
 }
 
-/** Han and full-width punctuation occupy two terminal columns. */
-function pad(value, size) {
-  let width = 0;
-  for (const character of value) width += (character.codePointAt(0) ?? 0) > 0x2e7f ? 2 : 1;
-  return value + " ".repeat(Math.max(1, size - width));
+function formatClosedCounts(counts) {
+  return [...counts].map(([name, count]) => `${name}=${count}`).join(" ");
 }
 
-function percent(part, total) {
-  return total === 0 ? "0%" : `${Math.round((part / total) * 100)}%`;
-}
-
-function quantile(sorted, fraction) {
-  if (sorted.length === 0) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * fraction))];
+function writeSafeOutput(value) {
+  process.stdout.write(`${value}\n`);
 }
 
 /**
@@ -723,8 +599,9 @@ async function loadLocalEnvironment() {
       const match = /^([A-Z0-9_]+)=(.*)$/u.exec(line.trim());
       if (match !== null) process.env[match[1]] ??= match[2];
     }
-  } catch {
-    // A deployment supplies the pool through real environment variables.
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    // A deployment may supply the pool through real environment variables.
   }
 }
 describe("per-case two-layer judgement", () => {
@@ -782,13 +659,17 @@ describe("per-case two-layer judgement", () => {
     expect(record.askedCount).toBe(2);
   });
 
-  it("stops all subsequent paid calls when a journal write fails", async () => {
-    let paidCalls = 0;
+  it("stops all subsequent completion attempts when a journal write fails", async () => {
+    let completionCalls = 0;
+    let journalWrites = 0;
     const complete = async () => {
-      paidCalls += 1;
+      completionCalls += 1;
       return { ok: true, text: "一个模型答案" };
     };
-    const writeJournal = async () => ({ ok: false, error: "EACCES" });
+    const writeJournal = async () => {
+      journalWrites += 1;
+      return journalWrites === 1 ? { ok: true } : { ok: false, error: "EACCES" };
+    };
     const items = [
       { id: "spoken-1", text: "呃，我觉得，我们怀念的其实不是过去本身，而是那个过去仍然允许我们想象的其他生活。" },
       { id: "spoken-2", text: "然后呢，这个延迟问题我觉得需要单独看，尤其是冷启动的时候会更明显。" },
@@ -797,14 +678,132 @@ describe("per-case two-layer judgement", () => {
     const result = await runCaseSequence({
       corpusItems: items,
       candidate: { model: "fixture" },
-      repeat: 1,
+      repeat: 3,
       complete,
       writeJournal,
     });
     expect(result.journalStopped).toBe(true);
     expect(result.journalStopReason).toBe("EACCES");
-    expect(result.rows).toHaveLength(1);
-    expect(paidCalls).toBeLessThan(items.length);
+    expect(result.rows).toHaveLength(0);
+    expect(completionCalls).toBe(1);
+    expect(formatSafeReport(0, result.rows, {
+      journalStopped: result.journalStopped,
+      attemptedCalls: result.attemptedCalls,
+    })).toContain("attempts attempted=1 recorded=0 unrecorded=1");
+  });
+
+  it.each(["datasync", "close"])(
+    "stops after a real journal handle %s failure",
+    async (failureMethod) => {
+      let openCount = 0;
+      let completionCalls = 0;
+      const openFile = async () => {
+        openCount += 1;
+        const failThisHandle = openCount === 2;
+        return {
+          appendFile: async () => undefined,
+          datasync: async () => {
+            if (failThisHandle && failureMethod === "datasync") throw new Error("EIO-datasync");
+          },
+          close: async () => {
+            if (failThisHandle && failureMethod === "close") throw new Error("EIO-close");
+          },
+        };
+      };
+      const result = await runCaseSequence({
+        corpusItems: [{
+          id: "spoken-1",
+          text: "呃，我觉得，我们怀念的其实不是过去本身，而是那个过去仍然允许我们想象的其他生活。",
+        }],
+        candidate: { model: "fixture" },
+        repeat: 2,
+        complete: async () => {
+          completionCalls += 1;
+          return { ok: true, text: "想象的生活" };
+        },
+        writeJournal: (record) => appendCaseJournal("fixture", record, { openFile }),
+      });
+      expect(result.journalStopped).toBe(true);
+      expect(result.journalStopReason).toContain(`EIO-${failureMethod}`);
+      expect(result).toMatchObject({ attemptedCalls: 1, rows: [] });
+      expect(completionCalls).toBe(1);
+    },
+  );
+
+  it("journals every completion result before allowing the next call", async () => {
+    const events = [];
+    const result = await runCaseSequence({
+      corpusItems: [{
+        id: "spoken-1",
+        text: "呃，我觉得，我们怀念的其实不是过去本身，而是那个过去仍然允许我们想象的其他生活。",
+      }],
+      candidate: { model: "fixture" },
+      repeat: 2,
+      complete: async () => {
+        events.push("call");
+        return { ok: true, text: "想象的生活" };
+      },
+      writeJournal: async (record) => {
+        events.push(record.kind === "attempt" ? `write-${record.attempt}` : "write-case");
+        return { ok: true };
+      },
+    });
+    expect(events).toEqual(["write-case", "call", "write-0", "call", "write-1"]);
+    expect(result).toMatchObject({ journalStopped: false, attemptedCalls: 2 });
+    expect(result.rows[0].caseRecord.complete).toBe(true);
+  });
+
+  it("atomically claims one plan digest and never truncates its evidence", async () => {
+    const directory = await mkdtemp(`${tmpdir()}/matter-label-eval-`);
+    const reportRoot = pathToFileURL(`${directory}/`);
+    try {
+      const digest = "a".repeat(64);
+      const first = await initializeEvalArtifacts(1, digest, reportRoot);
+      expect((await stat(first[0].journalPath)).mode & 0o777).toBe(0o600);
+      expect((await stat(first[0].reportPath)).mode & 0o777).toBe(0o600);
+      await writeFile(first[0].journalPath, "sentinel\n", "utf8");
+      await expect(initializeEvalArtifacts(1, digest, reportRoot)).rejects.toMatchObject({
+        code: "EEXIST",
+      });
+      await expect(readFile(first[0].journalPath, "utf8")).resolves.toBe("sentinel\n");
+
+      const concurrentDigest = "b".repeat(64);
+      const claims = await Promise.allSettled([
+        initializeEvalArtifacts(1, concurrentDigest, reportRoot),
+        initializeEvalArtifacts(1, concurrentDigest, reportRoot),
+      ]);
+      expect(claims.filter((claim) => claim.status === "fulfilled")).toHaveLength(1);
+      expect(claims.filter((claim) => claim.status === "rejected")).toHaveLength(1);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("stores the credential verifier with owner-only permissions", async () => {
+    const directory = await mkdtemp(`${tmpdir()}/matter-label-plan-`);
+    const planPath = pathToFileURL(`${directory}/plan.private.json`);
+    try {
+      await writeFile(planPath, "old\n", { encoding: "utf8", mode: 0o644 });
+      await writePrivateFile(planPath, "new\n");
+      expect((await stat(planPath)).mode & 0o777).toBe(0o600);
+      await expect(readFile(planPath, "utf8")).resolves.toBe("new\n");
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an authorized shape whose worst-case provider time exceeds the runner", () => {
+    const models = Array.from({ length: 12 }, (_, index) => `model-${index}`).join(",");
+    expect(() => prepareEvaluation({
+      MATTER_MODEL_POOL: "primary",
+      MATTER_MODEL_PRIMARY_BASE_URL: "https://relay.example/v1",
+      MATTER_MODEL_PRIMARY_API_KEY: "private-key",
+      MATTER_MODEL_PRIMARY_MODELS: models,
+      MATTER_LABEL_EVAL_REPEAT: "10",
+    }, {
+      authorizationId: "a".repeat(32),
+      credentialBindingSalt: Buffer.alloc(32, 8).toString("base64url"),
+    })).toThrow(/bounded wall-clock authority/u);
   });
 
   it("keeps transport errors separate from policy codes", () => {
@@ -817,14 +816,126 @@ describe("per-case two-layer judgement", () => {
     expect(record.shape.code).toBe("unknown");
     expect(LABEL_REJECTION_CODES).not.toContain("http-500");
   });
+
+  it("uses the production Label token and thinking policy in the eval request", async () => {
+    const calls = [];
+    const fetchImpl = async (url, init) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: "cold-start latency" } }],
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const input = normalizeLabelInput({
+      text: "The caching layer dominates latency during cold starts.",
+      locale: "en-US",
+    });
+    const budget = LABEL_SCENARIO.budget(input);
+    expect(budget).toMatchObject({ maxOutputTokens: 64, disableThinking: true });
+    await complete(
+      {
+        baseUrl: "https://relay.example/v1",
+        apiKey: "fixture",
+        model: "fixture-model",
+        enableThinking: true,
+      },
+      "fixture prompt",
+      budget,
+      input,
+      fetchImpl,
+    );
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].init.body)).toMatchObject({
+      max_tokens: 64,
+      enable_thinking: false,
+      stream: false,
+      temperature: 0,
+    });
+
+    calls.length = 0;
+    await complete(
+      {
+        baseUrl: "https://relay.example/v1",
+        apiKey: "fixture",
+        model: "fixture-model",
+      },
+      "fixture prompt",
+      budget,
+      input,
+      fetchImpl,
+    );
+    expect(JSON.parse(calls[0].init.body)).not.toHaveProperty("enable_thinking");
+  });
+
+  it("uses the production completion parser and rejects a truncated answer", async () => {
+    const input = normalizeLabelInput({
+      text: "The caching layer dominates latency during cold starts.",
+      locale: "en-US",
+    });
+    const result = await complete(
+      {
+        baseUrl: "https://relay.example/v1",
+        apiKey: "fixture",
+        model: "fixture-model",
+      },
+      "fixture prompt",
+      LABEL_SCENARIO.budget(input),
+      input,
+      async () => new Response(JSON.stringify({
+        choices: [{ finish_reason: "length", message: { content: "partial answer" } }],
+      }), { status: 200, headers: { "content-type": "application/json" } }),
+    );
+    expect(result).toEqual({ ok: false, error: "UnusableCompletionError" });
+  });
+
+  it("binds release-canary cases to the route's 28-grapheme envelope", () => {
+    const canary = normalizeCorpusItem(corpus.find((item) => item.id === "canary-sourced-absence"));
+    const ordinaryLatin = normalizeCorpusItem(corpus.find((item) => item.id === "latin-long"));
+    expect(canary.maxGraphemes).toBe(28);
+    expect(LABEL_SCENARIO.budget(canary).maxOutputTokens).toBe(56);
+    expect(ordinaryLatin.maxGraphemes).toBe(32);
+    expect(LABEL_SCENARIO.budget(ordinaryLatin).maxOutputTokens).toBe(64);
+  });
+
+  it("keeps exact material, answers, providers, and transport details out of safe output", () => {
+    const rows = [{
+      id: "private-case-id",
+      caseRecord: {
+        provisional: "private material words",
+        answers: [{
+          text: "private model answer",
+          transportError: "http-599-provider-detail",
+          verdict: "transport-error",
+          shape: { ok: false, code: "unknown" },
+          semantic: { ok: false, reasons: ["unknown"] },
+          latencyMs: 812,
+        }, {
+          text: "another private answer",
+          transportError: null,
+          verdict: "future-provider-verdict",
+          shape: { ok: false, code: "future-provider-shape" },
+          semantic: { ok: false, reasons: ["future-provider-semantic"] },
+          latencyMs: 8_000,
+        }],
+        unstable: false,
+        acceptedCount: 0,
+        askedCount: 1,
+      },
+    }];
+    const output = formatSafeReport(0, rows);
+    expect(output).toContain("candidate-01");
+    expect(output).toContain("transport-error=1");
+    expect(output).toContain("unknown=1");
+    expect(output).toContain("250-999ms=1");
+    expect(output).toContain("attempts attempted=2 recorded=2 unrecorded=0");
+    expect(output).not.toMatch(/private|future-provider|provider-detail|http-599/u);
+  });
 });
 
 export {
   appendCaseJournal,
-  buildEvalPlanBinding,
-  checkEvalPlanBinding,
-  endpointDigestOf,
-  EvalPlanBindingMismatchError,
+  complete,
+  formatSafeReport,
+  initializeEvalArtifacts,
   isLabelAdjudicationReason,
   isLabelRejectionCode,
   judge,
@@ -832,11 +943,10 @@ export {
   judgeCase,
   LABEL_ADJUDICATION_POLICY_VERSION,
   LABEL_ADJUDICATION_REASONS,
-  LABEL_COMPLETION_POLICY_VERSION,
   LABEL_REJECTION_CODES,
+  normalizeCorpusItem,
   notAskedCase,
-  PER_CASE_MAX_OUTPUT_TOKENS,
-  readBindingInputsFromEnv,
+  prepareEvaluation,
+  report,
   runCaseSequence,
-  thinkingModeOf,
 };

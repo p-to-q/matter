@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_POOL_LIMITS,
   createPoolAdapter,
+  probePoolCandidate,
   readModelPool,
   resetPoolHealth,
   resolvePoolAdapter,
   type PoolCandidate,
+  type PoolTransport,
 } from "./model-pool";
 import {
   ScenarioGovernor,
@@ -162,6 +164,58 @@ describe("readModelPool", () => {
 });
 
 describe("pool adapter", () => {
+  it("delegates the complete reviewed wire contract to PoolTransport", async () => {
+    const transportFetch = vi.fn<typeof fetch>(async () => new Response(JSON.stringify({
+      kind: "reviewed-answer",
+      value: "transport-owned",
+      stop: "done",
+    }), { headers: { "content-type": "application/vnd.reviewed+json" } }));
+    const transport: PoolTransport = Object.freeze({
+      id: "reviewed/full-contract/1",
+      fetch: transportFetch,
+      completionUrl: (baseUrl) => `${baseUrl}/reviewed-operation`,
+      authHeaders: (apiKey) => ({ "x-reviewed-key": apiKey }),
+      acceptsResponse: (response) => (
+        response.status === 200 &&
+        response.headers.get("content-type") === "application/vnd.reviewed+json"
+      ),
+      serialize: (input, maximumOutputTokens, model) => ({
+        reviewed_model: model,
+        material: input.prompt,
+        output_limit: maximumOutputTokens,
+      }),
+      parseCompletion: (payload) => {
+        if (
+          typeof payload !== "object" ||
+          payload === null ||
+          (payload as { kind?: unknown }).kind !== "reviewed-answer" ||
+          (payload as { stop?: unknown }).stop !== "done"
+        ) throw new Error("invalid reviewed response");
+        return {
+          content: (payload as { value?: unknown }).value,
+          disposition: "complete",
+        };
+      },
+    });
+    const adapter = createPoolAdapter([{
+      ...candidate("reviewed-model"),
+      apiKey: "reviewed-key",
+      transport,
+    }]);
+
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .resolves.toEqual({ text: "transport-owned" });
+    expect(transportFetch).toHaveBeenCalledOnce();
+    const [url, init] = transportFetch.mock.calls[0]!;
+    expect(String(url)).toBe("https://relay.example/v1/reviewed-operation");
+    expect(new Headers(init?.headers).get("x-reviewed-key")).toBe("reviewed-key");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      reviewed_model: "reviewed-model",
+      material: "name it",
+      output_limit: 32,
+    });
+  });
+
   it("sends an OpenAI-compatible deterministic request and returns the text", async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     const adapter = createPoolAdapter(
@@ -320,6 +374,7 @@ describe("pool adapter", () => {
 
   it("preserves relay fallback when a transport ignores AbortSignal", async () => {
     vi.useFakeTimers();
+    let releaseIgnored!: (response: Response) => void;
     try {
       const tried: string[] = [];
       const adapter = createPoolAdapter(
@@ -331,7 +386,7 @@ describe("pool adapter", () => {
           tried.push(model);
           return model === "steady"
             ? chatResponse("成本问题")
-            : new Promise<Response>(() => undefined);
+            : new Promise<Response>((resolve) => { releaseIgnored = resolve; });
         },
       );
 
@@ -340,9 +395,396 @@ describe("pool adapter", () => {
       await vi.advanceTimersByTimeAsync(500);
       await assertion;
       expect(tried).toEqual(["ignores-abort", "steady"]);
+      releaseIgnored(new Response());
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("continues to a later candidate when an explicit-action scenario rejects valid transport text", async () => {
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("first"), candidate("second")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        tried.push(model);
+        return chatResponse(model === "first" ? "bad" : "good");
+      },
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: (answer) => answer === "good"
+        ? { ok: true, value: answer }
+        : { ok: false, reason: "invalid" },
+    });
+    const observations: ScenarioPerformanceObservation[] = [];
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+      observePerformance: (observation) => observations.push(observation),
+    })).resolves.toEqual({ ok: true, value: "good" });
+    expect(tried).toEqual(["first", "second"]);
+    expect(observations).toEqual([expect.objectContaining({
+      outcome: "answered",
+      candidateAttempts: 2,
+      candidateRejections: 1,
+    })]);
+  });
+
+  it("does not buy another candidate for a floor-backed scenario rejection", async () => {
+    const tried: string[] = [];
+    const adapter = createPoolAdapter(
+      [candidate("first"), candidate("second")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        tried.push((JSON.parse(String(init?.body)) as { model: string }).model);
+        return chatResponse("bad");
+      },
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-thought-label",
+      promptVersion: "test/1",
+      rejectedCandidate: "settle-floor",
+      locale: () => "en-US",
+      compile: () => "label",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: () => ({ ok: false as const, reason: "invalid" }),
+    });
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
+      .resolves.toEqual({ ok: false, fallback: "MODEL_REJECTED" });
+    expect(tried).toEqual(["first"]);
+  });
+
+  it("settles rejected without cooling transport when every explicit-action candidate is invalid", async () => {
+    const adapter = createPoolAdapter(
+      [candidate("first"), candidate("second")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => chatResponse("bad"),
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: () => ({ ok: false as const, reason: "invalid" }),
+    });
+    const governor = new ScenarioGovernor();
+    await expect(runScenario(scenario, null, adapter, governor))
+      .resolves.toEqual({ ok: false, fallback: "MODEL_REJECTED" });
+    expect(governor.cooling(Date.now())).toBe(false);
+  });
+
+  it("keeps a semantically rejected request credential first on the next action", async () => {
+    const tried: string[] = [];
+    const pool = [
+      { ...candidate("selected", "user"), credentialScopeId: "semantic-scope" },
+      candidate("managed", "managed"),
+    ];
+    const adapter = createPoolAdapter(
+      pool,
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        tried.push(model);
+        return chatResponse(model === "selected" ? "bad" : "good");
+      },
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: (answer) => answer === "good"
+        ? { ok: true as const, value: answer }
+        : { ok: false as const, reason: "invalid" },
+    });
+
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
+      .resolves.toEqual({ ok: true, value: "good" });
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
+      .resolves.toEqual({ ok: true, value: "good" });
+    expect(tried).toEqual(["selected", "managed", "selected", "managed"]);
+  });
+
+  it.each([
+    [["reject-first", "fail-second"]],
+    [["fail-first", "reject-second"]],
+  ] as const)("gives infrastructure failure stable precedence over semantic rejection: %j", async (order) => {
+    const adapter = createPoolAdapter(
+      order.map((model) => candidate(model)),
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async (_url, init) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        return model.startsWith("fail") ? chatResponse("", 503) : chatResponse("bad");
+      },
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: (answer) => answer === "good"
+        ? { ok: true as const, value: answer }
+        : { ok: false as const, reason: "invalid" },
+    });
+    const observations: ScenarioPerformanceObservation[] = [];
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+      observePerformance: (observation) => observations.push(observation),
+    })).resolves.toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+    expect(observations).toEqual([expect.objectContaining({
+      outcome: "unavailable",
+      candidateAttempts: 2,
+      candidateFailures: 1,
+      candidateRejections: 1,
+    })]);
+  });
+
+  it("keeps a spent attempt deadline ahead of a later semantic rejection", async () => {
+    vi.useFakeTimers();
+    try {
+      const adapter = createPoolAdapter(
+        [candidate("stalls"), candidate("rejects")],
+        DEFAULT_POOL_LIMITS,
+        Date.now,
+        async (_url, init) => {
+          const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+          if (model === "rejects") return chatResponse("bad");
+          return await new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(init.signal?.reason ?? new DOMException("Aborted", "AbortError"));
+            }, { once: true });
+          });
+        },
+      );
+      const scenario: MatterScenario<null, string> = Object.freeze({
+        id: "matter-inquiry",
+        promptVersion: "test/1",
+        rejectedCandidate: "continue-if-budget",
+        locale: () => "en-US",
+        compile: () => "answer",
+        budget: () => ({ deadlineMs: 1_000, maxOutputTokens: 16 }),
+        adjudicate: (answer) => answer === "good"
+          ? { ok: true as const, value: answer }
+          : { ok: false as const, reason: "invalid" },
+      });
+      const observations: ScenarioPerformanceObservation[] = [];
+      const outcome = runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+        observePerformance: (observation) => observations.push(observation),
+      });
+
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(outcome).resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+      expect(observations).toEqual([expect.objectContaining({
+        outcome: "timeout",
+        candidateAttempts: 2,
+        candidateTimeouts: 1,
+        candidateRejections: 1,
+      })]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("records one completed attempt when local candidate adjudication throws", async () => {
+    const adapter = createPoolAdapter(
+      [candidate("only")],
+      DEFAULT_POOL_LIMITS,
+      Date.now,
+      async () => chatResponse("answer"),
+    );
+    const scenario: MatterScenario<null, string> = Object.freeze({
+      id: "matter-inquiry",
+      promptVersion: "test/1",
+      rejectedCandidate: "continue-if-budget",
+      locale: () => "en-US",
+      compile: () => "answer",
+      budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
+      adjudicate: () => { throw new Error("policy defect"); },
+    });
+    const observations: ScenarioPerformanceObservation[] = [];
+    await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
+      observePerformance: (observation) => observations.push(observation),
+    })).resolves.toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+    expect(observations).toEqual([expect.objectContaining({
+      outcome: "unavailable",
+      candidateAttempts: 1,
+    })]);
+  });
+
+  it("temporarily demotes one failed request credential without affecting another scope", async () => {
+    const tried: string[] = [];
+    const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1 };
+    const respond = async (_url: unknown, init: unknown) => {
+      const model = (JSON.parse(String((init as RequestInit).body)) as { model: string }).model;
+      tried.push(model);
+      return model === "selected"
+        ? chatResponse("", 503)
+        : chatResponse("managed");
+    };
+    const adapterFor = (scope: string) => createPoolAdapter([
+      { ...candidate("selected", "user"), credentialScopeId: scope },
+      candidate("managed", "managed"),
+    ], limits, Date.now, respond);
+
+    await adapterFor("scope-a")(adapterInput(), new AbortController().signal);
+    await adapterFor("scope-a")(adapterInput(), new AbortController().signal);
+    await adapterFor("scope-b")(adapterInput(), new AbortController().signal);
+    expect(tried).toEqual([
+      "selected", "managed",
+      "managed",
+      "selected", "managed",
+    ]);
+  });
+
+  it("skips a request credential only while its exact scoped attempt is still draining", async () => {
+    vi.useFakeTimers();
+    let release!: (response: Response) => void;
+    try {
+      const tried: string[] = [];
+      const adapter = createPoolAdapter([
+        { ...candidate("selected", "user"), credentialScopeId: "scope-a" },
+        candidate("managed", "managed"),
+      ], DEFAULT_POOL_LIMITS, Date.now, async (_url, init) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        tried.push(model);
+        return model === "selected"
+          ? new Promise<Response>((resolve) => { release = resolve; })
+          : chatResponse("managed");
+      });
+      const first = adapter(adapterInput(1_000), new AbortController().signal);
+      const firstResult = expect(first).resolves.toEqual({ text: "managed" });
+      await vi.advanceTimersByTimeAsync(500);
+      await firstResult;
+      expect(tried).toEqual(["selected", "managed"]);
+
+      tried.length = 0;
+      await expect(adapter(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "managed" });
+      expect(tried).toEqual(["managed"]);
+      release(new Response());
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses only the opaque credential scope, never reflected model or URL text, for a user drain lane", async () => {
+    vi.useFakeTimers();
+    let release!: (response: Response) => void;
+    try {
+      const tried: string[] = [];
+      const respond = async (url: string | URL | Request, init?: RequestInit) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        tried.push(String(url));
+        return model === "selected"
+          ? new Promise<Response>((resolve) => { release = resolve; })
+          : chatResponse("managed");
+      };
+      const userAt = (baseUrl: string, model = "selected") => ({
+        ...candidate(model, "user"),
+        baseUrl,
+        credentialScopeId: "opaque-scope",
+      });
+      const first = createPoolAdapter([
+        userAt("https://tenant-sensitive-a.example/v1"),
+        candidate("managed", "managed"),
+      ], DEFAULT_POOL_LIMITS, Date.now, respond);
+      const firstResult = expect(first(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "managed" });
+      await vi.advanceTimersByTimeAsync(500);
+      await firstResult;
+
+      tried.length = 0;
+      const sameScopeAtAnotherUrl = createPoolAdapter([
+        userAt("https://tenant-sensitive-b.example/v1", "sk-reflected-secret"),
+        candidate("managed", "managed"),
+      ], DEFAULT_POOL_LIMITS, Date.now, respond);
+      await expect(sameScopeAtAnotherUrl(adapterInput(1_000), new AbortController().signal))
+        .resolves.toEqual({ text: "managed" });
+      expect(tried).toEqual(["https://relay.example/v1/chat/completions"]);
+
+      release(new Response());
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not start a provider probe whose caller already lost authority", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchAfterAbort = vi.fn(async () => chatResponse("MATTER_READY"));
+    await expect(probePoolCandidate(
+      { ...candidate("selected", "user"), credentialScopeId: "aborted-scope" },
+      controller.signal,
+      fetchAfterAbort,
+    )).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchAfterAbort).not.toHaveBeenCalled();
+  });
+
+  it("refuses a provider probe before fetch when the shared drain ceiling is full", async () => {
+    vi.useFakeTimers();
+    const releases: Array<(response: Response) => void> = [];
+    try {
+      for (let index = 0; index < 256; index += 1) {
+        const pending = probePoolCandidate(
+          {
+            ...candidate("selected", "user"),
+            credentialScopeId: `scope-${index}`,
+          },
+          new AbortController().signal,
+          async () => new Promise<Response>((resolve) => releases.push(resolve)),
+        );
+        const outcome = pending.then(
+          () => null,
+          (error: unknown) => error,
+        );
+        await vi.advanceTimersByTimeAsync(6_000);
+        expect(await outcome).toMatchObject({
+          message: "The model relay did not answer inside its attempt window.",
+        });
+      }
+
+      const fetchAfterCeiling = vi.fn(async () => chatResponse("MATTER_READY"));
+      await expect(probePoolCandidate(
+        { ...candidate("selected", "user"), credentialScopeId: "blocked-scope" },
+        new AbortController().signal,
+        fetchAfterCeiling,
+      )).rejects.toThrow("still draining");
+      expect(fetchAfterCeiling).not.toHaveBeenCalled();
+    } finally {
+      for (const release of releases) release(new Response());
+      for (let turn = 0; turn < 16; turn += 1) await Promise.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      vi.useRealTimers();
+    }
+
+    await expect(probePoolCandidate(
+      { ...candidate("selected", "user"), credentialScopeId: "recovered-scope" },
+      new AbortController().signal,
+      async () => chatResponse("MATTER_READY"),
+    )).resolves.toBeUndefined();
   });
 
   it("drains a late response and never lets it replace the fallback winner", async () => {
@@ -953,6 +1395,7 @@ describe("pool adapter", () => {
       candidateAttempts: 2,
       candidateTruncations: 2,
       candidateRefusals: 0,
+      candidateRejections: 0,
     })]);
   });
 

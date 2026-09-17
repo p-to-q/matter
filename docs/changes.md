@@ -17,6 +17,244 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-17 — provider address recovery is same-origin and finite
+
+Changed: Model API keeps the person's safe HTTPS path as the first custom
+candidate, repairs only unambiguous local scheme mistakes, and may probe one
+same-host `/v1` base when the exact path cannot expose a usable catalog. The
+address field preserves the person's draft verbatim through editing and testing;
+normalization stays inside the request boundary, and only a successful explicit
+save may replace it with the proven canonical address. The
+three catalog requests remain one connection-time budget; at most one candidate
+per base/wire pair receives a short proof, the proven canonical base alone is
+sealed, and runtime material calls never repeat discovery. The
+desktop corner wrappers now also own an explicit shared height so icon-bearing
+and text-only controls have the same measured vertical center.
+
+Why: compatible services differ mainly on whether their documented address
+already includes `/v1`, while people commonly omit or mistype `https`. Recovering
+that one distinction without changing host, following redirects, or sending a
+key over HTTP removes an avoidable setup threshold without turning Matter into
+a generic relay. Explicit wrapper geometry removes an inline-SVG baseline pixel
+that flex alignment alone could not see.
+
+Forecloses: arbitrary path guessing, plaintext key transmission, cross-host
+fallback, redirect-based recovery, runtime renegotiation, and baseline-dependent
+desktop control alignment.
+
+## 2026-09-17 — Voice acquisition has one failure channel
+
+Changed: a Voice transport reports microphone acquisition failure through its
+`start()` result only. Runtime `onError` begins after a successful start, and
+the shared lease contains an adapter that nevertheless reports both without
+losing the original typed permission error or promoting a second owner early.
+
+Why: a browser permission denial used to release the lease through `onError`
+before the rejected start was observed, turning a precise denial into a generic
+recording or transcription failure. One terminal channel preserves truthful
+recovery while the lease still protects native singleton ordering.
+
+Forecloses: double-settling a Voice attempt, masking `MICROPHONE_DENIED` as
+cancelled, and using a callback from an unstarted transport as proof that raw
+capture ever began.
+
+## 2026-09-17 — provider removal and save receipts are exact within the browser jar
+
+Changed: the provider-session wire is version 4. Each saved lease exposes one
+non-secret opaque credential receipt, and the browser confirms that exact id
+after save rather than inferring identity from endpoint or time. DELETE expires
+the bearer and rotates an independent HttpOnly generation that every already-
+started save has already captured but can never write back. Active replay of a
+copied bearer plus matching generation remains explicitly outside this
+stateless boundary and ends only at lease expiry or sealing-key retirement.
+Only DELETE writes the generation; a fresh browser uses one write-free initial
+value so concurrent status reads cannot erase another tab's accepted save. The
+marker is high-priority and the bearer low-priority, but selective marker
+eviction remains an explicit stateless-revocation limit.
+
+Why: two tabs may save different keys for the same endpoint, and a slow verified
+save may return after a later removal. Endpoint comparison misreports ownership;
+aborting one tab cannot order serverless responses. Cookie-jar generation and
+the existing random lease scope solve those exact browser races without a
+process registry or a dishonest distributed-revocation claim.
+
+Forecloses: endpoint/time as credential identity, late-save resurrection after
+ordinary browser removal, Web Locks or in-memory tombstones as server or
+distributed revocation authority, and claiming global revocation without
+shared durable state. Supported same-origin UI mutations still use one stable
+Web Lock to serialize cooperative tabs before their server receipts are checked.
+
+## 2026-09-17 — Voice stop and visible delivery have separate authority
+
+Changed: recorded Voice becomes submitted synchronously at Stop, before the
+browser publishes its terminal recorder event. Page suspension, modal opening,
+outside pointers, and device-ownership revocation cannot erase that accepted
+work. Modal chrome still cancels raw microphone capture, while stopped work may
+finish privately but cannot commit material or a late repair until the modal is
+closed, the pointer is idle, and the material surface is perceivable again.
+
+Why: final audio chunks arrive asynchronously after Stop. Treating that interval
+as raw capture loses a paid action; treating it as freely deliverable lets a
+hidden modal background mutate material. Submission ownership and presentation
+availability are distinct facts and need distinct gates.
+
+Forecloses: `onstop` as the submit boundary, background microphone capture
+behind a modal, modal dismissal as cancellation, and hidden material commits
+merely because network work finished.
+
+## 2026-09-17 — recorder stop is a bounded recoverable phase
+
+Changed: Recorded-audio Voice arms a four-second active-page watchdog budget
+for the browser to publish the final `dataavailable` and terminal `stop` event.
+A browser that never settles now releases capture and exposes a pointer retry
+instead of leaving the local action in “Finishing”. The reveal receipt verifies
+the authored CSS timeline rather than animation-event delivery jitter.
+
+Why: Stopping is part of the action the person already submitted. Waiting for
+the final chunk protects that action; waiting forever strands both the
+microphone lease and the product surface.
+
+Forecloses: Treating `MediaRecorder.stop()` as a completion guarantee, using
+`timeslice` as a duration clock, accepting a partial recording, or weakening
+the reveal because a test runner delivered two animation events in one busy
+frame.
+
+## 2026-09-17 — paid Label evidence requires prior private authority
+
+Changed: Label evaluation now has separate plan and run invocations. A run
+must match an earlier private artifact and its explicitly supplied digest;
+the plan has a unique single-use authorization, privately binds the exact
+credential with a keyed digest, is stored owner-only as a credential verifier,
+and freezes a bounded worst-case wall clock.
+TLS, frozen bindings, an atomic no-replay claim, and every journal/report
+target fail closed before the production completion path becomes callable.
+Each completion result is flushed to its journal before the next attempt. Safe output
+contains only closed verdicts, reasons, counts, latency buckets, and an honest
+attempted/recorded/unrecorded completion tally. Whether a provider bills an
+attempt remains provider-owned rather than inferred by the local evaluator.
+
+Why: a process cannot authorize its own paid comparison, and an unwritable
+journal or insecure transport must stop before the first charge rather than
+leave partial, unauditable evidence.
+
+Forecloses: self-built expected plans, permissive repeat parsing, warning-only
+TLS bypass, replayed or concurrent spend under one authorization, credential
+substitution, runner timeout below an authorized worst case, paid calls before
+durable preflight, parallel evaluation transport semantics, and stdout or
+safe-report disclosure of material or model answers.
+
+## 2026-09-17 — explicit model actions own semantic fallback
+
+Changed: Inquiry, Transform, and Text Swap may continue to the next healthy
+candidate when a transport-complete answer fails their pure scenario
+adjudicator, inside the same immutable action basis and deadline. Label and
+Repair settle their deterministic floor instead. Semantic rejection is recorded
+separately and never cools a provider; transport failure still does.
+
+Why: the first reachable provider must not consume a person's submitted action
+with unusable text, while background enhancements should not multiply latency
+or spend when their existing floor is already correct.
+
+Forecloses: one global retry rule, provider-owned product semantics, cooling a
+healthy relay for bad prose, resampling background labels, and retrying against
+newer material state.
+
+## 2026-09-17 — release evidence separates reachability from output quality
+
+Changed: the live release probe requires every public scenario to reach the
+managed pool and requires every Inquiry call to produce an accepted answer.
+Repair and Label semantic rejection may use their correct deterministic floor;
+their quality gate belongs to the versioned offline corpus and frozen eval plan.
+
+Why: a random live Label canary cannot simultaneously prove provider
+availability, language quality, and product usability. Conflating those facts
+withheld a release even when the pool answered and the visible product retained
+its correct floor.
+
+Forecloses: treating every floor-backed enhancement as a release-blocking live
+answer, weakening the adjudicator to make a canary green, and describing a
+reachable provider as down because one completion was semantically rejected.
+
+## 2026-09-12 — saved provider access is explicit and server-owned
+
+Changed: the Model API surface sends only endpoint, optional replacement key,
+and explicit test/save intent. GET is local to a fixed 30-day sealed HttpOnly
+credential. Test never persists; save performs finite server-side profile
+detection, bounded model discovery, and at most two short sentinels. Surrounding
+sentinel whitespace is ignored, but any additional content fails. Save replaces
+the credential only after success. An omitted key is reusable only at the saved
+canonical endpoint, and any non-empty bounded opaque key is accepted regardless
+of vendor prefix or length convention. This 30-day explicit-save lease
+supersedes the eight-hour draft recorded on 2026-09-11.
+
+Why: a saved key is a deliberate device preference, not proof that a remote is
+currently connected. Preserving an existing credential across a failed edit,
+while refusing to forward it to a changed host, protects both the person's
+action and secret. Server-owned profiles make two-field setup honest without
+making the route a universal proxy.
+
+Forecloses: browser-readable key storage, GET-time probes, key-prefix provider
+inference, client-selected model or wire format, silent key reuse at a new host,
+save-before-verify, failed-save deletion, sliding status renewal, and runtime
+profile renegotiation.
+
+## 2026-09-11 — submitted work outlives its presentation
+
+Changed: capture and draft still follow the visible control, but submit freezes
+one immutable operation and exact material/document basis. Unrelated selection,
+navigation, revision, presentation dismissal, and temporary page hiding do not
+discard accepted work. Material delivery waits for visible, pointer-idle,
+target-visible revalidation; conflict, document replacement, explicit cancel,
+page exit, or unmount revokes it.
+
+Why: closing a surface is not evidence that a person withdrew the action they
+already paid for, while late output still must not overwrite newer human
+material or land beneath another direct manipulation.
+
+Forecloses: React-component lifetime as request authority, blanket cancellation
+on global revision, background mutation while a pointer is active, and
+exactly-once billing claims without a durable distributed operation service.
+
+## 2026-09-11 — one bounded lasso path owns sight and selection
+
+Changed: lasso capture retains the complete stroke under an explicit
+4,096-point input bound and simplifies it to at most 256 points with a `1.5px`
+maximum error. Paint and hit testing use the same straight polyline; saturation
+is inert. Projected layout is fail-open prefilter only, multi-segment blank space
+cannot become whole-node selection, and precise outlines use type-relative
+`4–9px` corners plus SVG-precision microstep removal.
+
+Why: an accurate prefix plus a replaced tail, or a smoothed path different from
+the semantic polygon, makes the visible hand gesture lie about its address. The
+old fixed corner and raw subpixel comparisons also exaggerated wrapped-line
+steps in the selected material.
+
+Forecloses: tail-chord approximation, learned or decorative selection widening,
+DOM measurement of certainly offscreen nodes, fixed `3px` precise corners, and
+painting geometry that the resolver did not use.
+
+## 2026-09-11 — private provider choice is a closed server lease
+
+Changed: settings exposes one quiet Model API surface for a reviewed provider,
+key, and compatible-mirror base URL. The server retains model and completion-path
+ownership, verifies an exact bounded generation profile, pins custom TLS calls
+to a DNS-checked public address, and seals the key, base, and proven adapter in
+an eight-hour path-scoped HttpOnly cookie with a rotatable AES-GCM key ring, and
+prepends one request-local candidate to the unchanged managed pool. Opaque
+credential scope, rather than key or base URL, isolates disposable health,
+drain, and label cache while scenario governors and
+live product gates remain global.
+
+Why: a person's own key should survive failing managed relays and provider
+mirrors without entering material or browser-readable storage. A fixed model,
+path, small adapter matrix, DNS/connect binding, and global admission preserve
+that freedom without creating an arbitrary proxy or spend lane.
+
+Forecloses: localStorage keys, key or custom-host re-echo, arbitrary paths/models,
+global-fetch after a separate DNS check, redirects, unbounded "OpenAI-compatible"
+guessing, cross-person candidate state, credential-minted load lanes, and
+provider configuration as permission to promote a closed action.
+
 ## 2026-09-09 — transient views retain bounded material geometry owners
 
 Changed: the complete canvas keeps the current document's at-most 2,000 native

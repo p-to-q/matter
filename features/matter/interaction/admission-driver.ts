@@ -70,11 +70,27 @@ export type AdmissionDriverDependencies = Readonly<{
 type OwnedResources = {
   readonly operation: VoiceOperation;
   readonly documentEpoch: number;
+  readonly locale: MatterLocale;
   recording?: VoiceRecording;
   transcription?: AbortController;
 };
 
+type PendingAdmissionCommit = Extract<
+  AdmissionInteractionEffect,
+  { readonly type: "commit-admission" }
+>;
+
+type LateRepairBasis = Readonly<{
+  operation: VoiceOperation;
+  repairLeaseId: string;
+  nodeId: string;
+  baseline: string;
+  admittedAtMs: number;
+  locale: MatterLocale;
+}>;
+
 type LateRepairResources = {
+  basis: LateRepairBasis;
   controller: AbortController;
   repairLeaseId: string;
   timeout?: ReturnType<typeof setTimeout>;
@@ -97,6 +113,7 @@ export class AdmissionDriver {
   private readonly listeners = new Set<(state: AdmissionInteractionState) => void>();
   private readonly resources = new Map<string, OwnedResources>();
   private readonly lateRepairs = new Map<string, LateRepairResources>();
+  private readonly pendingLocales = new Map<string, MatterLocale>();
   private readonly events: AdmissionInteractionEvent[] = [];
   private voice: VoicePort | null = null;
   private processing = false;
@@ -105,6 +122,10 @@ export class AdmissionDriver {
   private leaseGeneration = 0;
   private activeSettlementOrigin: Omit<AdmissionSettlement, "outcome"> | null = null;
   private settlement: AdmissionSettlement | null = null;
+  private pendingCommit: PendingAdmissionCommit | null = null;
+  private deliveryWindowOpen = true;
+  private deliveryTargetVisible = true;
+  private deliveryVisibleNodeIds = new Set<string>();
 
   constructor(dependencies: AdmissionDriverDependencies) {
     this.dependencies = dependencies;
@@ -144,16 +165,18 @@ export class AdmissionDriver {
     });
   }
 
-  start(anchor: AdmissionAnchor): void {
-    // A new utterance is a fresh material decision. An older optional repair
-    // must not land after this pointer action, advance the tree revision, and
-    // invalidate the microphone operation that the person just started.
-    this.cancelLateRepairs();
+  start(anchor: AdmissionAnchor, locale = this.dependencies.locale): void {
+    if (this.disposed || this.state.phase !== "idle") return;
+    const token = this.dependencies.createInteractionId();
+    this.pendingLocales.set(operationKey({ interactionId: token, attempt: 1 }), locale);
     this.send({
       type: "start",
-      token: this.dependencies.createInteractionId(),
+      token,
       anchor,
     });
+    if (!stateOwnsOperation(this.state, { interactionId: token, attempt: 1 })) {
+      this.pendingLocales.delete(operationKey({ interactionId: token, attempt: 1 }));
+    }
   }
 
   stop(): void {
@@ -164,22 +187,74 @@ export class AdmissionDriver {
     this.send({ type: "cancel" });
   }
 
-  retry(): void {
+  /** Cancels only microphone work that the person has not submitted yet. */
+  cancelRawCapture(): void {
+    if (admissionRawCaptureOwnsOperation(this.state)) this.send({ type: "cancel" });
+  }
+
+  retry(locale = this.dependencies.locale): void {
+    if (this.state.phase !== "error") return;
+    const operation = {
+      interactionId: this.state.token,
+      attempt: this.state.attempt + 1,
+    };
+    this.pendingLocales.set(operationKey(operation), locale);
     this.send({ type: "retry" });
+    if (!stateOwnsOperation(this.state, operation)) {
+      this.pendingLocales.delete(operationKey(operation));
+    }
   }
 
   dismiss(): void {
     this.send({ type: "dismiss" });
   }
 
-  /** Precise material gestures take precedence over an optional late repair. */
-  discardPendingRepairs(): void {
+  suspendCapture(): void {
+    this.setDeliveryWindowOpen(false);
+    if (admissionRawCaptureOwnsOperation(this.state)) {
+      this.cancelRawCapture();
+      return;
+    }
+    // Permission and live-capture errors precede submission, so their surface
+    // can leave with the hidden capture UI. A failure after Stop still belongs
+    // to an accepted user action; keep its recovery state for the next visible
+    // delivery window instead of making event timing decide whether it exists.
+    if (this.state.phase === "error" && !this.state.submitted) {
+      this.send({ type: "dismiss" });
+    }
+  }
+
+  resumeDelivery(): void {
+    this.setDeliveryWindowOpen(true);
+  }
+
+  setDeliveryWindowOpen(open: boolean): void {
+    this.deliveryWindowOpen = open;
+    if (open) {
+      this.deliverPendingCommitIfReady();
+      this.deliverLateRepairsIfReady();
+    }
+  }
+
+  setDeliveryTargetVisible(visible: boolean): void {
+    this.deliveryTargetVisible = visible;
+    if (visible) this.deliverPendingCommitIfReady();
+  }
+
+  setDeliveryVisibleNodeIds(nodeIds: ReadonlySet<string>): void {
+    this.deliveryVisibleNodeIds = new Set(nodeIds);
+    this.deliverLateRepairsIfReady();
+  }
+
+  exit(): void {
+    this.send({ type: "unmount" });
+    this.pendingLocales.clear();
+    this.pendingCommit = null;
     this.cancelLateRepairs();
   }
 
   updateScope(scope: AdmissionScope): void {
     if (this.disposed || (this.scope !== null && sameScope(this.scope, scope))) return;
-    const invalidatesOperation = this.scope !== null;
     const previous = this.scope;
     this.scope = ownScope(scope);
     if (
@@ -188,8 +263,8 @@ export class AdmissionDriver {
         (previous.documentEpoch ?? 0) !== (scope.documentEpoch ?? 0))
     ) {
       this.cancelLateRepairs();
+      this.send({ type: "scope-invalidated" });
     }
-    if (invalidatesOperation) this.send({ type: "scope-invalidated" });
   }
 
   dispose(): void {
@@ -200,6 +275,8 @@ export class AdmissionDriver {
       this.cleanup(resources.operation);
     }
     this.cancelLateRepairs();
+    this.pendingLocales.clear();
+    this.pendingCommit = null;
     this.dependencies.repair.dispose();
     this.events.length = 0;
     this.listeners.clear();
@@ -271,9 +348,13 @@ export class AdmissionDriver {
         this.resources.set(key, {
           operation,
           documentEpoch: scope.documentEpoch ?? 0,
+          locale: this.pendingLocales.get(key) ?? this.dependencies.locale,
         });
+        this.pendingLocales.delete(key);
+        const owned = this.resources.get(key);
+        if (owned === undefined) return;
         void voice.start(operation, {
-          locale: this.dependencies.locale,
+          locale: owned.locale,
           onTranscript: (transcript) => this.send({
             type: "transcript-updated",
             token: operation.interactionId,
@@ -289,7 +370,10 @@ export class AdmissionDriver {
             failureEvent("recording-failed", effect, mapVoiceError(error)),
           ),
           onOwnershipRevoked: (revoked) => {
-            if (sameVoiceOperation(operation, revoked)) this.send({ type: "cancel" });
+            if (
+              sameVoiceOperation(operation, revoked) &&
+              admissionRawCaptureOwnsOperation(this.state, operation)
+            ) this.send({ type: "cancel" });
           },
         }).then(
           () => this.send({
@@ -342,7 +426,7 @@ export class AdmissionDriver {
           interactionId: effect.token,
           attempt: effect.attempt,
           purpose: "admission",
-          locale: this.dependencies.locale,
+          locale: owned.locale,
           durationMs: owned.recording.durationMs,
           audio: owned.recording.audio,
           signal: controller.signal,
@@ -378,6 +462,11 @@ export class AdmissionDriver {
         return;
       }
       case "commit-admission": {
+        if (!this.deliveryWindowOpen || !this.deliveryTargetVisible) {
+          this.pendingCommit = effect;
+          return;
+        }
+        this.pendingCommit = null;
         let receipt: AdmissionStoreReceipt;
         const owned = this.resources.get(key);
         if (owned === undefined) {
@@ -387,7 +476,7 @@ export class AdmissionDriver {
         const nodeId = this.dependencies.createMaterialId();
         const admittedAt = this.dependencies.canonicalNow();
         const admittedAtMs = this.dependencies.monotonicNow();
-        const baseline = normalizeAdmittedTranscript(effect.transcript, this.dependencies.locale);
+        const baseline = normalizeAdmittedTranscript(effect.transcript, owned.locale);
         try {
           receipt = this.dependencies.commit(toRuntimeAnchor(effect.anchor), {
             interactionId: effect.token,
@@ -396,7 +485,7 @@ export class AdmissionDriver {
             createdAt: admittedAt,
             transcript: baseline,
             admittedAtMs,
-            repairLocale: this.dependencies.locale,
+            repairLocale: owned.locale,
             expectedDocumentEpoch: owned.documentEpoch,
           });
         } catch {
@@ -409,8 +498,10 @@ export class AdmissionDriver {
             this.startLateRepair({
               operation,
               repairLeaseId: receipt.repairLeaseId,
+              nodeId,
               baseline,
               admittedAtMs,
+              locale: owned.locale,
             });
           }
         } else {
@@ -437,18 +528,19 @@ export class AdmissionDriver {
     resources?.transcription?.abort();
     this.voice?.cancel(operation);
     this.resources.delete(key);
+    this.pendingLocales.delete(key);
+    if (
+      this.pendingCommit?.token === operation.interactionId &&
+      this.pendingCommit.attempt === operation.attempt
+    ) this.pendingCommit = null;
   }
 
-  private startLateRepair(input: Readonly<{
-    operation: VoiceOperation;
-    repairLeaseId: string;
-    baseline: string;
-    admittedAtMs: number;
-  }>): void {
+  private startLateRepair(input: LateRepairBasis): void {
     if (this.disposed) return;
-    const key = operationKey(input.operation);
+    const key = input.repairLeaseId;
     const controller = new AbortController();
     const resources: LateRepairResources = {
+      basis: input,
       controller,
       repairLeaseId: input.repairLeaseId,
       baselineVisible: false,
@@ -465,27 +557,20 @@ export class AdmissionDriver {
           if (active === undefined || active.controller.signal.aborted) return;
           active.cancelVisibilityGate = undefined;
           active.baselineVisible = true;
-          this.commitLateRepairIfReady(key, input);
+          this.commitLateRepairIfReady(key);
         },
       );
     } catch {
       this.discardLateRepair(key, "Transcript repair presentation gate failed.");
       return;
     }
-    this.runLateRepair(key, input);
+    this.runLateRepair(key);
   }
 
-  private runLateRepair(
-    key: string,
-    input: Readonly<{
-      operation: VoiceOperation;
-      repairLeaseId: string;
-      baseline: string;
-      admittedAtMs: number;
-    }>,
-  ): void {
+  private runLateRepair(key: string): void {
     const resources = this.lateRepairs.get(key);
     if (resources === undefined || resources.controller.signal.aborted) return;
+    const input = resources.basis;
     // Starting through a resolved promise contains a port that throws before
     // returning its promise just as strictly as an asynchronous rejection.
     void Promise.resolve()
@@ -493,7 +578,7 @@ export class AdmissionDriver {
         operationId: input.operation.interactionId,
         attempt: input.operation.attempt,
         text: input.baseline,
-        locale: this.dependencies.locale,
+        locale: input.locale,
         // Admission does not own the active working-context projection. Empty
         // is the only safe hint until that owner can be captured synchronously.
         vocabulary: NO_REPAIR_VOCABULARY,
@@ -508,29 +593,24 @@ export class AdmissionDriver {
           return;
         }
         resources.candidate = result;
-        this.commitLateRepairIfReady(key, input);
+        this.commitLateRepairIfReady(key);
       })
       .catch(() => {
         this.discardLateRepair(key, "Transcript repair adapter failed.");
       });
   }
 
-  private commitLateRepairIfReady(
-    key: string,
-    input: Readonly<{
-      operation: VoiceOperation;
-      repairLeaseId: string;
-      baseline: string;
-      admittedAtMs: number;
-    }>,
-  ): void {
+  private commitLateRepairIfReady(key: string): void {
     const resources = this.lateRepairs.get(key);
     if (
       resources === undefined ||
       resources.controller.signal.aborted ||
       !resources.baselineVisible ||
-      resources.candidate === undefined
+      resources.candidate === undefined ||
+      !this.deliveryWindowOpen ||
+      !this.deliveryVisibleNodeIds.has(resources.basis.nodeId)
     ) return;
+    const input = resources.basis;
     if (this.dependencies.monotonicNow() - input.admittedAtMs > ADMISSION_REPAIR_WINDOW_MS) {
       this.discardLateRepair(key, "Transcript repair lease expired.");
       return;
@@ -587,6 +667,19 @@ export class AdmissionDriver {
     }
   }
 
+  private deliverPendingCommitIfReady(): void {
+    const pending = this.pendingCommit;
+    if (pending === null || !this.deliveryWindowOpen || !this.deliveryTargetVisible) return;
+    this.runEffect(pending);
+  }
+
+  private deliverLateRepairsIfReady(): void {
+    if (!this.deliveryWindowOpen) return;
+    for (const key of [...this.lateRepairs.keys()]) {
+      this.commitLateRepairIfReady(key);
+    }
+  }
+
   private notify(): void {
     for (const listener of [...this.listeners]) {
       try {
@@ -612,6 +705,28 @@ function operationKey(operation: VoiceOperation): string {
 
 function sameVoiceOperation(left: VoiceOperation, right: VoiceOperation): boolean {
   return left.interactionId === right.interactionId && left.attempt === right.attempt;
+}
+
+function stateOwnsOperation(
+  state: AdmissionInteractionState,
+  operation: VoiceOperation,
+): boolean {
+  return state.phase !== "idle" &&
+    state.token === operation.interactionId &&
+    state.attempt === operation.attempt;
+}
+
+function admissionRawCaptureOwnsOperation(
+  state: AdmissionInteractionState,
+  operation?: VoiceOperation,
+): boolean {
+  // Stop is the submission boundary. The recorder may still be flushing final
+  // chunks in `stopping`, but visibility, modal acquisition, or a late device
+  // revocation must not reinterpret that accepted action as raw capture.
+  if (state.phase !== "requesting" && state.phase !== "recording") return false;
+  return operation === undefined || (
+    state.token === operation.interactionId && state.attempt === operation.attempt
+  );
 }
 
 function operationFrom(effect: AdmissionInteractionEffect): VoiceOperation {

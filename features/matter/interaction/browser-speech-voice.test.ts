@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RECORDING_LIMIT_MS } from "./audio-policy";
+import { RECORDING_LIMIT_MS, RECORDING_STOP_TIMEOUT_MS } from "./audio-policy";
 import {
   BrowserSpeechVoicePort,
   prepareBrowserSpeechRecognition,
@@ -7,6 +7,7 @@ import {
   SPEECH_START_TIMEOUT_MS,
 } from "./browser-speech-voice";
 import type { VoiceOperation } from "./browser-voice";
+import { VoiceLeaseCoordinator } from "./voice-lease";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 
 const OPERATION: VoiceOperation = { interactionId: "speech_1", attempt: 1 };
@@ -16,6 +17,7 @@ class FakeRecognition {
   static instance: FakeRecognition | null = null;
   static instances: FakeRecognition[] = [];
   static autoStart = true;
+  static events: string[] = [];
   continuous = false;
   interimResults = false;
   maxAlternatives = 0;
@@ -24,9 +26,12 @@ class FakeRecognition {
   onresult: ((event: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null = null;
   onerror: ((event: { error: string }) => void) | null = null;
   onend: (() => void) | null = null;
-  start = vi.fn(() => { if (FakeRecognition.autoStart) this.onstart?.(); });
+  start = vi.fn(() => {
+    FakeRecognition.events.push("start");
+    if (FakeRecognition.autoStart) this.onstart?.();
+  });
   stop = vi.fn(() => this.onend?.());
-  abort = vi.fn();
+  abort = vi.fn(() => { FakeRecognition.events.push("abort"); });
 
   constructor() {
     FakeRecognition.instance = this;
@@ -41,6 +46,7 @@ afterEach(() => {
   FakeRecognition.instance = null;
   FakeRecognition.instances = [];
   FakeRecognition.autoStart = true;
+  FakeRecognition.events = [];
   resetBrowserSpeechPreparationForTests();
   vi.unstubAllGlobals();
 });
@@ -253,9 +259,11 @@ describe("BrowserSpeechVoicePort", () => {
       clearTimeout,
     } as unknown as Window;
     const port = new BrowserSpeechVoicePort();
-    const started = port.start(OPERATION);
+    const onError = vi.fn();
+    const started = port.start(OPERATION, { onError });
     FakeRecognition.instance?.onerror?.({ error: "not-allowed" });
     await expect(started).rejects.toMatchObject({ code: "MICROPHONE_DENIED" });
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("does not leave a first browser start waiting forever", async () => {
@@ -285,10 +293,12 @@ describe("BrowserSpeechVoicePort", () => {
       clearTimeout,
     } as unknown as Window;
     const port = new BrowserSpeechVoicePort();
+    const onError = vi.fn();
 
-    await expect(port.start(OPERATION)).rejects.toMatchObject({
+    await expect(port.start(OPERATION, { onError })).rejects.toMatchObject({
       code: "RECORDING_FAILED",
     });
+    expect(onError).not.toHaveBeenCalled();
   });
 
   it("reports the duration limit through the same transient callback", async () => {
@@ -353,6 +363,36 @@ describe("BrowserSpeechVoicePort", () => {
     expect(recognition.start).toHaveBeenCalledTimes(1);
   });
 
+  it("detaches native callbacks before a synchronous abort dispatch", async () => {
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const onError = vi.fn();
+    const coordinator = new VoiceLeaseCoordinator();
+    const first = coordinator.coordinate(new BrowserSpeechVoicePort());
+    const second = coordinator.coordinate(new BrowserSpeechVoicePort());
+    await first.start(OPERATION, { onError });
+    const recognition = FakeRecognition.instance!;
+    recognition.abort = vi.fn(() => {
+      FakeRecognition.events.push("abort");
+      recognition.onerror?.({ error: "aborted" });
+      recognition.onend?.();
+    });
+
+    const secondOperation = { interactionId: "speech_2", attempt: 1 };
+    await expect(second.start(secondOperation)).resolves.toBeUndefined();
+    expect(recognition.abort).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+    expect(FakeRecognition.events.lastIndexOf("abort")).toBeLessThan(
+      FakeRecognition.events.lastIndexOf("start"),
+    );
+    second.cancel(secondOperation);
+  });
+
   it("commits the latest interim hypothesis when stop produces no final event", async () => {
     (globalThis as { window?: unknown }).window = {
       SpeechRecognition: FakeRecognition,
@@ -369,6 +409,43 @@ describe("BrowserSpeechVoicePort", () => {
     await expect(port.stop(OPERATION)).resolves.toMatchObject({
       transcript: "还没有最终事件。",
     });
+  });
+
+  it("times out a missing native end event and releases the shared lease to its queued successor", async () => {
+    vi.useFakeTimers();
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const coordinator = new VoiceLeaseCoordinator();
+    const first = coordinator.coordinate(new BrowserSpeechVoicePort());
+    const second = coordinator.coordinate(new BrowserSpeechVoicePort());
+    await first.start(OPERATION);
+    const firstRecognition = FakeRecognition.instance!;
+    const lateEnd = firstRecognition.onend!;
+    firstRecognition.stop = vi.fn();
+
+    const stopping = first.stop(OPERATION);
+    const stopOutcome = expect(stopping).rejects.toMatchObject({
+      code: "RECORDING_FAILED",
+    });
+    const secondOperation = { interactionId: "speech_2", attempt: 1 };
+    const secondStarting = second.start(secondOperation);
+    expect(FakeRecognition.instances).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(RECORDING_STOP_TIMEOUT_MS);
+    await stopOutcome;
+    await secondStarting;
+    expect(FakeRecognition.instances).toHaveLength(2);
+    expect(firstRecognition.abort).toHaveBeenCalled();
+    expect(FakeRecognition.events.lastIndexOf("abort")).toBeLessThan(
+      FakeRecognition.events.lastIndexOf("start"),
+    );
+
+    lateEnd();
+    expect(firstRecognition.start).toHaveBeenCalledTimes(1);
+    second.cancel(secondOperation);
   });
 
   it("rejects a native transcript beyond the material text bound", async () => {

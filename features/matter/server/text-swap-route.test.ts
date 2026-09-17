@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { MAX_TEXT_SWAP_REQUEST_BYTES, parseTextSwapEnvelope, parseTextSwapPlan } from "../protocol/text-swap-contract";
 import type { ScenarioAdapter, ScenarioCall } from "./harness";
 import type { MaterialTurnObservationOptions } from "./material-turn-observation";

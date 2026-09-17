@@ -1,27 +1,36 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.56 is the current deployed
-public-origin product source: PR #96 merged as `main` `536d792`, exact CI run
-`34558357704` passed, automatic Production deployment
-`GcFQr3beW677Y6easpT2JobKuHzo` succeeded, and the bounded no-store public check
-identified `0.2.0-preview.56` after one probe. Publication is withheld because
-its exact strict model-pool release probe failed. The latest annotated tag and
-GitHub prerelease therefore remain
-Preview.52 at `6a4931b`; neither may be advanced by borrowing an older pool
-receipt. The repository maintainer operates only through GitHub: a topic push
-triggers Preview and a `main` update triggers Production. No manual Vercel
-command, project binding, credential, or environment edit is part of this
-release. A package version alone proves neither source nor live identity.
+the complete generative product loop yet. Preview.57 is an exact review
+candidate in PR #102; its earlier draft source and browser receipts are
+superseded and must not be used for publication. The public origin still
+identifies itself as `0.2.0-preview.56`, but its current Production source is
+`main` `9eb169b` from
+PR #101: exact CI run `35144776434` passed and GitHub Production deployment
+`6489479901` succeeded. The only exact Preview.56 publication probe targeted its
+earlier `536d792` source and failed. The later same-version source changed Label
+behaviour but never received a fresh complete release gate, so it cannot
+retroactively publish Preview.56. The latest annotated tag and GitHub
+prerelease therefore remain Preview.52 at `6a4931b`; neither may be advanced by
+borrowing an older pool receipt. The repository maintainer operates only
+through GitHub: a topic push triggers Preview and a `main` update triggers
+Production. No manual Vercel command, project binding, credential, or
+environment edit is part of this release. A package version alone proves
+neither source nor live identity.
 
 ## Receipt verification — 0.2.0-preview.57
 
-A "97 Node boundary checks, 49-document link proof" receipt for Preview.57
-appears only in codex session records as a local-candidate claim dated
-2026-09-11. Verification on 2026-09-16 found no Preview.57 commit, PR, tag
-(`v0.2.0-preview.57` is absent), or GitHub release on `origin/main`; the latest
-merged preview is Preview.56 at `af7b1c1`. The receipt is not confirmed and is
-not cited here as publication evidence.
+The "97 Node boundary checks, 49-document link proof" receipt for Preview.57
+appears only in Codex session records as a local-candidate claim dated
+2026-09-11. It remains invalid: its UI contract and source tree predate the
+current candidate. The replacement implementation tree at `fb37ef8`, followed
+by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
+below. Both are remotely reachable through topic branch
+`codex/action-lasso-api-hardening`; PR #102 opened at candidate head `260b16d`.
+Any successor becomes the authoritative PR head and must earn fresh exact-head
+CI and Preview evidence. No Preview.57 tag or GitHub release exists. These
+receipts therefore prove a reviewable candidate, not publication or a deployed
+origin.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -74,6 +83,76 @@ pool. Their browser receipts prove interaction and mutation boundaries only.
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same
 probe at `/api/health`. It is a no-store capability probe, not an uptime or
 dependency monitor.
+
+## Candidate release boundary — 0.2.0-preview.57
+
+Preview.57 separates accepted work from its temporary presentation. Admission,
+Elastic, Point Talk, and Inquiry keep one immutable submitted basis across
+unrelated selection, navigation, revision, dismissal, and temporary page
+hiding. Material delivery waits for a visible, pointer-idle, target-visible
+window and revalidates the exact text and lineage before the tree engine makes
+one undoable commit. Exact conflict, document replacement, explicit cancel,
+page exit, or unmount still revokes authority.
+
+Lasso now retains a bounded complete stroke, simplifies it with an explicit
+client-space error ceiling, and uses the same path for paint and hit testing.
+Projected layout is only a fail-open candidate prefilter. Multi-line address
+corners are glyph-relative and bounded; zero-size microsteps no longer create
+visual teeth. Mobile Pan owns the browser gesture only on the material plane
+while Move is active, so one touch continues beyond the paper without disabling
+ordinary chrome, Lasso, index scrolling, or desktop input.
+
+Settings adds one quiet Model API surface. The browser supplies one HTTPS API
+address and an optional replacement key; the server detects a finite reviewed
+OpenAI, DeepSeek, or Anthropic profile and owns the model, completion path,
+request shape, response vocabulary, DNS/public-address check, TLS address pin,
+global admission, and fallback. Test never saves. A successful explicit save
+is AES-GCM sealed for a fixed 30 days in a path-scoped HttpOnly cookie; failure
+preserves the prior credential. The key does not enter material, browser-readable
+storage, response JSON, logs, cache keys, or process health/drain identity. The
+non-secret canonical address may be returned so the form can be restored.
+Configuration remains subject to every existing product capability gate.
+
+```text
+source proof           implementation tree fb37ef8 passed npm run check:
+                       111 Node boundary tests, 50-document link proof, the
+                       485-file architecture gate, 2,584 passing Vitest cases
+                       plus five explicit skips, type generation, TypeScript,
+                       zero-warning lint, and the Next production build
+runtime proof          the same build passed the runtime-artifact budget at
+                       1,208.9 KiB initial raw / 381.3 KiB gzip
+browser proof          exact diagnostic successor 2f3d506 passed the complete
+                       serial Chromium matrix: 161 cases with 15 historical or
+                       explicitly scoped skips; desktop, narrow, real touch,
+                       Model API, paint-only click/double-click selection,
+                       continuous Pan, and Voice recovery all passed. Its only
+                       source change after fb37ef8 makes a coarse-target failure
+                       identify the exact control and measured dimensions
+performance diagnostic the fb37ef8 production artifact retained 4,485 DOM
+                       elements, 188–260ms FCP, and 302.8–425ms layout-ready.
+                       Two formal three-round receipts measured 145ms and 135ms
+                       maximum long tasks; the same-host a101d5c control measured
+                       122ms. All exceed the unchanged strict <100ms optimization
+                       target, so it remains honestly open; no renderer-path
+                       source changed and no threshold was relaxed to manufacture
+                       a pass
+independent review     provider, lifecycle, Model API, and corner-geometry proof
+                       passed 175/175 focused Vitest cases and 19/19 focused
+                       Chromium cases; the final verifier found no P0–P3 issue
+GitHub CI proof         pending on the exact topic and merged-main identities
+automatic deploy proof pending from GitHub-triggered Preview and Production;
+                       Model API additionally requires a deployment-owned
+                       MATTER_PROVIDER_SESSION_KEYS ring
+publication state      pending; no tag or prerelease unless the exact public
+                       version, strict six-round model-pool release probe, and
+                       non-secret provider-session availability all pass
+```
+
+One earlier full run reached 160 passes and reported one aggregate narrow-index
+target below 48 px without naming it. The unchanged product then passed that
+exact scenario in ten independent repeats. `2f3d506` replaced the aggregate
+boolean with per-control dimensions, and its complete serial matrix passed; no
+runtime rule was changed to hide or excuse the observation.
 
 ## Release boundary — 0.2.0-preview.56
 

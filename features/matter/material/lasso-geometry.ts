@@ -26,6 +26,11 @@ export const LASSO_THRESHOLDS = Object.freeze({
   minimumPolygonArea: 36,
   sampleDistance: 4,
   maximumPointCount: 256,
+  maximumCapturedPointCount: 4096,
+  // Compaction may remove a point only while the complete captured stroke
+  // remains within this client-pixel error. If 256 points cannot preserve that
+  // bound, the stroke is saturated and cannot change the current selection.
+  maximumCompactionError: 1.5,
   // People release a hand-drawn loop near, rather than exactly on, its origin.
   // The tolerance is deliberately large enough for a small trackpad loop.
   closureNearDistance: 32,
@@ -52,39 +57,92 @@ export type PreparedLasso = Readonly<{
 
 export type LassoPathAnalysis =
   | Readonly<{ kind: "prepared"; lasso: PreparedLasso }>
-  | Readonly<{ kind: "uncommitted"; reason: "invalid" | "tiny" | "linear" | "open" }>
+  | Readonly<{ kind: "uncommitted"; reason: "invalid" | "tiny" | "linear" | "open" | "saturated" }>
   | Readonly<{ kind: "ambiguous"; reason: "self-intersection" }>;
+
+export type LassoPathCompaction =
+  | Readonly<{ kind: "compacted"; points: readonly ClientPoint[] }>
+  | Readonly<{ kind: "invalid" | "saturated" }>;
 
 export type LassoStrokeQualification = "pending" | "qualified";
 
 /**
- * Samples from the last accepted point and never revises the accepted prefix.
- * At the safety cap only the endpoint slot changes, avoiding the visible whole-
- * stroke reshaping caused by repeatedly halving an existing trace.
+ * Produces the one bounded polyline shared by paint and hit testing. Distance
+ * sampling removes pointer noise first. Longer strokes are simplified from the
+ * complete path at the smallest error that fits the point budget, rather than
+ * keeping an accurate prefix and replacing the rest with one long chord.
+ *
+ * If the budget cannot represent the full stroke inside the declared error,
+ * saturation is explicit. Guessing would make the visible loop and the
+ * addressed language disagree precisely on the most complex gestures.
  */
-export function sampleLassoPath(
+export function compactLassoPath(
   rawPoints: readonly ClientPoint[],
-): readonly ClientPoint[] | null {
-  if (!Array.isArray(rawPoints) || rawPoints.some((point) => !isFinitePoint(point))) {
-    return null;
+): LassoPathCompaction {
+  if (!Array.isArray(rawPoints)) {
+    return Object.freeze({ kind: "invalid" });
   }
-  if (rawPoints.length <= 1) return freezePoints(rawPoints);
+  if (rawPoints.length > LASSO_THRESHOLDS.maximumCapturedPointCount) {
+    return Object.freeze({ kind: "saturated" });
+  }
+  if (rawPoints.some((point) => !isFinitePoint(point))) {
+    return Object.freeze({ kind: "invalid" });
+  }
+  if (rawPoints.length <= 1) {
+    return Object.freeze({ kind: "compacted", points: freezePoints(rawPoints) });
+  }
 
   const sampled: ClientPoint[] = [rawPoints[0]!];
-  const prefixLimit = LASSO_THRESHOLDS.maximumPointCount - 1;
   for (let index = 1; index < rawPoints.length - 1; index += 1) {
     const point = rawPoints[index]!;
-    if (
-      sampled.length < prefixLimit &&
-      distance(sampled.at(-1)!, point) >= LASSO_THRESHOLDS.sampleDistance
-    ) {
+    if (distance(sampled.at(-1)!, point) >= LASSO_THRESHOLDS.sampleDistance) {
       sampled.push(point);
     }
   }
-
   const finalPoint = rawPoints.at(-1)!;
   if (!samePoint(sampled.at(-1)!, finalPoint)) sampled.push(finalPoint);
-  return freezePoints(sampled);
+  if (sampled.length <= LASSO_THRESHOLDS.maximumPointCount) {
+    return Object.freeze({ kind: "compacted", points: freezePoints(sampled) });
+  }
+
+  const atMaximumError = simplifyPolyline(
+    sampled,
+    LASSO_THRESHOLDS.maximumCompactionError,
+    LASSO_THRESHOLDS.maximumPointCount,
+  );
+  if (atMaximumError.length > LASSO_THRESHOLDS.maximumPointCount) {
+    return Object.freeze({ kind: "saturated" });
+  }
+
+  // Preserve as much source geometry as the fixed budget permits. Twelve
+  // monotonic refinements are sub-millipixel at this bounded error and avoid a
+  // data-dependent unbounded loop on the pointer path.
+  let lowerError: number = 0;
+  let upperError: number = LASSO_THRESHOLDS.maximumCompactionError;
+  let best = atMaximumError;
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const candidateError = (lowerError + upperError) / 2;
+    const candidate = simplifyPolyline(
+      sampled,
+      candidateError,
+      LASSO_THRESHOLDS.maximumPointCount,
+    );
+    if (candidate.length <= LASSO_THRESHOLDS.maximumPointCount) {
+      best = candidate;
+      upperError = candidateError;
+    } else {
+      lowerError = candidateError;
+    }
+  }
+  return Object.freeze({ kind: "compacted", points: freezePoints(best) });
+}
+
+/** Nullable compatibility boundary for callers that do not need the reason. */
+export function sampleLassoPath(
+  rawPoints: readonly ClientPoint[],
+): readonly ClientPoint[] | null {
+  const compacted = compactLassoPath(rawPoints);
+  return compacted.kind === "compacted" ? compacted.points : null;
 }
 
 /**
@@ -93,8 +151,11 @@ export function sampleLassoPath(
  * strokes are rejected before they can address language.
  */
 export function analyzeLassoPath(rawPoints: readonly ClientPoint[]): LassoPathAnalysis {
-  const sampled = sampleLassoPath(rawPoints);
-  if (sampled === null) return Object.freeze({ kind: "uncommitted", reason: "invalid" });
+  const compacted = compactLassoPath(rawPoints);
+  if (compacted.kind !== "compacted") {
+    return Object.freeze({ kind: "uncommitted", reason: compacted.kind });
+  }
+  const sampled = compacted.points;
   if (sampled.length < LASSO_THRESHOLDS.minimumPointCount) {
     return Object.freeze({ kind: "uncommitted", reason: "tiny" });
   }
@@ -433,6 +494,46 @@ function squaredDistanceToSegment(point: ClientPoint, start: ClientPoint, end: C
   if (dx === 0 && dy === 0) return squaredDistance(point, start);
   const projection = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy)));
   return squaredDistance(point, { x: start.x + projection * dx, y: start.y + projection * dy });
+}
+
+/** Ramer-Douglas-Peucker over the complete path with stable source ordering. */
+function simplifyPolyline(
+  points: readonly ClientPoint[],
+  maximumError: number,
+  pointLimit: number,
+): readonly ClientPoint[] {
+  if (points.length <= 2) return points;
+  const keep = new Uint8Array(points.length);
+  keep[0] = 1;
+  keep[points.length - 1] = 1;
+  let keptPointCount = 2;
+  const spans: Array<readonly [number, number]> = [[0, points.length - 1]];
+  const maximumSquaredError = maximumError ** 2;
+  while (spans.length > 0) {
+    const [startIndex, endIndex] = spans.pop()!;
+    const start = points[startIndex]!;
+    const end = points[endIndex]!;
+    let furthestIndex = -1;
+    let furthestSquaredDistance = maximumSquaredError;
+    for (let index = startIndex + 1; index < endIndex; index += 1) {
+      const candidate = squaredDistanceToSegment(points[index]!, start, end);
+      if (candidate > furthestSquaredDistance) {
+        furthestSquaredDistance = candidate;
+        furthestIndex = index;
+      }
+    }
+    if (furthestIndex < 0) continue;
+    keep[furthestIndex] = 1;
+    keptPointCount += 1;
+    if (keptPointCount > pointLimit) {
+      // Callers need only the fact that this error cannot satisfy the bound.
+      // Returning a bounded sentinel avoids quadratic work on a pathological
+      // sawtooth while preserving the exact yes/no decision.
+      return points.slice(0, pointLimit + 1);
+    }
+    spans.push([startIndex, furthestIndex], [furthestIndex, endIndex]);
+  }
+  return points.filter((_, index) => keep[index] === 1);
 }
 
 function squaredDistance(left: ClientPoint, right: ClientPoint): number {

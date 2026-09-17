@@ -46,6 +46,22 @@ targets. The selected desktop rail uses the second preview's `60px` / `22px`
 outer geometry and `44px` / `13px` button geometry.
 `aria-pressed` is reserved for a real persistent mode or toggle.
 
+Pan owns a direct-manipulation gesture only after the person selects Move. The
+material plane declares `touch-action: none` before that gesture begins, so a
+mobile browser cannot turn a few delivered pointer samples into native viewport
+motion and then cancel Matter's camera owner. Pointer capture keeps the same
+gesture alive when the finger leaves the paper, while the camera reducer derives
+every frame from the original client-space point rather than accumulating event
+deltas. Coalesced or skipped samples therefore change smoothness, never travel.
+Cancellation retains the last accepted transient camera position; changing
+tools releases capture and makes every later event from that pointer inert.
+This follows the Pointer Events Level 3
+[`touch-action` negotiation](https://www.w3.org/TR/pointerevents3/#the-touch-action-css-property),
+[`pointercancel` boundary](https://www.w3.org/TR/pointerevents3/#the-pointercancel-event),
+and [pointer-capture model](https://www.w3.org/TR/pointerevents3/#pointer-capture).
+Excalidraw independently recorded the same Android/iPad failure and repair in
+its [mobile-support investigation](https://github.com/excalidraw/excalidraw/issues/138).
+
 The paper may also present one transient local action lens for a precise passage.
 It does not create another catalog or state owner: its left control is the
 material-local AI mark and opens one transient Point-and-Talk direction field

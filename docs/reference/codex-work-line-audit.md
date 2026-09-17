@@ -1,7 +1,7 @@
 # Codex Work Line Audit
 
 > **Date**: 2026-09-17
-> **Policy**: merge-or-stash, never abandon (`spec-v3 §Phase 4`, user policy)
+> **Scope**: evidence snapshot, not repository policy or current instruction
 > **Auditor**: maintainer role
 
 ## Summary
@@ -11,8 +11,8 @@
 | `codex/preview-46-ai-harness` | 2 | 48 | stash | Tag `codex-wip-preview-46-ai-harness` created |
 | `codex/selected-material-recovery` | 1 | 2 (add/add docs) | stash | Tag `codex-wip-selected-material-recovery` created |
 | `cloud/address-restore` | 0 | 0 | already-in-main | No action — HEAD `8d2d56a` is in main |
-| `tmp/action-lasso-api-hardening/` | 94 uncommitted files | n/a | adapt (pending) | Clone preserved in gitignored `tmp/`; needs scope split |
-| Stash `preview54-excluded-local-video` | n/a | n/a | isolate | Launch-video policy; not touched |
+| `codex/action-lasso-api-hardening` | 17 candidate commits through `260b16d`, followed by remote-state records | 0 after rebase | reviewable in PR #102 | Implementation `fb37ef8` and browser diagnostic `2f3d506` are locally proven; exact PR-head gates remain authoritative |
+| Stash `preview54-excluded-local-video` | n/a | n/a | isolate | Mixed 79-file historical snapshot; never restore or drop wholesale |
 
 ## Details
 
@@ -46,18 +46,35 @@
 - **Action**: No action needed. `git merge-base --is-ancestor 8d2d56a origin/main` confirms HEAD is in main. The two-dot diff shows main's changes that the branch doesn't have, not unique work.
 - **Note**: Branch is stale (behind main). Can be deleted safely, but left in place per no-abandon policy.
 
-### `tmp/action-lasso-api-hardening/`
+### `codex/action-lasso-api-hardening`
 
-- **Structure**: Full clone of repo at `af7b1c1` with 94 uncommitted files
-- **Scope**: +3854/-801
-- **Content**: Significant doc changes (architecture.md +101, protocol.md +134, product.md +59, changes.md +76) and code changes (CanvasChrome.tsx +186, RootedMaterial.tsx +290, CanvasChrome.module.css +227)
-- **Concern**: Touches `docs/principles.md` (+11) and `docs/product.md` (+59) — protected by user policy ("不修改")
-- **Verdict**: adapt (pending)
-- **Preservation**: Clone preserved in gitignored `tmp/action-lasso-api-hardening/`. Work is not lost.
-- **Next steps**: Split scope into (a) protected-doc changes to exclude, (b) non-protected doc changes to evaluate, (c) code changes to evaluate. Requires careful review before any merge.
+- **Structure**: linked Git worktree, not a clone; it originally started at
+  `af7b1c1` while `main` had advanced to `9eb169b`.
+- **Content**: submitted-action ownership, lasso/Elastic/mobile interaction,
+  modal presentation ownership, a two-field sealed Model API, bounded provider
+  discovery, and request-local model fallback.
+- **Review correction**: `docs/product.md` and `docs/principles.md` are governed
+  by `AGENTS.md` and were required reading; there was no repository instruction
+  forbidding their maintenance. The relevant changes preserve rather than
+  replace their product invariants.
+- **Resolution**: the dirty worktree was split into reviewable implementation,
+  verification, and release-evidence commits, then rebased without conflict
+  onto `9eb169b`. Exact implementation `fb37ef8` passed the repository and
+  focused browser gates; browser-diagnostic-only successor `2f3d506` passed the
+  complete serial Chromium matrix. The candidate through `260b16d` was pushed
+  as PR #102. Any later documentation-only successor must pass its own exact
+  PR-head gates before merge. Launch Video remains outside the branch.
+- **Recovery evidence**: the original Codex JSONL conversation and the local
+  Code Arts SQLite session tree, memory, task, and spec caches were inspected as
+  historical evidence. None was copied into the repository. That review
+  corrected the earlier “separate clone”, “no runtime BYOK”, and blanket
+  protected-document conclusions before implementation was accepted.
 
 ### Stash `preview54-excluded-local-video`
 
-- **Content**: Launch-video work from Preview.54 era
+- **Content**: despite its name, a 79-file mixed historical snapshot containing
+  launch captures alongside overlapping product, protocol, E2E, local-AI, and
+  documentation changes
 - **Verdict**: isolate
-- **Action**: Not touched per launch-video isolation policy
+- **Action**: Not touched. Never pop, drop, or cherry-pick it wholesale; recover
+  a specifically audited path only if later work establishes independent need.

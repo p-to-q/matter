@@ -72,6 +72,19 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expectInset(paperBox!.y + paperBox!.height - (askMatterBox!.y + askMatterBox!.height / 2), 34);
   expectInset(guidanceBox!.x - paperBox!.x, 21);
   expectInset(paperBox!.y + paperBox!.height - guidanceBox!.y - guidanceBox!.height, 25);
+  const guidanceLabelBox = await guidance.locator(".matter-guidance__next").boundingBox();
+  const topChromeBox = await page.locator('[data-chrome-region="top"]').boundingBox();
+  const bottomChromeBox = await page.locator('[data-chrome-region="bottom"]').boundingBox();
+  if (guidanceLabelBox === null || topChromeBox === null || bottomChromeBox === null) {
+    throw new Error("desktop corner alignment geometry is not visible");
+  }
+  // The paper owns one 20px optical track at each bottom corner. The right
+  // track then shares its right edge with the upper-right track; oversized
+  // pointer targets may extend around that paint geometry without moving it.
+  expect(guidanceLabelBox.y + guidanceLabelBox.height / 2)
+    .toBeCloseTo(askMatterBox!.y + askMatterBox!.height / 2, 1);
+  expect(topChromeBox.x + topChromeBox.width)
+    .toBeCloseTo(bottomChromeBox.x + bottomChromeBox.width, 1);
   expect(await guidance.evaluate((element) => {
     const style = getComputedStyle(element);
     const label = element.querySelector<HTMLElement>(".matter-guidance__next");
@@ -192,10 +205,11 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     "定价",
     "隐私政策",
     "服务条款",
+    "模型 API",
   ]);
   const settingsMenuBox = await settingsMenu.boundingBox();
   expect(settingsMenuBox?.width).toBeCloseTo(160, 0);
-  expect(settingsMenuBox?.height).toBeCloseTo(104, 0);
+  expect(settingsMenuBox?.height).toBeCloseTo(136, 0);
 
   await settingsMenu.getByRole("menuitem", { name: "定价", exact: true }).click();
   const pricing = page.getByRole("dialog", { name: "定价" });

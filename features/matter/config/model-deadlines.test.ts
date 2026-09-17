@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { readFileSync } from "node:fs";
 import { maxDuration as inquiryPlatformSeconds } from "../../../app/api/inquiry/route";
 import { maxDuration as labelPlatformSeconds } from "../../../app/api/label/route";

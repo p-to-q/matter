@@ -28,7 +28,8 @@ import {
 import { admitTransformRequest } from "./transform-admission";
 import { TextSwapServerError, invalidTextSwapRequest } from "./text-swap-errors";
 import { TEXT_SWAP_SCENARIO, type TextSwapScenarioInput } from "./text-swap-harness";
-import { resolveTextSwapAdapter } from "./text-swap-provider";
+import { TEXT_SWAP_POOL_LIMITS, resolveTextSwapAdapter } from "./text-swap-provider";
+import { resolveScenarioRequestModelAdapter } from "./request-model-pool";
 
 const governor = new ScenarioGovernor();
 const TURN_LIMITS = Object.freeze({
@@ -40,7 +41,7 @@ export const TEXT_SWAP_ROUTE_TIMEOUT_MS = MODEL_DEADLINES.textSwap.routeMs;
 
 export async function handleTextSwapRequest(
   request: Request,
-  adapter: ScenarioAdapter | null = resolveTextSwapAdapter(),
+  adapter?: ScenarioAdapter | null,
   observationOptions: MaterialTurnObservationOptions = {},
 ): Promise<Response> {
   // Swap and fixed expand share one public generative-mutation perimeter while
@@ -54,6 +55,12 @@ export async function handleTextSwapRequest(
       throw admissionError(admission.reason);
     }
     try {
+      const resolvedAdapter = adapter === undefined
+        ? resolveScenarioRequestModelAdapter(request, "matter-text-swap", {
+            fallback: resolveTextSwapAdapter(),
+            limits: TEXT_SWAP_POOL_LIMITS,
+          }).adapter
+        : adapter;
       return await withBoundedJsonRequest(request, REQUEST_POLICY, async (payload, signal, metadata) => {
         observation.noteRequestBytes(metadata.requestBytes);
         const parsed = parseTextSwapEnvelope(payload);
@@ -70,7 +77,7 @@ export async function handleTextSwapRequest(
         const plan = await createTextSwapPlanFromInput(
           parsed.envelope,
           input,
-          adapter,
+          resolvedAdapter,
           signal,
           observation.noteScenario,
         );

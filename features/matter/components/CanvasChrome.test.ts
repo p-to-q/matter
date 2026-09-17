@@ -10,14 +10,27 @@ import {
 import {
   CANVAS_CHROME_INFO,
   CanvasChrome,
+  canvasOverlayOwnsSurface,
   isCanvasChromeInfoOverlay,
+  nextDialogTabFocusIndex,
   nextMenuFocusIndex,
   projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
 import { toolRailCopy } from "./tool-rail-copy";
+import { API_SETTINGS_COPY, ApiSettingsForm } from "./ApiSettingsForm";
+import { MIN_USER_PROVIDER_API_KEY_CODE_UNITS } from "../protocol/provider-session-contract";
 
 describe("CanvasChrome", () => {
+  it("gives every dialog, and no transient menu, exclusive material-surface ownership", () => {
+    for (const overlay of ["about", "pricing", "privacy", "terms", "api", "mobile"] as const) {
+      expect(canvasOverlayOwnsSurface(overlay)).toBe(true);
+    }
+    for (const overlay of [null, "settings", "language", "inquiry"] as const) {
+      expect(canvasOverlayOwnsSurface(overlay)).toBe(false);
+    }
+  });
+
   it("renders the desktop corner system and one mobile menu trigger", () => {
     const markup = renderChrome();
 
@@ -43,10 +56,32 @@ describe("CanvasChrome", () => {
     expect(markup).toContain("定价");
     expect(markup).toContain("隐私政策");
     expect(markup).toContain("服务条款");
+    expect(markup).toContain("模型 API");
     expect(markup).toContain("询问 Matter");
   });
 
-  it("keeps the closed inquiry entirely unmounted without a persistent prompt surface", () => {
+  it.each([
+    ["en-US", "Model API"],
+    ["zh-CN", "模型 API"],
+    ["zh-TW", "模型 API"],
+    ["ja-JP", "モデル API"],
+    ["de-DE", "Modell-API"],
+  ] as const)("names the provider surface naturally in %s", (language, expected) => {
+    const markup = renderChrome({
+      preferences: { ...DEFAULT_CANVAS_PREFERENCES, language },
+    });
+    expect(markup).toContain(`>${expected}<`);
+  });
+
+  it("uses one quiet, decorative plug glyph for the Model API entry", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    expect(source).toContain('function ApiIcon()');
+    expect(source).toContain('d="M9 2v6m6-6v6m3 0v4a6 6 0 0 1-12 0V8h12M12 18v4"');
+    expect(source).not.toContain('M8 9v6');
+    expect(source).toContain('<svg aria-hidden="true"');
+  });
+
+  it("keeps the closed inquiry without a persistent prompt surface", () => {
     const markup = renderChrome();
 
     expect(markup).not.toMatch(/<textarea\b/);
@@ -54,6 +89,28 @@ describe("CanvasChrome", () => {
     expect(markup).toContain('aria-controls="matter-inquiry"');
     expect(markup).not.toContain("data-inquiry-thread");
     expect(markup).not.toMatch(/chat|assistant|history/i);
+  });
+
+  it("detaches inquiry presentation without aborting an already submitted request", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    expect(source).toContain('presented={overlay === "inquiry"}');
+    const detachStart = source.indexOf("const detach = useCallback");
+    const detachEnd = source.indexOf("useImperativeHandle", detachStart);
+    const detach = source.slice(detachStart, detachEnd);
+    expect(detach).toContain('dispatch({ type: "close" })');
+    expect(detach).not.toContain("abort(");
+    expect(detach).not.toContain("authorityRef.current += 1");
+    expect(source).toContain("setSubmissionPending(true)");
+  });
+
+  it("projects the bounded API-key contract into the browser form", () => {
+    const markup = renderToStaticMarkup(createElement(ApiSettingsForm, {
+      language: "en-US",
+      presented: true,
+    }));
+    expect(markup).toContain(`minLength="${MIN_USER_PROVIDER_API_KEY_CODE_UNITS}"`);
+    expect(markup).toContain('maxLength="512"');
+    expect(markup).toMatch(/<input[^>]*required=""[^>]*type="password"|<input[^>]*type="password"[^>]*required=""/u);
   });
 
   it("keeps the inquiry waiting mark compact and cyclic", () => {
@@ -110,6 +167,7 @@ describe("CanvasChrome", () => {
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);
+    expect(css).toMatch(/\.popoverAnchor\s*{[^}]*display:\s*flex;[^}]*height:\s*20px;[^}]*align-items:\s*center;/s);
     expect(css).toMatch(/\.topRight::before\s*{\s*inset:\s*-14px -18px;/s);
     expect(css).toMatch(/\.topRight::after\s*{\s*inset:\s*-7px -10px;/s);
     expect(css).toMatch(/\.bottomRight::before\s*{\s*inset:\s*-22px -28px;/s);
@@ -137,6 +195,7 @@ describe("CanvasChrome", () => {
     expect(globalCss).toMatch(/@media \(max-width:\s*767px\)\s*{[\s\S]*?\.material-files-toggle svg\s*{[^}]*width:\s*var\(--mobile-corner-glyph\);[^}]*height:\s*var\(--mobile-corner-glyph\);/s);
     expect(css).toMatch(/\.mobileTrigger\s*{[^}]*width:\s*var\(--compact-corner-target\);[^}]*height:\s*var\(--compact-corner-target\);/s);
     expect(css).toMatch(/\.mobileTrigger svg\s*{[^}]*width:\s*var\(--mobile-corner-glyph\);[^}]*height:\s*var\(--mobile-corner-glyph\);/s);
+    expect(css).toMatch(/@media \(max-width:\s*767px\) and \(max-height:\s*480px\)\s*{[\s\S]*?\.mobileTrigger\s*{[^}]*right:\s*98px;/s);
     expect(css).toContain("width: min(320px, 85%);");
     expect(css).toMatch(/\.inquiryAnchor\s*{[^}]*right:\s*0;[^}]*bottom:\s*30px;/s);
   });
@@ -185,9 +244,65 @@ describe("isCanvasChromeInfoOverlay", () => {
     (overlay) => expect(isCanvasChromeInfoOverlay(overlay)).toBe(true),
   );
 
-  it.each([null, "settings", "language", "inquiry", "mobile"] as const)(
+  it.each([null, "settings", "language", "inquiry", "mobile", "api"] as const)(
     "rejects the %s non-information surface",
     (overlay) => expect(isCanvasChromeInfoOverlay(overlay)).toBe(false),
+  );
+});
+
+describe("ApiSettingsForm", () => {
+  it("keeps the browser contract to the two things a person actually has", () => {
+    const markup = renderToStaticMarkup(createElement(ApiSettingsForm, {
+      language: "en-US",
+      presented: true,
+    }));
+    expect(markup.match(/<input\b/g)).toHaveLength(2);
+    expect(markup).toContain("API address");
+    expect(markup).toContain("API key");
+    expect(markup).toContain('type="password"');
+    expect(markup).toContain("sk-kfcfkxqsvivowushiwoyaochishunzhiyuanweiji");
+    expect(markup).toContain("Test");
+    expect(markup).toContain("https://api.kfc.com/v1");
+    expect(markup).toContain(">Save<");
+    expect(markup).not.toMatch(/<(?:select|option)\b/u);
+    expect(markup).not.toContain('name="provider"');
+    expect(markup).not.toContain('name="model"');
+    expect(markup).not.toMatch(/compatible|mirror|模型选择|提供商/iu);
+  });
+
+  it("uses one quiet focus edge and the existing compact instrument scale", () => {
+    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
+    expect(css).toMatch(/\.apiDialog\s*{[^}]*94%/s);
+    expect(css).toMatch(/\.apiForm label\s*{[^}]*font:\s*500 12px\/1\.35 var\(--mono\);/s);
+    expect(css).toMatch(/\.apiForm input\s*{[^}]*min-height:\s*44px;/s);
+    expect(css).toMatch(/\.apiForm input:focus-visible\s*{[^}]*border-color:[^}]*outline:\s*0;/s);
+    expect(css).toMatch(/\.apiActions button\s*{[^}]*min-height:\s*32px;[^}]*font:\s*500 11px\/1\.2 var\(--mono\);/s);
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*{[\s\S]*?\.apiForm,[\s\S]*?animation:\s*none;/s);
+  });
+
+  it.each(CANVAS_LANGUAGE_OPTIONS.map((option) => option.value))(
+    "%s explains persistence and provider use without implementation jargon",
+    (locale) => {
+      const privacy = API_SETTINGS_COPY[locale].privacy;
+      expect(privacy).toContain("30");
+      expect(privacy).toContain({
+        "en-US": "encrypted browser credential",
+        "zh-CN": "加密凭据",
+        "zh-TW": "加密憑據",
+        "ja-JP": "暗号化されたブラウザ資格情報",
+        "de-DE": "verschlüsselter Browser-Nachweis",
+      }[locale]);
+      expect(privacy).toContain({
+        "en-US": "managed service",
+        "zh-CN": "托管服务",
+        "zh-TW": "託管服務",
+        "ja-JP": "管理サービス",
+        "de-DE": "verwalteten Dienst",
+      }[locale]);
+      expect(privacy).not.toMatch(/HttpOnly|cookie|mirror|compatible/i);
+      expect(privacy.length).toBeGreaterThan(38);
+      expect(privacy.length).toBeLessThan(190);
+    },
   );
 });
 
@@ -204,6 +319,23 @@ describe("nextMenuFocusIndex", () => {
   ])("maps %s from %i across %i items", (key, current, count, expected) => {
     expect(nextMenuFocusIndex(key, current, count)).toBe(expected);
   });
+});
+
+describe("nextDialogTabFocusIndex", () => {
+  it.each([
+    [-1, 3, false, 0],
+    [-1, 3, true, 2],
+    [0, 3, true, 2],
+    [2, 3, false, 0],
+    [1, 3, false, null],
+    [1, 3, true, null],
+    [-1, 0, false, null],
+  ] as const)(
+    "maps active %i across %i controls backwards=%s",
+    (active, count, backwards, expected) => {
+      expect(nextDialogTabFocusIndex(active, count, backwards)).toBe(expected);
+    },
+  );
 });
 
 describe("canvas chrome info parity", () => {
@@ -274,6 +406,8 @@ describe("canvas chrome info parity", () => {
 function renderChrome(overrides: Partial<CanvasChromeProps> = {}): string {
   const props: CanvasChromeProps = {
     inquiryOwner: { treeId: "test-tree", documentEpoch: 1 },
+    onOverlayChange: vi.fn(),
+    overlay: null,
     preferences: DEFAULT_CANVAS_PREFERENCES,
     resolvedAppearance: "light",
     setAppearance: vi.fn(),

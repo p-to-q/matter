@@ -20,9 +20,9 @@ const pathByLayer = new WeakMap<HTMLElement, SVGPathElement>();
 /**
  * The whole-node state keeps the label pill's `.44em` rounding, so it is taken
  * from the rows this projection actually measured rather than from a multiple
- * of the precise address radius. The receipt's corner is a fixed client-space
- * value, so scaling it would drift away from the pill at small type or high
- * zoom; the median row extent tracks the type at every zoom instead.
+ * of the precise address radius. The receipt's precise corner follows a much
+ * quieter glyph-relative ratio and is bounded at zoom extremes; `.44em` remains
+ * the separate structural identity rather than a scale-up of that value.
  *
  * It reads only cached row geometry, so it stays pure and costs no layout.
  */

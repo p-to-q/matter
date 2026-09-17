@@ -140,7 +140,10 @@ export function useStructuralMaterialSelection(
           `[data-thought-text-id="${CSS.escape(nodeId)}"]`,
       );
       const label = root?.querySelector<HTMLElement>(".spatial-thought__label") ?? null;
-      const material = input.source === "point-talk" ? label ?? root : label;
+      // The declared surface, not conditional DOM presence, owns measurement.
+      // Selection paint must not change line breaking; Point Talk may still
+      // deliberately address the complete text root when its basis says so.
+      const material = geometryBasis.surface === "label" ? label : root;
       if (root === null || material === null || !scope.contains(root)) {
         setMeasurement(null);
         return;

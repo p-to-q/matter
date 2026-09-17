@@ -1,4 +1,4 @@
-import { RECORDING_LIMIT_MS } from "./audio-policy";
+import { RECORDING_LIMIT_MS, RECORDING_STOP_TIMEOUT_MS } from "./audio-policy";
 import { VoiceError, type VoiceCallbacks, type VoiceOperation, type VoicePort, type VoiceRecording } from "./voice-port";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { subscribePageSuspension } from "./page-suspension";
@@ -83,6 +83,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
   private startedAt = -1;
   private timer: number | null = null;
   private startTimer: number | null = null;
+  private stopTimer: number | null = null;
   private stopping = false;
   private locale = "zh-CN";
   private maxTranscriptCodePoints: number | undefined;
@@ -225,6 +226,12 @@ export class BrowserSpeechVoicePort implements VoicePort {
     const stopPromise = new Promise<VoiceRecording>((resolve, reject) => { this.resolveStop = resolve; this.rejectStop = reject; });
     this.stopPromise = stopPromise;
     if (this.timer !== null) window.clearTimeout(this.timer);
+    const recognition = this.recognition;
+    this.stopTimer = window.setTimeout(() => {
+      if (this.recognition === recognition && this.stopping) {
+        this.fail(new VoiceError("RECORDING_FAILED"));
+      }
+    }, RECORDING_STOP_TIMEOUT_MS);
     try { this.recognition.stop(); } catch { this.fail(new VoiceError("RECORDING_FAILED")); }
     return stopPromise;
   }
@@ -233,15 +240,18 @@ export class BrowserSpeechVoicePort implements VoicePort {
     if (this.operation?.interactionId !== operation.interactionId || this.operation.attempt !== operation.attempt) return;
     this.rejectStart?.(new VoiceError("RECORDING_CANCELLED"));
     this.rejectStop?.(new VoiceError("RECORDING_CANCELLED"));
-    try { this.recognition?.abort(); } catch { /* cleanup remains authoritative */ }
     this.cleanup();
   }
 
   private fail(error: VoiceError): void {
+    const started = this.startedAt >= 0;
+    const onError = this.callbacks.onError;
     this.rejectStart?.(error);
     this.rejectStop?.(error);
-    this.callbacks.onError?.(error);
+    // Release the native singleton before observers can re-enter the shared
+    // coordinator and start a queued owner.
     this.cleanup();
+    if (started) onError?.(error);
   }
 
   private cleanup(): void {
@@ -249,18 +259,19 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.timer = null;
     if (this.startTimer !== null) window.clearTimeout(this.startTimer);
     this.startTimer = null;
-    if (this.recognition !== null) {
-      // Detaching handlers only makes a live session invisible. Release it here
-      // so no path can drop the reference while the microphone stays open —
-      // a failing `stop()` reaches cleanup after the driver has already
-      // forgotten the operation, so no later `cancel()` can do it instead.
-      try { this.recognition.abort(); } catch { /* releasing is best effort */ }
-      this.recognition.onstart = null;
-      this.recognition.onresult = null;
-      this.recognition.onerror = null;
-      this.recognition.onend = null;
-    }
+    if (this.stopTimer !== null) window.clearTimeout(this.stopTimer);
+    this.stopTimer = null;
+    const recognition = this.recognition;
+    // Relinquish callback ownership before abort. Some engines dispatch error
+    // or end synchronously from abort(); those events must not re-enter fail(),
+    // clean the same lease twice, or notify an already-released operation.
     this.recognition = null;
+    if (recognition !== null) {
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+    }
     this.operation = null;
     this.callbacks = {};
     this.resolveStart = null;
@@ -275,6 +286,9 @@ export class BrowserSpeechVoicePort implements VoicePort {
     this.maxTranscriptCodePoints = undefined;
     this.finalTranscript = "";
     this.interimTranscript = "";
+    // Detaching handlers only makes a live session invisible. Release it after
+    // local state is terminal so no failure path can leave the microphone open.
+    try { recognition?.abort(); } catch { /* releasing is best effort */ }
   }
 }
 

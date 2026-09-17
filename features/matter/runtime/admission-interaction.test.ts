@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  admissionCaptureIsActive,
   createAdmissionInteractionState,
   reduceAdmissionInteraction,
   type AdmissionAnchor,
@@ -52,6 +53,16 @@ function transcribing(): AdmissionInteractionState {
 }
 
 describe("admission interaction reducer", () => {
+  it("locks the shared canvas only for live microphone capture", () => {
+    const stopping = reduceAdmissionInteraction(recording(), { type: "stop" }).state;
+    expect(admissionCaptureIsActive(createAdmissionInteractionState())).toBe(false);
+    expect(admissionCaptureIsActive(start().state)).toBe(true);
+    expect(admissionCaptureIsActive(recording())).toBe(true);
+    expect(admissionCaptureIsActive(stopping)).toBe(true);
+    expect(admissionCaptureIsActive(transcribing())).toBe(false);
+    expect(admissionCaptureIsActive(committing())).toBe(false);
+  });
+
   it.each([ROOT, CHILD])("starts one frozen %s attempt and requests a microphone", (anchor) => {
     const result = start(anchor);
 
@@ -213,9 +224,16 @@ describe("admission interaction reducer", () => {
     ["stopping", reduceAdmissionInteraction(recording(), { type: "stop" }).state, { type: "recording-failed", token: "voice_1", attempt: 1, errorCode: "RECORDING_FAILED" }],
     ["transcription", transcribing(), { type: "transcription-failed", token: "voice_1", attempt: 1, errorCode: "TRANSCRIPTION_TIMEOUT" }],
     ["commit", committing(), { type: "commit-failed", token: "voice_1", attempt: 1, errorCode: "STALE_TARGET" }],
-  ] as const)("makes %s failure recoverable after cleanup", (_name, state, event) => {
+  ] as const)("makes %s failure recoverable after cleanup", (name, state, event) => {
     const result = reduceAdmissionInteraction(state, event);
-    expect(result.state).toMatchObject({ phase: "error", token: "voice_1", attempt: 1, anchor: CHILD, errorCode: event.errorCode });
+    expect(result.state).toMatchObject({
+      phase: "error",
+      token: "voice_1",
+      attempt: 1,
+      anchor: CHILD,
+      errorCode: event.errorCode,
+      submitted: name === "stopping" || name === "transcription" || name === "commit",
+    });
     expect(result.effects).toEqual([
       { type: "cleanup-operation", token: "voice_1", attempt: 1, reason: "failed" },
     ]);

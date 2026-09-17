@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { settleLassoGeometry } from "./lasso-driver";
 import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
@@ -108,18 +108,24 @@ for (const viewport of [
     expect(new Set(gripSkin.map((grip) => grip.color)).size).toBe(1);
     expect(gripSkin[0]?.color).not.toBe("rgba(0, 0, 0, 0)");
     const sourceLayout = await sourceLayoutReceipt(page, text);
+    const topHandle = page.getByRole("slider", { name: "用上握点设置所选文字的展开程度" });
     const handle = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
     await expect(handle).toHaveAttribute("aria-valuenow", "0");
-    const selectedRows = (
-      await selectionProjectionParity(page, text, "，", { includeVisibleSeam: true })
-    ).sourceRects;
-    const lastSelectedRow = selectedRows.at(-1) ?? null;
+    await selectionProjectionParity(page, text, "，", { includeVisibleSeam: true });
     const bottomHandleInitial = await handle.boundingBox();
-    if (lastSelectedRow === null || bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
-    expect(Math.abs(
-      bottomHandleInitial.x + bottomHandleInitial.width / 2 -
-      (lastSelectedRow.x + lastSelectedRow.width / 2),
-    )).toBeLessThanOrEqual(3.1);
+    if (bottomHandleInitial === null) throw new Error("selection-aligned handle missing");
+    const topCueCenter = await stretchCueCenter(topHandle);
+    const bottomCueCenter = await stretchCueCenter(handle);
+    const ownedBoundaryCenters = await page.locator(".elastic-preview").evaluate((element) => {
+      const style = getComputedStyle(element);
+      const read = (name: string): number => Number.parseFloat(style.getPropertyValue(name));
+      return {
+        top: read("--elastic-top-center") + read("--elastic-top-cue-offset"),
+        bottom: read("--elastic-bottom-center") + read("--elastic-bottom-cue-offset"),
+      };
+    });
+    expect(topCueCenter).toBeCloseTo(ownedBoundaryCenters.top, 1);
+    expect(bottomCueCenter).toBeCloseTo(ownedBoundaryCenters.bottom, 1);
     await page.evaluate(() => {
       const original = Element.prototype.setPointerCapture;
       Element.prototype.setPointerCapture = function failCaptureOnce(pointerId) {
@@ -382,7 +388,8 @@ for (const viewport of [
     await page.mouse.move(empty.x + empty.width, empty.y, { steps: 3 });
     await page.mouse.move(empty.x + empty.width, empty.y + empty.height, { steps: 3 });
     await page.mouse.move(empty.x, empty.y + empty.height, { steps: 3 });
-    await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / Q /);
+    await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / L /);
+    await expect(page.locator(".lasso-ink__trace")).not.toHaveAttribute("d", / Q /);
     await expect(page.locator(".lasso-ink__closure")).toHaveAttribute("d", "");
     await page.mouse.up();
     await expect(page.locator(".lasso-layer[data-selected=true]")).toHaveCount(0);
@@ -398,7 +405,8 @@ for (const viewport of [
     await expect(page.locator(".lasso-ink__trace")).toHaveCSS("stroke-width", "2px");
     await page.mouse.move(fragment.x + fragment.width + margin, fragment.y + fragment.height + margin, { steps: 3 });
     await page.mouse.move(fragment.x - margin, fragment.y + fragment.height + margin, { steps: 3 });
-    await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / Q /);
+    await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / L /);
+    await expect(page.locator(".lasso-ink__trace")).not.toHaveAttribute("d", / Q /);
     await expect(page.locator(".lasso-ink__closure")).toHaveAttribute("d", / L /);
     await page.locator("main.matter-shell").dispatchEvent("pointercancel", {
       pointerId: 1,
@@ -552,6 +560,47 @@ test("keyboard addresses exact segments and Escape or the narrow index returns L
   await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles, exact: true }).click();
   await expect(page.locator("#material-files")).toHaveAttribute("data-open", "true");
   await expect(shell).not.toHaveAttribute("data-lasso-mode", "true");
+});
+
+test("modal chrome occludes and restores one settled Elastic address without changing its degree", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await selectRoot(page);
+
+  const shell = page.locator("main.matter-shell");
+  const lasso = page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  });
+  const rootText = page.locator(`[data-thought-text-id="${rootId}"]`);
+  await lasso.click();
+  await rootText.focus();
+  await rootText.press("ArrowRight");
+  const bottom = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
+  await bottom.press("End");
+  await expect(bottom).toHaveAttribute("aria-valuenow", "1");
+  const address = page.locator(
+    '.lasso-layer .material-address-layer[data-address-variant="actionable"]',
+  );
+  await expect(address).toBeVisible();
+
+  await page.getByRole("button", { name: "关于", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "关于 Matter" });
+  await expect(dialog).toBeVisible();
+  await expect(shell).toHaveAttribute("data-material-presentation", "occluded");
+  await expect(page.locator(".material-interaction-presentation")).toBeHidden();
+  await expect(address).toHaveCount(0);
+  await expect(bottom).toHaveCount(0);
+  // The modal owns only presentation. The semantic address and its settled
+  // human degree stay owned instead of being interpreted as cancellation.
+  await expect(shell).toHaveAttribute("data-lasso-mode", "true");
+
+  await dialog.getByRole("button", { name: "关闭: 关于 Matter" }).click();
+  await expect(shell).toHaveAttribute("data-material-presentation", "available");
+  await expect(bottom).toBeVisible();
+  await expect(bottom).toHaveAttribute("aria-valuenow", "1");
+  await expect(address).toBeVisible();
 });
 
 test("lasso keeps its outside-paper particle echo visual-only", async ({ page }) => {
@@ -830,7 +879,8 @@ test("activating Lasso adopts the rendered camera during index motion", async ({
   // measured after Lasso has frozen the rendered camera, so it cannot splice
   // coordinates from two camera epochs.
   await page.mouse.move(fragment.x - margin, fragment.y + Math.min(18, fragment.height * .45), { steps: 2 });
-  await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / Q /);
+  await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / L /);
+  await expect(page.locator(".lasso-ink__trace")).not.toHaveAttribute("d", / Q /);
   await expect(page.locator(".lasso-ink__closure")).toHaveAttribute("d", / L /);
   await page.mouse.up();
   await expect(page.getByRole("status").filter({ hasText: "已选文字" }))
@@ -1095,6 +1145,14 @@ async function segmentProbeRect(
     // One fragment center addresses the whole semantic punctuation segment.
     return { x: centerX - 2, y: centerY - 2, width: 4, height: 4 };
   }, segmentIndex);
+}
+
+async function stretchCueCenter(handle: Locator): Promise<number> {
+  return await handle.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const cue = getComputedStyle(element, "::after");
+    return bounds.left + Number.parseFloat(cue.left) + Number.parseFloat(cue.width) / 2;
+  });
 }
 
 async function textSliceProbeRect(

@@ -40,10 +40,13 @@ the running product, not how ambitious a feature sounds.
 **Submission authority stays strict; result delivery stays resilient.** A
 read-only Inquiry answer belongs to the question and bounded snapshot that were
 submitted, so ordinary edits, selection changes, and a temporarily hidden tab
-do not erase it. A result that changes material may rebase across unrelated
-history, but it must still revalidate the exact material it read and will write
-before the tree engine creates one undoable commit. A real target conflict is
-never permission to overwrite newer human material silently.
+do not erase it. Dismissing a presentation is not cancellation after submit;
+explicit cancellation, page exit, document-owner replacement, or a real target
+conflict is. A result that changes material may rebase across unrelated history,
+but it waits for a visible pointer-idle delivery window and must revalidate the
+exact material it read and will write before the tree engine creates one
+undoable commit. A real target conflict is never permission to overwrite newer
+human material silently.
 
 A material interaction must declare reference + degree + direction + lineage
 without letting the model infer a missing signal. Elastic Language 2 takes

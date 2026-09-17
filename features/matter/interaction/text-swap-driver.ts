@@ -31,6 +31,9 @@ export type TextSwapScope = Readonly<{
   lineage: readonly TextSwapLineageNode[] | null;
   enabled: boolean;
   interactionScopeKey: string;
+  materialSelection?: SegmentSelection | null;
+  materialLineage?: readonly TextSwapLineageNode[] | null;
+  deliveryTargetVisible?: boolean;
 }>;
 
 export type TextSwapCommitResult<TCommitted> =
@@ -80,6 +83,7 @@ type RequestResources = {
   controller: AbortController;
   envelope: TextSwapEnvelope;
   basis: TextSwapBasis;
+  plan?: TextSwapPlan;
 };
 
 /**
@@ -101,6 +105,7 @@ export class TextSwapDriver<TCommitted> {
   private disposed = false;
   private leases = 0;
   private leaseGeneration = 0;
+  private deliveryWindowOpen = true;
 
   constructor(dependencies: TextSwapDriverDependencies<TCommitted>) {
     this.dependencies = dependencies;
@@ -145,12 +150,27 @@ export class TextSwapDriver<TCommitted> {
     const previous = this.scope;
     this.scope = ownScope(scope);
     if (previous === null || this.state.phase === "idle") return;
+    if (submittedState(this.state)) {
+      if (!this.scopeMaterialMatches(this.state.basis)) {
+        const reason = previous.treeId === scope.treeId &&
+          previous.documentEpoch === scope.documentEpoch
+          ? "selection-change"
+          : "scope-change";
+        this.send({ type: "scope-invalidated", reason });
+      } else {
+        this.deliverResolvedPlanIfReady();
+      }
+      return;
+    }
     const reason = sameDocumentScope(previous, scope) ? "selection-change" : "scope-change";
     this.send({ type: "scope-invalidated", reason });
   }
 
   enter(basis: TextSwapBasis): boolean {
     if (this.disposed) return false;
+    // The host owns at most one submitted turn. A later presentation gesture
+    // cannot replace work that already crossed the person's submit boundary.
+    if (submittedState(this.state)) return false;
     this.send({
       type: "enter",
       interactionId: this.dependencies.createInteractionId(),
@@ -199,6 +219,28 @@ export class TextSwapDriver<TCommitted> {
 
   cancel(): void {
     this.send({ type: "cancel" });
+  }
+
+  detachPresentation(): boolean {
+    const retained = submittedState(this.state);
+    if (!retained) this.send({ type: "cancel" });
+    return retained;
+  }
+
+  suspendCapture(): void {
+    this.setDeliveryWindowOpen(false);
+    if (stateOwnsTextSwapCapture(this.state, this.voiceResources)) {
+      this.send({ type: "cancel" });
+    }
+  }
+
+  resumeDelivery(): void {
+    this.setDeliveryWindowOpen(true);
+  }
+
+  setDeliveryWindowOpen(open: boolean): void {
+    this.deliveryWindowOpen = open;
+    if (open) this.deliverResolvedPlanIfReady();
   }
 
   dispose(): void {
@@ -297,7 +339,9 @@ export class TextSwapDriver<TCommitted> {
       },
       onOwnershipRevoked: (revoked) => {
         if (!sameOperation(operation, revoked) || !this.ownsVoice(operation, generation)) return;
-        this.send({ type: "cancel" });
+        if (stateOwnsTextSwapCapture(this.state, this.voiceResources)) {
+          this.send({ type: "cancel" });
+        }
       },
     }).then(
       () => {
@@ -437,7 +481,7 @@ export class TextSwapDriver<TCommitted> {
   private requestSwap(
     effect: Extract<TextSwapInteractionEffect, { type: "request-swap" }>,
   ): void {
-    if (!this.scopeMatches(effect.basis)) {
+    if (!this.scopeMaterialMatches(effect.basis)) {
       this.send({
         type: "request-stale",
         interactionId: effect.interactionId,
@@ -472,16 +516,28 @@ export class TextSwapDriver<TCommitted> {
     };
     this.requestResources = resources;
     void this.dependencies.request(envelope, controller.signal).then(
-      (plan) => this.commitPlan(resources, plan),
+      (plan) => {
+        if (!this.ownsRequest(resources)) return;
+        resources.plan = plan;
+        this.deliverResolvedPlanIfReady();
+      },
       (error) => {
         if (!this.ownsRequest(resources)) return;
+        if (!this.scopeMaterialMatches(resources.basis)) {
+          this.send({
+            type: "request-stale",
+            interactionId: resources.interactionId,
+            requestId: resources.requestId,
+          });
+          return;
+        }
         this.send(requestFailure(resources, error));
       },
     );
   }
 
   private commitPlan(resources: RequestResources, plan: TextSwapPlan): void {
-    if (!this.ownsRequest(resources) || !this.scopeMatches(resources.basis)) {
+    if (!this.ownsRequest(resources) || !this.scopeMaterialMatches(resources.basis)) {
       this.send({
         type: "request-stale",
         interactionId: resources.interactionId,
@@ -596,6 +652,26 @@ export class TextSwapDriver<TCommitted> {
       basis.sourceText === basis.selection.selectedText;
   }
 
+  private scopeMaterialMatches(basis: TextSwapBasis): boolean {
+    const scope = this.scope;
+    if (scope === null || scope.treeId !== basis.treeId ||
+      scope.documentEpoch !== basis.documentEpoch) return false;
+    return sameSelection(materialSelectionOf(scope), basis.selection) &&
+      sameLineage(materialLineageOf(scope), basis.lineage) &&
+      basis.sourceText === basis.selection.selectedText;
+  }
+
+  private deliverResolvedPlanIfReady(): void {
+    const resources = this.requestResources;
+    if (
+      resources === null ||
+      resources.plan === undefined ||
+      !this.deliveryWindowOpen ||
+      this.scope?.deliveryTargetVisible === false
+    ) return;
+    this.commitPlan(resources, resources.plan);
+  }
+
   private notify(): void {
     for (const listener of [...this.listeners]) {
       try {
@@ -614,7 +690,45 @@ function ownScope(scope: TextSwapScope): TextSwapScope {
     lineage: scope.lineage === null
       ? null
       : Object.freeze(scope.lineage.map((node) => Object.freeze({ ...node }))),
+    materialSelection: scope.materialSelection === undefined
+      ? undefined
+      : scope.materialSelection === null
+        ? null
+        : Object.freeze({ ...scope.materialSelection }),
+    materialLineage: scope.materialLineage === undefined
+      ? undefined
+      : scope.materialLineage === null
+        ? null
+        : Object.freeze(scope.materialLineage.map((node) => Object.freeze({ ...node }))),
   });
+}
+
+function submittedState(state: TextSwapInteractionState): state is Extract<
+  TextSwapInteractionState,
+  { readonly phase: "pending" | "transcribing" }
+> {
+  // Stopping Voice is the person's submit. `recorderSettled` describes only
+  // whether the browser has flushed its final chunks; it is not an authority
+  // boundary and must not make presentation loss cancel accepted work.
+  return state.phase === "pending" || state.phase === "transcribing";
+}
+
+function stateOwnsTextSwapCapture(
+  state: TextSwapInteractionState,
+  resources: VoiceResources | null,
+): boolean {
+  if (resources === null) return false;
+  return state.phase === "permission" || state.phase === "recording";
+}
+
+function materialSelectionOf(scope: TextSwapScope): SegmentSelection | null {
+  return scope.materialSelection === undefined ? scope.selection : scope.materialSelection;
+}
+
+function materialLineageOf(
+  scope: TextSwapScope,
+): readonly TextSwapLineageNode[] | null {
+  return scope.materialLineage === undefined ? scope.lineage : scope.materialLineage;
 }
 
 function sameScope(left: TextSwapScope, right: TextSwapScope): boolean {
@@ -622,7 +736,10 @@ function sameScope(left: TextSwapScope, right: TextSwapScope): boolean {
     left.enabled === right.enabled &&
     left.interactionScopeKey === right.interactionScopeKey &&
     sameSelection(left.selection, right.selection) &&
-    sameLineage(left.lineage, right.lineage);
+    sameLineage(left.lineage, right.lineage) &&
+    sameSelection(materialSelectionOf(left), materialSelectionOf(right)) &&
+    sameLineage(materialLineageOf(left), materialLineageOf(right)) &&
+    left.deliveryTargetVisible === right.deliveryTargetVisible;
 }
 
 function sameDocumentScope(left: TextSwapScope, right: TextSwapScope): boolean {

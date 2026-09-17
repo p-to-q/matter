@@ -653,7 +653,6 @@ export function createMatterStore(
         }
         const result = commitSessionCommand(runtimeState(current), command, HISTORY_LIMITS);
         receipt = result.receipt;
-        if (result.ok) repairLeases.clear();
         const domain = protectDomain(result.state);
         return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(receipt) });
       });
@@ -679,8 +678,8 @@ export function createMatterStore(
     undo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        repairLeases.clear();
         const result = undoSession(runtimeState(current));
+        pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
         return freezeState({
@@ -696,8 +695,8 @@ export function createMatterStore(
     redo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        repairLeases.clear();
         const result = redoSession(runtimeState(current));
+        pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
         return freezeState({
@@ -1137,6 +1136,23 @@ function pruneExpiredRepairLeases(
   if (!Number.isFinite(nowMs)) return;
   for (const [id, lease] of leases) {
     if (nowMs - lease.admittedAtMs > ADMISSION_REPAIR_WINDOW_MS) leases.delete(id);
+  }
+}
+
+function pruneStaleRepairLeases(
+  leases: Map<string, AdmissionRepairLease>,
+  tree: ThoughtTree,
+  documentEpoch: number,
+): void {
+  for (const [id, lease] of leases) {
+    const node = tree.nodes[lease.nodeId];
+    if (
+      lease.documentEpoch !== documentEpoch ||
+      lease.treeId !== tree.id ||
+      node === undefined ||
+      node.text !== lease.expectedText ||
+      node.updatedAt !== lease.expectedUpdatedAt
+    ) leases.delete(id);
   }
 }
 

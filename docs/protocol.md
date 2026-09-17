@@ -295,9 +295,13 @@ The request is bounded to 32 KiB and the browser reads at most 8 KiB of actual
 UTF-8 response bytes. The scenario has a 12-second deadline, the route boundary
 14 seconds, the client 16 seconds, and the platform route 25 seconds. The
 margins cover body parsing, plan construction, and response transport without
-shrinking the measured cold provider attempt before live evidence exists. A
-model rejection is never retried. Ordered relay fallback inside one provider
-call remains transport behavior; it does not resample a rejected answer. A
+shrinking the measured cold provider attempt before live evidence exists.
+Semantic fallback is scenario-owned: Label and Repair settle their deterministic
+floor after the first rejected completion, while the explicit Inquiry,
+Transform, and Text Swap actions may try the next healthy candidate inside the
+same immutable basis and remaining deadline. A rejection never cools a
+provider; transport failure still does. Ordered relay fallback inside one
+candidate remains transport behavior. A
 candidate's attempt is hard-bounded even if its transport ignores cancellation,
 so it cannot consume the delivery margin reserved for the next relay. Browser
 and provider POSTs use no-store transport and reject redirects; no material turn
@@ -306,15 +310,18 @@ answer becomes an HTTP cache entry or follows a redirect to another origin.
 Unavailable, timeout, busy, rejected, malformed, no-op, and cancelled turns all
 leave the passage unchanged. Provider, pool, timeout, and transport failures do
 not create visible error material: the browser returns the control to its prior
-usable selection state while operational receipts remain server-side. A new
-selection or stretch, a document/tree switch, a change anywhere in the exact
-visible lineage addressed by the turn, import, unmount, or page hide aborts the
-request and makes a late answer inert. Global revision is a receipt, not the
-read set: an unrelated sibling edit may settle while the addressed lineage is
-still exact. Pre-commit validation repeats request version, interaction, tree,
-current target text/timestamp, selection, complete visible lineage, grapheme,
-adjudication, and composed-node checks synchronously, then gives the tree engine
-one command against the current revision.
+usable selection state while operational receipts remain server-side. After
+submit, a new selection or stretch, navigation, presentation dismissal, an
+unrelated revision, or temporary page hiding does not abort the immutable
+request. A document/tree switch, change anywhere in the exact visible lineage
+addressed by the turn, target removal, import, page exit, unmount, or explicit
+Escape does. Global revision is a receipt, not the read set: an unrelated
+sibling edit may settle while the addressed lineage is still exact. A resolved
+plan waits for visible, global pointer-idle, target-visible delivery, then
+pre-commit validation repeats request version, interaction, tree, current target
+text/timestamp, selection, complete visible lineage, grapheme, adjudication, and
+composed-node checks synchronously before the tree engine receives one command
+against the current revision.
 
 One click inside the settled address surface creates one immutable interaction
 id and one POST. Pointer release alone is local preview state. Neither
@@ -456,11 +463,13 @@ or Focus; Lasso exposes only Elastic and Voice keeps its material-admission
 meaning outside the local Point-and-Talk field. The protocol also retains one
 exact current punctuation segment as a valid address for bounded integrations,
 but the current Lasso surface does not publish that second operation. Entry
-cancels Elastic and keeps both grips hidden and inert. Leaving the field or
-changing target, document basis, tree, addressed visible lineage or selection,
-import, page, or recording ownership aborts work and revokes every late result.
-An unrelated history edit does not reinterpret the frozen direction. The two
-grammars never share an in-flight basis.
+detaches the Elastic presentation and keeps both grips hidden and inert. Before
+submit, leaving the field or changing target cancels its draft/capture. After
+submit, presentation dismissal, navigation, selection change, temporary page
+hiding, and an unrelated revision do not revoke work. A document/tree change,
+target or addressed-lineage conflict, page exit, unmount, or explicit
+cancellation does. A resolved plan waits for visible, global pointer-idle,
+target-visible delivery. The two grammars never share an in-flight basis.
 
 One valid Voice finalization or typed submit creates one immutable request.
 There is no automatic retry, candidate carousel, streaming mutation, or
@@ -726,9 +735,11 @@ request id and exact tree/revision/scope basis that the model read. The browser
 parses that network receipt strictly against the original request, then presents
 the read-only answer while the operation and local `{ treeId, documentEpoch }`
 owner remain current. Later edits or selections do not reinterpret the captured
-question and snapshot. Closing the surface, switching AI operations, page exit,
-unmount, or owner replacement aborts the request and makes a late completion
-inert.
+question and snapshot. Closing the surface, switching AI presentations, or
+temporary page hiding detaches the bubble without aborting the submitted
+request; a terminal result may enter the bounded local record and a later open
+still starts clean. Page exit, unmount, or owner replacement aborts the request
+and makes a late completion inert.
 
 An error response is also parsed as an exact Matter envelope. Its server message
 is validated and discarded; the closed `fallbackReason` remains an operational
@@ -757,6 +768,146 @@ unavailable reason; no fallback prose is invented. The live answer adapter is
 independently server-gated. Its optional local completed record is not an answer
 adapter or model memory and never changes this visible-context, non-mutation
 contract.
+
+## User provider session provider-session/4
+
+The settings surface stores a deliberate device-level provider preference; it
+does not widen any material envelope. The browser supplies only an action, one
+canonical endpoint, and an optional replacement key. Provider family, model,
+operation URL, authentication headers, request serialization, and response
+vocabulary remain a finite server-only registry.
+
+```ts
+type ProviderSessionRequest = {
+  protocolVersion: "4";
+  action: "test" | "save";
+  endpoint: string;
+  apiKey?: string; // omitted means retain; an empty string is never sent
+};
+
+type ProviderSessionStatus = {
+  protocolVersion: "4";
+  available: boolean;
+  credentialPresent: boolean;
+  resetRequired: boolean; // damaged generation state needs explicit removal
+  credentialId: string | null; // opaque 128-bit per-lease save receipt
+  endpoint: string | null; // non-secret server-canonical base
+  expiresAt: string | null;
+};
+
+type ProviderSessionTestResult = {
+  protocolVersion: "4";
+  verified: true;
+  endpoint: string;
+};
+```
+
+`GET /api/provider-session` only decrypts local cookie state and returns the
+exact non-secret status. It never contacts a provider, never writes a fresh
+generation for a new browser, and never slides the expiry.
+Invalid bearer state reports unavailable; malformed or mismatched generation
+state additionally reports `resetRequired`. This read is still zero-write:
+explicit remove repairs damaged state, while a later successful save replaces
+an ordinary invalid or expired bearer.
+The browser confirms a successful save with one such GET and accepts it only
+when `credentialId` still identifies the same lease returned by POST. Endpoint
+or expiry equality is not lease identity: another tab may save a different key
+for the same endpoint while the first response is in flight.
+An omitted POST key may reuse the sealed key only when the submitted canonical
+endpoint exactly equals the saved canonical base. Changing the endpoint
+requires the key again, so a stored secret is never silently forwarded to a new
+host.
+
+`POST` accepts at most 2 KiB and is same-origin plus
+rate/concurrency/deadline bounded. Its 9.5-second route budget covers the
+2.25-second catalog window, three 2.25-second proof windows, and 0.5 seconds of
+bounded processing below the platform ceiling. Both explicit actions perform the same
+finite capability proof. An exact official OpenAI, DeepSeek, or Anthropic
+endpoint selects its reviewed fixed model directly. A custom endpoint keeps the
+normalized supplied base first, adds at most one same-origin `/v1` base, and
+performs at most three parallel model-list reads inside a 2.25-second discovery budget,
+rejects known non-generative identifiers, and deterministically retains at most
+one inexpensive-looking text candidate for each admitted base/wire pair. A
+reviewed exact alias wins when present. The route then performs at most three
+short content-free `MATTER_READY` generations in exact-compatible,
+versioned-compatible, then versioned-Anthropic order and seals only the
+candidate whose whitespace-trimmed real response proves that exact token and
+wire. Matter never infers a provider
+from a key prefix or parses an arbitrary error vocabulary. A custom service that
+exposes no bounded model catalog or no candidate that passes the sentinel cannot
+be inferred safely from only endpoint and key and therefore fails closed.
+
+`action: "test"` returns the strict test result and never writes a cookie.
+`action: "save"` verifies first and atomically replaces the cookie only after
+the sentinel succeeds; a failed replacement leaves the previous credential
+untouched. A different, incomplete, malformed, oversized, redirected, or late
+response also fails without writing. `DELETE` is same-origin protected and
+expires the credential while rotating an independent opaque removal-generation
+cookie; every credential is sealed against the generation observed when its
+save began, and save responses never write that generation. Either response
+order therefore leaves a delete newer than every already-started save in the
+ordinary browser cookie jar. A missing marker is the explicit initial
+generation; only DELETE changes it. This avoids random status responses racing
+and invalidating an accepted save in another tab. The 400-day, `Priority=High`
+generation marker outlives every 30-day, `Priority=Low` bearer issued by a save
+already in flight when removal rotates it. Duplicate or malformed state fails
+closed. Cookie priority is eviction guidance, not authority: independent
+eviction of a removal marker while an initial-generation bearer remains is not
+revocation this stateless boundary can prove. DELETE deliberately does
+not compete with provider probe rate or concurrency, so removal remains
+available while checks are exhausted or stalled. Every response is `no-store`
+and varies on `Cookie`; the browser reads at most 8 KiB. Mutation errors use only
+`INVALID_REQUEST`, `FEATURE_UNAVAILABLE`, `CONNECTION_FAILED`, or `RATE_LIMITED`
+and never echo a provider body or key.
+
+This generation is ordinary browser-jar ordering, not distributed account
+revocation. An attacker who has already copied both an old bearer and its
+matching generation can replay that pair until the fixed lease expires or its
+sealing key is retired. Nor can stateless cookies prove removal after selective
+generation-cookie eviction. Preventing either case requires a shared durable
+subject/generation compare on every use; Matter neither claims nor silently
+simulates that stronger service.
+
+The endpoint is 1–512 ASCII code units and canonicalized with the platform URL
+parser. A missing or narrowly mistyped scheme is upgraded locally to HTTPS; the
+server never transmits the key over HTTP. The result must use HTTPS on the
+default port, contain a multi-label DNS name, and contain no credentials, query,
+or fragment. A reviewed explicit
+`/chat/completions` or `/v1/messages` operation may be supplied; the server
+reduces it to its profile-owned base. A base without `/v1` stays first and may
+gain only one same-origin `/v1` discovery candidate. Each custom-host operation resolves all
+addresses afresh, rejects the set if any member is non-public, and pins the TLS
+connection to one accepted address while retaining hostname SNI and certificate
+verification. No redirect is followed. The public fetch boundary exposes only
+model-list, chat-completion, and Anthropic-message operations, so it is not a
+general relay.
+
+On a successful save the server seals `{ profileId, model, baseUrl, apiKey,
+scopeId, generationId, issuedAtMs, expiresAtMs }` with AES-256-GCM and a fresh
+96-bit nonce.
+The first entry in the deployment key ring writes; at most three older entries
+remain read-only for rotation. The token is a `__Secure-` `HttpOnly`, `Secure`,
+`SameSite=Strict` cookie scoped to the normalized Matter API path. It has one
+fixed 30-day lifetime and is renewed only by another explicit successful save.
+Duplicate, v1–v3, malformed, tampered, expired, future, unknown-key,
+unsafe-base-path, invalid or mismatched generation, or over-bound tokens fail
+closed. Status reports them without writing cookies; explicit remove or a later
+successful save owns cleanup. No key enters localStorage, IndexedDB, the
+material document, or a browser-visible response. The server maps the already non-secret
+per-lease `scopeId` to `credentialId` only so the browser can confirm exact save
+ownership; provider profile, model, key, and sealed token stay hidden.
+
+The unsealed profile is request-local and is never rediscovered at runtime. Its
+candidate can supply the already-public repair, label, and Inquiry surfaces even
+when the corresponding managed adapter is disabled. Elastic and Text Swap still
+require their independent product gate. Only a live managed gate contributes
+managed candidates to the same request. The opaque `scopeId`, never key,
+endpoint, or provider-authored model text, separates disposable candidate health, drain, and label-cache
+ownership. A healthy user candidate is first; repeated transport failures cool
+only that scope and let a healthy managed candidate go first until the short
+cooldown expires. Scenario governors remain global across managed and user
+credentials. A saved configuration cannot promote Elastic, Text Swap, or any
+other capability whose independent product gate is closed.
 
 ## Private commands
 

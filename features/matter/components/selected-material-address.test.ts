@@ -12,6 +12,10 @@ import type { MaterialAddressProjection } from "../interaction/projected-layout-
 const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
 const rooted = readFileSync(new URL("./RootedMaterial.tsx", import.meta.url), "utf8");
 const layer = readFileSync(new URL("./MaterialAddressLayer.tsx", import.meta.url), "utf8");
+const structuralSelection = readFileSync(
+  new URL("../interaction/use-structural-material-selection.ts", import.meta.url),
+  "utf8",
+);
 
 const ROWS = Object.freeze([
   Object.freeze({ blockEnd: 140, blockStart: 100, inlineEnd: 600, inlineStart: 300 }),
@@ -63,12 +67,12 @@ describe("selected material address", () => {
   it("gives Point Talk one shared material address and withholds the competing lens", () => {
     expect(rooted).toContain('source: "point-talk"');
     expect(rooted).toMatch(
-      /<MaterialAddressLayer\s+projection=\{pointTalkAddressProjection\}\s+variant="actionable"/,
+      /<MaterialAddressLayer\s+projection=\{materialPresentationAvailable \? pointTalkAddressProjection : null\}\s+variant="actionable"/,
     );
-    expect(rooted).toContain("addressVisible={activePointTalkNodeId === null}");
+    expect(rooted).toContain("addressVisible={materialPresentationAvailable && activePointTalkNodeId === null}");
     expect(rooted).toContain("{addressVisible ? <MaterialAddressLayer");
     expect(rooted).toContain("targetBounds={pointTalkTargetBounds}");
-    expect(rooted).toMatch(/const nodeActionsEnabled =[^;]*activePointTalkNodeId === null/s);
+    expect(rooted).toMatch(/const nodeActionsEnabled =[^;]*pointTalkHostNodeId === null/s);
     expect(css).toMatch(
       /\.material-address-layer\[data-address-variant="actionable"\]\[data-address-partition="point-talk"\]\s*\{\s*z-index:\s*32;/,
     );
@@ -77,6 +81,14 @@ describe("selected material address", () => {
     expect(css).toMatch(
       /data-address-partition="point-talk"\]\[data-material-address-painted\][^}]*\.spatial-thought\[data-selected="true"\] \.spatial-thought__label\s*\{\s*background:\s*transparent;/,
     );
+  });
+
+  it("keeps one submitted Point Talk host after its presentation detaches", () => {
+    expect(rooted).toContain("const pointTalkHostNodeId = currentPointTalkNodeId");
+    expect(rooted).toContain("const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null");
+    expect(rooted).toContain("{pointTalkHostNodeId === null ? null : (");
+    expect(rooted).toContain("presented={pointTalkPresented}");
+    expect(rooted).toContain("if (pointTalkHostNodeId !== null) return;");
   });
 
   it("gives the reference the upper grip's displacement and nothing else", () => {
@@ -94,6 +106,64 @@ describe("selected material address", () => {
     expect(perLine).toHaveLength(2);
     expect(rooted).not.toContain("centerX");
     expect(rooted).not.toMatch(/elastic-(top|bottom)-center[^\n]*bounds\.right/);
+  });
+
+  it("lets modal chrome own every external interaction painter without erasing its state", () => {
+    expect(rooted).toContain('data-material-presentation={materialPresentationAvailable ? "available" : "occluded"}');
+    expect(rooted).toContain('className="material-interaction-presentation"');
+    expect(rooted).toContain('inert={!materialPresentationAvailable || undefined}');
+    expect(rooted).toContain('projection={materialPresentationAvailable ? nativeAddressProjection : null}');
+    expect(rooted).toContain('projection={materialPresentationAvailable ? visibleStructuralAddressProjection : null}');
+    expect(rooted).toContain('stretchVisible={materialPresentationAvailable && elasticSelection !== null}');
+    expect(rooted).toContain('surfaceAvailable={outcomePresentationAvailable}');
+    expect(rooted).toContain('deliveryWindowAvailable: materialPresentationAvailable');
+    expect(rooted).toContain('if (nextOwnsSurface) setAdmissionPresentationAvailable(false)');
+    expect(rooted).toContain('if (materialPresentationAvailable) {');
+    expect(rooted).toContain('setAdmissionPresentationAvailable(true)');
+    expect(rooted).toContain('const lassoPointerId = lasso.cancelActiveStroke()');
+    expect(rooted).toContain('stretch.cancelActiveDrag()');
+    expect(css).toMatch(
+      /\.matter-shell\[data-material-presentation="occluded"\] \.material-interaction-presentation \{ visibility: hidden; pointer-events: none; \}/,
+    );
+    expect(css).toMatch(
+      /\.matter-shell\[data-material-presentation="occluded"\] ::selection \{ background: transparent; color: inherit; \}/,
+    );
+    expect(css).toMatch(
+      /\.matter-shell\[data-material-presentation="occluded"\] \.spatial-thought\[data-selected="true"\] \.spatial-thought__label \{ background: transparent; box-shadow: none; text-shadow: none; \}/,
+    );
+    // Settled selection, degree, and owned jobs are not cleared by the modal
+    // transition; only in-progress pointer gestures are rolled back.
+    const transition = rooted.slice(
+      rooted.indexOf("const changeCanvasOverlay"),
+      rooted.indexOf("const closePointTalk"),
+    );
+    expect(transition).not.toMatch(/clearSelection|setPointTalkOwner\(null\)|props\.admission\.cancel\(\)/);
+  });
+
+  it("keeps structural selection paint outside text layout", () => {
+    // Only the selected material pays for the temporary fallback wrapper; the
+    // 2,000-node renderer must not gain one DOM element per passage.
+    expect(rooted).toMatch(
+      /isSelected\s*\?\s*<span className="spatial-thought__label">\{materialText\}<\/span>/,
+    );
+    const selectedLabelRules = [...css.matchAll(
+      /\.spatial-thought\[data-selected="true"\] \.spatial-thought__label \{([^}]*)\}/g,
+    )].map((match) => match[1]);
+    const selectedLabel = selectedLabelRules.find((body) => body.includes("padding:"));
+    expect(selectedLabel).toMatch(/padding:\s*0/);
+    expect(selectedLabel).not.toMatch(/margin:|border-width:|border:\s*(?!0)/);
+    expect(structuralSelection).toContain(
+      'const material = geometryBasis.surface === "label" ? label : root',
+    );
+  });
+
+  it("separates the viewport-safe hit target from the exact visible cue", () => {
+    expect(rooted).toContain('"--elastic-top-center": `${preview.topControlCenter}px`');
+    expect(rooted).toContain('"--elastic-bottom-center": `${preview.bottomControlCenter}px`');
+    expect(rooted).toContain('preview.topHandle.x2) / 2 - preview.topControlCenter');
+    expect(rooted).toContain('preview.bottomHandle.x2) / 2 - preview.bottomControlCenter');
+    expect(css).toContain('--stretch-cue-offset-x: var(--elastic-top-cue-offset, 0px)');
+    expect(css).toContain('--stretch-cue-offset-x: var(--elastic-bottom-cue-offset, 0px)');
   });
 
   it("proves a stepped selection never collapses to one shared centre", () => {
@@ -202,6 +272,7 @@ describe("selected material address", () => {
     // with no address at all.
     expect(css).toContain('[data-address-variant="actionable"][data-material-address-painted]) .material-address-selection-set--fallback');
     expect(css).toContain('[data-address-variant="structural"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label');
+    expect(css).toContain('[data-address-variant="native"][data-material-address-painted]) .spatial-thought[data-selected="true"] .spatial-thought__label');
     expect(css).toContain('[data-address-variant="native"][data-material-address-painted]) ::selection');
     // The flag is only set once a path has actually been written.
     expect(layer).toContain('path.setAttribute("d", outline.path)');
@@ -279,9 +350,9 @@ describe("selected material address", () => {
         "structural",
       );
 
-    // The precise receipt uses a fixed client-pixel corner. A multiple of that
-    // cannot reproduce the pill's `.44em`; the structural variant has to keep
-    // following the rows it actually measured.
+    // The precise receipt uses a bounded, quieter glyph-relative corner. A
+    // multiple of that still cannot reproduce the pill's `.44em`; structural
+    // identity has to keep following the rows it actually measured.
     expect(requested(28, 3)).toBeCloseTo(28 * 0.44, 5);
     expect(requested(60, 3)).toBeCloseTo(60 * 0.44, 5);
     expect(requested(28, 12)).toBeCloseTo(28 * 0.44, 5);
@@ -291,7 +362,7 @@ describe("selected material address", () => {
     // And the same rows under different receipt radii must not move it.
     expect(requested(28, 3)).toBeCloseTo(requested(28, 12), 5);
 
-    // A precise address keeps the receipt radius exactly.
+    // A precise address keeps the receipt's already bounded optical radius.
     for (const variant of ["actionable", "native"] as const) {
       const projection = addressProjection({
         metrics: { blockOutset: 3, cornerRadius: 7, inlineOutset: 3, medianRowExtent: 20 },

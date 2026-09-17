@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type { AdmissionAnchor as RuntimeAdmissionAnchor } from "../runtime/admission";
 import type { MatterLocale } from "../config/locales";
 import {
@@ -24,7 +24,7 @@ import { afterBaselineVisible } from "./repair-presentation-gate";
 import { createTranscriptRepairPort } from "./transcript-repair-port";
 import { requestTranscription } from "./transcription-client";
 import { useRepairPresentation } from "./use-repair-presentation";
-import { subscribePageSuspension } from "./page-suspension";
+import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
 
 export type UseAdmissionInput = {
   commit: (
@@ -45,7 +45,10 @@ export type AdmissionController = {
   cancel: () => void;
   retry: () => void;
   dismiss: () => void;
-  discardPendingRepairs: () => void;
+  /** Gates canvas presentation without cancelling work submitted at Stop. */
+  setPresentationAvailable: (available: boolean) => void;
+  setDeliveryTargetVisible: (visible: boolean) => void;
+  setDeliveryVisibleNodeIds: (nodeIds: ReadonlySet<string>) => void;
   clearRepairPresentations: () => void;
 };
 
@@ -72,9 +75,11 @@ export function useAdmission({
       createMaterialId,
       canonicalNow,
       monotonicNow,
-      locale,
+      // Locale is captured for each attempt at start/retry. Keeping the driver
+      // stable prevents a settings change from disposing a finalized job.
+      locale: "zh-CN",
     }),
-    [commit, settleRepair, repairPresentation.publish, locale],
+    [commit, settleRepair, repairPresentation.publish],
   );
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -82,6 +87,31 @@ export function useAdmission({
   );
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const setDeliveryVisibleNodeIds = useCallback(
+    (nodeIds: ReadonlySet<string>) => driver.setDeliveryVisibleNodeIds(nodeIds),
+    [driver],
+  );
+  const activePointersRef = useRef(new Set<number>());
+  const presentationAvailableRef = useRef(true);
+  const syncDeliveryWindow = useCallback(() => {
+    driver.setDeliveryWindowOpen(
+      presentationAvailableRef.current &&
+        document.visibilityState === "visible" &&
+        activePointersRef.current.size === 0,
+    );
+  }, [driver]);
+  const setPresentationAvailable = useCallback((available: boolean) => {
+    presentationAvailableRef.current = available;
+    if (!available) {
+      // Modal chrome must never leave an unseen live microphone behind. Stop,
+      // however, is already a submitted action: only its eventual delivery is
+      // held until the exact material surface is perceivable again.
+      driver.setDeliveryWindowOpen(false);
+      driver.cancelRawCapture();
+      return;
+    }
+    syncDeliveryWindow();
+  }, [driver, syncDeliveryWindow]);
 
   useEffect(() => {
     driver.updateScope({
@@ -96,23 +126,48 @@ export function useAdmission({
     return () => driver.release();
   }, [driver]);
 
-  useEffect(() => subscribePageSuspension(() => {
-    // A hidden page has no visible baseline to repair and must not retain a
-    // microphone, request, or optional late correction on the person's behalf.
-    driver.cancel();
-    driver.discardPendingRepairs();
-  }), [driver]);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      activePointersRef.current.add(event.pointerId);
+      driver.setDeliveryWindowOpen(false);
+    };
+    const onPointerDone = (event: PointerEvent) => {
+      activePointersRef.current.delete(event.pointerId);
+      syncDeliveryWindow();
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    window.addEventListener("pointerup", onPointerDone, true);
+    window.addEventListener("pointercancel", onPointerDone, true);
+    const unsubscribeSuspension = subscribePageSuspension(
+      () => {
+        activePointersRef.current.clear();
+        driver.suspendCapture();
+      },
+      syncDeliveryWindow,
+    );
+    const unsubscribeExit = subscribePageExit(() => driver.exit());
+    syncDeliveryWindow();
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointerup", onPointerDone, true);
+      window.removeEventListener("pointercancel", onPointerDone, true);
+      unsubscribeSuspension();
+      unsubscribeExit();
+    };
+  }, [driver, syncDeliveryWindow]);
 
   return {
     state,
     settlement: driver.getSettlement(),
     repairPresentations: repairPresentation.byNode,
-    start: (anchor) => driver.start(anchor),
+    start: (anchor) => driver.start(anchor, locale),
     stop: () => driver.stop(),
     cancel: () => driver.cancel(),
-    retry: () => driver.retry(),
+    retry: () => driver.retry(locale),
     dismiss: () => driver.dismiss(),
-    discardPendingRepairs: () => driver.discardPendingRepairs(),
+    setPresentationAvailable,
+    setDeliveryTargetVisible: (visible) => driver.setDeliveryTargetVisible(visible),
+    setDeliveryVisibleNodeIds,
     clearRepairPresentations: repairPresentation.clearAll,
   };
 }

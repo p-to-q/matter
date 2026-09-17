@@ -1,18 +1,31 @@
 # Preview deployment-owner handoff
 
-Status: Preview.56 is the current deployed public-origin product source through
-the automatic GitHub-linked Production path. Topic `e88d06c` passed CI run
-`34557892540` and automatic Preview `A1HV4GbsmLw7Cocrq8ubcntZMR9p`; PR #96
-merged as `main` `536d792`, which passed CI run `34558357704`, automatic
-Production `GcFQr3beW677Y6easpT2JobKuHzo`, and the bounded no-store public
-version check after one probe. Its GitHub prerelease and annotated tag are
-withheld because the exact strict pool release probe failed; the latest
-immutable publication remains Preview.52 at `6a4931b`. The repository
-maintainer pushes only GitHub and observes the linked deployment; the deployment
-owner retains Vercel configuration and credential authority. The candidate
-preserves the current process-local admission perimeter and live label,
-transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
+Status: the public origin still identifies itself as Preview.56 through the
+automatic GitHub-linked Production path. Its current exact Production source is
+`main` `9eb169b` from PR #101: CI run `35144776434` and GitHub Production
+deployment `6489479901` both passed. Preview.56's original source boundary came
+through PR #96, and its exact `536d792` strict pool release probe failed. The
+later same-version source changed Label behaviour but never received a fresh
+complete release gate; it does not authorize a retrospective Preview.56 tag.
+The latest immutable publication remains Preview.52 at `6a4931b`. The
+repository maintainer pushes only GitHub and observes the linked deployment;
+the deployment owner retains Vercel configuration and credential authority.
+The candidate preserves the current process-local admission perimeter and live
+label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
 unavailable. This is an operator checklist, not a place to record token values.
+
+Preview.57 is the next locally proven candidate. In addition to preserving the
+same public gates, it introduces an optional fixed-lifetime Model API lease. The
+source fails closed without `MATTER_PROVIDER_SESSION_KEYS`: managed model calls
+continue unchanged, while `GET /api/provider-session` reports
+`available: false` and Test/Save/Remove actions remain unavailable while the
+two fields stay editable. That is a safe deployment,
+but it is not evidence that the requested Model API feature is available. The
+deployment owner must generate and store the independent AES-256 key ring as
+described in `deployment-handoff.md`; the repository maintainer is not
+authorized to invent, derive, print, or install it. No provider key belongs in
+Vercel configuration—the user's provider key exists only inside the encrypted
+30-day lease created after an explicit verified save.
 
 Preview.56 is the reviewed and deployed source. It changes no provider gate,
 secret, deployment ownership, or public Transform/Text Swap authority.
@@ -42,15 +55,15 @@ their evidence outside this repository. Do not place credentials, recordings,
 transcripts, prompts, or response text in this file, a GitHub issue, or a build
 log.
 
-The repository owner has directed one Preview.56 prerelease after the exact
+The repository owner has directed one Preview.57 prerelease after the exact
 candidate passes repository, browser, GitHub CI, and the automatically triggered
-deployment gates. This is fresh Preview.56-only authority; it does not extend
-the historical Preview.49 authorization or permit the repository maintainer to
-run a manual Vercel command or edit Vercel configuration. The automatic
-promotion does not prove that external controls exist. Issues #34 and #68
-remain open; label, repair, inquiry, and browser/local voice stay as configured,
-while Elastic and Text Swap remain unavailable. The source admission ceilings
-below are per warm instance only.
+deployment gates. This is fresh Preview.57-only authority; it does not extend
+the Preview.56 direction or permit the repository maintainer to run a manual
+Vercel command or edit Vercel configuration. The automatic promotion does not
+prove that external controls or the new session-sealing ring exist. Issues #34
+and #68 remain open; label, repair, inquiry, and browser/local voice stay as
+configured, while Elastic and Text Swap remain unavailable. The source
+admission ceilings below are per warm instance only.
 
 ## Resolved-by-itself incident — inquiry reached no model on Production
 
@@ -146,7 +159,34 @@ whose failure reaches a person, and a recorded expectation for inquiry latency
 so that "slow" is distinguishable from "down" without reading this file. Until
 that exists, every occurrence of this will be found the same way.
 
-### Current Preview.56 publication gate
+### Current Preview.57 publication gate
+
+After the exact Preview.57 source has passed topic and merged-main CI, its
+automatic Preview and Production deployments, and the bounded public-origin
+version check, first read `GET https://matter.ptoq.io/api/provider-session`.
+The no-store strict status must identify protocol `4` and return the exact
+empty shape: `available: true`, `credentialPresent: false`,
+`resetRequired: false`, `credentialId: null`, `endpoint: null`, and
+`expiresAt: null` without an operator cookie. It performs no provider request. If it reports
+`available: false`, the source remains safe but the new Model API feature is not
+deployable; do not publish a Preview.57 prerelease and do not derive a sealing
+key from another deployment secret.
+
+Then run:
+
+`npm run probe:pool -- https://matter.ptoq.io --rounds=6 --pace=65 --profile=release --expected-version=0.2.0-preview.57`
+
+Publication is allowed only when that exact paced run reports `pool-healthy`
+and Inquiry produces an accepted answer on every call. Repair and Label must
+reach a provider on every call, but a semantic rejection may settle their
+deterministic floor without vetoing publication; their quality is governed by
+the separately versioned offline corpus, not one stochastic live canary.
+Provider-session availability does not substitute for the managed pool gate,
+and a healthy managed pool does not substitute for availability of the feature
+introduced in this candidate. A paid user key is not a release fixture and must
+never be placed in a probe, log, issue, or this handoff.
+
+### Preview.56 publication gate
 
 After the exact Preview.56 source has passed merged-main CI, its automatic
 Production deployment, and the bounded public-origin version check, run:
@@ -248,29 +288,16 @@ repair. That historical constraint does not evaluate the later Preview.48
 candidate; every release still requires its own exact source and behavior
 receipts.
 
-## Known qualitative observation — cold-start race in independent verification
+## Known qualitative observation — browser gesture verification
 
-A prior session recorded an unstable signal during an independent cold-start
-re-verification: the case "sidebar scroll must not undo the canvas gesture"
-lost its drawing state after the sidebar event on that run. The observation is
-qualitative — the session did not treat it as a pass before characterization,
-and no fix, flake suppression, or retry was applied. A later session that
-committed to a "final independent acceptance" round produced no JSONL
-conclusion because it was interrupted by a spend cap.
-
-This is recorded as a known qualitative note, not a fix and not a claim that
-the race is resolved. It does not assert a source defect: the signal appeared
-on a cold start and was not reproduced under a warm instance, so it is
-consistent with either a deployment-environment concern (cold-start instance
-initialization or warm-up ordering under the Vercel serverless path — route to
-the deployment owner) or a candidate-pool concern (per-instance initialization
-variance across the model pool — route to the provider owner). The origin
-probe cannot distinguish those owners from this evidence alone.
-
-This note does not claim issue #34 (alert delivery / rate limiting) or
-issue #68 (provider spend caps). Both remain open. If the signal becomes
-reproducible and actionable, the owner who can act is named above; until then
-no code, route, or limiter change is warranted on this basis.
+A prior local browser session reported that "sidebar scroll must not undo the
+canvas gesture" lost drawing state once. No reproducible trace or completed
+JSONL receipt survived that run, and a later verification was interrupted.
+This is therefore a test lead, not evidence of a cold-start, deployment, or
+provider-pool defect: the gesture and sidebar state are client-owned and the
+test performs no model call. It must be investigated only if the exact browser
+case reproduces, using its pointer/state trace; it must not be routed to a
+deployment or provider owner on the basis of the earlier observation.
 
 ## Historical Preview.42 release and authorization
 
@@ -343,15 +370,21 @@ without its environment and SHA is insufficient.
    browser speech plus local fallback enabled, and `MATTER_TRANSCRIPTION_ADAPTER=browser`.
    The authoritative variable names and migration rule are in
    [`deployment-handoff.md`](deployment-handoff.md#required-vercel-configuration).
-4. Do not set `MATTER_TRANSFORM_ADAPTER=live` or `MATTER_TEXT_SWAP_ADAPTER=live`.
+4. Install an independent, rotatable `MATTER_PROVIDER_SESSION_KEYS` ring before
+   claiming that Model API is available. Generate and retain it only in the
+   encrypted Vercel server environment; never derive it from a provider key or
+   another deployment secret. The exact format and rotation window are in
+   [`deployment-handoff.md`](deployment-handoff.md#required-vercel-configuration).
+5. Do not set `MATTER_TRANSFORM_ADAPTER=live` or `MATTER_TEXT_SWAP_ADAPTER=live`.
    Their product and promotion gates remain closed.
 
 ## External controls required before expanding model authority
 
 1. Add distributed edge rate rules for `/api/label`, `/api/repair`,
-   `/api/inquiry`, and `/api/transcribe`. After the next-source candidate is
-   deployed, its source-side ceilings are a per-warm-instance first line of
-   defence, not a distributed promise:
+   `/api/inquiry`, `/api/transcribe`, and the external-probe lane at
+   `POST /api/provider-session`. After the next-source candidate is deployed,
+   its source-side ceilings are a per-warm-instance first line of defence, not a
+   distributed promise:
 
    | Route | Requests per identity / minute | Concurrent requests per instance |
    | --- | ---: | ---: |
@@ -359,10 +392,16 @@ without its environment and SHA is insufficient.
    | `/api/repair` | 12 | 4 |
    | `/api/inquiry` | 12 | 4 |
    | `/api/transcribe` | 12 | 3 |
+   | `POST /api/provider-session` | 8 | 3 |
 
    Record the edge identity, window, burst and concurrency semantics explicitly;
    do not infer a global limit by multiplying these numbers by an unknown
-   serverless replica count.
+   serverless replica count. Keep `GET /api/provider-session` as a local,
+   no-provider status read and keep same-origin `DELETE` revocation outside any
+   expensive-probe queue so a person can always remove a saved credential. That
+   DELETE must preserve both `Set-Cookie` headers through the edge: bearer expiry
+   and the independent removal-generation rotation. Dropping or coalescing either
+   header breaks the cross-tab late-save ordering proof.
 2. Set a provider spend cap and delivery channel for budget alerts. Limit the
    key to this deployment and rotate any key that may have left the encrypted
    deployment store.

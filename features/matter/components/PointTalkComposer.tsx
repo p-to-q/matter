@@ -11,6 +11,7 @@ import {
   type RefObject,
 } from "react";
 import type { TextSwapController } from "../interaction/use-text-swap";
+import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
 import {
@@ -37,6 +38,7 @@ export function PointTalkComposer({
   onStopVoice,
   onSubmit,
   positioningRef,
+  surfaceAvailable,
   targetBounds,
   voiceAvailable,
 }: Readonly<{
@@ -53,6 +55,7 @@ export function PointTalkComposer({
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
   positioningRef: RefObject<HTMLElement | null>;
+  surfaceAvailable: boolean;
   targetBounds: PointTalkBounds | null;
   voiceAvailable: boolean;
 }>) {
@@ -63,8 +66,9 @@ export function PointTalkComposer({
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const inputId = useId();
   const phase = controller.state.phase;
-  const retryableError = controller.state.phase === "error" && controller.state.retryable &&
-    controller.state.direction !== undefined;
+  const submitted = textSwapActionWasSubmitted(controller.state);
+  const recoveryAction = pointTalkRecoveryAction(controller.state, voiceAvailable);
+  const recoveryAvailable = recoveryAction !== null;
   const placementReady = placement !== null && targetBounds !== null;
   const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
@@ -78,6 +82,7 @@ export function PointTalkComposer({
   }, [canvasRef, nodeId, onCancel]);
 
   const measure = useCallback(() => {
+    if (!surfaceAvailable) return;
     const boundary = boundaryRef.current;
     const canvas = canvasRef.current;
     const bubble = bubbleRef.current;
@@ -124,7 +129,7 @@ export function PointTalkComposer({
       && current.maxWidth === next.maxWidth
       ? current
       : next);
-  }, [boundaryRef, canvasRef, onCancel, positioningRef, targetBounds, visualScale]);
+  }, [boundaryRef, canvasRef, onCancel, positioningRef, surfaceAvailable, targetBounds, visualScale]);
 
   const scheduleMeasure = useCallback(() => {
     if (measurementFrameRef.current !== null) return;
@@ -186,6 +191,7 @@ export function PointTalkComposer({
   }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
   useEffect(() => {
+    if (!surfaceAvailable) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
@@ -194,27 +200,43 @@ export function PointTalkComposer({
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [cancelAndRestoreFocus]);
+  }, [cancelAndRestoreFocus, surfaceAvailable]);
 
   useEffect(() => {
+    if (!surfaceAvailable) return;
     const cancelFromOutsidePointer = (event: PointerEvent) => {
-      if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
-      onCancel();
+      const target = event.target;
+      const targetElement = target instanceof Element
+        ? target
+        : target instanceof Node
+          ? target.parentElement
+          : null;
+      if (pointTalkOutsidePointerDismisses({
+        insideBubble: target instanceof Node && bubbleRef.current?.contains(target) === true,
+        insideCanvasChrome: targetElement?.closest("[data-canvas-chrome]") != null,
+        submitted,
+      })) onCancel();
     };
     document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
     return () => document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
-  }, [onCancel]);
+  }, [onCancel, submitted, surfaceAvailable]);
 
   useEffect(() => {
-    if (!formVisible || !placementReady) return;
+    if (
+      !surfaceAvailable || !formVisible || !placementReady ||
+      document.visibilityState !== "visible"
+    ) return;
     const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     return () => cancelAnimationFrame(frame);
-  }, [formVisible, placementReady]);
+  }, [formVisible, placementReady, surfaceAvailable]);
 
   useLayoutEffect(() => {
-    if (!retryableError || !placementReady) return;
+    if (
+      !surfaceAvailable || !recoveryAvailable || !placementReady ||
+      document.visibilityState !== "visible"
+    ) return;
     retryRef.current?.focus({ preventScroll: true });
-  }, [placementReady, retryableError]);
+  }, [placementReady, recoveryAvailable, surfaceAvailable]);
 
   const activeState = controller.state;
   if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
@@ -223,12 +245,15 @@ export function PointTalkComposer({
 
   return (
     <div
+      aria-hidden={!surfaceAvailable || undefined}
       className="point-talk"
       data-canvas-interactive
       data-phase={phase}
+      data-surface-available={surfaceAvailable || undefined}
+      inert={!surfaceAvailable || undefined}
       ref={bubbleRef}
-      role={formVisible ? undefined : "status"}
-      style={placement === null || targetBounds === null
+      role={formVisible || recoveryAvailable ? undefined : "status"}
+      style={!surfaceAvailable || placement === null || targetBounds === null
         ? { visibility: "hidden" }
         : {
             left: placement.left,
@@ -254,13 +279,29 @@ export function PointTalkComposer({
           <span aria-atomic="true" aria-live="polite" dir="auto">{status}</span>
           {recording ? (
             <button onClick={onStopVoice} type="button">{copy.stop}</button>
-          ) : retryableError ? (
+          ) : recoveryAction === "request" ? (
             <button onClick={onRetry} ref={retryRef} type="button">{copy.retry}</button>
+          ) : recoveryAction === "voice" ? (
+            <button onClick={onStartVoice} ref={retryRef} type="button">{copy.recordAgain}</button>
           ) : null}
         </div>
       )}
     </div>
   );
+}
+
+export function pointTalkOutsidePointerDismisses({
+  insideBubble,
+  insideCanvasChrome,
+  submitted,
+}: Readonly<{
+  insideBubble: boolean;
+  insideCanvasChrome: boolean;
+  submitted: boolean;
+}>): boolean {
+  // Chrome may temporarily occlude accepted work, but draft and capture still
+  // follow their visible control and remain easy to dismiss.
+  return !insideBubble && (!insideCanvasChrome || !submitted);
 }
 
 function PointTalkForm({
@@ -363,6 +404,25 @@ function pointTalkStatus(
   return "";
 }
 
+export function pointTalkRecoveryAction(
+  state: TextSwapController["state"],
+  voiceAvailable: boolean,
+): "request" | "voice" | null {
+  if (state.phase !== "error" || !state.retryable) return null;
+  if (state.direction !== undefined) return "request";
+  if (!voiceAvailable) return null;
+  switch (state.errorCode) {
+    case "MICROPHONE_UNAVAILABLE":
+    case "RECORDING_FAILED":
+    case "NO_AUDIO":
+    case "TRANSCRIPTION_FAILED":
+    case "TRANSCRIPTION_TIMEOUT":
+      return "voice";
+    default:
+      return null;
+  }
+}
+
 function pointTalkCopy(locale: CanvasLanguage) {
   if (locale === "zh-CN") return {
     label: "告诉 AI 这段文字应该怎样改变",
@@ -371,6 +431,7 @@ function pointTalkCopy(locale: CanvasLanguage) {
     apply: "改写",
     stop: "完成",
     retry: "重试",
+    recordAgain: "重新录音",
   };
   if (locale === "zh-TW") return {
     label: "告訴 AI 這段文字應該怎樣改變",
@@ -379,6 +440,7 @@ function pointTalkCopy(locale: CanvasLanguage) {
     apply: "改寫",
     stop: "完成",
     retry: "重試",
+    recordAgain: "重新錄音",
   };
   if (locale === "ja-JP") return {
     label: "この文章をどう変えるか AI に伝える",
@@ -387,6 +449,7 @@ function pointTalkCopy(locale: CanvasLanguage) {
     apply: "書換",
     stop: "完了",
     retry: "再試行",
+    recordAgain: "もう一度録音",
   };
   if (locale === "de-DE") return {
     label: "AI eine Richtung für diesen Text geben",
@@ -395,6 +458,7 @@ function pointTalkCopy(locale: CanvasLanguage) {
     apply: "Ändern",
     stop: "Fertig",
     retry: "Erneut",
+    recordAgain: "Erneut aufnehmen",
   };
   return {
     label: "Tell AI how this passage should change",
@@ -403,5 +467,6 @@ function pointTalkCopy(locale: CanvasLanguage) {
     apply: "Rewrite",
     stop: "Done",
     retry: "Retry",
+    recordAgain: "Record again",
   };
 }

@@ -79,7 +79,7 @@ describe("canvas guidance projection", () => {
     "gives %s one truthful recovery action",
     (errorCode, id, text) => {
       expect(projectCanvasGuidance(input({
-        admission: attempt({ phase: "error", errorCode }),
+        admission: attempt({ phase: "error", errorCode, submitted: false }),
       }))).toEqual({ id, kind: "recovery", text });
       expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     },
@@ -142,7 +142,7 @@ describe("canvas guidance projection", () => {
     "lets current Elastic state %s outrank a dismissed admission error",
     (stretch, id, kind, text) => {
       expect(projectCanvasGuidance(input({
-        admission: attempt({ phase: "error", errorCode: "NO_AUDIO" }),
+        admission: attempt({ phase: "error", errorCode: "NO_AUDIO", submitted: true }),
         language: { kind: "selected", stretch },
         material: { kind: "focus" },
       }))).toEqual({ id, kind, text });

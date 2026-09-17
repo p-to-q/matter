@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   createTextSwapInteractionState,
   reduceTextSwapInteraction,
+  textSwapActionWasSubmitted,
   type TextSwapBasis,
   type TextSwapInteractionEvent,
   type TextSwapInteractionState,
@@ -69,6 +70,27 @@ function pending(): TextSwapInteractionState {
 }
 
 describe("text swap interaction reducer", () => {
+  it("distinguishes protected submitted work from disposable local drafting", () => {
+    const requestFailure = reduceTextSwapInteraction(pending(), {
+      type: "request-failed",
+      interactionId: "text_swap_interaction_1",
+      requestId: "text_swap_request_1",
+      errorCode: "REQUEST_FAILED",
+      retryable: true,
+    }).state;
+    const localFailure = reduceTextSwapInteraction(enter().state, {
+      type: "accept-direction",
+      text: "line one\nline two",
+    }).state;
+
+    expect(textSwapActionWasSubmitted(enter().state)).toBe(false);
+    expect(textSwapActionWasSubmitted(ready())).toBe(false);
+    expect(textSwapActionWasSubmitted(transcribing())).toBe(true);
+    expect(textSwapActionWasSubmitted(pending())).toBe(true);
+    expect(textSwapActionWasSubmitted(requestFailure)).toBe(true);
+    expect(textSwapActionWasSubmitted(localFailure)).toBe(false);
+  });
+
   it("enters with an owned immutable source basis and no browser work", () => {
     const mutable = {
       ...BASIS,
@@ -203,6 +225,7 @@ describe("text swap interaction reducer", () => {
       phase: "error",
       errorCode: "INVALID_DIRECTION",
       retryable: true,
+      submitted: false,
     });
   });
 
@@ -246,6 +269,7 @@ describe("text swap interaction reducer", () => {
       direction: "Make it more tentative",
       requestId: "text_swap_request_1",
       retryable: true,
+      submitted: true,
     });
 
     const retried = reduceTextSwapInteraction(failed.state, {
@@ -266,6 +290,7 @@ describe("text swap interaction reducer", () => {
       errorCode: "INVALID_RESPONSE",
       retryable: false,
     }).state;
+    expect(terminal).toMatchObject({ phase: "error", submitted: true });
     expect(terminal).not.toHaveProperty("direction");
     expect(terminal).not.toHaveProperty("requestId");
   });

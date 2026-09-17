@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { PROTOCOL_VERSION } from "../tree/model";
 import { MAX_TRANSFORM_REQUEST_BYTES, parseTransformEnvelope, parseTransformPlan } from "../protocol/transform-contract";
 import type { ScenarioAdapter, ScenarioCall } from "./harness";

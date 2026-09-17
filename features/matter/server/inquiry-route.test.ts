@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { PROTOCOL_VERSION } from "../tree/model";
 import {
   MAX_INQUIRY_ANSWER_CODE_POINTS,

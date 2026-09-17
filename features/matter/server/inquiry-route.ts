@@ -8,7 +8,8 @@ import {
   type InquiryRequest,
 } from "../protocol/inquiry-contract";
 import { InquiryServerError, invalidInquiryRequest } from "./inquiry-errors";
-import { resolveInquiryAdapter } from "./inquiry-provider";
+import { INQUIRY_POOL_LIMITS, resolveInquiryAdapter } from "./inquiry-provider";
+import { resolveScenarioRequestModelAdapter } from "./request-model-pool";
 import { INQUIRY_SCENARIO } from "./inquiry-harness";
 import {
   ScenarioGovernor,
@@ -25,15 +26,21 @@ import {
 
 export async function handleInquiryRequest(
   request: Request,
-  adapter: ScenarioAdapter | null = resolveInquiryAdapter(),
+  adapter?: ScenarioAdapter | null,
 ): Promise<Response> {
   const admission = admitInquiryRequest(request);
   if (!admission.ok) throw inquiryAdmissionError(admission.reason);
   try {
+    const resolvedAdapter = adapter === undefined
+      ? resolveScenarioRequestModelAdapter(request, "matter-inquiry", {
+          fallback: resolveInquiryAdapter(),
+          limits: INQUIRY_POOL_LIMITS,
+        }).adapter
+      : adapter;
     return await withBoundedJsonRequest(request, INQUIRY_REQUEST_POLICY, async (payload, signal) => {
       const parsed = parseInquiryRequest(payload);
       if (!parsed.ok) throw invalidInquiryRequest(parsed.message);
-      return Response.json(await answerInquiry(parsed.request, adapter, signal), {
+      return Response.json(await answerInquiry(parsed.request, resolvedAdapter, signal), {
         headers: { "Cache-Control": "no-store" },
       });
     });

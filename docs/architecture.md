@@ -56,8 +56,12 @@ accessible name remain complete and steady. It never renders an old-text copy,
 announces status, or enters history, persistence, archive, or context. Undo,
 Redo, replacement, expiry, failure, reload, and reduced-motion rendering do not
 replay it.
-Lasso, stretch, node drag, and Undo/Redo synchronously discard pending repair
-capabilities: precise material control has priority over optional correction.
+A submitted repair owns a store-unique capability and exact node memento rather
+than the currently visible tool. Lasso, stretch, node drag, navigation, and an
+unrelated revision may proceed without discarding it. Delivery waits for a
+visible, pointer-idle window and the exact target node to be rendered; same-node change,
+removal, Undo/Redo to a different timestamp, document replacement, expiry, page
+exit, or unmount consumes or invalidates the capability.
 
 Human structure changes through the same durable kernel:
 
@@ -95,9 +99,11 @@ planToTreeCommand → tree engine → exact inverse
 The request carries no transcript and no client-authored output target. The
 server derives the target from the validated selection, stretch amount, and
 UTF-16 capacity; it adjudicates one complete answer before constructing the
-plan. Provider or transport failure leaves the selected passage unchanged,
+plan. Provider or transport failure leaves the selected passage unchanged and
 returns the local control to its prior usable state without visible failure
-chrome, and is not retried automatically. The strict `transform/2` contract is
+chrome. The browser never resubmits the action automatically; inside that one
+immutable action, an explicit surface may try the next bounded provider
+candidate after semantic rejection. The strict `transform/2` contract is
 implemented; the deleted Voice-direction
 `transform/1` path remains historical trace only.
 
@@ -210,7 +216,10 @@ prompt has a shape and where each scenario's judgement differs.
 
 The provider registry, credentials, endpoint parsing, and transport stay shared
 and server-only. Mutable execution state does not: each scenario owns its
-governor, deadline, cache policy, and candidate-health lane. A short repair stall
+governor, deadline, cache policy, and candidate-health lane. The governor owns
+scenario concurrency and the health of a direct adapter; an ordered pool marks
+that it already owns candidate cooldown and drain state, so the governor never
+duplicates pool health. A short repair stall
 therefore cannot reorder the candidates used for a background label, and a label
 success cannot erase repair's own cooldown. This is one provider foundation,
 not one cross-product failure domain. Its canonical external configuration uses
@@ -230,6 +239,85 @@ bounded upstream by five scenario-owned governors: label 4, repair 4, inquiry
 Direct adapter calls in tests remain intentionally outside that product
 admission boundary.
 
+The optional user-provider path is a request-local extension of this same
+foundation, not a second process-wide registry. `provider-session/4` accepts
+only an explicit test/save action, one canonical HTTPS endpoint, and an optional
+replacement key; the browser cannot choose provider, model, operation path,
+transport profile, or arbitrary request shape. `PoolTransport` owns the full
+reviewed wire profile: completion URL, authentication, serialization, accepted
+response envelope, and strict parsing. Exact official OpenAI, DeepSeek, and
+Anthropic endpoints select fixed reviewed models. A custom endpoint preserves
+the supplied safe base as its first candidate and may add only the same-origin
+`/v1` base. It performs at most three parallel, bounded model-list operations
+across those bases and two reviewed authentication formats. The registry rejects
+non-generative catalog entries, prefers a reviewed inexpensive text alias when
+present, and otherwise selects at most one stable catalog candidate per
+admitted base/wire pair. At most three short `MATTER_READY` generations then prove
+the actual model and wire before either can be sealed. The catalog heuristic is
+never authority by itself. No key-prefix inference or error-body vocabulary
+participates in selection.
+
+Custom-host model-list and completion operations pass through one closed public
+fetch boundary. It resolves the complete DNS answer set afresh, rejects the set
+if any member is private or special, and pins the TLS socket to one checked
+address while hostname SNI and certificate verification remain active.
+Redirects, credentials, fragments, queries, non-443 ports, IP literals, local
+names, and unreviewed paths fail closed. `GET /api/provider-session` performs no
+provider I/O; it only reports whether a credential exists plus its non-secret
+canonical endpoint and fixed expiry. A missing POST key can reuse the sealed key
+only at that exact canonical endpoint. Test never writes. Save verifies first
+and atomically replaces the credential only after success, so a failed edit
+preserves the previous user action.
+
+The successful profile and key are AES-256-GCM sealed in an `HttpOnly`, `Secure`,
+`SameSite=Strict` bearer cookie with a fixed 30-day lifetime; status reads do not
+extend it. A separate opaque HttpOnly removal-generation cookie orders DELETE
+against every already-started save without process memory: saves bind the
+generation they read and never write it, while DELETE rotates it and expires
+the bearer. Status exposes only the non-secret per-lease `credentialId` needed
+for an exact POST/GET save receipt. The active sealing key writes and up to
+three older keys read during rotation. The key ring is deployment-only, and the
+cookies are attached only below the normalized Matter `/api` path. Legacy v1–v3,
+generation-mismatched, duplicate, and invalid cookies fail closed and are
+reported by the zero-write status path rather than migrated ambiguously;
+explicit remove repairs damaged generation state, and a later verified save
+may replace an ordinary invalid bearer. Missing is the explicit initial
+generation so concurrent fresh status reads remain write-free and cannot erase
+an accepted action in another tab. The removal marker is `Priority=High` and the
+bearer `Priority=Low`, but priority is only eviction guidance. Copied
+bearer-plus-generation replay or selective marker eviction remains bounded by
+lease expiry/key retirement; exact active revocation requires shared durable
+state and is outside this stateless browser preference.
+
+Each model route decrypts the cookie for that request, constructs one ephemeral
+candidate, combines it with only the managed candidates authorized for that
+scenario, and then discards the plaintext key with request-local memory. Origin,
+rate, and concurrency admission happens first: refused traffic never parses a
+credential or constructs a provider adapter. A
+healthy user candidate remains first. Its opaque credential scope also owns a
+short health lane, so repeated transport failures temporarily move it behind a
+healthy managed candidate without affecting another person's lease. Provider
+transport, health, and label-cache
+identity use an opaque credential scope rather than key or endpoint text. The existing
+scenario governor's admission remains global, so a new user credential cannot
+mint a new concurrency lane. Provider health does not: the pool owns it at the
+actual managed or opaque credential candidate, and a pool settlement neither
+advances nor clears the governor's coarser direct-adapter health. The key and cookie token never enter material,
+history, local documents, routine observations, logs, health/drain keys, or answer
+cache keys. Reviewed provider/model identifiers may index disposable server
+health, but never enter material, browser status, or routine model observations.
+A saved user candidate may supply the already-public repair, label, and Inquiry
+surfaces independently of Matter's managed-provider gate. Elastic and Text Swap
+remain excluded until their separate product gate opens; configuration cannot
+promote an unreleased action.
+
+Candidate transport fallback and scenario policy stay separate. Label and
+repair have useful floors and stop after the first transport-complete answer is
+rejected. Inquiry, Elastic, and Text Swap are explicit submitted actions: the
+scenario passes a pure adjudication seam to the pool, which may try a later
+candidate inside the same immutable call and remaining deadline. A semantic
+rejection never cools a provider or changes the submitted material basis.
+
 The secondary inquiry is non-mutating and deliberately smaller than a material
 turn:
 
@@ -242,16 +330,18 @@ short question + lassoed passages, or bounded active-working projection when no 
     reopening begins with a clean exchange
 ```
 
-The canvas root owns one transient AI-operation slot. Point and Talk, an active
-Elastic adjustment or turn, and Inquiry close one another synchronously; a
-neutral lasso may coexist with Inquiry because it is an address and may be that
-request's explicit context, not yet a model operation. Inquiry captures its
-bounded basis at submit time and may settle that read-only answer across later
-material or selection changes. Closing the surface, switching AI operations,
-page exit, unmount, or a different local `{ treeId, documentEpoch }` owner
-increments client authority before a delayed promise can settle. A revoked
-answer therefore cannot render or append a record even in the render-to-effect
-interval.
+The canvas root owns one transient AI-presentation slot, not one lifetime for
+all accepted work. Point and Talk, an active Elastic adjustment, and Inquiry
+detach one another's visible controls synchronously; a neutral lasso may coexist
+with Inquiry because it is an address and may be that request's explicit
+context, not yet a model operation. Each operation owner holds at most one
+submitted job, so another gesture cannot replace paid work in that owner. An
+Inquiry captures its bounded basis at submit time and may settle that read-only
+answer across later material, selection, presentation, and temporary visibility
+changes. Page exit, unmount, or a different local `{ treeId, documentEpoch }`
+owner increments client authority before a delayed promise can settle. A
+revoked answer therefore cannot render or append a record even in the
+render-to-effect interval.
 
 Inquiry projection is bounded while it walks the working tree: it stops reading
 node text once the 64-node or 4,000-code-point wire ceiling is full instead of
@@ -392,14 +482,16 @@ their visible precedence and pointer availability. Each lifecycle owns its
 start, event, commit or cancel, and cleanup transitions. An async lifecycle also
 carries its operation identity, attempt, document, and revision basis.
 
-Pointer cancel, lost capture, unmount, and a newer interaction interrupt the
-relevant owner and clean up audio, ranges, highlights, workers, and timers.
-`visibilitychange:hidden` and `pagehide` are the same interruption boundary for
-transient capture, model workers, and material-writing requests: returning
-visible may offer a new pointer action, but never resumes or eagerly recreates
-old work. Read-only Inquiry is narrower: its bounded snapshot request may finish
-while a tab is hidden, and only page exit, explicit close, surface switch,
-unmount, or document-owner replacement revokes it.
+Pointer cancel and lost capture interrupt only work that still belongs to that
+pointer or capture. Presentation dismissal and a newer gesture retire transient
+capture, ranges, highlights, workers, and timers, but do not revoke an immutable
+request that already crossed submit. `visibilitychange:hidden` cancels live
+capture and closes material delivery; it does not discard finalized
+transcription or a submitted model request. Returning visible reopens delivery
+after global pointer-idle and exact target checks. `pagehide`, unmount, document
+owner replacement, explicit cancellation, or exact-basis conflict are terminal
+operation boundaries. Read-only Inquiry follows the same submitted-owner rule
+without a material commit.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.
 
@@ -522,12 +614,16 @@ app/
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
   api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; live gate off
+  api/provider-session/route.ts    no-store persistent provider status, explicit test/save, and removal
 
 features/matter/
-  server/harness.ts                the only place a model is awaited; one scenario contract
+  server/harness.ts                the only product-result model await; one scenario contract
   server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
   server/*-harness.ts              one scenario each: repair, label, inquiry, transform, text swap
-  server/model-pool.ts             the only place an endpoint, model name, or key appears
+  server/model-pool.ts             shared managed/request-local execution, health, and fallback
+  server/user-provider-registry.ts finite wire profiles and bounded model discovery
+  server/public-provider-fetch.ts  closed DNS-checked, address-pinned HTTPS operations
+  server/provider-session-*.ts     sealed fixed-lifetime credential and route boundary
   config/inquiry.ts                neutral inquiry bounds and current scope vocabulary
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules

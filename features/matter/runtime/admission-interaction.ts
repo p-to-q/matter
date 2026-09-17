@@ -53,6 +53,8 @@ export type AdmissionInteractionState =
   | (AttemptState & {
       readonly phase: "error";
       readonly errorCode: AdmissionErrorCode;
+      /** Stop is the submission boundary; submitted failures survive hidden UI. */
+      readonly submitted: boolean;
     });
 
 export type AdmissionInteractionEvent =
@@ -110,6 +112,13 @@ const NO_EFFECTS: readonly AdmissionInteractionEffect[] = Object.freeze([]);
 
 export function createAdmissionInteractionState(): AdmissionInteractionState {
   return IDLE;
+}
+
+/** Only live microphone phases own the exclusive pointer/audio surface. */
+export function admissionCaptureIsActive(state: AdmissionInteractionState): boolean {
+  return state.phase === "requesting" ||
+    state.phase === "recording" ||
+    state.phase === "stopping";
 }
 
 export function reduceAdmissionInteraction(
@@ -220,9 +229,17 @@ function cancel(
   return changed(IDLE, [{ type: "cancel-operation", ...identity(state), reason }]);
 }
 
-function fail(state: AttemptState, errorCode: AdmissionErrorCode): AdmissionInteractionResult {
+function fail(
+  state: Exclude<AdmissionInteractionState, { phase: "idle" } | { phase: "error" }>,
+  errorCode: AdmissionErrorCode,
+): AdmissionInteractionResult {
   return changed(
-    { ...identityAndAnchor(state), phase: "error", errorCode },
+    {
+      ...identityAndAnchor(state),
+      phase: "error",
+      errorCode,
+      submitted: state.phase !== "requesting" && state.phase !== "recording",
+    },
     [{ type: "cleanup-operation", ...identity(state), reason: "failed" }],
   );
 }

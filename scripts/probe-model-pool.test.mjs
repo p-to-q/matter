@@ -15,6 +15,7 @@ import {
   parseArguments,
   probeModelPool,
   probeGateFailures,
+  RELEASE_USABLE_SURFACES,
   REPAIR_PROMPT_VERSION,
   LABEL_PROMPT_VERSION,
   MAX_INQUIRY_ANSWER_CODE_POINTS,
@@ -527,7 +528,7 @@ test("release gate requires every Inquiry sample to contain a real answer", () =
   assert.deepEqual(probeGateFailures(rejected), []);
 });
 
-test("release profile separates pool reachability from every surface being usable", () => {
+test("release usability gate applies only to Inquiry, whose product has no floor", () => {
   const rejected = summarize([
     sample("repair", "model", null),
     sample("label", "rejected", "MODEL_REJECTED"),
@@ -535,9 +536,20 @@ test("release profile separates pool reachability from every surface being usabl
   ]);
   assert.equal(rejected.verdict, "pool-healthy");
   assert.equal(rejected.usabilityVerdict, "surface-degraded");
+  assert.deepEqual(RELEASE_USABLE_SURFACES, ["inquiry"]);
   assert.deepEqual(
-    probeGateFailures(rejected, { requiredUsableSurfaces: ["repair", "label", "inquiry"] }),
-    ["release gate requires a real label result on every call; observed 0/1."],
+    probeGateFailures(rejected, { requiredUsableSurfaces: RELEASE_USABLE_SURFACES }),
+    [],
+  );
+
+  const inquiryRejected = summarize([
+    sample("repair", "rejected", "MODEL_REJECTED"),
+    sample("label", "rejected", "MODEL_REJECTED"),
+    sample("inquiry", "rejected", "MODEL_REJECTED"),
+  ]);
+  assert.deepEqual(
+    probeGateFailures(inquiryRejected, { requiredUsableSurfaces: RELEASE_USABLE_SURFACES }),
+    ["release gate requires a real inquiry result on every call; observed 0/1."],
   );
 });
 

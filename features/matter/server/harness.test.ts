@@ -4,13 +4,19 @@ import {
   ScenarioGovernor,
   recordScenarioPerformance,
   runScenario,
+  withAdapterOwnedHealth,
   withRequestSignal,
   type MatterScenario,
   type ScenarioAdapter,
   type ScenarioCall,
   type ScenarioPerformanceObservation,
 } from "./harness";
-import { PoolDrainingError, UnusableCompletionError } from "./completion-outcome";
+import {
+  CandidateAttemptTimeoutError,
+  PoolDrainingError,
+  ScenarioPolicyError,
+  UnusableCompletionError,
+} from "./completion-outcome";
 import {
   KEEP_UNFINISHED,
   MATTER_BACKGROUND,
@@ -22,6 +28,11 @@ import {
   fence,
   fenceJson,
 } from "./prompt-spine";
+import { INQUIRY_SCENARIO } from "./inquiry-harness";
+import { LABEL_SCENARIO } from "./label-harness";
+import { REPAIR_SCENARIO } from "./repair-harness";
+import { TEXT_SWAP_SCENARIO } from "./text-swap-harness";
+import { TRANSFORM_SCENARIO } from "./transform-harness";
 
 const ECHO: MatterScenario<string, string> = Object.freeze({
   id: "matter-inquiry",
@@ -42,6 +53,22 @@ afterEach(() => {
 });
 
 describe("runScenario", () => {
+  it("freezes retry cost by the five production scenario policies", () => {
+    expect({
+      inquiry: INQUIRY_SCENARIO.rejectedCandidate,
+      transform: TRANSFORM_SCENARIO.rejectedCandidate,
+      textSwap: TEXT_SWAP_SCENARIO.rejectedCandidate,
+      label: LABEL_SCENARIO.rejectedCandidate,
+      repair: REPAIR_SCENARIO.rejectedCandidate,
+    }).toEqual({
+      inquiry: "continue-if-budget",
+      transform: "continue-if-budget",
+      textSwap: "continue-if-budget",
+      label: "settle-floor",
+      repair: "settle-floor",
+    });
+  });
+
   it("passes the compiled prompt, locale, and budget to the adapter", async () => {
     const seen: ScenarioCall[] = [];
     const outcome = await runScenario(ECHO, "hello", async (call) => {
@@ -89,6 +116,7 @@ describe("runScenario", () => {
       candidateFailures: 1,
       candidateTruncations: 0,
       candidateRefusals: 0,
+      candidateRejections: 0,
       candidateUnknownTerminators: 1,
       candidateMissingTerminators: 0,
     });
@@ -175,6 +203,7 @@ describe("runScenario", () => {
       candidateFailures: 0,
       candidateTruncations: 0,
       candidateRefusals: 0,
+      candidateRejections: 0,
       candidateUnknownTerminators: 0,
       candidateMissingTerminators: 0,
       material: "MATERIAL_SENTINEL",
@@ -188,6 +217,7 @@ describe("runScenario", () => {
       + '{"scenario":"matter-inquiry","outcome":"answered","elapsedMs":128,'
       + '"candidateTelemetry":"pool","candidateAttempts":2,"candidateTimeouts":1,'
       + '"candidateFailures":0,"candidateTruncations":0,"candidateRefusals":0,'
+      + '"candidateRejections":0,'
       + '"candidateUnknownTerminators":0,"candidateMissingTerminators":0}',
     );
     expect(line).not.toContain("MATERIAL_SENTINEL");
@@ -229,6 +259,28 @@ describe("runScenario", () => {
     );
     expect(outcome).toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
     expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("keeps an adapter-owned deadline outside shared scenario health", async () => {
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 5_000 };
+    const hanging = withAdapterOwnedHealth(() => new Promise(() => undefined));
+
+    await expect(runScenario(ECHO, "request-owned", hanging, governor, { limits }))
+      .resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+    expect(governor.cooling(Date.now())).toBe(false);
+  });
+
+  it("classifies an adapter-owned final-attempt deadline independently of timer order", async () => {
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 5_000 };
+    const timedOut = withAdapterOwnedHealth(async () => {
+      throw new CandidateAttemptTimeoutError();
+    });
+
+    await expect(runScenario(ECHO, "request-owned", timedOut, governor, { limits }))
+      .resolves.toEqual({ ok: false, fallback: "MODEL_TIMEOUT" });
+    expect(governor.cooling(Date.now())).toBe(false);
   });
 
   it("lets a caller shorten a scenario's deadline but never lengthen it", async () => {
@@ -334,6 +386,40 @@ describe("runScenario", () => {
     expect(calls).toBe(3);
   });
 
+  it.each([
+    ["answer", () => withAdapterOwnedHealth(answers("ok"))],
+    ["semantic rejection", () => withAdapterOwnedHealth(answers(""))],
+    ["local policy error", () => withAdapterOwnedHealth(async () => {
+      throw new ScenarioPolicyError();
+    })],
+  ])("does not let an adapter-owned %s clear shared failure evidence", async (_name, owned) => {
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 2, cooldownMs: 5_000 };
+    const failing: ScenarioAdapter = async () => { throw new Error("shared relay down"); };
+
+    await runScenario(ECHO, "shared-first", failing, governor, { limits });
+    await runScenario(ECHO, "owned", owned(), governor, { limits });
+    await runScenario(ECHO, "shared-second", failing, governor, { limits });
+    expect(governor.cooling(Date.now())).toBe(true);
+  });
+
+  it("lets adapter-owned health bypass a shared cooldown without clearing it", async () => {
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 5_000 };
+    const failing: ScenarioAdapter = async () => { throw new Error("shared relay down"); };
+    let ownedCalls = 0;
+    const owned = withAdapterOwnedHealth(async () => {
+      ownedCalls += 1;
+      return { text: "ok" };
+    });
+
+    await runScenario(ECHO, "shared", failing, governor, { limits });
+    await expect(runScenario(ECHO, "owned", owned, governor, { limits }))
+      .resolves.toEqual({ ok: true, value: "ok" });
+    expect(ownedCalls).toBe(1);
+    expect(governor.cooling(Date.now())).toBe(true);
+  });
+
   it("gives the slot back when the scenario itself throws before the call", async () => {
     const broken: MatterScenario<string, string> = {
       ...ECHO,
@@ -374,6 +460,18 @@ describe("runScenario", () => {
     };
     expect(await runScenario(broken, "a", answers("ok"), new ScenarioGovernor()))
       .toEqual({ ok: false, fallback: "MODEL_UNAVAILABLE" });
+  });
+
+  it("clears stale provider failure evidence when only local scenario policy fails", async () => {
+    const governor = new ScenarioGovernor();
+    const limits = { ...DEFAULT_GOVERNOR_LIMITS, failuresBeforeCooldown: 2, cooldownMs: 5_000 };
+    const failing: ScenarioAdapter = async () => { throw new Error("relay down"); };
+    const policyDefect: ScenarioAdapter = async () => { throw new ScenarioPolicyError(); };
+
+    await runScenario(ECHO, "first", failing, governor, { limits });
+    await runScenario(ECHO, "policy", policyDefect, governor, { limits });
+    await runScenario(ECHO, "second", failing, governor, { limits });
+    expect(governor.cooling(Date.now())).toBe(false);
   });
 
   it("never lets a provider error reach the caller", async () => {

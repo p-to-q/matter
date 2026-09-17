@@ -290,6 +290,9 @@
 
 .popoverAnchor {
   position: relative;
+  display: flex;
+  height: 20px;
+  align-items: center;
 }
 
 .popover {
@@ -535,7 +538,11 @@
   top: 50%;
   left: 50%;
   width: min(480px, calc(100% - 48px));
+  max-height: calc(100% - 24px);
   border: 1px solid var(--chrome-text);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: color-mix(in srgb, var(--chrome-sheet) 78%, transparent);
   box-shadow: 0 25px 50px -12px rgb(0 0 0 / 25%);
   color: var(--chrome-text);
@@ -568,6 +575,209 @@
 
 .dialogBody p + p {
   margin-top: 12px;
+}
+
+.apiDialog {
+  width: min(408px, calc(100% - 48px));
+  background: color-mix(in srgb, var(--chrome-sheet) 94%, transparent);
+}
+
+.apiDialog .dialogHeader {
+  min-height: 52px;
+}
+
+.apiDialog .dialogHeader h2 {
+  font-size: 13px;
+  letter-spacing: .8px;
+  text-transform: none;
+}
+
+.apiForm {
+  display: grid;
+  gap: 15px;
+  padding: 17px 16px 16px;
+  color: var(--chrome-muted);
+  animation: apiFormIn 140ms ease-out;
+}
+
+.apiForm label {
+  color: var(--chrome-muted);
+  font: 500 12px/1.35 var(--mono);
+  letter-spacing: .25px;
+}
+
+.apiField {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.apiForm input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--chrome-line);
+  border-radius: 4px;
+  outline: none;
+  background: color-mix(in srgb, var(--chrome-sheet) 72%, transparent);
+  color: var(--chrome-text);
+  font: 400 13.5px/1.4 var(--mono);
+  transition: border-color 120ms ease;
+}
+
+.apiForm input::placeholder {
+  color: var(--chrome-muted);
+  opacity: .56;
+}
+
+.apiForm input:focus-visible {
+  border-color: var(--chrome-text);
+  outline: 0;
+}
+
+.apiForm input:disabled,
+.apiForm button:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+.apiPrivacy,
+.apiFieldError,
+.apiFieldHint,
+.apiState p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--mono);
+}
+
+.apiPrivacy {
+  color: var(--chrome-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.apiFieldHint,
+.apiFieldError,
+.apiState p {
+  color: var(--chrome-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.apiState p[role="alert"] {
+  color: var(--chrome-text);
+}
+
+.apiFieldError {
+  color: var(--chrome-text);
+}
+
+.apiForm input[aria-invalid="true"] {
+  border-color: var(--chrome-text);
+}
+
+.apiStateRow {
+  display: flex;
+  min-height: 18px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -3px;
+}
+
+.apiState {
+  min-width: 0;
+  flex: 1;
+}
+
+.apiRemove {
+  min-height: 28px;
+  flex: 0 0 auto;
+  padding: 4px 0;
+  color: var(--chrome-muted) !important;
+  cursor: pointer;
+  font: 500 10.5px/1.2 var(--mono) !important;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.apiRemoveActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.apiRemove:hover:not(:disabled) {
+  color: var(--chrome-text) !important;
+}
+
+.apiFooter {
+  display: grid;
+  gap: 11px;
+  padding-top: 1px;
+}
+
+.apiActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.apiActions button {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  cursor: pointer;
+  font: 500 11px/1.2 var(--mono);
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.apiTest {
+  border: 1px solid transparent !important;
+  color: var(--chrome-muted) !important;
+}
+
+.apiTest:hover:not(:disabled),
+.apiTest:focus-visible {
+  border-color: var(--chrome-text);
+  color: var(--chrome-text) !important;
+}
+
+.apiSave {
+  border: 1px solid var(--chrome-line) !important;
+}
+
+.apiSave:not(:disabled) {
+  background: transparent !important;
+  color: var(--chrome-text) !important;
+}
+
+.apiSave:hover:not(:disabled) {
+  border-color: var(--chrome-primary) !important;
+  background: var(--chrome-primary) !important;
+  color: var(--chrome-primary-fg) !important;
+}
+
+@media (pointer: coarse), (max-width: 767px) {
+  .apiForm input,
+  .apiActions button,
+  .apiRemove {
+    min-height: 48px;
+  }
+
+  .apiForm input {
+    font-size: 16px;
+  }
+}
+
+@keyframes apiFormIn {
+  from { opacity: .9; }
+  to { opacity: 1; }
 }
 
 .inquiryAnchor {
@@ -845,6 +1055,15 @@
   }
 }
 
+/* A short landscape viewport makes the fixed material tool rail nearly as tall
+   as the paper. Keep the menu immediately to its left instead of letting the
+   two independent 48px targets overlap. */
+@media (max-width: 767px) and (max-height: 480px) {
+  .mobileTrigger {
+    right: 98px;
+  }
+}
+
 @media (min-width: 768px) {
   .mobileSheet {
     display: none;
@@ -871,9 +1090,15 @@
   .popover,
   .mobileSheet,
   .inquiry,
+  .apiForm,
   .inquiryTurn,
   .inquiryLoading span {
     animation: none;
+  }
+
+  .apiForm input,
+  .apiActions button {
+    transition: none;
   }
 
   .inquiry[data-inquiry-phase="listening"] .inquiryStatus::before {
@@ -888,6 +1113,11 @@
 }
 
 @media (forced-colors: active) {
+  .apiForm input:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
   .topRight::before,
   .topRight::after,
   .bottomRight::before,

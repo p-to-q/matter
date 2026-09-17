@@ -28,6 +28,7 @@ export type TransformRejection = ExpandInPlacePolicyCode;
 export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> = Object.freeze({
   id: "matter-transform",
   promptVersion: TRANSFORM_PROMPT_VERSION,
+  rejectedCandidate: "continue-if-budget",
   locale: (input) => input.locale,
   compile: compileTransformPrompt,
   budget: (input) => Object.freeze({

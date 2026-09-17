@@ -93,8 +93,10 @@ They never enter the store, tree, history, or a retry cache. Cancel invalidates
 the token and releases recorder handlers, chunks, tracks, optional meter,
 timers, and fetch. Since microphone permission cannot be aborted reliably, a
 stream that resolves after cancellation is immediately stopped. Stopping waits
-for the final `dataavailable` before using the recording; `timeslice` is never a
-duration clock.
+for the final `dataavailable` before using the recording. A four-second
+active-page stop-watchdog budget turns a browser that never publishes its
+terminal `stop` event into a recoverable recording failure and releases the
+stream; `timeslice` is never a duration clock.
 
 React does not interpret these effects directly. A small Matter-specific driver
 serializes reducer events, owns the operation registry, and disposes idempotently.
@@ -273,29 +275,34 @@ live partials without the model download. The local model provides final text,
 not real-time partial hypotheses, and lower-powered devices may take noticeably
 longer to settle.
 
-A cancelled queued local request is explicitly skipped by that worker. If
-Whisper has already started inference, the browser has no safe interrupt for
-that model call, so cancellation retires the worker and invalidates every late
-message from its lease; the next request lazily creates a fresh worker. This
-prevents a dismissed utterance from consuming the next person's turn while
-keeping all audio on-device and transient.
+A cancelled queued local request is explicitly skipped by that worker. If an
+explicit cancellation, document replacement, or page exit arrives after Whisper
+has started inference, the browser has no safe interrupt for that model call, so
+the worker lease is retired and every late message from it is invalidated; the
+next request lazily creates a fresh worker. This prevents a revoked utterance
+from consuming the next person's turn while keeping all audio on-device and
+transient.
 
-The same lease now ends on `visibilitychange:hidden` and `pagehide`. Admission,
-Ask Matter dictation, and any related transcription or repair request cancel at
-that boundary; an in-memory Whisper worker is terminated even after a successful
-turn so its model memory does not remain resident through a background session.
-Returning visible never starts capture, constructs a worker, or reloads model
-assets. Cached immutable runtime/model bytes remain the browser's disposable
-asset cache, never a cache of audio, transcript, question, or answer.
+`visibilitychange:hidden` ends live microphone capture and draft-only dictation,
+but it does not revoke a finalized Admission or Point Talk transcript that has
+already crossed submit. That bounded inference may finish in the existing local
+worker; any material write then waits until the page is visible, no pointer is
+active, and its exact node is rendered. `pagehide`, document replacement,
+explicit cancellation, and owner disposal still retire the worker and reject
+late messages. Returning visible never starts capture, constructs a worker, or
+reloads model assets by itself; it may only release an already-retained result.
+Cached immutable runtime/model bytes remain the browser's disposable asset
+cache, never a cache of audio, transcript, question, or answer.
 
 ## Future managed real-time correction
 
-The current preview does not mint a credential or open a configurable provider
-session: its real-time partials come only from the browser-managed Web Speech
-capability. A later managed-provider slice may mint a short-lived, origin-bound
-credential through one same-origin endpoint, then let the browser establish the
-media session directly. The application must never receive a permanent API key
-or forward raw audio.
+The current API setting leases a bounded text provider only; it neither mints a
+voice credential nor sends raw audio to that provider. Real-time partials still
+come only from the browser-managed Web Speech capability. A later managed voice
+slice may mint a short-lived, origin-bound credential through one same-origin
+endpoint, then let the browser establish the media session directly. Matter's
+application server must never receive a permanent voice credential or forward
+raw audio.
 
 Partial hypotheses are transient interaction feedback, keyed by interaction id,
 attempt, and a monotonic sequence. They are never stored in `ThoughtTree`,

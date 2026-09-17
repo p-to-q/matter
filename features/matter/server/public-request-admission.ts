@@ -16,6 +16,20 @@ const DEVELOPMENT_ADMISSION = Object.freeze({
 });
 
 /**
+ * Origin-only perimeter for cheap revocation mutations. A person must still be
+ * able to clear a credential after exhausting an expensive operation lane.
+ */
+export function admitPublicMutationOrigin(
+  request: Request,
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): PublicRequestAdmission {
+  if (environment.NODE_ENV !== "production") return DEVELOPMENT_ADMISSION;
+  return originAllowed(request, environment)
+    ? DEVELOPMENT_ADMISSION
+    : refuse(request, "ORIGIN");
+}
+
+/**
  * A process-local public-route perimeter. Deployment infrastructure remains
  * responsible for distributed limits because serverless instances share no RAM.
  */

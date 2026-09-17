@@ -2,7 +2,8 @@
 
 Modules: `features/matter/server/harness.ts`, `prompt-spine.ts`,
 `repair-harness.ts`, `label-harness.ts`, `inquiry-harness.ts`,
-`transform-harness.ts`, `text-swap-harness.ts`, `model-pool.ts`
+`transform-harness.ts`, `text-swap-harness.ts`, `model-pool.ts`,
+`user-provider-registry.ts`
 
 ## Problem
 
@@ -37,11 +38,15 @@ a queued call only spends a deadline someone is already waiting out.
 
 ## Chosen
 
-**A scenario, not an integration.** Each surface is a `MatterScenario`: an id, a
-frozen prompt version, a compiled prompt, a budget, and an adjudicator.
-`runScenario` is the only function in the codebase that awaits a provider, so
-the deadline, the shedding, the backoff, and the refusal to leak a provider's
-identity exist once.
+**A scenario, not an integration.** Each material-facing surface is a
+`MatterScenario`: an id, a frozen prompt version, a compiled prompt, a budget,
+and an adjudicator. `runScenario` is the only product-result path that awaits a
+provider, so deadline, shedding, backoff, and the refusal to leak provider
+identity exist once. The single exception is the settings connection probe: it
+contains no material or user question, requires `MATTER_READY` as its only
+non-whitespace output, uses the same
+bounded transport/parser, and can issue a credential lease but no product
+answer, plan, record, or tree command.
 
 ```text
 input → scenario.compile      one prompt, from the shared spine
@@ -216,13 +221,20 @@ The boundary is fail-closed for every explicit terminator. Known complete values
 may return text; truncation, guardrail/refusal, tool/continuation, conflicting
 fields, and explicit unknown values cannot. A missing field remains a counted
 compatibility path while deployed relays are measured. Production receipts keep
-only closed counts — attempt, timeout, failure, truncation, refusal, unknown, and
-missing — never the relay's raw vocabulary.
+only closed counts — attempt, timeout, failure, truncation, refusal, unknown,
+missing, and explicit-action scenario rejection — never the relay's raw
+vocabulary.
 
-**One provider foundation, five execution lanes.** `model-pool.ts` is the only
-file where an endpoint, a model name, or a key appears. Each scenario has its
-own server-only authority switch, so permission is granted per surface rather
-than per credential. Existing deployed switches include
+**One provider foundation, five execution lanes.** `model-pool.ts` owns the
+managed registry and execution machinery; `user-provider-registry.ts` owns the
+small reviewed wire serializers and bounded model discovery. Both remain
+server-only. A user
+key exists only inside the sealed-session boundary and one request-local pool
+candidate; key text never enters pool identity, cache identity, observation, or
+logs. Product permission remains per surface rather than per credential. Repair,
+label, and Inquiry are already-public surfaces, so a verified user lease may
+supply them even when Matter's managed adapter is disabled. Existing managed
+switches include
 `MATTER_LABEL_ADAPTER`, `MATTER_REPAIR_ADAPTER`, and `MATTER_INQUIRY_ADAPTER`;
 Elastic and Text Swap require distinct live gates rather than inheriting one of
 them or each other. New deployments use the scenario-neutral `MATTER_MODEL_*`
@@ -233,6 +245,26 @@ Mutable candidate health is keyed by scenario, because a stall is a judgement
 made against that scenario's deadline: a relay that is too slow for foreground
 repair may still be healthy for a background label. Governors, cache policy,
 and adjudication are scenario-local; health follows the same ownership boundary.
+A healthy sealed user candidate is prepended without mutating either registry.
+Its opaque credential scope separates health and label-cache ownership, while
+the scenario's existing governor continues to share one concurrency lane across
+all credentials. Pool adapters own their candidate cooldowns and drain leases,
+so the governor does not duplicate that health in either direction: one user's
+failure cannot cool another credential, and one user's success cannot erase
+managed failure evidence. Repeated transport failure cools only that candidate
+scope and temporarily places it after a healthy managed candidate. Cooling is
+an ordering signal, not a veto: if every candidate is cooling, a new bounded
+action still tries them in order so a recovered provider can honor the person's
+action. Only an unresolved drain lease is skipped, because duplicating work that
+still exists would spend without increasing the chance of delivery.
+
+Adjudication remains scenario-owned even when ordered fallback needs its result.
+Label and repair settle their useful floor after the first transport-complete
+answer is rejected. Inquiry, Elastic, and Text Swap are explicit submitted
+actions, so the scenario may pass a pure candidate-adjudication callback to the
+pool. The pool can then try a later candidate inside the same call and deadline;
+it never learns material semantics, changes the immutable input, or cools a
+provider for a semantic rejection.
 
 Every current narrow scenario asks for visible output without hidden reasoning,
 but `enable_thinking` is not part of the OpenAI-compatible base contract. A

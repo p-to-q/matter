@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { TRANSCRIPT_REPAIR_PROMPT_VERSION } from "../material/transcript-repair";
 import { PROTOCOL_VERSION } from "../tree/model";
 import {

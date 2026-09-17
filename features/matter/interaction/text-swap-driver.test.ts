@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import type { TextSwapBasis } from "../runtime/text-swap-interaction";
-import type {
-  VoiceCallbacks,
-  VoiceOperation,
-  VoicePort,
-  VoiceRecording,
+import {
+  VoiceError,
+  type VoiceCallbacks,
+  type VoiceOperation,
+  type VoicePort,
+  type VoiceRecording,
 } from "./voice-port";
 import { TextSwapClientError } from "./text-swap-client";
 import {
@@ -253,9 +254,32 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState()).toMatchObject({
       phase: "error",
       errorCode: "TRANSCRIPTION_FAILED",
+      submitted: true,
     });
     expect(h.buildEnvelope).not.toHaveBeenCalled();
     expect(h.request).not.toHaveBeenCalled();
+  });
+
+  it("starts a fresh voice attempt after a retryable capture failure", async () => {
+    const h = harness();
+    const first = await reachRecording(h);
+    h.voice.starts[0]?.callbacks.onError?.(new VoiceError("RECORDING_FAILED"));
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "RECORDING_FAILED",
+      retryable: true,
+      submitted: false,
+    });
+    expect(h.driver.getState()).not.toHaveProperty("direction");
+    expect(h.driver.retry()).toBe(false);
+    expect(h.driver.startRecording()).toBe(true);
+    expect(h.voice.starts).toHaveLength(2);
+    expect(h.voice.starts[1]?.operation).toEqual({
+      interactionId: first.interactionId,
+      attempt: first.attempt + 1,
+    });
   });
 
   it("accepts a future typed carrier through the same bounded direction state", () => {
@@ -315,7 +339,7 @@ describe("TextSwapDriver", () => {
     expect(h.request).not.toHaveBeenCalled();
   });
 
-  it("releases a revoked shared Voice lease and makes its transcription inert", async () => {
+  it("ignores late capture revocation after Voice submit is finalized", async () => {
     let resolveTranscript!: (value: {
       protocolVersion: "0.2";
       interactionId: string;
@@ -338,8 +362,8 @@ describe("TextSwapDriver", () => {
     expect(h.driver.getState().phase).toBe("transcribing");
 
     h.voice.starts[0]?.callbacks.onOwnershipRevoked?.(operation);
-    expect(h.driver.getState()).toEqual({ phase: "idle" });
-    expect(observedSignal?.aborted).toBe(true);
+    expect(h.driver.getState().phase).toBe("transcribing");
+    expect(observedSignal?.aborted).toBe(false);
     resolveTranscript({
       protocolVersion: "0.2",
       interactionId: operation.interactionId,
@@ -348,7 +372,29 @@ describe("TextSwapDriver", () => {
     });
     await settle();
 
-    expect(h.request).not.toHaveBeenCalled();
+    expect(h.request).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Voice submit while the recorder flushes behind a hidden surface", async () => {
+    const h = harness();
+    const operation = await reachRecording(h);
+    h.driver.stopRecording();
+    expect(h.driver.getState()).toMatchObject({ phase: "transcribing", recorderSettled: false });
+
+    expect(h.driver.detachPresentation()).toBe(true);
+    h.driver.suspendCapture();
+    h.voice.starts[0]?.callbacks.onOwnershipRevoked?.(operation);
+
+    expect(h.driver.getState()).toMatchObject({ phase: "transcribing", recorderSettled: false });
+    expect(h.voice.cancel).not.toHaveBeenCalled();
+    h.voice.finish(operation, "Use a calmer rhythm");
+    await settle(30);
+    expect(h.commit).not.toHaveBeenCalled();
+
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.driver.getState().phase).toBe("success");
   });
 
   it("aborts a pending request on selection loss and gives its late plan no commit authority", async () => {
@@ -392,6 +438,7 @@ describe("TextSwapDriver", () => {
       retryable: true,
       direction: "Use a calmer rhythm",
       requestId: "text_swap_request_1",
+      submitted: true,
     });
     expect(h.driver.retry()).toBe(true);
     await settle();
@@ -415,7 +462,72 @@ describe("TextSwapDriver", () => {
     expect(h.onCommitted).not.toHaveBeenCalled();
   });
 
-  it("a new action aborts the old request and revokes its late plan", async () => {
+  it("detaches submitted work from presentation and still commits its exact basis", async () => {
+    let resolveRequest!: (plan: TextSwapPlan) => void;
+    const h = harness({
+      request: () => new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.acceptDirection("Use a calmer rhythm");
+    h.driver.submit();
+    h.driver.updateScope({
+      ...SCOPE,
+      enabled: false,
+      selection: null,
+      lineage: null,
+      interactionScopeKey: "other-presentation",
+      materialSelection: BASIS.selection,
+      materialLineage: BASIS.lineage,
+    });
+    expect(h.driver.detachPresentation()).toBe(true);
+    resolveRequest(plan(envelope("text_swap_request_1")));
+    await settle();
+
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.driver.getState().phase).toBe("success");
+  });
+
+  it("releases an unsubmitted presentation instead of retaining an empty owner", () => {
+    const h = harness();
+    expect(h.driver.enter(BASIS)).toBe(true);
+
+    expect(h.driver.detachPresentation()).toBe(false);
+
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+  });
+
+  it("holds a resolved plan until the visible idle delivery window opens", async () => {
+    const h = harness();
+    h.driver.setDeliveryWindowOpen(false);
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.acceptDirection("Use a calmer rhythm");
+    h.driver.submit();
+    await settle();
+
+    expect(h.driver.getState().phase).toBe("pending");
+    expect(h.commit).not.toHaveBeenCalled();
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds a resolved plan while the exact target is not rendered", async () => {
+    const h = harness();
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: false });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.acceptDirection("Use a calmer rhythm");
+    h.driver.submit();
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: true });
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a new action instead of replacing a submitted request", async () => {
     let resolveRequest!: (plan: TextSwapPlan) => void;
     const observedSignal: { current?: AbortSignal } = {};
     const h = harness({
@@ -430,13 +542,13 @@ describe("TextSwapDriver", () => {
     h.driver.acceptDirection("Use a calmer rhythm");
     h.driver.submit();
 
-    expect(h.driver.enter(BASIS)).toBe(true);
-    expect(observedSignal.current?.aborted).toBe(true);
+    expect(h.driver.enter(BASIS)).toBe(false);
+    expect(observedSignal.current?.aborted).toBe(false);
     resolveRequest(plan(envelope("text_swap_request_1")));
     await settle();
 
-    expect(h.driver.getState().phase).toBe("eligible");
-    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.driver.getState().phase).toBe("success");
+    expect(h.commit).toHaveBeenCalledTimes(1);
   });
 
   it("survives Strict Mode retain replay and disposes every owned resource once", async () => {

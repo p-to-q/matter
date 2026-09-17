@@ -2,6 +2,19 @@ import { defineConfig, devices } from "@playwright/test";
 
 const localTranscriptionReceipt = process.env.MATTER_E2E_LOCAL_TRANSCRIPTION === "true";
 const fakeAudioPath = process.env.MATTER_E2E_FAKE_AUDIO_PATH?.trim();
+const requestedPort = Number(process.env.MATTER_E2E_PORT ?? "3100");
+if (!Number.isSafeInteger(requestedPort) || requestedPort < 1_024 || requestedPort > 65_535) {
+  throw new Error("MATTER_E2E_PORT must be an integer between 1024 and 65535.");
+}
+const requestedServerTimeoutMs = Number(process.env.MATTER_E2E_SERVER_TIMEOUT_MS ?? "60000");
+if (
+  !Number.isSafeInteger(requestedServerTimeoutMs) ||
+  requestedServerTimeoutMs < 10_000 ||
+  requestedServerTimeoutMs > 10 * 60_000
+) {
+  throw new Error("MATTER_E2E_SERVER_TIMEOUT_MS must be an integer from 10000 to 600000.");
+}
+const localOrigin = `http://127.0.0.1:${requestedPort}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -13,7 +26,7 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: "line",
   use: {
-    baseURL: "http://127.0.0.1:3100/matter",
+    baseURL: `${localOrigin}/matter`,
     trace: "on-first-retry",
   },
   projects: [
@@ -35,7 +48,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1 --port 3100",
+    command: `npm run dev -- --hostname 127.0.0.1 --port ${requestedPort}`,
     env: {
       ...process.env,
       MATTER_BASE_PATH: "/matter",
@@ -58,12 +71,12 @@ export default defineConfig({
         : "false",
       MATTER_NEXT_DIST_DIR: ".next-e2e",
     },
-    url: "http://127.0.0.1:3100/matter",
+    url: `${localOrigin}/matter`,
     reuseExistingServer: false,
     // SIGTERM, not a hard kill: the command runs the server behind an `npm run`
     // wrapper, and killing the wrapper outright orphans the server it started,
     // which then holds the port for every later run.
     gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
-    timeout: 60_000,
+    timeout: requestedServerTimeoutMs,
   },
 });

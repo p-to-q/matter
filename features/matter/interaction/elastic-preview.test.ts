@@ -6,6 +6,7 @@ import {
   projectElasticPreview,
   resolveElasticLayoutReceipt,
 } from "./elastic-preview";
+import { materialAddressOutline } from "./material-address-outline";
 
 const stepped = [
   { x: 100, y: 200, width: 120, height: 20 },
@@ -13,6 +14,17 @@ const stepped = [
 ] as const;
 
 describe("elastic preview geometry", () => {
+  function expectCuesOnOwnedBoundaries(
+    preview: NonNullable<ReturnType<typeof elasticPreviewGeometry>>,
+  ): void {
+    const outline = materialAddressOutline(preview.addressProjection);
+    expect(outline).not.toBeNull();
+    const topCenter = (outline!.topBoundary.left + outline!.topBoundary.right) / 2;
+    const bottomCenter = (outline!.bottomBoundary.left + outline!.bottomBoundary.right) / 2;
+    expect((preview.topHandle.x1 + preview.topHandle.x2) / 2).toBeCloseTo(topCenter, 5);
+    expect((preview.bottomHandle.x1 + preview.bottomHandle.x2) / 2).toBeCloseTo(bottomCenter, 5);
+  }
+
   it("groups same-line fragments and anchors the seam cue and lower grip", () => {
     const rects = [
       { x: 100, y: 200, width: 30, height: 20 },
@@ -36,6 +48,49 @@ describe("elastic preview geometry", () => {
     expect(preview.addressProjection.rows).toHaveLength(1);
     expect(preview.topHandle.x1).toBe(preview.bottomHandle.x1);
     expect(preview.topHandle.x2).toBe(preview.bottomHandle.x2);
+  });
+
+  it.each([
+    { amount: 0, active: null, last: null, direction: "neutral" },
+    { amount: .5, active: "top", last: "top", direction: "slot-then-selection" },
+    { amount: .5, active: "bottom", last: "bottom", direction: "selection-then-slot" },
+  ] as const)(
+    "centres neutral and $direction cues on the exact first and last outline edges",
+    ({ amount, active, last }) => {
+      const preview = elasticPreviewGeometry(
+        stepped,
+        amount,
+        undefined,
+        { left: 80, top: 180, right: 260, bottom: 420 },
+        active,
+        last,
+      );
+      expect(preview).not.toBeNull();
+      expectCuesOnOwnedBoundaries(preview!);
+
+      if (amount > 0) {
+        const topCenter = (preview!.topHandle.x1 + preview!.topHandle.x2) / 2;
+        const bottomCenter = (preview!.bottomHandle.x1 + preview!.bottomHandle.x2) / 2;
+        // An attached slot may widen only its own terminal edge. The two cues
+        // are not forced onto a shared column axis.
+        if (active === "top") expect(topCenter).not.toBe(bottomCenter);
+        else expect(bottomCenter).not.toBe(topCenter);
+      }
+    },
+  );
+
+  it("keeps RTL cues centred on their own physical boundary segments", () => {
+    const source = prepareElasticPreviewSource(
+      stepped,
+      { left: 80, top: 180, right: 260, bottom: 420 },
+      undefined,
+      "rtl",
+    );
+    expect(source).not.toBeNull();
+    const preview = projectElasticPreview(source!, .5, undefined, "bottom", "bottom");
+    expect(preview).not.toBeNull();
+    expect(preview!.addressProjection.textDirection).toBe("rtl");
+    expectCuesOnOwnedBoundaries(preview!);
   });
 
   it("moves only the lower grip down for the shared degree", () => {
@@ -81,6 +136,23 @@ describe("elastic preview geometry", () => {
     expect(bottom.maximumDepth).toBe(ELASTIC_PREVIEW_METRICS.maximumExpansionDepth);
     expect(bottom.pocketDepth).toBe(ELASTIC_PREVIEW_METRICS.maximumExpansionDepth);
     expect(bottom.topHandle.x1).toBeGreaterThanOrEqual(ELASTIC_PREVIEW_METRICS.handleHalfWidth - 11);
+  });
+
+  it("clamps a narrow-viewport hit target without moving its visible cue off the outline", () => {
+    const viewport = { left: 112, top: 0, right: 148, bottom: 480 };
+    const preview = elasticPreviewGeometry(
+      stepped,
+      0,
+      viewport,
+      { left: 100, top: 180, right: 220, bottom: 360 },
+    );
+    expect(preview).not.toBeNull();
+    expectCuesOnOwnedBoundaries(preview!);
+    expect(preview!.topControlCenter).toBe(preview!.bottomControlCenter);
+    expect(preview!.topControlCenter).toBe((viewport.left + viewport.right) / 2);
+    expect(preview!.topControlCenter).not.toBe(
+      (preview!.topHandle.x1 + preview!.topHandle.x2) / 2,
+    );
   });
 
   it("keeps the full coarse lower-grip target inside the viewport", () => {

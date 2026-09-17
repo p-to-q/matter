@@ -27,4 +27,10 @@ describe("material address foundation", () => {
     expect(rooted).not.toContain("selectedText}`");
     expect(rooted).not.toContain("selectedText}:`");
   });
+
+  it("locks the canvas only while Voice still owns live capture", () => {
+    expect(rooted).toContain("admissionCaptureIsActive(props.admission.state)");
+    expect(rooted).toContain("persistenceLoading || admissionCapturePending");
+    expect(rooted).toContain('props.admission.state.phase === "idle" || props.admission.state.phase === "recording"');
+  });
 });

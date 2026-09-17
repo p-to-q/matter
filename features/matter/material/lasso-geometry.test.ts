@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   LASSO_THRESHOLDS,
   analyzeLassoPath,
+  compactLassoPath,
   lassoClickIntent,
   lassoClosureIntent,
   lassoHitsRectFragment,
@@ -28,6 +29,8 @@ describe("lasso path preparation", () => {
       minimumPolygonArea: 36,
       sampleDistance: 4,
       maximumPointCount: 256,
+      maximumCapturedPointCount: 4096,
+      maximumCompactionError: 1.5,
       closureNearDistance: 32,
       closureEarlyArcLength: 12,
       closureMinimumAngleDegrees: 45,
@@ -55,15 +58,47 @@ describe("lasso path preparation", () => {
     ]);
   });
 
-  it("keeps the accepted prefix stable at the cap and reserves only the endpoint slot", () => {
-    const raw = Array.from({ length: 400 }, (_, index) => ({ x: index * 4, y: index % 7 }));
-    const before = sampleLassoPath(raw.slice(0, 300))!;
-    const after = sampleLassoPath(raw)!;
-    expect(before).toHaveLength(LASSO_THRESHOLDS.maximumPointCount);
-    expect(after).toHaveLength(LASSO_THRESHOLDS.maximumPointCount);
-    expect(after.slice(0, -1)).toEqual(before.slice(0, -1));
-    expect(before.at(-1)).toEqual(raw[299]);
-    expect(after.at(-1)).toEqual(raw.at(-1));
+  it("compacts the complete path inside a bounded error and preserves its endpoint", () => {
+    const raw = Array.from({ length: 2049 }, (_, index) => {
+      const angle = index / 2048 * Math.PI * 2;
+      return { x: 500 + Math.cos(angle) * 400, y: 500 + Math.sin(angle) * 320 };
+    });
+    const compacted = compactLassoPath(raw);
+    expect(compacted.kind).toBe("compacted");
+    if (compacted.kind !== "compacted") throw new Error("path did not compact");
+    expect(compacted.points.length).toBeLessThanOrEqual(LASSO_THRESHOLDS.maximumPointCount);
+    expect(compacted.points.at(-1)).toEqual(raw.at(-1));
+    expect(compacted.points[0]).toEqual(raw[0]);
+    expect(Object.isFrozen(compacted.points)).toBe(true);
+
+    const accepted = Array.from({ length: 600 }, (_, index) => ({
+      x: index * 4,
+      y: 100 + Math.sin(index / 18) * 40,
+    }));
+    const bounded = compactLassoPath(accepted);
+    expect(bounded.kind).toBe("compacted");
+    if (bounded.kind !== "compacted") throw new Error("accepted path saturated");
+    const maximumError = Math.max(...accepted.map((point) =>
+      Math.sqrt(distanceToPolylineSquared(point, bounded.points))
+    ));
+    expect(maximumError).toBeLessThanOrEqual(LASSO_THRESHOLDS.maximumCompactionError + 1e-9);
+  });
+
+  it("saturates instead of replacing an accurate winding tail with a chord", () => {
+    const winding = Array.from({ length: 2049 }, (_, index) => ({
+      x: index * 4,
+      y: index % 2 === 0 ? 0 : 20,
+    }));
+    expect(compactLassoPath(winding)).toEqual({ kind: "saturated" });
+    expect(analyzeLassoPath(winding)).toEqual({
+      kind: "uncommitted",
+      reason: "saturated",
+    });
+    expect(sampleLassoPath(winding)).toBeNull();
+    expect(compactLassoPath(Array.from(
+      { length: LASSO_THRESHOLDS.maximumCapturedPointCount + 1 },
+      (_, index) => ({ x: index, y: 0 }),
+    ))).toEqual({ kind: "saturated" });
   });
 
   it("qualifies with path length and two-dimensional bounds rather than point count", () => {
@@ -188,6 +223,27 @@ describe("lasso path preparation", () => {
     expect(prepared.points.every(Object.isFrozen)).toBe(true);
   });
 });
+
+function distanceToPolylineSquared(
+  point: Readonly<{ x: number; y: number }>,
+  polyline: readonly Readonly<{ x: number; y: number }>[],
+): number {
+  let minimum = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < polyline.length; index += 1) {
+    const start = polyline[index - 1]!;
+    const end = polyline[index]!;
+    const dx = end.x - start.x;
+    const dy = end.y - start.y;
+    const denominator = dx * dx + dy * dy;
+    const amount = denominator === 0 ? 0 : Math.max(0, Math.min(1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) / denominator,
+    ));
+    const x = start.x + dx * amount;
+    const y = start.y + dy * amount;
+    minimum = Math.min(minimum, (point.x - x) ** 2 + (point.y - y) ** 2);
+  }
+  return minimum;
+}
 
 describe("polygon topology", () => {
   const closed = [...clockwiseSquare, clockwiseSquare[0]];
