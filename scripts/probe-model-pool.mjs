@@ -71,6 +71,9 @@ export const DEFAULT_PACE_MS = 6_000;
  * later samples may be measuring this probe's own effect.
  */
 export const POOL_COOLDOWN_MS = 60_000;
+// Formal evidence leaves a small scheduling margin beyond the pool's complete
+// health window; the faster default remains diagnostic-only.
+export const RELEASE_MIN_PACE_MS = POOL_COOLDOWN_MS + 5_000;
 export const DEFAULT_ROUNDS = LABEL_CANARY_MATERIAL.length;
 export const MAX_ROUNDS = LABEL_CANARY_MATERIAL.length;
 
@@ -433,6 +436,17 @@ export function parseArguments(args) {
       throw new Error("Pool probe accepts one origin and its documented flags.");
     }
     origin = value;
+  }
+  if (profile === "release" && rounds !== DEFAULT_ROUNDS) {
+    throw new Error(
+      `--profile=release requires exactly ${DEFAULT_ROUNDS} rounds; pass --rounds=${DEFAULT_ROUNDS}.`,
+    );
+  }
+  if (profile === "release" && paceMs < RELEASE_MIN_PACE_MS) {
+    throw new Error(
+      `--profile=release requires --pace=${RELEASE_MIN_PACE_MS / 1_000} or greater `
+        + `so every round begins outside the ${POOL_COOLDOWN_MS / 1_000}s model-pool cooldown window.`,
+    );
   }
   return Object.freeze({ origin, rounds, paceMs, requireInquiryAnswer, profile, expectedVersion });
 }
