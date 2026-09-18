@@ -22,6 +22,7 @@ type RequestHttps = (
 
 export type PublicProviderOperation =
   | "chat-completions"
+  | "responses"
   | "anthropic-messages"
   | "models";
 
@@ -131,6 +132,7 @@ export function createPublicProviderFetch(operation: PublicProviderOperation, de
 }
 
 export const fetchPublicChatCompletions: typeof fetch = createPublicProviderFetch("chat-completions");
+export const fetchPublicResponses: typeof fetch = createPublicProviderFetch("responses");
 export const fetchPublicAnthropicMessages: typeof fetch = createPublicProviderFetch("anthropic-messages");
 export const fetchPublicProviderModels: typeof fetch = createPublicProviderFetch("models");
 
@@ -193,9 +195,11 @@ export function createPinnedLookup(address: LookupAddress): LookupFunction {
 function assertOperationUrl(url: URL, operation: PublicProviderOperation): void {
   const suffix = operation === "chat-completions"
     ? "/chat/completions"
-    : operation === "anthropic-messages"
-      ? "/messages"
-      : "/models";
+    : operation === "responses"
+      ? "/responses"
+      : operation === "anthropic-messages"
+        ? "/messages"
+        : "/models";
   if (!url.pathname.endsWith(suffix)) throw new Error("The provider request path is invalid.");
   const baseUrl = `${url.origin}${url.pathname.slice(0, -suffix.length)}`;
   const basePath = new URL(baseUrl).pathname.replace(/\/+$/u, "");

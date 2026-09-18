@@ -17,6 +17,37 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-18 — user provider compatibility is a finite proved protocol set
+
+Changed: Anthropic's official endpoint discovers an available Haiku and then
+Sonnet instead of pinning an expensive agentic model. Gemini's official
+OpenAI-compatible base is a named Bearer/models/Chat profile. The OpenAI
+Responses wire has separate OpenAI, DeepSeek, and custom non-streaming profiles
+admitted only by an explicit `/responses` address; it accepts one completed
+assistant text and rejects incomplete, failed, tool, refusal, ambiguous, and
+empty output. Every new profile still requires the existing sentinel before it
+can be sealed. Existing official Anthropic leases
+that selected Fable fail closed and require one explicit reconnect; compatible
+custom leases retain their proved model because their host owns that catalog.
+The official OpenAI Chat profile and every Responses profile send `store: false`
+without adding the field to unreviewed Chat formats. Google's exact root and
+`/v1beta` shortcuts enter only its OpenAI-compatible base; nearby addresses stay
+custom and native Gemini operations remain outside the registry.
+Gemini selection is limited to 2.5 Flash and Flash-Lite and sends
+`reasoning_effort: "none"`; Gemini 3 stays outside this profile because its
+reasoning cannot be disabled inside Matter's bounded sentinel and runtime
+output budgets.
+
+Why: endpoint plus key can safely negotiate only a finite reviewed protocol
+family. Explicit operation ownership improves compatibility without paying for
+blind format guesses or claiming that arbitrary private APIs are interchangeable.
+`store: false` suppresses retrievable provider response state; it does not claim
+that a provider performs no operational, safety, abuse, or billing logging.
+
+Forecloses: an “any API” promise, runtime protocol guessing, silent Chat-to-
+Responses probing, expensive Anthropic defaults, and widening the SSRF-safe
+fetch boundary into a generic method/path relay.
+
 ## 2026-09-17 — provider address recovery is same-origin and finite
 
 Changed: Model API keeps the person's safe HTTPS path as the first custom

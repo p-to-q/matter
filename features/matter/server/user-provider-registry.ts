@@ -16,6 +16,7 @@ import {
   fetchPublicAnthropicMessages,
   fetchPublicChatCompletions,
   fetchPublicProviderModels,
+  fetchPublicResponses,
 } from "./public-provider-fetch";
 
 export const USER_PROVIDER_DISCOVERY_TIMEOUT_MS = 2_250;
@@ -27,12 +28,21 @@ const MAX_MODEL_LIST_ENTRIES = 512;
 const MAX_MODEL_ID_CODE_UNITS = 128;
 const MAX_DISCOVERED_SELECTIONS = 3;
 const MAX_DISCOVERY_REQUESTS = 3;
+const GEMINI_OPENAI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai";
+const GEMINI_OPENAI_BASE_ALIASES: ReadonlyMap<string, string> = new Map([
+  ["https://generativelanguage.googleapis.com", GEMINI_OPENAI_BASE],
+  ["https://generativelanguage.googleapis.com/v1beta", GEMINI_OPENAI_BASE],
+]);
 
 export type UserProviderProfileId =
   | "openai-current"
   | "openai-compatible"
+  | "openai-responses-current"
+  | "openai-responses-compatible"
   | "deepseek-current"
   | "deepseek-compatible"
+  | "deepseek-responses-current"
+  | "gemini-openai-current"
   | "anthropic-current"
   | "anthropic-compatible";
 
@@ -48,32 +58,48 @@ export type UserProviderCandidateCredential = UserProviderSelection & Readonly<{
 }>;
 
 type DiscoveryKind = "openai-models" | "anthropic-models";
+type UserProviderOperation = "chat-completions" | "responses" | "anthropic-messages";
+type CatalogPolicy = "anthropic-haiku-sonnet" | "gemini-flash";
 
 type UserProviderDefinition = Readonly<{
   id: UserProviderProfileId;
-  family: "openai" | "deepseek" | "anthropic";
+  family: "openai" | "deepseek" | "gemini" | "anthropic";
   reviewedModels: readonly string[];
   officialBases: readonly string[];
   discovery: DiscoveryKind;
+  operation: UserProviderOperation;
+  catalogPolicy?: CatalogPolicy;
   transport: PoolTransport;
   custom: boolean;
 }>;
 
 const OPENAI_MODEL = "gpt-4.1-mini";
 const DEEPSEEK_MODEL = "deepseek-flash";
-// Fable is the current small Claude family with a materially longer active
-// lifecycle than the near-retirement Haiku 4.5 snapshot.
-const ANTHROPIC_MODEL = "claude-fable-5";
+const ANTHROPIC_MODELS = Object.freeze([
+  "claude-haiku-4-5-20251001",
+  "claude-haiku-4-5",
+  "claude-sonnet-5",
+  "claude-sonnet-4-6",
+]);
+const GEMINI_MODELS = Object.freeze(["gemini-2.5-flash", "gemini-2.5-flash-lite"]);
 
 const OPENAI_CURRENT_TRANSPORT = chatTransport({
   id: "openai-chat-completions/current/2",
   maxTokensField: "max_completion_tokens",
   completion: "official",
+  store: false,
 });
 const OPENAI_COMPATIBLE_TRANSPORT = chatTransport({
   id: "openai-chat-completions/compatible/2",
   maxTokensField: "max_tokens",
   completion: "compatible",
+});
+const OPENAI_RESPONSES_CURRENT_TRANSPORT = responsesTransport({
+  id: "openai-responses/current/1",
+  temperature: 0,
+});
+const OPENAI_RESPONSES_COMPATIBLE_TRANSPORT = responsesTransport({
+  id: "openai-responses/compatible/1",
 });
 const DEEPSEEK_CURRENT_TRANSPORT = chatTransport({
   id: "deepseek-chat-completions/current/2",
@@ -86,6 +112,17 @@ const DEEPSEEK_COMPATIBLE_TRANSPORT = chatTransport({
   maxTokensField: "max_tokens",
   completion: "compatible",
 });
+const DEEPSEEK_RESPONSES_CURRENT_TRANSPORT = responsesTransport({
+  id: "deepseek-responses/current/1",
+  temperature: 0,
+  reasoning: Object.freeze({ effort: "none" }),
+});
+const GEMINI_OPENAI_CURRENT_TRANSPORT = chatTransport({
+  id: "gemini-openai-chat-completions/current/1",
+  maxTokensField: "max_tokens",
+  completion: "compatible",
+  reasoningEffort: "none",
+});
 const ANTHROPIC_CURRENT_TRANSPORT = anthropicTransport("anthropic-messages/current/1");
 const ANTHROPIC_COMPATIBLE_TRANSPORT = anthropicTransport("anthropic-messages/compatible/1");
 
@@ -96,6 +133,7 @@ const DEFINITIONS: Readonly<Record<UserProviderProfileId, UserProviderDefinition
     reviewedModels: [OPENAI_MODEL],
     officialBases: ["https://api.openai.com/v1"],
     discovery: "openai-models",
+    operation: "chat-completions",
     transport: OPENAI_CURRENT_TRANSPORT,
     custom: false,
   }),
@@ -105,7 +143,28 @@ const DEFINITIONS: Readonly<Record<UserProviderProfileId, UserProviderDefinition
     reviewedModels: [OPENAI_MODEL],
     officialBases: [],
     discovery: "openai-models",
+    operation: "chat-completions",
     transport: OPENAI_COMPATIBLE_TRANSPORT,
+    custom: true,
+  }),
+  "openai-responses-current": definition({
+    id: "openai-responses-current",
+    family: "openai",
+    reviewedModels: [OPENAI_MODEL],
+    officialBases: ["https://api.openai.com/v1"],
+    discovery: "openai-models",
+    operation: "responses",
+    transport: OPENAI_RESPONSES_CURRENT_TRANSPORT,
+    custom: false,
+  }),
+  "openai-responses-compatible": definition({
+    id: "openai-responses-compatible",
+    family: "openai",
+    reviewedModels: [OPENAI_MODEL, DEEPSEEK_MODEL],
+    officialBases: [],
+    discovery: "openai-models",
+    operation: "responses",
+    transport: OPENAI_RESPONSES_COMPATIBLE_TRANSPORT,
     custom: true,
   }),
   "deepseek-current": definition({
@@ -114,6 +173,7 @@ const DEFINITIONS: Readonly<Record<UserProviderProfileId, UserProviderDefinition
     reviewedModels: [DEEPSEEK_MODEL],
     officialBases: ["https://api.deepseek.com/v1"],
     discovery: "openai-models",
+    operation: "chat-completions",
     transport: DEEPSEEK_CURRENT_TRANSPORT,
     custom: false,
   }),
@@ -123,35 +183,67 @@ const DEFINITIONS: Readonly<Record<UserProviderProfileId, UserProviderDefinition
     reviewedModels: [DEEPSEEK_MODEL],
     officialBases: [],
     discovery: "openai-models",
+    operation: "chat-completions",
     transport: DEEPSEEK_COMPATIBLE_TRANSPORT,
     custom: true,
+  }),
+  "deepseek-responses-current": definition({
+    id: "deepseek-responses-current",
+    family: "deepseek",
+    reviewedModels: [DEEPSEEK_MODEL],
+    officialBases: ["https://api.deepseek.com", "https://api.deepseek.com/v1"],
+    discovery: "openai-models",
+    operation: "responses",
+    transport: DEEPSEEK_RESPONSES_CURRENT_TRANSPORT,
+    custom: false,
+  }),
+  "gemini-openai-current": definition({
+    id: "gemini-openai-current",
+    family: "gemini",
+    reviewedModels: GEMINI_MODELS,
+    officialBases: [GEMINI_OPENAI_BASE],
+    discovery: "openai-models",
+    operation: "chat-completions",
+    catalogPolicy: "gemini-flash",
+    transport: GEMINI_OPENAI_CURRENT_TRANSPORT,
+    custom: false,
   }),
   "anthropic-current": definition({
     id: "anthropic-current",
     family: "anthropic",
-    reviewedModels: [ANTHROPIC_MODEL],
+    reviewedModels: ANTHROPIC_MODELS,
     officialBases: ["https://api.anthropic.com/v1"],
     discovery: "anthropic-models",
+    operation: "anthropic-messages",
+    catalogPolicy: "anthropic-haiku-sonnet",
     transport: ANTHROPIC_CURRENT_TRANSPORT,
     custom: false,
   }),
   "anthropic-compatible": definition({
     id: "anthropic-compatible",
     family: "anthropic",
-    reviewedModels: [ANTHROPIC_MODEL],
+    reviewedModels: ANTHROPIC_MODELS,
     officialBases: [],
     discovery: "anthropic-models",
+    operation: "anthropic-messages",
     transport: ANTHROPIC_COMPATIBLE_TRANSPORT,
     custom: true,
   }),
 });
-const OFFICIAL_BASES: ReadonlySet<string> = new Set(
-  Object.values(DEFINITIONS).flatMap((entry) => entry.officialBases),
+const OFFICIAL_OPERATION_BASES: ReadonlySet<string> = new Set(
+  Object.values(DEFINITIONS).flatMap((entry) => (
+    entry.officialBases.map((base) => `${entry.operation}\u0000${base}`)
+  )),
 );
 
-const CUSTOM_DISCOVERY_ORDER: readonly UserProviderProfileId[] = Object.freeze([
+const CHAT_DISCOVERY_ORDER: readonly UserProviderProfileId[] = Object.freeze([
   "openai-compatible",
   "deepseek-compatible",
+]);
+const RESPONSES_DISCOVERY_ORDER: readonly UserProviderProfileId[] = Object.freeze([
+  "openai-responses-compatible",
+]);
+const ANTHROPIC_DISCOVERY_ORDER: readonly UserProviderProfileId[] = Object.freeze([
   "anthropic-compatible",
 ]);
 
@@ -164,7 +256,7 @@ export function createUserPoolCandidate(credential: UserProviderCandidateCredent
   if (!/^[A-Za-z0-9_-]{22}$/u.test(credential.scopeId)) return null;
   const definition = DEFINITIONS[credential.profileId];
   const transport = definition.custom
-    ? publicTransport(definition.transport, definition.family)
+    ? publicTransport(definition.transport, definition.operation)
     : definition.transport;
   return Object.freeze({
     station: `user-${definition.family}`,
@@ -186,10 +278,12 @@ export function createUserProbeCandidate(
 
 /**
  * Resolves endpoint shape without provider or model hints from the browser.
- * Official endpoints use one reviewed model. A custom endpoint contributes at
- * most one bounded candidate per admitted base/wire pair; the connection route
- * must still prove each candidate with the production transport before it can
- * seal a lease. Runtime material requests never repeat this negotiation.
+ * Official fixed-model endpoints skip catalog discovery. Official profiles
+ * whose inexpensive model changes over time use one bounded catalog read. A
+ * custom endpoint contributes at most one candidate per admitted base/wire
+ * pair. The connection route must still prove every returned candidate with
+ * the production transport before it can seal a lease; runtime material
+ * requests never repeat this negotiation.
  */
 export async function resolveUserProviderSelections(
   endpoint: string,
@@ -202,16 +296,35 @@ export async function resolveUserProviderSelections(
     return Object.freeze([]);
   }
   signal.throwIfAborted();
-  const shapes = endpointShapes(normalizedEndpoint);
-  for (const shape of shapes) {
-    const official = resolveOfficialSelection(shape);
-    if (official !== null) return Object.freeze([official]);
+  const shapes = endpointShapes(canonicalizeProviderRegistryEndpoint(normalizedEndpoint));
+  const official = resolveOfficialDefinition(shapes);
+  if (official !== null) {
+    if (official.definition.catalogPolicy === undefined) {
+      return Object.freeze([Object.freeze({
+        profileId: official.definition.id,
+        model: official.definition.reviewedModels[0]!,
+        baseUrl: official.shape.baseUrl,
+      })]);
+    }
+    return await runDiscoveryRequests(
+      Object.freeze([officialDiscoveryRequest(official, apiKey)]),
+      signal,
+      fetchImpl ?? fetchPublicProviderModels,
+    );
   }
 
   const requests = discoveryRequests(shapes, apiKey);
   if (requests.length === 0 || requests.length > MAX_DISCOVERY_REQUESTS) {
     return Object.freeze([]);
   }
+  return await runDiscoveryRequests(requests, signal, fetchImpl ?? fetchPublicProviderModels);
+}
+
+async function runDiscoveryRequests(
+  requests: readonly DiscoveryRequest[],
+  signal: AbortSignal,
+  fetchImpl: typeof fetch,
+): Promise<readonly UserProviderSelection[]> {
   const deadline = new AbortController();
   const abort = () => deadline.abort(signal.reason);
   signal.addEventListener("abort", abort, { once: true });
@@ -219,15 +332,25 @@ export async function resolveUserProviderSelections(
   try {
     const settled = await Promise.all(requests.map(async (request) => {
       try {
-        return await discoverSelection(request, deadline.signal, fetchImpl ?? fetchPublicProviderModels);
+        return await discoverSelection(request, deadline.signal, fetchImpl);
       } catch {
         return null;
       }
     }));
     signal.throwIfAborted();
-    return Object.freeze(settled
+    const selections = settled
       .filter((selection): selection is UserProviderSelection => selection !== null)
-      .slice(0, MAX_DISCOVERED_SELECTIONS));
+      .slice(0, MAX_DISCOVERED_SELECTIONS);
+    // Preserve a proved selection if another parallel catalog merely timed
+    // out. When none proved, surface the owned deadline instead of reporting a
+    // misleading empty catalog to the connection route.
+    if (selections.length === 0 && deadline.signal.aborted) {
+      const reason = deadline.signal.reason;
+      throw reason instanceof DOMException && reason.name === "TimeoutError"
+        ? reason
+        : new DOMException("Discovery timed out", "TimeoutError");
+    }
+    return Object.freeze(selections);
   } finally {
     clearTimeout(timer);
     signal.removeEventListener("abort", abort);
@@ -247,9 +370,10 @@ export function isUserProviderSelection(value: unknown): value is UserProviderSe
   const definition = DEFINITIONS[value.profileId];
   return isCanonicalUserProviderBaseUrl(value.baseUrl) &&
     (definition.custom
-      ? !OFFICIAL_BASES.has(value.baseUrl) && isSelectableTextModelId(value.model)
+      ? !OFFICIAL_OPERATION_BASES.has(`${definition.operation}\u0000${value.baseUrl}`) &&
+        isSelectableTextModelId(value.model)
       : definition.officialBases.includes(value.baseUrl) &&
-        definition.reviewedModels.includes(value.model));
+        isOfficialModelAllowed(definition, value.model));
 }
 
 export function validateUserProviderRegistry(): boolean {
@@ -257,9 +381,20 @@ export function validateUserProviderRegistry(): boolean {
   const ids = new Set(definitions.map((entry) => entry.id));
   const transportIds = new Set(definitions.map((entry) => entry.transport.id));
   const discoveredModelOwners = new Map<string, DiscoveryKind>();
+  const officialOperationOwners = new Set<string>();
   for (const entry of definitions) {
     if (entry.reviewedModels.length === 0) return false;
+    if (entry.custom !== (entry.officialBases.length === 0)) return false;
+    if ((entry.operation === "anthropic-messages") !== (entry.discovery === "anthropic-models")) return false;
+    if (entry.catalogPolicy !== undefined && entry.custom) return false;
+    if (entry.catalogPolicy === "anthropic-haiku-sonnet" && entry.family !== "anthropic") return false;
+    if (entry.catalogPolicy === "gemini-flash" && entry.family !== "gemini") return false;
     if (entry.officialBases.some((base) => !isCanonicalUserProviderBaseUrl(base))) return false;
+    for (const base of entry.officialBases) {
+      const owner = `${base}\u0000${entry.operation}`;
+      if (officialOperationOwners.has(owner)) return false;
+      officialOperationOwners.add(owner);
+    }
     for (const model of entry.reviewedModels) {
       const owner = discoveredModelOwners.get(model);
       if (owner !== undefined && owner !== entry.discovery) return false;
@@ -270,28 +405,40 @@ export function validateUserProviderRegistry(): boolean {
 }
 
 type EndpointShape = Readonly<{
-  endpoint: string;
   baseUrl: string;
-  hint: "chat-completions" | "anthropic-messages" | null;
+  hint: UserProviderOperation | null;
 }>;
+
+/**
+ * Two exact Google-owned shortcuts enter the documented OpenAI-compatible
+ * surface. This is a server registry alias, not general URL normalization:
+ * nearby hosts and paths must continue through ordinary bounded discovery.
+ */
+function canonicalizeProviderRegistryEndpoint(endpoint: string): string {
+  return GEMINI_OPENAI_BASE_ALIASES.get(endpoint) ?? endpoint;
+}
 
 function splitEndpoint(endpoint: string): EndpointShape {
   const url = new URL(endpoint);
   if (url.pathname.endsWith("/chat/completions")) {
     return Object.freeze({
-      endpoint,
       baseUrl: `${url.origin}${url.pathname.slice(0, -"/chat/completions".length)}`,
       hint: "chat-completions",
     });
   }
+  if (url.pathname.endsWith("/responses")) {
+    return Object.freeze({
+      baseUrl: `${url.origin}${url.pathname.slice(0, -"/responses".length)}`,
+      hint: "responses",
+    });
+  }
   if (url.pathname.endsWith("/v1/messages")) {
     return Object.freeze({
-      endpoint,
       baseUrl: `${url.origin}${url.pathname.slice(0, -"/messages".length)}`,
       hint: "anthropic-messages",
     });
   }
-  return Object.freeze({ endpoint, baseUrl: endpoint, hint: null });
+  return Object.freeze({ baseUrl: endpoint, hint: null });
 }
 
 /**
@@ -309,28 +456,49 @@ function endpointShapes(endpoint: string): readonly EndpointShape[] {
     : Object.freeze([exact, splitEndpoint(fallback)]);
 }
 
-function resolveOfficialSelection(shape: EndpointShape): UserProviderSelection | null {
-  for (const profileId of ["openai-current", "deepseek-current", "anthropic-current"] as const) {
-    const definition = DEFINITIONS[profileId];
-    if (!definition.officialBases.includes(shape.baseUrl)) continue;
-    if (shape.hint === "anthropic-messages" && definition.discovery !== "anthropic-models") continue;
-    if (shape.hint === "chat-completions" && definition.discovery !== "openai-models") continue;
-    return Object.freeze({
-      profileId,
-      model: definition.reviewedModels[0]!,
-      baseUrl: shape.baseUrl,
-    });
+type OfficialDefinition = Readonly<{
+  shape: EndpointShape;
+  definition: UserProviderDefinition;
+}>;
+
+function resolveOfficialDefinition(shapes: readonly EndpointShape[]): OfficialDefinition | null {
+  for (const shape of shapes) {
+    for (const definition of Object.values(DEFINITIONS)) {
+      if (definition.custom || !definition.officialBases.includes(shape.baseUrl)) continue;
+      // Responses is opt-in only. A base without an operation keeps the
+      // provider's ordinary chat/messages profile and never spends a second
+      // paid wire guess.
+      if (shape.hint === null && definition.operation === "responses") continue;
+      if (shape.hint !== null && definition.operation !== shape.hint) continue;
+      return Object.freeze({ shape, definition });
+    }
   }
   return null;
 }
 
 type DiscoveryRequest = Readonly<{
   kind: DiscoveryKind;
-  endpoint: string;
   baseUrl: string;
   url: string;
   headers: Readonly<Record<string, string>>;
+  profiles: readonly UserProviderProfileId[];
 }>;
+
+function officialDiscoveryRequest(
+  official: OfficialDefinition,
+  apiKey: string,
+): DiscoveryRequest {
+  const { definition, shape } = official;
+  return Object.freeze({
+    kind: definition.discovery,
+    baseUrl: shape.baseUrl,
+    url: appendPath(shape.baseUrl, "models"),
+    headers: definition.discovery === "anthropic-models"
+      ? anthropicHeaders(apiKey)
+      : bearerHeaders(apiKey),
+    profiles: Object.freeze([definition.id]),
+  });
+}
 
 function discoveryRequests(
   shapes: readonly EndpointShape[],
@@ -343,25 +511,36 @@ function discoveryRequests(
   // Promise.all preserves this order even though the catalog reads share one
   // latency budget.
   for (const shape of shapes) {
-    if (shape.hint !== "anthropic-messages") {
+    if (shape.hint !== "anthropic-messages" && shape.hint !== "responses") {
       pushDiscoveryRequest(requests, identities, Object.freeze({
         kind: "openai-models",
-        endpoint: shape.endpoint,
         baseUrl: shape.baseUrl,
         url: appendPath(shape.baseUrl, "models"),
         headers: bearerHeaders(apiKey),
+        profiles: CHAT_DISCOVERY_ORDER,
       }));
     }
   }
   for (const shape of shapes) {
-    if (shape.hint !== "chat-completions") {
+    if (shape.hint === "responses") {
+      pushDiscoveryRequest(requests, identities, Object.freeze({
+        kind: "openai-models",
+        baseUrl: shape.baseUrl,
+        url: appendPath(shape.baseUrl, "models"),
+        headers: bearerHeaders(apiKey),
+        profiles: RESPONSES_DISCOVERY_ORDER,
+      }));
+    }
+  }
+  for (const shape of shapes) {
+    if (shape.hint === null || shape.hint === "anthropic-messages") {
       const versionedBase = ensureVersionedBase(shape.baseUrl);
       pushDiscoveryRequest(requests, identities, Object.freeze({
         kind: "anthropic-models",
-        endpoint: shape.endpoint,
         baseUrl: versionedBase,
         url: appendPath(versionedBase, "models"),
         headers: anthropicHeaders(apiKey),
+        profiles: ANTHROPIC_DISCOVERY_ORDER,
       }));
     }
   }
@@ -398,7 +577,7 @@ async function discoverSelection(
   const payload = await readBoundedJson(response, signal);
   const models = parseModelList(payload);
   if (models === null) return null;
-  const selected = selectCatalogModel(request.kind, models);
+  const selected = selectCatalogModel(request.profiles, models);
   return selected === null ? null : Object.freeze({
     profileId: selected.profileId,
     model: selected.model,
@@ -413,12 +592,15 @@ async function discoverSelection(
  * authority that proves the selected model actually supports Matter's wire.
  */
 function selectCatalogModel(
-  kind: DiscoveryKind,
+  profiles: readonly UserProviderProfileId[],
   models: ReadonlySet<string>,
 ): Readonly<{ profileId: UserProviderProfileId; model: string }> | null {
-  const profiles = CUSTOM_DISCOVERY_ORDER.filter((profileId) => (
-    DEFINITIONS[profileId].discovery === kind
-  ));
+  for (const profileId of profiles) {
+    const policy = DEFINITIONS[profileId].catalogPolicy;
+    if (policy === undefined) continue;
+    const model = selectCatalogPolicyModel(policy, models);
+    if (model !== null) return Object.freeze({ profileId, model });
+  }
   for (const profileId of profiles) {
     const preferred = DEFINITIONS[profileId].reviewedModels.find((model) => models.has(model));
     if (preferred !== undefined) return Object.freeze({ profileId, model: preferred });
@@ -431,10 +613,57 @@ function selectCatalogModel(
     ));
   const model = ranked[0]?.model;
   if (model === undefined) return null;
-  const profileId = kind === "anthropic-models"
-    ? "anthropic-compatible"
-    : "openai-compatible";
+  const profileId = profiles.find((candidate) => DEFINITIONS[candidate].custom);
+  if (profileId === undefined) return null;
   return Object.freeze({ profileId, model });
+}
+
+function selectCatalogPolicyModel(
+  policy: CatalogPolicy,
+  models: ReadonlySet<string>,
+): string | null {
+  const selectable = [...models].filter(isSelectableTextModelId);
+  if (policy === "anthropic-haiku-sonnet") {
+    return selectable.find((model) => isClaudeFamilyModel(model, "haiku")) ??
+      selectable.find((model) => isClaudeFamilyModel(model, "sonnet")) ?? null;
+  }
+  const ranked = selectable
+    .filter(isGeminiFlashModel)
+    .map((model) => Object.freeze({ model, score: geminiFlashSelectionScore(model) }))
+    .sort((left, right) => right.score - left.score || compareCodeUnits(left.model, right.model));
+  return ranked[0]?.model ?? null;
+}
+
+function isOfficialModelAllowed(definition: UserProviderDefinition, model: string): boolean {
+  if (definition.catalogPolicy === "anthropic-haiku-sonnet") {
+    return isClaudeFamilyModel(model, "haiku") || isClaudeFamilyModel(model, "sonnet");
+  }
+  if (definition.catalogPolicy === "gemini-flash") return isGeminiFlashModel(model);
+  return definition.reviewedModels.includes(model);
+}
+
+function isClaudeFamilyModel(model: string, family: "haiku" | "sonnet"): boolean {
+  return isSelectableTextModelId(model) && model.toLowerCase().startsWith("claude-") &&
+    new RegExp(`(?:^|[-_.:/])${family}(?:$|[-_.:/])`, "u").test(model.toLowerCase());
+}
+
+function isGeminiFlashModel(model: string): boolean {
+  const value = model.toLowerCase();
+  return isSelectableTextModelId(model) &&
+    /^gemini-2\.5-flash(?:-lite)?(?:$|[-_.:/])/u.test(value) &&
+    !/(?:^|[-_.:/])(live|omni|tts|speech|audio|image|imagen|transcrib(?:e|er|ing|ed)?|transcript(?:ion)?|embedding|embed)(?:$|[-_.:/])/u.test(value);
+}
+
+function geminiFlashSelectionScore(model: string): number {
+  const reviewedIndex = GEMINI_MODELS.indexOf(model);
+  const floating = /(?:^|[-_.:/])(preview|experimental|exp|latest)(?:$|[-_.:/])/u.test(model.toLowerCase());
+  return (modelSelectionScore(model) ?? 0) +
+    (reviewedIndex < 0 ? 0 : 1_000 - reviewedIndex) +
+    (floating ? 0 : 100);
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function modelSelectionScore(model: string): number | null {
@@ -467,10 +696,14 @@ function definition(value: UserProviderDefinition): UserProviderDefinition {
   });
 }
 
-function publicTransport(transport: PoolTransport, family: UserProviderDefinition["family"]): PoolTransport {
+function publicTransport(transport: PoolTransport, operation: UserProviderOperation): PoolTransport {
   return Object.freeze({
     ...transport,
-    fetch: family === "anthropic" ? fetchPublicAnthropicMessages : fetchPublicChatCompletions,
+    fetch: operation === "anthropic-messages"
+      ? fetchPublicAnthropicMessages
+      : operation === "responses"
+        ? fetchPublicResponses
+        : fetchPublicChatCompletions,
   });
 }
 
@@ -479,6 +712,8 @@ function chatTransport(input: Readonly<{
   maxTokensField: "max_tokens" | "max_completion_tokens";
   completion: "official" | "compatible";
   thinking?: Readonly<{ type: "disabled" }>;
+  reasoningEffort?: "none";
+  store?: false;
 }>): PoolTransport {
   return Object.freeze({
     id: input.id,
@@ -491,6 +726,8 @@ function chatTransport(input: Readonly<{
       [input.maxTokensField]: maximumOutputTokens,
       stream: false,
       ...(input.thinking === undefined ? {} : { thinking: input.thinking }),
+      ...(input.reasoningEffort === undefined ? {} : { reasoning_effort: input.reasoningEffort }),
+      ...(input.store === undefined ? {} : { store: input.store }),
       messages: [{ role: "user", content: call.prompt }],
     }),
     parseCompletion: (payload) => parseChatCompletion(
@@ -514,6 +751,29 @@ function anthropicTransport(id: string): PoolTransport {
       messages: [{ role: "user", content: call.prompt }],
     }),
     parseCompletion: parseAnthropicCompletion,
+  });
+}
+
+function responsesTransport(input: Readonly<{
+  id: string;
+  temperature?: 0;
+  reasoning?: Readonly<{ effort: "none" }>;
+}>): PoolTransport {
+  return Object.freeze({
+    id: input.id,
+    completionUrl: (baseUrl) => appendPath(baseUrl, "responses"),
+    authHeaders: bearerHeaders,
+    acceptsResponse: acceptsJsonResponse,
+    serialize: (call, maximumOutputTokens, model) => ({
+      model,
+      input: call.prompt,
+      max_output_tokens: maximumOutputTokens,
+      stream: false,
+      store: false,
+      ...(input.temperature === undefined ? {} : { temperature: input.temperature }),
+      ...(input.reasoning === undefined ? {} : { reasoning: input.reasoning }),
+    }),
+    parseCompletion: parseResponsesCompletion,
   });
 }
 
@@ -541,7 +801,12 @@ function parseChatCompletion(
 }
 
 function parseAnthropicCompletion(payload: unknown): PoolParsedCompletion {
-  if (!isPlainObject(payload) || payload.type !== "message" || !Array.isArray(payload.content)) {
+  if (
+    !isPlainObject(payload) ||
+    payload.type !== "message" ||
+    payload.role !== "assistant" ||
+    !Array.isArray(payload.content)
+  ) {
     throw new Error("The Anthropic response envelope was invalid.");
   }
   const text: string[] = [];
@@ -565,13 +830,79 @@ function parseAnthropicCompletion(payload: unknown): PoolParsedCompletion {
   });
 }
 
+function parseResponsesCompletion(payload: unknown): PoolParsedCompletion {
+  if (!isPlainObject(payload) || payload.object !== "response" || typeof payload.status !== "string") {
+    throw new Error("The Responses API envelope was invalid.");
+  }
+  if (payload.status !== "completed") {
+    if (payload.status === "incomplete") {
+      const details = isPlainObject(payload.incomplete_details) ? payload.incomplete_details : null;
+      return Object.freeze({
+        content: undefined,
+        disposition: details?.reason === "max_output_tokens" ? "truncated" :
+          details?.reason === "content_filter" ? "blocked-or-refused" : "unknown-terminator",
+      });
+    }
+    return Object.freeze({
+      content: undefined,
+      disposition: payload.status === "failed" ? "blocked-or-refused" : "tool-or-continuation",
+    });
+  }
+  if (
+    (payload.error !== undefined && payload.error !== null) ||
+    (payload.incomplete_details !== undefined && payload.incomplete_details !== null) ||
+    !Array.isArray(payload.output)
+  ) {
+    throw new Error("The completed Responses API envelope was inconsistent.");
+  }
+
+  let messageCount = 0;
+  let unusable: "blocked-or-refused" | "tool-or-continuation" | undefined;
+  const text: string[] = [];
+  for (const output of payload.output) {
+    if (!isPlainObject(output) || typeof output.type !== "string") {
+      throw new Error("The Responses API output was invalid.");
+    }
+    if (output.type === "reasoning") {
+      if (output.status !== undefined && output.status !== "completed") {
+        unusable = "tool-or-continuation";
+      }
+      continue;
+    }
+    if (output.type !== "message") {
+      unusable = "tool-or-continuation";
+      continue;
+    }
+    messageCount += 1;
+    if (output.role !== "assistant" || output.status !== "completed" || !Array.isArray(output.content)) {
+      throw new Error("The Responses API message was invalid.");
+    }
+    for (const part of output.content) {
+      if (!isPlainObject(part) || typeof part.type !== "string") {
+        throw new Error("The Responses API message content was invalid.");
+      }
+      if (part.type === "output_text" && typeof part.text === "string") text.push(part.text);
+      else if (part.type === "refusal" && typeof part.refusal === "string") unusable = "blocked-or-refused";
+      else throw new Error("The Responses API message content was unsupported.");
+    }
+  }
+  if (messageCount !== 1) throw new Error("The Responses API returned an ambiguous message set.");
+  const content = text.join("");
+  return Object.freeze({
+    content: content.trim().length === 0 ? undefined : content,
+    disposition: "complete",
+    ...(unusable === undefined ? {} : { unusable }),
+  });
+}
+
 function classifyAnthropicStop(value: unknown): PoolCompletionDisposition {
   if (value === undefined || value === null) return "missing";
   if (typeof value !== "string") return "unknown-terminator";
   switch (value) {
     case "end_turn":
     case "stop_sequence": return "complete";
-    case "max_tokens": return "truncated";
+    case "max_tokens":
+    case "model_context_window_exceeded": return "truncated";
     case "refusal": return "blocked-or-refused";
     case "tool_use":
     case "pause_turn": return "tool-or-continuation";

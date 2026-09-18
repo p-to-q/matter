@@ -1,16 +1,14 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.57 is an exact review
-candidate in PR #102; its earlier draft source and browser receipts are
-superseded and must not be used for publication. The public origin still
-identifies itself as `0.2.0-preview.56`, but its current Production source is
-`main` `9eb169b` from
-PR #101: exact CI run `35144776434` passed and GitHub Production deployment
-`6489479901` succeeded. The only exact Preview.56 publication probe targeted its
-earlier `536d792` source and failed. The later same-version source changed Label
-behaviour but never received a fresh complete release gate, so it cannot
-retroactively publish Preview.56. The latest annotated tag and GitHub
+the complete generative product loop yet. Preview.57 implementation merged
+through PR #102 at `a6b8f91`; the cooldown-safe release probe followed through
+PR #103 at `fca0558`. The public health route identifies
+`0.2.0-preview.57`. This is a deployed source identity, not an immutable
+release: no Preview.57 tag or GitHub prerelease exists. Production Model API
+remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
+ring is valid and redeployed, and publication remains withheld until the strict
+six-round managed-pool probe passes. The latest annotated tag and GitHub
 prerelease therefore remain Preview.52 at `6a4931b`; neither may be advanced by
 borrowing an older pool receipt. The repository maintainer operates only
 through GitHub: a topic push triggers Preview and a `main` update triggers
@@ -23,14 +21,13 @@ neither source nor live identity.
 The "97 Node boundary checks, 49-document link proof" receipt for Preview.57
 appears only in Codex session records as a local-candidate claim dated
 2026-09-11. It remains invalid: its UI contract and source tree predate the
-current candidate. The replacement implementation tree at `fb37ef8`, followed
+accepted candidate. The replacement implementation tree at `fb37ef8`, followed
 by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
-below. Both are remotely reachable through topic branch
-`codex/action-lasso-api-hardening`; PR #102 opened at candidate head `260b16d`.
-Any successor becomes the authoritative PR head and must earn fresh exact-head
-CI and Preview evidence. No Preview.57 tag or GitHub release exists. These
-receipts therefore prove a reviewable candidate, not publication or a deployed
-origin.
+below and was accepted through PR #102. PR #103 then added the release-profile
+cooldown guard. Subsequent lifecycle, deployment-gate, or provider-compatibility
+work must earn its own exact-head CI, Preview, Production, and independent-
+verifier receipts; the PR #102 counts cannot certify a successor. No Preview.57
+tag or GitHub release exists.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -103,12 +100,15 @@ while Move is active, so one touch continues beyond the paper without disabling
 ordinary chrome, Lasso, index scrolling, or desktop input.
 
 Settings adds one quiet Model API surface. The browser supplies one HTTPS API
-address and an optional replacement key; the server detects a finite reviewed
-OpenAI, DeepSeek, or Anthropic profile and owns the model, completion path,
-request shape, response vocabulary, DNS/public-address check, TLS address pin,
-global admission, and fallback. Test never saves. A successful explicit save
-is AES-GCM sealed for a fixed 30 days in a path-scoped HttpOnly cookie; failure
-preserves the prior credential. The key does not enter material, browser-readable
+address and an optional replacement key; the server detects only a finite
+reviewed protocol set: OpenAI-compatible Chat, an explicitly addressed
+Responses operation, Anthropic Messages, and Google's official
+OpenAI-compatible Gemini endpoint. It owns the model, completion path, request
+shape, response vocabulary, DNS/public-address check, TLS address pin, global
+admission, and fallback. It does not promise arbitrary APIs or blindly spend a
+second wire guess. Test never saves. A successful explicit save is AES-GCM
+sealed for a fixed 30 days in a path-scoped HttpOnly cookie; failure preserves
+the prior credential. The key does not enter material, browser-readable
 storage, response JSON, logs, cache keys, or process health/drain identity. The
 non-secret canonical address may be returned so the form can be restored.
 Configuration remains subject to every existing product capability gate.
@@ -139,14 +139,32 @@ performance diagnostic the fb37ef8 production artifact retained 4,485 DOM
 independent review     provider, lifecycle, Model API, and corner-geometry proof
                        passed 175/175 focused Vitest cases and 19/19 focused
                        Chromium cases; the final verifier found no P0–P3 issue
-GitHub CI proof         pending on the exact topic and merged-main identities
-automatic deploy proof pending from GitHub-triggered Preview and Production;
-                       Model API additionally requires a deployment-owned
-                       MATTER_PROVIDER_SESSION_KEYS ring
-publication state      pending; no tag or prerelease unless the exact public
-                       version, strict six-round model-pool release probe, and
-                       non-secret provider-session availability all pass
+GitHub CI proof         PR #102 and PR #103 passed on their exact topic and
+                       merged-main identities; every successor still requires
+                       its own exact-head proof
+automatic deploy proof PR #102 and PR #103 completed their GitHub-triggered
+                       Preview and Production paths; the public session receipt
+                       remains available:false and issue #104 owns the missing
+                       deployment-side sealing ring
+publication state      withheld; the strict release probe failed Repair 0/6,
+                       Label 0/6, and Inquiry 5/6. No tag or prerelease unless a
+                       successor passes exact public identity, the fresh strict
+                       six-round pool gate, and provider-session availability
 ```
+
+Successor candidate `919743b` hardens only the bounded user-provider seam; it
+does not widen the release claim. On that exact commit, `npm run check` passed
+119 Node boundary tests, all 50 Markdown files, the 485-file architecture gate,
+2,615 Vitest cases with five explicit skips, type generation, typecheck,
+zero-warning lint, the Next production build, and the runtime-artifact budget.
+The complete 177-case Chromium run passed 151 cases with 15 explicit skips and
+reported 11 shared-server timeouts or animation sampling misses under three
+workers; every reported case then passed 11/11 in an exact single-worker rerun.
+The independent provider verifier additionally passed 247/247 focused tests and
+reported no P0–P3 finding. This is local candidate evidence only: exact PR-head
+CI, Preview and Production identities, issue #104's deployment-owned session
+ring, and the fresh six-round managed-pool gate remain unsatisfied publication
+conditions.
 
 One earlier full run reached 160 passes and reported one aggregate narrow-index
 target below 48 px without naming it. The unchanged product then passed that

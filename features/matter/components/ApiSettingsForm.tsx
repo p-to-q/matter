@@ -273,8 +273,11 @@ export function ApiSettingsForm({
   const [notice, setNotice] = useState<ApiSettingsNotice | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ApiSettingsFieldErrors>({});
   const [removeArmed, setRemoveArmed] = useState(false);
+  const [pageRecoveryWake, setPageRecoveryWake] = useState(0);
   const operationRef = useRef<AbortController | null>(null);
   const operationKindRef = useRef<ApiSettingsOperation | null>(null);
+  const pageRecoveryPendingRef = useRef(false);
+  const pageRecoveryReadyRef = useRef(false);
   const endpointTouchedRef = useRef(false);
   const draftRevisionRef = useRef(0);
   const focusEndpointAfterRemoveRef = useRef(false);
@@ -307,6 +310,12 @@ export function ApiSettingsForm({
     operationRef.current = null;
     operationKindRef.current = null;
     setBusy(null);
+    // A BFCache return may race the aborted operation's promise settlement.
+    // Wake the reconciliation effect only after that operation releases the
+    // single owner; recovery must never replace or run beside an explicit act.
+    if (pageRecoveryPendingRef.current) {
+      setPageRecoveryWake((current) => current + 1);
+    }
   }, []);
 
   const refreshStatus = useCallback(() => {
@@ -349,18 +358,48 @@ export function ApiSettingsForm({
 
   useEffect(() => {
     const onPageHide = () => {
+      // Only an interrupted operation needs reconciliation. A form that was
+      // never opened must not create background traffic on every BFCache trip.
+      pageRecoveryPendingRef.current = pageRecoveryPendingRef.current ||
+        operationKindRef.current !== null;
+      pageRecoveryReadyRef.current = false;
       operationRef.current?.abort();
       draftRevisionRef.current += 1;
       setApiKey("");
     };
+    const onPageShow = () => {
+      if (pageRecoveryPendingRef.current) {
+        pageRecoveryReadyRef.current = true;
+        setPageRecoveryWake((current) => current + 1);
+      }
+    };
     window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
     return () => {
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      pageRecoveryPendingRef.current = false;
+      pageRecoveryReadyRef.current = false;
       operationRef.current?.abort();
       operationRef.current = null;
       operationKindRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      pageRecoveryWake === 0 ||
+      !pageRecoveryPendingRef.current ||
+      !pageRecoveryReadyRef.current ||
+      operationKindRef.current !== null
+    ) return;
+    // POST/DELETE may already have changed the HttpOnly browser jar before
+    // pagehide aborted its confirming read. Reconcile exactly once with the
+    // read-only status endpoint; never replay a paid provider sentinel.
+    pageRecoveryPendingRef.current = false;
+    pageRecoveryReadyRef.current = false;
+    refreshStatus();
+  }, [pageRecoveryWake, refreshStatus]);
 
   const normalizedEndpoint = normalizeUserProviderEndpoint(endpoint);
   const canReuseSavedKey = status?.credentialPresent === true &&

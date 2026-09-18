@@ -79,8 +79,10 @@ promotion remains independently gated and outside the first-release promise.
 
 ## Active correction — submitted intent, precise lasso, and private provider session
 
-State: implemented and independently verified locally; GitHub, deployment, and
-publication proof remain pending.
+State: the original integrated slice is merged and deployed at Preview.57;
+follow-up lifecycle and provider-compatibility hardening is in review.
+Publication remains withheld pending the deployment-owner sealing ring and a
+fresh passing managed-pool gate.
 
 ```text
 Outcome:    a submitted human action keeps running across unrelated presentation
@@ -140,6 +142,17 @@ tests, and 86/86 action-lifecycle tests with no P0-P3 finding. Desktop, narrow,
 and touch proof covered Model API, layout-neutral click/double-click selection,
 continuous Pan, and typed microphone-denial recovery. No paid or real-provider
 call was made.
+
+Production receipt, 2026-09-18: PRs #102 and #103 are on `main` at `fca0558`,
+the public health route identifies `0.2.0-preview.57`, and the provider-session
+route returns its strict protocol-4 empty receipt with `available: false` and
+`Cache-Control: no-store`. That isolates the immediate Model API blocker to the
+independent Production session-sealing ring rather than a submitted user
+endpoint or key. Issue #104 hands the non-secret Vercel action and acceptance
+receipt to the deployment owner. The strict managed-pool release profile also
+failed Repair 0/6, Label 0/6, and Inquiry 5/6, so no tag or GitHub prerelease is
+authorized. A source follow-up adds an opt-in provider-session deployment gate;
+it does not weaken the separately required managed-pool gate.
 
 The provider session is deliberately an operational preference rather than a
 second account or material store. The browser sends a key and compatible
