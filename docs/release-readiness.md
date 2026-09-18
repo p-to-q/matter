@@ -28,9 +28,9 @@ below and was accepted through PR #102. PR #103 then added the release-profile
 cooldown guard. Subsequent lifecycle, deployment-gate, or provider-compatibility
 work must earn its own exact-head CI, Preview, Production, and independent-
 verifier receipts; the PR #102 counts cannot certify a successor. PR #105 and
-its merged-main CI passed, but its public provider-session receipt remains
-unavailable and its strict pool receipt still fails Repair. No Preview.57 tag
-or GitHub release exists.
+its merged-main CI passed, but its public provider-session receipt still
+reports `available: false` and its strict pool receipt still fails Repair. No
+Preview.57 tag or GitHub release exists.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment

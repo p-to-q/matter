@@ -8,9 +8,9 @@ reports the Model API session surface as `available: false`. A newer strict
 six-round managed-pool receipt reached the provider for Label 6/6 (four accepted
 labels and two policy rejections) and returned accepted Inquiry answers 6/6,
 but Repair used its deterministic floor after `MODEL_TIMEOUT` 6/6. Neither a
-successful deployment nor two healthy surfaces substitute for the failed
-Repair gate or the independent session gate. The latest immutable publication
-remains Preview.52 at `6a4931b`.
+successful deployment nor provider reachability on the two non-Repair surfaces
+substitutes for the failed Repair gate or the independent session gate. The
+latest immutable publication remains Preview.52 at `6a4931b`.
 
 The repository maintainer pushes GitHub source and observes the linked
 deployment. The deployment owner retains Vercel environment and credential
