@@ -77,6 +77,11 @@ function anthropicCompletion(text = "MATTER_READY", stopReason = "end_turn"): Re
   }), { headers: { "content-type": "application/json" } });
 }
 
+/**
+ * Creates a mock Response for the OpenAI Responses API format.
+ * @param text - The output text content, defaults to "MATTER_READY".
+ * @returns A Response object with a completed responses API payload.
+ */
 function responsesCompletion(text = "MATTER_READY"): Response {
   return new Response(JSON.stringify({
     object: "response",

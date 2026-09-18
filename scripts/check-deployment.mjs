@@ -119,6 +119,12 @@ export function inspectDeploymentHealthHeaders(headers) {
   return failures;
 }
 
+/**
+ * Inspects provider-session endpoint response headers for required cache and
+ * security directives.
+ * @param {Headers} headers - The HTTP response headers to inspect.
+ * @returns {string[]} Array of failure messages, empty if all checks pass.
+ */
 export function inspectProviderSessionHeaders(headers) {
   const failures = [];
   const contentType = headers.get("content-type")?.toLowerCase() ?? "";
@@ -138,6 +144,12 @@ export function inspectProviderSessionHeaders(headers) {
   return failures;
 }
 
+/**
+ * Validates that the provider-session status response matches the expected
+ * release-ready structure with all required fields and values.
+ * @param {unknown} value - The provider-session status payload to validate.
+ * @returns {string[]} Array of failure messages, empty if validation passes.
+ */
 export function inspectProviderSessionStatus(value) {
   if (!isRecord(value)) return ["Provider-session receipt is not release-ready."];
   const actualKeys = Object.keys(value).sort();
@@ -593,6 +605,12 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Extracts and normalizes comma-separated tokens from an HTTP header value.
+ * @param {Headers} headers - The HTTP headers object.
+ * @param {string} name - The header name to extract tokens from.
+ * @returns {string[]} Array of lowercase, trimmed, non-empty tokens.
+ */
 function headerTokens(headers, name) {
   return (headers.get(name)?.toLowerCase() ?? "")
     .split(",")
@@ -618,6 +636,13 @@ async function main() {
   console.log(`deployment: ${result.origin} matches Matter ${packageMetadata.version} after ${result.attempts} probe(s)`);
 }
 
+/**
+ * Parses command-line arguments for deployment check script.
+ * Accepts origin URL, --profile, --wait, and --require-provider-session flags.
+ * @param {string[]} args - The command-line arguments to parse.
+ * @returns {Object} Parsed configuration with origin, profile, waitMs, and requireProviderSession.
+ * @throws {Error} If arguments are invalid or malformed.
+ */
 export function parseArguments(args) {
   let origin;
   let profile = "browser-preview";

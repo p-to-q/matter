@@ -320,6 +320,11 @@ export async function resolveUserProviderSelections(
   return await runDiscoveryRequests(requests, signal, fetchImpl ?? fetchPublicProviderModels);
 }
 
+/**
+ * Runs multiple discovery requests in parallel with a shared timeout deadline.
+ * Returns successful selections up to MAX_DISCOVERED_SELECTIONS, or throws if
+ * none succeeded and the deadline expired.
+ */
 async function runDiscoveryRequests(
   requests: readonly DiscoveryRequest[],
   signal: AbortSignal,
@@ -413,6 +418,8 @@ type EndpointShape = Readonly<{
  * Two exact Google-owned shortcuts enter the documented OpenAI-compatible
  * surface. This is a server registry alias, not general URL normalization:
  * nearby hosts and paths must continue through ordinary bounded discovery.
+ * @param endpoint - The endpoint URL to canonicalize.
+ * @returns The canonical endpoint URL or the original if no alias exists.
  */
 function canonicalizeProviderRegistryEndpoint(endpoint: string): string {
   return GEMINI_OPENAI_BASE_ALIASES.get(endpoint) ?? endpoint;
@@ -461,6 +468,12 @@ type OfficialDefinition = Readonly<{
   definition: UserProviderDefinition;
 }>;
 
+/**
+ * Resolves an official provider definition matching the given endpoint shapes.
+ * Responses API is opt-in only; bases without operation hints default to chat/messages.
+ * @param shapes - Array of endpoint shapes to match against official definitions.
+ * @returns Matching official definition and shape, or null if no match found.
+ */
 function resolveOfficialDefinition(shapes: readonly EndpointShape[]): OfficialDefinition | null {
   for (const shape of shapes) {
     for (const definition of Object.values(DEFINITIONS)) {
@@ -484,6 +497,12 @@ type DiscoveryRequest = Readonly<{
   profiles: readonly UserProviderProfileId[];
 }>;
 
+/**
+ * Creates a discovery request for an official provider definition.
+ * @param official - The official definition and shape to create a request for.
+ * @param apiKey - The API key for authorization headers.
+ * @returns A discovery request configured for the official provider.
+ */
 function officialDiscoveryRequest(
   official: OfficialDefinition,
   apiKey: string,
@@ -618,6 +637,14 @@ function selectCatalogModel(
   return Object.freeze({ profileId, model });
 }
 
+/**
+ * Selects a model from the catalog based on the specified policy.
+ * For anthropic-haiku-sonnet policy, prefers Haiku over Sonnet.
+ * For gemini-flash policy, ranks models by selection score.
+ * @param policy - The catalog selection policy to apply.
+ * @param models - Set of available model IDs.
+ * @returns The selected model ID, or null if no suitable model found.
+ */
 function selectCatalogPolicyModel(
   policy: CatalogPolicy,
   models: ReadonlySet<string>,
@@ -634,6 +661,13 @@ function selectCatalogPolicyModel(
   return ranked[0]?.model ?? null;
 }
 
+/**
+ * Checks if a model is allowed for an official provider definition.
+ * Applies catalog policy rules or checks reviewed models list.
+ * @param definition - The provider definition to check against.
+ * @param model - The model ID to validate.
+ * @returns True if the model is allowed for this definition.
+ */
 function isOfficialModelAllowed(definition: UserProviderDefinition, model: string): boolean {
   if (definition.catalogPolicy === "anthropic-haiku-sonnet") {
     return isClaudeFamilyModel(model, "haiku") || isClaudeFamilyModel(model, "sonnet");
@@ -642,11 +676,23 @@ function isOfficialModelAllowed(definition: UserProviderDefinition, model: strin
   return definition.reviewedModels.includes(model);
 }
 
+/**
+ * Checks if a model ID belongs to a specific Claude family (haiku or sonnet).
+ * @param model - The model ID to check.
+ * @param family - The Claude family name to match.
+ * @returns True if the model is a Claude model of the specified family.
+ */
 function isClaudeFamilyModel(model: string, family: "haiku" | "sonnet"): boolean {
   return isSelectableTextModelId(model) && model.toLowerCase().startsWith("claude-") &&
     new RegExp(`(?:^|[-_.:/])${family}(?:$|[-_.:/])`, "u").test(model.toLowerCase());
 }
 
+/**
+ * Checks if a model ID is a Gemini Flash model suitable for text generation.
+ * Excludes audio, image, embedding, and other non-text models.
+ * @param model - The model ID to check.
+ * @returns True if the model is a selectable Gemini Flash text model.
+ */
 function isGeminiFlashModel(model: string): boolean {
   const value = model.toLowerCase();
   return isSelectableTextModelId(model) &&
@@ -654,6 +700,12 @@ function isGeminiFlashModel(model: string): boolean {
     !/(?:^|[-_.:/])(live|omni|tts|speech|audio|image|imagen|transcrib(?:e|er|ing|ed)?|transcript(?:ion)?|embedding|embed)(?:$|[-_.:/])/u.test(value);
 }
 
+/**
+ * Computes a selection score for Gemini Flash models.
+ * Prioritizes reviewed models and stable versions over preview/experimental ones.
+ * @param model - The model ID to score.
+ * @returns A numeric score, higher values indicate preferred models.
+ */
 function geminiFlashSelectionScore(model: string): number {
   const reviewedIndex = GEMINI_MODELS.indexOf(model);
   const floating = /(?:^|[-_.:/])(preview|experimental|exp|latest)(?:$|[-_.:/])/u.test(model.toLowerCase());
@@ -662,6 +714,12 @@ function geminiFlashSelectionScore(model: string): number {
     (floating ? 0 : 100);
 }
 
+/**
+ * Compares two strings lexicographically by code units.
+ * @param left - First string to compare.
+ * @param right - Second string to compare.
+ * @returns -1 if left < right, 1 if left > right, 0 if equal.
+ */
 function compareCodeUnits(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
@@ -696,6 +754,13 @@ function definition(value: UserProviderDefinition): UserProviderDefinition {
   });
 }
 
+/**
+ * Creates a public transport by adding the appropriate fetch implementation
+ * based on the operation type (chat-completions, responses, or anthropic-messages).
+ * @param transport - The base transport configuration.
+ * @param operation - The provider operation type.
+ * @returns A frozen transport with the appropriate public fetch function.
+ */
 function publicTransport(transport: PoolTransport, operation: UserProviderOperation): PoolTransport {
   return Object.freeze({
     ...transport,
@@ -754,6 +819,12 @@ function anthropicTransport(id: string): PoolTransport {
   });
 }
 
+/**
+ * Creates a pool transport for the OpenAI Responses API.
+ * Configures serialization with max_output_tokens and optional temperature/reasoning.
+ * @param input - Configuration with transport ID and optional temperature/reasoning settings.
+ * @returns A frozen pool transport configured for the Responses API.
+ */
 function responsesTransport(input: Readonly<{
   id: string;
   temperature?: 0;
@@ -830,6 +901,14 @@ function parseAnthropicCompletion(payload: unknown): PoolParsedCompletion {
   });
 }
 
+/**
+ * Parses a completion response from the OpenAI Responses API.
+ * Handles completed, incomplete, and failed statuses, extracting text content
+ * from message output while marking refusals and tool calls as unusable.
+ * @param payload - The raw API response payload.
+ * @returns Parsed completion with content, disposition, and optional unusable flag.
+ * @throws Error if the response envelope or structure is invalid.
+ */
 function parseResponsesCompletion(payload: unknown): PoolParsedCompletion {
   if (!isPlainObject(payload) || payload.object !== "response" || typeof payload.status !== "string") {
     throw new Error("The Responses API envelope was invalid.");

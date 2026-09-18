@@ -398,6 +398,13 @@ export async function probeModelPool({
   return Object.freeze({ origin: target, samples: Object.freeze(samples), summary: summarize(samples) });
 }
 
+/**
+ * Parses command-line arguments for model pool probe script.
+ * Validates release profile requirements including rounds count and pace timing.
+ * @param {string[]} args - The command-line arguments to parse.
+ * @returns {Object} Configuration with origin, rounds, paceMs, requireInquiryAnswer, profile, and expectedVersion.
+ * @throws {Error} If arguments are invalid or profile requirements not met.
+ */
 export function parseArguments(args) {
   let origin;
   let rounds = DEFAULT_ROUNDS;
