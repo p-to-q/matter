@@ -118,6 +118,20 @@ describe("user-provider registry", () => {
   });
 
   it.each([
+    ["claude-HAIKU-4-6", true],
+    ["claude-sonnet_5", true],
+    ["claude-haikuish-4-6", false],
+    ["not-claude-haiku-4-6", false],
+  ] as const)("bounds the reviewed Anthropic family marker (%s)", (model, allowed) => {
+    const candidate = createUserPoolCandidate(credential(
+      "anthropic-current",
+      model,
+      "https://api.anthropic.com/v1",
+    ));
+    expect(candidate !== null).toBe(allowed);
+  });
+
+  it.each([
     ["https://api.openai.com/v1", "openai-current", "gpt-4.1-mini", "https://api.openai.com/v1"],
     ["https://api.openai.com/v1/chat/completions", "openai-current", "gpt-4.1-mini", "https://api.openai.com/v1"],
     ["https://api.deepseek.com", "deepseek-current", "deepseek-flash", "https://api.deepseek.com/v1"],
