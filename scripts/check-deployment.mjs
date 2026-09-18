@@ -18,6 +18,7 @@ const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
 const DEPLOYMENT_PROFILES = new Set(["browser-preview", "elastic-live"]);
 const MAX_ROOT_HTML_BYTES = 1_024 * 1_024;
 const MAX_HEALTH_BYTES = 32 * 1_024;
+const MAX_PROVIDER_SESSION_BYTES = 8 * 1_024;
 const MAX_MANIFEST_BYTES = 64 * 1_024;
 const MAX_ICON_BYTES = 512 * 1_024;
 const BRAND_MANIFEST_URL = new URL(
@@ -31,6 +32,15 @@ const DEPLOYMENT_BRAND_ICONS = Object.freeze([
   Object.freeze({ file: "app/icon4.png", path: "/icon4.png", rel: "icon", sizes: "512x512" }),
   Object.freeze({ file: "app/apple-icon.png", path: "/apple-icon.png", rel: "apple-touch-icon", sizes: "180x180" }),
 ]);
+const PROVIDER_SESSION_RELEASE_STATUS = Object.freeze({
+  protocolVersion: "4",
+  available: true,
+  credentialPresent: false,
+  resetRequired: false,
+  credentialId: null,
+  endpoint: null,
+  expiresAt: null,
+});
 
 export function normalizeDeploymentOrigin(value) {
   const url = new URL(value);
@@ -107,6 +117,39 @@ export function inspectDeploymentHealthHeaders(headers) {
     failures.push("Health probe is not marked no-store.");
   }
   return failures;
+}
+
+export function inspectProviderSessionHeaders(headers) {
+  const failures = [];
+  const contentType = headers.get("content-type")?.toLowerCase() ?? "";
+  if (!/^application\/json(?:\s*;|$)/u.test(contentType)) {
+    failures.push("Provider-session probe did not declare JSON.");
+  }
+  const cacheControl = headerTokens(headers, "cache-control");
+  if (!cacheControl.includes("no-store")) {
+    failures.push("Provider-session probe is not marked no-store.");
+  }
+  if (!cacheControl.includes("max-age=0")) {
+    failures.push("Provider-session probe is missing max-age=0.");
+  }
+  if (!headerTokens(headers, "vary").includes("cookie")) {
+    failures.push("Provider-session probe does not vary on Cookie.");
+  }
+  return failures;
+}
+
+export function inspectProviderSessionStatus(value) {
+  if (!isRecord(value)) return ["Provider-session receipt is not release-ready."];
+  const actualKeys = Object.keys(value).sort();
+  const expectedKeys = Object.keys(PROVIDER_SESSION_RELEASE_STATUS).sort();
+  if (
+    actualKeys.length !== expectedKeys.length
+    || actualKeys.some((key, index) => key !== expectedKeys[index])
+    || expectedKeys.some((key) => value[key] !== PROVIDER_SESSION_RELEASE_STATUS[key])
+  ) {
+    return ["Provider-session receipt is not release-ready."];
+  }
+  return [];
 }
 
 export function inspectDeploymentMediaHeaders(headers) {
@@ -344,9 +387,13 @@ export async function checkDeployment({
   origin,
   expectedVersion,
   profile = "browser-preview",
+  requireProviderSession = false,
   fetchImpl = fetch,
   expectedBrandAssets,
 }) {
+  if (typeof requireProviderSession !== "boolean") {
+    throw new Error("Provider-session deployment requirement must be boolean.");
+  }
   const normalized = normalizeDeploymentOrigin(origin);
   const brandAssets = expectedBrandAssets ?? await readExpectedBrandAssets();
   const request = (path, init = {}) => fetchImpl(`${normalized}${path}`, {
@@ -355,14 +402,21 @@ export async function checkDeployment({
     signal: AbortSignal.timeout(10_000),
     ...init,
   });
-  const [root, legacy, health, media, manifest, ...icons] = await Promise.all([
+  const [root, legacy, health, media, manifest, ...remaining] = await Promise.all([
     request("/", { method: "GET" }),
     request("/matter", { method: "HEAD" }),
     request("/api/health", { method: "GET" }),
     request("/matter-ui/shadows-poster.jpg", { method: "HEAD" }),
     request("/manifest.webmanifest", { method: "GET" }),
     ...DEPLOYMENT_BRAND_ICONS.map((icon) => request(icon.path, { method: "GET" })),
+    ...(requireProviderSession
+      ? [request("/api/provider-session", { method: "GET", credentials: "omit" })]
+      : []),
   ]);
+  const icons = remaining.slice(0, DEPLOYMENT_BRAND_ICONS.length);
+  const providerSession = requireProviderSession
+    ? remaining[DEPLOYMENT_BRAND_ICONS.length]
+    : undefined;
   const failures = [];
   if (root.status !== 200) {
     failures.push(`Root returned HTTP ${root.status}.`);
@@ -440,6 +494,22 @@ export async function checkDeployment({
       failures.push(`${contract.path} body is invalid or exceeds its byte limit.`);
     }
   }
+  if (requireProviderSession) {
+    if (providerSession === undefined) {
+      failures.push("Provider-session probe request failed.");
+    } else if (providerSession.status !== 200) {
+      failures.push(`Provider-session probe returned HTTP ${providerSession.status}.`);
+    } else {
+      failures.push(...inspectProviderSessionHeaders(providerSession.headers));
+      let payload;
+      try {
+        payload = await readBoundedDeploymentJson(providerSession, MAX_PROVIDER_SESSION_BYTES);
+      } catch {
+        failures.push("Provider-session probe body is invalid or exceeds its byte limit.");
+      }
+      if (payload !== undefined) failures.push(...inspectProviderSessionStatus(payload));
+    }
+  }
   failures.push(...inspectDeploymentHeaders(root.headers));
   return Object.freeze({ origin: normalized, failures: Object.freeze(failures) });
 }
@@ -473,6 +543,7 @@ export async function waitForDeployment({
   origin,
   expectedVersion,
   profile = "browser-preview",
+  requireProviderSession = false,
   waitMs = 0,
   intervalMs = 5_000,
   check = checkDeployment,
@@ -488,6 +559,9 @@ export async function waitForDeployment({
   if (!Number.isSafeInteger(intervalMs) || intervalMs <= 0) {
     throw new Error("Deployment retry interval must be a positive integer number of milliseconds.");
   }
+  if (typeof requireProviderSession !== "boolean") {
+    throw new Error("Provider-session deployment requirement must be boolean.");
+  }
 
   const normalizedOrigin = normalizeDeploymentOrigin(origin);
   const deadline = now() + waitMs;
@@ -496,7 +570,12 @@ export async function waitForDeployment({
   do {
     attempts += 1;
     try {
-      result = await check({ origin: normalizedOrigin, expectedVersion, profile });
+      result = await check({
+        origin: normalizedOrigin,
+        expectedVersion,
+        profile,
+        requireProviderSession,
+      });
     } catch {
       result = Object.freeze({
         origin: normalizedOrigin,
@@ -514,13 +593,21 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function headerTokens(headers, name) {
+  return (headers.get(name)?.toLowerCase() ?? "")
+    .split(",")
+    .map((token) => token.trim())
+    .filter((token) => token.length > 0);
+}
+
 async function main() {
   const packageMetadata = JSON.parse(await readFile("package.json", "utf8"));
-  const { origin, profile, waitMs } = parseArguments(process.argv.slice(2));
+  const { origin, profile, waitMs, requireProviderSession } = parseArguments(process.argv.slice(2));
   const result = await waitForDeployment({
     origin: origin ?? process.env.MATTER_DEPLOYMENT_ORIGIN ?? "https://matter.ptoq.io",
     expectedVersion: packageMetadata.version,
     profile,
+    requireProviderSession,
     waitMs,
   });
   if (result.failures.length > 0) {
@@ -531,11 +618,16 @@ async function main() {
   console.log(`deployment: ${result.origin} matches Matter ${packageMetadata.version} after ${result.attempts} probe(s)`);
 }
 
-function parseArguments(args) {
+export function parseArguments(args) {
   let origin;
   let profile = "browser-preview";
   let waitMs = 0;
+  let requireProviderSession = false;
   for (const value of args) {
+    if (value === "--require-provider-session") {
+      requireProviderSession = true;
+      continue;
+    }
     if (value.startsWith("--wait=")) {
       const seconds = Number(value.slice("--wait=".length));
       if (!Number.isSafeInteger(seconds) || seconds < 0 || seconds > 300) {
@@ -553,12 +645,17 @@ function parseArguments(args) {
     }
     if (origin !== undefined) {
       throw new Error(
-        "Deployment check accepts one origin, --profile=<name>, and --wait=<seconds>.",
+        "Deployment check accepts one origin, --profile=<name>, --wait=<seconds>, and --require-provider-session.",
+      );
+    }
+    if (value.startsWith("--")) {
+      throw new Error(
+        "Deployment check accepts one origin, --profile=<name>, --wait=<seconds>, and --require-provider-session.",
       );
     }
     origin = value;
   }
-  return Object.freeze({ origin, profile, waitMs });
+  return Object.freeze({ origin, profile, waitMs, requireProviderSession });
 }
 
 function delay(milliseconds) {

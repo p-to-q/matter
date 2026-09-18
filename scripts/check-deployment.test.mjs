@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   checkDeployment,
@@ -12,7 +14,10 @@ import {
   inspectDeploymentMetadataHeaders,
   inspectDeploymentMetadataHtml,
   inspectDeploymentHealth,
+  inspectProviderSessionHeaders,
+  inspectProviderSessionStatus,
   normalizeDeploymentOrigin,
+  parseArguments,
   readBoundedDeploymentBody,
   waitForDeployment,
 } from "./check-deployment.mjs";
@@ -59,11 +64,115 @@ const HEALTH = {
     archiveExportImport: "available",
   },
 };
+const PROVIDER_SESSION_STATUS = {
+  protocolVersion: "4",
+  available: true,
+  credentialPresent: false,
+  resetRequired: false,
+  credentialId: null,
+  endpoint: null,
+  expiresAt: null,
+};
+
+function passingDeploymentResponse(path) {
+  if (path === "/") {
+    return new Response(BRAND_ROOT_HTML, {
+      status: 200,
+      headers: {
+        "permissions-policy": "microphone=(self)",
+        "referrer-policy": "no-referrer",
+        "strict-transport-security": "max-age=63072000",
+        "x-content-type-options": "nosniff",
+        "x-frame-options": "DENY",
+      },
+    });
+  }
+  if (path === "/matter") return new Response(null, { status: 404 });
+  if (path === "/api/health") {
+    return Response.json(HEALTH, {
+      headers: { "cache-control": "no-store" },
+    });
+  }
+  if (path === "/matter-ui/shadows-poster.jpg") {
+    return new Response(null, {
+      status: 200,
+      headers: {
+        "cache-control": "public, max-age=14400, must-revalidate",
+        "content-type": "image/jpeg",
+      },
+    });
+  }
+  if (path === "/manifest.webmanifest") {
+    return new Response(JSON.stringify(BRAND_MANIFEST), {
+      status: 200,
+      headers: {
+        "cache-control": "public, max-age=0, must-revalidate",
+        "content-type": "application/manifest+json",
+      },
+    });
+  }
+  if (path === "/api/provider-session") {
+    return Response.json(PROVIDER_SESSION_STATUS, {
+      headers: {
+        "cache-control": "no-store, max-age=0",
+        vary: "Cookie",
+      },
+    });
+  }
+  const iconIndex = ICON_PATHS.indexOf(path);
+  if (iconIndex >= 0) {
+    return new Response(ICON_BYTES[iconIndex], {
+      status: 200,
+      headers: {
+        "cache-control": "public, max-age=14400, must-revalidate",
+        "content-type": "image/png",
+      },
+    });
+  }
+  throw new Error(`Unexpected deployment path ${path}.`);
+}
 
 test("accepts one dedicated HTTPS deployment origin", () => {
   assert.equal(normalizeDeploymentOrigin("https://matter.ptoq.io/"), "https://matter.ptoq.io");
   assert.throws(() => normalizeDeploymentOrigin("http://matter.ptoq.io"), /HTTPS origin/);
   assert.throws(() => normalizeDeploymentOrigin("https://matter.ptoq.io/matter"), /must not include/);
+});
+
+test("keeps the provider-session CLI gate explicit and default-off", () => {
+  assert.deepEqual(parseArguments([]), {
+    origin: undefined,
+    profile: "browser-preview",
+    waitMs: 0,
+    requireProviderSession: false,
+  });
+  assert.deepEqual(parseArguments([
+    "--wait=120",
+    "--require-provider-session",
+    "https://matter.ptoq.io",
+    "--profile=elastic-live",
+  ]), {
+    origin: "https://matter.ptoq.io",
+    profile: "elastic-live",
+    waitMs: 120_000,
+    requireProviderSession: true,
+  });
+  assert.throws(
+    () => parseArguments(["--require-provider-session=true"]),
+    /--require-provider-session/,
+  );
+  assert.throws(
+    () => parseArguments(["https://matter.ptoq.io", "https://other.example"]),
+    /--require-provider-session/,
+  );
+
+  const cli = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("./check-deployment.mjs", import.meta.url)), "--require-provider-session=true"],
+    { cwd: fileURLToPath(new URL("../", import.meta.url)), encoding: "utf8" },
+  );
+  assert.equal(cli.status, 1);
+  assert.match(cli.stderr, /--require-provider-session/);
+  assert.equal(cli.stdout, "");
 });
 
 test("accepts the complete current deployment capability shape", () => {
@@ -145,6 +254,42 @@ test("requires a JSON no-store health receipt", () => {
     "Health probe did not declare JSON.",
     "Health probe is not marked no-store.",
   ]);
+});
+
+test("requires the exact anonymous provider-session release receipt", () => {
+  const complete = new Headers({
+    "cache-control": "No-Store, MAX-AGE=0",
+    "content-type": "application/json; charset=utf-8",
+    vary: "Accept-Encoding, Cookie",
+  });
+  assert.deepEqual(inspectProviderSessionHeaders(complete), []);
+  assert.deepEqual(inspectProviderSessionStatus(PROVIDER_SESSION_STATUS), []);
+
+  const lookalike = new Headers({
+    "cache-control": "no-store-if-error, max-age=00",
+    "content-type": "application/jsonp",
+    vary: "X-Cookie",
+  });
+  assert.deepEqual(inspectProviderSessionHeaders(lookalike), [
+    "Provider-session probe did not declare JSON.",
+    "Provider-session probe is not marked no-store.",
+    "Provider-session probe is missing max-age=0.",
+    "Provider-session probe does not vary on Cookie.",
+  ]);
+
+  for (const invalid of [
+    null,
+    [],
+    { ...PROVIDER_SESSION_STATUS, available: false },
+    { ...PROVIDER_SESSION_STATUS, credentialPresent: true },
+    { ...PROVIDER_SESSION_STATUS, credentialId: "opaque" },
+    { ...PROVIDER_SESSION_STATUS, extra: true },
+    Object.fromEntries(Object.entries(PROVIDER_SESSION_STATUS).slice(1)),
+  ]) {
+    assert.deepEqual(inspectProviderSessionStatus(invalid), [
+      "Provider-session receipt is not release-ready.",
+    ]);
+  }
 });
 
 test("requires the observed bounded browser cache for stable-name visual media", () => {
@@ -419,7 +564,100 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
       hasAbortSignal: true,
     })),
   ]);
+  assert.equal(calls.some((call) => call.path === "/api/provider-session"), false);
   assert.equal(healthReads, 1);
+});
+
+test("requests the anonymous provider-session receipt only when explicitly required", async () => {
+  const calls = [];
+  const result = await checkDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    requireProviderSession: true,
+    fetchImpl: async (url, init) => {
+      calls.push({
+        url: String(url),
+        path: new URL(url).pathname,
+        method: init.method,
+        cache: init.cache,
+        redirect: init.redirect,
+        credentials: init.credentials,
+        hasAbortSignal: init.signal instanceof AbortSignal,
+        hasHeaders: init.headers !== undefined,
+      });
+      return passingDeploymentResponse(new URL(url).pathname);
+    },
+    expectedBrandAssets: EXPECTED_BRAND_ASSETS,
+  });
+
+  assert.deepEqual(result.failures, []);
+  assert.deepEqual(calls.filter((call) => call.path === "/api/provider-session"), [{
+    url: "https://matter.ptoq.io/api/provider-session",
+    path: "/api/provider-session",
+    method: "GET",
+    cache: "no-store",
+    redirect: "manual",
+    credentials: "omit",
+    hasAbortSignal: true,
+    hasHeaders: false,
+  }]);
+});
+
+test("aggregates provider-session header and body failures without exposing the body", async () => {
+  const privateBody = "private-provider-body";
+  const result = await checkDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    requireProviderSession: true,
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      if (path !== "/api/provider-session") return passingDeploymentResponse(path);
+      return new Response(privateBody, {
+        status: 200,
+        headers: {
+          "cache-control": "no-store-if-error, max-age=00",
+          "content-type": "application/jsonp",
+          vary: "X-Cookie",
+        },
+      });
+    },
+    expectedBrandAssets: EXPECTED_BRAND_ASSETS,
+  });
+
+  assert.deepEqual(result.failures, [
+    "Provider-session probe did not declare JSON.",
+    "Provider-session probe is not marked no-store.",
+    "Provider-session probe is missing max-age=0.",
+    "Provider-session probe does not vary on Cookie.",
+    "Provider-session probe body is invalid or exceeds its byte limit.",
+  ]);
+  assert.equal(result.failures.join("\n").includes(privateBody), false);
+});
+
+test("bounds the required provider-session body to eight KiB", async () => {
+  const result = await checkDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    requireProviderSession: true,
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      if (path !== "/api/provider-session") return passingDeploymentResponse(path);
+      return new Response("{}", {
+        status: 200,
+        headers: {
+          "cache-control": "no-store, max-age=0",
+          "content-length": String(8 * 1_024 + 1),
+          "content-type": "application/json",
+          vary: "Cookie",
+        },
+      });
+    },
+    expectedBrandAssets: EXPECTED_BRAND_ASSETS,
+  });
+
+  assert.deepEqual(result.failures, [
+    "Provider-session probe body is invalid or exceeds its byte limit.",
+  ]);
 });
 
 test("waits through one stale edge receipt without widening the probe", async () => {
@@ -441,6 +679,28 @@ test("waits through one stale edge receipt without widening the probe", async ()
   });
   assert.equal(result.attempts, 2);
   assert.equal(elapsed, 5_000);
+  assert.deepEqual(result.failures, []);
+});
+
+test("forwards the provider-session requirement through deployment retries", async () => {
+  let received;
+  const result = await waitForDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    profile: "elastic-live",
+    requireProviderSession: true,
+    check: async (options) => {
+      received = options;
+      return { origin: options.origin, failures: [] };
+    },
+  });
+
+  assert.deepEqual(received, {
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    profile: "elastic-live",
+    requireProviderSession: true,
+  });
   assert.deepEqual(result.failures, []);
 });
 
