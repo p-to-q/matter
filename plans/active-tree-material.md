@@ -143,16 +143,20 @@ and touch proof covered Model API, layout-neutral click/double-click selection,
 continuous Pan, and typed microphone-denial recovery. No paid or real-provider
 call was made.
 
-Production receipt, 2026-09-18: PRs #102 and #103 are on `main` at `fca0558`,
+Production receipt, 2026-09-18: PR #105 is on `main` at `2f85b94`,
 the public health route identifies `0.2.0-preview.57`, and the provider-session
 route returns its strict protocol-4 empty receipt with `available: false` and
 `Cache-Control: no-store`. That isolates the immediate Model API blocker to the
 independent Production session-sealing ring rather than a submitted user
 endpoint or key. Issue #104 hands the non-secret Vercel action and acceptance
-receipt to the deployment owner. The strict managed-pool release profile also
-failed Repair 0/6, Label 0/6, and Inquiry 5/6, so no tag or GitHub prerelease is
-authorized. A source follow-up adds an opt-in provider-session deployment gate;
-it does not weaken the separately required managed-pool gate.
+receipt to the deployment owner. A fresh cooldown-separated managed-pool
+release profile then reached the provider for Label 6/6 (four accepted answers
+and two policy rejections) and returned accepted Inquiry answers 6/6, but
+Repair settled to its deterministic floor after `MODEL_TIMEOUT` 6/6. The
+remaining managed-pool defect is therefore Repair-specific, not evidence that
+both deployed accounts are unavailable. No tag or GitHub prerelease is
+authorized. The source-side deployment gate does not weaken the separately
+required managed-pool gate.
 
 The provider session is deliberately an operational preference rather than a
 second account or material store. The browser sends a key and compatible
@@ -3420,18 +3424,27 @@ the stored basis on the current two values and map the three addresses onto them
 for look-back only. The second keeps every saved record and costs one documented
 lossy mapping; the first is cleaner and needs a migration receipt.
 
-### Attempt window versus answer length — measured, then corrected
+### Attempt window versus answer length — reopened by Preview.57 evidence
 
-State: Closed for current source on 2026-08-28; reopen only with new latency
-evidence.
+State: Repair correction implemented locally on 2026-09-18; deployment proof
+remains required.
 
 Inquiry asks for up to 720 output tokens and takes `maxAttemptShare: 0.5` of a
 16s deadline, so two ordered candidates may each receive a real window. Repair
-previously kept a 0.95 exception even after its provider deadline grew to
-6–8s. That gave the first relay 5.7–7.6s and left only 0.3–0.4s for fallback —
-at or below the pool's minimum useful attempt. Repair now uses the same 0.5
-ceiling, giving both candidates a real three-to-four-second window. Label asks
-for tens of tokens against the default share.
+previously kept a 0.95 exception after its provider deadline grew to 6–8s. The
+2026-08-28 correction replaced it with the shared 0.5 ceiling on the assumption
+that two three-to-four-second attempts were real fallback. Preview.57 supplied
+the missing counter-evidence: the 6,504 ms Repair canary returned
+`MODEL_TIMEOUT` 6/6, while Label reached the provider 6/6 with roughly six
+seconds available per candidate and Inquiry returned accepted answers 6/6.
+
+Repair therefore again owns a 0.95 first-attempt ceiling, plus a one-second
+minimum useful attempt. A fast refusal or transport failure still leaves nearly
+the complete remainder for the next candidate. A relay that spends the usable
+window cannot buy a second sub-second attempt merely to say fallback occurred;
+the already-visible deterministic transcript settles this request and the pool
+cools that scenario/candidate for nearby work. Label, Inquiry, and the shared
+default remain at 0.5. No deadline or twelve-second mutation lease grew.
 
 Inquiry's split buys two attempts, which is the right trade when a bad relay
 fails fast: the second candidate still gets a real turn. It is the wrong trade
@@ -3447,11 +3460,11 @@ from a relay that is simply down. The condition is real and invisible.
 **This was not the 2026-08-28 Production incident.** Measured healthy inquiry
 latency is 915ms, so 8s is roughly eight times the headroom actually needed;
 widening the Inquiry window would have changed nothing, and doing it would have
-been a change that looked responsive while fixing nothing. Repair's correction
-instead restores the fallback the existing ordered pool already claims. See
-the incident section in `docs/deployment-owner-handoff.md`. Reopen Inquiry's
-share only with a measurement showing a healthy answer approaching the window,
-not after a timeout.
+been a change that looked responsive while fixing nothing. The new evidence is
+specific to Repair's much shorter, heavier call and does not reopen Inquiry's
+share. See the incident section in `docs/deployment-owner-handoff.md`. Reopen
+Inquiry only with a measurement showing a healthy answer approaching its own
+window, not after an unrelated timeout.
 
 ## Current risks
 

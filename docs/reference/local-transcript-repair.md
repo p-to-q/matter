@@ -81,12 +81,17 @@ bounded vocabulary hint. It carries no material address. It has one 11-second
 client ceiling covering headers and the bounded body, no retry, and no response
 cache. Inquiry dictation keeps its previously shipped 8.8-second visible-draft
 override because, unlike admitted material, its baseline is not yet readable
-while repair runs. The server grants six to eight seconds according to utterance length and
-shares that budget across two candidates; the 9.5-second route boundary leaves
-the server time to translate the terminal result. Each candidate therefore has
-three to four seconds. That is above the former 2.6-second short floor that
-expired before a relay could answer, while preventing one stalled relay from
-making the configured fallback unreachable. The server still applies the
+while repair runs. The server grants six to eight seconds according to utterance
+length; the 9.5-second route boundary leaves time to translate the terminal
+result. Repair gives one candidate up to 95 percent of that scenario budget,
+because production evidence showed that splitting a short request into two
+three-to-four-second attempts made both attempts unusable. A fast refusal or
+transport failure still leaves almost the whole remainder for the next
+candidate. A candidate that consumes the usable window is cooled for nearby
+requests while the deterministic transcript remains the current request's safe
+floor. Repair does not start a tail attempt below one second: production has
+never shown that to be a completable window, and spending it would only cool a
+candidate that had no real chance to answer. The server still applies the
 shared prompt, pool, load shedding, and adjudicator. The browser and store
 recompute the deterministic floor and judge only the model's additional delta
 from it, so a safe restart removal is not charged twice. The store is still the

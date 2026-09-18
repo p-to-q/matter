@@ -17,6 +17,30 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-18 — Repair buys one completable attempt, not two nominal ones
+
+Changed: transcript repair again gives its first model-pool candidate at most
+95 percent of the existing six-to-eight-second provider budget. The shared
+pool remains half-deadline by default. A fast refusal or transport failure can
+still reach the next candidate; a candidate that consumes Repair's usable
+window settles this request to the already-visible deterministic transcript
+and enters the pool's scenario-local cooldown. Repair also declines to start a
+tail attempt below one second, instead of timing out and cooling a candidate
+that never received a historically usable window.
+
+Why: the strict Preview.57 production probe reached Label and Inquiry on every
+round but returned `MODEL_TIMEOUT` for Repair on all six. Its 6,504 ms canary
+had been divided into two 3,252 ms attempts. That directly falsified the
+2026-08-28 assumption that two three-to-four-second windows were real Repair
+fallbacks. Together with earlier production samples, it supports restoring one
+near-complete relay window; the exact deployed successor must still prove that
+choice with a fresh release-profile receipt.
+
+Forecloses: extending the provider, route, browser, or twelve-second mutation
+lease to hide an attempt-allocation defect; weakening Repair adjudication;
+changing the global pool policy; or calling two attempts useful merely because
+both were started.
+
 ## 2026-09-18 — user provider compatibility is a finite proved protocol set
 
 Changed: Anthropic's official endpoint discovers an available Haiku and then

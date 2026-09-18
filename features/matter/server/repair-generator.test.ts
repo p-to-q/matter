@@ -8,6 +8,7 @@ import type { RepairRequest } from "../protocol/repair-contract";
 import type { ScenarioAdapter } from "./harness";
 import { compileRepairPrompt } from "./repair-harness";
 import { REPAIR_SCENARIO } from "./repair-harness";
+import { DEFAULT_POOL_LIMITS } from "./model-pool";
 import {
   DEFAULT_REPAIR_LIMITS,
   REPAIR_POOL_LIMITS,
@@ -200,17 +201,25 @@ describe("fixtureRepairAdapter", () => {
 });
 
 describe("resolveRepairAdapter", () => {
-  it("reserves a real second-candidate window", () => {
+  it("gives Repair one usable attempt without changing the shared pool", () => {
     expect(REPAIR_POOL_LIMITS).toMatchObject({
-      maxAttemptShare: 0.5,
-      minimumAttemptMs: 400,
+      maxAttemptShare: 0.95,
+      minimumAttemptMs: 1_000,
       maxOutputTokens: 1_200,
     });
+    expect(REPAIR_POOL_LIMITS).not.toBe(DEFAULT_POOL_LIMITS);
+    expect(DEFAULT_POOL_LIMITS).toMatchObject({
+      maxAttemptShare: 0.5,
+      minimumAttemptMs: 400,
+    });
+    expect(6_000 * REPAIR_POOL_LIMITS.maxAttemptShare).toBeGreaterThan(5_000);
     expect(6_000 * (1 - REPAIR_POOL_LIMITS.maxAttemptShare))
-      .toBeGreaterThan(REPAIR_POOL_LIMITS.minimumAttemptMs);
+      .toBeLessThan(REPAIR_POOL_LIMITS.minimumAttemptMs);
+    expect(8_000 * (1 - REPAIR_POOL_LIMITS.maxAttemptShare))
+      .toBeLessThan(REPAIR_POOL_LIMITS.minimumAttemptMs);
   });
 
-  it("reaches a healthy second candidate after the first stalls", async () => {
+  it("accepts a first candidate that needs longer than a half deadline", async () => {
     vi.useFakeTimers();
     const tried: string[] = [];
     try {
@@ -218,44 +227,70 @@ describe("resolveRepairAdapter", () => {
         const request = init as RequestInit;
         const model = (JSON.parse(String(request.body)) as { model: string }).model;
         tried.push(model);
-        if (model === "stalled") {
-          return new Promise<Response>((_resolve, reject) => {
-            request.signal?.addEventListener(
-              "abort",
-              () => reject(new DOMException("Aborted", "AbortError")),
-              { once: true },
-            );
-          });
-        }
-        return new Response(JSON.stringify({
-          choices: [{ finish_reason: "stop", message: { content: "完整修复。" } }],
-        }), { status: 200, headers: { "content-type": "application/json" } });
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(chatResponse("完整修复。")), 5_800);
+        });
       }));
-      const adapter = resolveRepairAdapter({
-        MATTER_REPAIR_ADAPTER: "live",
-        MATTER_MODEL_POOL: "primary,backup",
-        MATTER_MODEL_PRIMARY_BASE_URL: "https://primary.example/v1",
-        MATTER_MODEL_PRIMARY_API_KEY: "primary-key",
-        MATTER_MODEL_PRIMARY_MODELS: "stalled",
-        MATTER_MODEL_BACKUP_BASE_URL: "https://backup.example/v1",
-        MATTER_MODEL_BACKUP_API_KEY: "backup-key",
-        MATTER_MODEL_BACKUP_MODELS: "healthy",
-      });
+      const adapter = resolveRepairAdapter(repairPoolEnvironment("slow-healthy", "unused"));
       expect(adapter).not.toBeNull();
 
-      const pending = adapter!({
-        scenario: "matter-transcript-repair",
-        prompt: "repair it",
-        locale: "zh-CN",
-        input: normalizeRepairInput(repairRequest()),
-        deadlineMs: 6_000,
-        maxOutputTokens: 128,
-        disableThinking: true,
-      }, idle());
-      await vi.advanceTimersByTimeAsync(3_000);
+      const pending = adapter!(repairScenarioCall(), idle());
+      await vi.advanceTimersByTimeAsync(5_800);
 
       await expect(pending).resolves.toEqual({ text: "完整修复。" });
-      expect(tried).toEqual(["stalled", "healthy"]);
+      expect(tried).toEqual(["slow-healthy"]);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the second candidate for a fast first-candidate failure", async () => {
+    const tried: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+      tried.push(model);
+      return model === "fails-fast" ? chatResponse("", 503) : chatResponse("完整修复。");
+    }));
+    try {
+      const adapter = resolveRepairAdapter(repairPoolEnvironment("fails-fast", "healthy"));
+      expect(adapter).not.toBeNull();
+
+      await expect(adapter!(repairScenarioCall(), idle()))
+        .resolves.toEqual({ text: "完整修复。" });
+      expect(tried).toEqual(["fails-fast", "healthy"]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("settles to the transcript floor after one provider consumes the usable window", async () => {
+    vi.useFakeTimers();
+    const tried: string[] = [];
+    try {
+      vi.stubGlobal("fetch", vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+        tried.push(model);
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("Aborted", "AbortError")),
+            { once: true },
+          );
+        });
+      }));
+      const adapter = resolveRepairAdapter(repairPoolEnvironment("stalled", "unreached"));
+      expect(adapter).not.toBeNull();
+
+      const pending = repairTranscript(repairRequest(), idle(), adapter);
+      await vi.advanceTimersByTimeAsync(8_000);
+
+      await expect(pending).resolves.toMatchObject({
+        source: "verbatim",
+        text: SPOKEN,
+        fallbackReason: "MODEL_TIMEOUT",
+      });
+      expect(tried).toEqual(["stalled"]);
     } finally {
       vi.unstubAllGlobals();
       vi.useRealTimers();
@@ -278,6 +313,41 @@ describe("resolveRepairAdapter", () => {
     expect(resolveRepairAdapter({ MATTER_REPAIR_ADAPTER: "live" })).toBeNull();
   });
 });
+
+function repairPoolEnvironment(
+  primaryModel: string,
+  backupModel: string,
+): Readonly<Record<string, string>> {
+  return {
+    MATTER_REPAIR_ADAPTER: "live",
+    MATTER_MODEL_POOL: "primary,backup",
+    MATTER_MODEL_PRIMARY_BASE_URL: "https://primary.example/v1",
+    MATTER_MODEL_PRIMARY_API_KEY: "primary-key",
+    MATTER_MODEL_PRIMARY_MODELS: primaryModel,
+    MATTER_MODEL_BACKUP_BASE_URL: "https://backup.example/v1",
+    MATTER_MODEL_BACKUP_API_KEY: "backup-key",
+    MATTER_MODEL_BACKUP_MODELS: backupModel,
+  };
+}
+
+function repairScenarioCall(): Parameters<ScenarioAdapter>[0] {
+  return {
+    scenario: "matter-transcript-repair" as const,
+    prompt: "repair it",
+    locale: "zh-CN",
+    input: normalizeRepairInput(repairRequest()),
+    // The production release canary is 63 code points: 6,000 + 63 × 8.
+    deadlineMs: 6_504,
+    maxOutputTokens: 128,
+    disableThinking: true,
+  };
+}
+
+function chatResponse(text: string, status = 200): Response {
+  return new Response(JSON.stringify({
+    choices: [{ finish_reason: "stop", message: { content: text } }],
+  }), { status, headers: { "content-type": "application/json" } });
+}
 
 describe("compileRepairPrompt", () => {
   const prompt = compileRepairPrompt({ text: "我在想<这件事>该怎么做", locale: "zh-CN", vocabulary: [] });
