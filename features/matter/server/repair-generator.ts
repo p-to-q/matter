@@ -88,12 +88,24 @@ export const fixtureRepairAdapter: ScenarioAdapter = async (call) => {
 };
 
 /**
- * Repair follows the pool's two-candidate allocation. Its six-to-eight-second
- * budget gives each candidate three to four seconds: above the former
- * 2.6-second floor that proved too short, while ensuring one stalled relay
- * cannot consume the fallback the pool exists to provide.
+ * Repair spends one usable provider window instead of buying two windows that
+ * are both shorter than this prompt can finish in. A fast refusal or transport
+ * failure still leaves almost the whole deadline for the next candidate; only
+ * a relay that consumes the useful window prevents a same-request fallback.
+ * That stalled candidate is cooled by the pool before a nearby request.
+ *
+ * The person's deterministic transcript is already visible and remains the
+ * safe floor, so this scenario-specific allocation is preferable to widening
+ * the twelve-second mutation lease or making every pool-backed surface wait.
  */
-export const REPAIR_POOL_LIMITS = DEFAULT_POOL_LIMITS;
+export const REPAIR_POOL_LIMITS = Object.freeze({
+  ...DEFAULT_POOL_LIMITS,
+  // The fastest historical Repair completion was about 0.9 s. A smaller tail
+  // is not a fallback; it can only time out and cool a candidate that never
+  // received a usable opportunity.
+  minimumAttemptMs: 1_000,
+  maxAttemptShare: 0.95,
+});
 
 export function resolveRepairAdapter(
   environment: Readonly<Record<string, string | undefined>> = process.env,

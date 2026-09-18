@@ -3,7 +3,8 @@
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. Preview.57 implementation merged
 through PR #102 at `a6b8f91`; the cooldown-safe release probe followed through
-PR #103 at `fca0558`. The public health route identifies
+PR #103 at `fca0558`, and the provider/action hardening merged through PR #105
+at `2f85b94`. The public health route identifies
 `0.2.0-preview.57`. This is a deployed source identity, not an immutable
 release: no Preview.57 tag or GitHub prerelease exists. Production Model API
 remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
@@ -26,8 +27,10 @@ by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
 below and was accepted through PR #102. PR #103 then added the release-profile
 cooldown guard. Subsequent lifecycle, deployment-gate, or provider-compatibility
 work must earn its own exact-head CI, Preview, Production, and independent-
-verifier receipts; the PR #102 counts cannot certify a successor. No Preview.57
-tag or GitHub release exists.
+verifier receipts; the PR #102 counts cannot certify a successor. PR #105 and
+its merged-main CI passed, but its public provider-session receipt still
+reports `available: false` and its strict pool receipt still fails Repair. No
+Preview.57 tag or GitHub release exists.
 
 Preview.42 source work merged through PR #73 as `738d077`; the exact public
 cache receipt merged through PR #74 as `776b003`. Exact Production deployment
@@ -139,21 +142,24 @@ performance diagnostic the fb37ef8 production artifact retained 4,485 DOM
 independent review     provider, lifecycle, Model API, and corner-geometry proof
                        passed 175/175 focused Vitest cases and 19/19 focused
                        Chromium cases; the final verifier found no P0–P3 issue
-GitHub CI proof         PR #102 and PR #103 passed on their exact topic and
+GitHub CI proof         PRs #102, #103, and #105 passed on their exact topic and
                        merged-main identities; every successor still requires
                        its own exact-head proof
-automatic deploy proof PR #102 and PR #103 completed their GitHub-triggered
-                       Preview and Production paths; the public session receipt
-                       remains available:false and issue #104 owns the missing
-                       deployment-side sealing ring
-publication state      withheld; the strict release probe failed Repair 0/6,
-                       Label 0/6, and Inquiry 5/6. No tag or prerelease unless a
+automatic deploy proof PR #105 completed its GitHub-triggered Preview and
+                       Production paths at merged commit 2f85b94; the public
+                       session receipt remains available:false and issue #104
+                       owns the missing deployment-side sealing ring
+publication state      withheld; the newest strict release receipt reached the
+                       provider for Label 6/6 (four accepted, two rejected) and
+                       returned accepted Inquiry answers 6/6, but Repair ended
+                       in MODEL_TIMEOUT 6/6. No tag or prerelease unless a
                        successor passes exact public identity, the fresh strict
                        six-round pool gate, and provider-session availability
 ```
 
-Successor candidate `919743b` hardens only the bounded user-provider seam; it
-does not widen the release claim. On that exact commit, `npm run check` passed
+Successor commit `919743b`, now included in PR #105 and merged main, hardens only
+the bounded user-provider seam; it does not widen the release claim. On that
+exact commit, `npm run check` passed
 119 Node boundary tests, all 50 Markdown files, the 485-file architecture gate,
 2,615 Vitest cases with five explicit skips, type generation, typecheck,
 zero-warning lint, the Next production build, and the runtime-artifact budget.
@@ -535,9 +541,13 @@ The five provider, route, browser, lease, and platform deadlines now form one
 explicit lattice, and provider-specific thinking flags are sent only to a
 candidate that declared support. The release probe distinguishes pool
 reachability from real per-surface usability, rejects cache/fixture/floor and
-browser-invalid envelopes, and binds the expected source version. Repair now
-gives both ordered candidates a real three-to-four-second window instead of
-letting the first hold 95 percent of the budget.
+browser-invalid envelopes, and binds the expected source version. The later
+Preview.57 strict receipt falsified the assumption that two three-to-four-second
+Repair windows were usable: its 6,504 ms canary reached no complete answer in
+six rounds while the longer Label and Inquiry scenarios reached the same pool.
+The current successor therefore restores a Repair-local 95-percent first
+attempt and refuses a sub-second tail; global pool allocation remains 50/50,
+and the existing deadline lattice is unchanged pending deployment proof.
 
 AI settlement is strict about ownership rather than incidental global revision.
 Elastic and Point-and-Talk may rebase across unrelated edits only while their

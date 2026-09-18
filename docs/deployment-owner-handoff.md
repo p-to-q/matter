@@ -1,14 +1,16 @@
 # Preview deployment-owner handoff
 
 Status: the public origin identifies itself as Preview.57 through the automatic
-GitHub-linked Production path after PRs #102 and #103 reached `main` at
-`fca0558`. Source, CI, deployment, and bounded public-origin identity proof are
-complete, but immutable publication is withheld. The 2026-09-18 public receipt
-still reports the Model API session surface as `available: false`, and the
-strict six-round managed-pool gate failed Repair 0/6, Label 0/6, and Inquiry
-5/6. Neither a successful deployment nor one healthy surface substitutes for
-those independent gates. The latest immutable publication remains Preview.52
-at `6a4931b`.
+GitHub-linked Production path after PR #105 reached `main` at `2f85b94`.
+Source, CI, deployment, and bounded public-origin identity proof are complete,
+but immutable publication is withheld. The 2026-09-18 public receipt still
+reports the Model API session surface as `available: false`. A newer strict
+six-round managed-pool receipt reached the provider for Label 6/6 (four accepted
+labels and two policy rejections) and returned accepted Inquiry answers 6/6,
+but Repair used its deterministic floor after `MODEL_TIMEOUT` 6/6. Neither a
+successful deployment nor provider reachability on the two non-Repair surfaces
+substitutes for the failed Repair gate or the independent session gate. The
+latest immutable publication remains Preview.52 at `6a4931b`.
 
 The repository maintainer pushes GitHub source and observes the linked
 deployment. The deployment owner retains Vercel environment and credential
