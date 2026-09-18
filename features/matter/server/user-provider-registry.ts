@@ -81,6 +81,8 @@ const ANTHROPIC_MODELS = Object.freeze([
   "claude-sonnet-5",
   "claude-sonnet-4-6",
 ]);
+const CLAUDE_HAIKU_MODEL = /(?:^|[-_.:/])haiku(?:$|[-_.:/])/u;
+const CLAUDE_SONNET_MODEL = /(?:^|[-_.:/])sonnet(?:$|[-_.:/])/u;
 const GEMINI_MODELS = Object.freeze(["gemini-2.5-flash", "gemini-2.5-flash-lite"]);
 
 const OPENAI_CURRENT_TRANSPORT = chatTransport({
@@ -643,8 +645,9 @@ function isOfficialModelAllowed(definition: UserProviderDefinition, model: strin
 }
 
 function isClaudeFamilyModel(model: string, family: "haiku" | "sonnet"): boolean {
-  return isSelectableTextModelId(model) && model.toLowerCase().startsWith("claude-") &&
-    new RegExp(`(?:^|[-_.:/])${family}(?:$|[-_.:/])`, "u").test(model.toLowerCase());
+  const value = model.toLowerCase();
+  const familyPattern = family === "haiku" ? CLAUDE_HAIKU_MODEL : CLAUDE_SONNET_MODEL;
+  return isSelectableTextModelId(model) && value.startsWith("claude-") && familyPattern.test(value);
 }
 
 function isGeminiFlashModel(model: string): boolean {
