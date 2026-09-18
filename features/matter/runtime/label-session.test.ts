@@ -57,6 +57,28 @@ describe("planLabelWork", () => {
     expect(items[1]?.requestModel).toBe(false);
   });
 
+  it("uses a product-owned label without allowing model work", () => {
+    const [item] = planLabelWork(
+      ROOT,
+      ["root"],
+      createLabelSessionState("tree-1", 0),
+      "zh-CN",
+      new Map([["root", "允许我们想象的其他生活"]]),
+    );
+
+    expect(item).toMatchObject({
+      provisional: "允许我们想象的其他生活",
+      fixed: true,
+      requestModel: false,
+    });
+    const state = begun([item!], null);
+    expect(state.entries.get("root")).toMatchObject({
+      label: "允许我们想象的其他生活",
+      origin: "fixed",
+      pendingOperationId: null,
+    });
+  });
+
   it("skips a node whose material has not changed", () => {
     const state = begun(plan());
     expect(plan(state)).toEqual([]);
@@ -286,6 +308,33 @@ describe("reduceLabelSession", () => {
       label: "我给它的名字",
       origin: "user",
       basis: null,
+    });
+  });
+
+  it("lets a manual name, but not a stored model label, replace a fixed name", () => {
+    const [fixedItem] = planLabelWork(
+      ROOT,
+      ["root"],
+      createLabelSessionState("tree-1", 0),
+      "zh-CN",
+      new Map([["root", "允许我们想象的其他生活"]]),
+    );
+    const fixed = begun([fixedItem!], null);
+    const modelRestore = reduceLabelSession(fixed, {
+      type: "restore",
+      treeId: "tree-1",
+      entries: [{ nodeId: "root", label: "模型的旧名字", origin: "model", basis: fixedItem!.basis }],
+    });
+    expect(modelRestore).toBe(fixed);
+
+    const manualRestore = reduceLabelSession(fixed, {
+      type: "restore",
+      treeId: "tree-1",
+      entries: [{ nodeId: "root", label: "人给它的名字", origin: "user", basis: null }],
+    });
+    expect(manualRestore.entries.get("root")).toMatchObject({
+      label: "人给它的名字",
+      origin: "user",
     });
   });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import type { MatterLocale } from "../config/locales";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import {
@@ -9,7 +9,10 @@ import {
 } from "../interaction/use-text-swap";
 import type { SegmentSelection } from "../material/text-segments";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
-import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
+import {
+  textSwapActionWasSubmitted,
+  type TextSwapInteractionState,
+} from "../runtime/text-swap-interaction";
 import type { TextSwapCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import type { PointTalkBounds } from "./point-talk-placement";
@@ -30,12 +33,14 @@ export function PointTalkTurn({
   nodeId,
   onClose,
   onCommitted,
+  onPhaseChange,
   onReleased,
   presented,
   surfaceAvailable,
   positioningRef,
   targetBounds,
   tree,
+  voiceCommand,
   voiceAvailable,
 }: Readonly<{
   boundaryRef: RefObject<HTMLElement | null>;
@@ -55,12 +60,14 @@ export function PointTalkTurn({
   nodeId: string;
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
+  onPhaseChange?: (phase: TextSwapInteractionState["phase"]) => void;
   onReleased: () => void;
   presented: boolean;
   surfaceAvailable: boolean;
   positioningRef: RefObject<HTMLElement | null>;
   targetBounds: PointTalkBounds | null;
   tree: ThoughtTree;
+  voiceCommand?: Readonly<{ id: number; type: "start" | "stop" }> | null;
   voiceAvailable: boolean;
 }>) {
   const selection = useMemo<SegmentSelection | null>(() => {
@@ -88,10 +95,26 @@ export function PointTalkTurn({
     onCommitted,
     deliveryWindowAvailable: surfaceAvailable,
   });
+  const appliedVoiceCommandIdRef = useRef<number | null>(null);
   const phase = controller.state.phase;
   useEffect(() => {
     if (presented && selection !== null && phase === "idle" && !controller.enter()) onClose();
   }, [controller, onClose, phase, presented, selection]);
+  useEffect(() => {
+    onPhaseChange?.(phase);
+  }, [onPhaseChange, phase]);
+  useEffect(() => {
+    if (!presented || voiceCommand === null || voiceCommand === undefined) return;
+    if (appliedVoiceCommandIdRef.current === voiceCommand.id) return;
+    if (voiceCommand.type === "start") {
+      if (phase !== "eligible" && phase !== "ready" && phase !== "error") return;
+      if (!controller.startRecording()) return;
+    } else {
+      if (phase !== "recording") return;
+      controller.stopRecording();
+    }
+    appliedVoiceCommandIdRef.current = voiceCommand.id;
+  }, [controller, phase, presented, voiceCommand]);
   useEffect(() => {
     if (!presented) controller.detachPresentation();
   }, [controller, presented]);

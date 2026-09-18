@@ -73,6 +73,7 @@ type PendingRequest = Readonly<{
  * — there is nothing here that could have been lost.
  */
 const WRITE_SKIPPED: LabelWriteReceipt = Object.freeze({ ok: true });
+const EMPTY_FIXED_LABELS: ReadonlyMap<string, string> = new Map<string, string>();
 
 export class LabelDriver {
   private state: LabelSessionState;
@@ -99,6 +100,7 @@ export class LabelDriver {
   private restoring = false;
   private lastScope: LabelScope | null = null;
   private lastNodeIds: readonly string[] = [];
+  private lastFixedLabels: ReadonlyMap<string, string> = EMPTY_FIXED_LABELS;
   private paused = false;
   private disposed = false;
   private leases = 0;
@@ -150,14 +152,25 @@ export class LabelDriver {
    * person can actually see. Work is bounded by that set, so a large document
    * never turns one commit into hundreds of requests.
    */
-  observe(scope: LabelScope, nodeIds: readonly string[]): void {
+  observe(
+    scope: LabelScope,
+    nodeIds: readonly string[],
+    fixedLabels: ReadonlyMap<string, string> = EMPTY_FIXED_LABELS,
+  ): void {
     if (this.disposed) return;
     this.applyDocument(scope);
     this.lastScope = scope;
     this.lastNodeIds = nodeIds;
+    this.lastFixedLabels = fixedLabels;
     this.restoreOnce(scope);
 
-    const items = planLabelWork(scope.tree, nodeIds, this.state, this.dependencies.locale);
+    const items = planLabelWork(
+      scope.tree,
+      nodeIds,
+      this.state,
+      this.dependencies.locale,
+      fixedLabels,
+    );
     let cancelledSupersededWork = false;
     for (const item of items) {
       cancelledSupersededWork = this.cancelSupersededPending(item) || cancelledSupersededWork;
@@ -260,7 +273,9 @@ export class LabelDriver {
       const committed = reduceLabelSession(this.state, { type: "reset-name", nodeId });
       if (committed !== this.state) {
         this.publish(committed);
-        if (this.lastScope !== null) this.observe(this.lastScope, this.lastNodeIds);
+        if (this.lastScope !== null) {
+          this.observe(this.lastScope, this.lastNodeIds, this.lastFixedLabels);
+        }
       }
       return receipt;
     });
@@ -403,6 +418,7 @@ export class LabelDriver {
         entries: records.flatMap((record) => {
           const node = tree?.nodes[record.nodeId];
           if (node === undefined) return [];
+          if (record.origin === "model" && this.lastFixedLabels.has(record.nodeId)) return [];
           if (
             record.origin === "model" &&
             record.basis !== labelMaterialBasis(node.text, this.dependencies.locale)
@@ -421,7 +437,9 @@ export class LabelDriver {
     }
     // Whatever was deferred while loading is now planned against the restored
     // session, so only genuinely unnamed nodes reach the network.
-    if (this.lastScope !== null) this.observe(this.lastScope, this.lastNodeIds);
+    if (this.lastScope !== null) {
+      this.observe(this.lastScope, this.lastNodeIds, this.lastFixedLabels);
+    }
   }
 
   private cancelPending(nodeId: string): void {
@@ -442,7 +460,10 @@ export class LabelDriver {
   private cancelSupersededPending(item: LabelWorkItem): boolean {
     let cancelled = false;
     for (const [operationId, pending] of this.active) {
-      if (pending.item.nodeId !== item.nodeId || pending.item.basis === item.basis) continue;
+      if (
+        pending.item.nodeId !== item.nodeId ||
+        (!item.fixed && pending.item.basis === item.basis)
+      ) continue;
       pending.controller.abort();
       this.active.delete(operationId);
       cancelled = true;
@@ -452,7 +473,7 @@ export class LabelDriver {
       if (
         pending === undefined ||
         pending.item.nodeId !== item.nodeId ||
-        pending.item.basis === item.basis
+        (!item.fixed && pending.item.basis === item.basis)
       ) {
         continue;
       }

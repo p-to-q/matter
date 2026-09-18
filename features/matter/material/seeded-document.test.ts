@@ -14,6 +14,7 @@ import type { ThoughtTree } from "../tree/model";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
   SEEDED_DOCUMENT_TEXT_VARIANTS,
+  SEEDED_EMPTY_TREE_ID,
   SEEDED_ROOT_ONLY_TREE_ID,
   createBranchChildCommand,
   createPerformanceThoughtTree,
@@ -26,6 +27,17 @@ const TEST_HISTORY_LIMITS = {
 };
 
 describe("rooted material fixture", () => {
+  it("keeps the explicit pre-admission document empty and valid", () => {
+    const fixture = createSeededDocument("empty");
+
+    expect(fixture.tree.id).toBe(SEEDED_EMPTY_TREE_ID);
+    expect(fixture.tree.rootId).toBeNull();
+    expect(fixture.tree.nodes).toEqual({});
+    expect(fixture.tree.revision).toBe(0);
+    expect(validateThoughtTree(fixture.tree)).toEqual({ ok: true });
+    expect(fixture.history.entries).toEqual([]);
+  });
+
   it("keeps the public root-only fixture free of prewritten descendants", () => {
     const fixture = createSeededDocument("root");
 

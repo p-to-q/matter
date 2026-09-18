@@ -26,7 +26,7 @@ import type { ThoughtTree } from "../tree/model";
  * `user` is a name a person typed. It outranks both derived origins, survives
  * edits to the material, and is only replaced when they reset it.
  */
-export type LabelOrigin = SemanticLabelSource | "user";
+export type LabelOrigin = SemanticLabelSource | "fixed" | "user";
 
 export type LabelEntry = Readonly<{
   label: string;
@@ -74,6 +74,8 @@ export type LabelWorkItem = Readonly<{
   maxGraphemes: number;
   text: string;
   reference: LabelReferenceMaterial;
+  /** Built-in product copy owns this name; no model may replace it. */
+  fixed: boolean;
   requestModel: boolean;
 }>;
 
@@ -145,6 +147,7 @@ export function planLabelWork(
   nodeIds: readonly string[],
   state: LabelSessionState,
   locale: string,
+  fixedLabels: ReadonlyMap<string, string> = new Map<string, string>(),
 ): readonly LabelWorkItem[] {
   const items: LabelWorkItem[] = [];
   const seen = new Set<string>();
@@ -158,9 +161,17 @@ export function planLabelWork(
     const input = normalizeLabelInput({ text: node.text, locale, context: reference });
     const basis = materialFingerprint(input);
     const existing = state.entries.get(nodeId);
+    const fixedLabel = fixedLabels.get(nodeId);
     // A name a person typed is never re-derived, whatever the material does.
     if (existing?.origin === "user") continue;
-    if (existing !== undefined && existing.basis === basis && !existing.deferred) continue;
+    if (
+      existing !== undefined &&
+      existing.basis === basis &&
+      !existing.deferred &&
+      (fixedLabel === undefined || (
+        existing.origin === "fixed" && existing.label === fixedLabel
+      ))
+    ) continue;
 
     const provisional = deriveProvisionalLabel(input);
     items.push(
@@ -168,12 +179,13 @@ export function planLabelWork(
         nodeId,
         revision: tree.revision,
         basis,
-        provisional: provisional.text,
+        provisional: fixedLabel ?? provisional.text,
         locale: input.locale,
         maxGraphemes: input.maxGraphemes,
         text: input.text,
         reference: toReferenceMaterial(reference),
-        requestModel: decideModelRequest(input, provisional).request,
+        fixed: fixedLabel !== undefined,
+        requestModel: fixedLabel === undefined && decideModelRequest(input, provisional).request,
       }),
     );
   }
@@ -198,6 +210,23 @@ export function reduceLabelSession(
       const existing = state.entries.get(event.item.nodeId);
       const deferred = event.deferred === true;
       if (existing?.origin === "user") return state;
+      if (event.item.fixed) {
+        if (
+          existing?.origin === "fixed" &&
+          existing.basis === event.item.basis &&
+          existing.label === event.item.provisional &&
+          existing.pendingOperationId === null &&
+          !existing.deferred
+        ) return state;
+        return withEntry(state, event.item.nodeId, {
+          label: event.item.provisional,
+          origin: "fixed",
+          basis: event.item.basis,
+          revision: event.item.revision,
+          pendingOperationId: null,
+          deferred: false,
+        });
+      }
       if (existing !== undefined && existing.basis === event.item.basis) {
         // The label is already correct; only the right to ask later changes.
         if (!existing.deferred || deferred) return state;
@@ -209,7 +238,7 @@ export function reduceLabelSession(
       }
       return withEntry(state, event.item.nodeId, {
         label: event.item.provisional,
-        origin: "provisional",
+        origin: event.item.fixed ? "fixed" : "provisional",
         basis: event.item.basis,
         revision: event.item.revision,
         pendingOperationId: event.operationId,
@@ -261,7 +290,7 @@ export function reduceLabelSession(
         // A durable manual name outranks every automatic result, including a
         // model answer that happened to settle while storage was opening.
         if (entry.origin !== "user") {
-          if (existing?.origin === "model") continue;
+          if (existing?.origin === "model" || existing?.origin === "fixed") continue;
           // The driver filters against the current tree as well. This pure
           // guard prevents a stale stored model result from briefly replacing
           // a provisional label when an entry already owns the current basis.

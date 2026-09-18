@@ -5,11 +5,14 @@ import {
   RECORDING_STOP_TIMEOUT_MS,
 } from "./audio-policy";
 import {
+  BrowserSpeechFallbackVoicePort,
   BrowserVoicePort,
   resolveBrowserVoiceTransport,
   VoiceError,
   type BrowserVoiceDependencies,
+  type VoiceCallbacks,
   type VoiceOperation,
+  type VoicePort,
   type VoiceRecording,
 } from "./browser-voice";
 import { VoiceLeaseCoordinator } from "./voice-lease";
@@ -171,6 +174,7 @@ describe("BrowserVoicePort", () => {
       mimeType: "audio/mp4;codecs=mp4a.40.2",
       audioBitsPerSecond: 64_000,
     });
+    expect(h.recorder.start).toHaveBeenCalledWith(1_000);
 
     h.advance(850);
     const stopped = h.port.stop(OPERATION);
@@ -185,6 +189,142 @@ describe("BrowserVoicePort", () => {
     // Stop replaces the duration timer with its own terminal-event watchdog;
     // successful settlement clears both lifetimes exactly once.
     expect(h.dependencies.clearTimer).toHaveBeenCalledTimes(2);
+  });
+
+  it("falls back before capture when the native speech service is unavailable", async () => {
+    const unsupported = new VoiceError("VOICE_UNSUPPORTED");
+    const primary: VoicePort = {
+      start: vi.fn(async (_operation, callbacks) => {
+        callbacks?.onError?.(unsupported);
+        throw unsupported;
+      }),
+      stop: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const recording: VoiceRecording = Object.freeze({
+      operation: OPERATION,
+      audio: new Blob(["voice"], { type: "audio/mp4" }),
+      durationMs: 400,
+    });
+    const fallback: VoicePort = {
+      start: vi.fn(async () => undefined),
+      stop: vi.fn(async () => recording),
+      cancel: vi.fn(),
+    };
+    const createFallback = vi.fn(() => fallback);
+    const onError = vi.fn();
+    const port = new BrowserSpeechFallbackVoicePort(primary, createFallback);
+
+    await expect(port.start(OPERATION, { onError })).resolves.toBeUndefined();
+    expect(onError).not.toHaveBeenCalled();
+    expect(primary.cancel).toHaveBeenCalledWith(OPERATION);
+    expect(fallback.start).toHaveBeenCalledWith(
+      OPERATION,
+      expect.objectContaining({ onError: expect.any(Function) }),
+    );
+    await expect(port.stop(OPERATION)).resolves.toBe(recording);
+  });
+
+  it("does not hide microphone denial behind a second capture path", async () => {
+    const denied = new VoiceError("MICROPHONE_DENIED");
+    const primary: VoicePort = {
+      start: vi.fn(async (_operation, callbacks) => {
+        callbacks?.onError?.(denied);
+        throw denied;
+      }),
+      stop: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const createFallback = vi.fn<() => VoicePort>();
+    const onError = vi.fn();
+    const port = new BrowserSpeechFallbackVoicePort(primary, createFallback);
+
+    await expect(port.start(OPERATION, { onError })).rejects.toEqual(denied);
+    expect(onError).toHaveBeenCalledWith(denied);
+    expect(createFallback).not.toHaveBeenCalled();
+  });
+
+  it("releases a successful or failed stop so the same wrapper can record again", async () => {
+    const firstRecording: VoiceRecording = Object.freeze({
+      operation: OPERATION,
+      audio: new Blob(["voice"], { type: "audio/mp4" }),
+      durationMs: 400,
+    });
+    const stop = vi.fn()
+      .mockResolvedValueOnce(firstRecording)
+      .mockRejectedValueOnce(new VoiceError("RECORDING_FAILED"));
+    const primary: VoicePort = {
+      start: vi.fn(async () => undefined),
+      stop,
+      cancel: vi.fn(),
+    };
+    const port = new BrowserSpeechFallbackVoicePort(primary, () => primary);
+
+    await port.start(OPERATION);
+    await expect(port.stop(OPERATION)).resolves.toBe(firstRecording);
+    await expect(port.start({ ...OPERATION, attempt: 2 })).resolves.toBeUndefined();
+    await expect(port.stop({ ...OPERATION, attempt: 2 })).rejects.toMatchObject({
+      code: "RECORDING_FAILED",
+    });
+    await expect(port.start({ ...OPERATION, attempt: 3 })).resolves.toBeUndefined();
+    port.cancel({ ...OPERATION, attempt: 3 });
+  });
+
+  it("releases runtime failure and ignores cancelled session callbacks", async () => {
+    const callbackLeases: VoiceCallbacks[] = [];
+    const primary: VoicePort = {
+      start: vi.fn(async (_operation, callbacks) => {
+        callbackLeases.push(callbacks ?? {});
+      }),
+      stop: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const firstTranscript = vi.fn();
+    const firstError = vi.fn();
+    const secondTranscript = vi.fn();
+    const port = new BrowserSpeechFallbackVoicePort(primary, () => primary);
+
+    await port.start(OPERATION, {
+      onTranscript: firstTranscript,
+      onError: firstError,
+    });
+    callbackLeases[0]?.onError?.(new VoiceError("RECORDING_FAILED"));
+    expect(firstError).toHaveBeenCalledTimes(1);
+
+    await port.start({ ...OPERATION, attempt: 2 }, {
+      onTranscript: secondTranscript,
+    });
+    port.cancel({ ...OPERATION, attempt: 2 });
+    callbackLeases[0]?.onTranscript?.("late first transcript");
+    callbackLeases[1]?.onTranscript?.("late second transcript");
+    callbackLeases[1]?.onError?.(new VoiceError("RECORDING_FAILED"));
+    expect(firstTranscript).not.toHaveBeenCalled();
+    expect(secondTranscript).not.toHaveBeenCalled();
+  });
+
+  it("does not switch transports after native speech has started", async () => {
+    let callbacks: VoiceCallbacks = {};
+    const primary: VoicePort = {
+      start: vi.fn(async (_operation, nextCallbacks) => {
+        callbacks = nextCallbacks ?? {};
+      }),
+      stop: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const createFallback = vi.fn<() => VoicePort>();
+    const onError = vi.fn();
+    const port = new BrowserSpeechFallbackVoicePort(primary, createFallback);
+
+    await port.start(OPERATION, { onError });
+    callbacks.onError?.(new VoiceError("VOICE_UNSUPPORTED"));
+
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({
+      code: "VOICE_UNSUPPORTED",
+    }));
+    expect(createFallback).not.toHaveBeenCalled();
+    await expect(port.stop(OPERATION)).rejects.toMatchObject({
+      code: "RECORDING_NOT_ACTIVE",
+    });
   });
 
   it("tries the next supported MIME when a hinted recorder cannot be constructed", async () => {

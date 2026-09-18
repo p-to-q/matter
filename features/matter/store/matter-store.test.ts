@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
+  SEEDED_EMPTY_TREE_ID,
   SEEDED_ROOT_ONLY_TREE_ID,
   createSeededDocument,
 } from "../material/seeded-document";
+import { EMPTY_MATTER_DOCUMENT_TITLE } from "../config/initial-document";
 import {
   seededNodeText,
 } from "../material/seeded-material-copy";
@@ -21,6 +23,23 @@ import { buildTextSwapPlan, parseTextSwapEnvelope } from "../protocol/text-swap-
 import { selectLineage } from "../tree/selectors";
 
 describe("Matter store", () => {
+  it("opens the pre-admission document with quiet identity and no sample material", () => {
+    const store = createMatterStore("empty", { documentRoot: true });
+    const tree = store.getState().tree;
+    const rootId = tree.rootId;
+    if (rootId === null) throw new Error("empty document root missing");
+
+    expect(tree.id).toBe(SEEDED_EMPTY_TREE_ID);
+    expect(tree.title).toBe(EMPTY_MATTER_DOCUMENT_TITLE);
+    expect(tree.nodes[rootId]).toMatchObject({
+      role: "document-root",
+      text: "",
+      children: [],
+    });
+    expect(Object.keys(tree.nodes)).toEqual([rootId]);
+    expect(store.getState().history.entries).toEqual([]);
+  });
+
   it("uses the deployed initial title without replacing restored document titles", () => {
     const store = createMatterStore("expanded", {
       documentRoot: true,
@@ -853,7 +872,7 @@ describe("Matter store", () => {
     },
   );
 
-  it("localizes only an untouched default title", () => {
+  it("localizes canonical title mementos without touching a manual title", () => {
     const untouched = createMatterStore("expanded", {
       documentRoot: true,
       initialTitle: "被允许想象的其他生活",
@@ -873,9 +892,9 @@ describe("Matter store", () => {
     renamed.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
     expect(renamed.getState().tree.title).toBe("我自己的标题");
     expect(renamed.getState().undo()).toMatchObject({ status: "committed" });
-    expect(renamed.getState().tree.title).toBe("被允许想象的其他生活");
+    expect(renamed.getState().tree.title).toBe("Other lives we are still allowed to imagine");
     renamed.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
-    expect(renamed.getState().tree.title).toBe("被允许想象的其他生活");
+    expect(renamed.getState().tree.title).toBe("Other lives we are still allowed to imagine");
     expect(renamed.getState().redo()).toMatchObject({ status: "committed" });
     expect(renamed.getState().tree.title).toBe("我自己的标题");
   });

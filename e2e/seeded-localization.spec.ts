@@ -1,12 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 import { CANVAS_LANGUAGE_OPTIONS } from "../features/matter/components/canvas-preferences";
 import { SEEDED_DOCUMENT_NODE_IDS, SEEDED_DOCUMENT_TREE_ID } from "../features/matter/material/seeded-document";
-import { seededNodeText } from "../features/matter/material/seeded-material-copy";
+import {
+  seededMaterialCopy,
+  seededNodeLabel,
+  seededNodeText,
+} from "../features/matter/material/seeded-material-copy";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
 test("the preview seed follows all five languages and keeps the last one after reload", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
+  const labelRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/label")) labelRequests.push(request.url());
+  });
   await page.goto("/matter");
 
   const html = page.locator("html");
@@ -19,9 +27,16 @@ test("the preview seed follows all five languages and keeps the last one after r
     await page.getByRole("menuitemradio", { name: option.label, exact: true }).click();
 
     await expect(html).toHaveAttribute("lang", option.value);
-    await expect(root).toHaveText(seededNodeText(option.value, "root"));
-    await expect(subtitle).toHaveText(seededNodeText(option.value, "imaginedLives"));
+    await expect(page.locator(".material-files__context-title span"))
+      .toHaveText(seededMaterialCopy(option.value).title);
+    for (const [key, nodeId] of Object.entries(SEEDED_DOCUMENT_NODE_IDS)) {
+      const passageKey = key as keyof typeof SEEDED_DOCUMENT_NODE_IDS;
+      await expect(seedText(page, nodeId)).toHaveText(seededNodeText(option.value, passageKey));
+      await expect(page.locator(`.material-file[data-node-id="${nodeId}"] .material-file__title`))
+        .toHaveText(seededNodeLabel(option.value, passageKey));
+    }
   }
+  expect(labelRequests).toEqual([]);
 
   const finalLocale = CANVAS_LANGUAGE_OPTIONS.at(-1)?.value;
   if (finalLocale === undefined) throw new Error("The closed language list is empty.");

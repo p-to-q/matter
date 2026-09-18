@@ -105,6 +105,15 @@ write is retried once in the same atomic transaction before failure is reported.
 Existing databases converge during the v4 upgrade itself, so the bound does not
 depend on a later model write; a failed migration aborts as one version change.
 
+**Built-in preview copy is named, not labelled.** Each canonical seed passage
+has one fixed navigation name in every supported locale. Switching language
+replaces that name together with the exact canonical title, passage copy, and
+their undo or redo mementos; it never sends seed copy to `/api/label` and never
+lets an older model-cache row displace the fixed name. An explicit name a person
+typed still outranks it. Editing the passage to non-canonical material ends this
+exception, while Undo may restore it; Branch and Voice material are ordinary
+person-created material even when Branch began from closed preview prose.
+
 **The model's output surface is `{ text }`**, matching the transform turn. It
 cannot name a node, a revision, or an action, because none of those exist in its
 output channel.

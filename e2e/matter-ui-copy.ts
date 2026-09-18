@@ -32,11 +32,12 @@ export const fixtureMaterialFilesToggleName = anyOf(
 );
 
 /**
- * The voice tool names the exact anchor it would admit under, so a selection
- * one level from the root reads differently from a deeper one. A test that
- * only cares that voice is armed must accept either name.
+ * The voice tool names whether it will admit new material or rewrite the
+ * currently selected passage. A test that only cares that Voice is armed must
+ * accept each available action name.
  */
 export const fixtureVoiceAdmissionName = anyOf(
   fixtureUiCopy.voiceTool.recordTopLevelThought,
   fixtureUiCopy.voiceTool.recordBelowSelectedMaterial,
+  fixtureUiCopy.voiceTool.recordRewriteDirection,
 );

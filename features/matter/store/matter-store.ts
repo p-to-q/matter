@@ -11,6 +11,7 @@ import {
 } from "../material/seeded-document";
 import {
   DEFAULT_MATTER_DOCUMENT_TITLE,
+  EMPTY_MATTER_DOCUMENT_TITLE,
   LEGACY_MATTER_DOCUMENT_TITLE,
   normalizeMatterInitialDocument,
 } from "../config/initial-document";
@@ -341,8 +342,11 @@ export function createMatterStore(
   let repairLeaseSequence = 0;
   const monotonicNow = options.monotonicNow ?? defaultMonotonicNow;
   const fixture = createSeededDocument(initialDocument);
+  const initialTitle = options.initialTitle ?? (
+    initialDocument === "empty" ? EMPTY_MATTER_DOCUMENT_TITLE : undefined
+  );
   const initialTree = options.documentRoot === true
-    ? normalizeForDocumentModel(fixture.tree, options.initialTitle)
+    ? normalizeForDocumentModel(fixture.tree, initialTitle)
     : fixture.tree;
   const initialDomain = protectDomain({
     tree: initialTree,
@@ -1289,9 +1293,14 @@ function freezeState(state: MatterStoreInternalState): MatterStoreInternalState 
   return Object.freeze(state);
 }
 
-const matterStore = createMatterStore(undefined, {
+const singletonInitialDocument = normalizeMatterInitialDocument(
+  process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
+);
+const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
-  initialTitle: DEFAULT_MATTER_DOCUMENT_TITLE,
+  initialTitle: singletonInitialDocument === "empty"
+    ? EMPTY_MATTER_DOCUMENT_TITLE
+    : DEFAULT_MATTER_DOCUMENT_TITLE,
 });
 
 export function useMatterStore<T>(

@@ -6,12 +6,13 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
+import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
 import type { TypographyHeightAuthorityToken } from "../layout/typography-height-ledger";
 import { projectVerticalPresentationBand } from "../layout/vertical-presentation-band";
 import type { ThoughtTree } from "../tree/model";
-import { isDocumentRoot } from "../tree/document-root";
+import { isDocumentRoot, isEmptyMaterialDocument } from "../tree/document-root";
 import { projectTools } from "../tools/project-tools";
 import { projectToolSurface } from "../tools/project-tool-surface";
 import { isCurrentToolIntent } from "../tools/validate-intent";
@@ -23,6 +24,7 @@ import {
   projectCanvasAttentionField,
   reduceCanvasViewport,
   type CanvasPointerType,
+  type CanvasTouchContact,
   type CanvasViewportState,
 } from "../interaction/canvas-viewport";
 import {
@@ -401,6 +403,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(false),
     () => setPagePresentationAvailable(true),
   ), []);
+  const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
+    id: number;
+    type: "start" | "stop";
+  }> | null>(null);
+  const pointTalkVoiceCommandIdRef = useRef(0);
   // A revision orders one known lineage; it cannot reconcile edits made before
   // IndexedDB has identified that lineage. Keep durable gestures inert during
   // bootstrap so hydration can never discard a load-window edit.
@@ -590,6 +598,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const voiceReadiness = useVoiceReadiness();
   const wheelMotionTimerRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
+  const canvasTouchContactsRef = useRef(new Map<number, CanvasTouchContact>());
+  const multiTouchNavigationRef = useRef(false);
   const pointerOriginNodeRef = useRef<string | null>(null);
   const lassoClickOriginNodeRef = useRef<string | null>(null);
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
@@ -1171,6 +1181,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // this render fail-closed.
     setPointTalkOwner(null);
     setPointTalkPresented(false);
+    if (pointTalkPhase !== "idle") setPointTalkPhase("idle");
+    if (pointTalkVoiceCommand !== null) setPointTalkVoiceCommand(null);
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1222,6 +1234,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     publishMaterialTextChange(change);
     setPointTalkOwner(null);
     setPointTalkPresented(false);
+    setPointTalkPhase("idle");
+    setPointTalkVoiceCommand(null);
     cancelPointTalkFocusRestore();
     const basis = Object.freeze({
       documentEpoch: change.documentEpoch,
@@ -1342,10 +1356,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [materialPresentationAvailable, setAdmissionPresentationAvailable]);
   const closePointTalk = useCallback(() => {
     setPointTalkPresented(false);
+    setPointTalkVoiceCommand(null);
   }, []);
   const releasePointTalkJob = useCallback(() => {
     setPointTalkOwner(null);
     setPointTalkPresented(false);
+    setPointTalkPhase("idle");
+    setPointTalkVoiceCommand(null);
+  }, []);
+  const issuePointTalkVoiceCommand = useCallback((type: "start" | "stop") => {
+    pointTalkVoiceCommandIdRef.current += 1;
+    setPointTalkVoiceCommand(Object.freeze({
+      id: pointTalkVoiceCommandIdRef.current,
+      type,
+    }));
   }, []);
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
     transformState.phase !== "idle";
@@ -2022,12 +2046,27 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectedNode =
     navigation.selectedNodeId === null ? null : tree.nodes[navigation.selectedNodeId] ?? null;
   const toolTargetNode = resolveToolTargetNode(navigation, tree);
+  const selectedRewriteNodeId = selectedNode !== null && pointTalkEligibleNodeIds.has(selectedNode.id)
+    ? selectedNode.id
+    : null;
   const admissionVoiceAvailable = props.admissionAnchor !== null &&
     voiceAdmissionIsEnabled() &&
     voiceReadiness.status === "ready";
-  const voiceAvailable = admissionVoiceAvailable;
-  const voiceToolAvailable = voiceAvailable &&
+  const pointTalkVoiceStartable = activePointTalkNodeId !== null &&
+    (pointTalkPhase === "eligible" || pointTalkPhase === "ready" || pointTalkPhase === "error");
+  const pointTalkVoiceRecording = activePointTalkNodeId !== null && pointTalkPhase === "recording";
+  const selectedRewriteAvailable = selectedRewriteNodeId !== null &&
+    voiceReadiness.status === "ready";
+  const voiceAvailable = activePointTalkNodeId !== null
+    ? voiceReadiness.status === "ready" && (pointTalkVoiceStartable || pointTalkVoiceRecording)
+    : selectedNode !== null
+      ? selectedRewriteAvailable
+      : admissionVoiceAvailable;
+  const admissionVoiceToolAvailable = admissionVoiceAvailable &&
     (props.admission.state.phase === "idle" || props.admission.state.phase === "recording");
+  const voiceToolAvailable = activePointTalkNodeId !== null || selectedNode !== null
+    ? voiceAvailable
+    : admissionVoiceToolAvailable;
   const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
   const admissionFocusFrameRef = useRef<Readonly<{
     basis: AdmissionFocusRestorationBasis;
@@ -2113,7 +2152,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => ({ treeId: tree.id, documentEpoch: props.documentEpoch }),
     [props.documentEpoch, tree.id],
   );
-  const materialGuidance: CanvasMaterialGuidanceState = tree.rootId === null
+  const firstAdmission = isEmptyMaterialDocument(tree);
+  const materialGuidance: CanvasMaterialGuidanceState = firstAdmission
     ? { kind: "empty" }
     : navigation.mode === "focus"
       ? { kind: "focus" }
@@ -2743,20 +2783,58 @@ export function RootedMaterial(props: RootedMaterialProps) {
     !wheelMotionActive &&
     viewport.gesture?.dragging !== true;
 
-  const updateViewport = (event: Parameters<typeof reduceCanvasViewport>[1]) => {
+  const updateViewport = useCallback((event: Parameters<typeof reduceCanvasViewport>[1]) => {
     indexCenterRequestRef.current = null;
     interruptIndexCameraMotion();
     setViewport((current) => {
       const result = reduceCanvasViewport(current, event);
       return result.ok ? result.state : current;
     });
-  };
+  }, [interruptIndexCameraMotion, setViewport]);
+
+  const cancelCanvasPointerOwnership = useCallback(() => {
+    const touchPointerIds = Array.from(canvasTouchContactsRef.current.keys());
+    canvasTouchContactsRef.current.clear();
+    multiTouchNavigationRef.current = false;
+    const shell = shellRef.current;
+    for (const pointerId of touchPointerIds) {
+      lasso.pointerCancel(pointerId);
+      if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
+    }
+    lassoClickOriginNodeRef.current = null;
+    pointerOriginNodeRef.current = null;
+    if (nodeDragRef.current !== null) clearNodeDrag();
+    updateViewport({ type: "gesture-cancel" });
+  }, [clearNodeDrag, lasso, updateViewport]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") cancelCanvasPointerOwnership();
+    };
+    window.addEventListener("blur", cancelCanvasPointerOwnership);
+    window.addEventListener("pagehide", cancelCanvasPointerOwnership);
+    window.addEventListener("orientationchange", cancelCanvasPointerOwnership);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.screen.orientation?.addEventListener?.("change", cancelCanvasPointerOwnership);
+    return () => {
+      window.removeEventListener("blur", cancelCanvasPointerOwnership);
+      window.removeEventListener("pagehide", cancelCanvasPointerOwnership);
+      window.removeEventListener("orientationchange", cancelCanvasPointerOwnership);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.screen.orientation?.removeEventListener?.("change", cancelCanvasPointerOwnership);
+    };
+  }, [cancelCanvasPointerOwnership]);
 
   const cancelViewportGesture = () => {
     // A tool transfer ends the old camera owner and its browser capture as one
     // boundary; later events from that pointer cannot enter the new tool.
-    const pointerId = viewport.gesture?.pointerId;
-    if (pointerId === undefined) return;
+    const gesture = viewport.gesture;
+    if (gesture === null) return;
+    if (gesture.kind === "pinch") {
+      cancelCanvasPointerOwnership();
+      return;
+    }
+    const pointerId = gesture.pointerId;
     pointerOriginNodeRef.current = null;
     updateViewport({ type: "pointer-cancel", pointerId });
     const shell = shellRef.current;
@@ -2840,6 +2918,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
         event.stopPropagation();
       }}
       onLostPointerCapture={(event) => {
+        const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
+        if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
+        if (trackedTouch && multiTouchNavigationRef.current) {
+          suppressClickRef.current = true;
+          if (canvasTouchContactsRef.current.size === 0) multiTouchNavigationRef.current = false;
+          updateViewport({ type: "lost-pointer-capture", pointerId: event.pointerId });
+          return;
+        }
         if (stretch.pointerCancel(event.pointerId)) return;
         if (lasso.pointerCancel(event.pointerId)) {
           lassoClickOriginNodeRef.current = null;
@@ -2850,6 +2936,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "lost-pointer-capture", pointerId: event.pointerId });
       }}
       onPointerCancel={(event) => {
+        const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
+        if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
+        if (trackedTouch && multiTouchNavigationRef.current) {
+          suppressClickRef.current = true;
+          if (canvasTouchContactsRef.current.size === 0) multiTouchNavigationRef.current = false;
+          updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
+          return;
+        }
         if (stretch.pointerCancel(event.pointerId)) return;
         if (lasso.pointerCancel(event.pointerId)) {
           lassoClickOriginNodeRef.current = null;
@@ -2865,18 +2959,51 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
         const pointerViewport = interruptIndexCameraMotion();
         abortFixedExpansion();
+        if (event.pointerType === "touch") {
+          const contact = projectCanvasTouchContact(
+            event.pointerId,
+            event.clientX,
+            event.clientY,
+            materialPlaneRef.current,
+          );
+          if (contact !== null) canvasTouchContactsRef.current.set(event.pointerId, contact);
+          if (canvasTouchContactsRef.current.size >= 2) {
+            for (const pointerId of canvasTouchContactsRef.current.keys()) {
+              if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
+            }
+            if (nodeDragRef.current !== null) clearNodeDrag();
+            pointerOriginNodeRef.current = null;
+            suppressClickRef.current = true;
+            multiTouchNavigationRef.current = true;
+            updateViewport({
+              type: "pinch-start",
+              contacts: Array.from(canvasTouchContactsRef.current.values()),
+            });
+            event.preventDefault();
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              canvasTouchContactsRef.current.delete(event.pointerId);
+              updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
+              if (canvasTouchContactsRef.current.size === 0) multiTouchNavigationRef.current = false;
+            }
+            return;
+          }
+        }
         if (lasso.pointerDown(event)) {
           const originNodeId = (event.target as HTMLElement)
             .closest<HTMLElement>("[data-thought-id]")?.dataset.thoughtId ?? null;
           lassoClickOriginNodeRef.current = originNodeId !== null && workingContext.activeNodeIds.has(originNodeId)
             ? originNodeId
             : null;
+          props.admission.clearRepairPresentations();
           event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
             // A detached capture target cannot own a trustworthy lasso stroke.
             lasso.pointerCancel(event.pointerId);
+            canvasTouchContactsRef.current.delete(event.pointerId);
           }
           return;
         }
@@ -2930,20 +3057,53 @@ export function RootedMaterial(props: RootedMaterialProps) {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
             clearNodeDrag();
+            canvasTouchContactsRef.current.delete(event.pointerId);
           }
           return;
         }
-        updateViewport({ type: "pointer-down", pointerId: event.pointerId, pointerType: normalizePointerType(event.pointerType), isPrimary: event.isPrimary, button: event.button, clientX: event.clientX, clientY: event.clientY });
+        const touchContact = canvasTouchContactsRef.current.get(event.pointerId);
+        updateViewport({
+          type: "pointer-down",
+          pointerId: event.pointerId,
+          pointerType: normalizePointerType(event.pointerType),
+          isPrimary: event.isPrimary,
+          button: event.button,
+          clientX: touchContact?.x ?? event.clientX,
+          clientY: touchContact?.y ?? event.clientY,
+        });
         try {
           event.currentTarget.setPointerCapture(event.pointerId);
         } catch {
           // A detached capture target cannot own a trustworthy pan gesture;
           // drop the half-started drag so moves can never arrive for it.
           pointerOriginNodeRef.current = null;
+          canvasTouchContactsRef.current.delete(event.pointerId);
           updateViewport({ type: "pointer-cancel", pointerId: event.pointerId });
         }
       }}
       onPointerMove={(event) => {
+        let touchContact: CanvasTouchContact | null = null;
+        if (canvasTouchContactsRef.current.has(event.pointerId)) {
+          touchContact = projectCanvasTouchContact(
+            event.pointerId,
+            event.clientX,
+            event.clientY,
+            materialPlaneRef.current,
+          );
+          if (touchContact !== null) {
+            canvasTouchContactsRef.current.set(event.pointerId, touchContact);
+          }
+        }
+        if (multiTouchNavigationRef.current && touchContact !== null) {
+          event.preventDefault();
+          updateViewport({
+            type: "pointer-move",
+            pointerId: event.pointerId,
+            clientX: touchContact.x,
+            clientY: touchContact.y,
+          });
+          return;
+        }
         if (interactionPending) return;
         if (lasso.pointerMove(event)) {
           event.preventDefault();
@@ -2954,6 +3114,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           if (!nodeDrag.dragging && Math.hypot(event.clientX - nodeDrag.startX, event.clientY - nodeDrag.startY) >= (event.pointerType === "touch" ? 8 : 4)) {
             nodeDrag.dragging = true;
             if (nodeDrag.sourceId !== null && nodeDrag.policy !== null && nodeDrag.sourceElement !== null) {
+              props.admission.clearRepairPresentations();
               event.currentTarget.dataset.nodeDragging = "true";
               nodeDrag.sourceElement.dataset.dragSource = "true";
             }
@@ -3012,10 +3173,42 @@ export function RootedMaterial(props: RootedMaterialProps) {
           publishNodeDragTarget(nodeDrag, targetElement, targetId, targetIndex, targetMode, event.currentTarget);
           return;
         }
-        if (viewport.gesture?.pointerId !== event.pointerId) return;
-        updateViewport({ type: "pointer-move", pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY });
+        if (viewport.gesture?.kind !== "pan" || viewport.gesture.pointerId !== event.pointerId) return;
+        updateViewport({
+          type: "pointer-move",
+          pointerId: event.pointerId,
+          clientX: touchContact?.x ?? event.clientX,
+          clientY: touchContact?.y ?? event.clientY,
+        });
       }}
       onPointerUp={(event) => {
+        const trackedTouch = canvasTouchContactsRef.current.get(event.pointerId) ?? null;
+        const finalTrackedTouch = trackedTouch === null
+          ? null
+          : projectCanvasTouchContact(
+              event.pointerId,
+              event.clientX,
+              event.clientY,
+              materialPlaneRef.current,
+            ) ?? trackedTouch;
+        if (trackedTouch !== null && multiTouchNavigationRef.current) {
+          canvasTouchContactsRef.current.delete(event.pointerId);
+          suppressClickRef.current = true;
+          updateViewport(interactionPending
+            ? { type: "pointer-cancel", pointerId: event.pointerId }
+            : {
+                type: "pointer-up",
+                pointerId: event.pointerId,
+                clientX: finalTrackedTouch?.x ?? event.clientX,
+                clientY: finalTrackedTouch?.y ?? event.clientY,
+              });
+          if (canvasTouchContactsRef.current.size === 0) multiTouchNavigationRef.current = false;
+          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+          }
+          return;
+        }
+        if (trackedTouch !== null) canvasTouchContactsRef.current.delete(event.pointerId);
         if (interactionPending) {
           lasso.pointerCancel(event.pointerId);
           lassoClickOriginNodeRef.current = null;
@@ -3071,7 +3264,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
           return;
         }
-        if (viewport.gesture?.pointerId !== event.pointerId) return;
+        if (viewport.gesture?.kind !== "pan" || viewport.gesture.pointerId !== event.pointerId) return;
         const dragged =
           viewport.gesture.dragging ||
           Math.hypot(
@@ -3092,7 +3285,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
         }
         suppressClickRef.current = true;
-        updateViewport({ type: "pointer-up", pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY });
+        updateViewport({
+          type: "pointer-up",
+          pointerId: event.pointerId,
+          clientX: finalTrackedTouch?.x ?? event.clientX,
+          clientY: finalTrackedTouch?.y ?? event.clientY,
+        });
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       }}
     >
@@ -3190,6 +3388,27 @@ export function RootedMaterial(props: RootedMaterialProps) {
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
+          if (activePointTalkNodeId !== null) {
+            if (pointTalkVoiceRecording) issuePointTalkVoiceCommand("stop");
+            else if (pointTalkVoiceStartable) issuePointTalkVoiceCommand("start");
+            return;
+          }
+          if (selectedRewriteNodeId !== null) {
+            canvasChromeRef.current?.closeInquiry();
+            abortElasticExpansion();
+            if (lasso.active) exitLasso();
+            props.admission.clearRepairPresentations();
+            setPointTalkPhase("idle");
+            setPointTalkOpeningId((current) => current + 1);
+            setPointTalkOwner(createPointTalkOwner(
+              props.documentEpoch,
+              tree.id,
+              selectedRewriteNodeId,
+            ));
+            setPointTalkPresented(true);
+            issuePointTalkVoiceCommand("start");
+            return;
+          }
           abortFixedExpansion();
           if (props.admission.state.phase === "recording") {
             props.admission.stop();
@@ -3202,7 +3421,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         surface={toolSurface}
         panActive={!lasso.active && canvasMode === "pan"}
-        voiceActive={props.admission.state.phase === "recording"}
+        voiceActive={props.admission.state.phase === "recording" ||
+          pointTalkVoiceRecording ||
+          (activePointTalkNodeId !== null && pointTalkPhase === "permission")}
         voiceAvailable={voiceToolAvailable}
         // A navigation restriction must be named as one. The generic build
         // limitation is the last branch, because reaching for it first told a
@@ -3210,11 +3431,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
         // both navigation explanations unreachable.
         voiceLabel={voiceToolLabel({
           anchor: props.admissionAnchor,
+          firstAdmission,
           isPreviewReady: voiceAdmissionIsEnabled() && voiceReadiness.status === "ready",
           isRecording: props.admission.state.phase === "recording",
           isVoiceChecking: voiceReadiness.status === "checking",
           locale: props.locale,
           navigationMode: navigation.mode,
+          rewriteRecording: pointTalkVoiceRecording,
+          rewriteTargeted: activePointTalkNodeId !== null || selectedNode !== null,
           rootId: tree.rootId,
         })}
       />
@@ -3250,9 +3474,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
           viewport={{ x: viewport.x, y: viewport.y, zoom: viewport.zoom }}
         />
         {projection.length === 0 ? (
-          <p className="matter-document__empty">
-            {navigation.mode === "focus" ? "This focus is no longer available." : "No material yet."}
-          </p>
+          navigation.mode === "focus" ? (
+            <p className="matter-document__empty">This focus is no longer available.</p>
+          ) : null
         ) : (
           <div
             className="matter-world"
@@ -3339,6 +3563,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
               if (pointTalkHostNodeId !== null) return;
               canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
+              props.admission.clearRepairPresentations();
+              setPointTalkPhase("idle");
+              setPointTalkVoiceCommand(null);
               setPointTalkOpeningId((current) => current + 1);
               setPointTalkOwner(createPointTalkOwner(props.documentEpoch, tree.id, nodeId));
               setPointTalkPresented(true);
@@ -3410,6 +3637,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
+            onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
@@ -3417,6 +3645,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             targetBounds={pointTalkTargetBounds}
             tree={tree}
             deliveryVisibleNodeIds={visiblyLaidOutNodeIds}
+            voiceCommand={pointTalkVoiceCommand}
             voiceAvailable={voiceReadiness.status === "ready"}
           />
         )}
@@ -3438,6 +3667,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           locale={props.locale}
           onBeginAdjustment={beginStretchAdjustment}
           onFocusRestored={finishStretchFocusRestore}
+          onPreciseGesture={props.admission.clearRepairPresentations}
           onRequestFocusRestore={requestStretchFocusRestore}
           restoreFocusHandle={stretchFocusRestoreHandle}
           status={transformState.phase}
@@ -3821,6 +4051,7 @@ function LassoOverlay({
   locale,
   onBeginAdjustment,
   onFocusRestored,
+  onPreciseGesture,
   onRequestFocusRestore,
   restoreFocusHandle,
   status,
@@ -3844,6 +4075,7 @@ function LassoOverlay({
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
   onFocusRestored: (handle: StretchHandle) => void;
+  onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
@@ -3895,7 +4127,7 @@ function LassoOverlay({
         layerRef={addressLayerRef}
         onConfirm={() => {
           onBeginAdjustment();
-          stretch.confirm();
+          if (stretch.confirm()) onPreciseGesture();
         }}
         projection={addressProjection}
         variant="actionable"
@@ -3961,6 +4193,7 @@ function LassoOverlay({
               locale={locale}
               onBeginAdjustment={onBeginAdjustment}
               onFocusRestored={onFocusRestored}
+              onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
@@ -3972,6 +4205,7 @@ function LassoOverlay({
               locale={locale}
               onBeginAdjustment={onBeginAdjustment}
               onFocusRestored={onFocusRestored}
+              onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
@@ -4062,6 +4296,7 @@ function StretchHandleButton({
   locale,
   onBeginAdjustment,
   onFocusRestored,
+  onPreciseGesture,
   onRequestFocusRestore,
   restoreFocusHandle,
   status,
@@ -4072,6 +4307,7 @@ function StretchHandleButton({
   locale: CanvasLanguage;
   onBeginAdjustment: () => void;
   onFocusRestored: (handle: StretchHandle) => void;
+  onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
@@ -4119,6 +4355,7 @@ function StretchHandleButton({
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           onBeginAdjustment();
+          onPreciseGesture();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
           } catch {
@@ -4152,6 +4389,7 @@ function StretchHandleButton({
         }
         if (status !== "idle" && event.key !== "Escape") stretch.reopen();
         stretch.keyDown(event.key, handle);
+        onPreciseGesture();
       }}
       role="slider"
       ref={controlRef}
@@ -4343,6 +4581,28 @@ function normalizePointerType(value: string): CanvasPointerType {
 function documentFocusIsOwned(): boolean {
   const active = document.activeElement;
   return active instanceof HTMLElement && active !== document.body && active.isConnected;
+}
+
+function projectCanvasTouchContact(
+  pointerId: number,
+  clientX: number,
+  clientY: number,
+  materialPlane: HTMLElement | null,
+): CanvasTouchContact | null {
+  if (
+    materialPlane === null ||
+    !Number.isSafeInteger(pointerId) ||
+    pointerId < 0 ||
+    !Number.isFinite(clientX) ||
+    !Number.isFinite(clientY)
+  ) return null;
+  const bounds = materialPlane.getBoundingClientRect();
+  if (!Number.isFinite(bounds.left) || !Number.isFinite(bounds.top)) return null;
+  return Object.freeze({
+    pointerId,
+    x: clientX - bounds.left,
+    y: clientY - bounds.top,
+  });
 }
 
 function AdmissionFeedback({
@@ -4550,15 +4810,21 @@ function resolveToolTargetNode(
 
 export function voiceToolLabel(input: Readonly<{
   anchor: InteractionAdmissionAnchor | null;
+  firstAdmission: boolean;
   isPreviewReady: boolean;
   isRecording: boolean;
   isVoiceChecking: boolean;
   locale: CanvasLanguage;
   navigationMode: NavigationState["mode"];
+  rewriteRecording: boolean;
+  rewriteTargeted: boolean;
   rootId: string | null;
 }>): string {
   const copy = voiceToolCopy(input.locale);
+  if (input.rewriteRecording) return copy.stopRewriteDirection;
+  if (input.rewriteTargeted) return copy.recordRewriteDirection;
   if (input.isRecording) return copy.stopRecording;
+  if (input.firstAdmission) return copy.recordRootThought;
   if (input.anchor?.kind === "root") return copy.recordRootThought;
   if (input.anchor?.kind === "child" && input.anchor.parentNodeId === input.rootId) {
     return copy.recordTopLevelThought;

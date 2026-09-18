@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createSeededDocument } from "../material/seeded-document";
 import { projectLayoutProjection } from "../components/layout-projection";
 import { createNavigationState } from "../runtime/navigation";
-import { normalizeDocumentTree } from "./document-root";
+import { isEmptyMaterialDocument, normalizeDocumentTree } from "./document-root";
 import { createEmptyTree, validateThoughtTree } from "./invariants";
 
 describe("document root normalization", () => {
@@ -38,7 +38,17 @@ describe("document root normalization", () => {
     const tree = normalizeDocumentTree(createEmptyTree("empty_document"));
     expect(tree.rootId).not.toBeNull();
     expect(tree.nodes[tree.rootId!]).toMatchObject({ role: "document-root", children: [] });
+    expect(isEmptyMaterialDocument(tree)).toBe(true);
     expect(validateThoughtTree(tree)).toEqual({ ok: true });
+  });
+
+  it("distinguishes the invisible container from its first visible material", () => {
+    const empty = normalizeDocumentTree(createEmptyTree("empty_document"));
+    const populated = normalizeDocumentTree(createSeededDocument("root").tree);
+
+    expect(isEmptyMaterialDocument(createEmptyTree("legacy_empty"))).toBe(true);
+    expect(isEmptyMaterialDocument(empty)).toBe(true);
+    expect(isEmptyMaterialDocument(populated)).toBe(false);
   });
 
   it("normalizes a long astral title without splitting or persisting malformed text", () => {

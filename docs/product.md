@@ -21,9 +21,11 @@ sync, or surface area.
 
 ## Two kinds of turn
 
-**Material admission.** A person speaks at the empty root, beneath the selected
-visible passage, or — when nothing is selected — as a first-level thought in
-the full material view. The final transcript first receives deterministic
+**Material admission.** A person speaks at the empty root or, when no passage is
+selected, as a first-level thought in the full material view. Selecting an
+existing passage changes the fixed Voice tool from admission to Point and Talk:
+the spoken line becomes a transient rewrite direction for that complete passage,
+never a child insertion chosen by hidden inference. The final admission transcript first receives deterministic
 locale punctuation, using genuine audio pauses when available and conservative
 semantic seams otherwise, then enters the tree immediately as human material.
 That first pass inserts formatting but never deletes, replaces, or reorders the
@@ -99,9 +101,11 @@ creates no transform request, and never enters tree, history, persistence, or
 archive data. Clicking ordinary material or blank paper clears that state and
 exits Lasso; clicking the Lasso tool does the same.
 
-**Passage-local transformation — Point and Talk.** The AI mark in a passage's
-transient Control Fog opens one small local direction field. It is the current
-UI owner of strict `text-swap/2`; it does not open the lower-right Ask Matter
+**Passage-local transformation — Point and Talk.** Either the AI mark in a passage's
+transient Control Fog or the fixed Voice tool while that passage is selected
+opens the same strict `text-swap/2` lifecycle. The AI mark exposes the small
+local direction field; selected Voice starts its bounded direction recording
+without turning the passage into a text editor. Neither opens the lower-right Ask Matter
 bubble and does not create a chat. Lasso continues to expose only Elastic, so
 the two operations never compete around one visible selection. The frozen
 contract is:
@@ -116,7 +120,8 @@ lineage     why it belongs here   authored root → selected node
 ```
 
 Voice and the one-line field share the same transient direction port. Clicking
-the AI mark itself is the explicit whole-node reference; one restrained white
+a passage selects the explicit whole-node reference for fixed Voice; clicking
+the AI mark supplies that same reference directly. One restrained white
 field aligns to that material's upper-left edge and prefers the space above it.
 Its idle form carries only the muted Voice entry and the ink submit action—no
 separate Cancel button—and may take focus because the person explicitly requested
@@ -136,8 +141,9 @@ After submit, closing the field or moving elsewhere only detaches its
 presentation; the immutable job continues until completion. Losing its exact
 document, tree, target, or visible-lineage basis gives a late result no
 authority. An unrelated history revision does not reinterpret or revoke the
-frozen direction. Full-view Voice admission remains a separate human-material
-channel.
+frozen direction. The passage-local AI mark and selected fixed Voice enter this
+same turn; Voice with no selected passage remains the separate human-material
+admission channel.
 
 The paper has one transient AI-presentation slot. Point and Talk, an Elastic
 grip adjustment, and the corner Inquiry cannot remain visibly active behind one
@@ -258,6 +264,14 @@ camera bounds. It does not rewrite layout coordinates or persist a per-node
 position. If an exposed sliver is narrower than readable target type can fit,
 the camera holds the target-specific readable floor and treats centring as a
 bounded best effort instead of making the material illegibly small.
+
+On a touch canvas, one finger keeps the current selected-tool behavior. Two or
+more fingers temporarily own only the camera: their centroid pans while their
+shared spread zooms around that same material point. Adding or removing a
+contact rebases the transient gesture without moving the camera; one remaining
+finger may continue the same camera pan. Cancellation, capture loss, page
+suspension, or orientation change ends that gesture. None of this authors a
+coordinate or enters material history.
 
 The index ends with a quiet local identity, not a persistence dashboard. It may
 briefly say that material is being saved, but conflict, write failure, corrupt

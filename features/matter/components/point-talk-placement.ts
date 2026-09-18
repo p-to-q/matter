@@ -16,6 +16,11 @@ export type PointTalkPlacement = Readonly<{
   top: number;
 }>;
 
+export type PointTalkPlacementProjection =
+  | Readonly<{ kind: "placed"; placement: PointTalkPlacement }>
+  | Readonly<{ kind: "temporarily-unavailable" }>
+  | Readonly<{ kind: "unusable" }>;
+
 const MINIMUM_POINT_TALK_SCALE = .74;
 const MAXIMUM_POINT_TALK_SCALE = 1.1;
 const POINT_TALK_SHRINK_RESPONSE = .65;
@@ -81,6 +86,44 @@ export function excludePointTalkRightOccluder(
 }
 
 /**
+ * A software keyboard can briefly publish a zero-sized or disjoint visual
+ * viewport while it animates. That is disposable placement loss, not evidence
+ * that the addressed material turn lost authority.
+ */
+export function projectPointTalkPlacementWithinSurfaces(input: Readonly<{
+  target: PointTalkBounds;
+  bubble: PointTalkSize;
+  visualViewport: PointTalkBounds;
+  boundary: PointTalkBounds;
+  positioningSurface: PointTalkBounds;
+  rightOccluder: PointTalkBounds | null;
+  gap?: number;
+  inset?: number;
+}>): PointTalkPlacementProjection {
+  if (![input.visualViewport, input.boundary, input.positioningSurface].every(hasFiniteBounds)) {
+    return Object.freeze({ kind: "unusable" });
+  }
+  const visibleField = intersectPointTalkBounds(
+    input.visualViewport,
+    input.boundary,
+    input.positioningSurface,
+  );
+  if (visibleField === null) return Object.freeze({ kind: "temporarily-unavailable" });
+  const viewport = excludePointTalkRightOccluder(visibleField, input.rightOccluder);
+  if (viewport === null) return Object.freeze({ kind: "unusable" });
+  const placement = projectPointTalkPlacement({
+    target: input.target,
+    bubble: input.bubble,
+    viewport,
+    gap: input.gap,
+    inset: input.inset,
+  });
+  return placement === null
+    ? Object.freeze({ kind: "unusable" })
+    : Object.freeze({ kind: "placed", placement });
+}
+
+/**
  * Projects viewport-fixed UI from measured client geometry. DOM ownership
  * stays at the rendering edge; this policy remains deterministic and testable.
  */
@@ -137,6 +180,10 @@ export function projectPointTalkPlacement(input: Readonly<{
 
 function finiteNonNegative(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function hasFiniteBounds(bounds: PointTalkBounds): boolean {
+  return [bounds.left, bounds.top, bounds.right, bounds.bottom].every(Number.isFinite);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

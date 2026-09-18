@@ -15,9 +15,7 @@ import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
 import {
-  excludePointTalkRightOccluder,
-  intersectPointTalkBounds,
-  projectPointTalkPlacement,
+  projectPointTalkPlacementWithinSurfaces,
   projectPointTalkScale,
   type PointTalkBounds,
   type PointTalkPlacement,
@@ -99,31 +97,28 @@ export function PointTalkComposer({
       return;
     }
     const bubbleRect = bubble.getBoundingClientRect();
-    const visibleField = intersectPointTalkBounds(
-      visualViewportBounds(),
-      boundary.getBoundingClientRect(),
-      positioningSurface.getBoundingClientRect(),
-    );
     const toolRail = visiblePointTalkToolRail(boundary);
-    const viewport = visibleField === null
-      ? null
-      : excludePointTalkRightOccluder(visibleField, toolRail?.getBoundingClientRect() ?? null);
-    if (viewport === null) {
-      onCancel();
-      return;
-    }
-    const width = bubbleRect.width || 264;
-    const height = bubbleRect.height || 38;
-    const next = projectPointTalkPlacement({
+    const projection = projectPointTalkPlacementWithinSurfaces({
       target: targetBounds,
-      bubble: { width, height },
-      viewport,
+      bubble: {
+        width: bubbleRect.width || 264,
+        height: bubbleRect.height || 38,
+      },
+      visualViewport: visualViewportBounds(),
+      boundary: boundary.getBoundingClientRect(),
+      positioningSurface: positioningSurface.getBoundingClientRect(),
+      rightOccluder: toolRail?.getBoundingClientRect() ?? null,
       gap: 14 * visualScale,
     });
-    if (next === null) {
+    if (projection.kind === "temporarily-unavailable") {
+      setPlacement(null);
+      return;
+    }
+    if (projection.kind === "unusable") {
       onCancel();
       return;
     }
+    const next = projection.placement;
     setPlacement((current) => current !== null &&
       current.left === next.left && current.top === next.top
       && current.maxWidth === next.maxWidth
@@ -214,6 +209,7 @@ export function PointTalkComposer({
       if (pointTalkOutsidePointerDismisses({
         insideBubble: target instanceof Node && bubbleRef.current?.contains(target) === true,
         insideCanvasChrome: targetElement?.closest("[data-canvas-chrome]") != null,
+        insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
       })) onCancel();
     };
@@ -293,15 +289,18 @@ export function PointTalkComposer({
 export function pointTalkOutsidePointerDismisses({
   insideBubble,
   insideCanvasChrome,
+  insideVoiceTool,
   submitted,
 }: Readonly<{
   insideBubble: boolean;
   insideCanvasChrome: boolean;
+  insideVoiceTool: boolean;
   submitted: boolean;
 }>): boolean {
   // Chrome may temporarily occlude accepted work, but draft and capture still
-  // follow their visible control and remain easy to dismiss.
-  return !insideBubble && (!insideCanvasChrome || !submitted);
+  // follow their visible control and remain easy to dismiss. The fixed Voice
+  // tool belongs to the current turn even though it lives outside the bubble.
+  return !insideBubble && !insideVoiceTool && (!insideCanvasChrome || !submitted);
 }
 
 function PointTalkForm({

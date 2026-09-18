@@ -458,9 +458,10 @@ an old-text copy never become material.
 
 ### Lifecycle, failure, and gate
 
-The passage-local AI mark enters Text Swap for the complete current node in Full
-or Focus; Lasso exposes only Elastic and Voice keeps its material-admission
-meaning outside the local Point-and-Talk field. The protocol also retains one
+The passage-local AI mark, or fixed Voice while a passage is structurally
+selected, enters Text Swap for the complete current node in Full or Focus.
+Lasso exposes only Elastic, while Voice with no selected passage keeps its
+material-admission meaning. The protocol also retains one
 exact current punctuation segment as a valid address for bounded integrations,
 but the current Lasso surface does not publish that second operation. Entry
 detaches the Elastic presentation and keeps both grips hidden and inert. Before

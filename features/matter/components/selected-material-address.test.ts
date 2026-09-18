@@ -54,6 +54,28 @@ function engagedFragmentRules(): readonly string[] {
 }
 
 describe("selected material address", () => {
+  it("keeps coarse-pointer direction input above Safari's focus-zoom floor", () => {
+    expect(css).toMatch(
+      /@media \(pointer: coarse\)[\s\S]*?\.point-talk__composer input \{ font-size: 16px; line-height: 20px; \}/,
+    );
+  });
+
+  it("keeps structural selection fallback paint out of text layout", () => {
+    const selectedLabel = css.match(
+      /\.spatial-thought\[data-selected="true"\] \.spatial-thought__label \{([^}]*)\}/,
+    );
+    expect(selectedLabel).not.toBeNull();
+    expect(selectedLabel![1]).not.toMatch(
+      /\b(?:border(?!-radius)|box-sizing|display|font(?:-[a-z]+)?|letter-spacing|line-height|margin(?:-[a-z]+)?|max-width|min-width|padding(?:-[a-z]+)?|text-indent|vertical-align|white-space|width|word-spacing)\s*:/,
+    );
+    expect(rooted).toContain(
+      '? <span className="spatial-thought__label">{materialText}</span>',
+    );
+    expect(structuralSelection).toContain(
+      'const material = geometryBasis.surface === "label" ? label : root',
+    );
+  });
+
   it("keeps the reference painted through press, expand, and pending", () => {
     const bodies = engagedFragmentRules();
     // Both the projection-active and expand selectors must exist, and neither
@@ -138,23 +160,6 @@ describe("selected material address", () => {
       rooted.indexOf("const closePointTalk"),
     );
     expect(transition).not.toMatch(/clearSelection|setPointTalkOwner\(null\)|props\.admission\.cancel\(\)/);
-  });
-
-  it("keeps structural selection paint outside text layout", () => {
-    // Only the selected material pays for the temporary fallback wrapper; the
-    // 2,000-node renderer must not gain one DOM element per passage.
-    expect(rooted).toMatch(
-      /isSelected\s*\?\s*<span className="spatial-thought__label">\{materialText\}<\/span>/,
-    );
-    const selectedLabelRules = [...css.matchAll(
-      /\.spatial-thought\[data-selected="true"\] \.spatial-thought__label \{([^}]*)\}/g,
-    )].map((match) => match[1]);
-    const selectedLabel = selectedLabelRules.find((body) => body.includes("padding:"));
-    expect(selectedLabel).toMatch(/padding:\s*0/);
-    expect(selectedLabel).not.toMatch(/margin:|border-width:|border:\s*(?!0)/);
-    expect(structuralSelection).toContain(
-      'const material = geometryBasis.surface === "label" ? label : root',
-    );
   });
 
   it("separates the viewport-safe hit target from the exact visible cue", () => {

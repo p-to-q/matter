@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
@@ -67,6 +68,20 @@ describe("ToolRail", () => {
 
     expect(markup).toContain('aria-label="Finish recording"');
     expect(markup).not.toMatch(/data-tool-id="voice"[^>]*disabled/);
+  });
+
+  it("restores the original filled active receipt and keeps focus separate", () => {
+    const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(
+      /\.tool-rail__button\[data-tool-emphasis="primary"\]\s*\{[^}]*color:\s*var\(--rail-active-ink\);/s,
+    );
+    expect(css).toMatch(
+      /\.tool-rail__button\[data-tool-emphasis="primary"\]::before\s*\{[^}]*inset:\s*0 14px;[^}]*border-radius:\s*13px;[^}]*background:\s*var\(--rail-active\);/s,
+    );
+    expect(css).toMatch(
+      /\.tool-rail__button:focus-visible::after\s*\{[^}]*outline:\s*2px solid var\(--rail-active\);/s,
+    );
   });
 
   it.each(CANVAS_LANGUAGE_OPTIONS)("renders fixed controls in $label", ({ value: locale }) => {

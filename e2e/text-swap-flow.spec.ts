@@ -166,6 +166,90 @@ test.describe("passage-local Point and Talk", () => {
     await expect(passage).toContainText(SOURCE_TEXT);
   });
 
+  for (const selectionGesture of ["single click", "double click"] as const) {
+    test(`the fixed Voice tool rewrites a ${selectionGesture} selected passage`, async ({ page }) => {
+      let request: Readonly<{
+        direction: string;
+        selection: Readonly<{
+          type: "segment-range";
+          nodeId: string;
+          start: number;
+          end: number;
+          selectedText: string;
+        }>;
+      }> | null = null;
+      await page.route("**/api/text-swap", async (route) => {
+        const envelope = route.request().postDataJSON() as {
+          protocolVersion: "0.2";
+          requestVersion: "text-swap/2";
+          id: string;
+          treeId: string;
+          treeRevision: number;
+          direction: { text: string };
+          selection: NonNullable<typeof request>["selection"];
+        };
+        request = { direction: envelope.direction.text, selection: envelope.selection };
+        await route.fulfill({
+          contentType: "application/json",
+          body: JSON.stringify({
+            protocolVersion: envelope.protocolVersion,
+            requestVersion: envelope.requestVersion,
+            id: envelope.id,
+            treeId: envelope.treeId,
+            treeRevision: envelope.treeRevision,
+            action: {
+              id: envelope.id,
+              type: "replace-text-range",
+              nodeId: ROOT_ID,
+              start: 0,
+              end: SOURCE_TEXT.length,
+              text: REWRITTEN_TEXT,
+              intent: "paraphrase",
+            },
+            presentation: { motionHint: "settle" },
+          }),
+        });
+      });
+
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto("/matter");
+      await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+      const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+      if (selectionGesture === "double click") await passage.dblclick();
+      else await passage.click();
+      await expect(passage).toHaveAttribute("aria-pressed", "true");
+      await expect(page.locator(".point-talk")).toHaveCount(0);
+
+      const voice = page.getByRole("button", {
+        name: fixtureUiCopy.voiceTool.recordRewriteDirection,
+        exact: true,
+      });
+      await voice.click();
+      await expect(page.locator('.point-talk[data-phase="recording"]')).toBeVisible();
+      await expect(page.locator("main.matter-shell"))
+        .toHaveAttribute("data-point-talk-node-id", ROOT_ID);
+      await page.waitForTimeout(350);
+      await page.getByRole("button", {
+        name: fixtureUiCopy.voiceTool.stopRewriteDirection,
+        exact: true,
+      }).click();
+
+      await expect(passage).toContainText(REWRITTEN_TEXT);
+      expect(request).toEqual({
+        direction: `${DIRECTION}。`,
+        selection: {
+          type: "segment-range",
+          nodeId: ROOT_ID,
+          start: 0,
+          end: SOURCE_TEXT.length,
+          selectedText: SOURCE_TEXT,
+        },
+      });
+      await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
+      await expect(passage).toContainText(SOURCE_TEXT);
+    });
+  }
+
   test("a reopened turn keeps selection paint layout-neutral and the direction bound Unicode-complete", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/matter");

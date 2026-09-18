@@ -177,8 +177,10 @@ export class BrowserSpeechVoicePort implements VoicePort {
     recognition.onerror = (event) => {
       if (this.recognition !== recognition) return;
       if (this.stopping && event.error === "aborted") return;
-      const code = event.error === "not-allowed" || event.error === "service-not-allowed"
+      const code = event.error === "not-allowed"
         ? "MICROPHONE_DENIED"
+        : event.error === "service-not-allowed"
+          ? "VOICE_UNSUPPORTED"
         : event.error === "audio-capture" ? "MICROPHONE_UNAVAILABLE"
           : event.error === "no-speech" ? "RECORDING_EMPTY" : "RECORDING_FAILED";
       this.fail(new VoiceError(code));

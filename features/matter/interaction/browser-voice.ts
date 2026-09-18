@@ -8,6 +8,7 @@ import {
 import { createBrowserSpeechVoicePort, isBrowserSpeechRecognitionAvailable } from "./browser-speech-voice";
 import {
   VoiceError,
+  voiceCapture,
   type VoiceCallbacks,
   type VoiceOperation,
   type VoicePort,
@@ -15,6 +16,7 @@ import {
   type VoiceSample,
 } from "./voice-port";
 import { VoiceLeaseCoordinator } from "./voice-lease";
+import { browserAudioContextConstructor } from "./browser-audio-context";
 
 // Re-exported so the vocabulary keeps one import site for its callers, while
 // the transports below depend on `voice-port` directly.
@@ -83,6 +85,8 @@ type Session = {
   callbacks: VoiceCallbacks;
 };
 
+const RECORDING_TIMESLICE_MS = 1_000;
+
 function deferred<T>(): Deferred<T> {
   let resolve!: (value: T) => void;
   let reject!: (error: VoiceError) => void;
@@ -93,8 +97,11 @@ function deferred<T>(): Deferred<T> {
   return { promise, resolve, reject };
 }
 
-function sameOperation(left: VoiceOperation, right: VoiceOperation): boolean {
-  return (
+function sameOperation(
+  left: VoiceOperation | null,
+  right: VoiceOperation,
+): boolean {
+  return left !== null && (
     left.interactionId === right.interactionId && left.attempt === right.attempt
   );
 }
@@ -291,7 +298,10 @@ export class BrowserVoicePort implements VoicePort {
         recorder.onerror = () =>
           this.fail(session, new VoiceError("RECORDING_FAILED"));
         recorder.onstop = () => this.finishStop(session);
-        recorder.start(250);
+        // One-second chunks match WebKit's documented MediaRecorder path and
+        // avoid four callbacks per second on constrained phones. stop() still
+        // owns the final dataavailable event, so this is not a duration clock.
+        recorder.start(RECORDING_TIMESLICE_MS);
         session.mimeType = recorder.mimeType || actualMimeType;
         return recorder;
       } catch {
@@ -469,32 +479,198 @@ function notify(callback: () => void): void {
 
 const browserVoiceLease = new VoiceLeaseCoordinator();
 
+/**
+ * Uses recorded audio only when the preferred native speech service declares
+ * itself unavailable before recording starts. Microphone denial and ordinary
+ * recording failures never trigger a second permission path.
+ */
+export class BrowserSpeechFallbackVoicePort implements VoicePort {
+  private active: VoicePort | null = null;
+  private operation: VoiceOperation | null = null;
+  private primaryReady = false;
+
+  constructor(
+    private readonly primary: VoicePort,
+    private readonly createFallback: () => VoicePort,
+  ) {}
+
+  async start(
+    operation: VoiceOperation,
+    callbacks: VoiceCallbacks = {},
+  ): Promise<void> {
+    if (this.active !== null) throw new VoiceError("RECORDING_ACTIVE");
+    const ownedOperation = Object.freeze({ ...operation });
+    this.operation = ownedOperation;
+    this.active = this.primary;
+    this.primaryReady = false;
+    const primaryCallbacks = this.guardCallbacks(
+      this.primary,
+      ownedOperation,
+      callbacks,
+      true,
+    );
+    try {
+      await this.primary.start(ownedOperation, primaryCallbacks);
+      if (!this.owns(ownedOperation, this.primary)) {
+        throw new VoiceError("RECORDING_CANCELLED");
+      }
+      this.primaryReady = true;
+    } catch (error) {
+      if (
+        !this.owns(ownedOperation, this.primary) ||
+        !(error instanceof VoiceError) ||
+        error.code !== "VOICE_UNSUPPORTED"
+      ) {
+        this.release(ownedOperation);
+        throw error;
+      }
+      this.primary.cancel(ownedOperation);
+      let fallback: VoicePort;
+      try {
+        fallback = this.createFallback();
+      } catch (fallbackError) {
+        this.release(ownedOperation);
+        throw fallbackError;
+      }
+      if (!this.owns(ownedOperation, this.primary)) {
+        this.release(ownedOperation);
+        throw new VoiceError("RECORDING_CANCELLED");
+      }
+      this.active = fallback;
+      try {
+        await fallback.start(
+          ownedOperation,
+          this.guardCallbacks(fallback, ownedOperation, callbacks, false),
+        );
+      } catch (fallbackError) {
+        this.release(ownedOperation);
+        throw fallbackError;
+      }
+      if (!this.owns(ownedOperation, fallback)) {
+        fallback.cancel(ownedOperation);
+        throw new VoiceError("RECORDING_CANCELLED");
+      }
+    }
+  }
+
+  stop(operation: VoiceOperation): Promise<VoiceRecording> {
+    const active = this.active;
+    if (active === null || !sameOperation(this.operation, operation)) {
+      return Promise.reject(new VoiceError("RECORDING_NOT_ACTIVE"));
+    }
+    return active.stop(operation).then(
+      (recording) => {
+        if (this.owns(operation, active)) this.release(operation);
+        return recording;
+      },
+      (error: unknown) => {
+        if (this.owns(operation, active)) this.release(operation);
+        throw error;
+      },
+    );
+  }
+
+  cancel(operation: VoiceOperation): void {
+    const active = this.active;
+    if (active === null || !sameOperation(this.operation, operation)) return;
+    this.active = null;
+    this.operation = null;
+    this.primaryReady = false;
+    active.cancel(operation);
+  }
+
+  private owns(operation: VoiceOperation, port: VoicePort): boolean {
+    return this.active === port && sameOperation(this.operation, operation);
+  }
+
+  private release(operation: VoiceOperation): void {
+    if (!sameOperation(this.operation, operation)) return;
+    this.active = null;
+    this.operation = null;
+    this.primaryReady = false;
+  }
+
+  private guardCallbacks(
+    port: VoicePort,
+    operation: VoiceOperation,
+    callbacks: VoiceCallbacks,
+    suppressUnavailableBeforeStart: boolean,
+  ): VoiceCallbacks {
+    return Object.freeze({
+      ...voiceCapture(callbacks),
+      onSample: (sample) => {
+        if (this.owns(operation, port)) {
+          notify(() => callbacks.onSample?.(sample));
+        }
+      },
+      onTranscript: (transcript) => {
+        if (this.owns(operation, port)) {
+          notify(() => callbacks.onTranscript?.(transcript));
+        }
+      },
+      onDurationLimit: (limited) => {
+        if (this.owns(operation, port) && sameOperation(operation, limited)) {
+          notify(() => callbacks.onDurationLimit?.(limited));
+        }
+      },
+      onRecording: (recording) => {
+        if (!this.owns(operation, port) ||
+          !sameOperation(operation, recording.operation)) return;
+        this.release(operation);
+        notify(() => callbacks.onRecording?.(recording));
+      },
+      onError: (error) => {
+        if (!this.owns(operation, port)) return;
+        if (suppressUnavailableBeforeStart &&
+          !this.primaryReady &&
+          error.code === "VOICE_UNSUPPORTED") return;
+        this.release(operation);
+        notify(() => callbacks.onError?.(error));
+      },
+      onOwnershipRevoked: (revoked) => {
+        if (!this.owns(operation, port) || !sameOperation(operation, revoked)) return;
+        this.release(operation);
+        notify(() => callbacks.onOwnershipRevoked?.(revoked));
+      },
+    });
+  }
+}
+
 export function createBrowserVoicePort(): VoicePort {
   const transport = browserVoiceTransport();
   // Native recognition keeps raw audio out of the Matter server when the UA supports it.
   if (transport === "speech") {
-    return browserVoiceLease.coordinate(createBrowserSpeechVoicePort());
+    const speech = createBrowserSpeechVoicePort();
+    return browserVoiceLease.coordinate(
+      recordedAudioFallbackIsEnabled() && isBrowserRecordedAudioCaptureAvailable()
+        ? new BrowserSpeechFallbackVoicePort(speech, createRecordedAudioVoicePort)
+        : speech,
+    );
   }
   // Audio upload is an explicit deployment capability. Missing configuration
   // fails before capture instead of collecting audio for a guaranteed 503.
   if (transport === "unavailable") throw new VoiceError("VOICE_UNSUPPORTED");
   if (!isBrowserRecordedAudioCaptureAvailable()) throw new VoiceError("VOICE_UNSUPPORTED");
+  return browserVoiceLease.coordinate(createRecordedAudioVoicePort());
+}
+
+function createRecordedAudioVoicePort(): VoicePort {
   warmLocalTranscriptionAfterIntent();
-  return browserVoiceLease.coordinate(new BrowserVoicePort({
+  const AudioContextConstructor = browserAudioContextConstructor();
+  return new BrowserVoicePort({
     getUserMedia: (constraints) =>
       navigator.mediaDevices.getUserMedia(constraints),
     isTypeSupported: (mimeType) => MediaRecorder.isTypeSupported(mimeType),
     createRecorder: (stream, options) => new MediaRecorder(stream, options),
-    createAudioContext:
-      typeof AudioContext === "undefined"
-        ? undefined
-        : () => new AudioContext(),
+    createAudioContext: AudioContextConstructor === undefined
+      ? undefined
+      : () => new AudioContextConstructor(),
     now: () => performance.now(),
     setTimer: (callback, delayMs) => window.setTimeout(callback, delayMs),
     clearTimer: (timer) => window.clearTimeout(timer as number),
     requestFrame: (callback) => requestAnimationFrame(callback),
     cancelFrame: (frame) => cancelAnimationFrame(frame),
-  }));
+  });
 }
 
 /**
@@ -525,7 +701,8 @@ export function isBrowserRecordedAudioCaptureAvailable(): boolean {
     return false;
   }
   if (process.env.NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED !== "true") return true;
-  return typeof Worker !== "undefined" && typeof AudioContext !== "undefined";
+  return typeof Worker !== "undefined" &&
+    browserAudioContextConstructor() !== undefined;
 }
 
 export type BrowserVoiceTransport = "speech" | "audio" | "unavailable";

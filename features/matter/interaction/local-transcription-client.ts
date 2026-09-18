@@ -3,6 +3,7 @@ import {
   transcriptionTextFitsCapacity,
   type TranscriptionPurpose,
 } from "../protocol/transcription-contract";
+import { browserAudioContextConstructor } from "./browser-audio-context";
 
 const WHISPER_SAMPLE_RATE = 16_000;
 const LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000;
@@ -273,7 +274,7 @@ function localTranscriptionWorker(): Worker {
 }
 
 async function decodeRecording(audio: Blob, signal: AbortSignal): Promise<Float32Array> {
-  const AudioContextConstructor = window.AudioContext;
+  const AudioContextConstructor = browserAudioContextConstructor();
   if (AudioContextConstructor === undefined) {
     throw new LocalTranscriptionError("unavailable");
   }

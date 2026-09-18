@@ -45,23 +45,33 @@ describe("Point Talk recovery", () => {
     expect(pointTalkOutsidePointerDismisses({
       insideBubble: true,
       insideCanvasChrome: false,
+      insideVoiceTool: false,
       submitted: false,
     })).toBe(false);
     expect(pointTalkOutsidePointerDismisses({
       insideBubble: false,
       insideCanvasChrome: true,
+      insideVoiceTool: false,
       submitted: true,
     })).toBe(false);
     expect(pointTalkOutsidePointerDismisses({
       insideBubble: false,
       insideCanvasChrome: true,
+      insideVoiceTool: false,
       submitted: false,
     })).toBe(true);
     expect(pointTalkOutsidePointerDismisses({
       insideBubble: false,
       insideCanvasChrome: false,
+      insideVoiceTool: false,
       submitted: true,
     })).toBe(true);
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: false,
+      insideCanvasChrome: false,
+      insideVoiceTool: true,
+      submitted: false,
+    })).toBe(false);
   });
 
   it("keeps request retry and voice retry as distinct pointer actions", () => {
