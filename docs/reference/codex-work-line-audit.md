@@ -11,7 +11,7 @@
 | `codex/preview-46-ai-harness` | 2 | 48 | stash | Tag `codex-wip-preview-46-ai-harness` created |
 | `codex/selected-material-recovery` | 1 | 2 (add/add docs) | stash | Tag `codex-wip-selected-material-recovery` created |
 | `cloud/address-restore` | 0 | 0 | already-in-main | No action — HEAD `8d2d56a` is in main |
-| `codex/action-lasso-api-hardening` | 17 candidate commits through `260b16d`, followed by remote-state records | 0 after rebase | reviewable in PR #102 | Implementation `fb37ef8` and browser diagnostic `2f3d506` are locally proven; exact PR-head gates remain authoritative |
+| `codex/action-lasso-api-hardening` | 17 candidate commits through `260b16d`, followed by remote-state records | 0 after rebase | merged via PR #102 | Implementation `fb37ef8` and browser diagnostic `2f3d506` were accepted through PR #102; later successors require their own proof |
 | Stash `preview54-excluded-local-video` | n/a | n/a | isolate | Mixed 79-file historical snapshot; never restore or drop wholesale |
 
 ## Details
@@ -78,3 +78,19 @@
 - **Verdict**: isolate
 - **Action**: Not touched. Never pop, drop, or cherry-pick it wholesale; recover
   a specifically audited path only if later work establishes independent need.
+
+## 2026-09-18 status update
+
+- `codex/action-lasso-api-hardening` merged through PR #102 at `a6b8f91`; it is
+  no longer adapt-pending or merely reviewable.
+- The release-probe correction merged through PR #103 at `fca0558`.
+- `codex/provider-action-reliability` contains committed follow-ups `9ba808e`,
+  `abc1d05`, and provider-compatibility candidate `919743b`. The exact provider
+  commit passed the repository gate, the complete Chromium matrix with all
+  concurrent-run failures repeated serially, and an independent verifier with
+  no P0–P3 finding. It remains unmerged until its public PR passes exact-head CI;
+  local proof does not promote it to `main` or authorize a release.
+- The preservation verdicts for `codex/preview-46-ai-harness`,
+  `codex/selected-material-recovery`, `cloud/address-restore`, and the isolated
+  Launch Video work remain unchanged. Do not wholesale cherry-pick, restore, or
+  revert those historical lines.

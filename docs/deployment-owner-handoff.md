@@ -1,22 +1,27 @@
 # Preview deployment-owner handoff
 
-Status: the public origin still identifies itself as Preview.56 through the
-automatic GitHub-linked Production path. Its current exact Production source is
-`main` `9eb169b` from PR #101: CI run `35144776434` and GitHub Production
-deployment `6489479901` both passed. Preview.56's original source boundary came
-through PR #96, and its exact `536d792` strict pool release probe failed. The
-later same-version source changed Label behaviour but never received a fresh
-complete release gate; it does not authorize a retrospective Preview.56 tag.
-The latest immutable publication remains Preview.52 at `6a4931b`. The
-repository maintainer pushes only GitHub and observes the linked deployment;
-the deployment owner retains Vercel configuration and credential authority.
-The candidate preserves the current process-local admission perimeter and live
-label, transcript-repair, and Ask Matter gates. Elastic and Text Swap remain
-unavailable. This is an operator checklist, not a place to record token values.
+Status: the public origin identifies itself as Preview.57 through the automatic
+GitHub-linked Production path after PRs #102 and #103 reached `main` at
+`fca0558`. Source, CI, deployment, and bounded public-origin identity proof are
+complete, but immutable publication is withheld. The 2026-09-18 public receipt
+still reports the Model API session surface as `available: false`, and the
+strict six-round managed-pool gate failed Repair 0/6, Label 0/6, and Inquiry
+5/6. Neither a successful deployment nor one healthy surface substitutes for
+those independent gates. The latest immutable publication remains Preview.52
+at `6a4931b`.
 
-Preview.57 is the next locally proven candidate. In addition to preserving the
-same public gates, it introduces an optional fixed-lifetime Model API lease. The
-source fails closed without `MATTER_PROVIDER_SESSION_KEYS`: managed model calls
+The repository maintainer pushes GitHub source and observes the linked
+deployment. The deployment owner retains Vercel environment and credential
+authority; partial Cloudflare access does not confer that authority. The
+missing Production sealing-ring action is tracked publicly in issue #104 with
+only non-secret acceptance evidence. Do not work around that boundary by
+deriving a ring from provider keys, copying a value through an issue, or running
+an unowned manual deployment. This is an operator checklist, not a place to
+record token values.
+
+Preview.57 introduces an optional fixed-lifetime Model API lease while
+preserving the same public gates. The source fails closed without
+`MATTER_PROVIDER_SESSION_KEYS`: managed model calls
 continue unchanged, while `GET /api/provider-session` reports
 `available: false` and Test/Save/Remove actions remain unavailable while the
 two fields stay editable. That is a safe deployment,
@@ -27,11 +32,12 @@ authorized to invent, derive, print, or install it. No provider key belongs in
 Vercel configuration—the user's provider key exists only inside the encrypted
 30-day lease created after an explicit verified save.
 
-Preview.56 is the reviewed and deployed source. It changes no provider gate,
-secret, deployment ownership, or public Transform/Text Swap authority.
-Repository, browser, GitHub CI, automatic Production, and bounded public-origin
-identity evidence are complete. The exact Preview.56 model-pool gate failed, so
-immutable publication is withheld.
+Preview.57 is the reviewed and deployed source. It changes no deployment
+ownership or public Transform/Text Swap authority. Its safe fail-closed state
+keeps the existing managed surfaces usable, but Model API availability still
+requires the independent owner action above and one fresh deployment. After
+that action, the repository-side deployment check and managed-pool probe below
+must both pass against the exact public version before publication.
 
 Exact Preview.56 source `e88d06c` passed 97 Node checks, 48-document link proof,
 the 462-file seven-layer architecture gate, 2,224 Vitest cases with four
@@ -161,10 +167,15 @@ that exists, every occurrence of this will be found the same way.
 
 ### Current Preview.57 publication gate
 
-After the exact Preview.57 source has passed topic and merged-main CI, its
-automatic Preview and Production deployments, and the bounded public-origin
-version check, first read `GET https://matter.ptoq.io/api/provider-session`.
-The no-store strict status must identify protocol `4` and return the exact
+After the exact Preview.57 source has passed topic and merged-main CI and its
+automatic Preview and Production deployments, run:
+
+`npm run check:deployment -- https://matter.ptoq.io --wait=120 --require-provider-session`
+
+The opt-in check performs an anonymous same-origin
+`GET https://matter.ptoq.io/api/provider-session` in addition to the ordinary
+version and public-surface checks. Its no-store strict status must identify
+protocol `4` and return the exact
 empty shape: `available: true`, `credentialPresent: false`,
 `resetRequired: false`, `credentialId: null`, `endpoint: null`, and
 `expiresAt: null` without an operator cookie. It performs no provider request. If it reports
@@ -340,10 +351,11 @@ delivery control; Vercel's Git integration observes it automatically.
 4. On a proof-only topic, record the exact source, CI, automatic Preview and
    Production, public check, browser, and pool receipts. Merge it and require
    its exact final `main` SHA to finish the same automatic Production path.
-   Repeat `npm run check:deployment -- https://matter.ptoq.io --wait=120` for
-   that final SHA and retain its no-store version/public-alias receipt before
-   tagging. The paid pool and browser behaviour proofs need not repeat because
-   no source behaviour may change in this step.
+   Repeat
+   `npm run check:deployment -- https://matter.ptoq.io --wait=120 --require-provider-session`
+   for that final SHA and retain its no-store version/public-alias/session
+   receipt before tagging. The paid pool and browser behaviour proofs need not
+   repeat because no source behaviour may change in this step.
 5. Require Immutable Releases to report enabled, create and push the annotated
    version tag on that final deployed proof SHA, verify its remote peel, then
    create, inspect, publish, and verify the GitHub prerelease. npm publication
@@ -421,6 +433,11 @@ The expected browser-preview health shape is: label, repair, inquiry and voice
 admission available; transform and Text Swap unavailable. This only proves
 configuration. Follow the existing private synthetic-turn procedure before
 claiming provider-answer evidence.
+
+For Preview.57 and later candidates that claim Model API, add
+`--require-provider-session`. The stricter receipt proves only that the session
+sealing boundary is installed and anonymously empty; it deliberately does not
+spend a provider request or expose any key.
 
 If a live surface must be stopped, disable its corresponding server gate first,
 then roll back the Vercel deployment. Rotate the provider key whenever exposure
