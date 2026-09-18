@@ -91,6 +91,89 @@ test("desktop Model API keeps the surface to address and key, then tests and sav
   await expect(selectedThought).toHaveAttribute("data-selected", "true");
 });
 
+test("BFCache return reconciles an interrupted save without replaying it or taking a newer draft", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  let connected = false;
+  let gets = 0;
+  let saves = 0;
+  let markConfirmationStarted!: () => void;
+  let releaseConfirmation!: () => void;
+  const confirmationStarted = new Promise<void>((resolve) => {
+    markConfirmationStarted = resolve;
+  });
+  const confirmationGate = new Promise<void>((resolve) => {
+    releaseConfirmation = resolve;
+  });
+  await page.route("**/api/provider-session", async (route) => {
+    const method = route.request().method();
+    if (method === "POST") {
+      const body = route.request().postDataJSON() as { action?: unknown };
+      expect(body.action).toBe("save");
+      saves += 1;
+      connected = true;
+      await fulfillStatus(route, true);
+      return;
+    }
+    gets += 1;
+    if (gets === 2) {
+      // The save response has already made the browser credential current;
+      // hold only the client's confirming GET until pagehide aborts it.
+      markConfirmationStarted();
+      await confirmationGate;
+      await fulfillStatus(route, true).catch(() => undefined);
+      return;
+    }
+    await fulfillStatus(route, connected);
+  });
+
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "Matter 设置", exact: true }).click();
+  await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
+  await expect.poll(() => gets).toBe(1);
+
+  const endpoint = dialog.getByRole("textbox", { name: "API 地址" });
+  const key = dialog.getByRole("textbox", { name: "API Key" });
+  await endpoint.fill(EXAMPLE_ENDPOINT);
+  await key.fill(EXAMPLE_KEY);
+  await dialog.getByRole("button", { name: "保存", exact: true }).click();
+  await confirmationStarted;
+  expect(saves).toBe(1);
+  expect(gets).toBe(2);
+
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide", {
+    persisted: true,
+  })));
+  await expect(key).toHaveValue("");
+  releaseConfirmation();
+  await expect(dialog.getByRole("button", { name: "保存", exact: true })).toBeEnabled();
+
+  const newerEndpoint = "https://draft.vendor.ai/v1";
+  const newerKey = "sk-newer-draft-stays-with-the-person";
+  await endpoint.fill(newerEndpoint);
+  await key.fill(newerKey);
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", {
+    persisted: true,
+  })));
+
+  await expect.poll(() => gets).toBe(3);
+  await expect(dialog).toContainText("此前的设置仍已保存");
+  await expect(endpoint).toHaveValue(newerEndpoint);
+  await expect(key).toHaveValue(newerKey);
+  expect(saves).toBe(1);
+
+  // A duplicate browser resume signal cannot replay either the paid save or
+  // the read-only reconciliation already owned by the first pageshow.
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", {
+    persisted: true,
+  })));
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  expect(gets).toBe(3);
+  expect(saves).toBe(1);
+});
+
 test("mobile Model API uses the same two fields and coarse-pointer targets", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockProviderSession(page);
