@@ -115,6 +115,31 @@ describe("provider credential v4 sealing", () => {
     expect(unsealProviderCredential(sealed.token, environment, NOW + PROVIDER_SESSION_TTL_MS)).toBeNull();
   });
 
+  it("fails closed when an old official Anthropic Fable lease is presented", () => {
+    const environment = { MATTER_PROVIDER_SESSION_KEYS: `active:${KEY_A}` };
+    const oldSelection: UserProviderSelection = {
+      profileId: "anthropic-current",
+      model: "claude-fable-5",
+      baseUrl: "https://api.anthropic.com/v1",
+    };
+    expect(unsealProviderCredential(authenticatedToken({
+      v: 4,
+      ...oldSelection,
+      apiKey: API_KEY,
+      scopeId: Buffer.alloc(16, 3).toString("base64url"),
+      generationId: GENERATION_ID,
+      issuedAtMs: NOW,
+      expiresAtMs: NOW + PROVIDER_SESSION_TTL_MS,
+    }), environment, NOW)).toBeNull();
+    expect(sealProviderCredential(
+      oldSelection,
+      API_KEY,
+      GENERATION_ID,
+      environment,
+      NOW,
+    )).toBeNull();
+  });
+
   it("round-trips one server-selected custom profile without renegotiation fields", () => {
     const environment = { MATTER_PROVIDER_SESSION_KEYS: `active:${KEY_A}` };
     const custom: UserProviderSelection = {

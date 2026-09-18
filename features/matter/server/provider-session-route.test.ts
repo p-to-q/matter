@@ -71,8 +71,24 @@ function completion(text = "MATTER_READY", finishReason: string | null | undefin
 function anthropicCompletion(text = "MATTER_READY", stopReason = "end_turn"): Response {
   return new Response(JSON.stringify({
     type: "message",
+    role: "assistant",
     content: [{ type: "text", text }],
     stop_reason: stopReason,
+  }), { headers: { "content-type": "application/json" } });
+}
+
+function responsesCompletion(text = "MATTER_READY"): Response {
+  return new Response(JSON.stringify({
+    object: "response",
+    status: "completed",
+    error: null,
+    incomplete_details: null,
+    output: [{
+      type: "message",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text, annotations: [] }],
+    }],
   }), { headers: { "content-type": "application/json" } });
 }
 
@@ -189,7 +205,7 @@ describe("provider-session route", () => {
     expect(calls[0]).toMatchObject({
       url: "https://api.openai.com/v1/chat/completions",
       authorization: "Bearer sk-user-secret",
-      body: { model: "gpt-4.1-mini", max_completion_tokens: 12 },
+      body: { model: "gpt-4.1-mini", max_completion_tokens: 12, store: false },
     });
     expect(JSON.stringify(calls[0]!.body)).toContain("MATTER_READY");
     const cookie = response.headers.get("set-cookie") ?? "";
@@ -229,11 +245,16 @@ describe("provider-session route", () => {
 
   it("supports the reviewed Anthropic wire format without exposing profile or key", async () => {
     let observed: Readonly<Record<string, unknown>> = {};
+    const operations: string[] = [];
     const response = await connectProviderSession(
       jsonRequest("POST", { ...BODY, endpoint: "https://api.anthropic.com" }),
       ENVIRONMENT,
       NOW,
       async (url, init) => {
+        operations.push(`${init?.method ?? "GET"} ${String(url)}`);
+        if (init?.method === "GET") {
+          return modelList("claude-fable-5", "claude-sonnet-5", "claude-haiku-4-5-20251001");
+        }
         observed = Object.freeze({
           url: String(url),
           body: JSON.parse(String(init?.body)) as unknown,
@@ -248,15 +269,92 @@ describe("provider-session route", () => {
       url: "https://api.anthropic.com/v1/messages",
       apiKey: BODY.apiKey,
       version: "2023-06-01",
-      body: { model: "claude-fable-5", max_tokens: 12 },
+      body: { model: "claude-haiku-4-5-20251001", max_tokens: 12 },
     });
+    expect(operations).toEqual([
+      "GET https://api.anthropic.com/v1/models",
+      "POST https://api.anthropic.com/v1/messages",
+    ]);
     const payload = await response.json();
     expect(payload).toMatchObject({
       credentialPresent: true,
       endpoint: "https://api.anthropic.com/v1",
     });
     expect(JSON.stringify(payload)).not.toContain(BODY.apiKey);
-    expect(JSON.stringify(payload)).not.toContain("claude-fable-5");
+    expect(JSON.stringify(payload)).not.toContain("claude-haiku-4-5-20251001");
+  });
+
+  it.each([
+    "https://generativelanguage.googleapis.com",
+    "https://generativelanguage.googleapis.com/v1beta",
+  ])("maps only an exact Google shortcut into its OpenAI-compatible wire (%s)", async (endpoint) => {
+    const operations: string[] = [];
+    const bodies: Array<Readonly<Record<string, unknown>>> = [];
+    const response = await connectProviderSession(
+      jsonRequest("POST", { ...BODY, endpoint }),
+      ENVIRONMENT,
+      NOW,
+      async (url, init) => {
+        operations.push(`${init?.method ?? "GET"} ${String(url)}`);
+        if (init?.method === "POST") {
+          bodies.push(JSON.parse(String(init.body)) as Readonly<Record<string, unknown>>);
+        }
+        return init?.method === "GET"
+          ? modelList("gemini-2.5-flash-live", "gemini-2.5-flash")
+          : completion();
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(operations).toEqual([
+      "GET https://generativelanguage.googleapis.com/v1beta/openai/models",
+      "POST https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    ]);
+    expect(operations.every((operation) => !operation.includes(":generateContent"))).toBe(true);
+    expect(bodies).toEqual([expect.objectContaining({
+      model: "gemini-2.5-flash",
+      reasoning_effort: "none",
+      max_tokens: 12,
+    })]);
+    expect(await response.json()).toMatchObject({
+      credentialPresent: true,
+      endpoint: "https://generativelanguage.googleapis.com/v1beta/openai",
+    });
+  });
+
+  it("uses the Responses wire only when the person supplies its explicit operation URL", async () => {
+    let observed: Readonly<Record<string, unknown>> = {};
+    const response = await connectProviderSession(
+      jsonRequest("POST", { ...BODY, endpoint: "https://api.openai.com/v1/responses" }),
+      ENVIRONMENT,
+      NOW,
+      async (url, init) => {
+        observed = Object.freeze({
+          url: String(url),
+          method: init?.method,
+          authorization: new Headers(init?.headers).get("authorization"),
+          body: JSON.parse(String(init?.body)) as unknown,
+        });
+        return responsesCompletion();
+      },
+    );
+    expect(response.status).toBe(200);
+    expect(observed).toEqual({
+      url: "https://api.openai.com/v1/responses",
+      method: "POST",
+      authorization: `Bearer ${BODY.apiKey}`,
+      body: {
+        model: "gpt-4.1-mini",
+        input: "Return exactly MATTER_READY. This is a connection check; do not add any other text.",
+        max_output_tokens: 12,
+        temperature: 0,
+        stream: false,
+        store: false,
+      },
+    });
+    expect(await response.json()).toMatchObject({
+      credentialPresent: true,
+      endpoint: "https://api.openai.com/v1",
+    });
   });
 
   it("tests explicitly without writing or replacing a cookie", async () => {
@@ -570,6 +668,41 @@ describe("provider-session route", () => {
     expect(provider).toHaveBeenCalledTimes(2);
     expect(provider.mock.calls.every(([, init]) => init?.method === "GET")).toBe(true);
     expect(response.headers.get("set-cookie")).toBeNull();
+  });
+
+  it("reports a bounded discovery deadline as a timeout instead of an empty catalog", async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = vi.fn<typeof fetch>((_url, init) => new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(
+          new DOMException("Aborted", "AbortError"),
+        ), { once: true });
+      }));
+      const pending = connectProviderSession(
+        jsonRequest("POST", {
+          ...BODY,
+          endpoint: "https://mirror.vendor.ai/v1/chat/completions",
+        }),
+        ENVIRONMENT,
+        NOW,
+        provider,
+      );
+
+      await vi.advanceTimersByTimeAsync(2_250);
+      const response = await pending;
+      expect(response.status).toBe(504);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "CONNECTION_FAILED",
+          message: "The provider check timed out.",
+          retryable: true,
+        },
+      });
+      expect(provider).toHaveBeenCalledOnce();
+      expect(provider.mock.calls[0]?.[1]?.method).toBe("GET");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not broaden an explicit completion path after sentinel failure", async () => {

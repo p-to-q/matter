@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 const publicFetches = vi.hoisted(() => ({
   chat: vi.fn<typeof fetch>(),
+  responses: vi.fn<typeof fetch>(),
   anthropic: vi.fn<typeof fetch>(),
   models: vi.fn<typeof fetch>(),
 }));
 vi.mock("./public-provider-fetch", () => ({
   fetchPublicChatCompletions: publicFetches.chat,
+  fetchPublicResponses: publicFetches.responses,
   fetchPublicAnthropicMessages: publicFetches.anthropic,
   fetchPublicProviderModels: publicFetches.models,
 }));
@@ -62,6 +64,7 @@ function sealedRequest(selection: UserProviderSelection = {
 
 beforeEach(() => {
   publicFetches.chat.mockReset();
+  publicFetches.responses.mockReset();
   publicFetches.anthropic.mockReset();
   publicFetches.models.mockReset();
 });
@@ -374,6 +377,55 @@ describe("request model pool", () => {
     expect(publicFetches.chat).toHaveBeenCalledOnce();
     expect(String(publicFetches.chat.mock.calls[0]![0]))
       .toBe("https://mirror.vendor.ai/gateway/v1/chat/completions");
+  });
+
+  it("uses a sealed custom Responses profile directly without runtime discovery", async () => {
+    publicFetches.responses.mockResolvedValue(new Response(JSON.stringify({
+      object: "response",
+      status: "completed",
+      error: null,
+      incomplete_details: null,
+      output: [{
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [{ type: "output_text", text: "custom response answer" }],
+      }],
+    }), { headers: { "content-type": "application/json" } }));
+    const request = sealedRequest({
+      profileId: "openai-responses-compatible",
+      model: "vendor-response-small",
+      baseUrl: "https://mirror.vendor.ai/gateway/v1",
+    });
+    const resolution = resolveRequestModelAdapter(request, {
+      userAuthorized: true,
+      managedAuthorized: true,
+      fallback: null,
+      limits: DEFAULT_POOL_LIMITS,
+      environment: ENVIRONMENT,
+    });
+
+    await expect(resolution.adapter!({
+      scenario: "matter-inquiry",
+      prompt: "question",
+      locale: "en-US",
+      input: null,
+      deadlineMs: 3_000,
+      maxOutputTokens: 20,
+    }, new AbortController().signal)).resolves.toEqual({ text: "custom response answer" });
+    expect(publicFetches.models).not.toHaveBeenCalled();
+    expect(publicFetches.anthropic).not.toHaveBeenCalled();
+    expect(publicFetches.chat).not.toHaveBeenCalled();
+    expect(publicFetches.responses).toHaveBeenCalledOnce();
+    const [url, init] = publicFetches.responses.mock.calls[0]!;
+    expect(String(url)).toBe("https://mirror.vendor.ai/gateway/v1/responses");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      model: "vendor-response-small",
+      input: "question",
+      max_output_tokens: 20,
+      stream: false,
+      store: false,
+    });
   });
 });
 

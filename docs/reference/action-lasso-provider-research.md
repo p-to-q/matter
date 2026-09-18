@@ -125,9 +125,10 @@ different, much broader proxy product. Matter adopts the smaller contract:
 - the client supplies only one compatible HTTPS address and its opaque key; it
   cannot choose a model, completion path, header set,
   request shape, or response vocabulary;
-- the server registry owns a small named serializer/parser matrix and bounded
-  model discovery; a catalog name becomes usable only after a real sentinel
-  proves the selected wire;
+- the server registry owns a small named serializer/parser matrix for OpenAI
+  Chat, explicit OpenAI Responses, Anthropic Messages, and Gemini's official
+  OpenAI-compatible endpoint plus bounded model discovery; a catalog name
+  becomes usable only after a real sentinel proves the selected wire;
 - the authenticated user candidate is request-local and attempted first, while
   the existing managed candidates remain ordered fallback;
 - candidate health and derived cache scope are isolated by an opaque credential
@@ -145,8 +146,8 @@ warns that full URLs are difficult to validate, redirects bypass validation,
 and DNS pinning/rebinding defeats a separate lookup followed by an ordinary
 request. Product authorization requires a custom base here, so the accepted
 surface is narrower than a URL relay: ASCII HTTPS, default port, DNS hostname,
-no credentials/query/fragment. A reviewed complete `/chat/completions` or
-`/v1/messages` path is reduced to its server-owned base; every other path stays
+no credentials/query/fragment. A reviewed complete `/chat/completions`,
+`/responses`, or `/v1/messages` path is reduced to its server-owned base; every other path stays
 a base to which the reviewed registry appends its own operation. Every
 request resolves the complete answer set, rejects mixed public/private and
 special-use addresses, then gives `node:https` a lookup callback pinned to one
@@ -174,11 +175,22 @@ the fixed completion body, and existing scenario governors remain independent
 bounds.
 
 Compatibility is negotiated once rather than guessed on every material action.
-Official bases have one current profile. A custom endpoint keeps its normalized
+Official OpenAI and DeepSeek bases default to their current Chat profile;
+Responses remains opt-in through an explicit operation URL. Official Anthropic
+and Gemini OpenAI-compatible bases use one bounded catalog read to select a
+low-cost family available to that credential. The exact Google root and
+`/v1beta` shortcuts map to `/v1beta/openai` only inside the server registry;
+nearby hosts or paths remain custom, and no request is translated to native
+Gemini `:generateContent`. Gemini selection excludes Live, Omni, speech, image,
+transcription, and embedding variants, admits only the 2.5 Flash/Flash-Lite
+text family, sends `reasoning_effort: "none"`, and orders remaining IDs
+deterministically. Gemini 3 is intentionally outside this small-output profile
+because its reasoning cannot be disabled. A custom endpoint keeps its normalized
 safe path first, then admits only one same-origin `/v1` recovery. Across those
 two bases it receives at most three parallel model-list reads: bearer-auth
 OpenAI-compatible on the exact and, when distinct, versioned base, plus native
-Anthropic on its versioned base. Stable request ordering means a working exact
+Anthropic on its versioned base. An explicit Responses URL instead owns one
+Bearer catalog read and never expands into Chat or Messages. Stable request ordering means a working exact
 base wins even though discovery shares one latency budget. Missing `https`,
 plaintext `http`, and narrowly recognized scheme typos normalize locally to
 HTTPS; no request ever carries the key over plaintext.
@@ -188,9 +200,11 @@ catalog order and conservative cost markers select one text candidate per
 base/wire pair. At most three 2.25-second sentinels prove those candidates in
 exact-compatible, versioned-compatible, then versioned-Anthropic order. Matter does not parse an
 arbitrary provider error body, so it does not pretend to know which field was
-rejected. All work shares the route deadline and process drain cap; the sealed
-lease records only the profile and model that produced the exact sentinel.
-Runtime never renegotiates.
+rejected. All work shares the route deadline; sentinel and runtime generations
+also share the process drain cap. A DNS lookup loses request authority at its
+deadline, but native resolver work itself is not cancellable, so route admission
+remains the outer concurrency bound. The sealed lease records only the profile
+and model that produced the exact sentinel. Runtime never renegotiates.
 
 The key is posted once to the same-origin server, authenticated-encrypted with a
 fresh nonce, and returned only as a fixed 30-day `HttpOnly`, `Secure`,
@@ -214,12 +228,21 @@ generation or survive arbitrary selective cookie eviction; those stronger
 promises require shared durable state.
 
 Provider wire behavior is checked against the current
-[OpenAI API documentation](https://platform.openai.com/docs/api-reference/chat/create)
-and [DeepSeek API documentation](https://api-docs.deepseek.com/api/create-chat-completion/),
+[OpenAI Chat](https://developers.openai.com/api/reference/cli/resources/chat),
+[OpenAI Responses](https://developers.openai.com/api/reference/cli/resources/responses/methods/create),
+[OpenAI Responses migration](https://developers.openai.com/api/docs/guides/migrate-to-responses),
+[Anthropic models](https://platform.claude.com/docs/en/api/models/list),
+[Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai),
+[DeepSeek Chat](https://api-docs.deepseek.com/api/create-chat-completion/), and
+[DeepSeek Responses](https://api-docs.deepseek.com/api/create-response/),
 not inferred from an "OpenAI-compatible" label. New wire formats require an
 explicit registry change and focused fixtures; ordinary model lifecycle changes
 are admitted through bounded catalog discovery and the sentinel rather than a
 client-visible model setting.
+Official OpenAI Chat and every Responses request send `store: false`. The flag
+prevents those APIs from establishing retrievable response or conversation
+state; it does not promise that a provider writes no operational, safety,
+abuse, or billing logs. Matter therefore does not describe it as zero retention.
 DeepSeek's current [quick start](https://api-docs.deepseek.com/) and
 [model-list example](https://api-docs.deepseek.com/api/list-models/) use
 `deepseek-flash` and

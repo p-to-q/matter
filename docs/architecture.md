@@ -245,17 +245,37 @@ only an explicit test/save action, one canonical HTTPS endpoint, and an optional
 replacement key; the browser cannot choose provider, model, operation path,
 transport profile, or arbitrary request shape. `PoolTransport` owns the full
 reviewed wire profile: completion URL, authentication, serialization, accepted
-response envelope, and strict parsing. Exact official OpenAI, DeepSeek, and
-Anthropic endpoints select fixed reviewed models. A custom endpoint preserves
+response envelope, and strict parsing. Exact official OpenAI and DeepSeek Chat
+endpoints select fixed reviewed models. Official Anthropic and Gemini
+OpenAI-compatible endpoints perform one bounded catalog read so the former can
+prefer Haiku then Sonnet and the latter can prefer a Gemini 2.5 Flash or
+Flash-Lite text model whose thinking can be disabled; the
+sentinel remains the authority. The exact Google root and `/v1beta` shortcuts
+canonicalize server-side to its documented `/v1beta/openai` base; nearby hosts
+and paths do not, and Matter never emits a native `:generateContent` operation.
+A custom endpoint preserves
 the supplied safe base as its first candidate and may add only the same-origin
 `/v1` base. It performs at most three parallel, bounded model-list operations
 across those bases and two reviewed authentication formats. The registry rejects
 non-generative catalog entries, prefers a reviewed inexpensive text alias when
 present, and otherwise selects at most one stable catalog candidate per
-admitted base/wire pair. At most three short `MATTER_READY` generations then prove
+admitted base/wire pair. The OpenAI Responses wire, including DeepSeek's
+documented compatible endpoint, is admitted only when the person supplies an
+explicit `/responses` operation; an ordinary base is never probed with that
+paid wire. At most three short `MATTER_READY` generations then prove
 the actual model and wire before either can be sealed. The catalog heuristic is
 never authority by itself. No key-prefix inference or error-body vocabulary
 participates in selection.
+
+The official OpenAI Chat profile and every Responses profile send
+`store: false`. This asks a provider not to create retrievable response or
+conversation state for the request; it is not a claim that the provider keeps
+no safety, abuse, billing, or infrastructure logs. Compatible Chat, DeepSeek
+Chat, Gemini Chat, and Anthropic profiles do not receive an unsupported storage
+field merely because another wire accepts it.
+The Gemini OpenAI-compatible profile sends `reasoning_effort: "none"`; the
+registry excludes Gemini 3 because its reasoning cannot be disabled within
+Matter's small deterministic output and latency budget.
 
 Custom-host model-list and completion operations pass through one closed public
 fetch boundary. It resolves the complete DNS answer set afresh, rejects the set

@@ -109,6 +109,7 @@ describe("public provider network boundary", () => {
 
   it.each<readonly [PublicProviderOperation, string, "GET" | "POST", string | undefined]>([
     ["chat-completions", "https://mirror.vendor.ai/v1/chat/completions", "POST", "{}"],
+    ["responses", "https://mirror.vendor.ai/v1/responses", "POST", "{\"input\":\"thought\"}"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/messages", "POST", "{\"text\":\"思想\"}"],
     ["models", "https://mirror.vendor.ai/v1/models", "GET", undefined],
   ])("admits only the %s operation's owned method and path", async (operation, url, method, body) => {
@@ -138,6 +139,8 @@ describe("public provider network boundary", () => {
   it.each<readonly [PublicProviderOperation, string, string]>([
     ["chat-completions", "https://mirror.vendor.ai/v1/chat/completions", "GET"],
     ["chat-completions", "https://mirror.vendor.ai/v1/chat/completions", "PUT"],
+    ["responses", "https://mirror.vendor.ai/v1/responses", "GET"],
+    ["responses", "https://mirror.vendor.ai/v1/responses", "PATCH"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/messages", "GET"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/messages", "PATCH"],
     ["models", "https://mirror.vendor.ai/v1/models", "POST"],
@@ -156,6 +159,8 @@ describe("public provider network boundary", () => {
   it.each<readonly [PublicProviderOperation, string, string]>([
     ["chat-completions", "https://mirror.vendor.ai/v1/models", "request path is invalid"],
     ["chat-completions", "https://mirror.vendor.ai/v1/chat/completions/", "request path is invalid"],
+    ["responses", "https://mirror.vendor.ai/v1/chat/completions", "request path is invalid"],
+    ["responses", "https://mirror.vendor.ai/v1/responses/", "request path is invalid"],
     ["anthropic-messages", "https://mirror.vendor.ai/messages", "request URL is invalid"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/chat/completions", "request path is invalid"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/messages/", "request path is invalid"],
@@ -174,6 +179,8 @@ describe("public provider network boundary", () => {
   it.each<readonly [PublicProviderOperation, string]>([
     ["chat-completions", "https://mirror.vendor.ai/v1/chat/completions?model=other"],
     ["chat-completions", "https://mirror.vendor.ai/v1/chat/completions#other"],
+    ["responses", "https://mirror.vendor.ai/v1/responses?stream=true"],
+    ["responses", "https://mirror.vendor.ai/v1/responses#other"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/messages?stream=true"],
     ["anthropic-messages", "https://mirror.vendor.ai/v1/messages#other"],
     ["models", "https://mirror.vendor.ai/v1/models?limit=100"],
@@ -190,6 +197,7 @@ describe("public provider network boundary", () => {
 
   it.each<readonly [PublicProviderOperation, string]>([
     ["chat-completions", "https://user@mirror.vendor.ai/v1/chat/completions"],
+    ["responses", "https://user@mirror.vendor.ai/v1/responses"],
     ["models", "https://user:secret@mirror.vendor.ai/v1/models"],
   ])("rejects URL credentials before DNS for %s", async (operation, url) => {
     const lookupAll = vi.fn(async () => PUBLIC_DNS_ANSWER);

@@ -61,6 +61,10 @@ describe("provider-session contract", () => {
       "https://mirror.vendor.ai/v1/messages",
       "https://mirror.vendor.ai/v1/messages",
     ],
+    [
+      "https://mirror.vendor.ai/v1/responses/",
+      "https://mirror.vendor.ai/v1/responses",
+    ],
   ])("canonicalizes an HTTPS base or known operation endpoint (%s)", (input, expected) => {
     expect(normalizeUserProviderEndpoint(input)).toBe(expected);
     expect(parseProviderSessionRequest({ ...valid, endpoint: input })).toEqual({

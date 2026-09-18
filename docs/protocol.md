@@ -822,8 +822,18 @@ host.
 rate/concurrency/deadline bounded. Its 9.5-second route budget covers the
 2.25-second catalog window, three 2.25-second proof windows, and 0.5 seconds of
 bounded processing below the platform ceiling. Both explicit actions perform the same
-finite capability proof. An exact official OpenAI, DeepSeek, or Anthropic
-endpoint selects its reviewed fixed model directly. A custom endpoint keeps the
+finite capability proof. Exact official OpenAI and DeepSeek Chat endpoints
+select a reviewed fixed model directly. Official Anthropic performs one native
+catalog read and admits only an available Haiku, falling back to Sonnet; the
+official Gemini OpenAI-compatible base performs one Bearer-authenticated catalog
+read and admits an available stable Flash text model after excluding Live,
+Omni, speech, image, transcription, and embedding variants. The exact Google
+root and `/v1beta` shortcuts map in the server registry to `/v1beta/openai`;
+nearby hosts and paths remain ordinary custom endpoints, and no native Gemini
+operation is admitted. Neither catalog is authority without the same sentinel
+proof. The admitted Gemini family is limited to 2.5 Flash and Flash-Lite and
+sends `reasoning_effort: "none"`; Gemini 3 remains outside this small-output
+profile because its reasoning cannot be disabled. A custom endpoint keeps the
 normalized supplied base first, adds at most one same-origin `/v1` base, and
 performs at most three parallel model-list reads inside a 2.25-second discovery budget,
 rejects known non-generative identifiers, and deterministically retains at most
@@ -832,10 +842,18 @@ reviewed exact alias wins when present. The route then performs at most three
 short content-free `MATTER_READY` generations in exact-compatible,
 versioned-compatible, then versioned-Anthropic order and seals only the
 candidate whose whitespace-trimmed real response proves that exact token and
-wire. Matter never infers a provider
+wire. An explicit `/responses` endpoint selects the finite non-streaming OpenAI
+Responses wire; reviewed OpenAI and DeepSeek endpoints have named profiles, and
+a custom endpoint still requires catalog plus sentinel proof. The parser accepts
+only one completed assistant text output. An ordinary base never causes a
+Responses probe. Matter never infers a provider
 from a key prefix or parses an arbitrary error vocabulary. A custom service that
 exposes no bounded model catalog or no candidate that passes the sentinel cannot
 be inferred safely from only endpoint and key and therefore fails closed.
+The official OpenAI Chat profile and every Responses profile explicitly send
+`store: false`; this suppresses provider-created retrievable response state, not
+provider-side safety, abuse, billing, or infrastructure logging. Other Chat and
+Messages profiles omit the field unless their reviewed wire owns it.
 
 `action: "test"` returns the strict test result and never writes a cookie.
 `action: "save"` verifies first and atomically replaces the cookie only after
@@ -873,14 +891,15 @@ parser. A missing or narrowly mistyped scheme is upgraded locally to HTTPS; the
 server never transmits the key over HTTP. The result must use HTTPS on the
 default port, contain a multi-label DNS name, and contain no credentials, query,
 or fragment. A reviewed explicit
-`/chat/completions` or `/v1/messages` operation may be supplied; the server
+`/chat/completions`, `/responses`, or `/v1/messages` operation may be supplied;
+the server
 reduces it to its profile-owned base. A base without `/v1` stays first and may
 gain only one same-origin `/v1` discovery candidate. Each custom-host operation resolves all
 addresses afresh, rejects the set if any member is non-public, and pins the TLS
 connection to one accepted address while retaining hostname SNI and certificate
 verification. No redirect is followed. The public fetch boundary exposes only
-model-list, chat-completion, and Anthropic-message operations, so it is not a
-general relay.
+model-list, chat-completion, Responses, and Anthropic-message operations, so it
+is not a general relay.
 
 On a successful save the server seals `{ profileId, model, baseUrl, apiKey,
 scopeId, generationId, issuedAtMs, expiresAtMs }` with AES-256-GCM and a fresh
