@@ -679,7 +679,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @media (forced-colors: active) {
   .point-talk__composer,
   .point-talk__feedback { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
-  .material-files__search:has(input:focus-visible) { box-shadow: none; }
+  .material-files__search:has(input:focus-visible) { outline: 2px solid Highlight; outline-offset: 2px; box-shadow: none; }
   .canvas-ruling { display: none; }
   .matter-guidance::before,
   .matter-guidance::after { -webkit-backdrop-filter: none; backdrop-filter: none; -webkit-mask-image: none; mask-image: none; }

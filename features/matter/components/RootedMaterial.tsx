@@ -3438,7 +3438,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           locale: props.locale,
           navigationMode: navigation.mode,
           rewriteRecording: pointTalkVoiceRecording,
-          rewriteTargeted: activePointTalkNodeId !== null || selectedNode !== null,
+          rewriteTargeted: activePointTalkNodeId !== null || selectedRewriteNodeId !== null,
           rootId: tree.rootId,
         })}
       />

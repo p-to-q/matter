@@ -95,6 +95,9 @@ describe("selected material address", () => {
     expect(rooted).toContain("{addressVisible ? <MaterialAddressLayer");
     expect(rooted).toContain("targetBounds={pointTalkTargetBounds}");
     expect(rooted).toMatch(/const nodeActionsEnabled =[^;]*pointTalkHostNodeId === null/s);
+    expect(rooted).toContain(
+      "rewriteTargeted: activePointTalkNodeId !== null || selectedRewriteNodeId !== null",
+    );
     expect(css).toMatch(
       /\.material-address-layer\[data-address-variant="actionable"\]\[data-address-partition="point-talk"\]\s*\{\s*z-index:\s*32;/,
     );

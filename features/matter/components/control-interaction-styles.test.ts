@@ -12,6 +12,11 @@ describe("canvas control interaction styles", () => {
       /\.material-files__search input:focus-visible\s*\{[^}]*outline:\s*0;/s,
     );
     expect(css).not.toMatch(/\.material-files__search:has\(input:focus-visible\)\s*\{[^}]*border-bottom:/s);
+
+    const forcedColors = css.slice(css.indexOf("@media (forced-colors: active)"));
+    expect(forcedColors).toMatch(
+      /\.material-files__search:has\(input:focus-visible\)\s*\{[^}]*outline:\s*2px solid Highlight;[^}]*outline-offset:\s*2px;[^}]*box-shadow:\s*none;/s,
+    );
   });
 
   it("keeps one chip geometry while separating hover from a compressed press", () => {
