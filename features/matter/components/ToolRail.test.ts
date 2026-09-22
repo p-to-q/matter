@@ -82,6 +82,9 @@ describe("ToolRail", () => {
     expect(css).toMatch(
       /\.tool-rail__button:focus-visible::after\s*\{[^}]*outline:\s*2px solid var\(--rail-active\);/s,
     );
+    expect(css).toMatch(
+      /\.tool-rail__button\[data-tool-emphasis="primary"\]:disabled\s*\{[^}]*color:\s*var\(--rail-active-ink\);/s,
+    );
   });
 
   it.each(CANVAS_LANGUAGE_OPTIONS)("renders fixed controls in $label", ({ value: locale }) => {

@@ -33,6 +33,9 @@ describe("canvas control interaction styles", () => {
     expect(css).toMatch(
       /\.tool-rail__button\s*\{[^}]*width:\s*72px;[^}]*height:\s*44px;/s,
     );
+    expect(css).toMatch(
+      /@media \(pointer: coarse\)[\s\S]*?\.tool-rail__button::before,[\s\S]*?\.tool-rail__button\[data-tool-emphasis="primary"\]::before\s*\{[^}]*inset-block:\s*2px;/s,
+    );
   });
 
   it("lets only the icon overshoot after a completed activation", () => {

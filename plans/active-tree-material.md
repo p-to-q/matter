@@ -7,6 +7,52 @@ Destination: the first usable public release at `ptoq.io/matter`
 This is the only roadmap. It ends at the first release; it is not a forecast of
 Matter as a platform.
 
+## Active delivery — Preview.58 material and mobile interaction correction
+
+State: implementation candidate assembled for review. Repository gates,
+Chromium interaction receipts, and an independent PR verification bind the
+release before merge. No physical iPhone/iPad Safari Voice or multi-touch
+receipt is claimed; that remains a named post-merge device proof boundary.
+
+```text
+Outcome:    untouched example title, passages, and fixed directory names follow
+            all five locales; search focus has no shell or underline; selected
+            material opens the existing Text Swap turn from the fixed Voice
+            tool; touch canvas pan and multi-contact zoom remain continuous;
+            Point Talk survives software-keyboard viewport transitions and uses
+            the compatible Voice path; rail hover, press, release, and selected
+            states remain geometrically stable; Ask Matter is primary and all
+            three corner groups share their intended axes
+Boundary:   product-owned seed provenance and fixed-label projection; Material
+            Files focus paint; selected-node-to-Text-Swap composition; transient
+            canvas pointer reducer and rendering-edge contact registry; Point
+            Talk placement/Voice lifecycle; rail animation state; desktop
+            corner chrome geometry. No protocol version or durable document
+            field is added, and only the tree engine commits rewritten material
+Invariants: authored or provenance-ambiguous text and names never relocalize;
+            canonical seed labels never call a model; selection and search do
+            not reflow material; pinch state stays transient and bounded;
+            one remaining touch continues the same camera as pan; permission
+            denial never opens a second capture path; submitted Text Swap work
+            keeps its existing authority, revalidation, Undo, and model-return-
+            only-text contracts; reduced motion and keyboard focus remain
+            perceivable; control hit areas, chip size, radius, and corner insets
+            do not change across hover, press, release, or selection
+Proof:      focused seed/history/label, index focus, selected-address/Text Swap,
+            viewport/contact, Point Talk placement, Voice fallback/cleanup,
+            rail-style, and corner-alignment tests; Chromium walks for all five
+            seed locales without Label traffic, search focus, click/double-click
+            Voice rewrite plus Undo, narrow touch/keyboard presentation, and
+            laptop corner geometry; then npm run check, npm run test:e2e, and a
+            separate PR diff review. Physical Safari/iPad capture and gesture
+            behavior remain explicitly unproved until a device receipt exists
+Non-goals:  translating human material, renaming a person's session, adding a
+            second mobile backend or model, changing Text Swap's protocol or
+            prompt, persisting camera/contact state, redesigning the canvas,
+            shipping launch-film capture work, or treating emulation as device
+            evidence
+```
+
 ## Active correction — Label evidence is precommitted before spend
 
 State: implemented and independently verified locally; no paid run or

@@ -46,6 +46,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
       }),
     });
   });
+  await prewarmInquiryDictationRouteModules(page);
   await page.goto("/matter");
   await page.evaluate(async () => document.fonts.ready);
 
@@ -735,6 +736,17 @@ test("tablet index and settings controls share the 40px instrument scale", async
   await page.setViewportSize({ width: 960, height: 844 });
   await expect(page.locator(".material-files-toggle")).toHaveCount(0);
 });
+
+async function prewarmInquiryDictationRouteModules(page: Page): Promise<void> {
+  // Next's development server compiles each dynamic route on first access.
+  // Keep that test-only startup work outside the held pointer receipt;
+  // production deployments already contain compiled route artifacts.
+  for (const path of ["/matter/api/transcribe", "/matter/api/repair"]) {
+    const response = await page.request.get(path);
+    expect(response.status()).toBe(405);
+    await response.dispose();
+  }
+}
 
 function expectInset(actual: number, expected: number): void {
   expect(Math.abs(actual - expected)).toBeLessThanOrEqual(1.1);

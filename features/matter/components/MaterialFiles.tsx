@@ -1425,7 +1425,6 @@ function emptyIndexMessage(
   query: string,
   copy: MaterialFilesCopy,
 ): string {
-  const rootId = tree.rootId;
   if (isEmptyMaterialDocument(tree)) return copy.emptyFirstThought;
   if (mode === "search") {
     return query.trim().length === 0 ? copy.emptyTypeToFind : copy.emptyNoMatches;

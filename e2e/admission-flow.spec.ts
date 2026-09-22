@@ -1,7 +1,4 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  clickExposedMaterial,
-} from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const heardTranscript = "呃，我觉得我觉得这个方案可以，但是它的实现事件比预期长。";
@@ -148,7 +145,7 @@ for (const viewport of [
       "true",
     );
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("说话，让想法向下生长。");
+      .toHaveText("选择一段想法。");
     await expect(page.locator("#material-files")).toHaveAttribute(
       "data-persistence-phase",
       "saved",

@@ -456,6 +456,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .tool-rail__button[data-tool-emphasis="primary"]:hover:not(:disabled)::before,
 .tool-rail__button[data-tool-emphasis="primary"]:focus-visible::before { background: var(--rail-active); }
 .tool-rail__button:disabled { cursor: default; color: rgba(22,29,39,.38); }
+.tool-rail__button[data-tool-emphasis="primary"]:disabled { color: var(--rail-active-ink); }
 .tool-rail__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .tool-rail__separator { width: 22px; height: 1px; margin: 2px 0; background: rgba(22,29,39,.22); }
 /* The plate returns monotonically. Only the icon crosses its rest size after a
@@ -670,6 +671,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .material-file__open,
   .material-file__check { min-height: 48px; }
   .tool-rail__button { height: var(--instrument-size); }
+  .tool-rail__button::before,
+  .tool-rail__button[data-tool-emphasis="primary"]::before { inset-block: 2px; }
   .stretch-handle { min-width: var(--instrument-size); height: var(--instrument-size); }
 }
 

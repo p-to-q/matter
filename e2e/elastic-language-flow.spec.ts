@@ -1157,13 +1157,10 @@ async function runElasticReceipt(
   await expect(page.locator(".stretch-amount-rail")).toHaveCount(0);
   await expectUpperGripAtSelection(page, upperGrip);
   await expectNeutralSelection(page);
-  // The transform presentation is intentionally short-lived. Start observing
-  // before the gesture so a loaded browser cannot complete the durable change,
-  // then let this test begin looking after the reveal has already retired.
-  // This still requires the perceptible multi-group arrival for pointer input.
-  const revealGroupCount = input === "keyboard"
-    ? null
-    : page.locator(".transform-text").getAttribute("data-transform-reveal-groups");
+  // The transform presentation is intentionally short-lived. Observe its DOM
+  // insertion inside the browser so runner load cannot miss the bounded reveal
+  // before this test reaches the durable-text assertions below.
+  if (input !== "keyboard") await observeTransformReveal(page);
 
   if (input === "drag") {
     const box = await grip.boundingBox();
@@ -1231,7 +1228,7 @@ async function runElasticReceipt(
     );
     expect(animations.every((name) => name === "none")).toBe(true);
   } else {
-    const groupCount = Number(await revealGroupCount);
+    const groupCount = await readObservedTransformRevealGroupCount(page);
     expect(groupCount).toBeGreaterThanOrEqual(2);
     expect(groupCount).toBeLessThanOrEqual(4);
   }
@@ -1253,6 +1250,39 @@ async function runElasticReceipt(
   await expect(page.locator(".transform-text")).toHaveCount(0);
   expect(turnRequests).toBe(1);
   expect(browserErrors).toEqual([]);
+}
+
+async function observeTransformReveal(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const receiptKey = "__matterTransformRevealGroupCount";
+    const receiptWindow = window as Window & { [receiptKey]?: number };
+    delete receiptWindow[receiptKey];
+    const capture = (): boolean => {
+      const value = document.querySelector(".transform-text")
+        ?.getAttribute("data-transform-reveal-groups");
+      if (value === null || value === undefined) return false;
+      const groupCount = Number(value);
+      if (!Number.isSafeInteger(groupCount)) return false;
+      receiptWindow[receiptKey] = groupCount;
+      return true;
+    };
+    if (capture()) return;
+    const observer = new MutationObserver(() => {
+      if (!capture()) return;
+      observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function readObservedTransformRevealGroupCount(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const receiptKey = "__matterTransformRevealGroupCount";
+    const receiptWindow = window as Window & { [receiptKey]?: number };
+    const groupCount = receiptWindow[receiptKey];
+    delete receiptWindow[receiptKey];
+    return groupCount ?? 0;
+  });
 }
 
 async function confirmElasticAddress(
