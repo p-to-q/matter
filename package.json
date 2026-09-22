@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "dev:ai": "node scripts/local-ai-demo.mjs",
+    "capture:launch": "node scripts/render-matter-launch.mjs",
     "dev:webpack": "next dev --webpack",
     "build": "next build --webpack && npm run check:runtime",
     "start": "next start",
