@@ -6,10 +6,37 @@ import {
   MIN_INDEX_TARGET_FONT_CSS_PX,
   planCanvasViewportForClientRect,
   projectCanvasAttentionField,
+  projectCanvasZoomPercent,
   reduceCanvasViewport,
   type CanvasViewportEvent,
   type CanvasViewportState,
 } from "./canvas-viewport";
+
+describe("projectCanvasZoomPercent", () => {
+  it.each([
+    [MIN_CANVAS_ZOOM, 60],
+    [0.994, 99],
+    [0.999, 100],
+    [1, 100],
+    [1.001, 100],
+    [1.006, 101],
+    [MAX_CANVAS_ZOOM, 180],
+  ])("projects camera ratio %s as %s percent", (zoom, expected) => {
+    expect(projectCanvasZoomPercent(zoom)).toBe(expected);
+  });
+
+  it.each([
+    Number.NaN,
+    Number.NEGATIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    -1,
+    0,
+    MIN_CANVAS_ZOOM - Number.EPSILON,
+    MAX_CANVAS_ZOOM + Number.EPSILON,
+  ])("fails closed for the invalid camera ratio %s", (zoom) => {
+    expect(projectCanvasZoomPercent(zoom)).toBeNull();
+  });
+});
 
 function apply(
   state: CanvasViewportState,

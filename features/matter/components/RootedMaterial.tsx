@@ -2203,6 +2203,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
+      camera: !lasso.active && canvasMode === "pan"
+        ? { kind: "pan", zoom: viewport.zoom }
+        : { kind: "none" },
       language: languageGuidance,
       material: materialGuidance,
     }),
@@ -3612,7 +3615,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           data-optical-clearance="guidance"
           key={guidance.id}
         >
-          <p className="matter-guidance__next">{guidance.text}</p>
+          <p
+            className={guidance.kind === "readout"
+              ? "matter-guidance__next matter-guidance__next--readout"
+              : "matter-guidance__next"}
+            data-canvas-zoom-value={guidance.kind === "readout" ? guidance.percent : undefined}
+          >
+            {guidance.text}
+          </p>
         </footer>
         </div>
         <CanvasChrome

@@ -269,6 +269,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 /* Like the upper-right and lower-right groups, the atmospheric planes belong
    to the whole corner while a hover surface belongs only to its live label. */
 .matter-guidance__next { isolation: isolate; position: relative; z-index: 1; display: inline-block; margin: 0; white-space: nowrap; animation: matter-guidance-in 1s ease forwards; }
+.matter-guidance[data-guidance-kind="readout"] { pointer-events: none; }
+.matter-guidance__next--readout { inline-size: 4.5ch; font-variant-numeric: lining-nums tabular-nums; font-feature-settings: "lnum" 1, "tnum" 1; line-height: inherit; text-align: end; vertical-align: top; direction: ltr; unicode-bidi: isolate; animation: none; transition: none; }
 .matter-guidance__next::before { position: absolute; z-index: -1; inset: 0 -4px; background: transparent; content: ""; transition: background-color 150ms ease; }
 .matter-guidance:hover,
 .matter-guidance:focus-visible,

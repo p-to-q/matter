@@ -2,6 +2,7 @@ import type {
   AdmissionErrorCode,
   AdmissionInteractionState,
 } from "../runtime/admission-interaction";
+import { projectCanvasZoomPercent } from "../interaction/canvas-viewport";
 import type { CanvasLanguage } from "./canvas-preferences";
 
 export type CanvasMaterialGuidanceState =
@@ -25,13 +26,18 @@ export type CanvasLanguageGuidanceState =
         | Readonly<{ kind: "pending"; amount: number }>;
     }>;
 
+export type CanvasCameraGuidanceState =
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "pan"; zoom: number }>;
+
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
+  camera: CanvasCameraGuidanceState;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
 }>;
 
-export type CanvasGuidanceId =
+type CanvasActionGuidanceId =
   | "allow-microphone"
   | "speak-recording"
   | "wait-recording"
@@ -53,6 +59,8 @@ export type CanvasGuidanceId =
   | "unfold-thought"
   | "speak-child"
   | "select-thought";
+
+export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
 export const CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT = 34;
 
@@ -78,7 +86,7 @@ const GUIDANCE_COPY = Object.freeze({
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
   "select-thought": "Select one thought.",
-} satisfies Readonly<Record<CanvasGuidanceId, string>>);
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const GUIDANCE_COPY_ZH = Object.freeze({
   "allow-microphone": "允许使用麦克风。",
@@ -102,13 +110,20 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
   "select-thought": "选择一段想法。",
-} satisfies Readonly<Record<CanvasGuidanceId, string>>);
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
-export type CanvasGuidance = Readonly<{
-  id: CanvasGuidanceId;
-  kind: "action" | "progress" | "recovery";
-  text: string;
-}>;
+export type CanvasGuidance =
+  | Readonly<{
+      id: CanvasActionGuidanceId;
+      kind: "action" | "progress" | "recovery";
+      text: string;
+    }>
+  | Readonly<{
+      id: "canvas-zoom";
+      kind: "readout";
+      percent: number;
+      text: string;
+    }>;
 
 /**
  * Projects transient interaction state into one truthful next action. Specific
@@ -155,6 +170,25 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
       return assertNever(input.language);
   }
 
+  switch (input.camera.kind) {
+    case "pan": {
+      const percent = projectCanvasZoomPercent(input.camera.zoom);
+      if (percent !== null) {
+        return Object.freeze({
+          id: "canvas-zoom",
+          kind: "readout",
+          percent,
+          text: `${percent}%`,
+        });
+      }
+      break;
+    }
+    case "none":
+      break;
+    default:
+      return assertNever(input.camera);
+  }
+
   switch (input.material.kind) {
     case "focus":
       return guidance("circle-selection", "action");
@@ -175,6 +209,9 @@ export function localizeCanvasGuidance(
   guidanceState: CanvasGuidance,
   language: CanvasLanguage,
 ): CanvasGuidance {
+  // Camera scale is a locale-independent instrument value. Keeping one ASCII
+  // form also makes server and browser rendering identical across ICU builds.
+  if (guidanceState.id === "canvas-zoom") return guidanceState;
   if (language === "en-US") return guidanceState;
   if (language === "zh-TW") {
     return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_ZH_TW[guidanceState.id] });
@@ -309,9 +346,9 @@ function projectAdmissionError(errorCode: AdmissionErrorCode): CanvasGuidance {
 }
 
 function guidance(
-  id: CanvasGuidanceId,
-  kind: CanvasGuidance["kind"],
-): CanvasGuidance {
+  id: CanvasActionGuidanceId,
+  kind: "action" | "progress" | "recovery",
+): Extract<CanvasGuidance, { id: CanvasActionGuidanceId }> {
   const text = GUIDANCE_COPY[id];
   if (text.length > CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT) {
     throw new Error(`Canvas guidance exceeds narrow line budget: ${id}`);

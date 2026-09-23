@@ -176,6 +176,22 @@ export const INITIAL_CANVAS_VIEWPORT: CanvasViewportState = Object.freeze({
   gesture: null,
 });
 
+/**
+ * Projects the canonical camera ratio into a quiet whole-percent readout.
+ * Invalid or out-of-contract values fail closed instead of painting a false
+ * `0%`, `NaN%`, or unbounded scale at the rendering edge.
+ */
+export function projectCanvasZoomPercent(zoom: number): number | null {
+  if (
+    !isFiniteNumber(zoom) ||
+    zoom < MIN_CANVAS_ZOOM ||
+    zoom > MAX_CANVAS_ZOOM
+  ) {
+    return null;
+  }
+  return Math.round(zoom * 100);
+}
+
 function isValidGesture(gesture: CanvasViewportGesture): boolean {
   if (gesture.kind === "pinch") {
     return (

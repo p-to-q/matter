@@ -197,6 +197,8 @@ describe("CanvasChrome", () => {
     expect(globalCss).toMatch(/\.matter-guidance::after\s*{[^}]*inset:\s*-9px -12px;[^}]*--corner-optical-inner-mask/s);
     expect(globalCss).toMatch(/\.matter-guidance\s*{[^}]*pointer-events:\s*auto;[^}]*transition:\s*color/s);
     expect(globalCss).toMatch(/\.matter-guidance__next\s*{[^}]*animation:\s*matter-guidance-in/s);
+    expect(globalCss).toMatch(/\.matter-guidance\[data-guidance-kind="readout"\]\s*{[^}]*pointer-events:\s*none/s);
+    expect(globalCss).toMatch(/\.matter-guidance__next--readout\s*{[^}]*inline-size:\s*4\.5ch;[^}]*font-variant-numeric:\s*lining-nums tabular-nums;[^}]*line-height:\s*inherit;[^}]*text-align:\s*end;[^}]*animation:\s*none;[^}]*transition:\s*none/s);
     expect(globalCss).toMatch(/\.matter-guidance__next::before\s*{[^}]*inset:\s*0 -4px;[^}]*background:\s*transparent/s);
     expect(globalCss).toMatch(/\.matter-guidance:hover\s+\.matter-guidance__next::before[^}]*background:\s*var\(--chrome-hover-bg/s);
     expect(css).toMatch(/\.gearButton\s*{[^}]*width:\s*30px;[^}]*height:\s*30px;/s);
