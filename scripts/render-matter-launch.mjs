@@ -559,16 +559,17 @@ export function launchVideoOutroMarkup(sourceDataUrl) {
       };
       window.renderMatterOutro=(frame,total)=>{
         const progress=total<=1?1:frame/(total-1);
-        const rounding=ease((progress-.04)/.18);
+        const rounding=ease((progress-.03)/.30);
         // The final seeded passage first returns to the opening's haze, now on
         // night paper. The screen begins departing only after that atmosphere
         // is perceptible, so the close rhymes with the opening without replaying it.
         // Blur must keep evolving while the screen departs. A late-biased
         // power curve avoids reaching a static haze halfway through the move;
         // it settles only in the last frames before the picture disappears.
-        const pictureBlur=Math.pow(clamp((progress-.08)/.84),1.35);
-        const departure=ease((progress-.18)/.54);
-        const exit=ease((progress-.86)/.14);
+        const pictureBlur=Math.pow(clamp((progress-.10)/.82),1.3);
+        const dimming=Math.pow(clamp((progress-.16)/.76),1.2);
+        const departure=ease((progress-.12)/.64);
+        const exit=ease((progress-.82)/.18);
         const scale=lerp(1,.78,departure);
         const width=canvas.width*scale;const height=canvas.height*scale;
         const arc=Math.sin(Math.PI*departure);
@@ -578,10 +579,10 @@ export function launchVideoOutroMarkup(sourceDataUrl) {
         ctx.globalAlpha=1;ctx.fillStyle='#030506';ctx.fillRect(0,0,canvas.width,canvas.height);
         ctx.save();roundedRect(x,y,width,height,radius);ctx.clip();
         ctx.globalAlpha=1-exit;
-        ctx.filter='blur('+lerp(0,4,pictureBlur)+'px) brightness('+lerp(1,.86,pictureBlur)+')';
+        ctx.filter='blur('+lerp(0,4,pictureBlur)+'px) brightness('+lerp(1,.72,dimming)+')';
         ctx.drawImage(source,x,y,width,height);ctx.restore();
         if(rounding>0&&exit<1){
-          ctx.globalAlpha=(1-exit)*rounding*.26;ctx.strokeStyle='#dce7e6';ctx.lineWidth=1;
+          ctx.globalAlpha=(1-exit)*rounding*.18*(1-dimming*.5);ctx.strokeStyle='#dce7e6';ctx.lineWidth=1;
           roundedRect(x+.5,y+.5,width-1,height-1,radius);ctx.stroke();
         }
         ctx.globalAlpha=1;

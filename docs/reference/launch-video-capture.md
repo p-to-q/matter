@@ -99,8 +99,11 @@ field. Capture rejects any closing root whose position or dimensions differ
 from the measured opening by 5 CSS pixels or more. The outro draws that page exactly once; it
 never repeats the same interface as a blurred background. This closing state
 keeps accumulating haze throughout the shrink, settles only near the final
-fade, and rhymes with the opening passage without
-replaying its daylight composition. It omits tutorial labels,
+fade, and rhymes with the opening passage without replaying its daylight
+composition. Corner rounding leads the departure, while scale, dimming, blur,
+edge attenuation, and the final opacity exit overlap as one continuous curve
+rather than completing as separate beats. It does so without
+adding tutorial labels,
 device frames, scanning light, and a feature-list
 montage. The opening credit is editorial film language, not invented product
 chrome. The supplied audio begins after the credit starts leaving, fades in for

@@ -538,10 +538,13 @@ test("the outro returns the real root-only night paper to haze before it departs
   assert.match(markup, /renderMatterOutro/u);
   assert.match(markup, /'#030506'/u);
   assert.match(markup, /roundedRect/u);
-  assert.match(markup, /pictureBlur=Math\.pow\(clamp\(\(progress-\.08\)\/\.84\),1\.35\)/u);
-  assert.match(markup, /departure=ease\(\(progress-\.18\)\/\.54\)/u);
-  assert.match(markup, /exit=ease\(\(progress-\.86\)\/\.14\)/u);
+  assert.match(markup, /rounding=ease\(\(progress-\.03\)\/\.30\)/u);
+  assert.match(markup, /pictureBlur=Math\.pow\(clamp\(\(progress-\.10\)\/\.82\),1\.3\)/u);
+  assert.match(markup, /dimming=Math\.pow\(clamp\(\(progress-\.16\)\/\.76\),1\.2\)/u);
+  assert.match(markup, /departure=ease\(\(progress-\.12\)\/\.64\)/u);
+  assert.match(markup, /exit=ease\(\(progress-\.82\)\/\.18\)/u);
   assert.match(markup, /blur\('\+lerp\(0,4,pictureBlur\)/u);
+  assert.match(markup, /brightness\('\+lerp\(1,\.72,dimming\)/u);
   assert.doesNotMatch(markup, /lerp\(0,22,pictureBlur\)|backgroundExit|bleed/u);
   assert.equal(markup.match(/ctx\.drawImage\(source/gu)?.length, 1);
   assert.match(markup, /lerp\(1,\.78,departure\)/u);
