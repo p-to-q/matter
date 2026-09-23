@@ -116,6 +116,36 @@ test.describe("mobile canvas Pan", () => {
     expect(Number(await shell.getAttribute("data-observed-lost-captures"))).toBeGreaterThanOrEqual(2);
     await expect(page.locator(".spatial-thought[data-selected=true]")).toHaveCount(selectedBeforeMoveExit);
   });
+
+  test("a stationary touch remains a tap after Pan translates the material plane", async ({ page }) => {
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const shell = page.locator("main.matter-shell");
+    const paper = page.locator(".matter-document");
+    await page.getByRole("button", {
+      name: fixtureUiCopy.toolRail.canvasPan,
+      exact: true,
+    }).tap();
+    await expect(shell).toHaveAttribute("data-canvas-mode", "pan");
+
+    const paperBox = await paper.boundingBox();
+    if (paperBox === null) throw new Error("mobile paper is not visible");
+    const dragStart = { x: paperBox.x + 56, y: paperBox.y + 220 };
+    await withTouchSession(page, async (session) => {
+      await touchStart(session, dragStart);
+      await touchMove(session, { x: dragStart.x + 36, y: dragStart.y + 20 });
+      await touchEnd(session);
+    });
+    await expect(shell).toHaveAttribute("data-canvas-mode", "pan");
+
+    const tap = await visibleThoughtTextPoint(page);
+    await withTouchSession(page, async (session) => {
+      await touchStart(session, tap);
+      await touchEnd(session);
+    });
+    await expect(shell).toHaveAttribute("data-canvas-mode", "material");
+    await expect(page.locator(".spatial-thought[data-selected=true]")).toHaveCount(1);
+  });
 });
 
 async function observePointerLifecycle(shell: Locator): Promise<void> {

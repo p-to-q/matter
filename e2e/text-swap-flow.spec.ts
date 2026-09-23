@@ -616,7 +616,7 @@ test.describe("passage-local Point and Talk", () => {
       name: fixtureUiCopy.voiceTool.recordTopLevelThought,
       exact: true,
     })).toBeDisabled();
-    expect(requestCount).toBe(1);
+    await expect.poll(() => requestCount).toBe(1);
 
     releaseResponse();
     await expect(passage).toContainText(REWRITTEN_TEXT);

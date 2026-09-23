@@ -3276,11 +3276,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
           return;
         }
         if (viewport.gesture?.kind !== "pan" || viewport.gesture.pointerId !== event.pointerId) return;
+        const releaseX = finalTrackedTouch?.x ?? event.clientX;
+        const releaseY = finalTrackedTouch?.y ?? event.clientY;
         const dragged =
           viewport.gesture.dragging ||
           Math.hypot(
-            event.clientX - viewport.gesture.startX,
-            event.clientY - viewport.gesture.startY,
+            releaseX - viewport.gesture.startX,
+            releaseY - viewport.gesture.startY,
           ) >= (event.pointerType === "touch" ? 8 : 4);
         const originNodeId = pointerOriginNodeRef.current;
         pointerOriginNodeRef.current = null;
@@ -3299,8 +3301,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({
           type: "pointer-up",
           pointerId: event.pointerId,
-          clientX: finalTrackedTouch?.x ?? event.clientX,
-          clientY: finalTrackedTouch?.y ?? event.clientY,
+          clientX: releaseX,
+          clientY: releaseY,
         });
         if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
       }}

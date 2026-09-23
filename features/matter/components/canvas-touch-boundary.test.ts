@@ -40,4 +40,11 @@ describe("mobile canvas touch ownership", () => {
     expect(lifecycleCancellation).toContain("shell.releasePointerCapture(nodeDragPointerId)");
     expect(lifecycleCancellation).toContain("if (nodeDragPointerId !== null) clearNodeDrag()");
   });
+
+  it("compares a touch release in the same material-plane coordinates as its start", () => {
+    expect(rooted).toContain("const releaseX = finalTrackedTouch?.x ?? event.clientX");
+    expect(rooted).toContain("const releaseY = finalTrackedTouch?.y ?? event.clientY");
+    expect(rooted).toContain("releaseX - viewport.gesture.startX");
+    expect(rooted).toContain("releaseY - viewport.gesture.startY");
+  });
 });
