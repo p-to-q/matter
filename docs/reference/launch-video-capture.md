@@ -4,7 +4,7 @@ Need: a short Matter film must show the real product surface without recording
 the operator's desktop, leaking private notifications, or disguising a
 deterministic demonstration as an unrestricted live-provider evaluation.
 
-Status: the restrained hybrid V14 workflow is implemented. Its closing proof
+Status: the restrained hybrid V15 workflow is implemented. Its closing proof
 uses the real history to return the authored tree to its seeded root;
 publication remains subject to the archival audio rights decision.
 
@@ -75,17 +75,18 @@ browser take is 1600×900. The sequence is one causal movement: root-seeded
 light paper holding the passage “我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。”;
 the real FX control introducing daylight moving leaf shadow; the real appearance
 control establishing night; a closer About hold and Settings → Model API as orientation;
-the real pressed Voice control after selecting the root; Voice recording,
+the real pressed Voice control on neutral paper; Voice recording,
 showing “正在将声音变成材料”, and admitting one spoken subtitle beneath it; a Branch
 whose index row is opened into Point Talk; Stop shows “正在听清…”, the transcript
-appears in the editable direction field, and only the visible “改写” click sends
-the request. The four visible child passages have distinct jobs rather than
+is validated against the request receipt, and Voice Stop acts as the current
+product's explicit submit boundary before “正在换一种说法…” appears. The four visible child passages have distinct jobs rather than
 paraphrasing one another: a Voice-born proposition, a rewritten contrast, a
 second root claim, and one nested consequence. The canvas title is never reused
 as body material. A third root branch and one more native Branch beneath it make
 the paper and index both expose three levels, then a smooth native canvas zoom-out
 and restrained leftward drag leave roughly half of the short right-hand continuation
-visible before the tool rail, preserving both the root's breathing room and the sense
+visible before the tool rail. The existing lower-left guidance slot visibly reads
+`60%` throughout the settled pan, preserving both the root's breathing room and the sense
 that the canvas continues beyond the frame;
 Elastic release followed by an explicit click inside the shaped address; one
 branch set aside from the canvas minus control and restored from the matching
@@ -94,7 +95,8 @@ hover-and-click operations in the same wide composition visibly remove the
 Elastic change, nested branch, sibling branch, rewrite, first branch, and voice branch
 until only the seeded root remains; a short reading breath; then that same
 passage is returned through native move mode to the opening's scale and screen
-position before the night paper rounds, shrinks, and exits over a solid black
+position, with the same lower-left slot visibly settling at `100%`, before the
+night paper rounds, shrinks, and exits over a solid black
 field. Capture rejects any closing root whose position or dimensions differ
 from the measured opening by 5 CSS pixels or more. The outro draws that page exactly once; it
 never repeats the same interface as a blurred background. This closing state
@@ -114,7 +116,8 @@ visible Point Talk direction, and the Ask Matter question—plus one Transform,
 one Text Swap, and one Inquiry
 request. It also records ordered story-event and opening/daylight/night
 presentation receipts, an explicit post-Elastic selection-clear receipt, the
-explicit Inquiry mode, post-navigation and closing-geometry receipts, and the durable canvas title in a version-14
+explicit Inquiry mode, native `60%` and `100%` zoom-readout receipts,
+post-navigation and closing-geometry receipts, and the durable canvas title in a version-15
 `capture-cues.json` beside the raw WebM. The renderer accepts
 only the frozen 1600×900 capture surface and valid, non-overlapping cue windows,
 generates the transparent title and deterministic closing frames through the
@@ -135,7 +138,7 @@ hide, or relabel product state.
 
 Before the screencast clock starts, the harness uses Matter's native transient
 move mode to place the opening material at the center of the complete 1600×900
-frame, not merely at the center of the paper area beside the directory. The V14
+frame, not merely at the center of the paper area beside the directory. The V15
 receipt rejects an off-center opening. A translucent pale veil preserves a
 hazy impression of the interface while the real captured material pixels
 remain sharp. A feathered lower-right mask suppresses only the high-contrast
@@ -144,13 +147,16 @@ are fixed rather than left to browser-balanced wrapping.
 
 The harness never rewrites product source to make a take pass. It requires the
 recorded product revision to expose the native quiet-ink Voice hover, the
-solid-ink active tile, and the Point Talk `ready` phase with an explicit
-“改写” confirmation. If any of those product preconditions is absent, capture
-fails before it can be treated as a release candidate.
+solid-ink active tile, and the Point Talk Voice Stop submission path with
+perceivable transcribing and pending states. If any of those product
+preconditions is absent, capture fails before it can be treated as a release
+candidate.
 
-Before the first branch, the capture measures every visible text Range-fragment
-rectangle, selects the newly admitted material, waits for the structural address
-to paint, and requires exact equality after normalization to 0.01 CSS pixels.
+Before the filmed clock and first Voice admission, the capture measures every
+visible text Range-fragment rectangle, selects the seeded material, waits for
+the structural address to paint, and requires exact equality after normalization
+to 0.01 CSS pixels. It then clears selection so current Matter routes Voice to
+top-level admission rather than selected-material Point and Talk.
 Selection paint is therefore allowed to change pixels but not line wrapping or
 text geometry; a regression aborts the take before it can become a candidate
 master. A focused product E2E separately compares the pre-selection geometry

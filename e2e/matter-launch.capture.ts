@@ -71,9 +71,10 @@ type StoryEventName =
   | "voice-recording"
   | "voice-transcribing"
   | "voice-material"
-  | "point-talk-transcribed"
+  | "point-talk-submitted"
   | "point-talk-commit"
   | "nested-branch"
+  | "canvas-zoom-60"
   | "canvas-positioned"
   | "elastic-commit"
   | "elastic-deselected"
@@ -86,6 +87,7 @@ type StoryEventName =
   | "undo-point-talk"
   | "undo-first-branch"
   | "undo-voice-branch"
+  | "closing-zoom-100"
   | "closing-restored";
 
 test("capture the Matter launch master", async ({ context, page }) => {
@@ -187,7 +189,9 @@ test("capture the Matter launch master", async ({ context, page }) => {
       : null;
     if (envelope?.requestVersion === "text-swap/2") {
       textSwapRequests += 1;
-      await page.waitForTimeout(750);
+      // Voice Stop is the product's submit boundary. Keep the native pending
+      // state readable before the deterministic result settles into material.
+      await page.waitForTimeout(1_200);
       const plan = buildTextSwapPlan(
         envelope as TextSwapEnvelope,
         LAUNCH_POINT_TALK_FIXTURE.text,
@@ -293,6 +297,20 @@ test("capture the Matter launch master", async ({ context, page }) => {
       }).catch(() => undefined);
     }, `/matter/api/${endpoint}`);
   }));
+  // Prove the current structural selection paint before the filmed clock, then
+  // return to the neutral paper required by top-level Voice admission. Current
+  // Matter intentionally routes selected Voice to Point and Talk instead.
+  const rootGeometryBeforeSelection = await materialLineGeometry(root);
+  await root.click();
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="structural"]',
+  )).toHaveAttribute("data-material-address-painted", "true");
+  expect(await materialLineGeometry(root)).toEqual(rootGeometryBeforeSelection);
+  const preflightPaperBounds = await paper.boundingBox();
+  if (preflightPaperBounds === null) throw new Error("Launch-film paper is not visible.");
+  await page.mouse.click(preflightPaperBounds.x + 76, preflightPaperBounds.y + 120);
+  await expect(root).toHaveAttribute("aria-pressed", "false");
+  await expect(initialVoice).toHaveAttribute("aria-label", "录入一级想法");
   await centerOpeningMaterial(page, root, paper);
   const openingRootBounds = await root.boundingBox();
   if (openingRootBounds === null) throw new Error("Launch-film opening material is not visible.");
@@ -455,17 +473,12 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(settingsMenu).toBeHidden();
 
     // The opening passage remains the same authored material through every
-    // paper state. Voice now grows one spoken subtitle beneath that selected
-    // passage instead of manufacturing the sentence the viewer already read.
+    // paper state. Neutral-paper Voice now admits one spoken top-level subtitle
+    // instead of manufacturing the sentence the viewer already read.
     await at(10_800);
     const voice = page.locator('[data-tool-id="voice"]');
-    const rootGeometryBeforeSelection = await materialLineGeometry(root);
-    await ensureSelected(root);
-    await expect(page.locator(
-      '.material-address-layer[data-address-variant="structural"]',
-    )).toHaveAttribute("data-material-address-painted", "true");
-    expect(await materialLineGeometry(root)).toEqual(rootGeometryBeforeSelection);
-    await expect(voice).toHaveAttribute("aria-label", "在所选材料下录入想法");
+    await expect(root).toHaveAttribute("aria-pressed", "false");
+    await expect(voice).toHaveAttribute("aria-label", "录入一级想法");
     const beforeAdmission = await ids();
     await cue("voice-tool-start", voice);
     await moveTo(voice, 500);
@@ -499,7 +512,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(page.locator(".matter-guidance__next")).toHaveText("说出你的想法。");
     receiptEvent("voice-recording");
 
-    // The selected root owns the transient recording and transcription lane.
+    // The neutral paper owns the transient recording and transcription lane.
     // Hold it long enough to read before stopping: the camera's return is the
     // bridge from a pressed microphone to one new subordinate material.
     await at(13_650);
@@ -531,8 +544,10 @@ test("capture the Matter launch master", async ({ context, page }) => {
     receiptEvent("voice-material");
     await at(15_100);
 
-    // Admission must not disturb the already-visible root's typography.
-    expect(await materialLineGeometry(root)).toEqual(rootGeometryBeforeSelection);
+    // Top-level admission may legitimately recenter the authored structure,
+    // but it must not change the opening passage's line wrapping or metrics.
+    expect((await materialLineGeometry(root)).map(({ width, height }) => ({ width, height })))
+      .toEqual(rootGeometryBeforeSelection.map(({ width, height }) => ({ width, height })));
 
     // Handle the first branch immediately with Point and Talk so the causal
     // reference -> direction -> one material change chain stays clear.
@@ -561,15 +576,6 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await click(pointTalk.getByRole("button", { name: "完成", exact: true }), 180);
     await expect(pointTalk).toHaveAttribute("data-phase", "transcribing");
     await expect(pointTalk).toContainText("正在听清…");
-    const directionField = pointTalk.getByRole("textbox", {
-      name: "告诉 AI 这段文字应该怎样改变",
-    });
-    await expect(pointTalk).toHaveAttribute("data-phase", "ready", { timeout: 8_000 });
-    await expect(directionField).toHaveValue(LAUNCH_POINT_TALK_FIXTURE.direction);
-    expect(textSwapRequests).toBe(0);
-    receiptEvent("point-talk-transcribed");
-    await at(21_250);
-    await click(pointTalk.getByRole("button", { name: "改写", exact: true }), 220);
     await expect(pointTalk).toHaveAttribute("data-phase", "pending");
     await expect(pointTalk).toContainText("正在换一种说法…");
     await expect.poll(() => textSwapReceipt).toEqual({
@@ -577,8 +583,9 @@ test("capture the Matter launch master", async ({ context, page }) => {
       passageMatches: true,
       status: 200,
     });
-    await expect(firstBranch).toHaveText(REWRITTEN_BRANCH, { timeout: 10_000 });
     expect(textSwapRequests).toBe(1);
+    receiptEvent("point-talk-submitted");
+    await expect(firstBranch).toHaveText(REWRITTEN_BRANCH, { timeout: 10_000 });
     receiptEvent("point-talk-commit");
     await page.waitForTimeout(800);
     await cue("point-talk-end", firstBranch);
@@ -618,6 +625,10 @@ test("capture the Matter launch master", async ({ context, page }) => {
     const move = page.locator('[data-tool-id="move"]');
     await click(move, 280);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
+    const guidance = page.locator(".matter-guidance");
+    const zoomReadout = guidance.locator("[data-canvas-zoom-value]");
+    await expect(guidance).toHaveAttribute("data-guidance-state", "canvas-zoom");
+    await expect(zoomReadout).toHaveText("100%");
     const navigationPaperBounds = await paper.boundingBox();
     if (navigationPaperBounds === null) throw new Error("Launch-film paper is not visible.");
     cursor = await glide(page, cursor, {
@@ -637,6 +648,10 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect.poll(async () => Number(
       await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
     )).toBeLessThan(0.62);
+    await expect(zoomReadout).toHaveText("60%");
+    await expect(zoomReadout).toHaveAttribute("data-canvas-zoom-value", "60");
+    await expect(zoomReadout).toBeVisible();
+    receiptEvent("canvas-zoom-60");
     const beforePan = await nestedBranch.boundingBox();
     if (beforePan === null) throw new Error("Launch-film right branch is not visible before pan.");
     const panOrigin = {
@@ -661,8 +676,10 @@ test("capture the Matter launch master", async ({ context, page }) => {
     expect(readableWidth / afterPan.width).toBeGreaterThan(0.35);
     expect(readableWidth / afterPan.width).toBeLessThan(0.65);
     expect(rootAfterPan.x).toBeGreaterThan(navigationPaperBounds.x + 140);
+    await expect(zoomReadout).toHaveText("60%");
+    await expect(zoomReadout).toBeVisible();
     receiptEvent("canvas-positioned");
-    await page.waitForTimeout(420);
+    await page.waitForTimeout(700);
     await click(move, 260);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
 
@@ -851,6 +868,8 @@ test("capture the Matter launch master", async ({ context, page }) => {
     // temporal echo, while identical geometry makes the rhyme perceptible.
     await click(move, 220);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
+    await expect(guidance).toHaveAttribute("data-guidance-state", "canvas-zoom");
+    await expect(zoomReadout).toHaveText("60%");
     await moveTo(root, 280);
     const closingZoom = Number(
       await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
@@ -872,6 +891,8 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect.poll(async () => Number(
       await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
     )).toBeCloseTo(1, 2);
+    await expect(zoomReadout).toHaveText("100%");
+    await expect(zoomReadout).toHaveAttribute("data-canvas-zoom-value", "100");
     const closingBeforePan = await root.boundingBox();
     if (closingBeforePan === null) throw new Error("Launch-film closing root is not visible.");
     const closingDelta = {
@@ -884,6 +905,10 @@ test("capture the Matter launch master", async ({ context, page }) => {
       y: cursor.y + closingDelta.y,
     }, 520);
     await page.mouse.up();
+    await expect(zoomReadout).toHaveText("100%");
+    await expect(zoomReadout).toBeVisible();
+    receiptEvent("closing-zoom-100");
+    await page.waitForTimeout(420);
     await click(move, 180);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
     await expect.poll(async () => {
@@ -911,7 +936,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
   } finally {
     await page.screencast.stop();
     await writeFile(resolve(runDirectory, "capture-cues.json"), `${JSON.stringify({
-      version: 14,
+      version: 15,
       durationMs: RECORDING_DURATION_MS,
       width: CAPTURE_WIDTH,
       height: CAPTURE_HEIGHT,

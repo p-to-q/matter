@@ -185,7 +185,7 @@ function parseLaunchCueMap(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Launch capture cues are invalid.");
   }
-  if (value.version !== 14) throw new Error("Launch capture cues use an unsupported version.");
+  if (value.version !== 15) throw new Error("Launch capture cues use an unsupported version.");
   if (value.durationMs !== durationSeconds * 1_000) {
     throw new Error("Launch capture cues do not describe the frozen 68-second master.");
   }
@@ -392,9 +392,10 @@ function validateLaunchCaptureReceipts(value) {
     "voice-recording",
     "voice-transcribing",
     "voice-material",
-    "point-talk-transcribed",
+    "point-talk-submitted",
     "point-talk-commit",
     "nested-branch",
+    "canvas-zoom-60",
     "canvas-positioned",
     "elastic-commit",
     "elastic-deselected",
@@ -407,6 +408,7 @@ function validateLaunchCaptureReceipts(value) {
     "undo-point-talk",
     "undo-first-branch",
     "undo-voice-branch",
+    "closing-zoom-100",
     "closing-restored",
   ];
   if (events === null || typeof events !== "object" || Array.isArray(events)) {

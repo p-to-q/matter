@@ -21,7 +21,7 @@ import {
 } from "./render-matter-launch.mjs";
 
 const captureCues = Object.freeze({
-  version: 14,
+  version: 15,
   durationMs: 68_000,
   width: 1_600,
   height: 900,
@@ -108,9 +108,10 @@ const captureCues = Object.freeze({
     "voice-recording": 12_550,
     "voice-transcribing": 13_400,
     "voice-material": 14_500,
-    "point-talk-transcribed": 21_000,
+    "point-talk-submitted": 21_000,
     "point-talk-commit": 22_500,
     "nested-branch": 25_000,
+    "canvas-zoom-60": 27_300,
     "canvas-positioned": 28_000,
     "elastic-commit": 37_500,
     "elastic-deselected": 39_000,
@@ -123,6 +124,7 @@ const captureCues = Object.freeze({
     "undo-point-talk": 55_000,
     "undo-first-branch": 55_700,
     "undo-voice-branch": 56_400,
+    "closing-zoom-100": 61_500,
     "closing-restored": 61_900,
   },
 });
@@ -609,6 +611,7 @@ test("invalid launch options and camera receipts fail before rendering", () => {
       : cue),
   }), /not centered/u);
   assert.throws(() => parseLaunchCaptureCues({ ...captureCues, inquiryMode: "unknown" }), /Inquiry mode/u);
+  assert.throws(() => parseLaunchCaptureCues({ ...captureCues, version: 14 }), /unsupported version/u);
   assert.throws(() => parseLaunchCaptureCues({
     ...captureCues,
     document: { title: "Matter" },
@@ -629,6 +632,10 @@ test("invalid launch options and camera receipts fail before rendering", () => {
     ...captureCues,
     events: { ...captureCues.events, "closing-restored": 66_000 },
   }), /early night and quiet ending/u);
+  assert.throws(() => parseLaunchCaptureCues({
+    ...captureCues,
+    events: { ...captureCues.events, "canvas-zoom-60": undefined },
+  }), /missing or out of order/u);
   assert.throws(() => parseLaunchCaptureCues({
     ...captureCues,
     cues: captureCues.cues.filter((cue) => cue.name !== "voice-tool-active"),
