@@ -2065,9 +2065,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
       : admissionVoiceAvailable;
   const admissionVoiceToolAvailable = admissionVoiceAvailable &&
     (props.admission.state.phase === "idle" || props.admission.state.phase === "recording");
-  const voiceToolAvailable = activePointTalkNodeId !== null || selectedNode !== null
-    ? voiceAvailable
-    : admissionVoiceToolAvailable;
+  const voiceToolAvailable = pointTalkHostNodeId !== null
+    ? activePointTalkNodeId !== null && voiceAvailable
+    : selectedNode !== null
+      ? voiceAvailable
+      : admissionVoiceToolAvailable;
   const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
   const admissionFocusFrameRef = useRef<Readonly<{
     basis: AdmissionFocusRestorationBasis;
@@ -3397,13 +3399,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
+          if (pointTalkHostNodeId !== null && activePointTalkNodeId === null) return;
           if (activePointTalkNodeId !== null) {
             if (pointTalkVoiceRecording) issuePointTalkVoiceCommand("stop");
             else if (pointTalkVoiceStartable) issuePointTalkVoiceCommand("start");
             return;
           }
           if (selectedRewriteNodeId !== null) {
-            if (pointTalkHostNodeId !== null) return;
             canvasChromeRef.current?.closeInquiry();
             abortElasticExpansion();
             if (lasso.active) exitLasso();

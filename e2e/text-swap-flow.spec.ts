@@ -608,8 +608,12 @@ test.describe("passage-local Point and Talk", () => {
     await passage.click();
     await expect(page.locator(".point-talk")).toBeHidden();
     await expect(passage).toHaveAttribute("aria-pressed", "true");
+    const paper = await page.locator(".matter-document").boundingBox();
+    if (paper === null) throw new Error("Matter paper missing");
+    await page.mouse.click(paper.x + 24, paper.y + 24);
+    await expect(passage).not.toHaveAttribute("aria-pressed", "true");
     await expect(page.getByRole("button", {
-      name: fixtureUiCopy.voiceTool.recordRewriteDirection,
+      name: fixtureUiCopy.voiceTool.recordTopLevelThought,
       exact: true,
     })).toBeDisabled();
     expect(requestCount).toBe(1);

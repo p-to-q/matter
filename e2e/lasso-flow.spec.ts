@@ -788,6 +788,14 @@ test("orientation change releases a mouse-owned lasso stroke without leaving Las
   await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", "");
   await expect(shell).toHaveAttribute("data-lasso-mode", "true");
   await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+  });
+  await expect(page.locator(".lasso-layer")).not.toHaveAttribute("data-drawing", "true");
+  await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", "");
+  await expect(shell).toHaveAttribute("data-lasso-mode", "true");
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
   // Synthetic lifecycle events do not release Playwright's physical mouse.
   await page.mouse.up();
 });

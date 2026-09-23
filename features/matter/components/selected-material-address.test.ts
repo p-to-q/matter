@@ -114,10 +114,13 @@ describe("selected material address", () => {
     expect(rooted).toContain("{pointTalkHostNodeId === null ? null : (");
     expect(rooted).toContain("presented={pointTalkPresented}");
     expect(rooted).toMatch(
-      /if \(selectedRewriteNodeId !== null\) \{\s*if \(pointTalkHostNodeId !== null\) return;/,
+      /onVoice=\{\(\) => \{\s*if \(pointTalkHostNodeId !== null && activePointTalkNodeId === null\) return;/,
     );
     expect(rooted).toMatch(
       /const selectedRewriteAvailable = selectedRewriteNodeId !== null &&\s*pointTalkHostNodeId === null &&/,
+    );
+    expect(rooted).toMatch(
+      /const voiceToolAvailable = pointTalkHostNodeId !== null\s*\? activePointTalkNodeId !== null && voiceAvailable/,
     );
   });
 

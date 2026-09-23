@@ -107,6 +107,14 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await expect(shell).not.toHaveAttribute("data-node-drop-mode", /.+/u);
   await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("orientationchange"));
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+  });
+  await expect(source).not.toHaveAttribute("data-drag-source", /.+/u);
+  await expect(shell).not.toHaveAttribute("data-node-dragging", /.+/u);
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
+  await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
   // Synthetic lifecycle events do not release Playwright's physical mouse.
   await page.mouse.up();
 
