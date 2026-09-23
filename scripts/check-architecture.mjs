@@ -17,7 +17,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const SOURCE_ROOTS = ["features", "app", "scripts"];
+const SOURCE_ROOTS = ["features", "app", "scripts", "studio"];
 const SOURCE_FILE = /\.(?:ts|tsx|mjs)$/u;
 const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/u;
 
@@ -128,9 +128,20 @@ export function findProblems(graph) {
     if (targets.includes(PROVIDER_MODULE) && !file.startsWith("features/matter/server/")) {
       problems.push(`${file} imports the model pool. Only features/matter/server/ may reach a provider.`);
     }
+
+    // 4. Publication tooling may drive the product from the outside, but it is
+    //    never a product dependency. This keeps studio source out of browser,
+    //    server, deployment, and future application-package graphs.
+    if (!file.startsWith("studio/")) {
+      for (const target of targets) {
+        if (target.startsWith("studio/")) {
+          problems.push(`${file} imports ${target}. Product and repository tooling must not depend on studio code.`);
+        }
+      }
+    }
   }
 
-  // 4. No cycles. A cycle means neither module can be understood, tested, or
+  // 5. No cycles. A cycle means neither module can be understood, tested, or
   //    replaced without the other, whatever the layer table says.
   const WHITE = 0, GREY = 1, BLACK = 2;
   const colour = new Map([...graph.keys()].map((file) => [file, WHITE]));
@@ -226,6 +237,6 @@ if (process.argv[1] === import.meta.filename) {
   }
   console.log(
     `architecture: ${graph.size} files, ${LAYERS.length} layers, ` +
-    "no outward dependency, no provider leak, no cycle",
+    "no outward dependency, no provider leak, no studio leak, no cycle",
   );
 }

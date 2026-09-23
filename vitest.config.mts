@@ -9,7 +9,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["features/**/*.test.ts", "next.config.test.ts", "scripts/**/*.test.mjs"],
+    include: [
+      "features/**/*.test.ts",
+      "next.config.test.ts",
+      "scripts/**/*.test.mjs",
+      "studio/**/*.test.ts",
+    ],
     // Repository checks that must run without Vitest keep their suites in
     // `node:test`, so `npm test` hands exactly these files to `node --test`.
     // A new one belongs in both lists or Vitest reports it as an empty suite.
@@ -24,7 +29,9 @@ export default defineConfig({
       "scripts/probe-local-ai.test.mjs",
       "scripts/label-corpus.test.mjs",
       "scripts/label-eval-plan.test.mjs",
-      "scripts/render-matter-launch.test.mjs",
+      "studio/film/boundary.test.mjs",
+      "studio/film/copy.test.mjs",
+      "studio/film/render.test.mjs",
     ],
   },
 });

@@ -5,31 +5,31 @@ import {
   inquiryBasis,
   inquiryReceipt,
   type InquiryRequest,
-} from "../features/matter/protocol/inquiry-contract";
+} from "../../features/matter/protocol/inquiry-contract";
 import {
   buildTextSwapPlan,
   type TextSwapEnvelope,
-} from "../features/matter/protocol/text-swap-contract";
+} from "../../features/matter/protocol/text-swap-contract";
 import {
   buildTransformPlan,
   type TransformEnvelope,
-} from "../features/matter/protocol/transform-contract";
+} from "../../features/matter/protocol/transform-contract";
 import {
   LAUNCH_MATERIAL_COPY,
   LAUNCH_POINT_TALK_FIXTURE,
-} from "./matter-launch.fixture";
+} from "./fixture";
+import { FILM_COPY } from "./copy.mjs";
 
-const SOURCE = "我们怀念的也许不是一个真实存在过的过去";
-const SUFFIX = "，而是那个过去在今天仍然允许我们想象的其他生活。";
-const EXPANDED = "我们怀念的也许不是一个真实存在过的、拥有非常清楚边界和十分完整形状的过去";
+const SOURCE = FILM_COPY.document.rootSource;
+const SUFFIX = FILM_COPY.document.rootSuffix;
+const EXPANDED = FILM_COPY.document.expandedRoot;
 const FIRST_BRANCH = LAUNCH_POINT_TALK_FIXTURE.passage;
 const REWRITTEN_BRANCH = LAUNCH_POINT_TALK_FIXTURE.text;
 const THIRD_BRANCH = LAUNCH_MATERIAL_COPY.thirdBranch;
 const NESTED_BRANCH = LAUNCH_MATERIAL_COPY.nestedBranch;
-const INQUIRY_QUESTION = "这段材料把‘怀念’理解成什么？";
-const INQUIRY_FIXTURE_ANSWER =
-  "它把“怀念”理解为过去曾让另一种生活仍可被想象。被保留的不是过去本身，而是当下尚未关闭的可能性。";
-const DOCUMENT_TITLE = "被允许想象的其他生活";
+const INQUIRY_QUESTION = FILM_COPY.inquiry.question;
+const INQUIRY_FIXTURE_ANSWER = FILM_COPY.inquiry.answer;
+const DOCUMENT_TITLE = FILM_COPY.document.title;
 const VOICE_SUBTITLE = LAUNCH_MATERIAL_COPY.voice;
 const ROOT_ID = "thought_fixture_root";
 const RECORDING_DURATION_MS = 68_000;
@@ -271,13 +271,13 @@ test("capture the Matter launch master", async ({ context, page }) => {
   const root = page.locator(`[data-thought-text-id="${rootId}"]`);
   await expect(root).toHaveText(`${SOURCE}${SUFFIX}`);
   await expect(page.getByRole("button", {
-    name: `重命名画布：${DOCUMENT_TITLE}`,
+    name: FILM_COPY.ui.renameCanvas,
     exact: true,
   })).toBeVisible();
   const initialVoice = page.locator('[data-tool-id="voice"]');
   await expect(initialVoice).toBeEnabled();
-  await expect(initialVoice).toHaveAttribute("aria-label", "录入一级想法");
-  await expect(page.locator(".matter-guidance__next")).toHaveText("选择一段想法。");
+  await expect(initialVoice).toHaveAttribute("aria-label", FILM_COPY.ui.topLevelVoice);
+  await expect(page.locator(".matter-guidance__next")).toHaveText(FILM_COPY.ui.selectGuidance);
   await page.evaluate(() => document.fonts.ready.then(() => undefined));
   // Warm the real ambient media before the recorder starts, then return to the
   // required unadorned opening. AmbientWorkbench retains its ready state, so
@@ -307,13 +307,13 @@ test("capture the Matter launch master", async ({ context, page }) => {
   )).toHaveAttribute("data-material-address-painted", "true");
   expect(await materialLineGeometry(root)).toEqual(rootGeometryBeforeSelection);
   const preflightPaperBounds = await paper.boundingBox();
-  if (preflightPaperBounds === null) throw new Error("Launch-film paper is not visible.");
+  if (preflightPaperBounds === null) throw new Error("Film paper is not visible.");
   await page.mouse.click(preflightPaperBounds.x + 76, preflightPaperBounds.y + 120);
   await expect(root).toHaveAttribute("aria-pressed", "false");
-  await expect(initialVoice).toHaveAttribute("aria-label", "录入一级想法");
+  await expect(initialVoice).toHaveAttribute("aria-label", FILM_COPY.ui.topLevelVoice);
   await centerOpeningMaterial(page, root, paper);
   const openingRootBounds = await root.boundingBox();
-  if (openingRootBounds === null) throw new Error("Launch-film opening material is not visible.");
+  if (openingRootBounds === null) throw new Error("Film opening material is not visible.");
   await installCapturePointer(page);
 
   let cursor: Point = { x: 86, y: 450 };
@@ -329,7 +329,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
   };
   const moveTo = async (target: Locator, durationMs = 480) => {
     const bounds = await target.boundingBox();
-    if (bounds === null) throw new Error("Launch-film target is not visible.");
+    if (bounds === null) throw new Error("Film target is not visible.");
     const next = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
     cursor = await glide(page, cursor, next, durationMs);
   };
@@ -440,7 +440,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await at(4_700);
     const appearance = page.locator('[data-chrome-control="appearance"]');
     await click(appearance, 300);
-    await expect(appearance).toHaveText("深色");
+    await expect(appearance).toHaveText(FILM_COPY.ui.darkAppearance);
     await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
     await expect(ambient).toHaveAttribute("data-fx", "on");
     await expect(ambient).toHaveAttribute("data-presentation", "video");
@@ -452,21 +452,24 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await at(5_700);
     const aboutTrigger = page.locator('[data-chrome-control="about"]');
     await click(aboutTrigger, 440);
-    const about = page.getByRole("dialog", { name: "关于 Matter" });
+    const about = page.getByRole("dialog", { name: FILM_COPY.ui.aboutDialog });
     await expect(about).toBeVisible();
     await cue("about-start", about);
     receiptEvent("about");
     await page.waitForTimeout(3_700);
     await cue("about-end", about);
-    await click(about.getByRole("button", { name: "关闭: 关于 Matter" }), 360);
+    await click(about.getByRole("button", { name: FILM_COPY.ui.aboutClose }), 360);
     await expect(about).toHaveCount(0);
 
     await at(8_900);
     const settings = page.locator('[data-chrome-control="settings"]');
     await click(settings, 380);
-    const settingsMenu = page.getByRole("menu", { name: "Matter 设置" });
+    const settingsMenu = page.getByRole("menu", { name: FILM_COPY.ui.settingsMenu });
     await expect(settingsMenu).toBeVisible();
-    await expect(settingsMenu.getByRole("menuitem", { name: "模型 API", exact: true })).toBeVisible();
+    await expect(settingsMenu.getByRole("menuitem", {
+      name: FILM_COPY.ui.modelApi,
+      exact: true,
+    })).toBeVisible();
     receiptEvent("model-api");
     await page.waitForTimeout(1_000);
     await click(settings, 320);
@@ -478,7 +481,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await at(10_800);
     const voice = page.locator('[data-tool-id="voice"]');
     await expect(root).toHaveAttribute("aria-pressed", "false");
-    await expect(voice).toHaveAttribute("aria-label", "录入一级想法");
+    await expect(voice).toHaveAttribute("aria-label", FILM_COPY.ui.topLevelVoice);
     const beforeAdmission = await ids();
     await cue("voice-tool-start", voice);
     await moveTo(voice, 500);
@@ -509,7 +512,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
       "data-guidance-state",
       "speak-recording",
     );
-    await expect(page.locator(".matter-guidance__next")).toHaveText("说出你的想法。");
+    await expect(page.locator(".matter-guidance__next")).toHaveText(FILM_COPY.ui.speakGuidance);
     receiptEvent("voice-recording");
 
     // The neutral paper owns the transient recording and transcription lane.
@@ -524,7 +527,9 @@ test("capture the Matter launch master", async ({ context, page }) => {
       "data-guidance-state",
       "wait-transcription",
     );
-    await expect(page.locator(".matter-guidance__next")).toHaveText("正在将声音变成材料。");
+    await expect(page.locator(".matter-guidance__next")).toHaveText(
+      FILM_COPY.ui.materializingGuidance,
+    );
     receiptEvent("voice-transcribing");
     await expect(canvas).toHaveAttribute("data-layout-ready", "true", { timeout: 8_000 });
     await expect(page.locator("[data-thought-id]")).toHaveCount(2, { timeout: 8_000 });
@@ -570,14 +575,20 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(pointTalk).toBeVisible();
     await cue("point-talk-start", firstBranch, pointTalk);
     await at(18_050);
-    await click(pointTalk.getByRole("button", { name: "说出改写方向", exact: true }), 220);
+    await click(pointTalk.getByRole("button", {
+      name: FILM_COPY.ui.rewriteVoice,
+      exact: true,
+    }), 220);
     await expect(pointTalk).toHaveAttribute("data-phase", "recording");
     await at(19_250);
-    await click(pointTalk.getByRole("button", { name: "完成", exact: true }), 180);
+    await click(pointTalk.getByRole("button", {
+      name: FILM_COPY.ui.done,
+      exact: true,
+    }), 180);
     await expect(pointTalk).toHaveAttribute("data-phase", "transcribing");
-    await expect(pointTalk).toContainText("正在听清…");
+    await expect(pointTalk).toContainText(FILM_COPY.ui.listening);
     await expect(pointTalk).toHaveAttribute("data-phase", "pending");
-    await expect(pointTalk).toContainText("正在换一种说法…");
+    await expect(pointTalk).toContainText(FILM_COPY.ui.rewriting);
     await expect.poll(() => textSwapReceipt).toEqual({
       directionMatches: true,
       passageMatches: true,
@@ -630,7 +641,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(guidance).toHaveAttribute("data-guidance-state", "canvas-zoom");
     await expect(zoomReadout).toHaveText("100%");
     const navigationPaperBounds = await paper.boundingBox();
-    if (navigationPaperBounds === null) throw new Error("Launch-film paper is not visible.");
+    if (navigationPaperBounds === null) throw new Error("Film paper is not visible.");
     cursor = await glide(page, cursor, {
       x: navigationPaperBounds.x + navigationPaperBounds.width / 2,
       y: navigationPaperBounds.y + navigationPaperBounds.height / 2,
@@ -653,7 +664,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(zoomReadout).toBeVisible();
     receiptEvent("canvas-zoom-60");
     const beforePan = await nestedBranch.boundingBox();
-    if (beforePan === null) throw new Error("Launch-film right branch is not visible before pan.");
+    if (beforePan === null) throw new Error("Film right branch is not visible before pan.");
     const panOrigin = {
       x: navigationPaperBounds.x + navigationPaperBounds.width * 0.62,
       y: navigationPaperBounds.y + navigationPaperBounds.height * 0.58,
@@ -663,15 +674,15 @@ test("capture the Matter launch master", async ({ context, page }) => {
     cursor = await glide(page, cursor, { x: panOrigin.x - 150, y: panOrigin.y - 8 }, 760);
     await page.mouse.up();
     const afterPan = await nestedBranch.boundingBox();
-    if (afterPan === null) throw new Error("Launch-film right branch disappeared after pan.");
+    if (afterPan === null) throw new Error("Film right branch disappeared after pan.");
     const toolRailBounds = await page.locator(".tool-rail").boundingBox();
-    if (toolRailBounds === null) throw new Error("Launch-film tool rail is not visible after pan.");
+    if (toolRailBounds === null) throw new Error("Film tool rail is not visible after pan.");
     const readableWidth = Math.max(
       0,
       Math.min(toolRailBounds.x - 24, afterPan.x + afterPan.width) - Math.max(0, afterPan.x),
     );
     const rootAfterPan = await root.boundingBox();
-    if (rootAfterPan === null) throw new Error("Launch-film root disappeared after pan.");
+    if (rootAfterPan === null) throw new Error("Film root disappeared after pan.");
     expect(afterPan.x).toBeLessThan(beforePan.x - 100);
     expect(readableWidth / afterPan.width).toBeGreaterThan(0.35);
     expect(readableWidth / afterPan.width).toBeLessThan(0.65);
@@ -701,7 +712,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
 
     await at(32_000);
     const lowerGrip = page.getByRole("slider", {
-      name: "用下握点设置所选文字的展开程度",
+      name: FILM_COPY.ui.lowerGrip,
     });
     await moveTo(lowerGrip, 380);
     await page.mouse.down();
@@ -721,7 +732,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await page.waitForTimeout(80);
     await page.mouse.up();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
-    await expect(page.locator(".matter-guidance__next")).toHaveText("已确认，正在展开。");
+    await expect(page.locator(".matter-guidance__next")).toHaveText(FILM_COPY.ui.expanding);
     await expect(root).toHaveText(`${EXPANDED}${SUFFIX}`, { timeout: 10_000 });
     expect(transformRequests).toBe(1);
     expect(transformReceipt).toEqual({ amount: 0.5, passageMatches: true, status: 200 });
@@ -769,15 +780,20 @@ test("capture the Matter launch master", async ({ context, page }) => {
     // and must produce a real answer from the three-thought working projection
     // after its question is visibly dictated and confirmed.
     await at(39_200);
-    const askMatter = page.getByRole("button", { name: "询问 Matter", exact: true });
+    const askMatter = page.getByRole("button", {
+      name: FILM_COPY.ui.askMatter,
+      exact: true,
+    });
     await click(askMatter, 400);
     const inquiry = page.locator('#matter-inquiry[role="dialog"]');
     await expect(askMatter).toHaveAttribute("aria-expanded", "true");
     await expect(page.locator("[data-canvas-chrome]")).toHaveAttribute("data-overlay", "inquiry");
     await expect(inquiry).toBeVisible();
-    await expect(inquiry).toHaveAccessibleName("询问 Matter");
+    await expect(inquiry).toHaveAccessibleName(FILM_COPY.ui.askMatter);
     await cue("inquiry-start", inquiry);
-    const inquiryField = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+    const inquiryField = inquiry.getByRole("textbox", {
+      name: FILM_COPY.ui.inquiryField,
+    });
     const inquiryDictate = inquiry.locator('[data-inquiry-control="dictate"]');
     await click(inquiryDictate, 180);
     await expect(inquiry).toHaveAttribute("data-inquiry-phase", "listening");
@@ -875,7 +891,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
       await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
     );
     if (!Number.isFinite(closingZoom) || closingZoom <= 0 || closingZoom > 1) {
-      throw new Error("Launch-film closing zoom is invalid.");
+      throw new Error("Film closing zoom is invalid.");
     }
     const closingWheelDelta = Math.log(closingZoom) / 0.002;
     await page.keyboard.down("Control");
@@ -894,7 +910,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(zoomReadout).toHaveText("100%");
     await expect(zoomReadout).toHaveAttribute("data-canvas-zoom-value", "100");
     const closingBeforePan = await root.boundingBox();
-    if (closingBeforePan === null) throw new Error("Launch-film closing root is not visible.");
+    if (closingBeforePan === null) throw new Error("Film closing root is not visible.");
     const closingDelta = {
       x: openingRootBounds.x - closingBeforePan.x,
       y: openingRootBounds.y - closingBeforePan.y,
@@ -1075,10 +1091,10 @@ async function centerOpeningMaterial(
 }
 
 async function unionBounds(targets: readonly Locator[], name: string): Promise<Bounds> {
-  if (targets.length === 0) throw new Error(`Launch-film cue ${name} has no target.`);
+  if (targets.length === 0) throw new Error(`Film cue ${name} has no target.`);
   const boxes = await Promise.all(targets.map((target) => target.boundingBox()));
   if (boxes.some((box) => box === null)) {
-    throw new Error(`Launch-film cue ${name} has a hidden target.`);
+    throw new Error(`Film cue ${name} has a hidden target.`);
   }
   const visible = boxes.filter((box) => box !== null);
   return mergeBounds(visible.map((box) => ({
@@ -1111,12 +1127,12 @@ async function blankCanvasPoint(paper: Locator): Promise<Point> {
     }
     return null;
   });
-  if (point === null) throw new Error("Launch-film capture cannot find a clear paper point.");
+  if (point === null) throw new Error("Film capture cannot find a clear paper point.");
   return point;
 }
 
 function mergeBounds(rectangles: readonly Bounds[], name: string): Bounds {
-  if (rectangles.length === 0) throw new Error(`Launch-film cue ${name} has no visible bounds.`);
+  if (rectangles.length === 0) throw new Error(`Film cue ${name} has no visible bounds.`);
   const left = Math.min(...rectangles.map((box) => box.left));
   const top = Math.min(...rectangles.map((box) => box.top));
   const right = Math.max(...rectangles.map((box) => box.left + box.width));
@@ -1158,7 +1174,7 @@ async function materialLineGeometry(material: Locator): Promise<readonly Bounds[
 async function installCapturePointer(page: Page): Promise<void> {
   await page.evaluate(() => {
     const pointer = document.createElement("div");
-    pointer.id = "matter-launch-pointer";
+    pointer.id = "matter-film-pointer";
     pointer.setAttribute("aria-hidden", "true");
     pointer.innerHTML = `
       <svg viewBox="0 0 24 30" width="24" height="30" aria-hidden="true">
@@ -1188,7 +1204,7 @@ async function positionCapturePointer(page: Page, point: Point): Promise<void> {
   // CDP screencasts do not consistently composite Chrome's native cursor, and
   // synthetic drag events can arrive without a paintable mousemove frame. Keep
   // the capture-only pointer on the exact product event coordinate explicitly.
-  await page.locator("#matter-launch-pointer").evaluate((pointer, position) => {
+  await page.locator("#matter-film-pointer").evaluate((pointer, position) => {
     const element = pointer as HTMLElement;
     element.style.opacity = "1";
     element.style.transform = `translate3d(${position.x - 3}px,${position.y - 3}px,0)`;
@@ -1196,7 +1212,7 @@ async function positionCapturePointer(page: Page, point: Point): Promise<void> {
 }
 
 async function hideCapturePointer(page: Page): Promise<void> {
-  await page.locator("#matter-launch-pointer").evaluate((pointer) => {
+  await page.locator("#matter-film-pointer").evaluate((pointer) => {
     (pointer as HTMLElement).style.opacity = "0";
   });
 }
@@ -1258,7 +1274,7 @@ async function segmentProbeRects(
 ): Promise<readonly Readonly<{ x: number; y: number; width: number; height: number }>[]> {
   return text.evaluate((element, index) => {
     const textNode = element.firstChild;
-    if (!(textNode instanceof Text)) throw new Error("Launch-film text node is missing.");
+    if (!(textNode instanceof Text)) throw new Error("Film text node is missing.");
     const delimiters = new Set(["，", "。", "；", "：", "！", "？", "、", "…", ",", ".", ";", ":", "!", "?"]);
     const segments: Array<{ start: number; end: number }> = [];
     let start = 0;
@@ -1270,7 +1286,7 @@ async function segmentProbeRects(
     }
     if (start < textNode.data.length) segments.push({ start, end: textNode.data.length });
     const segment = segments[index];
-    if (segment === undefined) throw new Error("Launch-film segment is missing.");
+    if (segment === undefined) throw new Error("Film segment is missing.");
     const range = document.createRange();
     range.setStart(textNode, segment.start);
     range.setEnd(textNode, segment.end);
@@ -1278,7 +1294,7 @@ async function segmentProbeRects(
       (rect) => rect.width > 0 && rect.height > 0,
     );
     range.detach();
-    if (rects.length === 0) throw new Error("Launch-film segment has no visible fragment.");
+    if (rects.length === 0) throw new Error("Film segment has no visible fragment.");
     return rects.map((rect) => ({
       x: rect.left,
       y: rect.top,
@@ -1293,7 +1309,7 @@ async function drawSelectedSegment(
   cursor: Point,
   fragments: readonly Readonly<{ x: number; y: number; width: number; height: number }>[],
 ): Promise<Point> {
-  if (fragments.length === 0) throw new Error("Launch-film segment has no lasso fragments.");
+  if (fragments.length === 0) throw new Error("Film segment has no lasso fragments.");
   const rows = [...fragments].sort((left, right) => left.y - right.y || left.x - right.x);
   const horizontalMargin = 18;
   const terminalMargin = 7;
@@ -1367,7 +1383,7 @@ async function elasticAddressInteriorPoint(page: Page): Promise<Point> {
   await expect.poll(async () => {
     point = await path.evaluate((element) => {
       if (!(element instanceof SVGGeometryElement)) {
-        throw new Error("Launch-film Elastic address path is missing.");
+        throw new Error("Film Elastic address path is missing.");
       }
       const box = element.getBoundingClientRect();
       const matrix = element.getScreenCTM();
@@ -1384,6 +1400,6 @@ async function elasticAddressInteriorPoint(page: Page): Promise<Point> {
     });
     return point;
   }).not.toBeNull();
-  if (point === null) throw new Error("Launch-film Elastic address has no confirmable interior point.");
+  if (point === null) throw new Error("Film Elastic address has no confirmable interior point.");
   return point;
 }

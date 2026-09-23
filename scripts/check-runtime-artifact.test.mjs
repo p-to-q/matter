@@ -42,7 +42,7 @@ test("rejects initial model work, dynamic shell drift, and forbidden traces", ()
   metrics.rootStatic = false;
   metrics.initialAssets.push("chunks/matter-local-transcription.12345678.js");
   metrics.prerenderedApiRoutes.push("/api/inquiry");
-  metrics.forbiddenTraceFiles.push("../../docs/private.md");
+  metrics.forbiddenTraceFiles.push("../../docs/private.md", "../../studio/film/render.mjs");
   metrics.browserFallbackNodeTraceFiles.push("../../node_modules/onnxruntime-node/index.js");
   metrics.productionSourceMaps = 1;
   const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
@@ -50,6 +50,7 @@ test("rejects initial model work, dynamic shell drift, and forbidden traces", ()
   assert.match(failures, /local speech fallback entered the initial graph/u);
   assert.match(failures, /api\/inquiry was prerendered/u);
   assert.match(failures, /docs\/private\.md/u);
+  assert.match(failures, /studio\/film\/render\.mjs/u);
   assert.match(failures, /browser-fallback-only package/u);
   assert.match(failures, /source map/u);
 });

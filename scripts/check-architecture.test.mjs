@@ -36,6 +36,14 @@ test("a check that cannot fail proves nothing", () => {
       expect: /Only features\/matter\/server\/ may reach a provider/u,
     },
     {
+      why: "product code reaching publication tooling",
+      graph: new Map([
+        ["features/matter/components/MatterApp.tsx", ["studio/film/copy.mjs"]],
+        ["studio/film/copy.mjs", []],
+      ]),
+      expect: /must not depend on studio code/u,
+    },
+    {
       why: "two transports importing each other",
       graph: new Map([
         ["features/matter/interaction/browser-voice.ts", ["features/matter/interaction/browser-speech-voice.ts"]],

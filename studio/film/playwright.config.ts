@@ -2,21 +2,22 @@ import { defineConfig, devices } from "@playwright/test";
 import {
   LAUNCH_MATERIAL_COPY,
   LAUNCH_POINT_TALK_FIXTURE,
-} from "./e2e/matter-launch.fixture";
+} from "./fixture";
+import { FILM_COPY } from "./copy.mjs";
 
 const runDirectory = process.env.MATTER_LAUNCH_RUN_DIR?.trim() ||
-  "tmp/matter-launch-video/unconfigured";
+  "studio/film/artifacts/unconfigured";
 const liveInquiry = process.env.MATTER_LAUNCH_LIVE_INQUIRY === "true";
 
 /**
- * Launch-film capture is an explicit operator workflow, not a product test.
+ * Film capture is an explicit operator workflow, not a product test.
  * Material-changing model surfaces are pinned to closed fixtures. Ask Matter
  * uses either one explicitly authorized live call or a receipt-marked local
  * fixture for an offline publication take.
  */
 export default defineConfig({
-  testDir: "./e2e",
-  testMatch: "matter-launch.capture.ts",
+  testDir: ".",
+  testMatch: "capture.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,
@@ -51,7 +52,7 @@ export default defineConfig({
     // Publication capture must never inherit the Next development indicator,
     // Fast Refresh, or cold route compilation. This helper builds with the
     // repository's frozen Webpack production command and then owns next start.
-    command: "node scripts/start-launch-video-server.mjs",
+    command: "node studio/film/start-server.mjs",
     env: {
       ...process.env,
       MATTER_BASE_PATH: "/matter",
@@ -66,7 +67,7 @@ export default defineConfig({
       MATTER_TRANSFORM_ADAPTER: "fixture",
       MATTER_TEXT_SWAP_ADAPTER: "fixture",
       MATTER_FIXTURE_SWAP_DIRECTION_TRANSCRIPT: LAUNCH_POINT_TALK_FIXTURE.direction,
-      MATTER_FIXTURE_DIRECTION_TRANSCRIPT: "这段材料把‘怀念’理解成什么？",
+      MATTER_FIXTURE_DIRECTION_TRANSCRIPT: FILM_COPY.inquiry.question,
       MATTER_INQUIRY_ADAPTER: liveInquiry ? "live" : "off",
       ...(liveInquiry ? {} : {
         MATTER_MODEL_POOL: "",

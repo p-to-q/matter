@@ -3,8 +3,9 @@ import { access, mkdir, readFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "@playwright/test";
+import { FILM_COPY } from "./copy.mjs";
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const durationSeconds = 68;
 const outputWidth = 1_440;
 const outputHeight = 810;
@@ -13,7 +14,7 @@ const captureHeight = 900;
 const framesPerSecond = 30;
 const elasticPulseFrames = 14;
 const elasticPulseDepth = 0.025;
-const documentTitle = "被允许想象的其他生活";
+const documentTitle = FILM_COPY.document.title;
 const creditVisibleSeconds = 2.75;
 const outroStartSeconds = 63.5;
 const outroDurationSeconds = durationSeconds - outroStartSeconds;
@@ -145,7 +146,7 @@ export function parseLaunchVideoArgs(argv, now = new Date()) {
     offlineDemo,
     audioPath: audioPath === null ? null : resolve(audioPath),
     outputDirectory: outputDirectory === null
-      ? resolve(repositoryRoot, "tmp", "matter-launch-video", stamp)
+      ? resolve(repositoryRoot, "studio", "film", "artifacts", stamp)
       : resolve(outputDirectory),
   });
 }
@@ -930,7 +931,7 @@ async function main() {
   if (!options.renderExisting) {
     await run(process.execPath, [
       e2eRunner,
-      "--config=playwright.launch-video.config.ts",
+      "--config=studio/film/playwright.config.ts",
     ], {
       env: launchVideoCaptureEnvironment(options, {
         ...process.env,

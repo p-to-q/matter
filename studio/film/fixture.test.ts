@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   LAUNCH_MATERIAL_COPY,
   LAUNCH_POINT_TALK_FIXTURE,
-} from "../../../e2e/matter-launch.fixture";
-import { validateTextSwapCandidate } from "./text-swap-policy";
+} from "./fixture";
+import { FILM_COPY } from "./copy.mjs";
+import { validateTextSwapCandidate } from "../../features/matter/protocol/text-swap-policy";
 
-describe("launch film material copy", () => {
+describe("film material copy", () => {
   it("keeps four distinct material roles and never repeats the canvas title", () => {
     const passages = [
       LAUNCH_MATERIAL_COPY.voice,
@@ -15,7 +16,7 @@ describe("launch film material copy", () => {
     ];
 
     expect(new Set(passages).size).toBe(passages.length);
-    expect(passages).not.toContain("被允许想象的其他生活。");
+    expect(passages).not.toContain(FILM_COPY.document.titleSentence);
   });
 
   it("keeps the filmed Point Talk rewrite inside the product policy", () => {

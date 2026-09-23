@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants";
-import { resolveMatterNextDistDir } from "./next.config";
+import {
+  MATTER_OUTPUT_FILE_TRACING_EXCLUDES,
+  resolveMatterNextDistDir,
+} from "./next.config";
 
 describe("Matter Next development output", () => {
+  it("excludes repository-only studio tooling from every server trace", () => {
+    expect(MATTER_OUTPUT_FILE_TRACING_EXCLUDES).toEqual({
+      "/*": ["./studio/**/*"],
+    });
+  });
+
   it("keeps the normal Next output directory by default", () => {
     expect(resolveMatterNextDistDir(PHASE_DEVELOPMENT_SERVER, undefined)).toBe(".next");
   });

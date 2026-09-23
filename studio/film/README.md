@@ -1,4 +1,4 @@
-# Launch video capture
+# Matter film studio
 
 Need: a short Matter film must show the real product surface without recording
 the operator's desktop, leaking private notifications, or disguising a
@@ -7,6 +7,23 @@ deterministic demonstration as an unrestricted live-provider evaluation.
 Status: the restrained hybrid V15 workflow is implemented. Its closing proof
 uses the real history to return the authored tree to its seeded root;
 publication remains subject to the archival audio rights decision.
+
+## Repository contract
+
+This directory is the single, reviewable home for the Matter film's capture
+source, editorial copy, closed fixtures, render orchestration, focused tests,
+and latest release receipt. Localized on-screen copy lives only in
+[`copy.md`](copy.md); executable files remain English-only. The repository
+retains one current receipt rather than an archive of superseded takes.
+
+Rendered media is not source. Local masters and their derived frames belong in
+the gitignored `artifacts/` directory, while the released README player uses a
+reviewed GitHub Markdown attachment. Neither representation is part of a
+deployment or application package. `.vercelignore` excludes all of `studio/`
+before upload, Next.js output tracing excludes the same tree from standalone
+runtime artifacts, and the film boundary plus runtime-artifact checks
+fail when either exclusion or the source-only rule drifts. Any future desktop,
+mobile, or archive packager must establish the same exclusion before shipping.
 
 ## Boundary
 
@@ -35,8 +52,9 @@ video-only title. A restrained bottom-right credit identifies the archival
 Engelbart excerpt and disappears before the blurred curtain clears. The closing departure begins from the captured
 night paper, contains no invented control or closing title, and uses no network,
 scan, sweep, or beam. It never commits external audio, transcripts, provider
-answers, or rendered media. Generated files stay under gitignored
-`tmp/` unless the operator explicitly chooses another directory.
+answers, or rendered media. Generated files stay under the gitignored local
+`artifacts/` directory unless the operator explicitly chooses another
+untracked directory.
 
 Proof: the launcher is dry by default; its parser, cue reader, camera filter,
 and encoder contract have focused Node tests; the capture config pins every
@@ -56,7 +74,7 @@ The final master is intentionally local. Pass an operator-supplied audio file; t
 repository does not contain or download it.
 
 ```bash
-npm run capture:launch -- \
+npm run film:capture -- \
   --execute \
   --offline-demo \
   --audio /absolute/path/to/audio.wav
@@ -67,7 +85,7 @@ authorized provider evaluation. The two modes are mutually exclusive, and a
 complete take refuses to start until the operator selects exactly one.
 
 The default output is a timestamped directory under
-`tmp/matter-launch-video/`. It contains `matter-launch-raw.webm`,
+`studio/film/artifacts/`. It contains `matter-launch-raw.webm`,
 `capture-cues.json`, a transparent `matter-launch-credit.png`, an extracted
 night-paper still, a deterministic 75-frame rounded screen departure, and a 68-second
 `matter-launch-master-68s.mp4` encoded as 1440×810, 30 fps H.264/AAC. The raw
@@ -177,7 +195,7 @@ If capture succeeds but a later cue or encoder check fails, resume from the
 same raw WebM and receipt without reopening any browser or model boundary:
 
 ```bash
-npm run capture:launch -- \
+npm run film:capture -- \
   --render-existing \
   --audio /absolute/path/to/audio.wav \
   --output-dir /absolute/path/to/completed-take

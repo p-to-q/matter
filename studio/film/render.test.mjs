@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { FILM_COPY } from "./copy.mjs";
 import {
   describeLaunchInquiryMode,
   launchVideoCameraFilter,
@@ -18,7 +19,7 @@ import {
   validateLaunchCreditProbe,
   validateLaunchMediaProbe,
   validateLaunchOutroSourceProbe,
-} from "./render-matter-launch.mjs";
+} from "./render.mjs";
 
 const captureCues = Object.freeze({
   version: 15,
@@ -94,7 +95,7 @@ const captureCues = Object.freeze({
   ],
   requests: { transcribe: 3, transform: 1, textSwap: 1, inquiry: 1 },
   inquiryMode: "fixture",
-  document: { title: "被允许想象的其他生活" },
+  document: { title: FILM_COPY.document.title },
   presentation: {
     opening: { theme: "light", leafFx: "off", ambient: "poster" },
     daylight: { theme: "light", leafFx: "on", ambient: "video" },
@@ -161,7 +162,10 @@ test("launch capture is dry and offline by default in a fresh ignored destinatio
   assert.equal(parsed.liveInquiry, false);
   assert.equal(parsed.offlineDemo, false);
   assert.equal(parsed.audioPath, null);
-  assert.match(parsed.outputDirectory, /tmp\/matter-launch-video\/2026-09-05T10-20-30-000Z$/u);
+  assert.match(
+    parsed.outputDirectory,
+    /studio\/film\/artifacts\/2026-09-05T10-20-30-000Z$/u,
+  );
   assert.deepEqual(
     launchVideoCaptureEnvironment(parsed, { KEEP: "yes" }),
     { KEEP: "yes", MATTER_LAUNCH_LIVE_INQUIRY: "false", MATTER_LAUNCH_OFFLINE_DEMO: "false" },
@@ -552,7 +556,8 @@ test("the outro returns the real root-only night paper to haze before it departs
   assert.match(markup, /lerp\(1,\.78,departure\)/u);
   assert.match(markup, /12\*rounding/u);
   assert.match(markup, /drawImage\(source,x,y,width,height\)/u);
-  assert.doesNotMatch(markup, /scan|sweep|beam|nodes|edges|fillText|p → q|被允许想象的其他生活/ui);
+  assert.doesNotMatch(markup, /scan|sweep|beam|nodes|edges|fillText|p → q/ui);
+  assert.ok(!markup.includes(FILM_COPY.document.title));
   assert.deepEqual(validateLaunchOutroSourceProbe({ streams: [{
     codec_type: "video",
     codec_name: "png",
