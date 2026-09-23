@@ -563,9 +563,12 @@ export function launchVideoOutroMarkup(sourceDataUrl) {
         // The final seeded passage first returns to the opening's haze, now on
         // night paper. The screen begins departing only after that atmosphere
         // is perceptible, so the close rhymes with the opening without replaying it.
-        const pictureBlur=ease((progress-.06)/.40);
+        // Blur must keep evolving while the screen departs. A late-biased
+        // power curve avoids reaching a static haze halfway through the move;
+        // it settles only in the last frames before the picture disappears.
+        const pictureBlur=Math.pow(clamp((progress-.08)/.84),1.35);
         const departure=ease((progress-.18)/.54);
-        const exit=ease((progress-.76)/.24);
+        const exit=ease((progress-.86)/.14);
         const scale=lerp(1,.78,departure);
         const width=canvas.width*scale;const height=canvas.height*scale;
         const arc=Math.sin(Math.PI*departure);

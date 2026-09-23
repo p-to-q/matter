@@ -98,7 +98,8 @@ position before the night paper rounds, shrinks, and exits over a solid black
 field. Capture rejects any closing root whose position or dimensions differ
 from the measured opening by 5 CSS pixels or more. The outro draws that page exactly once; it
 never repeats the same interface as a blurred background. This closing state
-rhymes with the opening passage without
+keeps accumulating haze throughout the shrink, settles only near the final
+fade, and rhymes with the opening passage without
 replaying its daylight composition. It omits tutorial labels,
 device frames, scanning light, and a feature-list
 montage. The opening credit is editorial film language, not invented product

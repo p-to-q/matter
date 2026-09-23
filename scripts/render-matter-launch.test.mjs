@@ -538,8 +538,9 @@ test("the outro returns the real root-only night paper to haze before it departs
   assert.match(markup, /renderMatterOutro/u);
   assert.match(markup, /'#030506'/u);
   assert.match(markup, /roundedRect/u);
-  assert.match(markup, /pictureBlur=ease\(\(progress-\.06\)\/\.40\)/u);
+  assert.match(markup, /pictureBlur=Math\.pow\(clamp\(\(progress-\.08\)\/\.84\),1\.35\)/u);
   assert.match(markup, /departure=ease\(\(progress-\.18\)\/\.54\)/u);
+  assert.match(markup, /exit=ease\(\(progress-\.86\)\/\.14\)/u);
   assert.match(markup, /blur\('\+lerp\(0,4,pictureBlur\)/u);
   assert.doesNotMatch(markup, /lerp\(0,22,pictureBlur\)|backgroundExit|bleed/u);
   assert.equal(markup.match(/ctx\.drawImage\(source/gu)?.length, 1);
