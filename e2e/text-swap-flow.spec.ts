@@ -559,7 +559,13 @@ test.describe("passage-local Point and Talk", () => {
   });
 
   test("an outside canvas pointer detaches a pending local turn while its result still commits", async ({ page }) => {
+    let requestCount = 0;
+    let releaseResponse!: () => void;
+    const responseBarrier = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
     await page.route("**/api/text-swap", async (route) => {
+      requestCount += 1;
       const envelope = route.request().postDataJSON() as {
         protocolVersion: "0.2";
         requestVersion: "text-swap/2";
@@ -567,7 +573,7 @@ test.describe("passage-local Point and Talk", () => {
         treeId: string;
         treeRevision: number;
       };
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await responseBarrier;
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -601,8 +607,16 @@ test.describe("passage-local Point and Talk", () => {
 
     await passage.click();
     await expect(page.locator(".point-talk")).toBeHidden();
-    await page.waitForTimeout(650);
+    await expect(passage).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", {
+      name: fixtureUiCopy.voiceTool.recordRewriteDirection,
+      exact: true,
+    })).toBeDisabled();
+    expect(requestCount).toBe(1);
+
+    releaseResponse();
     await expect(passage).toContainText(REWRITTEN_TEXT);
+    expect(requestCount).toBe(1);
   });
 
   test("Model API occludes a submitted turn and returns its failed action for recovery", async ({ page }) => {

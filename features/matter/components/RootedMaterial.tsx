@@ -2056,6 +2056,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     (pointTalkPhase === "eligible" || pointTalkPhase === "ready" || pointTalkPhase === "error");
   const pointTalkVoiceRecording = activePointTalkNodeId !== null && pointTalkPhase === "recording";
   const selectedRewriteAvailable = selectedRewriteNodeId !== null &&
+    pointTalkHostNodeId === null &&
     voiceReadiness.status === "ready";
   const voiceAvailable = activePointTalkNodeId !== null
     ? voiceReadiness.status === "ready" && (pointTalkVoiceStartable || pointTalkVoiceRecording)
@@ -2801,9 +2802,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
       lasso.pointerCancel(pointerId);
       if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
     }
+    const lassoPointerId = lasso.cancelActiveStroke();
+    if (lassoPointerId !== null && shell?.hasPointerCapture(lassoPointerId)) {
+      shell.releasePointerCapture(lassoPointerId);
+    }
     lassoClickOriginNodeRef.current = null;
     pointerOriginNodeRef.current = null;
-    if (nodeDragRef.current !== null) clearNodeDrag();
+    const nodeDragPointerId = nodeDragRef.current?.pointerId ?? null;
+    if (nodeDragPointerId !== null && shell?.hasPointerCapture(nodeDragPointerId)) {
+      shell.releasePointerCapture(nodeDragPointerId);
+    }
+    if (nodeDragPointerId !== null) clearNodeDrag();
     updateViewport({ type: "gesture-cancel" });
   }, [clearNodeDrag, lasso, updateViewport]);
 
@@ -3394,6 +3403,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             return;
           }
           if (selectedRewriteNodeId !== null) {
+            if (pointTalkHostNodeId !== null) return;
             canvasChromeRef.current?.closeInquiry();
             abortElasticExpansion();
             if (lasso.active) exitLasso();

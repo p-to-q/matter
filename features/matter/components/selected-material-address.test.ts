@@ -113,7 +113,12 @@ describe("selected material address", () => {
     expect(rooted).toContain("const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null");
     expect(rooted).toContain("{pointTalkHostNodeId === null ? null : (");
     expect(rooted).toContain("presented={pointTalkPresented}");
-    expect(rooted).toContain("if (pointTalkHostNodeId !== null) return;");
+    expect(rooted).toMatch(
+      /if \(selectedRewriteNodeId !== null\) \{\s*if \(pointTalkHostNodeId !== null\) return;/,
+    );
+    expect(rooted).toMatch(
+      /const selectedRewriteAvailable = selectedRewriteNodeId !== null &&\s*pointTalkHostNodeId === null &&/,
+    );
   });
 
   it("gives the reference the upper grip's displacement and nothing else", () => {

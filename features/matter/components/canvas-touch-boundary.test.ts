@@ -27,5 +27,17 @@ describe("mobile canvas touch ownership", () => {
     expect(rooted).toContain('window.addEventListener("blur", cancelCanvasPointerOwnership)');
     expect(rooted).toContain('window.addEventListener("orientationchange", cancelCanvasPointerOwnership)');
     expect(rooted).toContain('document.addEventListener("visibilitychange", handleVisibilityChange)');
+
+    const lifecycleCancellation = rooted.slice(
+      rooted.indexOf("const cancelCanvasPointerOwnership"),
+      rooted.indexOf("const cancelViewportGesture"),
+    );
+    expect(lifecycleCancellation).toContain("const lassoPointerId = lasso.cancelActiveStroke()");
+    expect(lifecycleCancellation).toContain("shell.releasePointerCapture(lassoPointerId)");
+    expect(lifecycleCancellation).toContain(
+      "const nodeDragPointerId = nodeDragRef.current?.pointerId ?? null",
+    );
+    expect(lifecycleCancellation).toContain("shell.releasePointerCapture(nodeDragPointerId)");
+    expect(lifecycleCancellation).toContain("if (nodeDragPointerId !== null) clearNodeDrag()");
   });
 });
