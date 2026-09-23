@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-24 — Pan scale replaces guidance without becoming status chrome
+
+Changed: while Move owns the canvas, the existing lower-left guidance line
+projects the canonical transient camera ratio as a whole percentage. A ratio of
+one is `100%`; the current bounded camera therefore reads `60%–180%`, and
+invalid values fail closed instead of painting `0%`. The readout uses one fixed
+line box, tabular figures, a stable unit edge, and the same quiet optical field;
+its value updates directly without remounting, count animation, or live-region
+announcements. Higher-priority interaction and recovery guidance still wins.
+
+Why: direct manipulation needs an exact scale reference, but deriving it from a
+wheel pulse, storing a second zoom value, or resizing text on every digit would
+turn transient camera truth into flickering chrome.
+
+Forecloses: treating browser zoom as canvas scale; a zero-scale state; decimal
+noise; debounced or interpolated readouts; a new badge, panel, timer, dependency,
+or persisted camera field; and hiding active recovery guidance behind a metric.
+
 ## 2026-09-22 — Preview.58 keeps material interactions quiet without hiding state
 
 Changed: the untouched built-in seed now relocalizes its title, passages, and

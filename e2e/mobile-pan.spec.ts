@@ -146,6 +146,55 @@ test.describe("mobile canvas Pan", () => {
     await expect(shell).toHaveAttribute("data-canvas-mode", "material");
     await expect(page.locator(".spatial-thought[data-selected=true]")).toHaveCount(1);
   });
+
+  test("keeps the readout synchronized with a real two-contact camera gesture", async ({ page }) => {
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const shell = page.locator("main.matter-shell");
+    const paper = page.locator(".matter-document");
+    await page.getByRole("button", {
+      name: fixtureUiCopy.toolRail.canvasPan,
+      exact: true,
+    }).tap();
+
+    const readout = page.locator("[data-canvas-zoom-value]");
+    await expect(readout).toHaveText("100%");
+    const initialBox = await readout.boundingBox();
+    const paperBox = await paper.boundingBox();
+    if (initialBox === null || paperBox === null) {
+      throw new Error("mobile zoom guidance geometry is not visible");
+    }
+    const center = {
+      x: paperBox.x + paperBox.width / 2,
+      y: paperBox.y + paperBox.height * 0.58,
+    };
+
+    await withTouchSession(page, async (session) => {
+      await touchContacts(session, "touchStart", [
+        { id: 1, x: center.x - 40, y: center.y },
+        { id: 2, x: center.x + 40, y: center.y },
+      ]);
+      await touchContacts(session, "touchMove", [
+        { id: 1, x: center.x - 60, y: center.y },
+        { id: 2, x: center.x + 60, y: center.y },
+      ]);
+      await expect.poll(async () => (await viewportReceipt(shell)).zoom)
+        .toBeGreaterThan(1);
+      await touchEnd(session);
+    });
+
+    const accepted = await viewportReceipt(shell);
+    const expectedPercent = Math.round(accepted.zoom * 100);
+    await expect(readout).toHaveText(`${expectedPercent}%`);
+    await expect(readout).toHaveAttribute("data-canvas-zoom-value", String(expectedPercent));
+    const settledBox = await readout.boundingBox();
+    if (settledBox === null) throw new Error("mobile zoom guidance disappeared");
+    expect(settledBox.x).toBeCloseTo(initialBox.x, 1);
+    expect(settledBox.y).toBeCloseTo(initialBox.y, 1);
+    expect(settledBox.width).toBeCloseTo(initialBox.width, 1);
+    expect(settledBox.height).toBeCloseTo(initialBox.height, 1);
+    await expect(shell).not.toHaveAttribute("data-dragging", "true");
+  });
 });
 
 async function observePointerLifecycle(shell: Locator): Promise<void> {
@@ -169,6 +218,7 @@ async function viewportReceipt(shell: Locator) {
   return {
     x: Number(await shell.getAttribute("data-viewport-x")),
     y: Number(await shell.getAttribute("data-viewport-y")),
+    zoom: Number(await shell.getAttribute("data-viewport-zoom")),
     revision: Number(await shell.getAttribute("data-tree-revision")),
   };
 }
@@ -211,6 +261,17 @@ async function touchMove(session: CDPSession, point: Point): Promise<void> {
   await session.send("Input.dispatchTouchEvent", {
     type: "touchMove",
     touchPoints: [{ ...point, id: 1, radiusX: 1, radiusY: 1 }],
+  });
+}
+
+async function touchContacts(
+  session: CDPSession,
+  type: "touchStart" | "touchMove",
+  points: readonly (Point & Readonly<{ id: number }>)[],
+): Promise<void> {
+  await session.send("Input.dispatchTouchEvent", {
+    type,
+    touchPoints: points.map((point) => ({ ...point, radiusX: 1, radiusY: 1 })),
   });
 }
 

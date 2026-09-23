@@ -273,6 +273,17 @@ finger may continue the same camera pan. Cancellation, capture loss, page
 suspension, or orientation change ends that gesture. None of this authors a
 coordinate or enters material history.
 
+While the Move tool owns the canvas, the lower-left guidance line becomes a
+passive readout of that same transient camera. `100%` means the canonical
+camera ratio is exactly `1`: material is at its baseline rendered scale, not
+that the browser page or device pixels are unscaled. The current camera bounds
+therefore read from `60%` through `180%`; `0%` is not a valid or visible canvas
+state. Higher-priority admission, recovery, empty-material, Lasso, and Elastic
+guidance still occupies the line when it is needed. The displayed integer is a
+direct projection of the accepted camera state. It neither interpolates nor
+keeps a second timer or zoom value, so its unit edge, line box, and optical
+footprint remain fixed while wheel, pinch, or automatic camera work settles.
+
 The index ends with a quiet local identity, not a persistence dashboard. It may
 briefly say that material is being saved, but conflict, write failure, corrupt
 storage, export, retry, and reload controls belong inside the explicit Archive

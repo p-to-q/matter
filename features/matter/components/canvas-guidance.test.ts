@@ -32,6 +32,7 @@ type AdmissionAttemptPayload = WithoutAttemptIdentity<AdmissionAttempt>;
 function input(overrides: Partial<CanvasGuidanceInput> = {}): CanvasGuidanceInput {
   return {
     admission: IDLE,
+    camera: { kind: "none" },
     language: NONE,
     material: FULL_UNSELECTED,
     ...overrides,
@@ -84,6 +85,52 @@ describe("canvas guidance projection", () => {
       expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     },
   );
+
+  it.each([
+    [0.6, 60],
+    [1, 100],
+    [1.8, 180],
+  ])("projects Pan camera scale %s as a stable %s percent readout", (zoom, percent) => {
+    expect(projectCanvasGuidance(input({
+      camera: { kind: "pan", zoom },
+    }))).toEqual({
+      id: "canvas-zoom",
+      kind: "readout",
+      percent,
+      text: `${percent}%`,
+    });
+  });
+
+  it("keeps urgent interaction guidance ahead of the Pan readout", () => {
+    const camera = { kind: "pan", zoom: 1.25 } as const;
+
+    expect(projectCanvasGuidance(input({
+      admission: attempt({ phase: "recording", startedAtMs: 20 }),
+      camera,
+    })).id).toBe("speak-recording");
+    expect(projectCanvasGuidance(input({
+      camera,
+      material: { kind: "empty" },
+    })).id).toBe("speak-root");
+    expect(projectCanvasGuidance(input({
+      camera,
+      language: { kind: "lasso-drawing" },
+    })).id).toBe("close-lasso");
+    expect(projectCanvasGuidance(input({
+      camera,
+      language: { kind: "selected", stretch: { kind: "pending", amount: 0.6 } },
+    })).id).toBe("wait-expansion");
+  });
+
+  it("falls back to truthful material guidance for an invalid camera scale", () => {
+    expect(projectCanvasGuidance(input({
+      camera: { kind: "pan", zoom: 0 },
+    }))).toEqual({
+      id: "select-thought",
+      kind: "action",
+      text: "Select one thought.",
+    });
+  });
 
   it.each([
     [{ kind: "empty" }, "speak-root", "Speak to place your first thought."],
@@ -168,6 +215,16 @@ describe("canvas guidance projection", () => {
     expect(Object.isFrozen(chinese)).toBe(true);
   });
 
+  it("keeps the instrument readout byte-stable across every canvas language", () => {
+    const readout = projectCanvasGuidance(input({
+      camera: { kind: "pan", zoom: 1.25 },
+    }));
+
+    for (const language of ["en-US", "zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeCanvasGuidance(readout, language)).toBe(readout);
+    }
+  });
+
   it("keeps every Chinese prompt inside the existing narrow copy budget", () => {
     const states = Object.keys({
       "allow-microphone": true,
@@ -191,7 +248,7 @@ describe("canvas guidance projection", () => {
       "unfold-thought": true,
       "speak-child": true,
       "select-thought": true,
-    }) as Array<ReturnType<typeof projectCanvasGuidance>["id"]>;
+    }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {
       const localized = localizeCanvasGuidance({ id, kind: "action", text: "" }, "zh-CN");

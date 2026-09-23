@@ -53,6 +53,43 @@ Non-goals:  translating human material, renaming a person's session, adding a
             evidence
 ```
 
+## Active correction — Pan reports its canonical camera scale without moving chrome
+
+State: Proven.
+
+```text
+Outcome:    while Move owns the canvas, the existing lower-left guidance slot
+            shows the accepted camera ratio as a stable whole percentage;
+            leaving Move restores the previous truthful action guidance
+Boundary:   the pure viewport percentage projection, guidance precedence,
+            RootedMaterial adapter, existing lower-left type surface, and
+            laptop/phone receipts; no new component, timer, dependency, or
+            persistent field
+Invariants: scale 1 is 100%; current legal bounds read 60%–180%; invalid camera
+            values fail closed and never paint 0%/NaN%; admission, recovery,
+            empty-material, Lasso, and Elastic guidance retain precedence;
+            one canonical viewport value owns rendering and copy; the readout
+            keeps one DOM identity, fixed line box, tabular figures, fixed unit
+            edge, no per-tick animation, and no live-region announcements
+Proof:      viewport boundary/rounding matrix, closed guidance precedence and
+            localization matrix, static typography contract, 1280/390/320px
+            Chromium width/line/identity receipts, a 390px Chromium two-contact
+            input receipt, repository checks, and an independent diff review
+Non-goals:  browser-page zoom, a zoom slider or reset control, decimal display,
+            persisted camera state, a second status surface, animated counting,
+            inertia, changing camera bounds, or redesigning corner chrome
+```
+
+Receipt, 2026-09-24: focused projection/chrome tests passed 157/157. Chromium
+passed the stable readout and two-contact matrix 7/7 across 1280, 390, and
+320px, then the complete suite passed 172 with 15 pre-existing conditional
+skips. `npm run check` passed repository doctor, docs, architecture, 2,685 unit
+tests with five conditional skips, type generation, typecheck, lint, production
+build, and runtime-artifact inspection. Localhost visual inspection confirmed
+the existing lower-left optical field, baseline, and corner axis; an independent
+diff review found no blocking or major issue. Physical Safari/iPad rendering
+remains explicitly unclaimed.
+
 ## Active correction — Label evidence is precommitted before spend
 
 State: implemented and independently verified locally; no paid run or
