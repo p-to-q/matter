@@ -21,7 +21,7 @@ import {
 } from "./render-matter-launch.mjs";
 
 const captureCues = Object.freeze({
-  version: 11,
+  version: 12,
   durationMs: 68_000,
   width: 1_600,
   height: 900,
@@ -127,6 +127,7 @@ const captureCues = Object.freeze({
     "point-talk-commit": 22_500,
     "nested-branch": 25_000,
     "elastic-commit": 37_500,
+    "elastic-deselected": 39_000,
     "branch-held-aside": 41_000,
     "inquiry-answer": 49_000,
     "branch-restored": 51_000,
@@ -550,7 +551,7 @@ test("the archival audio credit is transparent, restrained, and outside product 
   assert.match(markup, /Douglas Engelbart/u);
   assert.match(markup, /<em>The Mother of All Demos\.<\/em>/u);
   assert.match(markup, /background:transparent/u);
-  assert.match(markup, /right:56px;bottom:104px;width:620px/u);
+  assert.match(markup, /right:56px;bottom:72px;width:620px/u);
   assert.match(markup, /font-size:21px;font-weight:300;line-height:1\.38/u);
   assert.match(markup, /<span>1968 demonstration, since known as<\/span>/u);
   assert.doesNotMatch(markup, /script|data-thought|matter-document/ui);
@@ -578,8 +579,9 @@ test("the outro returns the real root-only night paper to haze before it departs
   assert.match(markup, /roundedRect/u);
   assert.match(markup, /pictureBlur=ease\(\(progress-\.06\)\/\.40\)/u);
   assert.match(markup, /departure=ease\(\(progress-\.18\)\/\.54\)/u);
-  assert.match(markup, /blur\('\+lerp\(0,22,pictureBlur\)/u);
-  assert.match(markup, /blur\('\+lerp\(0,7\.5,pictureBlur\)/u);
+  assert.match(markup, /blur\('\+lerp\(0,4,pictureBlur\)/u);
+  assert.doesNotMatch(markup, /lerp\(0,22,pictureBlur\)|backgroundExit|bleed/u);
+  assert.equal(markup.match(/ctx\.drawImage\(source/gu)?.length, 1);
   assert.match(markup, /lerp\(1,\.78,departure\)/u);
   assert.match(markup, /12\*rounding/u);
   assert.match(markup, /drawImage\(source,x,y,width,height\)/u);

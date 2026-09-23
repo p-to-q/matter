@@ -195,7 +195,7 @@ function parseLaunchCueMap(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Launch capture cues are invalid.");
   }
-  if (value.version !== 11) throw new Error("Launch capture cues use an unsupported version.");
+  if (value.version !== 12) throw new Error("Launch capture cues use an unsupported version.");
   if (value.durationMs !== durationSeconds * 1_000) {
     throw new Error("Launch capture cues do not describe the frozen 68-second master.");
   }
@@ -406,6 +406,7 @@ function validateLaunchCaptureReceipts(value) {
     "point-talk-commit",
     "nested-branch",
     "elastic-commit",
+    "elastic-deselected",
     "branch-held-aside",
     "inquiry-answer",
     "branch-restored",
@@ -517,7 +518,7 @@ export function launchVideoCreditMarkup() {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{width:${outputWidth}px;height:${outputHeight}px;margin:0;background:transparent;overflow:hidden}
     body{-webkit-font-smoothing:antialiased}
-    aside{position:absolute;right:56px;bottom:104px;width:620px;color:rgba(22,29,39,.66);
+    aside{position:absolute;right:56px;bottom:72px;width:620px;color:rgba(22,29,39,.66);
       font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
       font-size:21px;font-weight:300;line-height:1.38;letter-spacing:0;text-align:right;
       font-kerning:normal;text-rendering:optimizeLegibility}
@@ -573,7 +574,6 @@ export function launchVideoOutroMarkup(sourceDataUrl) {
         const pictureBlur=ease((progress-.06)/.40);
         const departure=ease((progress-.18)/.54);
         const exit=ease((progress-.76)/.24);
-        const backgroundExit=ease((progress-.88)/.12);
         const scale=lerp(1,.78,departure);
         const width=canvas.width*scale;const height=canvas.height*scale;
         const arc=Math.sin(Math.PI*departure);
@@ -581,15 +581,9 @@ export function launchVideoOutroMarkup(sourceDataUrl) {
         const y=(canvas.height-height)/2-18*departure+7*arc;
         const radius=12*rounding;
         ctx.globalAlpha=1;ctx.fillStyle='#030506';ctx.fillRect(0,0,canvas.width,canvas.height);
-        ctx.save();
-        ctx.globalAlpha=1-backgroundExit;
-        ctx.filter='blur('+lerp(0,22,pictureBlur)+'px) brightness('+lerp(1,.42,pictureBlur)+')';
-        const bleed=lerp(0,34,pictureBlur);
-        ctx.drawImage(source,-bleed,-bleed*.5625,canvas.width+bleed*2,canvas.height+bleed*1.125);
-        ctx.restore();
         ctx.save();roundedRect(x,y,width,height,radius);ctx.clip();
         ctx.globalAlpha=1-exit;
-        ctx.filter='blur('+lerp(0,7.5,pictureBlur)+'px) brightness('+lerp(1,.84,pictureBlur)+')';
+        ctx.filter='blur('+lerp(0,4,pictureBlur)+'px) brightness('+lerp(1,.86,pictureBlur)+')';
         ctx.drawImage(source,x,y,width,height);ctx.restore();
         if(rounding>0&&exit<1){
           ctx.globalAlpha=(1-exit)*rounding*.26;ctx.strokeStyle='#dce7e6';ctx.lineWidth=1;

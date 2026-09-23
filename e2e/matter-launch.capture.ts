@@ -75,6 +75,7 @@ type StoryEventName =
   | "point-talk-commit"
   | "nested-branch"
   | "elastic-commit"
+  | "elastic-deselected"
   | "branch-held-aside"
   | "branch-restored"
   | "inquiry-answer"
@@ -688,6 +689,14 @@ test("capture the Matter launch master", async ({ context, page }) => {
     }
     await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(".stretch-handle")).toHaveCount(0);
+    const clearPoint = await blankCanvasPoint(paper);
+    cursor = await glide(page, cursor, clearPoint, 480);
+    await page.mouse.down();
+    await page.waitForTimeout(55);
+    await page.mouse.up();
+    await expect(page.locator('.spatial-thought[data-selected="true"]')).toHaveCount(0);
+    await expect(root).toHaveAttribute("aria-pressed", "false");
+    receiptEvent("elastic-deselected");
 
     // The third subtitle leaves the working context through its real directory
     // minus. It remains faintly visible as authored material, and the same
@@ -823,7 +832,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
   } finally {
     await page.screencast.stop();
     await writeFile(resolve(runDirectory, "capture-cues.json"), `${JSON.stringify({
-      version: 11,
+      version: 12,
       durationMs: RECORDING_DURATION_MS,
       width: CAPTURE_WIDTH,
       height: CAPTURE_HEIGHT,
@@ -974,6 +983,32 @@ async function unionBounds(targets: readonly Locator[], name: string): Promise<B
     width: box.width,
     height: box.height,
   })), name);
+}
+
+async function blankCanvasPoint(paper: Locator): Promise<Point> {
+  const point = await paper.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    const candidates = [
+      { x: 0.12, y: 0.58 },
+      { x: 0.18, y: 0.72 },
+      { x: 0.34, y: 0.82 },
+      { x: 0.72, y: 0.78 },
+    ];
+    for (const candidate of candidates) {
+      const x = bounds.left + bounds.width * candidate.x;
+      const y = bounds.top + bounds.height * candidate.y;
+      const hit = document.elementFromPoint(x, y);
+      if (
+        hit !== null &&
+        hit.closest(
+          '[data-thought-id],[data-canvas-interactive],button,a,input,textarea,[role="dialog"],.tool-rail',
+        ) === null
+      ) return { x, y };
+    }
+    return null;
+  });
+  if (point === null) throw new Error("Launch-film capture cannot find a clear paper point.");
+  return point;
 }
 
 function mergeBounds(rectangles: readonly Bounds[], name: string): Bounds {

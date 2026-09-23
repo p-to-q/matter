@@ -4,7 +4,7 @@ Need: a short Matter film must show the real product surface without recording
 the operator's desktop, leaking private notifications, or disguising a
 deterministic demonstration as an unrestricted live-provider evaluation.
 
-Status: the restrained hybrid V11 workflow is implemented. Its closing proof
+Status: the restrained hybrid V12 workflow is implemented. Its closing proof
 uses the real history to return the authored tree to its seeded root;
 publication remains subject to the archival audio rights decision.
 
@@ -88,7 +88,9 @@ Undo; then a return to the complete paper while five more real Undo operations
 remove the nested branch, sibling branch, rewrite, first branch, and voice branch
 until only the seeded root remains; a short reading breath; then that same
 passage returns to a night-paper haze before the real screen rounds, shrinks,
-and exits into black. This closing state rhymes with the opening passage without
+and exits over a solid black field. The outro draws that page exactly once; it
+never repeats the same interface as a blurred background. This closing state
+rhymes with the opening passage without
 replaying its daylight composition. It omits tutorial labels,
 device frames, scanning light, and a feature-list
 montage. The opening credit is editorial film language, not invented product
@@ -99,7 +101,8 @@ The capture asserts three Transcription requests—first-material admission, the
 visible Point Talk direction, and the Ask Matter question—plus one Transform,
 one Text Swap, and one Inquiry
 request. It also records ordered story-event and opening/daylight/night
-presentation receipts, the explicit Inquiry mode, and the durable canvas title in a version-11
+presentation receipts, an explicit post-Elastic selection-clear receipt, the
+explicit Inquiry mode, and the durable canvas title in a version-12
 `capture-cues.json` beside the raw WebM. The renderer accepts
 only the frozen 1600×900 capture surface and valid, non-overlapping cue windows,
 generates the transparent title and deterministic closing frames through the
@@ -120,7 +123,7 @@ hide, or relabel product state.
 
 Before the screencast clock starts, the harness uses Matter's native transient
 move mode to place the opening material at the center of the complete 1600×900
-frame, not merely at the center of the paper area beside the directory. The V10
+frame, not merely at the center of the paper area beside the directory. The V12
 receipt rejects an off-center opening. A translucent pale veil preserves a
 hazy impression of the interface while the real captured material pixels
 remain sharp. A feathered lower-right mask suppresses only the high-contrast
