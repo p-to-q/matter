@@ -51,9 +51,10 @@ human material silently.
 A material interaction must declare reference + degree + direction + lineage
 without letting the model infer a missing signal. Elastic Language 2 takes
 reference and degree from gesture and fixes direction to `expand-in-place`.
-Point and Talk takes reference from an explicit passage-local AI click, direction
-from one bounded transient human instruction, degree from the closed near-source
-policy, and lineage from that exact node. `text-swap/2` also retains one exact
+Point and Talk takes reference from an explicit passage-local AI click or a
+single-/double-clicked passage followed by fixed Voice, direction from one bounded
+transient human instruction, degree from the closed near-source policy, and
+lineage from that exact node. `text-swap/2` also retains one exact
 punctuation segment as a valid address, but Lasso does not publish a second
 Rewrite control beside Elastic. A new operation or channel remains an open
 product question before it becomes a control or protocol field.

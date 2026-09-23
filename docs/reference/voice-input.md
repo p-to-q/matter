@@ -29,10 +29,10 @@ pointer starts at empty root / node / segment
 
 Raw audio is never written to storage or logs. Failure preserves the admission
 anchor and exposes a pointer retry. An admission transcript is not rendered as
-a message: it becomes human material. Point-and-Talk may instead lease the same
-bounded microphone capability for one transient transform direction attached to
-the explicitly addressed node; it never turns the fixed Voice rail into a
-selected-language mode and never stores that direction as material.
+a message: it becomes human material. When an existing passage is selected,
+Point-and-Talk instead leases the same bounded microphone capability from the
+fixed Voice rail for one transient transform direction attached to that exact
+node. The direction is never stored as material.
 
 The public preview uses browser-managed Web Speech for transient interim text
 and one final admission when available. Otherwise it records locally and lazily
@@ -65,12 +65,12 @@ a slow worker, without ever constructing that worker.
 
 ## Admission boundary
 
-The voice control has a target only in the full material view. A truly empty
-tree initializes its root. In the document-root runtime, speaking with no
+The admission voice control has a target only in the full material view. A truly
+empty tree initializes its root. In the document-root runtime, speaking with no
 visible passage selected appends first-level material beneath the invisible
-structural root; speaking with an active visible passage selected appends a
-child beneath that passage. Activation freezes the exact parent, tree id, and
-revision. Transcription never chooses a newer target or relocates its result.
+structural root. A selected passage routes fixed Voice to Point and Talk instead
+of this admission lifecycle. Admission activation freezes the exact parent,
+tree id, and revision. Transcription never chooses a newer target or relocates its result.
 A successful admission keeps the current selection, so recording does not
 select the material it creates.
 

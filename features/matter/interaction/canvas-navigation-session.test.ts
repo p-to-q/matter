@@ -17,6 +17,7 @@ describe("canvas navigation session", () => {
         zoom: 1.6,
         userMoved: true,
         gesture: Object.freeze({
+          kind: "pan" as const,
           pointerId: 8,
           pointerType: "mouse" as const,
           startX: 20,

@@ -3,9 +3,11 @@ import {
   SEEDED_INITIAL_NODES,
   type SeededPassageKey,
 } from "./seeded-material-core";
+import { seededNodeLabels } from "./seeded-label-copy";
 
 export { SEEDED_PASSAGE_KEYS } from "./seeded-material-core";
 export type { SeededPassageKey } from "./seeded-material-core";
+export { seededNodeLabel } from "./seeded-label-copy";
 
 export const SEEDED_MATERIAL_COPY_CHUNK_SENTINEL = "matter-seeded-material-copy";
 
@@ -16,9 +18,10 @@ type StoredSeededMaterialCopy = Readonly<{
 type SeededMaterialCopy = Readonly<{
   title: string;
   nodes: Readonly<Record<SeededPassageKey, string>>;
+  labels: Readonly<Record<SeededPassageKey, string>>;
 }>;
 
-/** Complete localized seed copy, loaded only with the atomic relocalizer. */
+/** Complete localized seed copy, loaded only by the lazy seed presentation surfaces. */
 const COPY = {
   [MATTER_LOCALE.simplifiedChinese]: {
     nodes: SEEDED_INITIAL_NODES,
@@ -86,6 +89,7 @@ export function seededMaterialCopy(locale: MatterLocale): SeededMaterialCopy {
   return Object.freeze({
     title: copy.nodes.imaginedLives,
     nodes: copy.nodes,
+    labels: seededNodeLabels(locale),
   });
 }
 

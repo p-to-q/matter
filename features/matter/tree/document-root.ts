@@ -13,6 +13,13 @@ export function isDocumentRoot(tree: ThoughtTree, nodeId: string | null): boolea
   return nodeId !== null && tree.rootId === nodeId && tree.nodes[nodeId]?.role === "document-root";
 }
 
+/** A normalized document root is structure, not material. */
+export function isEmptyMaterialDocument(tree: ThoughtTree): boolean {
+  if (tree.rootId === null) return true;
+  const root = tree.nodes[tree.rootId];
+  return root?.role === "document-root" && root.children.length === 0;
+}
+
 /** Wraps legacy one-root documents in an invisible structural root. */
 export function normalizeDocumentTree(tree: ThoughtTree, initialTitle?: string): ThoughtTree {
   if (tree.rootId === null || Object.keys(tree.nodes).length === 0) {

@@ -83,6 +83,41 @@ test("selected material reparents by pointer while canvas pan remains an explici
     await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
   }
 
+  const lifecycleSourceBox = await source.boundingBox();
+  const lifecycleTargetBox = await deeperParent.boundingBox();
+  if (lifecycleSourceBox === null || lifecycleTargetBox === null) {
+    throw new Error("lifecycle cancellation endpoints are not visible");
+  }
+  await page.mouse.move(
+    lifecycleSourceBox.x + lifecycleSourceBox.width / 2,
+    lifecycleSourceBox.y + lifecycleSourceBox.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    lifecycleTargetBox.x + lifecycleTargetBox.width / 2,
+    lifecycleTargetBox.y + lifecycleTargetBox.height / 2,
+    { steps: 8 },
+  );
+  await expect(source).toHaveAttribute("data-drag-source", "true");
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+  await expect(source).not.toHaveAttribute("data-drag-source", /.+/u);
+  await expect(deeperParent).not.toHaveAttribute("data-drag-over", /.+/u);
+  await expect(shell).not.toHaveAttribute("data-node-dragging", /.+/u);
+  await expect(shell).not.toHaveAttribute("data-node-drop-mode", /.+/u);
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
+  await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("orientationchange"));
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+  });
+  await expect(source).not.toHaveAttribute("data-drag-source", /.+/u);
+  await expect(shell).not.toHaveAttribute("data-node-dragging", /.+/u);
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
+  await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
+  // Synthetic lifecycle events do not release Playwright's physical mouse.
+  await page.mouse.up();
+
   const restoredSourceBox = await source.boundingBox();
   const deeperParentBox = await deeperParent.boundingBox();
   if (restoredSourceBox === null || deeperParentBox === null) throw new Error("deeper move endpoints are not visible");

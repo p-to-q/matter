@@ -253,6 +253,23 @@ describe("LabelDriver", () => {
     expect(instance.getState().entries.get("root")?.origin).toBe("provisional");
   });
 
+  it("publishes a fixed product label without calling the label endpoint", () => {
+    const recorded = recorder();
+    const instance = driver(recorded.request);
+    instance.observe(
+      ROOT,
+      ["root"],
+      new Map([["root", "允许我们想象的其他生活"]]),
+    );
+
+    expect(recorded.calls).toEqual([]);
+    expect(instance.getState().entries.get("root")).toMatchObject({
+      label: "允许我们想象的其他生活",
+      origin: "fixed",
+      pendingOperationId: null,
+    });
+  });
+
   it("replaces the label when the model answers", async () => {
     const recorded = recorder();
     const instance = driver(recorded.request);

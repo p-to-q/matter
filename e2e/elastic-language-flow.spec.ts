@@ -361,6 +361,31 @@ test("a direct double-click keeps canonical geometry while native copy takes own
   expect(await materialTextLayoutReceipt(root)).toEqual(before);
 });
 
+test("structural and native selection paint without changing material line geometry", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const root = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+  const before = await materialLineGeometry(root);
+  expect(before.lines.length).toBeGreaterThan(1);
+
+  await selectRoot(page);
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="structural"]',
+  )).toHaveAttribute("data-material-address-painted", "true");
+  const structural = await materialLineGeometry(root);
+  expect(structural).toEqual(before);
+
+  await root.locator(".spatial-thought__label").dblclick({ position: { x: 80, y: 12 } });
+  await expect(page.locator("main.matter-shell"))
+    .toHaveAttribute("data-material-address-owner", "native");
+  await expect(page.locator(
+    '.material-address-layer[data-address-variant="native"]',
+  )).toHaveAttribute("data-material-address-painted", "true");
+  expect(await materialLineGeometry(root)).toEqual(before);
+});
+
 test("one outline owns the address from neutral through both grips", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
@@ -1132,13 +1157,10 @@ async function runElasticReceipt(
   await expect(page.locator(".stretch-amount-rail")).toHaveCount(0);
   await expectUpperGripAtSelection(page, upperGrip);
   await expectNeutralSelection(page);
-  // The transform presentation is intentionally short-lived. Start observing
-  // before the gesture so a loaded browser cannot complete the durable change,
-  // then let this test begin looking after the reveal has already retired.
-  // This still requires the perceptible multi-group arrival for pointer input.
-  const revealGroupCount = input === "keyboard"
-    ? null
-    : page.locator(".transform-text").getAttribute("data-transform-reveal-groups");
+  // The transform presentation is intentionally short-lived. Observe its DOM
+  // insertion inside the browser so runner load cannot miss the bounded reveal
+  // before this test reaches the durable-text assertions below.
+  if (input !== "keyboard") await observeTransformReveal(page);
 
   if (input === "drag") {
     const box = await grip.boundingBox();
@@ -1206,7 +1228,7 @@ async function runElasticReceipt(
     );
     expect(animations.every((name) => name === "none")).toBe(true);
   } else {
-    const groupCount = Number(await revealGroupCount);
+    const groupCount = await readObservedTransformRevealGroupCount(page);
     expect(groupCount).toBeGreaterThanOrEqual(2);
     expect(groupCount).toBeLessThanOrEqual(4);
   }
@@ -1228,6 +1250,39 @@ async function runElasticReceipt(
   await expect(page.locator(".transform-text")).toHaveCount(0);
   expect(turnRequests).toBe(1);
   expect(browserErrors).toEqual([]);
+}
+
+async function observeTransformReveal(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const receiptKey = "__matterTransformRevealGroupCount";
+    const receiptWindow = window as Window & { [receiptKey]?: number };
+    delete receiptWindow[receiptKey];
+    const capture = (): boolean => {
+      const value = document.querySelector(".transform-text")
+        ?.getAttribute("data-transform-reveal-groups");
+      if (value === null || value === undefined) return false;
+      const groupCount = Number(value);
+      if (!Number.isSafeInteger(groupCount)) return false;
+      receiptWindow[receiptKey] = groupCount;
+      return true;
+    };
+    if (capture()) return;
+    const observer = new MutationObserver(() => {
+      if (!capture()) return;
+      observer.disconnect();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function readObservedTransformRevealGroupCount(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const receiptKey = "__matterTransformRevealGroupCount";
+    const receiptWindow = window as Window & { [receiptKey]?: number };
+    const groupCount = receiptWindow[receiptKey];
+    delete receiptWindow[receiptKey];
+    return groupCount ?? 0;
+  });
 }
 
 async function confirmElasticAddress(
@@ -1515,6 +1570,63 @@ async function materialTextLayoutReceipt(target: ReturnType<Page["locator"]>) {
       },
       rows,
     };
+  });
+}
+
+async function materialLineGeometry(
+  material: ReturnType<Page["locator"]>,
+): Promise<Readonly<{
+  height: number;
+  lines: readonly Readonly<{ bottom: number; left: number; right: number; top: number }>[];
+  width: number;
+}>> {
+  return material.evaluate((element) => {
+    const range = element.ownerDocument.createRange();
+    try {
+      const walker = element.ownerDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      const fragments: DOMRect[] = [];
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if (!(node instanceof Text) || node.data.length === 0) continue;
+        range.selectNodeContents(node);
+        fragments.push(...range.getClientRects());
+      }
+      const visibleFragments = fragments
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .sort((left, right) => left.top - right.top || left.left - right.left);
+      const lines: Array<{ bottom: number; left: number; right: number; top: number }> = [];
+      for (const fragment of visibleFragments) {
+        const row = lines.find((candidate) =>
+          Math.min(candidate.bottom, fragment.bottom) - Math.max(candidate.top, fragment.top) > 1
+        );
+        if (row === undefined) {
+          lines.push({
+            bottom: fragment.bottom,
+            left: fragment.left,
+            right: fragment.right,
+            top: fragment.top,
+          });
+        } else {
+          row.bottom = Math.max(row.bottom, fragment.bottom);
+          row.left = Math.min(row.left, fragment.left);
+          row.right = Math.max(row.right, fragment.right);
+          row.top = Math.min(row.top, fragment.top);
+        }
+      }
+      const box = element.getBoundingClientRect();
+      const precision = (value: number) => Math.round(value * 100) / 100;
+      return {
+        height: precision(box.height),
+        lines: lines.map((line) => ({
+          bottom: precision(line.bottom),
+          left: precision(line.left),
+          right: precision(line.right),
+          top: precision(line.top),
+        })),
+        width: precision(box.width),
+      };
+    } finally {
+      range.detach();
+    }
   });
 }
 

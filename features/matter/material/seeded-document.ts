@@ -38,8 +38,9 @@ import {
 
 export const SEEDED_DOCUMENT_TREE_ID = "matter_fixture_rooted_01";
 export const SEEDED_ROOT_ONLY_TREE_ID = "matter_fixture_rooted_02";
+export const SEEDED_EMPTY_TREE_ID = "matter_fixture_empty_01";
 
-export type SeededDocumentVariant = "root" | "expanded";
+export type SeededDocumentVariant = "empty" | "root" | "expanded";
 
 export const SEEDED_DOCUMENT_NODE_IDS = {
   root: "thought_fixture_root",
@@ -186,14 +187,19 @@ export type SeededDocument = {
 export function createSeededDocument(
   variant: SeededDocumentVariant = "expanded",
 ): SeededDocument {
-  let tree = createEmptyTree(
-    variant === "root" ? SEEDED_ROOT_ONLY_TREE_ID : SEEDED_DOCUMENT_TREE_ID,
-  );
+  const treeId = variant === "empty"
+    ? SEEDED_EMPTY_TREE_ID
+    : variant === "root"
+      ? SEEDED_ROOT_ONLY_TREE_ID
+      : SEEDED_DOCUMENT_TREE_ID;
+  let tree = createEmptyTree(treeId);
   let history = createTreeHistory();
 
-  const bootstrapSpecs = variant === "root"
-    ? SEEDED_BOOTSTRAP_NODES.slice(0, 1)
-    : SEEDED_BOOTSTRAP_NODES;
+  const bootstrapSpecs = variant === "empty"
+    ? []
+    : variant === "root"
+      ? SEEDED_BOOTSTRAP_NODES.slice(0, 1)
+      : SEEDED_BOOTSTRAP_NODES;
   const bootstrapNodes = bootstrapSpecs.map(materializeBootstrapNode);
   for (const [index, node] of bootstrapNodes.entries()) {
     const command: TreeCommand =

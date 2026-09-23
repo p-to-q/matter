@@ -2,6 +2,8 @@ import type { CanvasLanguage } from "./canvas-preferences";
 
 export type VoiceToolCopy = Readonly<{
   stopRecording: string;
+  stopRewriteDirection: string;
+  recordRewriteDirection: string;
   recordRootThought: string;
   recordTopLevelThought: string;
   recordBelowSelectedMaterial: string;
@@ -14,6 +16,8 @@ export type VoiceToolCopy = Readonly<{
 const COPY: Readonly<Record<CanvasLanguage, VoiceToolCopy>> = Object.freeze({
   "en-US": Object.freeze({
     stopRecording: "Stop recording",
+    stopRewriteDirection: "Finish rewrite direction",
+    recordRewriteDirection: "Speak a rewrite direction for the selected material",
     recordRootThought: "Record a root thought",
     recordTopLevelThought: "Record a top-level thought",
     recordBelowSelectedMaterial: "Record a thought below the selected material",
@@ -24,6 +28,8 @@ const COPY: Readonly<Record<CanvasLanguage, VoiceToolCopy>> = Object.freeze({
   }),
   "zh-CN": Object.freeze({
     stopRecording: "停止录音",
+    stopRewriteDirection: "完成改写方向",
+    recordRewriteDirection: "说出所选材料的改写方向",
     recordRootThought: "录入第一个想法",
     recordTopLevelThought: "录入一级想法",
     recordBelowSelectedMaterial: "在所选材料下录入想法",
@@ -34,6 +40,8 @@ const COPY: Readonly<Record<CanvasLanguage, VoiceToolCopy>> = Object.freeze({
   }),
   "zh-TW": Object.freeze({
     stopRecording: "停止錄音",
+    stopRewriteDirection: "完成改寫方向",
+    recordRewriteDirection: "說出所選材料的改寫方向",
     recordRootThought: "錄入第一個想法",
     recordTopLevelThought: "錄入第一層想法",
     recordBelowSelectedMaterial: "在所選材料下錄入想法",
@@ -44,6 +52,8 @@ const COPY: Readonly<Record<CanvasLanguage, VoiceToolCopy>> = Object.freeze({
   }),
   "ja-JP": Object.freeze({
     stopRecording: "録音を停止",
+    stopRewriteDirection: "書き換え方の録音を完了",
+    recordRewriteDirection: "選択した素材の書き換え方を話す",
     recordRootThought: "最初の考えを録音",
     recordTopLevelThought: "最上位の考えを録音",
     recordBelowSelectedMaterial: "選択した素材の下に考えを録音",
@@ -54,6 +64,8 @@ const COPY: Readonly<Record<CanvasLanguage, VoiceToolCopy>> = Object.freeze({
   }),
   "de-DE": Object.freeze({
     stopRecording: "Aufnahme beenden",
+    stopRewriteDirection: "Umschreibrichtung abschließen",
+    recordRewriteDirection: "Umschreibrichtung für das ausgewählte Material einsprechen",
     recordRootThought: "Ersten Gedanken aufnehmen",
     recordTopLevelThought: "Gedanken der ersten Ebene aufnehmen",
     recordBelowSelectedMaterial: "Gedanken unter dem ausgewählten Material aufnehmen",

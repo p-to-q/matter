@@ -3,6 +3,7 @@ import {
   excludePointTalkRightOccluder,
   intersectPointTalkBounds,
   projectPointTalkPlacement,
+  projectPointTalkPlacementWithinSurfaces,
   projectPointTalkScale,
 } from "./point-talk-placement";
 
@@ -106,5 +107,45 @@ describe("Point-and-Talk placement", () => {
       bubble,
       viewport,
     })).toBeNull();
+  });
+
+  it("keeps the turn alive while a keyboard publishes transient viewport geometry", () => {
+    const shared = {
+      target: { left: 40, top: 220, right: 250, bottom: 270 },
+      bubble,
+      boundary: { left: 8, top: 66, right: 382, bottom: 836 },
+      positioningSurface: { left: 8, top: 66, right: 382, bottom: 836 },
+      rightOccluder: null,
+    };
+    expect(projectPointTalkPlacementWithinSurfaces({
+      ...shared,
+      visualViewport: { left: 0, top: 0, right: 390, bottom: 0 },
+    })).toEqual({ kind: "temporarily-unavailable" });
+    expect(projectPointTalkPlacementWithinSurfaces({
+      ...shared,
+      visualViewport: { left: 0, top: 900, right: 390, bottom: 1_220 },
+    })).toEqual({ kind: "temporarily-unavailable" });
+    expect(projectPointTalkPlacementWithinSurfaces({
+      ...shared,
+      visualViewport: { left: 0, top: 80, right: 390, bottom: 430 },
+    })).toEqual({
+      kind: "placed",
+      placement: { left: 40, maxWidth: 350, top: 168 },
+    });
+    expect(projectPointTalkPlacementWithinSurfaces({
+      ...shared,
+      visualViewport: { left: 0, top: Number.NaN, right: 390, bottom: 430 },
+    })).toEqual({ kind: "unusable" });
+  });
+
+  it("still revokes a coherent field that cannot preserve usable controls", () => {
+    expect(projectPointTalkPlacementWithinSurfaces({
+      target: { left: 24, top: 220, right: 120, bottom: 270 },
+      bubble,
+      visualViewport: { left: 0, top: 0, right: 170, bottom: 844 },
+      boundary: { left: 8, top: 66, right: 162, bottom: 836 },
+      positioningSurface: { left: 8, top: 66, right: 162, bottom: 836 },
+      rightOccluder: null,
+    })).toEqual({ kind: "unusable" });
   });
 });

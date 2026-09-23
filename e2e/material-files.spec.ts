@@ -834,7 +834,8 @@ for (const viewport of [
     await expect(sidebar.locator(".material-files__empty")).toContainText(fixtureUiCopy.materialFiles.emptyTypeToFind);
     const search = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
     await expect(search).toBeFocused();
-    await expect(search).toHaveCSS("outline-width", "2px");
+    await expect(search).toHaveCSS("outline-width", "0px");
+    await expect(controls.locator(".material-files__search")).toHaveCSS("box-shadow", "none");
     await expect(search).toHaveAttribute("placeholder", fixtureUiCopy.materialFiles.findThought);
     await expect(controls.locator(".material-files__search")).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
     const controlAxesDuringSearch = {

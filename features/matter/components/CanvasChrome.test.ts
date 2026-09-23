@@ -129,6 +129,20 @@ describe("CanvasChrome", () => {
     expect(css).toMatch(/@media \(pointer: coarse\), \(max-width: 767px\)\s*{[\s\S]*?\.inquiryDictate,[\s\S]*?\.inquiryAsk\s*{[^}]*min-width:\s*48px;[^}]*height:\s*48px;/s);
   });
 
+  it("keeps the desktop Ask Matter entry primary and aligned with its corner peers", () => {
+    const css = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
+
+    expect(css).toMatch(
+      /\.askButton\s*\{[^}]*color:\s*var\(--chrome-primary-fg\)/s,
+    );
+    expect(css).toMatch(
+      /\.askButton::before\s*\{[^}]*background:\s*var\(--chrome-primary\);/s,
+    );
+    expect(css).toMatch(
+      /\.popoverAnchor\s*\{[^}]*display:\s*flex;[^}]*height:\s*20px;[^}]*align-items:\s*center;/s,
+    );
+  });
+
   it("keeps pre-release information honest and task-oriented", () => {
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("interface for unfinished thought");
     expect(CANVAS_CHROME_INFO["en-US"].about.body.join(" ")).toContain("Live voice input, transcript repair, and Ask Matter are available");

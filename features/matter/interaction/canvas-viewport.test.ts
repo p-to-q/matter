@@ -35,6 +35,16 @@ function down(
   };
 }
 
+function pinch(
+  contacts: readonly [
+    { pointerId: number; x: number; y: number },
+    { pointerId: number; x: number; y: number },
+    ...{ pointerId: number; x: number; y: number }[],
+  ],
+): Extract<CanvasViewportEvent, { type: "pinch-start" }> {
+  return { type: "pinch-start", contacts };
+}
+
 describe("reduceCanvasViewport", () => {
   it("starts only a primary left-button gesture", () => {
     const ignored = apply(INITIAL_CANVAS_VIEWPORT, {
@@ -153,6 +163,167 @@ describe("reduceCanvasViewport", () => {
       clientY: 200,
     });
     expect(state).toEqual(active);
+  });
+
+  it("pans and zooms around the moving multi-touch centre", () => {
+    const before: CanvasViewportState = {
+      ...INITIAL_CANVAS_VIEWPORT,
+      x: 20,
+      y: 10,
+    };
+    let state = apply(before, pinch([
+      { pointerId: 1, x: 100, y: 100 },
+      { pointerId: 2, x: 200, y: 100 },
+    ]));
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 1,
+      clientX: 120,
+      clientY: 120,
+    });
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 2,
+      clientX: 280,
+      clientY: 120,
+    });
+
+    expect(state.zoom).toBeCloseTo(1.6);
+    expect((200 - state.x) / state.zoom).toBeCloseTo((150 - before.x) / before.zoom);
+    expect((120 - state.y) / state.zoom).toBeCloseTo((100 - before.y) / before.zoom);
+    expect(state.userMoved).toBe(true);
+  });
+
+  it("rebases 1 to 2 to 1 fingers without reusing an old single-touch delta", () => {
+    let state = apply(INITIAL_CANVAS_VIEWPORT, down("touch"));
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 3,
+      clientX: 120,
+      clientY: 80,
+    });
+    expect(state.x).toBe(20);
+
+    const beforePinch = state;
+    state = apply(state, pinch([
+      { pointerId: 3, x: 120, y: 80 },
+      { pointerId: 4, x: 220, y: 80 },
+    ]));
+    expect(state).toMatchObject({ x: beforePinch.x, y: beforePinch.y, zoom: beforePinch.zoom });
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 4,
+      clientX: 260,
+      clientY: 80,
+    });
+    const beforeLift = state;
+    state = apply(state, {
+      type: "pointer-up",
+      pointerId: 4,
+      clientX: 260,
+      clientY: 80,
+    });
+    expect(state).toMatchObject({ x: beforeLift.x, y: beforeLift.y, zoom: beforeLift.zoom });
+    expect(state.gesture).toMatchObject({ kind: "pan", pointerId: 3, startX: 120, originX: beforeLift.x });
+
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 3,
+      clientX: 130,
+      clientY: 80,
+    });
+    expect(state.x).toBeCloseTo(beforeLift.x + 10);
+    state = apply(state, {
+      type: "pointer-up",
+      pointerId: 3,
+      clientX: 130,
+      clientY: 80,
+    });
+    expect(state.gesture).toBeNull();
+  });
+
+  it("rebases predictably when a third contact joins or one contact is cancelled", () => {
+    let state = apply(INITIAL_CANVAS_VIEWPORT, pinch([
+      { pointerId: 1, x: 100, y: 100 },
+      { pointerId: 2, x: 200, y: 100 },
+    ]));
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 2,
+      clientX: 240,
+      clientY: 100,
+    });
+    const beforeThird = state;
+    state = apply(state, pinch([
+      { pointerId: 1, x: 100, y: 100 },
+      { pointerId: 2, x: 240, y: 100 },
+      { pointerId: 3, x: 170, y: 200 },
+    ]));
+    expect(state).toMatchObject({ x: beforeThird.x, y: beforeThird.y, zoom: beforeThird.zoom });
+
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 3,
+      clientX: 170,
+      clientY: 230,
+    });
+    const beforeCancel = state;
+    state = apply(state, { type: "pointer-cancel", pointerId: 1 });
+    expect(state).toMatchObject({ x: beforeCancel.x, y: beforeCancel.y, zoom: beforeCancel.zoom });
+    expect(state.gesture).toMatchObject({ kind: "pinch" });
+    if (state.gesture?.kind !== "pinch") throw new Error("Expected a rebased pinch");
+    expect(state.gesture.contacts.map(({ pointerId }) => pointerId)).toEqual([2, 3]);
+  });
+
+  it("clamps pinch zoom without letting the anchored material point drift", () => {
+    const before: CanvasViewportState = {
+      ...INITIAL_CANVAS_VIEWPORT,
+      x: 30,
+      y: -10,
+      zoom: 1.7,
+    };
+    let state = apply(before, pinch([
+      { pointerId: 1, x: 100, y: 100 },
+      { pointerId: 2, x: 200, y: 100 },
+    ]));
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 2,
+      clientX: 400,
+      clientY: 100,
+    });
+    expect(state.zoom).toBe(MAX_CANVAS_ZOOM);
+    const currentCenterX = 250;
+    const currentCenterY = 100;
+    expect((currentCenterX - state.x) / state.zoom).toBeCloseTo((150 - before.x) / before.zoom);
+    expect((currentCenterY - state.y) / state.zoom).toBeCloseTo((100 - before.y) / before.zoom);
+
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 1,
+      clientX: 120,
+      clientY: 130,
+    });
+    state = apply(state, {
+      type: "pointer-move",
+      pointerId: 2,
+      clientX: 420,
+      clientY: 130,
+    });
+    expect(state.zoom).toBe(MAX_CANVAS_ZOOM);
+    expect((270 - state.x) / state.zoom).toBeCloseTo((150 - before.x) / before.zoom);
+    expect((130 - state.y) / state.zoom).toBeCloseTo((100 - before.y) / before.zoom);
+  });
+
+  it("clears multi-touch ownership after lost capture and lifecycle cancellation", () => {
+    let state = apply(INITIAL_CANVAS_VIEWPORT, pinch([
+      { pointerId: 1, x: 100, y: 100 },
+      { pointerId: 2, x: 200, y: 100 },
+    ]));
+    state = apply(state, { type: "lost-pointer-capture", pointerId: 1 });
+    expect(state.gesture).toMatchObject({ kind: "pan", pointerId: 2, dragging: true });
+    state = apply(state, { type: "gesture-cancel" });
+    expect(state.gesture).toBeNull();
   });
 
   it("normalizes wheel delta modes and pans opposite the scroll delta", () => {

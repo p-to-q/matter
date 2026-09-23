@@ -42,6 +42,7 @@ import {
   resolveMaterialFileTreeKey,
 } from "./material-file-tree";
 import type { MatterLocale } from "../config/locales";
+import { isEmptyMaterialDocument } from "../tree/document-root";
 
 export type MaterialFilesProps = Readonly<{
   /**
@@ -1065,7 +1066,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
           >
             {files.length === 0 ? (
             <p className="material-files__empty">
-              {emptyIndexMessage(props.tree.rootId, mode, visibleQuery, copy)}
+              {emptyIndexMessage(props.tree, mode, visibleQuery, copy)}
             </p>
           ) : (
             <ul
@@ -1419,12 +1420,12 @@ function PixelIdenticon() {
 }
 
 function emptyIndexMessage(
-  rootId: string | null,
+  tree: ThoughtTree,
   mode: IndexMode,
   query: string,
   copy: MaterialFilesCopy,
 ): string {
-  if (rootId === null) return copy.emptyFirstThought;
+  if (isEmptyMaterialDocument(tree)) return copy.emptyFirstThought;
   if (mode === "search") {
     return query.trim().length === 0 ? copy.emptyTypeToFind : copy.emptyNoMatches;
   }

@@ -763,6 +763,43 @@ test("independent index scrolling cannot revoke a canvas-owned lasso stroke", as
   await page.mouse.up();
 });
 
+test("orientation change releases a mouse-owned lasso stroke without leaving Lasso", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.circleSelectLanguage,
+    exact: true,
+  }).click();
+  await settleLassoGeometry(page);
+
+  const shell = page.locator("main.matter-shell");
+  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  if (paper === null) throw new Error("paper is not visible");
+  await page.mouse.move(paper.x + 48, paper.y + 96);
+  await page.mouse.down();
+  await page.mouse.move(paper.x + 128, paper.y + 136, { steps: 6 });
+  await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
+  await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", / L /);
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(true);
+
+  await page.evaluate(() => window.dispatchEvent(new Event("orientationchange")));
+  await expect(page.locator(".lasso-layer")).not.toHaveAttribute("data-drawing", "true");
+  await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", "");
+  await expect(shell).toHaveAttribute("data-lasso-mode", "true");
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("blur"));
+    window.dispatchEvent(new PageTransitionEvent("pagehide"));
+  });
+  await expect(page.locator(".lasso-layer")).not.toHaveAttribute("data-drawing", "true");
+  await expect(page.locator(".lasso-ink__trace")).toHaveAttribute("d", "");
+  await expect(shell).toHaveAttribute("data-lasso-mode", "true");
+  await expect.poll(() => shell.evaluate((element) => element.hasPointerCapture(1))).toBe(false);
+  // Synthetic lifecycle events do not release Playwright's physical mouse.
+  await page.mouse.up();
+});
+
 test("one Full-view punctuation segment keeps the full canvas and reveals both grips", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");

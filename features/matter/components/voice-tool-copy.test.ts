@@ -9,6 +9,8 @@ describe("voice tool copy", () => {
 
     expect(Object.values(copy).every((label) => label.length > 0)).toBe(true);
     expect(copy.stopRecording).not.toBe(copy.preparingVoiceInput);
+    expect(copy.recordRewriteDirection).not.toBe(copy.recordBelowSelectedMaterial);
+    expect(copy.stopRewriteDirection).not.toBe(copy.recordRewriteDirection);
     // The rail and nearby feedback intentionally duplicate the safe completion
     // action: one stays in the fixed tool vocabulary, the other sits beside
     // the live recording state.

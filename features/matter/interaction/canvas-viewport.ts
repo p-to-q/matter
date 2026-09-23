@@ -7,10 +7,19 @@ const TOUCH_DRAG_THRESHOLD = 8;
 const WHEEL_LINE_CSS_PX = 16;
 const WHEEL_PAGE_CSS_PX = 800;
 const WHEEL_ZOOM_RATE = 0.002;
+const MIN_PINCH_SPREAD_CSS_PX = 1;
+const MAX_PINCH_CONTACTS = 10;
 
 export type CanvasPointerType = "mouse" | "pen" | "touch";
 
-export type CanvasViewportGesture = Readonly<{
+export type CanvasTouchContact = Readonly<{
+  pointerId: number;
+  x: number;
+  y: number;
+}>;
+
+type CanvasPanGesture = Readonly<{
+  kind: "pan";
   pointerId: number;
   pointerType: CanvasPointerType;
   startX: number;
@@ -21,6 +30,20 @@ export type CanvasViewportGesture = Readonly<{
   originY: number;
   dragging: boolean;
 }>;
+
+type CanvasPinchGesture = Readonly<{
+  kind: "pinch";
+  contacts: readonly CanvasTouchContact[];
+  originCenterX: number;
+  originCenterY: number;
+  originSpread: number;
+  originX: number;
+  originY: number;
+  originZoom: number;
+  dragging: true;
+}>;
+
+export type CanvasViewportGesture = CanvasPanGesture | CanvasPinchGesture;
 
 export type CanvasViewportState = Readonly<{
   x: number;
@@ -82,8 +105,13 @@ export type CanvasViewportEvent =
       clientX: number;
       clientY: number;
     }>
+  | Readonly<{
+      type: "pinch-start";
+      contacts: readonly CanvasTouchContact[];
+    }>
   | Readonly<{ type: "pointer-cancel"; pointerId: number }>
   | Readonly<{ type: "lost-pointer-capture"; pointerId: number }>
+  | Readonly<{ type: "gesture-cancel" }>
   | Readonly<{
       type: "wheel";
       surfaceX: number;
@@ -117,7 +145,12 @@ function isFiniteNumber(value: number): boolean {
 function freezeGesture(
   gesture: CanvasViewportGesture | null,
 ): CanvasViewportGesture | null {
-  return gesture === null ? null : Object.freeze({ ...gesture });
+  if (gesture === null) return null;
+  if (gesture.kind === "pan") return Object.freeze({ ...gesture });
+  return Object.freeze({
+    ...gesture,
+    contacts: Object.freeze(gesture.contacts.map((contact) => Object.freeze({ ...contact }))),
+  });
 }
 
 function success(
@@ -144,6 +177,21 @@ export const INITIAL_CANVAS_VIEWPORT: CanvasViewportState = Object.freeze({
 });
 
 function isValidGesture(gesture: CanvasViewportGesture): boolean {
+  if (gesture.kind === "pinch") {
+    return (
+      isValidPinchContacts(gesture.contacts) &&
+      isFiniteNumber(gesture.originCenterX) &&
+      isFiniteNumber(gesture.originCenterY) &&
+      isFiniteNumber(gesture.originSpread) &&
+      gesture.originSpread >= 0 &&
+      isFiniteNumber(gesture.originX) &&
+      isFiniteNumber(gesture.originY) &&
+      isFiniteNumber(gesture.originZoom) &&
+      gesture.originZoom >= MIN_CANVAS_ZOOM &&
+      gesture.originZoom <= MAX_CANVAS_ZOOM &&
+      gesture.dragging === true
+    );
+  }
   return (
     Number.isSafeInteger(gesture.pointerId) &&
     gesture.pointerId >= 0 &&
@@ -191,6 +239,53 @@ function validPoint(x: number, y: number): boolean {
   return isFiniteNumber(x) && isFiniteNumber(y);
 }
 
+function isValidPinchContacts(
+  contacts: readonly CanvasTouchContact[],
+): contacts is readonly [CanvasTouchContact, CanvasTouchContact, ...CanvasTouchContact[]] {
+  if (contacts.length < 2 || contacts.length > MAX_PINCH_CONTACTS) return false;
+  const pointerIds = new Set<number>();
+  for (const contact of contacts) {
+    if (
+      !validPointerId(contact.pointerId) ||
+      !validPoint(contact.x, contact.y) ||
+      pointerIds.has(contact.pointerId)
+    ) return false;
+    pointerIds.add(contact.pointerId);
+  }
+  return true;
+}
+
+function pinchGeometry(contacts: readonly CanvasTouchContact[]): Readonly<{
+  centerX: number;
+  centerY: number;
+  spread: number;
+}> {
+  const centerX = contacts.reduce((sum, contact) => sum + contact.x, 0) / contacts.length;
+  const centerY = contacts.reduce((sum, contact) => sum + contact.y, 0) / contacts.length;
+  const spread = Math.sqrt(contacts.reduce((sum, contact) => (
+    sum + (contact.x - centerX) ** 2 + (contact.y - centerY) ** 2
+  ), 0) / contacts.length);
+  return { centerX, centerY, spread };
+}
+
+function createPinchGesture(
+  state: CanvasViewportState,
+  contacts: readonly CanvasTouchContact[],
+): CanvasPinchGesture {
+  const geometry = pinchGeometry(contacts);
+  return {
+    kind: "pinch",
+    contacts,
+    originCenterX: geometry.centerX,
+    originCenterY: geometry.centerY,
+    originSpread: geometry.spread,
+    originX: state.x,
+    originY: state.y,
+    originZoom: state.zoom,
+    dragging: true,
+  };
+}
+
 function unchanged(state: CanvasViewportState): CanvasViewportResult {
   return success(state);
 }
@@ -209,9 +304,52 @@ function movePointer(
   }
 
   const gesture = state.gesture;
-  if (gesture === null || gesture.pointerId !== pointerId) {
+  if (gesture === null) {
     return unchanged(state);
   }
+
+  if (gesture.kind === "pinch") {
+    if (!gesture.contacts.some((contact) => contact.pointerId === pointerId)) {
+      return unchanged(state);
+    }
+    const contacts = gesture.contacts.map((contact) => contact.pointerId === pointerId
+      ? { ...contact, x: clientX, y: clientY }
+      : contact);
+    const geometry = pinchGeometry(contacts);
+    if (gesture.originSpread < MIN_PINCH_SPREAD_CSS_PX) {
+      const x = state.x + geometry.centerX - gesture.originCenterX;
+      const y = state.y + geometry.centerY - gesture.originCenterY;
+      if (!isFiniteNumber(x) || !isFiniteNumber(y)) return failure("VIEWPORT_OVERFLOW");
+      const next = { ...state, x, y };
+      return success({
+        ...next,
+        userMoved: state.userMoved || x !== state.x || y !== state.y,
+        gesture: createPinchGesture(next, contacts),
+      });
+    }
+    const zoom = Math.min(
+      MAX_CANVAS_ZOOM,
+      Math.max(MIN_CANVAS_ZOOM, gesture.originZoom * geometry.spread / gesture.originSpread),
+    );
+    const worldX = (gesture.originCenterX - gesture.originX) / gesture.originZoom;
+    const worldY = (gesture.originCenterY - gesture.originY) / gesture.originZoom;
+    const x = geometry.centerX - worldX * zoom;
+    const y = geometry.centerY - worldY * zoom;
+    if (!isFiniteNumber(x) || !isFiniteNumber(y) || !isFiniteNumber(zoom)) {
+      return failure("VIEWPORT_OVERFLOW");
+    }
+    const moved = x !== state.x || y !== state.y || zoom !== state.zoom;
+    return success({
+      ...state,
+      x,
+      y,
+      zoom,
+      userMoved: state.userMoved || moved,
+      gesture: { ...gesture, contacts },
+    });
+  }
+
+  if (gesture.pointerId !== pointerId) return unchanged(state);
 
   const deltaX = clientX - gesture.startX;
   const deltaY = clientY - gesture.startY;
@@ -280,6 +418,7 @@ export function reduceCanvasViewport(
       return success({
         ...state,
         gesture: {
+          kind: "pan",
           pointerId: event.pointerId,
           pointerType: event.pointerType,
           startX: event.clientX,
@@ -301,6 +440,19 @@ export function reduceCanvasViewport(
         event.clientY,
       );
 
+    case "pinch-start": {
+      if (!isValidPinchContacts(event.contacts)) {
+        return failure("INVALID_POINTER");
+      }
+      if (state.gesture?.kind === "pan" && state.gesture.pointerType !== "touch") {
+        return unchanged(state);
+      }
+      return success({
+        ...state,
+        gesture: createPinchGesture(state, event.contacts),
+      });
+    }
+
     case "pointer-up": {
       const moved = movePointer(
         state,
@@ -308,7 +460,41 @@ export function reduceCanvasViewport(
         event.clientX,
         event.clientY,
       );
-      if (!moved.ok || moved.state.gesture?.pointerId !== event.pointerId) {
+      if (!moved.ok) return moved;
+      const gesture = moved.state.gesture;
+      if (gesture === null) return moved;
+      if (gesture.kind === "pinch") {
+        if (!gesture.contacts.some((contact) => contact.pointerId === event.pointerId)) {
+          return moved;
+        }
+        const contacts = gesture.contacts.filter((contact) => contact.pointerId !== event.pointerId);
+        if (contacts.length >= 2) {
+          return success({
+            ...moved.state,
+            gesture: createPinchGesture(moved.state, contacts),
+          });
+        }
+        if (contacts.length === 1) {
+          const [contact] = contacts;
+          return success({
+            ...moved.state,
+            gesture: {
+              kind: "pan",
+              pointerId: contact.pointerId,
+              pointerType: "touch",
+              startX: contact.x,
+              startY: contact.y,
+              lastX: contact.x,
+              lastY: contact.y,
+              originX: moved.state.x,
+              originY: moved.state.y,
+              dragging: true,
+            },
+          });
+        }
+        return success({ ...moved.state, gesture: null });
+      }
+      if (gesture.pointerId !== event.pointerId) {
         return moved;
       }
       return success({ ...moved.state, gesture: null });
@@ -319,11 +505,42 @@ export function reduceCanvasViewport(
       if (!validPointerId(event.pointerId)) {
         return failure("INVALID_POINTER");
       }
-      if (state.gesture?.pointerId !== event.pointerId) {
+      const gesture = state.gesture;
+      if (gesture === null) return unchanged(state);
+      if (gesture.kind === "pinch") {
+        const contacts = gesture.contacts.filter((contact) => contact.pointerId !== event.pointerId);
+        if (contacts.length === gesture.contacts.length) return unchanged(state);
+        if (contacts.length >= 2) {
+          return success({ ...state, gesture: createPinchGesture(state, contacts) });
+        }
+        if (contacts.length === 1) {
+          const [contact] = contacts;
+          return success({
+            ...state,
+            gesture: {
+              kind: "pan",
+              pointerId: contact.pointerId,
+              pointerType: "touch",
+              startX: contact.x,
+              startY: contact.y,
+              lastX: contact.x,
+              lastY: contact.y,
+              originX: state.x,
+              originY: state.y,
+              dragging: true,
+            },
+          });
+        }
+        return success({ ...state, gesture: null });
+      }
+      if (gesture.pointerId !== event.pointerId) {
         return unchanged(state);
       }
       return success({ ...state, gesture: null });
     }
+
+    case "gesture-cancel":
+      return state.gesture === null ? unchanged(state) : success({ ...state, gesture: null });
 
     case "wheel": {
       if (!validPoint(event.surfaceX, event.surfaceY)) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MATTER_LOCALES } from "../config/locales";
+import type { ThoughtTree } from "../tree/model";
 import {
   canReplayTreeHistory,
   commitTreeCommand,
@@ -16,8 +17,10 @@ import { relocalizeSeededSession } from "./seeded-session-localization";
 import {
   SEEDED_PASSAGE_KEYS,
   seededMaterialCopy,
+  seededNodeLabel,
   seededNodeText,
 } from "./seeded-material-copy";
+import { seededFixedLabels } from "./seeded-labels";
 import { seededBranchTexts } from "./seeded-branch-copy";
 import {
   seededFallbackBranchTexts,
@@ -35,10 +38,18 @@ describe("localized seeded material copy", () => {
       const copy = seededMaterialCopy(locale);
       expect(copy.title.trim()).not.toBe("");
       expect(Object.keys(copy.nodes).sort()).toEqual([...SEEDED_PASSAGE_KEYS].sort());
+      expect(Object.keys(copy.labels).sort()).toEqual([...SEEDED_PASSAGE_KEYS].sort());
+      const maxLabelGraphemes = locale === "zh-CN" || locale === "zh-TW"
+        ? 14
+        : locale === "ja-JP" ? 20 : 32;
       for (const key of SEEDED_PASSAGE_KEYS) {
         expect(copy.nodes[key].trim()).not.toBe("");
+        expect(copy.labels[key].trim()).not.toBe("");
+        expect(graphemeLength(copy.labels[key])).toBeLessThanOrEqual(maxLabelGraphemes);
+        expect(seededNodeLabel(locale, key)).toBe(copy.labels[key]);
         expect(seededBranchTexts(locale, key).length).toBeGreaterThan(0);
       }
+      expect(new Set(Object.values(copy.labels)).size).toBe(SEEDED_PASSAGE_KEYS.length);
       expect(seededFallbackBranchTexts(locale).every((text) => text.trim().length > 0))
         .toBe(true);
       expect(seededBranchTexts(locale, "root")[0])
@@ -47,6 +58,23 @@ describe("localized seeded material copy", () => {
     for (const key of SEEDED_PASSAGE_KEYS) {
       expect(seededInitialNodeText(key)).toBe(seededNodeText("zh-CN", key));
     }
+  });
+
+  it.each(MATTER_LOCALES)("fixes every canonical seed label in %s without claiming edited material", (locale) => {
+    const fixture = createSeededDocument("expanded");
+    const localized = relocalizeSeededSession(fixture.tree, fixture.history, locale);
+    if (!localized.ok) throw new Error(localized.errorCode);
+    const labels = seededFixedLabels(localized.tree, locale);
+
+    expect(labels.size).toBe(SEEDED_PASSAGE_KEYS.length);
+    for (const [key, nodeId] of Object.entries(SEEDED_DOCUMENT_NODE_IDS)) {
+      expect(labels.get(nodeId)).toBe(seededNodeLabel(locale, key as keyof typeof SEEDED_DOCUMENT_NODE_IDS));
+    }
+
+    const edited = structuredClone(localized.tree) as ThoughtTree;
+    edited.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime].text = "A person changed this passage.";
+    edited.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime].updatedAt = "2026-08-24T12:00:00.000Z";
+    expect(seededFixedLabels(edited, locale).has(SEEDED_DOCUMENT_NODE_IDS.imaginedTime)).toBe(false);
   });
 
   it.each(MATTER_LOCALES)("relocalizes one valid, identity-stable %s document", (locale) => {
@@ -150,7 +178,12 @@ describe("localized seeded material copy", () => {
 
     const undone = undoTreeHistory(localized.tree, localized.history);
     if (!undone.ok) throw new Error(undone.error.code);
-    expect(undone.tree.nodes[root.id].text).toBe(root.text);
+    expect(undone.tree.nodes[root.id].text).toBe(seededNodeText("en-US", "root"));
+
+    const relocalized = relocalizeSeededSession(undone.tree, undone.history, "de-DE");
+    if (!relocalized.ok) throw new Error(relocalized.errorCode);
+    expect(relocalized.tree.nodes[root.id].text).toBe(seededNodeText("de-DE", "root"));
+    expect(canReplayTreeHistory(relocalized.tree, relocalized.history)).toBe(true);
   });
 
   it("rejects an inexact journal rather than repairing or partially localizing it", () => {
@@ -186,3 +219,9 @@ describe("localized seeded material copy", () => {
       });
   });
 });
+
+const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
+
+function graphemeLength(value: string): number {
+  return [...GRAPHEME_SEGMENTER.segment(value)].length;
+}

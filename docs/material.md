@@ -198,9 +198,10 @@ a clause inside it.
 ## Lineage
 
 One document has one structural root, but that root is not material. Its ordered
-children are the visible first-level passages. Speaking with a visible passage
-selected adds a child beneath that passage; speaking with no selection adds a
-first-level passage. Dropping a passage onto another
+children are the visible first-level passages. Speaking with no passage selected
+adds a first-level passage. Speaking after selecting an existing passage supplies
+Point and Talk's transient whole-node rewrite direction instead of adding a
+child. Dropping a passage onto another
 passage makes it a child; dropping into a sibling gap changes its exact order;
 dropping on unrelated paper attaches it to the structural root as a first-level
 passage. The canvas title is separate document metadata and may be renamed
@@ -248,9 +249,11 @@ selection to the stretch lifecycle until capture is idle again. The semantic
 lasso address may remain transiently available for revalidation. An
 already-submitted Elastic job keeps its immutable basis, but delivery cannot
 coexist with capture, a hidden page, an active pointer, or an invisible target.
-Point and Talk publishes one whole-node Text Swap address from the passage-local
-AI mark. Its direction, recording, request, and status are transient; Full-view
-Voice admission remains separate and unchanged.
+Point and Talk publishes one whole-node Text Swap address from either the
+passage-local AI mark or a selected passage followed by fixed Voice. Its
+direction, recording, request, and status are transient; Voice with no selected
+passage remains separate human-material admission. An already-submitted Point
+and Talk job likewise keeps its immutable basis when its presentation detaches.
 
 The two grips own one degree and one downward presentation band. Pulling the
 lower grip down keeps prefix and selection fixed and moves the suffix down.

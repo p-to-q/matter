@@ -17,6 +17,35 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-22 — Preview.58 keeps material interactions quiet without hiding state
+
+Changed: the untouched built-in seed now relocalizes its title, passages, and
+fixed directory names across the five supported locales without asking Label,
+while authored material remains byte-exact. Search focus keeps only the cursor
+and ink cue: it adds neither a shell nor an underline. Selecting a whole passage
+keeps the canvas visually stable and routes the rail's fixed Voice action through
+the existing bounded Text Swap turn. Touch canvas navigation now promotes two to
+ten contacts into one centroid-anchored camera gesture, hands the last contact
+back to pan, and cancels atomically on interruption. Point Talk treats transient
+software-keyboard viewport loss as presentation loss rather than lost authority;
+its Voice owner accepts WebKit audio context, lower-frequency recorder chunks,
+and native-speech-unavailable fallback without retrying a denied microphone.
+The rail retains one fixed `44px` by `44px`, `13px`-radius plate: hover and press
+shrink its icon, release overshoots only the icon, and selected tools return to
+the original dark plate with light artwork. Ask Matter again keeps its white
+primary surface, and the upper-right, lower-right, and lower-left chrome share
+the same explicit corner axes.
+
+Why: product-owned example copy, human-authored material, camera contacts,
+submitted Voice work, and transient chrome each need one visible owner. The
+previous regressions either exposed browser focus decoration, mistook a mobile
+viewport transition for cancellation, or changed geometry to communicate state.
+
+Forecloses: translating ambiguous human text; generating built-in directory
+names; a second rewrite protocol; document-owned pinch state; a mobile-only
+Voice stack; fallback after permission denial; variable hover-chip geometry;
+card-flip selection; and compensating corner alignment with per-control nudges.
+
 ## 2026-09-18 — Repair buys one completable attempt, not two nominal ones
 
 Changed: transcript repair again gives its first model-pool candidate at most

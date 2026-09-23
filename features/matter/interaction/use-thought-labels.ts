@@ -23,6 +23,8 @@ export function useThoughtLabels(input: Readonly<{
   tree: ThoughtTree;
   documentEpoch: number;
   locale?: string;
+  /** Product-owned names that must never spend or accept a model request. */
+  fixedLabels?: ReadonlyMap<string, string>;
   /**
    * Off for the performance receipt, which measures the material path and must
    * not have label work attributed to it.
@@ -65,9 +67,13 @@ export function useThoughtLabels(input: Readonly<{
   const observe = useCallback(
     (nodeIds: readonly string[]) => {
       if (!enabled) return;
-      driver.observe({ tree: input.tree, documentEpoch: input.documentEpoch }, nodeIds);
+      driver.observe(
+        { tree: input.tree, documentEpoch: input.documentEpoch },
+        nodeIds,
+        input.fixedLabels,
+      );
     },
-    [driver, enabled, input.documentEpoch, input.tree],
+    [driver, enabled, input.documentEpoch, input.fixedLabels, input.tree],
   );
   const rename = useCallback(
     (nodeId: string, label: string) => driver.rename(nodeId, label),

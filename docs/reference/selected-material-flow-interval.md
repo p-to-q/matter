@@ -143,6 +143,11 @@ reading-corridor topology. It keeps its current light/dark density and never
 acquires Elastic grips. The old label paint remains a fallback until all row
 paths are confirmed painted, preventing a focus-ring-only frame.
 
+That fallback is paint-only. Selection may not add padding, border width, font
+metrics, or any other box-model input to its inline wrapper. The measured
+address layer owns optical outset and rounding. Tapping material therefore
+cannot rewrap a line merely to show its structural address.
+
 A non-collapsed, single browser Range inside one material text node uses the
 same neutral outline authority without grips or slot. The browser Selection
 remains the copy and accessibility authority. Native range ownership

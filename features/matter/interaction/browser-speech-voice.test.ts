@@ -266,6 +266,19 @@ describe("BrowserSpeechVoicePort", () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it("keeps speech-service refusal distinct from microphone denial", async () => {
+    FakeRecognition.autoStart = false;
+    (globalThis as { window?: unknown }).window = {
+      SpeechRecognition: FakeRecognition,
+      setTimeout,
+      clearTimeout,
+    } as unknown as Window;
+    const port = new BrowserSpeechVoicePort();
+    const started = port.start(OPERATION);
+    FakeRecognition.instance?.onerror?.({ error: "service-not-allowed" });
+    await expect(started).rejects.toMatchObject({ code: "VOICE_UNSUPPORTED" });
+  });
+
   it("does not leave a first browser start waiting forever", async () => {
     vi.useFakeTimers();
     FakeRecognition.autoStart = false;

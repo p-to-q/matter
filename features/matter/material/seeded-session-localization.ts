@@ -74,7 +74,6 @@ export const relocalizeSeededSession: SeededSessionRelocalizer = (
     return localizationFailure("SEED_LOCALIZATION_INVALID_HISTORY", tree, history);
   }
 
-  const textDetachedNodeIds = textDetachedSeedNodeIds(history);
   let candidateTree = tree;
   let treeChanged = false;
 
@@ -82,7 +81,6 @@ export const relocalizeSeededSession: SeededSessionRelocalizer = (
     const node = candidateTree.nodes[spec.id];
     if (
       node === undefined ||
-      textDetachedNodeIds.has(node.id) ||
       !isOwnedSeedNode(node, spec)
     ) {
       continue;
@@ -115,7 +113,6 @@ export const relocalizeSeededSession: SeededSessionRelocalizer = (
 
   if (
     typeof candidateTree.title === "string" &&
-    !historyHasTitleReplacement(history) &&
     isCanonicalSeededTitle(candidateTree.title)
   ) {
     const title = seededMaterialCopy(locale).title;
@@ -140,7 +137,7 @@ export const relocalizeSeededSession: SeededSessionRelocalizer = (
     }
   }
 
-  const localizedHistory = localizeSeededHistory(history, locale, textDetachedNodeIds);
+  const localizedHistory = localizeSeededHistory(history, locale);
   if (localizedHistory === null || !canReplayTreeHistory(candidateTree, localizedHistory.history)) {
     return localizationFailure("SEED_LOCALIZATION_INVALID_HISTORY", tree, history);
   }
@@ -162,13 +159,9 @@ function isOwnedSeedNode(node: ThoughtNode, spec: BootstrapNode): boolean {
     isCanonicalSeededNodeText(spec.copyKey, node.text);
 }
 
-function historyEntries(history: TreeHistory): readonly TreeHistoryEntry[] {
-  return [...history.entries, ...(history.redoEntries ?? [])];
-}
-
 function historyBytesAreExact(history: TreeHistory): boolean {
   let total = 0;
-  for (const entry of historyEntries(history)) {
+  for (const entry of [...history.entries, ...(history.redoEntries ?? [])]) {
     const bytes = estimateSerializedInverseBytes(entry.inverse);
     if (entry.retainedInverseBytes !== bytes) return false;
     total += bytes;
@@ -177,32 +170,12 @@ function historyBytesAreExact(history: TreeHistory): boolean {
   return total === history.retainedInverseBytes;
 }
 
-function textDetachedSeedNodeIds(history: TreeHistory): ReadonlySet<string> {
-  const detached = new Set<string>();
-  for (const entry of historyEntries(history)) {
-    const mutation = entry.inverse.mutation;
-    if (mutation.type === "replace-text" && BOOTSTRAP_BY_ID.has(mutation.nodeId)) {
-      detached.add(mutation.nodeId);
-    }
-  }
-  return detached;
-}
-
-function historyHasTitleReplacement(history: TreeHistory): boolean {
-  return historyEntries(history).some(({ inverse }) => inverse.mutation.type === "replace-title");
-}
-
 function localizeSeededHistory(
   history: TreeHistory,
   locale: MatterLocale,
-  textDetachedNodeIds: ReadonlySet<string>,
 ): Readonly<{ changed: boolean; history: TreeHistory }> | null {
-  const entries = localizeHistoryEntries(history.entries, locale, textDetachedNodeIds);
-  const redoEntries = localizeHistoryEntries(
-    history.redoEntries ?? [],
-    locale,
-    textDetachedNodeIds,
-  );
+  const entries = localizeHistoryEntries(history.entries, locale);
+  const redoEntries = localizeHistoryEntries(history.redoEntries ?? [], locale);
   if (entries === null || redoEntries === null) return null;
   const changed = entries.changed || redoEntries.changed;
   if (!changed) return Object.freeze({ changed: false, history });
@@ -222,12 +195,11 @@ function localizeSeededHistory(
 function localizeHistoryEntries(
   entries: readonly TreeHistoryEntry[],
   locale: MatterLocale,
-  textDetachedNodeIds: ReadonlySet<string>,
 ): Readonly<{ changed: boolean; entries: TreeHistoryEntry[] }> | null {
   let changed = false;
   const localized: TreeHistoryEntry[] = [];
   for (const entry of entries) {
-    const inverse = localizeHistoryCommand(entry.inverse, locale, textDetachedNodeIds);
+    const inverse = localizeHistoryCommand(entry.inverse, locale);
     const retainedInverseBytes = estimateSerializedInverseBytes(inverse);
     if (!Number.isSafeInteger(retainedInverseBytes)) return null;
     if (inverse !== entry.inverse || retainedInverseBytes !== entry.retainedInverseBytes) {
@@ -243,59 +215,66 @@ function localizeHistoryEntries(
 function localizeHistoryCommand(
   command: TreeCommand,
   locale: MatterLocale,
-  textDetachedNodeIds: ReadonlySet<string>,
 ): TreeCommand {
-  const mutation = localizeHistoryMutation(command.mutation, locale, textDetachedNodeIds);
+  const mutation = localizeHistoryMutation(command.mutation, locale);
   return mutation === command.mutation ? command : { ...command, mutation };
 }
 
 function localizeHistoryMutation(
   mutation: TreeMutation,
   locale: MatterLocale,
-  textDetachedNodeIds: ReadonlySet<string>,
 ): TreeMutation {
   if (mutation.type === "initialize-root") {
-    const root = localizeHistoryNode(mutation.root, locale, textDetachedNodeIds);
+    const root = localizeHistoryNode(mutation.root, locale);
     return root === mutation.root ? mutation : { ...mutation, root };
   }
   if (mutation.type === "clear-root") {
     const expectedRoot = localizeHistoryNode(
       mutation.expectedRoot,
       locale,
-      textDetachedNodeIds,
     );
     return expectedRoot === mutation.expectedRoot ? mutation : { ...mutation, expectedRoot };
   }
   if (mutation.type === "insert-node") {
-    const node = localizeHistoryNode(mutation.node, locale, textDetachedNodeIds);
+    const node = localizeHistoryNode(mutation.node, locale);
     return node === mutation.node ? mutation : { ...mutation, node };
   }
   if (mutation.type === "remove-subtree" || mutation.type === "restore-subtree") {
-    const detached = localizeDetachedSubtree(mutation.detached, locale, textDetachedNodeIds);
+    const detached = localizeDetachedSubtree(mutation.detached, locale);
     return detached === mutation.detached ? mutation : { ...mutation, detached };
   }
   if (mutation.type === "move-node") {
     const expectedNode = localizeHistoryNode(
       mutation.expectedNode,
       locale,
-      textDetachedNodeIds,
     );
     return expectedNode === mutation.expectedNode ? mutation : { ...mutation, expectedNode };
   }
-  // A replace-text inverse proves that passage has left system ownership; its
-  // exact expected and replacement bytes must remain untouched.
+  if (mutation.type === "replace-text") {
+    const expectedText = localizeSeedText(mutation.nodeId, mutation.expectedText, locale);
+    const text = localizeSeedText(mutation.nodeId, mutation.text, locale);
+    return expectedText === mutation.expectedText && text === mutation.text
+      ? mutation
+      : { ...mutation, expectedText, text };
+  }
+  if (mutation.type === "replace-title") {
+    const expectedTitle = localizeSeedTitle(mutation.expectedTitle, locale);
+    const title = localizeSeedTitle(mutation.title, locale);
+    return expectedTitle === mutation.expectedTitle && title === mutation.title
+      ? mutation
+      : { ...mutation, expectedTitle, title };
+  }
   return mutation;
 }
 
 function localizeDetachedSubtree(
   detached: DetachedSubtree,
   locale: MatterLocale,
-  textDetachedNodeIds: ReadonlySet<string>,
 ): DetachedSubtree {
   let changed = false;
   const nodes: Record<string, ThoughtNode> = {};
   for (const [id, node] of Object.entries(detached.nodes)) {
-    const localized = localizeHistoryNode(node, locale, textDetachedNodeIds);
+    const localized = localizeHistoryNode(node, locale);
     nodes[id] = localized;
     changed ||= localized !== node;
   }
@@ -305,13 +284,26 @@ function localizeDetachedSubtree(
 function localizeHistoryNode(
   node: ThoughtNode,
   locale: MatterLocale,
-  textDetachedNodeIds: ReadonlySet<string>,
 ): ThoughtNode {
-  if (textDetachedNodeIds.has(node.id)) return node;
   const spec = BOOTSTRAP_BY_ID.get(node.id);
   if (spec === undefined || !isOwnedSeedNode(node, spec)) return node;
   const text = seededNodeText(locale, spec.copyKey);
   return node.text === text ? node : { ...node, text };
+}
+
+function localizeSeedText(
+  nodeId: string,
+  text: string,
+  locale: MatterLocale,
+): string {
+  const spec = BOOTSTRAP_BY_ID.get(nodeId);
+  return spec !== undefined && isCanonicalSeededNodeText(spec.copyKey, text)
+    ? seededNodeText(locale, spec.copyKey)
+    : text;
+}
+
+function localizeSeedTitle(title: string, locale: MatterLocale): string {
+  return isCanonicalSeededTitle(title) ? seededMaterialCopy(locale).title : title;
 }
 
 function localizationFailure(

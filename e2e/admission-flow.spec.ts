@@ -1,10 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import {
-  clickExposedMaterial,
-} from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
-const parentId = "thought_fixture_imagined_lives";
 const heardTranscript = "呃，我觉得我觉得这个方案可以，但是它的实现事件比预期长。";
 const repairedTranscript = "我觉得这个方案可以，但是它的实现时间比预期长。";
 // This is a functional boundary, not the performance receipt. Keep it below
@@ -16,7 +12,7 @@ for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
   { name: "narrow", width: 390, height: 844 },
 ]) {
-  test(`voice admits one undoable child thought at ${viewport.name} width`, async ({ page }) => {
+  test(`voice admits one undoable top-level thought at ${viewport.name} width`, async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -46,20 +42,8 @@ for (const viewport of [
       });
     });
 
-    if (viewport.width < 960) {
-      await page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`).click();
-    } else {
-      await clickExposedMaterial(
-        page,
-        page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`),
-      );
-    }
-    await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveAttribute(
-      "data-selected",
-      "true",
-    );
     const voice = page.getByRole("button", {
-      name: fixtureUiCopy.voiceTool.recordBelowSelectedMaterial,
+      name: fixtureUiCopy.voiceTool.recordTopLevelThought,
       exact: true,
     });
     await expect(voice).toBeEnabled();
@@ -81,12 +65,12 @@ for (const viewport of [
     await expect(feedback).toBeVisible();
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     const feedbackBox = await feedback.boundingBox();
-    const selectedBox = await page.locator(`[data-thought-id="${parentId}"]`).boundingBox();
+    const anchorBox = await page.locator('[data-thought-id="thought_fixture_root"]').boundingBox();
     expect(feedbackBox).not.toBeNull();
-    expect(selectedBox).not.toBeNull();
+    expect(anchorBox).not.toBeNull();
     // The structural commit anchor is invisible; feedback instead follows the
-    // selected visible passage and must clear every rendered language block.
-    expect(feedbackBox!.y).toBeGreaterThanOrEqual(selectedBox!.y + selectedBox!.height + 17);
+    // first visible passage and must clear every rendered language block.
+    expect(feedbackBox!.y).toBeGreaterThanOrEqual(anchorBox!.y + anchorBox!.height + 17);
     const overlaps = await page.locator("[data-thought-id]").evaluateAll((nodes, box) =>
       nodes.filter((node) => {
         const rect = node.getBoundingClientRect();
@@ -161,11 +145,7 @@ for (const viewport of [
       "true",
     );
     await expect(page.locator(".matter-guidance__next"))
-      .toHaveText("说话，让想法向下生长。");
-    await expect(page.locator(`[data-thought-id="${parentId}"]`)).toHaveAttribute(
-      "data-selected",
-      "true",
-    );
+      .toHaveText("选择一段想法。");
     await expect(page.locator("#material-files")).toHaveAttribute(
       "data-persistence-phase",
       "saved",
@@ -177,14 +157,14 @@ for (const viewport of [
       }),
     );
     const admittedId = await admitted.getAttribute("data-thought-id");
-    const parentGeometry = geometry.find(({ id }) => id === parentId);
+    const parentGeometry = geometry.find(({ id }) => id === "thought_fixture_root");
     const admittedGeometry = geometry.find(({ id }) => id === admittedId);
     expect(geometry).toHaveLength(11);
     expect(parentGeometry).toBeDefined();
     expect(admittedGeometry).toBeDefined();
-    // A selected visible passage is the durable parent, so admission moves one
-    // structural level to the right instead of becoming its sibling.
-    expect(admittedGeometry!.x).toBeGreaterThan(parentGeometry!.x);
+    // With no editing address selected, Voice admits a peer beneath the
+    // invisible document root instead of rewriting existing material.
+    expect(Math.abs(admittedGeometry!.x - parentGeometry!.x)).toBeLessThan(1);
 
     await page.reload();
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -461,12 +441,8 @@ test("reduced motion presents repaired text whole without a reveal sequence", as
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await clickExposedMaterial(
-    page,
-    page.locator(`[data-thought-id="${parentId}"] [data-thought-text-id]`),
-  );
   await page.getByRole("button", {
-    name: fixtureUiCopy.voiceTool.recordBelowSelectedMaterial,
+    name: fixtureUiCopy.voiceTool.recordTopLevelThought,
     exact: true,
   }).click();
   await page.waitForTimeout(350);

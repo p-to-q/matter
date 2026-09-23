@@ -120,12 +120,11 @@ test("the material index names a thought instead of previewing it", async ({ pag
   expect(title).toBe("被允许想象的其他生活");
   expect(material.startsWith(title)).toBe(false);
 
-  // One eligible visible passage is one question; the index arrives expanded,
-  // so it must not repeat requests while seven fixture passages stay on screen.
+  // Every built-in seed passage has a product-owned localized name. Opening
+  // the expanded index must not spend label requests on example copy.
   await expect(page.locator(".material-file")).toHaveCount(10);
-  await expect.poll(() => labelRequests.length).toBe(7);
   await page.waitForTimeout(300);
-  expect(labelRequests).toHaveLength(7);
+  expect(labelRequests).toHaveLength(0);
 });
 
 test("a name a person types survives a reload and outranks the model", async ({ page }) => {
@@ -210,10 +209,20 @@ test("a label is generated once, not once per reload", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  // Wait for the model answer to land and be written before reloading.
-  await page.waitForResponse((response) => response.url().includes("/api/label"));
+  // Seed names are fixed. A person-created Branch remains ordinary material
+  // and proves the generated-label cache without spending on the example.
+  const labelResponse = page.waitForResponse((response) => response.url().includes("/api/label"));
+  await page.getByRole("button", {
+    name: fixtureUiCopy.toolRail.extendRelatedThought,
+    exact: true,
+  }).click();
+  await expect(page.locator(".material-file")).toHaveCount(11);
+  await labelResponse;
   await page.waitForTimeout(400);
-  const first = await page.locator(".material-file__title").first().innerText();
+  const generatedRow = page.locator(".material-file").last();
+  const generatedNodeId = await generatedRow.getAttribute("data-node-id");
+  if (generatedNodeId === null) throw new Error("The generated Branch row is missing its node id.");
+  const first = await generatedRow.locator(".material-file__title").innerText();
 
   const afterReload: string[] = [];
   page.on("request", (request) => {
@@ -221,7 +230,8 @@ test("a label is generated once, not once per reload", async ({ page }) => {
   });
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  await expect(page.locator(".material-file__title").first()).toHaveText(first);
+  await expect(page.locator(`.material-file[data-node-id="${generatedNodeId}"] .material-file__title`))
+    .toHaveText(first);
   await page.waitForTimeout(600);
   expect(afterReload).toHaveLength(0);
 });

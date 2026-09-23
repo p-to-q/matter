@@ -3,6 +3,7 @@ import type {
   ReactNode,
   WheelEvent as ReactWheelEvent,
 } from "react";
+import { useState } from "react";
 import type { ToolIntent } from "../tools/model";
 import type { ProjectedToolSurface } from "../tools/project-tool-surface";
 import type { CanvasLanguage } from "./canvas-preferences";
@@ -148,18 +149,32 @@ function ToolButton({
   shortLabel,
   toolId,
 }: ToolButtonProps) {
+  const [clickMotion, setClickMotion] = useState<"a" | "b">();
+
+  function handleClick() {
+    if (!onClick) {
+      return;
+    }
+
+    // Alternate animation names so every completed activation can replay the
+    // same release motion without remounting the SVG and flashing its stroke.
+    setClickMotion((current) => current === "a" ? "b" : "a");
+    onClick();
+  }
+
   return (
     <button
       aria-label={label}
       aria-pressed={pressed}
       className="tool-rail__button"
       data-active={active || undefined}
+      data-click-motion={clickMotion}
       data-tool-emphasis={active ? "primary" : "quiet"}
       data-tool-group={group}
       data-tool-id={toolId}
       data-tool-state={disabled ? "disabled" : active ? "active" : "idle"}
       disabled={disabled}
-      onClick={onClick}
+      onClick={onClick ? handleClick : undefined}
       title={label}
       type="button"
     >

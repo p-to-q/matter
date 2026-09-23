@@ -6,6 +6,8 @@ import {
   MaterialFiles,
   type MaterialFilesProps,
 } from "./MaterialFiles";
+import { seededFixedLabels } from "../material/seeded-labels";
+import { projectMaterialFileLabels } from "./material-file-label-projection";
 
 export type MaterialFilesWithLabelsProps = Omit<
   MaterialFilesProps,
@@ -19,36 +21,32 @@ export type MaterialFilesWithLabelsProps = Omit<
  */
 export function MaterialFilesWithLabels(props: MaterialFilesWithLabelsProps) {
   const { labelsEnabled, ...materialFilesProps } = props;
+  const fixedLabels = useMemo(
+    () => seededFixedLabels(props.tree, props.locale),
+    [props.locale, props.tree],
+  );
   const labels = useThoughtLabels({
     tree: props.tree,
     documentEpoch: props.documentEpoch,
     locale: props.locale,
     enabled: labelsEnabled,
+    fixedLabels,
   });
-  const labelByNodeId = useMemo(() => {
-    const values = new Map<string, string>();
-    if (
-      labels.session.treeId !== props.tree.id ||
-      labels.session.documentEpoch !== props.documentEpoch
-    ) return values;
-    for (const [nodeId, entry] of labels.session.entries) values.set(nodeId, entry.label);
-    return values;
-  }, [labels.session, props.documentEpoch, props.tree.id]);
-  const labelOriginByNodeId = useMemo(() => {
-    const values = new Map<string, string>();
-    if (
-      labels.session.treeId !== props.tree.id ||
-      labels.session.documentEpoch !== props.documentEpoch
-    ) return values;
-    for (const [nodeId, entry] of labels.session.entries) values.set(nodeId, entry.origin);
-    return values;
-  }, [labels.session, props.documentEpoch, props.tree.id]);
+  const projectedLabels = useMemo(
+    () => projectMaterialFileLabels({
+      documentEpoch: props.documentEpoch,
+      fixedLabels,
+      session: labels.session,
+      treeId: props.tree.id,
+    }),
+    [fixedLabels, labels.session, props.documentEpoch, props.tree.id],
+  );
 
   return (
     <MaterialFiles
       {...materialFilesProps}
-      labelOrigins={labelOriginByNodeId}
-      labels={labelByNodeId}
+      labelOrigins={projectedLabels.origins}
+      labels={projectedLabels.labels}
       onRenameNode={labels.rename}
       onResetNodeName={labels.resetName}
       onVisibleNodes={labels.observe}

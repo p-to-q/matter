@@ -111,7 +111,8 @@ Text Swap is a sibling lifecycle and protocol, not an optional branch inside
 Elastic Language:
 
 ```text
-whole node click   → SegmentSelection 0..length    reference
+AI mark, or selected passage + fixed Voice
+                   → SegmentSelection 0..length    reference
 exact lasso segment remains protocol-valid         reference
 selected Voice     → bounded transient direction  direction
 Text Swap policy   → near-source length band       degree
@@ -133,6 +134,9 @@ mark freezes the complete current node as its explicit reference and lazily open
 one viewport-fixed typed/Voice direction field aligned to that passage's upper-left
 glyph bounds; Lasso remains owned only by Elastic. The full driver, Voice, and
 request graph stays out of the initial canvas bundle until that explicit click.
+Selecting a passage and pressing the fixed Voice tool creates the same complete-node
+reference and lazily loads the same driver, then starts its Voice direction directly;
+it does not create a second model path or reinterpret the transcript as admission.
 The rendering edge measures the addressed glyphs, clipped document, translated
 material plane, and visual viewport. A pure geometry policy intersects those
 surfaces, projects a bounded optical response from the current canvas zoom, and

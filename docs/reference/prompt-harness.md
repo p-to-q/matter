@@ -417,7 +417,7 @@ may be written only to a git-ignored local report.
 Text Swap is a fifth scenario behind `POST /api/text-swap` and a sibling to
 Elastic, not an Elastic prompt variant on `/api/turn`. Its reference is either
 one exact punctuation segment or the exact complete node explicitly addressed
-by the passage-local AI mark. Its direction is one transient person-authored
+by the passage-local AI mark or selected passage plus fixed Voice. Its direction is one transient person-authored
 line, its degree is a closed near-source length policy, and its lineage is the
 visible authored path. The carrier that produced the direction is deliberately
 absent from the prompt.

@@ -128,6 +128,29 @@ describe("voice readiness", () => {
     expect(FakeWorker.instances).toHaveLength(0);
   });
 
+  it("accepts the prefixed audio decoder used by older iOS WebKit", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED", "false");
+    vi.stubEnv("NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED", "true");
+    vi.stubGlobal("AudioContext", undefined);
+    vi.stubGlobal("window", {
+      setTimeout,
+      clearTimeout,
+      webkitAudioContext: class {},
+    });
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: vi.fn() },
+    });
+    vi.stubGlobal("MediaRecorder", class {});
+    vi.stubGlobal("Worker", FakeWorker);
+
+    await expect(prepareVoiceReadiness()).resolves.toEqual({
+      status: "ready",
+      transport: "audio",
+    });
+    expect(FakeWorker.instances).toHaveLength(0);
+  });
+
   it("warms the recorded-audio worker only after a person creates the voice path", async () => {
     vi.stubEnv("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED", "false");
     vi.stubEnv("NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED", "false");
