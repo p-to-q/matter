@@ -617,6 +617,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     nodeDragRef.current = null;
   }, []);
+  const cancelNodeDragOwnership = useCallback(() => {
+    const gesture = nodeDragRef.current;
+    if (gesture === null) return;
+    // Retire the transient owner before releasing capture: lostpointercapture
+    // may re-enter the shell, but it must never revive or settle this drag.
+    suppressClickRef.current = true;
+    clearNodeDrag();
+    const shell = shellRef.current;
+    if (shell?.hasPointerCapture(gesture.pointerId)) {
+      shell.releasePointerCapture(gesture.pointerId);
+    }
+  }, [clearNodeDrag]);
   const markPerformance = useCallback((name: string) => {
     if (!props.performanceMarking || typeof window === "undefined") return;
     window.performance.mark(name);
@@ -935,17 +947,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useEffect(() => {
     const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
       const gesture = nodeDragRef.current;
-      const shell = shellRef.current;
-      if (event.key !== "Escape" || gesture === null || shell === null) return;
+      if (event.key !== "Escape" || gesture === null) return;
       event.preventDefault();
-      suppressClickRef.current = true;
-      clearNodeDrag();
-      if (shell.hasPointerCapture(gesture.pointerId)) shell.releasePointerCapture(gesture.pointerId);
+      cancelNodeDragOwnership();
     };
     window.addEventListener("keydown", cancelMoveFromKeyboard);
     return () => window.removeEventListener("keydown", cancelMoveFromKeyboard);
-  }, [clearNodeDrag]);
-  useEffect(() => () => clearNodeDrag(), [clearNodeDrag, props.documentEpoch, navigation.mode, tree.revision]);
+  }, [cancelNodeDragOwnership]);
+  useEffect(
+    () => () => cancelNodeDragOwnership(),
+    [cancelNodeDragOwnership, props.documentEpoch, navigation.mode, tree.revision],
+  );
   const elasticRef = useRef<HTMLDivElement>(null);
   const actionableAddressLayerRef = useRef<HTMLDivElement>(null);
   const splitProjectionRef = useRef<HTMLDivElement>(null);
@@ -2810,13 +2822,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     lassoClickOriginNodeRef.current = null;
     pointerOriginNodeRef.current = null;
-    const nodeDragPointerId = nodeDragRef.current?.pointerId ?? null;
-    if (nodeDragPointerId !== null && shell?.hasPointerCapture(nodeDragPointerId)) {
-      shell.releasePointerCapture(nodeDragPointerId);
-    }
-    if (nodeDragPointerId !== null) clearNodeDrag();
+    cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
-  }, [clearNodeDrag, lasso, updateViewport]);
+  }, [cancelNodeDragOwnership, lasso, updateViewport]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -3369,6 +3377,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         locale={props.locale}
         onLasso={() => {
           abortFixedExpansion();
+          cancelNodeDragOwnership();
           if (lasso.active) {
             exitLasso();
             return;
@@ -3388,6 +3397,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         onMove={() => {
           abortFixedExpansion();
+          cancelNodeDragOwnership();
           if (canvasMode === "pan" && !lasso.active) {
             cancelViewportGesture();
             setCanvasMode("material");

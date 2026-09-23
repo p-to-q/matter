@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type CDPSession, type Page } from "@playwright/test";
 import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
@@ -8,6 +8,8 @@ const ALIGN_PARENT = "thought_fixture_present_distance";
 const DEEPER_PARENT = "thought_fixture_present_failure";
 const DOCUMENT_ROOT = "matter_document_root_matter_fixture_rooted_01";
 const ORIGINAL_SIBLING = "thought_fixture_imagined_relations";
+
+type TouchPoint = Readonly<{ id: number; x: number; y: number }>;
 
 test("selected material reparents by pointer while canvas pan remains an explicit mode", async ({ page }) => {
   await page.setViewportSize({ width: 2560, height: 1000 });
@@ -160,6 +162,61 @@ test("selected material reparents by pointer while canvas pan remains an explici
   await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
 });
 
+test.describe("touch node-drag ownership transfer", () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 834, height: 1112 } });
+
+  test("Lasso and Pan cancel an older finger's node drag before taking the canvas", async ({ page }) => {
+    for (const transfer of [
+      { mode: "lasso", toolId: "lasso" },
+      { mode: "pan", toolId: "move" },
+    ] as const) {
+      await page.goto("/matter");
+      await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+      await selectThoughtThroughMaterialIndex(page, SOURCE);
+
+      const shell = page.locator("main.matter-shell");
+      const source = page.locator(`[data-thought-id="${SOURCE}"]`);
+      const target = page.locator(`[data-thought-id="${DEEPER_PARENT}"]`);
+      const tool = page.locator(`[data-tool-id="${transfer.toolId}"]`);
+      const beforeRevision = await shell.getAttribute("data-tree-revision");
+      if (beforeRevision === null) throw new Error("tree revision receipt is missing");
+      const [sourceBox, targetBox] = await Promise.all([
+        source.boundingBox(),
+        target.boundingBox(),
+      ]);
+      if (sourceBox === null || targetBox === null) {
+        throw new Error(`${transfer.mode} touch ownership endpoints are not visible`);
+      }
+      const start = centre(sourceBox);
+      const drop = centre(targetBox);
+
+      const session = await page.context().newCDPSession(page);
+      try {
+        await dispatchTouch(session, "touchStart", [{ ...start, id: 1 }]);
+        await dispatchTouch(session, "touchMove", [{ ...drop, id: 1 }]);
+        await expect(source).toHaveAttribute("data-drag-source", "true");
+        await expect(target).toHaveAttribute("data-drag-over", "nest");
+
+        // Finger B taps fixed chrome while finger A remains captured by the
+        // canvas. Chrome stops propagation, so this is a direct owner transfer,
+        // not the canvas's two-contact pinch path.
+        await tool.tap();
+
+        await expect(shell).toHaveAttribute("data-canvas-mode", transfer.mode);
+        await expect(source).not.toHaveAttribute("data-drag-source", /.+/u);
+        await expect(target).not.toHaveAttribute("data-drag-over", /.+/u);
+        await expect(shell).not.toHaveAttribute("data-node-dragging", /.+/u);
+        await dispatchTouch(session, "touchEnd", []);
+        await expect(source).toHaveAttribute("data-parent-id", ORIGINAL_PARENT);
+        await expect(shell).toHaveAttribute("data-tree-revision", beforeRevision);
+      } finally {
+        await session.detach();
+      }
+      await proveTransferredToolWorks(page, transfer.mode, start);
+    }
+  });
+});
+
 test("canvas title is independent material with pointer undo", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/matter");
@@ -182,3 +239,44 @@ test("canvas title is independent material with pointer undo", async ({ page }) 
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }).click();
   await expect(page.getByRole("button", { name: originalLabel })).toBeVisible();
 });
+
+function centre(rect: Readonly<{ x: number; y: number; width: number; height: number }>) {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+async function dispatchTouch(
+  session: CDPSession,
+  type: "touchStart" | "touchMove" | "touchEnd",
+  points: readonly TouchPoint[],
+): Promise<void> {
+  await session.send("Input.dispatchTouchEvent", {
+    type,
+    touchPoints: points.map((point) => ({ ...point, radiusX: 1, radiusY: 1 })),
+  });
+}
+
+async function proveTransferredToolWorks(
+  page: Page,
+  mode: "lasso" | "pan",
+  start: Readonly<{ x: number; y: number }>,
+): Promise<void> {
+  const shell = page.locator("main.matter-shell");
+  const session = await page.context().newCDPSession(page);
+  try {
+    await dispatchTouch(session, "touchStart", [{ ...start, id: 1 }]);
+    await dispatchTouch(session, "touchMove", [{ x: start.x + 30, y: start.y + 18, id: 1 }]);
+    if (mode === "lasso") {
+      await expect(page.locator(".lasso-layer")).toHaveAttribute("data-drawing", "true");
+    } else {
+      await expect(shell).toHaveAttribute("data-dragging", "true");
+    }
+    await dispatchTouch(session, "touchEnd", []);
+    if (mode === "lasso") {
+      await expect(page.locator(".lasso-layer")).not.toHaveAttribute("data-drawing", "true");
+    } else {
+      await expect(shell).not.toHaveAttribute("data-dragging", "true");
+    }
+  } finally {
+    await session.detach();
+  }
+}
