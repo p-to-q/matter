@@ -4,7 +4,7 @@ Need: a short Matter film must show the real product surface without recording
 the operator's desktop, leaking private notifications, or disguising a
 deterministic demonstration as an unrestricted live-provider evaluation.
 
-Status: the restrained hybrid V9 workflow is implemented and has produced a
+Status: the restrained hybrid V10 workflow is implemented and has produced a
 locally reviewed candidate. Publication remains subject to the archival audio
 rights decision.
 
@@ -83,9 +83,10 @@ the request; a third root branch, one more native Branch beneath that branch so
 the paper and index both expose three levels, and a smooth native canvas zoom-out;
 Elastic release followed by an explicit click inside the shaped address; one
 branch set aside from the canvas minus control and restored from the matching
-index plus control; one real Ask Matter turn; Undo; a quiet return to the night
-paper and its tree; then the real screen simply rounds, shrinks, and exits into
-black. It omits tutorial labels, device frames, scanning light, and a feature-list
+index plus control; one real Ask Matter turn; Undo; a deliberately later native
+Move that settles the authored tree; a short reading breath; then the real
+screen simply rounds, shrinks, and exits into black. It omits tutorial labels,
+device frames, scanning light, and a feature-list
 montage. The opening credit is editorial film language, not invented product
 chrome. The supplied audio begins after the credit starts leaving, fades in for
 2.2 seconds, and fades out over its final 2.6 seconds.
@@ -94,7 +95,7 @@ The capture asserts three Transcription requests—first-material admission, the
 visible Point Talk direction, and the Ask Matter question—plus one Transform,
 one Text Swap, and one Inquiry
 request. It also records ordered story-event and opening/daylight/night
-presentation receipts, the explicit Inquiry mode, and the durable canvas title in a version-9
+presentation receipts, the explicit Inquiry mode, and the durable canvas title in a version-10
 `capture-cues.json` beside the raw WebM. The renderer accepts
 only the frozen 1600×900 capture surface and valid, non-overlapping cue windows,
 generates the transparent title and deterministic closing frames through the
@@ -111,6 +112,15 @@ bounded Bezier route with zero-velocity endpoints; the paper's own zoom-out
 remains a real sequence of four smootherstep canvas-wheel inputs and never overlaps a
 post camera move. Camera motion may clarify an action, but it may not create,
 hide, or relabel product state.
+
+Before the screencast clock starts, the harness uses Matter's native transient
+move mode to place the opening material at the center of the complete 1600×900
+frame, not merely at the center of the paper area beside the directory. The V10
+receipt rejects an off-center opening. A translucent pale veil preserves a
+hazy impression of the interface while the real captured material pixels
+remain sharp. A feathered lower-right mask suppresses only the high-contrast
+controls beneath the three-line archival credit, whose semantic line breaks
+are fixed rather than left to browser-balanced wrapping.
 
 The harness never rewrites product source to make a take pass. It requires the
 recorded product revision to expose the native quiet-ink Voice hover, the

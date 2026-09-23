@@ -21,7 +21,7 @@ import {
 } from "./render-matter-launch.mjs";
 
 const captureCues = Object.freeze({
-  version: 9,
+  version: 10,
   durationMs: 68_000,
   width: 1_600,
   height: 900,
@@ -29,7 +29,7 @@ const captureCues = Object.freeze({
     {
       name: "opening-root",
       milliseconds: 40,
-      bounds: { left: 690, top: 310, width: 520, height: 160 },
+      bounds: { left: 540, top: 370, width: 520, height: 160 },
     },
     {
       name: "about-start",
@@ -116,7 +116,7 @@ const captureCues = Object.freeze({
     "inquiry-answer": 49_000,
     "branch-restored": 51_000,
     undo: 53_000,
-    "canvas-positioned": 55_500,
+    "canvas-positioned": 59_000,
   },
 });
 
@@ -419,12 +419,12 @@ test("opening focus is derived from captured material pixels, not duplicate text
   const openingRoot = parseLaunchOpeningRootCue(captureCues);
   assert.deepEqual(openingRoot, {
     milliseconds: 40,
-    bounds: { left: 690, top: 310, width: 520, height: 160 },
+    bounds: { left: 540, top: 370, width: 520, height: 160 },
   });
   assert.equal(
     launchOpeningFocusMask(openingRoot),
     "color=c=black:s=1440x810:r=30:d=3.7,format=gray," +
-      "drawbox=x=573:y=245:w=564:h=212:color=white:t=fill,boxblur=28:2",
+      "drawbox=x=438:y=299:w=564:h=212:color=white:t=fill,boxblur=28:2",
   );
 });
 
@@ -453,6 +453,12 @@ test("ffmpeg creates one metadata-free 68-second H.264/AAC master", () => {
   assert.match(filter, /trim=duration=68/u);
   assert.match(filter, /zoompan=/u);
   assert.match(filter, /gblur=sigma=18/u);
+  assert.match(filter, /color=c=white@0\.70/u);
+  assert.match(filter, /\[opening-veil\]/u);
+  assert.match(filter, /drawbox=x=1020:y=710:w=420:h=100/u);
+  assert.match(filter, /boxblur=24:2\[opening-chrome-mask\]/u);
+  assert.match(filter, /\[deep-soft-clean\]\[opening-root-sharp\]/u);
+  assert.match(filter, /format=rgba,lut=a=255,fade=t=out/u);
   assert.match(filter, /\[opening-root-sharp\]/u);
   assert.doesNotMatch(filter, /gblur=sigma=3\.5/u);
   assert.match(filter, /maskedmerge/u);
@@ -461,8 +467,8 @@ test("ffmpeg creates one metadata-free 68-second H.264/AAC master", () => {
   assert.match(filter, /fade=t=in:st=0\.15:d=0\.45:alpha=1/u);
   assert.match(filter, /fade=t=out:st=1\.95:d=0\.7:alpha=1/u);
   assert.match(filter, /overlay=0:0[^;]*enable='lt\(t,2\.75\)'/u);
-  assert.match(filter, /setpts=PTS-STARTPTS\+65\.5\/TB/u);
-  assert.match(filter, /enable='gte\(t,65\.5\)'/u);
+  assert.match(filter, /setpts=PTS-STARTPTS\+63\.5\/TB/u);
+  assert.match(filter, /enable='gte\(t,63\.5\)'/u);
   assert.match(filter, /aresample=48000/u);
   assert.doesNotMatch(filter, /afade=/u);
   assert.doesNotMatch(filter, /atempo=/u);
@@ -496,8 +502,9 @@ test("the archival audio credit is transparent, restrained, and outside product 
   assert.match(markup, /Douglas Engelbart/u);
   assert.match(markup, /<em>The Mother of All Demos\.<\/em>/u);
   assert.match(markup, /background:transparent/u);
-  assert.match(markup, /right:48px;bottom:40px/u);
-  assert.match(markup, /font:300 21px\/1\.46 "Hiragino Sans GB"/u);
+  assert.match(markup, /right:56px;bottom:104px;width:620px/u);
+  assert.match(markup, /font-size:21px;font-weight:300;line-height:1\.38/u);
+  assert.match(markup, /<span>1968 demonstration, since known as<\/span>/u);
   assert.doesNotMatch(markup, /script|data-thought|matter-document/ui);
   assert.deepEqual(validateLaunchCreditProbe({ streams: [{
     codec_type: "video",
@@ -569,7 +576,7 @@ test("invalid launch options and camera receipts fail before rendering", () => {
     /mutually exclusive/u,
   );
   assert.throws(() => parseLaunchCaptureCues({ ...captureCues, durationMs: 63_000 }), /68-second/u);
-  assert.throws(() => parseLaunchCaptureCues({ ...captureCues, version: 8 }), /unsupported version/u);
+  assert.throws(() => parseLaunchCaptureCues({ ...captureCues, version: 9 }), /unsupported version/u);
   assert.throws(() => parseLaunchOpeningRootCue({
     ...captureCues,
     cues: captureCues.cues.filter((cue) => cue.name !== "opening-root"),
@@ -580,6 +587,12 @@ test("invalid launch options and camera receipts fail before rendering", () => {
       ? { ...cue, milliseconds: 300 }
       : cue),
   }), /after the opening settled/u);
+  assert.throws(() => parseLaunchOpeningRootCue({
+    ...captureCues,
+    cues: captureCues.cues.map((cue) => cue.name === "opening-root"
+      ? { ...cue, bounds: { ...cue.bounds, left: 690, top: 310 } }
+      : cue),
+  }), /not centered/u);
   assert.throws(() => parseLaunchCaptureCues({ ...captureCues, inquiryMode: "unknown" }), /Inquiry mode/u);
   assert.throws(() => parseLaunchCaptureCues({
     ...captureCues,
@@ -673,8 +686,8 @@ test("raw capture receipt requires one 1600x900 video stream", () => {
 });
 
 test("outro source seeks to the authored cut or the last decodable raw frame", () => {
-  assert.equal(resolveLaunchOutroFrameSeconds(68), 65.5);
-  assert.ok(Math.abs(resolveLaunchOutroFrameSeconds(64.1) - 63.85) < 1e-9);
+  assert.equal(resolveLaunchOutroFrameSeconds(68), 63.5);
+  assert.ok(Math.abs(resolveLaunchOutroFrameSeconds(62) - 61.75) < 1e-9);
   assert.throws(() => resolveLaunchOutroFrameSeconds(0), /duration/u);
 });
 

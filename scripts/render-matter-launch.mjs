@@ -15,7 +15,7 @@ const elasticPulseFrames = 14;
 const elasticPulseDepth = 0.025;
 const documentTitle = "被允许想象的其他生活";
 const creditVisibleSeconds = 2.75;
-const outroStartSeconds = 65.5;
+const outroStartSeconds = 63.5;
 const outroDurationSeconds = durationSeconds - outroStartSeconds;
 const outroFrameCount = outroDurationSeconds * framesPerSecond;
 
@@ -185,7 +185,7 @@ function parseLaunchCueMap(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Launch capture cues are invalid.");
   }
-  if (value.version !== 9) throw new Error("Launch capture cues use an unsupported version.");
+  if (value.version !== 10) throw new Error("Launch capture cues use an unsupported version.");
   if (value.durationMs !== durationSeconds * 1_000) {
     throw new Error("Launch capture cues do not describe the frozen 68-second master.");
   }
@@ -237,6 +237,13 @@ export function parseLaunchOpeningRootCue(value) {
   }
   if (openingRoot.milliseconds > 250) {
     throw new Error("The opening-root composition cue was recorded after the opening settled.");
+  }
+  const centerError = Math.max(
+    Math.abs(openingRoot.bounds.left + openingRoot.bounds.width / 2 - captureWidth / 2),
+    Math.abs(openingRoot.bounds.top + openingRoot.bounds.height / 2 - captureHeight / 2),
+  );
+  if (centerError >= 8) {
+    throw new Error("The opening material is not centered in the complete capture frame.");
   }
   return openingRoot;
 }
@@ -496,11 +503,13 @@ export function launchVideoCreditMarkup() {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
     html,body{width:${outputWidth}px;height:${outputHeight}px;margin:0;background:transparent;overflow:hidden}
     body{-webkit-font-smoothing:antialiased}
-    aside{position:absolute;right:48px;bottom:40px;max-width:820px;color:rgba(22,29,39,.7);
-      font:300 21px/1.46 "Hiragino Sans GB","Hiragino Sans","PingFang SC","Source Han Sans SC",sans-serif;
-      letter-spacing:0;text-align:right;text-wrap:balance}
-    em{font-style:italic;font-weight:350}
-  </style></head><body><aside>Archival audio excerpted from Douglas Engelbart’s 1968 demonstration, since known as <em>The Mother of All Demos.</em></aside></body></html>`;
+    aside{position:absolute;right:56px;bottom:104px;width:620px;color:rgba(22,29,39,.66);
+      font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;
+      font-size:21px;font-weight:300;line-height:1.38;letter-spacing:0;text-align:right;
+      font-kerning:normal;text-rendering:optimizeLegibility}
+    span,em{display:block}
+    em{margin-top:1px;font-style:italic;font-weight:350}
+  </style></head><body><aside><span>Archival audio excerpted from Douglas Engelbart’s</span><span>1968 demonstration, since known as</span><em>The Mother of All Demos.</em></aside></body></html>`;
 }
 
 export async function renderLaunchVideoCredit(path) {
@@ -634,10 +643,21 @@ export function launchVideoFfmpegArgs(
       `tpad=stop_mode=clone:stop_duration=${durationSeconds},` +
       `trim=duration=${durationSeconds},${camera},setsar=1,format=yuv420p[camera];` +
       `[camera]split=3[sharp][soft-source][focus-source];` +
-      `[soft-source]trim=duration=3.7,setpts=PTS-STARTPTS,gblur=sigma=18[deep-soft];` +
+      `[soft-source]trim=duration=3.7,setpts=PTS-STARTPTS,gblur=sigma=18[deep-soft-base];` +
+      `color=c=white@0.70:s=${outputWidth}x${outputHeight}:r=${framesPerSecond}:d=3.7,` +
+      `format=rgba[opening-veil];` +
+      `[deep-soft-base][opening-veil]overlay=0:0:format=auto,format=rgba[deep-soft];` +
+      // Preserve the surrounding haze; only feather away the dark chrome that
+      // would otherwise compete with the archival credit during the opening.
+      `color=c=white:s=${outputWidth}x${outputHeight}:r=${framesPerSecond}:d=3.7,` +
+      `format=rgba[opening-chrome-white];` +
+      `color=c=black:s=${outputWidth}x${outputHeight}:r=${framesPerSecond}:d=3.7,` +
+      `format=gray,drawbox=x=1020:y=710:w=420:h=100:color=white:t=fill,` +
+      `boxblur=24:2[opening-chrome-mask];` +
+      `[deep-soft][opening-chrome-white][opening-chrome-mask]maskedmerge[deep-soft-clean];` +
       `[focus-source]trim=duration=3.7,setpts=PTS-STARTPTS[opening-root-sharp];` +
       `${openingFocusMask}[focus-mask];` +
-      `[deep-soft][opening-root-sharp][focus-mask]maskedmerge,format=rgba,` +
+      `[deep-soft-clean][opening-root-sharp][focus-mask]maskedmerge,format=rgba,lut=a=255,` +
       `fade=t=out:st=2.35:d=1.3:alpha=1[soft];` +
       `[sharp][soft]overlay=0:0:eof_action=pass:shortest=0:format=auto[base];` +
       `[2:v]format=rgba,fade=t=in:st=0.15:d=0.45:alpha=1,` +

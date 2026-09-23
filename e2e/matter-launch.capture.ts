@@ -283,6 +283,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
       }).catch(() => undefined);
     }, `/matter/api/${endpoint}`);
   }));
+  await centerOpeningMaterial(page, root, paper);
   await installCapturePointer(page);
 
   let cursor: Point = { x: 86, y: 450 };
@@ -739,7 +740,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
 
     // Inquiry never enters history. Undo removes only Elastic while Point Talk
     // and all authored branches remain on the paper.
-    await at(53_300);
+    await at(55_100);
     const undo = page.locator('[data-tool-id="undo"]');
     await click(undo, 400);
     await expect(root).toHaveText(`${SOURCE}${SUFFIX}`);
@@ -755,7 +756,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     // End by using the product's real move mode to place the authored tree a
     // little higher and left. The final shot therefore explains one more tool
     // while settling the paper into a deliberately composed reading position.
-    await at(54_050);
+    await at(56_200);
     await click(move, 220);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
     const finalPaperBounds = await paper.boundingBox();
@@ -774,20 +775,20 @@ test("capture the Matter launch master", async ({ context, page }) => {
 
     // Night was established before the demonstrations. End on that same real
     // paper, then let the renderer detach it over a blurred echo of the scene.
-    await at(55_650);
+    await at(59_600);
     await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
     await expect(ambient).toHaveAttribute("data-fx", "on");
     await expect(ambient).toHaveAttribute("data-presentation", "video");
     await hideCapturePointer(page);
 
-    // Stop acting before the ending. Paper, tree, and moving night leaf light
-    // carry the hall tail without another product claim.
-    await at(56_050);
+    // Keep only a short reading breath before the ending. The previous long
+    // leaf-only hold looked like a missing action rather than intentional rest.
+    await at(60_000);
     await at(RECORDING_DURATION_MS + 120);
   } finally {
     await page.screencast.stop();
     await writeFile(resolve(runDirectory, "capture-cues.json"), `${JSON.stringify({
-      version: 9,
+      version: 10,
       durationMs: RECORDING_DURATION_MS,
       width: CAPTURE_WIDTH,
       height: CAPTURE_HEIGHT,
@@ -886,6 +887,43 @@ async function waitForAmbientMotion(page: Page, ambient: Locator): Promise<void>
   await page.evaluate(() => new Promise<void>((resolveFrame) => {
     requestAnimationFrame(() => requestAnimationFrame(() => resolveFrame()));
   }));
+}
+
+async function centerOpeningMaterial(
+  page: Page,
+  material: Locator,
+  paper: Locator,
+): Promise<void> {
+  const bounds = await material.boundingBox();
+  const paperBounds = await paper.boundingBox();
+  if (bounds === null || paperBounds === null) {
+    throw new Error("Opening material cannot be centered before capture.");
+  }
+  const delta = {
+    x: CAPTURE_WIDTH / 2 - (bounds.x + bounds.width / 2),
+    y: CAPTURE_HEIGHT / 2 - (bounds.y + bounds.height / 2),
+  };
+  const move = page.locator('[data-tool-id="move"]');
+  await move.click();
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
+  const origin = {
+    x: paperBounds.x + paperBounds.width / 2,
+    y: paperBounds.y + paperBounds.height / 2,
+  };
+  await page.mouse.move(origin.x, origin.y);
+  await page.mouse.down();
+  await page.mouse.move(origin.x + delta.x, origin.y + delta.y, { steps: 18 });
+  await page.mouse.up();
+  await move.click();
+  await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
+  await expect.poll(async () => {
+    const centered = await material.boundingBox();
+    if (centered === null) return Number.POSITIVE_INFINITY;
+    return Math.max(
+      Math.abs(centered.x + centered.width / 2 - CAPTURE_WIDTH / 2),
+      Math.abs(centered.y + centered.height / 2 - CAPTURE_HEIGHT / 2),
+    );
+  }).toBeLessThan(6);
 }
 
 async function unionBounds(targets: readonly Locator[], name: string): Promise<Bounds> {
