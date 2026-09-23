@@ -73,6 +73,16 @@ const cameraContracts = Object.freeze({
     safePadding: 88,
     motion: Object.freeze({ riseFrames: 24, settleFrames: 0, overshoot: 0, exitFrames: 30 }),
   }),
+  undoTool: Object.freeze({
+    startCue: "undo-start",
+    endCue: "undo-end",
+    interiorCues: Object.freeze([
+      Object.freeze({ name: "undo-commit", frameKey: "commitFrame", trailingFrames: 10 }),
+    ]),
+    maxZoom: 2.45,
+    safePadding: 72,
+    motion: Object.freeze({ riseFrames: 16, settleFrames: 7, overshoot: 0.04, exitFrames: 24 }),
+  }),
 });
 
 export function parseLaunchVideoArgs(argv, now = new Date()) {
@@ -185,7 +195,7 @@ function parseLaunchCueMap(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Launch capture cues are invalid.");
   }
-  if (value.version !== 10) throw new Error("Launch capture cues use an unsupported version.");
+  if (value.version !== 11) throw new Error("Launch capture cues use an unsupported version.");
   if (value.durationMs !== durationSeconds * 1_000) {
     throw new Error("Launch capture cues do not describe the frozen 68-second master.");
   }
@@ -399,8 +409,12 @@ function validateLaunchCaptureReceipts(value) {
     "branch-held-aside",
     "inquiry-answer",
     "branch-restored",
-    "undo",
-    "canvas-positioned",
+    "undo-elastic",
+    "undo-nested-branch",
+    "undo-third-branch",
+    "undo-point-talk",
+    "undo-first-branch",
+    "undo-voice-branch",
   ];
   if (events === null || typeof events !== "object" || Array.isArray(events)) {
     throw new Error("Launch capture story receipts are missing.");
@@ -413,7 +427,7 @@ function validateLaunchCaptureReceipts(value) {
     }
     previous = milliseconds;
   }
-  if (events.night > 8_000 || events["canvas-positioned"] >= outroStartSeconds * 1_000) {
+  if (events.night > 8_000 || events["undo-voice-branch"] >= outroStartSeconds * 1_000) {
     throw new Error("Launch capture does not preserve the frozen early night and quiet ending.");
   }
 }
@@ -552,13 +566,14 @@ export function launchVideoOutroMarkup(sourceDataUrl) {
       };
       window.renderMatterOutro=(frame,total)=>{
         const progress=total<=1?1:frame/(total-1);
-        const rounding=ease((progress-.02)/.16);
-        const departure=ease((progress-.08)/.58);
-        // Let the physical departure register first. Blur follows eight frames
-        // later and then reaches both the detached screen and its echo.
-        const pictureBlur=ease((progress-.18)/.36);
-        const exit=ease((progress-.74)/.26);
-        const backgroundExit=ease((progress-.86)/.14);
+        const rounding=ease((progress-.04)/.18);
+        // The final seeded passage first returns to the opening's haze, now on
+        // night paper. The screen begins departing only after that atmosphere
+        // is perceptible, so the close rhymes with the opening without replaying it.
+        const pictureBlur=ease((progress-.06)/.40);
+        const departure=ease((progress-.18)/.54);
+        const exit=ease((progress-.76)/.24);
+        const backgroundExit=ease((progress-.88)/.12);
         const scale=lerp(1,.78,departure);
         const width=canvas.width*scale;const height=canvas.height*scale;
         const arc=Math.sin(Math.PI*departure);

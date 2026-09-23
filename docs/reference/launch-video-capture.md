@@ -4,9 +4,9 @@ Need: a short Matter film must show the real product surface without recording
 the operator's desktop, leaking private notifications, or disguising a
 deterministic demonstration as an unrestricted live-provider evaluation.
 
-Status: the restrained hybrid V10 workflow is implemented and has produced a
-locally reviewed candidate. Publication remains subject to the archival audio
-rights decision.
+Status: the restrained hybrid V11 workflow is implemented. Its closing proof
+uses the real history to return the authored tree to its seeded root;
+publication remains subject to the archival audio rights decision.
 
 ## Boundary
 
@@ -17,7 +17,7 @@ the repository.
 Boundary: Playwright owns a 1600×900 webpage-only capture and emits versioned
 camera cues from real DOM bounds; the renderer owns the opening focus return,
 one archival-audio credit, the final rounded screen departure, and the
-1440×810, 30 fps MP4 mux. FFmpeg owns five cue-bounded camera moves and the
+1440×810, 30 fps MP4 mux. FFmpeg owns six cue-bounded camera moves and the
 composition boundary. Material-changing AI surfaces use closed fixtures. Ask
 Matter uses a strict, receipt-marked local fixture for the reproducible release
 take, while an explicitly selected live mode remains available for a separate
@@ -83,9 +83,13 @@ the request; a third root branch, one more native Branch beneath that branch so
 the paper and index both expose three levels, and a smooth native canvas zoom-out;
 Elastic release followed by an explicit click inside the shaped address; one
 branch set aside from the canvas minus control and restored from the matching
-index plus control; one real Ask Matter turn; Undo; a deliberately later native
-Move that settles the authored tree; a short reading breath; then the real
-screen simply rounds, shrinks, and exits into black. It omits tutorial labels,
+index plus control; one real Ask Matter turn; a close causal view of the first
+Undo; then a return to the complete paper while five more real Undo operations
+remove the nested branch, sibling branch, rewrite, first branch, and voice branch
+until only the seeded root remains; a short reading breath; then that same
+passage returns to a night-paper haze before the real screen rounds, shrinks,
+and exits into black. This closing state rhymes with the opening passage without
+replaying its daylight composition. It omits tutorial labels,
 device frames, scanning light, and a feature-list
 montage. The opening credit is editorial film language, not invented product
 chrome. The supplied audio begins after the credit starts leaving, fades in for
@@ -95,15 +99,16 @@ The capture asserts three Transcription requests—first-material admission, the
 visible Point Talk direction, and the Ask Matter question—plus one Transform,
 one Text Swap, and one Inquiry
 request. It also records ordered story-event and opening/daylight/night
-presentation receipts, the explicit Inquiry mode, and the durable canvas title in a version-10
+presentation receipts, the explicit Inquiry mode, and the durable canvas title in a version-11
 `capture-cues.json` beside the raw WebM. The renderer accepts
 only the frozen 1600×900 capture surface and valid, non-overlapping cue windows,
 generates the transparent title and deterministic closing frames through the
 same local Chrome dependency used for capture, then applies a brief focus return,
-its restrained credit fade, and four semantically distinct moves: the strongest close-up for the
+its restrained credit fade, and six semantically distinct moves: the strongest close-up for the
 real pressed Voice control, a short Point Talk spring, a restrained Elastic move,
-and a monotonic Inquiry reading
-move. Every crop is fitted and clamped from the union of the real target DOM
+the About and monotonic Inquiry reading moves, and a final Undo close-up whose
+exit completes before the remaining history contracts in the wide shot. Every
+crop is fitted and clamped from the union of the real target DOM
 bounds recorded at that take. Voice waits for computed pixels to settle before
 each cue, so idle remains transparent, hover is a quiet ink tint, and pressed is
 the native solid-ink tile with paper-white icon. Its crop includes the actual pressed-state bounds,
@@ -184,7 +189,7 @@ muted and fixture-only, but it is not this master workflow.
 
 Codex can maintain and run this explicit workflow, but Playwright is the actual
 recording boundary. FFmpeg performs the opening focus return, frozen archival-
-credit fade, five cue-derived crop motions, closing-frame composition, resize,
+credit fade, six cue-derived crop motions, closing-frame composition, resize,
 and mux; Matter itself owns the recorded canvas zoom-out and every background
 state. The closing rounded screen departure is explicitly a film transition, not a product
 claim. There is no

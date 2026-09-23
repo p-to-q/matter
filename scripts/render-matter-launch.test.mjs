@@ -21,7 +21,7 @@ import {
 } from "./render-matter-launch.mjs";
 
 const captureCues = Object.freeze({
-  version: 10,
+  version: 11,
   durationMs: 68_000,
   width: 1_600,
   height: 900,
@@ -91,6 +91,21 @@ const captureCues = Object.freeze({
       milliseconds: 50_000,
       bounds: { left: 1_080, top: 520, width: 420, height: 300 },
     },
+    {
+      name: "undo-start",
+      milliseconds: 52_000,
+      bounds: { left: 24, top: 650, width: 48, height: 48 },
+    },
+    {
+      name: "undo-commit",
+      milliseconds: 52_900,
+      bounds: { left: 24, top: 650, width: 48, height: 48 },
+    },
+    {
+      name: "undo-end",
+      milliseconds: 54_100,
+      bounds: { left: 24, top: 650, width: 48, height: 48 },
+    },
   ],
   requests: { transcribe: 3, transform: 1, textSwap: 1, inquiry: 1 },
   inquiryMode: "fixture",
@@ -115,8 +130,12 @@ const captureCues = Object.freeze({
     "branch-held-aside": 41_000,
     "inquiry-answer": 49_000,
     "branch-restored": 51_000,
-    undo: 53_000,
-    "canvas-positioned": 59_000,
+    "undo-elastic": 52_900,
+    "undo-nested-branch": 53_600,
+    "undo-third-branch": 54_300,
+    "undo-point-talk": 55_000,
+    "undo-first-branch": 55_700,
+    "undo-voice-branch": 56_400,
   },
 });
 
@@ -216,7 +235,7 @@ test("existing capture rendering is offline and requires its explicit run direct
   assert.equal(describeLaunchInquiryMode(parsed), "recorded-receipt");
 });
 
-test("capture cues freeze five non-overlapping, semantically motivated camera windows", () => {
+test("capture cues freeze six non-overlapping, semantically motivated camera windows", () => {
   const windows = parseLaunchCaptureCues(captureCues);
   assert.deepEqual(
     {
@@ -240,6 +259,30 @@ test("capture cues freeze five non-overlapping, semantically motivated camera wi
       overshoot: 0.045,
       maxZoom: 3.2,
       peakZoom: 3.344,
+    },
+  );
+  assert.deepEqual(
+    {
+      startFrame: windows.undoTool.startFrame,
+      commitFrame: windows.undoTool.commitFrame,
+      endFrame: windows.undoTool.endFrame,
+      riseFrames: windows.undoTool.riseFrames,
+      settleFrames: windows.undoTool.settleFrames,
+      exitFrames: windows.undoTool.exitFrames,
+      overshoot: windows.undoTool.overshoot,
+      maxZoom: windows.undoTool.maxZoom,
+      peakZoom: windows.undoTool.peakZoom,
+    },
+    {
+      startFrame: 1_560,
+      commitFrame: 1_587,
+      endFrame: 1_623,
+      riseFrames: 16,
+      settleFrames: 7,
+      exitFrames: 24,
+      overshoot: 0.04,
+      maxZoom: 2.45,
+      peakZoom: 2.548,
     },
   );
   assert.deepEqual(
@@ -366,13 +409,14 @@ test("Elastic framing includes the explicit confirmation geometry", () => {
   );
 });
 
-test("camera filter gives all five windows distinct motion and only Elastic a pulse", () => {
+test("camera filter gives all six windows distinct motion and only Elastic a pulse", () => {
   const filter = launchVideoCameraFilter(parseLaunchCaptureCues(captureCues));
   assert.match(filter, /^zoompan=/u);
   assert.match(filter, /\+2\.2\*/u);
   assert.match(filter, /\+0\.68\*/u);
   assert.match(filter, /\+0\.62\*/u);
   assert.match(filter, /\+0\.55\*/u);
+  assert.match(filter, /\+1\.45\*/u);
   assert.match(filter, /\(on-324\)\/14/u);
   assert.match(filter, /\(on-338\)\/5/u);
   assert.match(filter, /\(401-on\)\/17/u);
@@ -384,6 +428,9 @@ test("camera filter gives all five windows distinct motion and only Elastic a pu
   assert.match(filter, /\(1140-on\)\/28/u);
   assert.match(filter, /\(on-1176\)\/24/u);
   assert.match(filter, /\(1500-on\)\/30/u);
+  assert.match(filter, /\(on-1560\)\/16/u);
+  assert.match(filter, /\(on-1576\)\/7/u);
+  assert.match(filter, /\(1623-on\)\/24/u);
   assert.doesNotMatch(filter, /\/0(?:\D|$)/u);
   assert.match(filter, /\*6-15\)\+10/u);
   assert.match(filter, /0\.025\*if\(between\(on,1023,1037\),sin\(PI\*\(on-1023\)\/14\),0\)/u);
@@ -391,6 +438,7 @@ test("camera filter gives all five windows distinct motion and only Elastic a pu
   assert.match(filter, /between\(on,510,689\)/u);
   assert.match(filter, /between\(on,900,1139\)/u);
   assert.match(filter, /between\(on,1176,1499\)/u);
+  assert.match(filter, /between\(on,1560,1622\)/u);
   assert.match(filter, /max\(0,min\(iw-iw\/zoom/u);
   assert.match(filter, /s=1440x810:fps=30$/u);
   assert.equal(filter.match(/sin\(/gu)?.length, 1);
@@ -522,14 +570,14 @@ test("the archival audio credit is transparent, restrained, and outside product 
   }] }), /Launch credit/u);
 });
 
-test("the outro simply detaches, rounds, shrinks, and exits the real screen", () => {
+test("the outro returns the real root-only night paper to haze before it departs", () => {
   const markup = launchVideoOutroMarkup("data:image/png;base64,AAAA");
   assert.match(markup, /data:image\/png;base64,AAAA/u);
   assert.match(markup, /renderMatterOutro/u);
   assert.match(markup, /'#030506'/u);
   assert.match(markup, /roundedRect/u);
-  assert.match(markup, /departure=ease\(\(progress-\.08\)\/\.58\)/u);
-  assert.match(markup, /pictureBlur=ease\(\(progress-\.18\)\/\.36\)/u);
+  assert.match(markup, /pictureBlur=ease\(\(progress-\.06\)\/\.40\)/u);
+  assert.match(markup, /departure=ease\(\(progress-\.18\)\/\.54\)/u);
   assert.match(markup, /blur\('\+lerp\(0,22,pictureBlur\)/u);
   assert.match(markup, /blur\('\+lerp\(0,7\.5,pictureBlur\)/u);
   assert.match(markup, /lerp\(1,\.78,departure\)/u);
@@ -612,7 +660,7 @@ test("invalid launch options and camera receipts fail before rendering", () => {
   }), /paper-light sequence/u);
   assert.throws(() => parseLaunchCaptureCues({
     ...captureCues,
-    events: { ...captureCues.events, "canvas-positioned": 66_000 },
+    events: { ...captureCues.events, "undo-voice-branch": 66_000 },
   }), /early night and quiet ending/u);
   assert.throws(() => parseLaunchCaptureCues({
     ...captureCues,
@@ -626,6 +674,10 @@ test("invalid launch options and camera receipts fail before rendering", () => {
     ...captureCues,
     cues: captureCues.cues.filter((cue) => cue.name !== "elastic-confirm"),
   }), /elastic-confirm/u);
+  assert.throws(() => parseLaunchCaptureCues({
+    ...captureCues,
+    cues: captureCues.cues.filter((cue) => cue.name !== "undo-commit"),
+  }), /undo-commit/u);
   assert.throws(() => parseLaunchCaptureCues({
     ...captureCues,
     cues: captureCues.cues.map((cue) => cue.name === "point-talk-end"
@@ -674,6 +726,12 @@ test("invalid launch options and camera receipts fail before rendering", () => {
       ? { ...cue, milliseconds: 7_500 }
       : cue),
   }), /stable voiceTool hold/u);
+  assert.throws(() => parseLaunchCaptureCues({
+    ...captureCues,
+    cues: captureCues.cues.map((cue) => cue.name === "undo-commit"
+      ? { ...cue, milliseconds: 52_300 }
+      : cue),
+  }), /stable undoTool hold/u);
 });
 
 test("raw capture receipt requires one 1600x900 video stream", () => {

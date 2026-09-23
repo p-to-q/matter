@@ -49,7 +49,10 @@ type CameraCue = Readonly<{
     | "elastic-confirm"
     | "elastic-end"
     | "inquiry-start"
-    | "inquiry-end";
+    | "inquiry-end"
+    | "undo-start"
+    | "undo-commit"
+    | "undo-end";
   milliseconds: number;
   bounds: Bounds;
 }>;
@@ -75,8 +78,12 @@ type StoryEventName =
   | "branch-held-aside"
   | "branch-restored"
   | "inquiry-answer"
-  | "undo"
-  | "canvas-positioned";
+  | "undo-elastic"
+  | "undo-nested-branch"
+  | "undo-third-branch"
+  | "undo-point-talk"
+  | "undo-first-branch"
+  | "undo-voice-branch";
 
 test("capture the Matter launch master", async ({ context, page }) => {
   const rawVideoPath = process.env.MATTER_LAUNCH_RAW_WEBM?.trim();
@@ -312,6 +319,16 @@ test("capture the Matter launch master", async ({ context, page }) => {
     // Pointer-operated controls should not carry a keyboard focus halo into
     // the next filmed state. This preserves the product's focus-visible
     // contract while keeping the pointer capture visually truthful.
+    await page.evaluate(() => {
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+    await page.waitForTimeout(45);
+  };
+  const clickCurrentTarget = async () => {
+    await page.waitForTimeout(45);
+    await page.mouse.down();
+    await page.waitForTimeout(55);
+    await page.mouse.up();
     await page.evaluate(() => {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     });
@@ -738,11 +755,18 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(nestedBranch.locator("xpath=..")).not.toHaveAttribute("data-context-excluded", "true");
     receiptEvent("branch-restored");
 
-    // Inquiry never enters history. Undo removes only Elastic while Point Talk
-    // and all authored branches remain on the paper.
-    await at(55_100);
+    // Inquiry never enters history. The first Undo gets one close causal shot:
+    // camera in, click, visible text rollback, camera out. Once the complete
+    // paper is visible again, the remaining real history is unwound in place
+    // until only the seeded root remains. The ending is therefore a truthful
+    // contraction of authored material, never reverse playback.
+    await at(54_900);
     const undo = page.locator('[data-tool-id="undo"]');
-    await click(undo, 400);
+    await expect(undo).toBeEnabled();
+    await cue("undo-start", undo);
+    await moveTo(undo, 420);
+    await page.waitForTimeout(250);
+    await clickCurrentTarget();
     await expect(root).toHaveText(`${SOURCE}${SUFFIX}`);
     await expect(firstBranch).toHaveText(REWRITTEN_BRANCH);
     await expect(voiceSubtitle).toHaveText(VOICE_SUBTITLE);
@@ -751,44 +775,55 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(page.locator("[data-thought-id]")).toHaveCount(5);
     await expect(page.locator("aside.material-files .material-file")).toHaveCount(5);
     await expect(materialFiles).toHaveAttribute("data-persistence-phase", "saved");
-    receiptEvent("undo");
+    receiptEvent("undo-elastic");
+    await cue("undo-commit", undo);
+    await page.waitForTimeout(1_200);
+    await cue("undo-end", undo);
 
-    // End by using the product's real move mode to place the authored tree a
-    // little higher and left. The final shot therefore explains one more tool
-    // while settling the paper into a deliberately composed reading position.
-    await at(56_200);
-    await click(move, 220);
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
-    const finalPaperBounds = await paper.boundingBox();
-    if (finalPaperBounds === null) throw new Error("Launch-film paper is not visible.");
-    const panStart = {
-      x: finalPaperBounds.x + finalPaperBounds.width * 0.58,
-      y: finalPaperBounds.y + finalPaperBounds.height * 0.58,
+    const undoInWideShot = async (event: StoryEventName) => {
+      await expect(undo).toBeEnabled();
+      await page.waitForTimeout(600);
+      await clickCurrentTarget();
+      await expect(materialFiles).toHaveAttribute("data-persistence-phase", "saved");
+      receiptEvent(event);
     };
-    cursor = await glide(page, cursor, panStart, 360);
-    await page.mouse.down();
-    cursor = await glide(page, cursor, { x: panStart.x - 76, y: panStart.y - 42 }, 720);
-    await page.mouse.up();
-    await click(move, 220);
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
-    receiptEvent("canvas-positioned");
 
-    // Night was established before the demonstrations. End on that same real
-    // paper, then let the renderer detach it over a blurred echo of the scene.
-    await at(59_600);
+    await undoInWideShot("undo-nested-branch");
+    await expect(nestedBranch).toHaveCount(0);
+    await expect(page.locator("[data-thought-id]")).toHaveCount(4);
+
+    await undoInWideShot("undo-third-branch");
+    await expect(thirdBranch).toHaveCount(0);
+    await expect(page.locator("[data-thought-id]")).toHaveCount(3);
+
+    await undoInWideShot("undo-point-talk");
+    await expect(firstBranch).toHaveText(FIRST_BRANCH);
+    await expect(page.locator("[data-thought-id]")).toHaveCount(3);
+
+    await undoInWideShot("undo-first-branch");
+    await expect(firstBranch).toHaveCount(0);
+    await expect(page.locator("[data-thought-id]")).toHaveCount(2);
+
+    await undoInWideShot("undo-voice-branch");
+    await expect(voiceSubtitle).toHaveCount(0);
+    await expect(root).toHaveText(`${SOURCE}${SUFFIX}`);
+    await expect(page.locator("[data-thought-id]")).toHaveCount(1);
+    await expect(page.locator("aside.material-files .material-file")).toHaveCount(1);
+    await expect(undo).toBeDisabled();
+
+    // Hold the original material without another tool or editorial flourish.
+    // The renderer then detaches this same paper over a blurred echo.
+    await at(63_050);
     await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
     await expect(ambient).toHaveAttribute("data-fx", "on");
     await expect(ambient).toHaveAttribute("data-presentation", "video");
     await hideCapturePointer(page);
 
-    // Keep only a short reading breath before the ending. The previous long
-    // leaf-only hold looked like a missing action rather than intentional rest.
-    await at(60_000);
     await at(RECORDING_DURATION_MS + 120);
   } finally {
     await page.screencast.stop();
     await writeFile(resolve(runDirectory, "capture-cues.json"), `${JSON.stringify({
-      version: 10,
+      version: 11,
       durationMs: RECORDING_DURATION_MS,
       width: CAPTURE_WIDTH,
       height: CAPTURE_HEIGHT,
