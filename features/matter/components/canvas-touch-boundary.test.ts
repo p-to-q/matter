@@ -34,11 +34,37 @@ describe("mobile canvas touch ownership", () => {
     );
     expect(lifecycleCancellation).toContain("const lassoPointerId = lasso.cancelActiveStroke()");
     expect(lifecycleCancellation).toContain("shell.releasePointerCapture(lassoPointerId)");
-    expect(lifecycleCancellation).toContain(
-      "const nodeDragPointerId = nodeDragRef.current?.pointerId ?? null",
+    expect(lifecycleCancellation).toContain("cancelNodeDragOwnership()");
+  });
+
+  it("retires node-drag ownership before Lasso or Pan takes the canvas", () => {
+    const cancellation = rooted.slice(
+      rooted.indexOf("const cancelNodeDragOwnership"),
+      rooted.indexOf("const markPerformance"),
     );
-    expect(lifecycleCancellation).toContain("shell.releasePointerCapture(nodeDragPointerId)");
-    expect(lifecycleCancellation).toContain("if (nodeDragPointerId !== null) clearNodeDrag()");
+    expect(cancellation).toContain("const gesture = nodeDragRef.current");
+    expect(cancellation).toContain("suppressClickRef.current = true");
+    expect(cancellation).toContain("clearNodeDrag()");
+    expect(cancellation).toContain("shell.releasePointerCapture(gesture.pointerId)");
+
+    const toolRailStart = rooted.indexOf("<ToolRail");
+    const toolRail = rooted.slice(
+      toolRailStart,
+      rooted.indexOf("onIntent={(intent)", toolRailStart),
+    );
+    const lassoTransfer = toolRail.slice(
+      toolRail.indexOf("onLasso={() =>"),
+      toolRail.indexOf("onMove={() =>"),
+    );
+    expect(lassoTransfer.indexOf("cancelNodeDragOwnership()")).toBeGreaterThan(-1);
+    expect(lassoTransfer.indexOf("cancelNodeDragOwnership()")).toBeLessThan(
+      lassoTransfer.indexOf("lasso.activate()"),
+    );
+    const panTransfer = toolRail.slice(toolRail.indexOf("onMove={() =>"));
+    expect(panTransfer.indexOf("cancelNodeDragOwnership()")).toBeGreaterThan(-1);
+    expect(panTransfer.indexOf("cancelNodeDragOwnership()")).toBeLessThan(
+      panTransfer.indexOf('setCanvasMode("pan")'),
+    );
   });
 
   it("compares a touch release in the same material-plane coordinates as its start", () => {
