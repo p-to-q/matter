@@ -14,20 +14,23 @@ import {
   buildTransformPlan,
   type TransformEnvelope,
 } from "../features/matter/protocol/transform-contract";
-import { LAUNCH_POINT_TALK_FIXTURE } from "./matter-launch.fixture";
+import {
+  LAUNCH_MATERIAL_COPY,
+  LAUNCH_POINT_TALK_FIXTURE,
+} from "./matter-launch.fixture";
 
 const SOURCE = "我们怀念的也许不是一个真实存在过的过去";
 const SUFFIX = "，而是那个过去在今天仍然允许我们想象的其他生活。";
 const EXPANDED = "我们怀念的也许不是一个真实存在过的、拥有非常清楚边界和十分完整形状的过去";
 const FIRST_BRANCH = LAUNCH_POINT_TALK_FIXTURE.passage;
 const REWRITTEN_BRANCH = LAUNCH_POINT_TALK_FIXTURE.text;
-const THIRD_BRANCH = "怀念不是返回原处，而是确认还有没有继续想象的入口。";
-const NESTED_BRANCH = "也许我们怀念的不是过去本身，而是今天还留给另一种生活的余地。";
+const THIRD_BRANCH = LAUNCH_MATERIAL_COPY.thirdBranch;
+const NESTED_BRANCH = LAUNCH_MATERIAL_COPY.nestedBranch;
 const INQUIRY_QUESTION = "这段材料把‘怀念’理解成什么？";
 const INQUIRY_FIXTURE_ANSWER =
   "它把“怀念”理解为过去曾让另一种生活仍可被想象。被保留的不是过去本身，而是当下尚未关闭的可能性。";
 const DOCUMENT_TITLE = "被允许想象的其他生活";
-const VOICE_SUBTITLE = "被允许想象的其他生活。";
+const VOICE_SUBTITLE = LAUNCH_MATERIAL_COPY.voice;
 const ROOT_ID = "thought_fixture_root";
 const RECORDING_DURATION_MS = 68_000;
 const CAPTURE_WIDTH = 1_600;
@@ -49,10 +52,7 @@ type CameraCue = Readonly<{
     | "elastic-confirm"
     | "elastic-end"
     | "inquiry-start"
-    | "inquiry-end"
-    | "undo-start"
-    | "undo-commit"
-    | "undo-end";
+    | "inquiry-end";
   milliseconds: number;
   bounds: Bounds;
 }>;
@@ -74,6 +74,7 @@ type StoryEventName =
   | "point-talk-transcribed"
   | "point-talk-commit"
   | "nested-branch"
+  | "canvas-positioned"
   | "elastic-commit"
   | "elastic-deselected"
   | "branch-held-aside"
@@ -84,7 +85,8 @@ type StoryEventName =
   | "undo-third-branch"
   | "undo-point-talk"
   | "undo-first-branch"
-  | "undo-voice-branch";
+  | "undo-voice-branch"
+  | "closing-restored";
 
 test("capture the Matter launch master", async ({ context, page }) => {
   const rawVideoPath = process.env.MATTER_LAUNCH_RAW_WEBM?.trim();
@@ -292,6 +294,8 @@ test("capture the Matter launch master", async ({ context, page }) => {
     }, `/matter/api/${endpoint}`);
   }));
   await centerOpeningMaterial(page, root, paper);
+  const openingRootBounds = await root.boundingBox();
+  if (openingRootBounds === null) throw new Error("Launch-film opening material is not visible.");
   await installCapturePointer(page);
 
   let cursor: Point = { x: 86, y: 450 };
@@ -469,7 +473,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect.poll(() => voice.evaluate((button) => ({
       ink: getComputedStyle(button).color,
       tile: getComputedStyle(button, "::before").backgroundColor,
-    }))).toEqual({ ink: "rgb(22, 29, 39)", tile: "rgba(22, 29, 39, 0.08)" });
+    }))).toEqual({ ink: "rgb(22, 29, 39)", tile: "rgb(245, 245, 242)" });
     await at(11_600);
     // Hold the real pressed state long enough for the close-up to perceive the
     // physical black contact, without inventing a video-only highlight.
@@ -607,9 +611,10 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await page.waitForTimeout(600);
 
     // The authored fork is wider than one reading column. Use Matter's own
-    // transient canvas navigation to fit it before the film enters Elastic;
-    // the document keeps no authored coordinates and the outro can show both
-    // the paper structure and its matching index without clipping a branch.
+    // transient canvas navigation to fit it before the film enters Elastic.
+    // Zoom first, then visibly pull the paper left so the short right-hand
+    // continuation remains inside the reading frame. This navigation remains
+    // transient and never enters the authored document.
     const move = page.locator('[data-tool-id="move"]');
     await click(move, 280);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
@@ -625,14 +630,39 @@ test("capture the Matter launch master", async ({ context, page }) => {
       const current = step / 4;
       const smooth = (progress: number) => progress * progress * progress *
         (progress * (progress * 6 - 15) + 10);
-      await page.mouse.wheel(0, 110 * (smooth(current) - smooth(previous)));
+      await page.mouse.wheel(0, 260 * (smooth(current) - smooth(previous)));
       await page.waitForTimeout(70);
     }
     await page.keyboard.up("Control");
     await expect.poll(async () => Number(
       await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
-    )).toBeLessThan(0.82);
-    await page.waitForTimeout(450);
+    )).toBeLessThan(0.62);
+    const beforePan = await nestedBranch.boundingBox();
+    if (beforePan === null) throw new Error("Launch-film right branch is not visible before pan.");
+    const panOrigin = {
+      x: navigationPaperBounds.x + navigationPaperBounds.width * 0.62,
+      y: navigationPaperBounds.y + navigationPaperBounds.height * 0.58,
+    };
+    cursor = await glide(page, cursor, panOrigin, 320);
+    await page.mouse.down();
+    cursor = await glide(page, cursor, { x: panOrigin.x - 150, y: panOrigin.y - 8 }, 760);
+    await page.mouse.up();
+    const afterPan = await nestedBranch.boundingBox();
+    if (afterPan === null) throw new Error("Launch-film right branch disappeared after pan.");
+    const toolRailBounds = await page.locator(".tool-rail").boundingBox();
+    if (toolRailBounds === null) throw new Error("Launch-film tool rail is not visible after pan.");
+    const readableWidth = Math.max(
+      0,
+      Math.min(toolRailBounds.x - 24, afterPan.x + afterPan.width) - Math.max(0, afterPan.x),
+    );
+    const rootAfterPan = await root.boundingBox();
+    if (rootAfterPan === null) throw new Error("Launch-film root disappeared after pan.");
+    expect(afterPan.x).toBeLessThan(beforePan.x - 100);
+    expect(readableWidth / afterPan.width).toBeGreaterThan(0.35);
+    expect(readableWidth / afterPan.width).toBeLessThan(0.65);
+    expect(rootAfterPan.x).toBeGreaterThan(navigationPaperBounds.x + 140);
+    receiptEvent("canvas-positioned");
+    await page.waitForTimeout(420);
     await click(move, 260);
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
 
@@ -764,15 +794,13 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(nestedBranch.locator("xpath=..")).not.toHaveAttribute("data-context-excluded", "true");
     receiptEvent("branch-restored");
 
-    // Inquiry never enters history. The first Undo gets one close causal shot:
-    // camera in, click, visible text rollback, camera out. Once the complete
-    // paper is visible again, the remaining real history is unwound in place
-    // until only the seeded root remains. The ending is therefore a truthful
-    // contraction of authored material, never reverse playback.
-    await at(54_900);
+    // Inquiry never enters history. Undo stays in the same wide composition:
+    // ordinary native hover, click, then the visible material rollback. The
+    // complete real history is unwound in place until only the seeded root
+    // remains, without an editorial zoom competing with the contraction.
+    await at(54_200);
     const undo = page.locator('[data-tool-id="undo"]');
     await expect(undo).toBeEnabled();
-    await cue("undo-start", undo);
     await moveTo(undo, 420);
     await page.waitForTimeout(250);
     await clickCurrentTarget();
@@ -785,13 +813,11 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(page.locator("aside.material-files .material-file")).toHaveCount(5);
     await expect(materialFiles).toHaveAttribute("data-persistence-phase", "saved");
     receiptEvent("undo-elastic");
-    await cue("undo-commit", undo);
-    await page.waitForTimeout(1_200);
-    await cue("undo-end", undo);
+    await page.waitForTimeout(750);
 
     const undoInWideShot = async (event: StoryEventName) => {
       await expect(undo).toBeEnabled();
-      await page.waitForTimeout(600);
+      await page.waitForTimeout(560);
       await clickCurrentTarget();
       await expect(materialFiles).toHaveAttribute("data-persistence-phase", "saved");
       receiptEvent(event);
@@ -820,8 +846,61 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await expect(page.locator("aside.material-files .material-file")).toHaveCount(1);
     await expect(undo).toBeDisabled();
 
-    // Hold the original material without another tool or editorial flourish.
-    // The renderer then detaches this same paper over a blurred echo.
+    // Return the same root to the opening's exact scale and position through
+    // Matter's real transient navigation. The night paper makes the ending a
+    // temporal echo, while identical geometry makes the rhyme perceptible.
+    await click(move, 220);
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
+    await moveTo(root, 280);
+    const closingZoom = Number(
+      await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
+    );
+    if (!Number.isFinite(closingZoom) || closingZoom <= 0 || closingZoom > 1) {
+      throw new Error("Launch-film closing zoom is invalid.");
+    }
+    const closingWheelDelta = Math.log(closingZoom) / 0.002;
+    await page.keyboard.down("Control");
+    for (let step = 1; step <= 4; step += 1) {
+      const previous = (step - 1) / 4;
+      const current = step / 4;
+      const smooth = (progress: number) => progress * progress * progress *
+        (progress * (progress * 6 - 15) + 10);
+      await page.mouse.wheel(0, closingWheelDelta * (smooth(current) - smooth(previous)));
+      await page.waitForTimeout(40);
+    }
+    await page.keyboard.up("Control");
+    await expect.poll(async () => Number(
+      await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"),
+    )).toBeCloseTo(1, 2);
+    const closingBeforePan = await root.boundingBox();
+    if (closingBeforePan === null) throw new Error("Launch-film closing root is not visible.");
+    const closingDelta = {
+      x: openingRootBounds.x - closingBeforePan.x,
+      y: openingRootBounds.y - closingBeforePan.y,
+    };
+    await page.mouse.down();
+    cursor = await glide(page, cursor, {
+      x: cursor.x + closingDelta.x,
+      y: cursor.y + closingDelta.y,
+    }, 520);
+    await page.mouse.up();
+    await click(move, 180);
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
+    await expect.poll(async () => {
+      const closing = await root.boundingBox();
+      if (closing === null) return Number.POSITIVE_INFINITY;
+      return Math.max(
+        Math.abs(closing.x - openingRootBounds.x),
+        Math.abs(closing.y - openingRootBounds.y),
+        Math.abs(closing.width - openingRootBounds.width),
+        Math.abs(closing.height - openingRootBounds.height),
+      );
+    }).toBeLessThan(5);
+    await expect(root).toHaveAttribute("aria-pressed", "false");
+    receiptEvent("closing-restored");
+
+    // Hold the restored material without another editorial flourish. The
+    // renderer then detaches this same paper into the rounded black-field exit.
     await at(63_050);
     await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
     await expect(ambient).toHaveAttribute("data-fx", "on");
@@ -832,7 +911,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
   } finally {
     await page.screencast.stop();
     await writeFile(resolve(runDirectory, "capture-cues.json"), `${JSON.stringify({
-      version: 12,
+      version: 14,
       durationMs: RECORDING_DURATION_MS,
       width: CAPTURE_WIDTH,
       height: CAPTURE_HEIGHT,

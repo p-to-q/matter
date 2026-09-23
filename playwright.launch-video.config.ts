@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
-import { LAUNCH_POINT_TALK_FIXTURE } from "./e2e/matter-launch.fixture";
+import {
+  LAUNCH_MATERIAL_COPY,
+  LAUNCH_POINT_TALK_FIXTURE,
+} from "./e2e/matter-launch.fixture";
 
 const runDirectory = process.env.MATTER_LAUNCH_RUN_DIR?.trim() ||
   "tmp/matter-launch-video/unconfigured";
@@ -56,9 +59,9 @@ export default defineConfig({
       MATTER_INITIAL_DOCUMENT: "root",
       MATTER_PERFORMANCE_FIXTURE: "true",
       MATTER_TRANSCRIPTION_ADAPTER: "fixture",
-      MATTER_FIXTURE_ADMISSION_TRANSCRIPT: "被允许想象的其他生活。",
+      MATTER_FIXTURE_ADMISSION_TRANSCRIPT: LAUNCH_MATERIAL_COPY.voice,
       MATTER_REPAIR_ADAPTER: "fixture",
-      MATTER_FIXTURE_REPAIR: "被允许想象的其他生活。",
+      MATTER_FIXTURE_REPAIR: LAUNCH_MATERIAL_COPY.voice,
       MATTER_LABEL_ADAPTER: "fixture",
       MATTER_TRANSFORM_ADAPTER: "fixture",
       MATTER_TEXT_SWAP_ADAPTER: "fixture",

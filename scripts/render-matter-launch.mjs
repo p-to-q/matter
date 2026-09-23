@@ -73,16 +73,6 @@ const cameraContracts = Object.freeze({
     safePadding: 88,
     motion: Object.freeze({ riseFrames: 24, settleFrames: 0, overshoot: 0, exitFrames: 30 }),
   }),
-  undoTool: Object.freeze({
-    startCue: "undo-start",
-    endCue: "undo-end",
-    interiorCues: Object.freeze([
-      Object.freeze({ name: "undo-commit", frameKey: "commitFrame", trailingFrames: 10 }),
-    ]),
-    maxZoom: 2.45,
-    safePadding: 72,
-    motion: Object.freeze({ riseFrames: 16, settleFrames: 7, overshoot: 0.04, exitFrames: 24 }),
-  }),
 });
 
 export function parseLaunchVideoArgs(argv, now = new Date()) {
@@ -195,7 +185,7 @@ function parseLaunchCueMap(value) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Launch capture cues are invalid.");
   }
-  if (value.version !== 12) throw new Error("Launch capture cues use an unsupported version.");
+  if (value.version !== 14) throw new Error("Launch capture cues use an unsupported version.");
   if (value.durationMs !== durationSeconds * 1_000) {
     throw new Error("Launch capture cues do not describe the frozen 68-second master.");
   }
@@ -405,6 +395,7 @@ function validateLaunchCaptureReceipts(value) {
     "point-talk-transcribed",
     "point-talk-commit",
     "nested-branch",
+    "canvas-positioned",
     "elastic-commit",
     "elastic-deselected",
     "branch-held-aside",
@@ -416,6 +407,7 @@ function validateLaunchCaptureReceipts(value) {
     "undo-point-talk",
     "undo-first-branch",
     "undo-voice-branch",
+    "closing-restored",
   ];
   if (events === null || typeof events !== "object" || Array.isArray(events)) {
     throw new Error("Launch capture story receipts are missing.");
@@ -428,7 +420,7 @@ function validateLaunchCaptureReceipts(value) {
     }
     previous = milliseconds;
   }
-  if (events.night > 8_000 || events["undo-voice-branch"] >= outroStartSeconds * 1_000) {
+  if (events.night > 8_000 || events["closing-restored"] >= outroStartSeconds * 1_000) {
     throw new Error("Launch capture does not preserve the frozen early night and quiet ending.");
   }
 }

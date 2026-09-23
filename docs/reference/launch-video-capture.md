@@ -4,7 +4,7 @@ Need: a short Matter film must show the real product surface without recording
 the operator's desktop, leaking private notifications, or disguising a
 deterministic demonstration as an unrestricted live-provider evaluation.
 
-Status: the restrained hybrid V12 workflow is implemented. Its closing proof
+Status: the restrained hybrid V14 workflow is implemented. Its closing proof
 uses the real history to return the authored tree to its seeded root;
 publication remains subject to the archival audio rights decision.
 
@@ -17,7 +17,7 @@ the repository.
 Boundary: Playwright owns a 1600×900 webpage-only capture and emits versioned
 camera cues from real DOM bounds; the renderer owns the opening focus return,
 one archival-audio credit, the final rounded screen departure, and the
-1440×810, 30 fps MP4 mux. FFmpeg owns six cue-bounded camera moves and the
+1440×810, 30 fps MP4 mux. FFmpeg owns five cue-bounded camera moves and the
 composition boundary. Material-changing AI surfaces use closed fixtures. Ask
 Matter uses a strict, receipt-marked local fixture for the reproducible release
 take, while an explicitly selected live mode remains available for a separate
@@ -79,16 +79,24 @@ the real pressed Voice control after selecting the root; Voice recording,
 showing “正在将声音变成材料”, and admitting one spoken subtitle beneath it; a Branch
 whose index row is opened into Point Talk; Stop shows “正在听清…”, the transcript
 appears in the editable direction field, and only the visible “改写” click sends
-the request; a third root branch, one more native Branch beneath that branch so
-the paper and index both expose three levels, and a smooth native canvas zoom-out;
+the request. The four visible child passages have distinct jobs rather than
+paraphrasing one another: a Voice-born proposition, a rewritten contrast, a
+second root claim, and one nested consequence. The canvas title is never reused
+as body material. A third root branch and one more native Branch beneath it make
+the paper and index both expose three levels, then a smooth native canvas zoom-out
+and restrained leftward drag leave roughly half of the short right-hand continuation
+visible before the tool rail, preserving both the root's breathing room and the sense
+that the canvas continues beyond the frame;
 Elastic release followed by an explicit click inside the shaped address; one
 branch set aside from the canvas minus control and restored from the matching
-index plus control; one real Ask Matter turn; a close causal view of the first
-Undo; then a return to the complete paper while five more real Undo operations
-remove the nested branch, sibling branch, rewrite, first branch, and voice branch
+index plus control; one real Ask Matter turn; then six ordinary native Undo
+hover-and-click operations in the same wide composition visibly remove the
+Elastic change, nested branch, sibling branch, rewrite, first branch, and voice branch
 until only the seeded root remains; a short reading breath; then that same
-passage returns to a night-paper haze before the real screen rounds, shrinks,
-and exits over a solid black field. The outro draws that page exactly once; it
+passage is returned through native move mode to the opening's scale and screen
+position before the night paper rounds, shrinks, and exits over a solid black
+field. Capture rejects any closing root whose position or dimensions differ
+from the measured opening by 5 CSS pixels or more. The outro draws that page exactly once; it
 never repeats the same interface as a blurred background. This closing state
 rhymes with the opening passage without
 replaying its daylight composition. It omits tutorial labels,
@@ -102,28 +110,28 @@ visible Point Talk direction, and the Ask Matter question—plus one Transform,
 one Text Swap, and one Inquiry
 request. It also records ordered story-event and opening/daylight/night
 presentation receipts, an explicit post-Elastic selection-clear receipt, the
-explicit Inquiry mode, and the durable canvas title in a version-12
+explicit Inquiry mode, post-navigation and closing-geometry receipts, and the durable canvas title in a version-14
 `capture-cues.json` beside the raw WebM. The renderer accepts
 only the frozen 1600×900 capture surface and valid, non-overlapping cue windows,
 generates the transparent title and deterministic closing frames through the
 same local Chrome dependency used for capture, then applies a brief focus return,
-its restrained credit fade, and six semantically distinct moves: the strongest close-up for the
+its restrained credit fade, and five semantically distinct moves: the strongest close-up for the
 real pressed Voice control, a short Point Talk spring, a restrained Elastic move,
-the About and monotonic Inquiry reading moves, and a final Undo close-up whose
-exit completes before the remaining history contracts in the wide shot. Every
+the About and monotonic Inquiry reading moves. Undo deliberately stays in the
+wide shot with only the native hover and click while history contracts. Every
 crop is fitted and clamped from the union of the real target DOM
 bounds recorded at that take. Voice waits for computed pixels to settle before
 each cue, so idle remains transparent, hover is a quiet ink tint, and pressed is
 the native solid-ink tile with paper-white icon. Its crop includes the actual pressed-state bounds,
 and Elastic includes the actual confirmation moment. Pointer travel uses a
 bounded Bezier route with zero-velocity endpoints; the paper's own zoom-out
-remains a real sequence of four smootherstep canvas-wheel inputs and never overlaps a
-post camera move. Camera motion may clarify an action, but it may not create,
+and its following leftward paper drag remain real pointer input. Neither overlaps
+a post camera move. Camera motion may clarify an action, but it may not create,
 hide, or relabel product state.
 
 Before the screencast clock starts, the harness uses Matter's native transient
 move mode to place the opening material at the center of the complete 1600×900
-frame, not merely at the center of the paper area beside the directory. The V12
+frame, not merely at the center of the paper area beside the directory. The V14
 receipt rejects an off-center opening. A translucent pale veil preserves a
 hazy impression of the interface while the real captured material pixels
 remain sharp. A feathered lower-right mask suppresses only the high-contrast
@@ -192,8 +200,8 @@ muted and fixture-only, but it is not this master workflow.
 
 Codex can maintain and run this explicit workflow, but Playwright is the actual
 recording boundary. FFmpeg performs the opening focus return, frozen archival-
-credit fade, six cue-derived crop motions, closing-frame composition, resize,
-and mux; Matter itself owns the recorded canvas zoom-out and every background
+credit fade, five cue-derived crop motions, closing-frame composition, resize,
+and mux; Matter itself owns the recorded canvas zoom-out, leftward pan, and every background
 state. The closing rounded screen departure is explicitly a film transition, not a product
 claim. There is no
 product reason to introduce Remotion while the film is a

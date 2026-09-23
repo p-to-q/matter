@@ -24,6 +24,7 @@ export default defineConfig({
       "scripts/probe-local-ai.test.mjs",
       "scripts/label-corpus.test.mjs",
       "scripts/label-eval-plan.test.mjs",
+      "scripts/render-matter-launch.test.mjs",
     ],
   },
 });
