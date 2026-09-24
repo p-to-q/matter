@@ -250,7 +250,7 @@ function gzipBytes(file) {
 }
 
 function isRepositoryOnlyTrace(file) {
-  return /(^|\/)(?:docs|e2e|archive|tmp)\//u.test(file) ||
+  return /(^|\/)(?:docs|e2e|archive|studio|tmp)\//u.test(file) ||
     /(^|\/)\.env(?:\.|$)/u.test(file) ||
     /\.test\.[cm]?[jt]sx?$/u.test(file);
 }

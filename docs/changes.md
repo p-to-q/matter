@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-24 — Film source is auditable without becoming runtime
+
+Changed: the current Matter film's capture, closed fixtures, Markdown-owned
+localized copy, renderer, focused tests, and one latest release receipt live in
+`studio/film/`. Rendered takes remain in its gitignored local artifact
+directory; the reviewed public film is a GitHub Markdown attachment rather than
+a Git object. The complete `studio/` tree is excluded by deployment upload and
+Next.js output tracing, and automated checks reject missing source, tracked
+media, localized executable code, or either packaging boundary drifting.
+
+Why: the film needs the same repository history and product revision as the UI
+it demonstrates, while publication media and editorial tooling must never add
+bytes, secrets, user material, or accidental behavior to Matter's shipped
+application.
+
+Forecloses: a second repository; committing masters, source recordings, failed
+takes, transcripts, or provider answers; shipping the studio in web or future
+app packages; duplicating localized strings through executable files; and
+treating old film versions as active product artifacts.
+
 ## 2026-09-24 — Pan scale replaces guidance without becoming status chrome
 
 Changed: while Move owns the canvas, the existing lower-left guidance line

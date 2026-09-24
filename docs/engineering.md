@@ -44,6 +44,23 @@ product intent.
 - Use stable error codes at boundaries. Provider messages, raw audio, transcript,
   and lineage never enter routine logs.
 
+### Publication studio boundary
+
+`studio/` is reviewable repository tooling, not application code. It may hold
+reproducible capture and render source, closed fixtures, editorial copy,
+focused tests, and the latest release receipt. It must not hold credentials,
+real user material, provider answers, source recordings, rendered media, or a
+history of superseded takes. Local media belongs only in a gitignored artifact
+directory; a released film is a reviewed Markdown attachment rather than a Git
+object.
+
+The complete directory is excluded at both deployment upload and Next.js
+output-tracing boundaries. Any future desktop, mobile, or archive packager must
+exclude the same tree and extend the automated boundary proof before release.
+Executable studio source stays English-only; localized editorial copy may live
+in Markdown and must cross into the tools through one parsed, versioned
+contract. `npm run check` owns these assertions.
+
 ## Module ownership
 
 Place code with the owner of its invariant, not in the widest module that can

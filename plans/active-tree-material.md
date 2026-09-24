@@ -49,7 +49,7 @@ Proof:      focused seed/history/label, index focus, selected-address/Text Swap,
 Non-goals:  translating human material, renaming a person's session, adding a
             second mobile backend or model, changing Text Swap's protocol or
             prompt, persisting camera/contact state, redesigning the canvas,
-            shipping launch-film capture work, or treating emulation as device
+            shipping film-capture work, or treating emulation as device
             evidence
 ```
 

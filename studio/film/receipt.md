@@ -1,0 +1,53 @@
+# Latest film candidate
+
+Only the current V15 candidate is retained as the studio's publication receipt.
+Older takes are neither referenced nor accepted as release media.
+
+## Artifact identity
+
+- Name: `matter-launch-master-68s.mp4`
+- SHA-256: `abf2659246febc59125ed302b5701d15ac7662b6203721d93a92f581c8ac5f2b`
+- Duration: 68.000 seconds
+- Picture: 1440 × 810, 30 fps, H.264, yuv420p
+- Audio: AAC, 48 kHz, stereo
+- Size: 11,205,912 bytes
+- Capture contract: version 15
+- Product basis: `7a67d5c`, including the merged native zoom-readout change
+
+README playback uses a derived delivery copy because GitHub Markdown accepts
+video attachments smaller than 10 MB. The source master remains authoritative.
+The delivery copy is `matter-film-readme-68s.mp4`, 9,404,432 bytes,
+1440 × 810 at 30 fps, H.264/AAC at 48 kHz stereo, with SHA-256
+`53b939b18285820a5b9d40d1d1815cecea4f6960ec0404a477ea10d1df4b200c`.
+It completed a full decode and measured 0.997678 whole-picture SSIM against the
+master. Both files remain inside the ignored local artifact directory; only the
+delivery copy is published as the reviewed README attachment
+`https://github.com/user-attachments/assets/66cdce23-c66a-4d7e-aced-567d266c36ba`.
+
+The native lower-left Move guidance is asserted at 60% during the settled
+zoom/pan composition and at 100% after the closing restoration. The percentage
+is product UI, not a composited overlay.
+
+## Verification
+
+- Full media decode passed.
+- No audio gap of at least one second was detected at -45 dB.
+- Film render tests passed 19/19 before the studio colocation.
+- Film fixture tests passed 2/2 before the studio colocation.
+- Focused product coverage passed 173/173.
+- Zoom-guidance browser coverage passed 3/3 at laptop, phone, and compact-phone widths.
+- Capture passed 1/1.
+- `npm run check` passed 144 Node tests, 2,688 Vitest tests with five expected
+  skips, type generation, typecheck, zero-warning lint, documentation,
+  architecture, production build, and runtime-artifact budgets.
+- `npm run test:e2e` passed 172 browser tests with 15 expected skips in 3.1
+  minutes using the repository's three-worker configuration.
+
+## Publication gate
+
+The current master uses an archival excerpt from Douglas Engelbart's 1968
+demonstration. The owner authorized publication of this candidate on
+2026-09-24, and the repository Markdown upload makes the delivery copy publicly
+accessible. This receipt records the product publication decision, not
+third-party rights clearance. The source master, raw capture, supplied audio,
+frames, and failed takes remain untracked.

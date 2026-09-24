@@ -2,6 +2,8 @@
 
 > Matter — An interface for unfinished thought.
 
+https://github.com/user-attachments/assets/66cdce23-c66a-4d7e-aced-567d266c36ba
+
 Matter is an environment where thought becomes touchable material. Voice admits
 human thought. Gesture identifies exact material and degree; Elastic Language
 fixes direction to one expand-in-place operation. A rooted tree keeps lineage.

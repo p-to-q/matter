@@ -20,6 +20,11 @@ const repairEnabled = resolveMatterRepairEnabled(
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
 export const MATTER_MEDIA_CACHE_CONTROL = "public, max-age=14400, must-revalidate";
+export const MATTER_OUTPUT_FILE_TRACING_EXCLUDES: NonNullable<
+  NextConfig["outputFileTracingExcludes"]
+> = {
+  "/*": ["./studio/**/*"],
+};
 
 export function resolveMatterNextDistDir(
   phase: string,
@@ -39,6 +44,7 @@ export default function matterNextConfig(phase: string): NextConfig {
     basePath,
     distDir: resolveMatterNextDistDir(phase),
     poweredByHeader: false,
+    outputFileTracingExcludes: MATTER_OUTPUT_FILE_TRACING_EXCLUDES,
     async redirects() {
       if (basePath === "") return [];
       return [{

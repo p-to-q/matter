@@ -627,6 +627,11 @@ artifact budgets are recorded in
 
 The active product lives entirely beneath `features/matter/`. The retired scene
 implementation remains available only in `archive/` for traceability.
+`studio/` is an adjacent publication-tooling boundary: its source and tests are
+reviewable in the repository, but the entire tree is excluded from deployment
+upload and runtime output tracing. It cannot be imported by the application,
+and local media inside its ignored artifact directory is never repository or
+package input.
 
 ```text
 app/
@@ -660,6 +665,10 @@ features/matter/
   server/                          provider adapters, planner, transcription
   components/
   store/
+
+studio/
+  README.md                       repository and packaging boundary
+  film/                           capture, renderer, fixtures, tests, copy contract, latest receipt
 ```
 
 - `tree/`, `material/`, `layout/`, and `tools/` do not import React, DOM, store, or server code;
@@ -669,6 +678,9 @@ features/matter/
 - DOM `Range` and `getClientRects()` live at the interaction/rendering edge;
 - `server/` is the only place a configurable or credentialed provider name appears;
 - route handlers parse, delegate, and translate only.
+- `studio/` may operate the application from outside it, but application and
+  server modules never import studio code; deployment and runtime artifacts
+  exclude the entire directory.
 
 ### Context, harness, and memory ownership
 
