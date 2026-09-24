@@ -22,7 +22,7 @@ The delivery copy is `matter-film-readme-68s.mp4`, 9,404,432 bytes,
 It completed a full decode and measured 0.997678 whole-picture SSIM against the
 master. Both files remain inside the ignored local artifact directory; only the
 delivery copy is published as the reviewed README attachment
-`https://github.com/user-attachments/assets/020cd8b3-7d86-4cbd-b466-d6ce7c6c24aa`.
+`https://github.com/user-attachments/assets/66cdce23-c66a-4d7e-aced-567d266c36ba`.
 
 The native lower-left Move guidance is asserted at 60% during the settled
 zoom/pan composition and at 100% after the closing restoration. The percentage
@@ -48,7 +48,8 @@ is product UI, not a composited overlay.
 ## Publication gate
 
 The current master uses an archival excerpt from Douglas Engelbart's 1968
-demonstration. A repository Markdown upload makes the file publicly accessible.
-Do not upload or reference the final attachment until the owner records the
-applicable audio-use decision. The video itself, raw capture, supplied audio,
+demonstration. The owner authorized publication of this candidate on
+2026-09-24, and the repository Markdown upload makes the delivery copy publicly
+accessible. This receipt records the product publication decision, not
+third-party rights clearance. The source master, raw capture, supplied audio,
 frames, and failed takes remain untracked.
