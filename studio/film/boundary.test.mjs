@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
-import { inspectFilmBoundary } from "./boundary.mjs";
+import { inspectFilmBoundary, readFilmBoundary } from "./boundary.mjs";
 
 const required = [
   "README.md",
@@ -60,4 +64,36 @@ test("rejects incomplete source, tracked media, localized code, and packaging dr
   assert.match(failures, /\.vercelignore/u);
   assert.match(failures, /output tracing/u);
   assert.match(failures, /exactly one current film attachment/u);
+});
+
+test("reads text sources without decoding a forbidden media candidate", async () => {
+  const root = await mkdtemp(join(tmpdir(), "matter-film-boundary-"));
+  const attachment = "https://github.com/user-attachments/assets/current-film";
+  try {
+    const initialized = spawnSync("git", ["init", "--quiet"], { cwd: root });
+    assert.equal(initialized.status, 0);
+    await mkdir(join(root, "studio", "film"), { recursive: true });
+    for (const file of required) {
+      const relative = file.slice("studio/film/".length);
+      const source = relative === "receipt.md"
+        ? `# Receipt\n\n${attachment}\n`
+        : relative.endsWith(".md")
+          ? "# Film\n"
+          : "export const filmSource = true;\n";
+      await writeFile(join(root, file), source, "utf8");
+    }
+    await writeFile(join(root, "studio", "film", "old-take.mp4"), Uint8Array.from([0xff, 0xfe, 0xfd]));
+    await writeFile(join(root, "package.json"), JSON.stringify({
+      scripts: { "film:capture": "node studio/film/render.mjs" },
+    }), "utf8");
+    await writeFile(join(root, "next.config.ts"), '"./studio/**/*"\n', "utf8");
+    await writeFile(join(root, ".vercelignore"), "studio/\n", "utf8");
+    await writeFile(join(root, "README.md"), `# Matter\n\n${attachment}\n`, "utf8");
+
+    const boundary = await readFilmBoundary(root);
+    assert.equal(boundary.sources["old-take.mp4"], undefined);
+    assert.match(inspectFilmBoundary(boundary).join("\n"), /old-take\.mp4/u);
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
 });

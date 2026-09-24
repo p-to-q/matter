@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const marker = "<!-- matter-film-copy:v1 -->";
 const expectedKeys = Object.freeze({
@@ -81,6 +82,8 @@ function deepFreeze(value) {
   return Object.freeze(value);
 }
 
+// The renderer and Playwright wrapper both pin cwd to the repository root.
+// A cwd-relative path keeps this module valid when Playwright transpiles it to CommonJS.
 export const FILM_COPY = parseFilmCopy(
-  readFileSync(new URL("./copy.md", import.meta.url), "utf8"),
+  readFileSync(resolve(process.cwd(), "studio", "film", "copy.md"), "utf8"),
 );

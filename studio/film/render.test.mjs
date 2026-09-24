@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { basename, dirname } from "node:path";
 import test from "node:test";
 import { FILM_COPY } from "./copy.mjs";
 import {
@@ -20,12 +21,14 @@ import {
   validateLaunchMediaProbe,
   validateLaunchOutroSourceProbe,
 } from "./render.mjs";
+import { resolveNpmInvocation } from "./start-server.mjs";
 
 const captureCues = Object.freeze({
   version: 15,
   durationMs: 68_000,
   width: 1_600,
   height: 900,
+  complete: true,
   cues: [
     {
       name: "opening-root",
@@ -162,10 +165,10 @@ test("launch capture is dry and offline by default in a fresh ignored destinatio
   assert.equal(parsed.liveInquiry, false);
   assert.equal(parsed.offlineDemo, false);
   assert.equal(parsed.audioPath, null);
-  assert.match(
-    parsed.outputDirectory,
-    /studio\/film\/artifacts\/2026-09-05T10-20-30-000Z$/u,
-  );
+  assert.equal(basename(parsed.outputDirectory), "2026-09-05T10-20-30-000Z");
+  assert.equal(basename(dirname(parsed.outputDirectory)), "artifacts");
+  assert.equal(basename(dirname(dirname(parsed.outputDirectory))), "film");
+  assert.equal(basename(dirname(dirname(dirname(parsed.outputDirectory)))), "studio");
   assert.deepEqual(
     launchVideoCaptureEnvironment(parsed, { KEEP: "yes" }),
     { KEEP: "yes", MATTER_LAUNCH_LIVE_INQUIRY: "false", MATTER_LAUNCH_OFFLINE_DEMO: "false" },
@@ -185,8 +188,9 @@ test("launch capture resolves operator paths and opts into one live inquiry expl
   assert.equal(parsed.renderExisting, false);
   assert.equal(parsed.liveInquiry, true);
   assert.equal(parsed.offlineDemo, false);
-  assert.match(parsed.audioPath, /\/voice\.wav$/u);
-  assert.match(parsed.outputDirectory, /\/tmp\/take-one$/u);
+  assert.equal(basename(parsed.audioPath), "voice.wav");
+  assert.equal(basename(parsed.outputDirectory), "take-one");
+  assert.equal(basename(dirname(parsed.outputDirectory)), "tmp");
   assert.deepEqual(
     launchVideoCaptureEnvironment(parsed, { KEEP: "yes" }),
     { KEEP: "yes", MATTER_LAUNCH_LIVE_INQUIRY: "true", MATTER_LAUNCH_OFFLINE_DEMO: "false" },
@@ -221,12 +225,25 @@ test("existing capture rendering is offline and requires its explicit run direct
   assert.equal(parsed.renderExisting, true);
   assert.equal(parsed.liveInquiry, false);
   assert.equal(parsed.offlineDemo, false);
-  assert.match(parsed.outputDirectory, /\/tmp\/take-one$/u);
+  assert.equal(basename(parsed.outputDirectory), "take-one");
+  assert.equal(basename(dirname(parsed.outputDirectory)), "tmp");
   assert.deepEqual(
     launchVideoCaptureEnvironment(parsed, { KEEP: "yes" }),
     { KEEP: "yes", MATTER_LAUNCH_LIVE_INQUIRY: "false", MATTER_LAUNCH_OFFLINE_DEMO: "false" },
   );
   assert.equal(describeLaunchInquiryMode(parsed), "recorded-receipt");
+});
+
+test("film server launches npm through the native platform command boundary", () => {
+  assert.deepEqual(resolveNpmInvocation("darwin"), { command: "npm", prefix: [] });
+  assert.deepEqual(resolveNpmInvocation("win32", "C:\\Windows\\System32\\cmd.exe"), {
+    command: "C:\\Windows\\System32\\cmd.exe",
+    prefix: ["/d", "/s", "/c", "npm.cmd"],
+  });
+  assert.deepEqual(resolveNpmInvocation("win32", "  "), {
+    command: "cmd.exe",
+    prefix: ["/d", "/s", "/c", "npm.cmd"],
+  });
 });
 
 test("capture cues freeze five non-overlapping, semantically motivated camera windows", () => {
@@ -597,6 +614,7 @@ test("invalid launch options and camera receipts fail before rendering", () => {
     () => parseLaunchVideoArgs(["--execute", "--live-inquiry", "--offline-demo"]),
     /mutually exclusive/u,
   );
+  assert.throws(() => parseLaunchCaptureCues({ ...captureCues, complete: false }), /incomplete/u);
   assert.throws(() => parseLaunchCaptureCues({ ...captureCues, durationMs: 63_000 }), /68-second/u);
   assert.throws(() => parseLaunchCaptureCues({ ...captureCues, version: 13 }), /unsupported version/u);
   assert.throws(() => parseLaunchOpeningRootCue({

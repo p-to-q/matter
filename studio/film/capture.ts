@@ -147,6 +147,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
   let daylightPresentation: PresentationState | null = null;
   let nightPresentation: PresentationState | null = null;
   const storyEvents: Partial<Record<StoryEventName, number>> = {};
+  let captureComplete = false;
   await page.route("**/api/turn", async (route) => {
     const envelope = route.request().method() === "POST"
       ? route.request().postDataJSON() as {
@@ -949,6 +950,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     await hideCapturePointer(page);
 
     await at(RECORDING_DURATION_MS + 120);
+    captureComplete = true;
   } finally {
     await page.screencast.stop();
     await writeFile(resolve(runDirectory, "capture-cues.json"), `${JSON.stringify({
@@ -956,6 +958,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
       durationMs: RECORDING_DURATION_MS,
       width: CAPTURE_WIDTH,
       height: CAPTURE_HEIGHT,
+      complete: captureComplete,
       cues,
       requests: {
         transcribe: transcriptionRequests,

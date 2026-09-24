@@ -8,6 +8,9 @@ import { FILM_COPY } from "./copy.mjs";
 const runDirectory = process.env.MATTER_LAUNCH_RUN_DIR?.trim() ||
   "studio/film/artifacts/unconfigured";
 const liveInquiry = process.env.MATTER_LAUNCH_LIVE_INQUIRY === "true";
+// The renderer starts Playwright with the repository root as its explicit cwd.
+// Re-publish that boundary here so webServer never falls back to the config directory.
+const repositoryRoot = process.cwd();
 
 /**
  * Film capture is an explicit operator workflow, not a product test.
@@ -53,6 +56,7 @@ export default defineConfig({
     // Fast Refresh, or cold route compilation. This helper builds with the
     // repository's frozen Webpack production command and then owns next start.
     command: "node studio/film/start-server.mjs",
+    cwd: repositoryRoot,
     env: {
       ...process.env,
       MATTER_BASE_PATH: "/matter",

@@ -136,7 +136,9 @@ request. It also records ordered story-event and opening/daylight/night
 presentation receipts, an explicit post-Elastic selection-clear receipt, the
 explicit Inquiry mode, native `60%` and `100%` zoom-readout receipts,
 post-navigation and closing-geometry receipts, and the durable canvas title in a version-15
-`capture-cues.json` beside the raw WebM. The renderer accepts
+`capture-cues.json` beside the raw WebM. Its completion marker becomes true only
+after the authored flow reaches the end; a failed or interrupted take remains
+incomplete and cannot enter resume rendering. The renderer accepts
 only the frozen 1600×900 capture surface and valid, non-overlapping cue windows,
 generates the transparent title and deterministic closing frames through the
 same local Chrome dependency used for capture, then applies a brief focus return,
@@ -203,7 +205,7 @@ npm run film:capture -- \
 
 Resume mode requires the explicit take directory, rejects both Inquiry mode
 flags, and
-revalidates the raw stream, versioned receipt, credit, and final media profile
+revalidates the raw stream, completed versioned receipt, credit, and final media profile
 before publishing a master.
 
 The dedicated loopback Inquiry preflight remains available before a take. It

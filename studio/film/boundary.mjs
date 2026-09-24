@@ -70,7 +70,8 @@ export async function readFilmBoundary(root = process.cwd()) {
   );
   const files = stdout.split(/\r?\n/u).filter(Boolean);
   const studioFiles = files.filter((file) => file.startsWith(`${studioRoot}/`));
-  const sourceEntries = await Promise.all(studioFiles.map(async (file) => [
+  const sourceFiles = studioFiles.filter((file) => !forbiddenMediaPattern.test(file));
+  const sourceEntries = await Promise.all(sourceFiles.map(async (file) => [
     file.slice(studioRoot.length + 1),
     await readFile(resolve(root, file), "utf8"),
   ]));

@@ -37,13 +37,11 @@ is product UI, not a composited overlay.
 - Focused product coverage passed 173/173.
 - Zoom-guidance browser coverage passed 3/3 at laptop, phone, and compact-phone widths.
 - Capture passed 1/1.
-- `npm run check` passed 138 Node tests, 2,688 Vitest tests with four expected
+- `npm run check` passed 144 Node tests, 2,688 Vitest tests with five expected
   skips, type generation, typecheck, zero-warning lint, documentation,
   architecture, production build, and runtime-artifact budgets.
-- Two complete concurrent browser runs exposed three load-sensitive timing
-  failures across Voice admission, mid-animation sampling, and settings-menu
-  appearance. All three passed isolated serial replay. The concurrent browser
-  suite is therefore not claimed as clean.
+- `npm run test:e2e` passed 172 browser tests with 15 expected skips in 3.1
+  minutes using the repository's three-worker configuration.
 
 ## Publication gate
 

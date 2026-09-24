@@ -352,6 +352,9 @@ export function parseLaunchCaptureCues(value) {
 }
 
 function validateLaunchCaptureReceipts(value) {
+  if (value.complete !== true) {
+    throw new Error("Launch capture receipt is incomplete and cannot be rendered.");
+  }
   if (value.inquiryMode !== "fixture" && value.inquiryMode !== "live") {
     throw new Error("Launch capture must identify its Inquiry mode.");
   }
