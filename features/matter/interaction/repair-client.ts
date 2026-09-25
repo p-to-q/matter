@@ -19,8 +19,6 @@ export type RepairRequestInput = Readonly<{
   attempt: number;
   locale: string;
   text: string;
-  /** Bounded terms from the person's own material; omitted when there are none. */
-  vocabulary?: readonly string[];
   signal: AbortSignal;
   timeoutMs?: number;
 }>;
@@ -42,9 +40,6 @@ export async function requestTranscriptRepair(input: RepairRequestInput): Promis
     attempt: input.attempt,
     locale: input.locale,
     text: input.text,
-    ...(input.vocabulary === undefined || input.vocabulary.length === 0
-      ? {}
-      : { vocabulary: input.vocabulary }),
   });
   const deadline = withDeadline(input.signal, input.timeoutMs ?? REPAIR_CLIENT_TIMEOUT_MS);
 

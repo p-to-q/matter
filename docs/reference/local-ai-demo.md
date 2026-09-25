@@ -60,10 +60,9 @@ receive raw audio.
 - **Thought Label** is automatic rather than a separate visible action. It is a
   fixture by default so merely opening the page cannot spend provider capacity.
 
-Transcript Repair currently sends no document-derived vocabulary hint. The
-working-context projection is owned below the admission boundary; omitting the
-optional hint is safer than allowing held-aside material to cross that boundary
-or synchronizing it through a stale render effect.
+Transcript Repair has no document-derived term field. The working-context
+projection remains below the admission boundary, so held-aside material cannot
+cross into repair through a stale render effect.
 
 ## Probe boundary
 

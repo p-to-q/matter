@@ -55,7 +55,6 @@ export async function repairTranscript(
   const input = normalizeRepairInput({
     text: request.text,
     locale: request.locale,
-    vocabulary: request.vocabulary,
   });
   if (!decideRepairRequest(input)) {
     return settle(request, input.text, "verbatim", "NOT_WORTH_ASKING");

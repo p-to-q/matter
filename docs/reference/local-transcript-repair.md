@@ -31,7 +31,6 @@ type TranscriptRepairPort = Readonly<{
     attempt: number;
     text: string;
     locale: MatterLocale;
-    vocabulary: readonly string[];
     signal: AbortSignal;
   }): Promise<{ text: string; source: "rules" | "model" }>;
   dispose(): void;
@@ -76,8 +75,8 @@ heard baseline → deterministic rule floor → optional POST /api/repair
 managed proposal → local adjudication → store lease + exact revalidation
 ```
 
-The managed request carries operation identity, locale, one utterance, and a
-bounded vocabulary hint. It carries no material address. It has one 11-second
+The managed request carries operation identity, locale, and one utterance. It
+carries no material address or document-derived terms. It has one 11-second
 client ceiling covering headers and the bounded body, no retry, and no response
 cache. Inquiry dictation keeps its previously shipped 8.8-second visible-draft
 override because, unlike admitted material, its baseline is not yet readable
@@ -142,7 +141,7 @@ or delete the default `transformers-cache`: the local Whisper path may own it.
 Only after a new profile reaches `ready` may caches with the repair-specific
 prefix and a different profile be removed.
 
-Never cache transcript, vocabulary, candidate, or output; never put model bytes
+Never cache transcript, candidate, or output; never put model bytes
 in the Matter document IndexedDB; never request persistent storage for
 reproducible assets. Hidden, idle, and circuit-open states release memory but
 keep asset cache. The Cache API is disposable. `navigator.storage.estimate()`

@@ -58,7 +58,7 @@ describe("IndexedDB document repository", () => {
     expect(openDB).toHaveBeenCalledTimes(2);
   });
 
-  it("lets an older version-change callback close only its own database", async () => {
+  it("closes a late blocked database without touching the explicit retry", async () => {
     const olderDatabase = {
       close: vi.fn(),
       get: vi.fn().mockResolvedValue(undefined),
@@ -84,10 +84,14 @@ describe("IndexedDB document repository", () => {
     const secondLoad = repository.load("tree-1");
     resolveFirst(olderDatabase);
 
-    await expect(firstLoad).resolves.toEqual({ ok: true, value: null });
+    await expect(firstLoad).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_UNAVAILABLE" },
+    });
     await expect(secondLoad).resolves.toEqual({ ok: true, value: null });
-    lifecycle?.blocking?.();
     await vi.waitFor(() => expect(olderDatabase.close).toHaveBeenCalledTimes(1));
+    lifecycle?.blocking?.();
+    expect(olderDatabase.close).toHaveBeenCalledTimes(1);
 
     await expect(repository.load("tree-1")).resolves.toEqual({ ok: true, value: null });
     expect(currentDatabase.close).not.toHaveBeenCalled();

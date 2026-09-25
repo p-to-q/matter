@@ -36,6 +36,16 @@ the running product, not how ambitious a feature sounds.
    Status, AI, and infrastructure do not become permanent chrome; inquiry stays
    closed until the person explicitly opens it. Provider availability is kept
    in operational receipts, never rendered as another message inside material.
+   Local lexical authority remains invisible when it works and discloses only
+   the correction needed at an error the person has chosen to address.
+7. **Local authority is configuration, not agency.** Wiki may suggest one
+   deterministic spelling through a narrow captured capability; it cannot
+   choose scope, authorize or publish a command, or become model context.
+   The system may observe and score bounded human-admission evidence before a
+   person ever opens settings, but ambiguity always means abstention. When a
+   result is wrong, changing or removing its canonical word becomes the final
+   authority for all hidden aliases. Matter owns validation and publication
+   before and after every suggestion.
 
 **Submission authority stays strict; result delivery stays resilient.** A
 read-only Inquiry answer belongs to the question and bounded snapshot that were

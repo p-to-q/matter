@@ -7,7 +7,6 @@ const input = (text: string, signal = new AbortController().signal) => ({
   attempt: 1,
   text,
   locale: "en-US" as const,
-  vocabulary: ["Matter"],
   signal,
 });
 
@@ -43,7 +42,6 @@ describe("TranscriptRepairPort", () => {
       operationId: "voice_1",
       attempt: 1,
       text: "I think this works and it still needs testing.",
-      vocabulary: ["Matter"],
     }));
   });
 

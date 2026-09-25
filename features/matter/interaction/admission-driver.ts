@@ -99,8 +99,6 @@ type LateRepairResources = {
   candidate?: TranscriptRepairResult;
 };
 
-const NO_REPAIR_VOCABULARY: readonly string[] = Object.freeze([]);
-
 /**
  * Serializes admission events and owns their ephemeral effects. React may
  * recreate this driver, but no browser resource may survive dispose or scope
@@ -499,7 +497,9 @@ export class AdmissionDriver {
               operation,
               repairLeaseId: receipt.repairLeaseId,
               nodeId,
-              baseline,
+              baseline: typeof receipt.admittedText === "string"
+                ? receipt.admittedText
+                : baseline,
               admittedAtMs,
               locale: owned.locale,
             });
@@ -579,9 +579,6 @@ export class AdmissionDriver {
         attempt: input.operation.attempt,
         text: input.baseline,
         locale: input.locale,
-        // Admission does not own the active working-context projection. Empty
-        // is the only safe hint until that owner can be captured synchronously.
-        vocabulary: NO_REPAIR_VOCABULARY,
         signal: resources.controller.signal,
       }))
       .then((result) => {

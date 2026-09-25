@@ -43,6 +43,8 @@ export type ExpandInPlaceCandidate = Readonly<{
   amount: number;
 }>;
 
+export type ExpandGeneratedRange = Readonly<{ start: number; end: number }>;
+
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("und", { granularity: "grapheme" });
 const WORD_SEGMENTER = new Intl.Segmenter("und", { granularity: "word" });
 
@@ -213,6 +215,95 @@ function lexicalUnits(text: string): readonly string[] {
       .filter((part) => part.isWordLike && !/\d/u.test(part.segment))
       .map((part) => part.segment),
   );
+}
+
+/**
+ * Returns only candidate ranges that cannot be a source token after proving a
+ * complete ordered source alignment. Word, spacing, and punctuation tokens all
+ * participate; repeated source tokens are protected everywhere rather than
+ * assigned to one guessed occurrence.
+ */
+export function projectExpandGeneratedRanges(
+  sourceText: string,
+  candidateText: string,
+): readonly ExpandGeneratedRange[] | null {
+  if (
+    !isWellFormedUnicodeText(sourceText) ||
+    !isWellFormedUnicodeText(candidateText)
+  ) return null;
+  const source = [...WORD_SEGMENTER.segment(sourceText)];
+  const candidate = [...WORD_SEGMENTER.segment(candidateText)];
+  if (source.length === 0) return candidate.length === 0
+    ? Object.freeze([])
+    : Object.freeze([Object.freeze({ start: 0, end: candidateText.length })]);
+
+  const prefixBefore: number[] = [];
+  let prefixLength = 0;
+  for (let index = 0; index < candidate.length; index += 1) {
+    prefixBefore[index] = prefixLength;
+    if (candidate[index].segment === source[prefixLength]?.segment) prefixLength += 1;
+  }
+  if (prefixLength !== source.length) return null;
+
+  const suffixAfter: number[] = [];
+  let suffixLength = 0;
+  for (let index = candidate.length - 1; index >= 0; index -= 1) {
+    suffixAfter[index] = suffixLength;
+    if (
+      candidate[index].segment ===
+      source[source.length - suffixLength - 1]?.segment
+    ) suffixLength += 1;
+  }
+
+  const sourceIndexes = new Map<string, number[]>();
+  source.forEach((part, index) => {
+    const indexes = sourceIndexes.get(part.segment);
+    if (indexes === undefined) sourceIndexes.set(part.segment, [index]);
+    else indexes.push(index);
+  });
+  const protectedRanges = candidate
+    .filter((part, index) => {
+      const indexes = sourceIndexes.get(part.segment);
+      if (indexes === undefined) return false;
+      // Repeated lexical or punctuation tokens remain protected everywhere.
+      // Whitespace stays protected only where it can belong to a complete
+      // source alignment, so a generated multi-word phrase remains editable.
+      if (!/^\s+$/u.test(part.segment)) return true;
+      return hasIndexInRange(
+        indexes,
+        source.length - suffixAfter[index] - 1,
+        prefixBefore[index],
+      );
+    })
+    .map((part) => Object.freeze({
+      start: part.index,
+      end: part.index + part.segment.length,
+    }));
+
+  const eligible: ExpandGeneratedRange[] = [];
+  let cursor = 0;
+  for (const protectedRange of protectedRanges) {
+    if (cursor < protectedRange.start) {
+      eligible.push(Object.freeze({ start: cursor, end: protectedRange.start }));
+    }
+    cursor = Math.max(cursor, protectedRange.end);
+  }
+  if (cursor < candidateText.length) {
+    eligible.push(Object.freeze({ start: cursor, end: candidateText.length }));
+  }
+  return Object.freeze(eligible);
+}
+
+function hasIndexInRange(indexes: readonly number[], first: number, last: number): boolean {
+  if (first > last) return false;
+  let low = 0;
+  let high = indexes.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (indexes[middle] < first) low = middle + 1;
+    else high = middle;
+  }
+  return low < indexes.length && indexes[low] <= last;
 }
 
 function isOrderedSubsequence(source: readonly string[], candidate: readonly string[]): boolean {

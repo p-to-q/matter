@@ -1,29 +1,9 @@
 import type { ScenarioAdapter } from "./harness";
 import type { TextSwapScenarioInput } from "./text-swap-harness";
+import { FROZEN_TEXT_SWAP_FIXTURES } from "./text-swap-fixtures";
 import { resolvePoolAdapter } from "./model-pool";
 
-type FrozenTextSwap = Readonly<{
-  locale: TextSwapScenarioInput["locale"];
-  passage: string;
-  direction: string;
-  text: string;
-}>;
-
-/** A closed synthetic map. A miss is unavailable, never generic prose. */
-export const FROZEN_TEXT_SWAP_FIXTURES: readonly FrozenTextSwap[] = Object.freeze([
-  Object.freeze({
-    locale: "zh-CN",
-    passage: "房间慢慢安静下来",
-    direction: "换一种更清楚但保留安静感的说法",
-    text: "屋里渐渐恢复了安静",
-  }),
-  Object.freeze({
-    locale: "zh-CN",
-    passage: "我们怀念的也许不是一个真实存在过的过去",
-    direction: "换一种更凝练的说法",
-    text: "我们也许怀念的，并不是一个曾经真实存在的过去",
-  }),
-]);
+export { FROZEN_TEXT_SWAP_FIXTURES, LAUNCH_POINT_TALK_FIXTURE } from "./text-swap-fixtures";
 
 export const fixtureTextSwapAdapter: ScenarioAdapter = async (call) => {
   const input = call.input as TextSwapScenarioInput;

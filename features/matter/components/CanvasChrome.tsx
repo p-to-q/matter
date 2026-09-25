@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import {
   forwardRef,
   useCallback,
@@ -52,6 +53,11 @@ import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
 import { subscribePageExit } from "../interaction/page-suspension";
 import { ApiSettingsForm } from "./ApiSettingsForm";
 
+// Wiki is a low-frequency settings capability; its persistence and editor code
+// must not tax the paper's initial interaction bundle.
+const WikiSettingsSection = dynamic(() =>
+  import("./WikiSettingsSection").then((module) => module.WikiSettingsSection));
+
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
   inquiryOwner: InquiryContextOwner;
@@ -72,6 +78,7 @@ export type CanvasChromeOverlay =
   | "language"
   | "mobile"
   | "api"
+  | "wiki"
   | CanvasChromeInfoId
   | null;
 
@@ -123,6 +130,7 @@ type CanvasChromeCopy = Readonly<{
   recordUnsaved: string;
   settings: string;
   terms: string;
+  wiki: string;
 }>;
 
 export type InquiryDictationControl = Readonly<{
@@ -362,6 +370,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     recordUnsaved: "This record has not saved locally.",
     settings: "Matter settings",
     terms: "Terms",
+    wiki: "WIKI",
   }),
   "zh-CN": Object.freeze({
     about: "关于",
@@ -402,6 +411,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     recordUnsaved: "这份记录还没有保存在本地。",
     settings: "Matter 设置",
     terms: "服务条款",
+    wiki: "词典 WIKI",
   }),
   "zh-TW": Object.freeze({
     about: "關於",
@@ -442,6 +452,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     recordUnsaved: "這份記錄尚未儲存在本機。",
     settings: "Matter 設定",
     terms: "服務條款",
+    wiki: "詞典 WIKI",
   }),
   "ja-JP": Object.freeze({
     about: "概要",
@@ -482,6 +493,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     recordUnsaved: "この記録はまだこの端末に保存されていません。",
     settings: "Matter の設定",
     terms: "利用規約",
+    wiki: "辞書 WIKI",
   }),
   "de-DE": Object.freeze({
     about: "Über",
@@ -522,6 +534,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     recordUnsaved: "Dieser Verlauf wurde noch nicht lokal gespeichert.",
     settings: "Matter-Einstellungen",
     terms: "Nutzungsbedingungen",
+    wiki: "WÖRTERBUCH WIKI",
   }),
 });
 
@@ -536,6 +549,7 @@ const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
   ...INFO_OVERLAYS,
   "api",
   "mobile",
+  "wiki",
 ]);
 
 /** Modal chrome temporarily owns the surface without owning its material state. */
@@ -767,6 +781,12 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     openOverlay("api", trigger);
   }, [openOverlay, overlay]);
 
+  const openWiki = useCallback((trigger: HTMLElement | null) => {
+    if (overlay === "mobile") trigger = mobileTriggerRef.current;
+    else if (overlay === "settings") trigger = settingsButtonRef.current;
+    openOverlay("wiki", trigger);
+  }, [openOverlay, overlay]);
+
   const openMenuFromKeyboard = useCallback((
     event: ReactKeyboardEvent<HTMLButtonElement>,
     name: "settings" | "language",
@@ -849,6 +869,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
           <MenuButton icon={<PricingIcon />} label={copy.pricing} onClick={(target) => openInfo("pricing", target)} />
           <MenuButton icon={<PrivacyIcon />} label={copy.privacy} onClick={(target) => openInfo("privacy", target)} />
           <MenuButton icon={<TermsIcon />} label={copy.terms} onClick={(target) => openInfo("terms", target)} />
+          <MenuButton icon={<WikiIcon />} label={copy.wiki} onClick={openWiki} />
           <MenuButton icon={<ApiIcon />} label={copy.api} onClick={openApi} />
         </div>
 
@@ -1001,6 +1022,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
                 <MobileRow icon={<PricingIcon />} label={copy.pricing} onClick={(target) => openInfo("pricing", target)} />
                 <MobileRow icon={<PrivacyIcon />} label={copy.privacy} onClick={(target) => openInfo("privacy", target)} />
                 <MobileRow icon={<TermsIcon />} label={copy.terms} onClick={(target) => openInfo("terms", target)} />
+                <MobileRow icon={<WikiIcon />} label={copy.wiki} onClick={openWiki} />
                 <MobileRow icon={<ApiIcon />} label={copy.api} onClick={openApi} />
               </section>
               <section className={styles.mobileSection}>
@@ -1096,6 +1118,38 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
           presented={overlay === "api"}
         />
       </section>
+
+      {overlay === "wiki" ? (
+        <>
+          <button
+            aria-label={`${copy.close}: ${copy.wiki}`}
+            className={styles.backdrop}
+            onClick={() => closeOverlay()}
+            tabIndex={-1}
+            type="button"
+          />
+          <section
+            aria-labelledby="matter-wiki-title"
+            aria-modal="true"
+            className={`${styles.infoDialog} ${styles.wikiDialog}`}
+            ref={dialogRef}
+            role="dialog"
+          >
+            <header className={styles.dialogHeader}>
+              <h2 id="matter-wiki-title">{copy.wiki}</h2>
+              <button aria-label={`${copy.close}: ${copy.wiki}`} onClick={() => closeOverlay()} type="button">
+                <CloseIcon />
+              </button>
+            </header>
+            <div className={styles.wikiDialogBody}>
+              <WikiSettingsSection
+                active
+                language={preferences.language}
+              />
+            </div>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 });
@@ -1702,6 +1756,10 @@ function ApiIcon() {
 
 function AboutIcon() {
   return <ChromeSvg><circle cx="12" cy="12" r="9" /><path d="M12 11v5m0-8h.01" /></ChromeSvg>;
+}
+
+function WikiIcon() {
+  return <ChromeSvg><path d="M6 3.5h11.5A1.5 1.5 0 0 1 19 5v15H7a2.5 2.5 0 0 1 0-5h12M7 3.5V15M10.5 8h5M10.5 11.5h4" /></ChromeSvg>;
 }
 
 function AppearanceIcon() {

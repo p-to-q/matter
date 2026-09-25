@@ -1,7 +1,4 @@
-"use client";
-
-import { useStore } from "zustand";
-import { createStore, type StoreApi } from "zustand/vanilla";
+import { createStore } from "zustand/vanilla";
 import {
   createBranchChildCommand,
   createSeededDocument,
@@ -61,18 +58,34 @@ import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/tit
 import { deriveMaterialTitle } from "../material/material-files";
 import { recoverPersistedHistory } from "../persistence/history-recovery";
 import {
-  planToTreeCommand,
   type TransformEnvelope,
   type TransformPlan,
 } from "../protocol/transform-contract";
 import {
-  planToTextSwapCommand,
   type TextSwapEnvelope,
   type TextSwapPlan,
 } from "../protocol/text-swap-contract";
 import { MATTER_LOCALE, isMatterLocale, type MatterLocale } from "../config/locales";
 import type { SeededBranchTextResolver } from "../material/seeded-material-core";
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
+import {
+  prepareAdmissionIngress,
+  prepareRepairIngress,
+  prepareTransformIngress,
+  prepareTextSwapIngress,
+} from "../application/material-ingress";
+import {
+  captureMaterialLexicalSession,
+  IDENTITY_MATERIAL_LEXICAL_PORT,
+  type MaterialLexicalPort,
+  type MaterialLexicalRequest,
+  type MaterialLexicalSession,
+} from "../application/material-lexical-port";
+import {
+  IDENTITY_MATERIAL_LEXICAL_OBSERVATION_PORT,
+  observeCommittedMaterialText,
+  type MaterialLexicalObservationPort,
+} from "../application/material-lexical-observation-port";
 
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
   // Durable history must not silently discard an old inverse. Browser storage
@@ -142,7 +155,7 @@ export type SeedLocalizationReceipt = Readonly<{
 }>;
 
 export type AdmissionCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
-  Readonly<{ repairLeaseId: string }>;
+  Readonly<{ repairLeaseId: string; admittedText: string }>;
 
 export type MatterAdmissionValues = AdmissionValues & Readonly<{
   expectedDocumentEpoch: number;
@@ -231,6 +244,7 @@ type AdmissionRepairLease = Readonly<{
   admittedAtMs: number;
   locale: MatterLocale;
   interactionId: string;
+  lexicalSession: MaterialLexicalSession;
 }>;
 
 export type ObservableMatterStoreReceipt =
@@ -296,6 +310,9 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   clearError: () => void;
 };
 
+/** Selector shape for the composition-owned React binding. */
+export type MatterStoreViewState = MatterStoreInternalState;
+
 /**
  * Identity and time for one extension. They arrive as values because a pure
  * domain command may not read a clock or a random source, and because a node a
@@ -322,8 +339,8 @@ export type MatterStore = {
 };
 
 /**
- * Each factory owns an isolated fixture session. The singleton below is only a
- * React binding; tests and future document tabs must create their own store.
+ * Each factory owns an isolated session. Browser composition chooses any
+ * singleton binding; tests and future document tabs create their own store.
  */
 export function createMatterStore(
   initialDocument: SeededDocumentVariant = normalizeMatterInitialDocument(
@@ -333,6 +350,8 @@ export function createMatterStore(
     documentRoot?: boolean;
     initialTitle?: string;
     monotonicNow?: () => number;
+    materialLexical?: MaterialLexicalPort;
+    humanAdmissionObservation?: MaterialLexicalObservationPort;
   }> = {},
 ): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
@@ -341,6 +360,9 @@ export function createMatterStore(
   const repairLeases = new Map<string, AdmissionRepairLease>();
   let repairLeaseSequence = 0;
   const monotonicNow = options.monotonicNow ?? defaultMonotonicNow;
+  const materialLexical = options.materialLexical ?? IDENTITY_MATERIAL_LEXICAL_PORT;
+  const humanAdmissionObservation = options.humanAdmissionObservation ??
+    IDENTITY_MATERIAL_LEXICAL_OBSERVATION_PORT;
   const fixture = createSeededDocument(initialDocument);
   const initialTitle = options.initialTitle ?? (
     initialDocument === "empty" ? EMPTY_MATTER_DOCUMENT_TITLE : undefined
@@ -444,8 +466,10 @@ export function createMatterStore(
 
     admitHumanTranscript: (anchor, values) => {
       let receipt: AdmissionStoreReceipt | undefined;
+      const committedObservation: { current: MaterialLexicalRequest | null } = { current: null };
       set((current) => {
-        pruneExpiredRepairLeases(repairLeases, monotonicNow());
+        const leaseAdmittedAtMs = monotonicNow();
+        pruneExpiredRepairLeases(repairLeases, leaseAdmittedAtMs);
         if (
           !Number.isSafeInteger(values.expectedDocumentEpoch) ||
           values.expectedDocumentEpoch < 0 ||
@@ -467,15 +491,51 @@ export function createMatterStore(
             lastReceipt: protectValue(receipt),
           });
         }
+        const lexicalSession = captureMaterialLexicalSession(materialLexical);
+        const lexicalLocale = typeof values.repairLocale === "string" &&
+            isMatterLocale(values.repairLocale)
+          ? values.repairLocale
+          : MATTER_LOCALE.simplifiedChinese;
+        const prepared = prepareAdmissionIngress({
+          tree: current.tree,
+          navigation: current.navigation,
+          anchor,
+          values,
+          locale: lexicalLocale,
+          lexicalSession,
+        });
+        if (!prepared.ok) {
+          const error: MatterStoreError = prepared.error;
+          receipt = {
+            operation: "commit",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: error.code,
+          };
+          return freezeState({
+            ...current,
+            lastError: protectValue(error),
+            lastReceipt: protectValue(receipt),
+          });
+        }
         const result = commitHumanAdmission(
           runtimeState(current),
           anchor,
-          values,
+          { ...values, transcript: prepared.admittedText },
           HISTORY_LIMITS,
         );
         receipt = result.receipt;
+        if (result.ok) {
+          committedObservation.current = Object.freeze({
+            locale: lexicalLocale,
+            channel: "spoken" as const,
+            text: values.transcript,
+          });
+        }
         if (
           result.ok &&
+          Number.isFinite(leaseAdmittedAtMs) &&
+          leaseAdmittedAtMs >= 0 &&
           Number.isFinite(values.admittedAtMs) &&
           (values.admittedAtMs ?? -1) >= 0 &&
           typeof values.repairLocale === "string" &&
@@ -492,11 +552,19 @@ export function createMatterStore(
               expectedText: node.text,
               expectedUpdatedAt: node.updatedAt,
               documentEpoch: current.documentEpoch,
-              admittedAtMs: values.admittedAtMs ?? 0,
+              // Lease authority uses the store-owned monotonic clock. The
+              // caller's timestamp schedules presentation only and cannot
+              // extend a capability by supplying a future value.
+              admittedAtMs: leaseAdmittedAtMs,
               locale: values.repairLocale,
               interactionId: values.interactionId,
+              lexicalSession,
             }));
-            receipt = Object.freeze({ ...result.receipt, repairLeaseId });
+            receipt = Object.freeze({
+              ...result.receipt,
+              repairLeaseId,
+              admittedText: node.text,
+            });
           }
         }
         const domain = protectDomain(result.state);
@@ -510,6 +578,12 @@ export function createMatterStore(
           lastReceipt: protectValue(result.receipt),
         });
       });
+      if (committedObservation.current !== null) {
+        observeCommittedMaterialText(
+          humanAdmissionObservation,
+          committedObservation.current,
+        );
+      }
       return requireSynchronousReceipt(receipt);
     },
 
@@ -588,9 +662,19 @@ export function createMatterStore(
           admittedAtMs: lease.admittedAtMs,
           settledAtMs,
         };
+        const prepared = prepareRepairIngress({
+          tree: current.tree,
+          values,
+          locale: lease.locale,
+          lexicalSession: lease.lexicalSession,
+        });
+        if (!prepared.ok) {
+          receipt = silentRepairRejection(current.tree.revision, prepared.error.code);
+          return current;
+        }
         const result = commitHumanAdmissionRepair(
           runtimeState(current),
-          values,
+          prepared.values,
           HISTORY_LIMITS,
         );
         receipt = result.receipt;
@@ -605,7 +689,7 @@ export function createMatterStore(
         receipt = Object.freeze({
           ...baseReceipt,
           repairChange: Object.freeze({
-            id: values.commandId,
+            id: prepared.values.commandId,
             treeId: lease.treeId,
             documentEpoch: lease.documentEpoch,
             nodeId: lease.nodeId,
@@ -729,13 +813,16 @@ export function createMatterStore(
           return current;
         }
         const beforeNode = current.tree.nodes[envelope.selection.nodeId];
-        const translated = Number.isFinite(nowMs) && nowMs >= 0
-          ? planToTreeCommand(current.tree, envelope, plan, {
-              source: "agent",
-              now: () => nowMs,
-            })
-          : null;
-        if (translated !== null && !translated.ok && translated.reason === "STALE") {
+        const lexicalSession = captureMaterialLexicalSession(materialLexical);
+        const translated = prepareTransformIngress({
+          tree: current.tree,
+          envelope,
+          rawPlan: plan,
+          lexicalSession,
+          source: "agent",
+          nowMs,
+        });
+        if (!translated.ok && translated.reason === "STALE") {
           receipt = Object.freeze({
             operation: "commit",
             status: "stale",
@@ -743,7 +830,7 @@ export function createMatterStore(
           });
           return current;
         }
-        if (translated === null || !translated.ok) {
+        if (!translated.ok) {
           receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
           return freezeState({
             ...current,
@@ -767,7 +854,7 @@ export function createMatterStore(
         receipt = Object.freeze({
           ...baseReceipt,
           transformChange: Object.freeze({
-            id: plan.action.id,
+            id: translated.plan.action.id,
             treeId: envelope.treeId,
             documentEpoch: current.documentEpoch,
             nodeId: envelope.selection.nodeId,
@@ -805,13 +892,16 @@ export function createMatterStore(
           return current;
         }
         const beforeNode = current.tree.nodes[envelope.selection.nodeId];
-        const translated = Number.isFinite(nowMs) && nowMs >= 0
-          ? planToTextSwapCommand(current.tree, envelope, plan, {
-              source: "agent",
-              now: () => nowMs,
-            })
-          : null;
-        if (translated !== null && !translated.ok && translated.reason === "STALE") {
+        const lexicalSession = captureMaterialLexicalSession(materialLexical);
+        const translated = prepareTextSwapIngress({
+          tree: current.tree,
+          envelope,
+          rawPlan: plan,
+          lexicalSession,
+          source: "agent",
+          nowMs,
+        });
+        if (!translated.ok && translated.reason === "STALE") {
           receipt = Object.freeze({
             operation: "commit",
             status: "stale",
@@ -819,7 +909,7 @@ export function createMatterStore(
           });
           return current;
         }
-        if (translated === null || !translated.ok) {
+        if (!translated.ok) {
           receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
           return freezeState({
             ...current,
@@ -843,7 +933,7 @@ export function createMatterStore(
         receipt = Object.freeze({
           ...baseReceipt,
           textSwapChange: Object.freeze({
-            id: plan.action.id,
+            id: translated.plan.action.id,
             treeId: envelope.treeId,
             documentEpoch: current.documentEpoch,
             nodeId: envelope.selection.nodeId,
@@ -1123,7 +1213,7 @@ function requireSynchronousReceipt<Receipt extends MatterStoreReceipt>(
 
 function silentRepairRejection(
   revision: number,
-  errorCode: "REPAIR_STALE" | "INVALID_REPAIR" | "REPAIR_EXPIRED",
+  errorCode: "REPAIR_STALE" | "INVALID_REPAIR" | "REPAIR_EXPIRED" | "BOUND_EXCEEDED",
 ): Extract<RuntimeReceipt, { status: "rejected" }> {
   return Object.freeze({
     operation: "commit",
@@ -1291,26 +1381,4 @@ function protectUnknown(
 
 function freezeState(state: MatterStoreInternalState): MatterStoreInternalState {
   return Object.freeze(state);
-}
-
-const singletonInitialDocument = normalizeMatterInitialDocument(
-  process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
-);
-const matterStore = createMatterStore(singletonInitialDocument, {
-  documentRoot: true,
-  initialTitle: singletonInitialDocument === "empty"
-    ? EMPTY_MATTER_DOCUMENT_TITLE
-    : DEFAULT_MATTER_DOCUMENT_TITLE,
-});
-
-export function useMatterStore<T>(
-  selector: (state: MatterStoreInternalState) => T,
-): T {
-  return useStore(
-    matterStore as Pick<
-      StoreApi<MatterStoreInternalState>,
-      "getState" | "getInitialState" | "subscribe"
-    >,
-    selector,
-  );
 }

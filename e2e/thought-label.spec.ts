@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { MATTER_DATABASE_VERSION } from "../features/matter/persistence/matter-database";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const rootId = "thought_fixture_root";
@@ -93,7 +94,7 @@ test("a v3 model-label cache upgrades atomically and converges to its global bou
     hasEvictionIndex: true,
     manualLabel: "person-owned name",
     modelCount: 4_000,
-    version: 4,
+    version: MATTER_DATABASE_VERSION,
   });
 });
 

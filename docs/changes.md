@@ -17,6 +17,44 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-25 — Preview.59 keeps Wiki authority local and reversible
+
+Changed: Preview.59 introduces the settings-owned `词典 WIKI` surface and its
+strict V4 local authority. Applicability is reversible across spoken and written
+ingress, legacy states migrate without losing lineage, and the release build
+keeps uncalibrated automatic fitting off. The same candidate also carries the
+auditable, deployment-excluded film source and the latest canvas interaction
+hardening without adding published media to the runtime.
+
+Why: a public deployment needs a unique source identity and must expose agency
+without pretending that an unproved lexical learner is already correcting
+material.
+
+Forecloses: reusing Preview.58 for materially different source; treating a
+package version as deployment proof; enabling automatic fitting without corpus
+evidence; or shipping studio artifacts with the application.
+
+## 2026-09-25 — Wiki scope is a reversible applicability preference
+
+Changed: each canonical Wiki lexeme now stores `spoken`, `written`, or `both`
+as a strict V4 field. The exceptional settings editor presents that choice as
+voice, generated text, or both while inferring locale from the entry and the
+current interface language. V2 and V3 states migrate to `both`. Projection and
+fitting respect the selected scope, but a scope-only edit retains every hidden
+alias, aggregate, and tombstone; returning to `both` restores the same lineage.
+Machine observations cannot widen a person-selected scope, and fitting cache
+identity includes scope. The settings list uses truthful automatic/confirmed
+filters, a responsive three-column lexicon, explicit save/cancel, lossless
+export, and hover, focus, coarse-pointer, and narrow-screen actions.
+
+Why: applicability is meaningful agency, but it must not become a destructive
+channel editor, a language configuration burden, or decorative UI disconnected
+from the durable authority.
+
+Forecloses: deleting disabled-channel history; stale spoken fitting after a
+scope change; exposing language selection, aliases, scores, or a generic rule
+builder; and calling an edited automatic entry machine-owned.
+
 ## 2026-09-24 — Film source is auditable without becoming runtime
 
 Changed: the current Matter film's capture, closed fixtures, Markdown-owned
@@ -36,6 +74,49 @@ Forecloses: a second repository; committing masters, source recordings, failed
 takes, transcripts, or provider answers; shipping the studio in web or future
 app packages; duplicating localized strings through executable files; and
 treating old film versions as active product artifacts.
+
+## 2026-09-24 — local Wiki stays invisible until a person corrects an exception
+
+Changed: Matter now defines one bounded, origin-local lexical authority behind
+material ingress. Applying an enabled rule requires no human review and renders
+no badge, prompt, queue, or success status. Automatic provisional inference
+remains release-gated behind corpus calibration. Only a person who notices an
+erroneous visible word enters the exceptional correction path; that correction
+promotes one canonical lexeme to human authority and all hidden aliases follow
+that lexeme. Removing a word blocks automatic reconstruction. If the bounded
+negative ledger fills, automatic learning latches off rather than forgetting an
+older human decision; explicit human creation and editing remain available.
+Generated material contributes no evidence, existing trees are not
+rescanned without authorship provenance, and no Wiki state crosses a model or
+wire boundary. Matter core now consumes one neutral captured lexical session;
+only browser composition selects the Wiki adapter, and Store cannot reach Wiki
+through the import graph. A missing or malformed adapter becomes identity.
+Wiki loading or persistence failure retains the empty or last valid basis and
+cannot stop material. The exceptional settings path preserves agency by allowing
+an intentional inspect/add/edit/remove operation without turning Wiki into
+permanent chrome. That path is a settings-owned `词典 WIKI` surface,
+uses one strict, lossless `matter-wiki.json` export, refreshes by content-free cross-tab
+generation invalidation, and offers a separately confirmed corrupt-row reset
+that refuses to overwrite a row which has become valid. Lexical adapters return
+bounded patches rather than whole replacement strings, so no adapter can alter
+source punctuation or text outside the scenario's eligible spans.
+
+The browser composition keeps the conservative Latin fitting producer behind
+an explicit release gate. The default still submits an empty observation batch
+after each successful human admission so old machine evidence ages, but it does
+not claim Chinese pronunciation, English homophone, or automatic canonical
+discovery before their corpus and adapter receipts exist. Concurrent observation
+CAS conflicts rebase the same logical batch; evidence-only publications reuse
+the compiled exact and fitting indexes when their inputs did not change.
+
+Why: the product benefit is fewer repeated recognition and wording mistakes,
+not another system a person must operate. Human attention belongs to calibration
+only when the invisible layer fails.
+
+Forecloses: approval-driven learning, a permanent dictionary panel, learning
+from model output, hidden prompt injection, Store-to-Wiki coupling, a dynamic
+plugin registry, and claiming that historical tree text is human evidence when
+its provenance is unknown.
 
 ## 2026-09-24 — Pan scale replaces guidance without becoming status chrome
 
@@ -139,6 +220,37 @@ Forecloses: an “any API” promise, runtime protocol guessing, silent Chat-to-
 Responses probing, expensive Anthropic defaults, and widening the SSRF-safe
 fetch boundary into a generic method/path relay.
 
+## 2026-09-18 — multi-contact touch navigation owns only the camera
+
+Changed: two or more touch contacts pan and zoom the transient canvas camera
+around their shared centre. Contact-set changes rebase without a jump, one
+remaining finger may continue panning, and cancellation or page lifecycle loss
+clears the gesture without touching material.
+
+Why: the existing one-finger mobile path made the paper reachable but offered
+no bounded way to change reading scale on a touch-only device.
+
+Forecloses: browser-page pinch as the canvas model, touch-authored node
+coordinates, separate mobile document state, and gestures that survive capture
+or page ownership loss.
+
+## 2026-09-18 — selected Voice enters the existing Point-and-Talk turn
+
+Changed: a single- or double-clicked passage remains a non-caret structural
+selection, and the fixed Voice tool now sends its next bounded utterance through
+that complete passage's existing `text-swap/2` lifecycle and `text-swap/3`
+harness. With no selected passage, Voice retains ordinary first-level material
+admission. The passage-local AI mark and selected Voice share one driver, one
+request boundary, one adjudicator, and one pointer-undoable replacement.
+
+Why: pointing already supplies the exact rewrite reference; fixed Voice should
+add direction to that reference instead of silently changing the action into a
+child insertion or creating a second model integration.
+
+Forecloses: two Text Swap routes, model-chosen scope, storing the spoken
+direction as material, and using a stale admission error to disable an otherwise
+valid selected-passage rewrite.
+
 ## 2026-09-17 — provider address recovery is same-origin and finite
 
 Changed: Model API keeps the person's safe HTTPS path as the first custom
@@ -163,6 +275,69 @@ that flex alignment alone could not see.
 Forecloses: arbitrary path guessing, plaintext key transmission, cross-host
 fallback, redirect-based recovery, runtime renegotiation, and baseline-dependent
 desktop control alignment.
+
+## 2026-09-17 — launch capture grows from blank paper into editorial signal
+
+Changed: the locally proven private launch workflow defines and implements one 52-second,
+1600×900 webpage-only take from an explicit empty document and renders it as
+1440×810, 30 fps H.264/AAC. It begins on light paper without leaf shadow, uses
+one renderer-owned editorial title, renames the real canvas to
+“被允许想象的其他生活”, opens About and settings, then uses the real
+FX control to introduce daylight moving leaf shadow before Voice records,
+transcribes, and admits the first material. It closes through the real appearance
+control on dark moving leaf shadow. Two Branch actions
+grow the right index. Five bounded moves derive from that take's real DOM bounds:
+the pressed Voice control, its admitted material, Point Talk, Elastic, and
+Inquiry. Their motion follows their product meaning rather than one shared
+spring; the paper's separate twelve-step smootherstep zoom-out remains a real
+canvas action. Pointer travel uses bounded curved paths and the semantic camera
+moves use zero-velocity, zero-acceleration endpoints with small action-specific
+overshoot. After the real night paper has held, a renderer-owned five-second
+passage lets that exact frame recede into a sparse material-relation field and
+resolve into the title; it contains no scanning light and never masquerades as
+product UI. The version-5 receipt refuses a take unless the durable canvas title,
+the two visible Transcription
+boundaries (first admission and Point Talk direction), one Transform, one Text
+Swap, and one Inquiry occur exactly as authored, story events remain ordered, the night hold
+is long enough, and opening/daylight/night paper states match. The capture also
+refuses a take if structural selection changes any measured
+text-line rectangle. Elastic retains its separate inside-surface confirmation,
+Undo remains exact, and Ask Matter is the sole explicitly authorized live
+provider turn. A completed raw take can be revalidated and rendered without
+reopening the browser or provider boundary. Every material-changing AI surface uses a closed fixture.
+External audio and all rendered media remain outside Git.
+
+Why: the film should demonstrate Matter's causal product grammar rather than a
+pre-populated feature montage, while keeping every material mutation repeatable
+and every claim about live AI honest. Bounds captured from the interface keep
+the camera attached to the action it clarifies instead of guessed screen
+coordinates. The editorial beginning and ending are deterministic derivatives
+of the captured interface, so they can be reviewed and rerendered without
+reopening any provider boundary.
+
+Forecloses: seeded material masquerading as a first thought, an editorial title
+masquerading as product material, local secrets as
+implicit permission to spend provider traffic, fixture Inquiry presented as a
+live answer, live-provider material mutation inside the take, desktop capture
+as the default master, hard-coded camera crops, a scan or beam that pretends to
+discover the title, an editorial transition presented as product behavior, and committing licensed source
+audio or provider text to the public repository. This entry records the frozen
+workflow, not a completed QA or publication receipt.
+
+## 2026-09-17 — quiet controls retain marks instead of containers
+
+Changed: an active rail mode uses one four-pixel physical dot beneath its icon
+instead of a filled control, and the closed Ask Matter entry remains typographic
+through pointer hover and keyboard focus. The existing focus ring and complete
+hit targets remain unchanged.
+
+Why: a persistent filled rectangle reads as another surface on the paper and
+competes with the material. Mode and focus still need distinct, perceivable
+receipts, but neither needs permanent status chrome.
+
+Forecloses: using the active-state mark as a replacement for accessible focus,
+shrinking pointer targets to match the visual dot, and turning the corner
+Inquiry entrance into a panel before the person opens it.
 
 ## 2026-09-17 — Voice acquisition has one failure channel
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   countExtendedGraphemes,
   deriveExpandInPlaceLength,
+  projectExpandGeneratedRanges,
   validateExpandInPlaceCandidate,
 } from "./expand-in-place-policy";
 
@@ -53,6 +54,26 @@ describe("expand-in-place policy", () => {
       targetGraphemes: 7,
     });
     expect(deriveExpandInPlaceLength("source\uD800", "", "", .5)).toBeNull();
+  });
+
+  it("protects every ambiguous source occurrence and exposes only generated gaps", () => {
+    expect(projectExpandGeneratedRanges(
+      "matter returns",
+      "matter quietly returns to matter",
+    )).toEqual([
+      { start: 7, end: 14 },
+      { start: 22, end: 26 },
+    ]);
+    expect(projectExpandGeneratedRanges("matter", "new wording")).toBeNull();
+  });
+
+  it("never exposes source punctuation or spacing as generated material", () => {
+    const source = "Rain, touched the window softly";
+    const candidateText = "Rain, quietly touched the window softly";
+    const ranges = projectExpandGeneratedRanges(source, candidateText);
+
+    expect(ranges).toEqual([{ start: 6, end: 13 }]);
+    expect(ranges?.some((range) => range.start <= 4 && range.end >= 5)).toBe(false);
   });
 
   it("enforces no-op, growth, delta band, replacement, and composed-node bounds", () => {

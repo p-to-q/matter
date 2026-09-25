@@ -115,6 +115,53 @@ Non-goals:  a paid run, new quality evidence, weakening the Label adjudicator,
             an authoritative before/after experiment
 ```
 
+## Active correction — invisible local Wiki
+
+State: lexeme-first domain, persistence, neutral patch-based lexical port,
+separate human-observation capability, Wiki adapter, material-ingress foundation,
+canonical-word settings surface, strict export, cross-tab observation rebase,
+negative-capacity learning latch, and corrupt-row recovery implemented;
+automatic inference producer and error-local attribution remain gated.
+The settings projection now includes a reversible voice/generated-text scope,
+with V2/V3 migration to `both`, scope-aware disposable caches, and no deletion
+of disabled-channel lineage. Locale is inferred rather than exposed as another
+configuration burden.
+
+```text
+Outcome:    repeated recognition and wording mistakes disappear without asking
+            a person to operate or approve a dictionary
+Boundary:   one origin-local locale × channel authority; deterministic evidence
+            capability after proven human admission; one composition-owned Wiki
+            adapter behind a neutral captured lexical port; one browser-side
+            MaterialIngress facade before an existing tree command; one
+            error-local correction escape hatch
+Invariants: no Wiki value enters a model, wire request, archive, public action,
+            or material history; generated and repaired output contributes zero
+            evidence; old trees are not rescanned without authorship provenance;
+            normal hits have no UI; human correction takes over one canonical
+            lexeme and every hidden alias; removal cannot be undone by automatic
+            relearning; an exceptional configuration path permits explicit
+            add/edit/remove/export; a corrupt row can be explicitly reset
+            only while it remains corrupt; Wiki failure becomes identity or
+            last-good basis and never blocks material
+Proof:      strict state codec and bounds; locale-isolation and ambiguity tests;
+            immutable compiled matcher and operation budget; IndexedDB CAS;
+            raw-before-lexical and final-after-lexical validation at every text
+            ingress; architecture proof that server, protocol, API, and store
+            cannot reach concrete Wiki
+Non-goals:  memory, RAG, embeddings, prompt vocabulary, model-managed learning,
+            a review queue, permanent dictionary chrome, historical tree mining,
+            cross-account sync, dynamic plugins, or bulk editing
+```
+
+Automatic provisional rules stay off until a representative error corpus proves
+their precision, ambiguity rejection, locale isolation, and generated-output
+exclusion. The exceptional correction surface must retain only a short-lived,
+content-minimal attribution token for the exact applied rule; it must not infer
+responsibility later from a changed basis or from a whole-text diff. Applying a
+rule does not add an icon or hover action; attribution is disclosed only after
+the person invokes correction on the erroneous word.
+
 ## Active correction — bounded localhost AI demonstration
 
 State: implemented and verified locally; no production promotion is authorized.
@@ -307,8 +354,8 @@ The release is complete when a person can, without a keyboard:
 6. export it and later restore that same document on a supported browser;
 7. complete the same path in fixture and live modes on the deployed origin.
 
-The release ends there. Accounts, sync, collaboration, path-dependent or
-multi-touch gestures, streaming, split/merge, cross-links, tool prediction,
+The release ends there. Accounts, sync, collaboration, path-dependent gestures,
+streaming, split/merge, cross-links, tool prediction,
 retrieval, and a public SDK are not later phases of this plan. They remain
 outside the first release.
 
@@ -1217,7 +1264,9 @@ Non-goals:  a second durable document visibility model, a hidden-retrieval
 ```text
 Outcome:    hovering an active canvas passage exposes the selected left AI mark
             which opens one transient local direction field for that exact
-            complete node, and a right `−` to
+            complete node; single- or double-clicking a passage and then using
+            fixed Voice starts the same whole-node Point-and-Talk direction
+            lifecycle without a text cursor; a right `−` continues to
             hold its branch aside; a held root keeps the disabled AI mark
             and replaces the right control with `+` to restore it.
 Boundary:   one shared NodeActionLens projection over the existing client-only
@@ -1229,7 +1278,9 @@ Invariants: canvas and index `−` / `+` call the same hold/restore transition;
             inherited held descendants have no recovery exception; held material
             cannot become an AI target; AI never opens Ask Matter; one valid
             result becomes one tree-engine replacement with exact inverse;
-            outside pointer, Escape, mode/surface or target change, revision
+            selected and local-entry Voice share the existing text-swap/3
+            harness and strict text-swap/2 envelope; Voice with no selected
+            passage remains admission; outside pointer, Escape, mode/surface or target change, revision
             change, or page suspension revokes
             every late response.
 Proof:      strict whole-node/exact-segment protocol tests; retained driver and
@@ -3646,6 +3697,49 @@ its available bounds, while a cached receipt carries the exact positioning and
 query DOM owners that produced it. Missing or replacement owners therefore fail
 closed without a synchronous effect-driven render.
 
+### Active correction — mobile Point Talk survives the keyboard viewport handoff
+
+```text
+Outcome:    on a phone or tablet, opening Point Talk keeps the addressed turn alive
+            while the focused direction field opens the virtual keyboard
+Boundary:   Point Talk's render-edge placement availability and coarse-pointer
+            direction-input typography only
+Invariants: outside pointer, Escape, target/owner loss, and a stably unusable
+            field still cancel; the fixed Voice toggle remains inside the active
+            turn; document, selection, voice, Text Swap, and canvas camera do not move
+Proof:      pure placement classification across transient/disjoint and narrow
+            visual viewports; focused source/style tests; type and lint checks
+Non-goals:  multi-touch camera gestures, browser-page zoom policy, Voice transport,
+            Text Swap policy, or a new responsive surface
+```
+
+Mobile Safari may publish a transient zero-sized or disjoint `visualViewport`
+while it focuses the field and animates the software keyboard. That temporary
+measurement is not evidence that the selected material owner disappeared. Point
+Talk therefore hides only its disposable placement until a coherent viewport
+returns; a coherent but too-narrow field retains the existing fail-closed cancel.
+The coarse-pointer input also keeps a native-readable 16 px font floor so focus
+does not trigger Safari's automatic page magnification and manufacture another
+viewport transition.
+
+### Active correction — touch canvas owns multi-contact navigation
+
+```text
+Outcome:    a phone or tablet can pan and zoom the canvas with two or more fingers,
+            then continue panning with the one remaining finger without a jump
+Boundary:   the transient canvas viewport reducer, root pointer-capture adapter,
+            and the material world's browser touch-action ownership
+Invariants: one-finger pan remains unchanged; the current multi-contact centroid
+            anchors zoom and translation; contacts rebase on every add/remove;
+            controls and the index retain native touch behavior; no camera or
+            gesture state enters material, history, persistence, or protocol
+Proof:      pure 1-to-2-to-1, combined pan/zoom, third-contact, clamp, cancel,
+            capture-loss and lifecycle tests; scoped touch-action/source checks;
+            type, lint and narrow interaction verification
+Non-goals:  browser-page zoom, inertial physics, authored node coordinates,
+            multi-touch material editing, or a second gesture subsystem
+```
+
 ### Maintainer correction — performance attribution cannot relax the gate
 
 State: Implemented and formally verified in three production rounds on 2026-09-11.
@@ -3984,3 +4078,64 @@ does not trigger. The next version is Preview.57, confirmed unoccupied by D3.
 repeat=1 cannot distinguish sporadic from systematic; B2 should re-run at
 repeat>=3 before any repair is promoted. This freeze records only digests, not
 provider material, transcripts, or secrets.
+
+## Active freeze — blank-to-material launch-film master
+
+State: Reopened on 2026-09-17 by explicit editorial revision. The V5 renderer
+and offline A+B composition proof pass; a fresh V5 product take, final visual
+review, and archival-audio publication decision remain.
+
+```text
+Outcome:    one 52-second launch master makes Matter's founding promise legible:
+            an empty paper receives human voice, structure grows from it, and
+            bounded AI appears only where a person points, stretches, or asks
+Boundary:   a 1600×900 operator-only Playwright take rendered to 1440×810 at
+            30 fps; explicit empty light-paper startup; one renderer-owned title;
+            early About and settings; real FX into daylight leaf motion; Voice
+            recording, transcription, and first admission; two Branch/index changes;
+            Point Talk; explicitly confirmed Elastic; one live Inquiry; Undo;
+            real appearance change into dark night leaf motion; real durable
+            canvas title “被允许想象的其他生活”; five
+            DOM-bounds-derived camera moves; one real eased canvas zoom-out;
+            slower curved pointer routes; renderer-owned focus return and a
+            five-second night-paper-to-material-signal close; external archival audio
+Invariants: the recorded interface is the product interface; Voice remains human
+            admission; every material-changing AI result is one perceivable,
+            pointer-undoable commit; only Inquiry may receive explicit live-
+            provider authority; all other generated results remain fixtures;
+            the opening title and closing signal field belong to the film renderer,
+            never the product DOM; the close begins from the actual night frame
+            and contains no invented control or title scan; no prompt panel,
+            invented product overlay, key, external
+            audio, recording, transcript, provider answer, or user material enters git
+Proof:      the accepted V4 1600×900 take passed exact structural-selection
+            line-geometry equality and emitted a receipt with two
+            Transcription requests plus one Transform, Text Swap, and Inquiry;
+            story events remained ordered and the opening/daylight/night states
+            matched. Offline continuation rendered a 52.000-second 1440×810,
+            30 fps H.264/AAC master. Fresh full-film and six sectional contact
+            sheets, five transition sheets, loudness inspection, and a warning-
+            free complete decode passed; the private master SHA-256 begins
+            ae847cd6422a2cb4. The V5 renderer contract, title receipt, pointer and
+            camera timing changes pass focused tests, typecheck, and zero-warning
+            lint. An offline hybrid render of that accepted raw take produced a
+            52.000-second 1440×810, 30 fps H.264/AAC proof and a reviewed full-film
+            contact sheet. That derivative is composition evidence, not a V5 take.
+Non-goals:  adding a new-document product flow, changing provider or protocol
+            policy, showing every available interaction, adding literal UI foley,
+            adding a title scan, presenting the closing network as product UI,
+            shipping archival audio, or treating a staged film as availability proof
+```
+
+The pitch's retained proposition is the selection rule for this edit: Voice
+expresses intent, gesture gives language a body, and AI behaves as connective
+tissue inside material. About and settings establish provenance before material
+arrives; branching proves structure through both paper and index; Point and Talk,
+Elastic, and Inquiry receive bounded close camera treatment, while Voice receives
+one strong control close-up and one gentler material close-up. The five moves use
+separate semantic motion contracts; the paper zooms out only through its own
+canvas navigation. Structural selection must preserve every measured text-line
+rectangle before the first branch or the take aborts. Navigation,
+archive, node drag, focus, folding, and hold-aside remain real product
+capabilities but are omitted when they do not advance that single causal
+sentence.

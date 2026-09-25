@@ -23,7 +23,7 @@ import { MIN_USER_PROVIDER_API_KEY_CODE_UNITS } from "../protocol/provider-sessi
 
 describe("CanvasChrome", () => {
   it("gives every dialog, and no transient menu, exclusive material-surface ownership", () => {
-    for (const overlay of ["about", "pricing", "privacy", "terms", "api", "mobile"] as const) {
+    for (const overlay of ["about", "pricing", "privacy", "terms", "wiki", "api", "mobile"] as const) {
       expect(canvasOverlayOwnsSurface(overlay)).toBe(true);
     }
     for (const overlay of [null, "settings", "language", "inquiry"] as const) {
@@ -49,6 +49,12 @@ describe("CanvasChrome", () => {
 
   it("keeps settings and preferences semantic", () => {
     const markup = renderChrome();
+    const desktopSettings = markup.slice(
+      markup.indexOf('id="matter-settings-menu"'),
+      markup.indexOf('data-chrome-region="bottom"'),
+    );
+    const mobileMarkup = renderChrome({ overlay: "mobile" });
+    const mobileSettings = mobileMarkup.slice(mobileMarkup.indexOf('id="matter-mobile-sheet"'));
 
     expect(markup).toContain('role="menu"');
     expect(markup).toContain('role="menuitem"');
@@ -56,7 +62,13 @@ describe("CanvasChrome", () => {
     expect(markup).toContain("定价");
     expect(markup).toContain("隐私政策");
     expect(markup).toContain("服务条款");
+    expect(markup).toContain("词典 WIKI");
     expect(markup).toContain("模型 API");
+    expect(markup).not.toContain('href="/wiki"');
+    for (const settings of [desktopSettings, mobileSettings]) {
+      expect(settings.indexOf("服务条款")).toBeLessThan(settings.indexOf("词典 WIKI"));
+      expect(settings.indexOf("词典 WIKI")).toBeLessThan(settings.indexOf("模型 API"));
+    }
     expect(markup).toContain("询问 Matter");
   });
 
@@ -260,7 +272,7 @@ describe("isCanvasChromeInfoOverlay", () => {
     (overlay) => expect(isCanvasChromeInfoOverlay(overlay)).toBe(true),
   );
 
-  it.each([null, "settings", "language", "inquiry", "mobile", "api"] as const)(
+  it.each([null, "settings", "language", "inquiry", "mobile", "wiki", "api"] as const)(
     "rejects the %s non-information surface",
     (overlay) => expect(isCanvasChromeInfoOverlay(overlay)).toBe(false),
   );

@@ -32,15 +32,20 @@ const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/u;
  */
 export const LAYERS = Object.freeze([
   { name: "tree", dirs: ["features/matter/tree"] },
-  { name: "material", dirs: ["features/matter/material", "features/matter/config"] },
+  {
+    name: "material",
+    dirs: ["features/matter/material", "features/matter/config", "features/matter/wiki"],
+  },
   { name: "protocol", dirs: ["features/matter/protocol"] },
   { name: "domain", dirs: ["features/matter/runtime", "features/matter/tools", "features/matter/layout"] },
+  { name: "application", dirs: ["features/matter/application"] },
   { name: "adapter", dirs: ["features/matter/server", "features/matter/persistence", "features/matter/interaction"] },
   { name: "store", dirs: ["features/matter/store"] },
   { name: "composition", dirs: ["features/matter/components", "app"] },
 ]);
 
 const PROVIDER_MODULE = "features/matter/server/model-pool.ts";
+const WIKI_ROOT = "features/matter/wiki/";
 
 /**
  * Static value specifiers only.
@@ -73,6 +78,21 @@ export function importsOf(source) {
     specifiers.push(specifier);
   }
   return specifiers;
+}
+
+/** Runtime edges plus type-only Wiki edges, whose privacy boundary is about
+ * source knowledge and future serialization rather than bundle reachability. */
+export function architectureImportsOf(source) {
+  const runtime = importsOf(source);
+  const everyStaticSpecifier = [];
+  for (const [, specifier] of source.matchAll(
+    /(?:^|\n)\s*(?:import|export)\s+(?:type\s+)?[^;]*?\s*from\s*["']([^"']+)["']/gu,
+  )) everyStaticSpecifier.push(specifier);
+  return [...new Set([
+    ...runtime,
+    ...everyStaticSpecifier.filter((specifier) =>
+      specifier.includes("/wiki/") || specifier.endsWith("/wiki")),
+  ])];
 }
 
 export function layerOf(file) {
@@ -139,9 +159,40 @@ export function findProblems(graph) {
         }
       }
     }
+
+    // 5. Wiki is local lexical authority, never model context or wire data.
+    // Browser-side composition may adapt its compiled snapshot to the neutral
+    // lexical port, but a server, protocol, or API route has no reason to know
+    // that the Wiki exists.
+    if (
+      file.startsWith("features/matter/server/") ||
+      file.startsWith("features/matter/protocol/") ||
+      file.startsWith("app/api/")
+    ) {
+      const path = pathToWiki(graph, file);
+      if (path !== null) {
+        problems.push(
+          `${file} reaches local Wiki through ${path.join(" -> ")}. ` +
+          "Wiki is local-only and must not enter a server, protocol, or API route.",
+        );
+      }
+    }
+
+    // 6. The store consumes a neutral lexical capability, not Wiki itself.
+    // Composition is the only place allowed to choose the concrete local
+    // authority, which keeps future personal implementations replaceable.
+    if (file.startsWith("features/matter/store/")) {
+      const path = pathToWiki(graph, file);
+      if (path !== null) {
+        problems.push(
+          `${file} reaches concrete Wiki through ${path.join(" -> ")}. ` +
+          "The store may depend only on the neutral material lexical port.",
+        );
+      }
+    }
   }
 
-  // 5. No cycles. A cycle means neither module can be understood, tested, or
+  // 7. No cycles. A cycle means neither module can be understood, tested, or
   //    replaced without the other, whatever the layer table says.
   const WHITE = 0, GREY = 1, BLACK = 2;
   const colour = new Map([...graph.keys()].map((file) => [file, WHITE]));
@@ -174,6 +225,22 @@ export function findProblems(graph) {
   }
 
   return problems;
+}
+
+function pathToWiki(graph, source) {
+  const seen = new Set([source]);
+  const queue = [[source]];
+  while (queue.length > 0) {
+    const path = queue.shift();
+    const current = path[path.length - 1];
+    for (const target of graph.get(current) ?? []) {
+      if (target.startsWith(WIKI_ROOT)) return [...path, target];
+      if (seen.has(target) || TEST_FILE.test(target)) continue;
+      seen.add(target);
+      queue.push([...path, target]);
+    }
+  }
+  return null;
 }
 
 function sourceFiles() {
@@ -217,7 +284,7 @@ export function buildRepositoryGraph() {
   const known = new Set(files);
   return new Map(files.map((file) => [
     file,
-    importsOf(readFileSync(join(ROOT, file), "utf8"))
+    architectureImportsOf(readFileSync(join(ROOT, file), "utf8"))
       .map((specifier) => resolveLocal(file, specifier))
       .filter((target) => target !== null && known.has(target)),
   ]));
@@ -237,6 +304,6 @@ if (process.argv[1] === import.meta.filename) {
   }
   console.log(
     `architecture: ${graph.size} files, ${LAYERS.length} layers, ` +
-    "no outward dependency, no provider leak, no studio leak, no cycle",
+    "no outward dependency, no provider leak, no studio leak, no concrete Wiki leak, no cycle",
   );
 }

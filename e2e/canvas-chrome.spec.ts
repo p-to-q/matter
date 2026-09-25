@@ -4,6 +4,7 @@ import { fixtureUiCopy } from "./matter-ui-copy";
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
 test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({ page }) => {
+  test.setTimeout(45_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   const inquiryQuestions: string[] = [];
   await page.route("**/api/inquiry", async (route) => {
@@ -206,11 +207,12 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     "定价",
     "隐私政策",
     "服务条款",
+    "词典 WIKI",
     "模型 API",
   ]);
   const settingsMenuBox = await settingsMenu.boundingBox();
   expect(settingsMenuBox?.width).toBeCloseTo(160, 0);
-  expect(settingsMenuBox?.height).toBeCloseTo(136, 0);
+  expect(settingsMenuBox?.height).toBeCloseTo(168, 0);
 
   await settingsMenu.getByRole("menuitem", { name: "定价", exact: true }).click();
   const pricing = page.getByRole("dialog", { name: "定价" });

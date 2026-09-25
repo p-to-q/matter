@@ -1,12 +1,11 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. Preview.57 implementation merged
-through PR #102 at `a6b8f91`; the cooldown-safe release probe followed through
-PR #103 at `fca0558`, and the provider/action hardening merged through PR #105
-at `2f85b94`. The public health route identifies
-`0.2.0-preview.57`. This is a deployed source identity, not an immutable
-release: no Preview.57 tag or GitHub prerelease exists. Production Model API
+the complete generative product loop yet. The current source identifies
+`0.2.0-preview.59`; exact public identity still requires a no-store production
+health readback after the corresponding `main` deployment. This is a deployed
+source identity, not an immutable release: no Preview.59 tag or GitHub
+prerelease exists. Production Model API
 remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
 ring is valid and redeployed, and publication remains withheld until the strict
 six-round managed-pool probe passes. The latest annotated tag and GitHub
@@ -61,6 +60,36 @@ The current online-safe claim is narrow:
   lightweight Ask Matter boundary, with its server-side answer adapter independently gated
   no live material-transformation provider in the published preview profile
 ```
+
+## Wiki verifier gate — 2026-09-25
+
+The local Wiki foundation is a source-level **GO** for continued integration:
+strict versioned local persistence, compare-and-swap writes, bounded immutable
+compiled indexes, a synchronous MaterialIngress port, fail-open storage
+behavior, content-free cross-tab invalidation, pointer-owned settings, lossless
+export, and static exclusion from protocol, server, provider, prompt, archive,
+and public-agent boundaries are implemented and independently checked.
+Schema V4 adds one reversible lexeme scope. V2/V3 migration defaults to `both`;
+scope-only edits retain every alias, evidence aggregate, and tombstone; fitting
+cache identity includes scope; and a written-only lexeme cannot enter spoken
+fitting. The settings surface infers locale, persists scope, and exports the
+same strict state rather than presenting a decorative selector.
+
+Automatic lexical benefit is still **NO-GO** for a public release. The default
+build excludes provisional production and consumption. The controlled producer
+is intentionally limited to spoken, single-token Latin orthographic candidates;
+it has no Chinese phonetic fitting, English homophone proof, written-channel
+producer, or production error-site action that confirms a visible
+`observed form → canonical word` relation. A canonical word added in settings
+therefore records local intent but, by itself, cannot promise that later speech
+or generated text will change. The settings surface must not be cited as an
+end-to-end correction receipt until that admission path and representative
+positive/negative corpus pass are present.
+
+The release gate is fail-closed: one switch controls provisional production,
+material consumption, and settings projection; confirmed exact authority stays
+available. Enabling the existing experimental fitting mode is not a substitute
+for calibration and does not satisfy this gate.
 
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
 boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:
@@ -366,10 +395,9 @@ A loopback-only, dry-by-default maintainer harness can exercise the five
 server-backed AI routes without changing public authority. It sends no request
 on startup or dry run, keeps Label and Elastic on fixtures unless explicitly
 enabled, checks exact version/base-path/no-store/response bounds, and never logs
-provider text or secrets. Repair's optional vocabulary optimization remains
-empty until admission can synchronously own the active working-context
-projection; whole-tree or render-effect-derived hints are not an acceptable
-shortcut. Voice failure, Inquiry retry, Point Talk retry, localized material
+provider text or secrets. Repair carries no document-derived term field;
+whole-tree or render-effect-derived hints are not an acceptable shortcut.
+Voice failure, Inquiry retry, Point Talk retry, localized material
 actions, and focus restoration now have browser-level recovery receipts.
 
 This release adds no dependency, durable format, service worker, response
@@ -1452,7 +1480,7 @@ literal-safe repair across English, Simplified and Traditional Chinese,
 Japanese, and German, including only high-confidence spoken percentages,
 decimals, measures, dates, times, and version spans. One managed proposal may
 faithfully redraft a proven broken spoken seam, but the browser and store still
-lock facts, stable identifiers, bounded vocabulary, speaker, modality, logical
+lock facts, stable identifiers, speaker, modality, logical
 relations, question type, and claim order before one separately undoable repair
 can settle.
 

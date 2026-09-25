@@ -239,21 +239,18 @@ version, operation identity, locale, and one utterance — no tree, node, lineag
 or target. A dictated question is a draft rather than material, so closing the
 inquiry aborts the request and no repair command or lease exists.
 
-The wire still permits a vocabulary hint: terms from the person's active
-working context, bounded to 24 terms of 32 code units. The current browser
-deliberately sends no hint because the admission boundary does not yet own that
-projection synchronously. Recognition can fail on project-specific names, but
-omitting the optimization is safer than deriving it from the durable whole tree
-or synchronizing it through a stale render effect.
+The wire carries no document-derived terms. Project-specific names need a
+separate local lexical authority rather than a repair hint, because repair must
+not receive a working-context projection or turn repeated material into hidden
+model context.
 
-The boundary remains narrow if this optimization returns: the hint must be
-derived from the same active projection and never fetched; it carries words
-only, with no node id, depth, or ordering; and it cannot widen what an answer
-may change, because `adjudicateRepair` still
-measures the spoken skeleton. A hinted term can be used to recognise a word that
-was said and written down wrong; it cannot be inserted into a sentence that did
-not contain it, however apt it looks. Repetition is the whole signal: a term
-used twice is evidence it is theirs rather than the recognizer's guess.
+Native ASR phrase bias is not that repair hint. It belongs inside one concrete
+recognition adapter, before a transcript exists, and needs adapter-specific
+capability detection and corpus calibration. Matter does not add an empty
+`SpeechLexiconPort` before a real adapter needs it, and the current policy does
+not project Wiki into either local or remote ASR. Reopening on-device-only Wiki
+bias later would be a separate privacy and product decision, never a silent
+fallback through Repair.
 
 ## Live deployment gate
 

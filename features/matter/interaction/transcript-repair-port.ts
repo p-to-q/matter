@@ -18,7 +18,6 @@ export type TranscriptRepairInput = Readonly<{
   attempt: number;
   text: string;
   locale: MatterLocale;
-  vocabulary: readonly string[];
   signal: AbortSignal;
 }>;
 
@@ -59,7 +58,6 @@ export function createTranscriptRepairPort(options: Readonly<{
       const ruleInput = normalizeRepairInput({
         text: ruleWords,
         locale: input.locale,
-        vocabulary: input.vocabulary,
       });
       if (!remoteEnabled() || !decideRepairRequest(ruleInput)) return rules;
 
@@ -70,7 +68,6 @@ export function createTranscriptRepairPort(options: Readonly<{
           attempt: input.attempt,
           locale: input.locale,
           text: ruleWords,
-          vocabulary: input.vocabulary,
           signal: input.signal,
         });
       } catch (error) {
