@@ -80,6 +80,31 @@ test("rejects a runtime shape that leaves a live model surface behind", () => {
   assert.match(inspectVercelConfig(config).join("\n"), /env is missing MATTER_INQUIRY_ADAPTER/);
 });
 
+test("pins public material surfaces to user-supplied providers", () => {
+  const config = validConfig();
+  assert.equal(config.env.MATTER_TRANSFORM_SURFACE, "public");
+  assert.equal(config.env.MATTER_TEXT_SWAP_SURFACE, "public");
+  assert.equal(config.env.MATTER_TRANSFORM_ADAPTER, "off");
+  assert.equal(config.env.MATTER_TEXT_SWAP_ADAPTER, "off");
+  assert.deepEqual(inspectVercelConfig(config), []);
+});
+
+test("rejects material surface and managed-adapter drift", () => {
+  const closedSurface = validConfig();
+  closedSurface.env.MATTER_TRANSFORM_SURFACE = "off";
+  assert.match(
+    inspectVercelConfig(closedSurface).join("\n"),
+    /MATTER_TRANSFORM_SURFACE is "off", expected "public"/,
+  );
+
+  const managedTextSwap = validConfig();
+  managedTextSwap.env.MATTER_TEXT_SWAP_ADAPTER = "live";
+  assert.match(
+    inspectVercelConfig(managedTextSwap).join("\n"),
+    /MATTER_TEXT_SWAP_ADAPTER is "live", expected "off"/,
+  );
+});
+
 test("does not require the build-inlined public flags at runtime", () => {
   const config = validConfig();
   assert.ok(!("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED" in config.env));

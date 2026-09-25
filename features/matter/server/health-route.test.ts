@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+
 import packageMetadata from "../../../package.json";
 import { GET } from "../../../app/api/health/route";
 import { healthSnapshot } from "./health-route";
@@ -18,6 +21,8 @@ describe("Matter health route", () => {
     process.env.MATTER_LABEL_ADAPTER = "fixture";
     process.env.MATTER_REPAIR_ADAPTER = "fixture";
     process.env.MATTER_INQUIRY_ADAPTER = "off";
+    process.env.MATTER_TRANSFORM_SURFACE = "public";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "public";
     process.env.MATTER_TRANSFORM_ADAPTER = "fixture";
     process.env.MATTER_TEXT_SWAP_ADAPTER = "fixture";
     delete process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED;
@@ -95,17 +100,44 @@ describe("Matter health route", () => {
   });
 
   it("reports transform unavailable when its provider and fixture gates are off", () => {
+    process.env.MATTER_TRANSFORM_SURFACE = "off";
     process.env.MATTER_TRANSFORM_ADAPTER = "off";
 
     expect(healthSnapshot().surfaces.transformTurn).toBe("unavailable");
   });
 
   it("reports Text Swap independently from the Elastic adapter", () => {
+    process.env.MATTER_TRANSFORM_SURFACE = "public";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "off";
     process.env.MATTER_TRANSFORM_ADAPTER = "fixture";
     process.env.MATTER_TEXT_SWAP_ADAPTER = "off";
 
     expect(healthSnapshot().surfaces.transformTurn).toBe("fixture");
     expect(healthSnapshot().surfaces.textSwap).toBe("unavailable");
+  });
+
+  it("reports public material surfaces as user-configurable without managed adapters", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.MATTER_PROVIDER_SESSION_KEYS = `active:${Buffer.alloc(32, 7).toString("base64url")}`;
+    process.env.MATTER_TRANSFORM_SURFACE = "public";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "public";
+    process.env.MATTER_TRANSFORM_ADAPTER = "off";
+    process.env.MATTER_TEXT_SWAP_ADAPTER = "off";
+
+    expect(healthSnapshot().surfaces.transformTurn).toBe("user-configurable");
+    expect(healthSnapshot().surfaces.textSwap).toBe("user-configurable");
+  });
+
+  it("never lets a managed adapter widen a closed material surface", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    process.env.MATTER_TRANSFORM_SURFACE = "off";
+    process.env.MATTER_TRANSFORM_ADAPTER = "live";
+    process.env.MATTER_MODEL_POOL = "primary";
+    process.env.MATTER_MODEL_PRIMARY_BASE_URL = "https://models.example/v1";
+    process.env.MATTER_MODEL_PRIMARY_API_KEY = "test-only";
+    process.env.MATTER_MODEL_PRIMARY_MODELS = "fast";
+
+    expect(healthSnapshot().surfaces.transformTurn).toBe("unavailable");
   });
 
   it("falls back to the canonical Matter base path for unsafe deployment values", () => {

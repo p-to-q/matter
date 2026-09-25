@@ -20,6 +20,11 @@ for (const viewport of [
   { name: "narrow", width: 390, height: 844 },
 ]) {
   test(`lasso addresses wrapped language at ${viewport.name} width`, async ({ page }) => {
+    // This is one deliberate continuous-state receipt: pointer drawing,
+    // Elastic mouse and keyboard control, three geometry invalidations, focus
+    // transfer, cancellation, resize, and exit. Keep each action's normal
+    // assertion timeout, but give the full integrated journey its own budget.
+    test.setTimeout(60_000);
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -317,7 +322,14 @@ for (const viewport of [
     await expect(handle).toBeVisible();
 
     const committedDegree = await handle.getAttribute("aria-valuenow");
-    const movedHandleBox = await handle.boundingBox();
+    // Resize can legally remount the semantic slider between visibility and
+    // geometry reads. Sample the live locator until its current instance owns
+    // a box instead of treating that one-frame handoff as missing product UI.
+    let movedHandleBox = await handle.boundingBox();
+    await expect.poll(async () => {
+      movedHandleBox = await handle.boundingBox();
+      return movedHandleBox !== null;
+    }).toBe(true);
     if (movedHandleBox === null) throw new Error("moved stretch handle missing");
     await page.mouse.move(movedHandleBox.x + movedHandleBox.width / 2, movedHandleBox.y + movedHandleBox.height / 2);
     await page.mouse.down();

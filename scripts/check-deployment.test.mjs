@@ -59,9 +59,17 @@ const HEALTH = {
     thoughtLabel: "available",
     transcriptRepair: "available",
     inquiry: "available",
+    transformTurn: "user-configurable",
+    textSwap: "user-configurable",
+    archiveExportImport: "available",
+  },
+};
+const BROWSER_PREVIEW_HEALTH = {
+  ...HEALTH,
+  surfaces: {
+    ...HEALTH.surfaces,
     transformTurn: "unavailable",
     textSwap: "unavailable",
-    archiveExportImport: "available",
   },
 };
 const PROVIDER_SESSION_STATUS = {
@@ -74,7 +82,7 @@ const PROVIDER_SESSION_STATUS = {
   expiresAt: null,
 };
 
-function passingDeploymentResponse(path) {
+function passingDeploymentResponse(path, health = HEALTH) {
   if (path === "/") {
     return new Response(BRAND_ROOT_HTML, {
       status: 200,
@@ -89,7 +97,7 @@ function passingDeploymentResponse(path) {
   }
   if (path === "/matter") return new Response(null, { status: 404 });
   if (path === "/api/health") {
-    return Response.json(HEALTH, {
+    return Response.json(health, {
       headers: { "cache-control": "no-store" },
     });
   }
@@ -138,10 +146,10 @@ test("accepts one dedicated HTTPS deployment origin", () => {
   assert.throws(() => normalizeDeploymentOrigin("https://matter.ptoq.io/matter"), /must not include/);
 });
 
-test("keeps the provider-session CLI gate explicit and default-off", () => {
+test("parses the provider-session override independently of the deployment profile", () => {
   assert.deepEqual(parseArguments([]), {
     origin: undefined,
-    profile: "browser-preview",
+    profile: "material-user-provider",
     waitMs: 0,
     requireProviderSession: false,
   });
@@ -199,18 +207,46 @@ test("requires truthful release surfaces", () => {
   overstated.surfaces.transformTurn = "available";
   assert.deepEqual(inspectDeploymentHealth(overstated, HEALTH.appVersion), [
     "Public voice admission is not available.",
-    "Material model surface transformTurn must be unavailable for browser-preview.",
+    "Material model surface transformTurn must be user-configurable for material-user-provider.",
   ]);
 });
 
-test("promotes Elastic alone while the public Text Swap gate stays closed", () => {
+test("keeps the historical browser-preview profile explicit", () => {
+  const preview = structuredClone(HEALTH);
+  preview.surfaces.transformTurn = "unavailable";
+  preview.surfaces.textSwap = "unavailable";
+  assert.deepEqual(
+    inspectDeploymentHealth(preview, HEALTH.appVersion, "browser-preview"),
+    [],
+  );
+});
+
+test("keeps the historical Elastic-only profile explicit", () => {
   const live = structuredClone(HEALTH);
   live.surfaces.transformTurn = "available";
+  live.surfaces.textSwap = "unavailable";
   assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "elastic-live"), []);
   live.surfaces.textSwap = "available";
   assert.deepEqual(inspectDeploymentHealth(live, HEALTH.appVersion, "elastic-live"), [
-    "Public Text Swap surface must be unavailable for elastic-live.",
+    "Material model surface textSwap must be unavailable for elastic-live.",
   ]);
+});
+
+test("requires both public material surfaces to remain user-configurable", () => {
+  assert.deepEqual(
+    inspectDeploymentHealth(HEALTH, HEALTH.appVersion, "material-user-provider"),
+    [],
+  );
+  const managed = structuredClone(HEALTH);
+  managed.surfaces.transformTurn = "available";
+  managed.surfaces.textSwap = "available";
+  assert.deepEqual(
+    inspectDeploymentHealth(managed, HEALTH.appVersion, "material-user-provider"),
+    [
+      "Material model surface transformTurn must be user-configurable for material-user-provider.",
+      "Material model surface textSwap must be user-configurable for material-user-provider.",
+    ],
+  );
 });
 
 test("rejects the superseded paired material-live profile", () => {
@@ -514,7 +550,7 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
     }
     if (path === "/api/health") {
       healthReads += 1;
-      return new Response(JSON.stringify(HEALTH), {
+      return new Response(JSON.stringify(BROWSER_PREVIEW_HEALTH), {
         status: 200,
         headers: new Headers({
           "cache-control": "no-store",
@@ -545,6 +581,7 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
   const result = await checkDeployment({
     origin: "https://matter.ptoq.io",
     expectedVersion: HEALTH.appVersion,
+    profile: "browser-preview",
     fetchImpl,
     expectedBrandAssets: EXPECTED_BRAND_ASSETS,
   });
@@ -568,12 +605,11 @@ test("uses bounded discovery bodies and keeps unrelated probes header-only", asy
   assert.equal(healthReads, 1);
 });
 
-test("requests the anonymous provider-session receipt only when explicitly required", async () => {
+test("requests the anonymous provider-session receipt for the user-provider profile", async () => {
   const calls = [];
   const result = await checkDeployment({
     origin: "https://matter.ptoq.io",
     expectedVersion: HEALTH.appVersion,
-    requireProviderSession: true,
     fetchImpl: async (url, init) => {
       calls.push({
         url: String(url),
@@ -601,6 +637,24 @@ test("requests the anonymous provider-session receipt only when explicitly requi
     hasAbortSignal: true,
     hasHeaders: false,
   }]);
+});
+
+test("keeps provider-session optional for historical profiles unless explicitly required", async () => {
+  const calls = [];
+  const result = await checkDeployment({
+    origin: "https://matter.ptoq.io",
+    expectedVersion: HEALTH.appVersion,
+    profile: "browser-preview",
+    fetchImpl: async (url) => {
+      const path = new URL(url).pathname;
+      calls.push(path);
+      return passingDeploymentResponse(path, BROWSER_PREVIEW_HEALTH);
+    },
+    expectedBrandAssets: EXPECTED_BRAND_ASSETS,
+  });
+
+  assert.deepEqual(result.failures, []);
+  assert.equal(calls.includes("/api/provider-session"), false);
 });
 
 test("aggregates provider-session header and body failures without exposing the body", async () => {

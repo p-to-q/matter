@@ -43,6 +43,10 @@ export const DEDICATED_DOMAIN_RUNTIME_SHAPE = Object.freeze({
   MATTER_LABEL_ADAPTER: "live",
   MATTER_REPAIR_ADAPTER: "live",
   MATTER_INQUIRY_ADAPTER: "live",
+  MATTER_TRANSFORM_SURFACE: "public",
+  MATTER_TEXT_SWAP_SURFACE: "public",
+  MATTER_TRANSFORM_ADAPTER: "off",
+  MATTER_TEXT_SWAP_ADAPTER: "off",
 });
 
 // This file is committed to a world-readable repository. A provider credential

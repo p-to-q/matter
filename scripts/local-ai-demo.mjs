@@ -47,6 +47,8 @@ export function createLocalAiDemoEnvironment(environment, options) {
     MATTER_LABEL_ADAPTER: options.liveLabel ? "live" : "fixture",
     MATTER_REPAIR_ADAPTER: "live",
     MATTER_INQUIRY_ADAPTER: "live",
+    MATTER_TRANSFORM_SURFACE: "public",
+    MATTER_TEXT_SWAP_SURFACE: "public",
     MATTER_TRANSFORM_ADAPTER: options.liveTransform ? "live" : "fixture",
     MATTER_TEXT_SWAP_ADAPTER: "live",
   });

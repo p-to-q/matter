@@ -165,10 +165,12 @@ and active rules; it never rescans the complete rule set for each visible word.
 
 ## Model and privacy boundary
 
-Wiki is never serialized into a model request, system prompt, harness, server
-route, provider cache key, telemetry record, material archive, or public agent
-action. Server, protocol, and API modules are statically forbidden from
-importing Wiki code.
+In the current release, Wiki is never serialized into a model request, system
+prompt, harness, server route, provider cache key, telemetry record, material
+archive, or public agent action. This includes the whole dictionary, a filtered
+dictionary, selected canonical terms, and derived pronunciation aliases.
+Server, protocol, and API modules are statically forbidden from importing Wiki
+code, so a later product idea cannot silently widen today's privacy boundary.
 
 The former transcript-repair `vocabulary` hint was removed rather than reused.
 Repair receives one utterance and locale. Local lexical authority is applied
@@ -180,6 +182,17 @@ and a second non-deterministic authority. Native speech phrase bias is a
 different capability owned by a concrete recognition adapter. Matter will add
 such a port only with a real adapter and corpus proof; it will not be a Wiki
 fallback or a repair-prompt surrogate.
+
+Vendor phrase lists, custom vocabulary, contextual strings, and personal text
+replacement demonstrate adapter-owned bias or explicit substitution, not a
+general right to disclose local lexical state to a model. Matter keeps those
+concerns separate. A future bounded lexical-hint adapter remains an open design
+question, not a shipped capability or a permanent prohibition. It requires a
+separate privacy and prompt-harness freeze covering explicit purpose, minimum
+necessary entries, consent and revocation, transport and cache treatment,
+provider retention, adversarial tests, and visible evidence that it improves a
+real adapter. Until that review is accepted, Wiki correction remains local
+after provider output returns and every model payload remains Wiki-free.
 
 ## Failure posture
 
@@ -205,8 +218,11 @@ necessary to repair that visible occurrence and, if requested, add the corrected
 relation as local authority. It must also permit rejecting the responsible
 automatic mapping. A deeper Wiki configuration surface opens from Matter
 settings for people who choose it. It presents one canonical term per tile and
-may add, edit, remove, search, progressively load, and export lexemes. Locale is
-inferred from the word and interface language rather than exposed as a picker.
+may add, edit, remove, search, progressively load, and export lexemes. Export
+starts a browser download of the strict snapshot; its short control-local
+receipt may say that the download started, but must not claim that a browser,
+operating system, or person saved the file. Locale is inferred from the word and
+interface language rather than exposed as a picker.
 One `Use for` selector controls the lexeme's reversible applicability to voice,
 generated text, or both. It does not expose aliases, matcher channels,
 confidence, evidence scores, or a routine clear action. Source filters use the
@@ -237,11 +253,32 @@ edit, and abstains on bucket overflow or ambiguity. It is not phonetic matching,
 English homophone support, Chinese front/back-nasal support, or automatic
 canonical discovery. It remains off by default and may be enabled only with
 `NEXT_PUBLIC_MATTER_WIKI_FITTING=latin-conservative` for controlled corpus work.
-Release remains gated until representative positive and negative corpora prove
-precision, ambiguity rejection, locale isolation, and generated-output
-exclusion. Confirmed corrections and the deterministic ingress boundary do not
-depend on that gate. Bulk editing, imports, public sharing, vector search,
-cross-account sync, and model prompt injection are out of scope.
+
+Research freezes the next candidate as a local **pronunciation compiler**, not
+a fuzzy matcher and not a model feature. It may run only when canonical
+authority changes, emit bounded aliases into the existing immutable exact-match
+index, and stay absent from the synchronous material hot path. Its first corpus
+target is deliberately finite:
+
+- exact Chinese homophones under one pinned locale-owned pronunciation table;
+- only the Mandarin final confusions `an`/`ang`, `en`/`eng`, and `in`/`ing`,
+  with the rest of the syllable and locale unchanged; and
+- exact English phoneme-sequence identity from one pinned, licensed CMUdict
+  snapshot, with no grapheme or phoneme-distance fallback.
+
+Polyphones, unknown names, multiple English pronunciations, cross-locale
+matches, protected literals, collisions, bucket overflow, and insufficient
+human evidence all abstain. A pronunciation resource version becomes part of
+the disposable-cache identity; changing it cannot reinterpret durable human
+authority or tombstones. No portion is enabled until representative positive,
+negative, ambiguity, locale-isolation, protected-literal, generated-output, and
+performance corpora pass for the exact compiler and resource version. Until
+then the product must not claim Chinese near-sound, English homophone, or
+unconfirmed automatic correction as an available capability.
+
+Confirmed corrections and the deterministic ingress boundary do not depend on
+that gate. Bulk editing, imports, public sharing, vector search, cross-account
+sync, and model prompt injection are out of scope.
 
 The same release gate controls both halves of provisional authority: when the
 candidate producer is off, persisted provisional rules are also excluded from
