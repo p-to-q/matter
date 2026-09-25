@@ -108,8 +108,9 @@ locale cannot activate a rule.
 
 The repository provisions `Engelbart`, `Morphogenesis`, `KFC`, and `[p → q]` as
 ordinary automatic lexemes on the first successful local load. On Matter's
-current `zh-CN` speech path, `[p → q]` owns the two exact spoken aliases
-`P to Q` and `p to q`; these are bounded product
+current `zh-CN` speech path, that product-owned `[p → q]` starter owns the two
+exact spoken aliases `P to Q` and `p to q`; a human-created homograph owns no
+such relation. These are bounded product
 rules, not approximate pronunciation fitting. The repository also performs that
 provisioning as a one-time record-versioned migration for older valid records.
 Existing canonical identity, scope, provenance, tombstones, and a saturated

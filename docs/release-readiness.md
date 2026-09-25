@@ -84,7 +84,7 @@ frozen corpus, paid evidence, distributed abuse and spend controls, strict
 origin turn, and rollback receipt before its adapter may change to `live`.
 
 The exact local Preview.61 candidate passed `npm run check`: 154 Node boundary
-tests, 326 Markdown files, the 549-file / 8-layer architecture gate, 2,866
+tests, 326 Markdown files, the 549-file / 8-layer architecture gate, 2,868
 Vitest cases with five explicit skips, type generation, TypeScript,
 zero-warning lint, the production build, and the runtime-artifact budget. Its
 complete Chromium matrix then passed 175 cases with 15 capability-gated skips

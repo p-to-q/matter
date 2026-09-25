@@ -210,7 +210,39 @@ describe("Wiki starter lexemes", () => {
     ).text).toBe("[p → q]");
   });
 
-  it("preserves hidden p-to-q authority while its spoken scope is disabled", () => {
+  it("does not attach product spoken authority to a person's p-to-q lexeme", () => {
+    const custom = applyWikiEvent(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "zh-CN",
+      canonical: "[p → q]",
+      scope: "both",
+    });
+    expect(custom.ok).toBe(true);
+    if (!custom.ok) return;
+
+    const migrated = ensureWikiStarterLexemes(custom.state);
+    expect(migrated.ok).toBe(true);
+    if (!migrated.ok) return;
+    const pToQ = migrated.state.lexemes.find((entry) => entry.canonical === "[p → q]");
+    expect(pToQ).toEqual(expect.objectContaining({
+      provenance: "human-confirmed",
+      confirmedAtRevision: 1,
+    }));
+    expect(migrated.state.authorities.filter((entry) => entry.lexemeId === pToQ?.id))
+      .toEqual([]);
+
+    const compiled = compileWikiBasis(migrated.state, 2);
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    expect(canonicalizeWikiText(
+      compiled.basis.snapshot,
+      "zh-CN",
+      "spoken",
+      "P to Q",
+    ).text).toBe("P to Q");
+  });
+
+  it("does not invent hidden p-to-q authority while its spoken scope is disabled", () => {
     const initial = createInitialWikiState();
     const legacy = {
       ...initial,
@@ -222,7 +254,7 @@ describe("Wiki starter lexemes", () => {
     const migrated = ensureWikiStarterLexemes(legacy);
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
-    expect(migrated.state.authorities).toHaveLength(2);
+    expect(migrated.state.authorities).toHaveLength(0);
 
     const writtenOnly = compileWikiBasis(migrated.state, 3);
     expect(writtenOnly.ok).toBe(true);
@@ -253,7 +285,7 @@ describe("Wiki starter lexemes", () => {
       "zh-CN",
       "spoken",
       "P to Q",
-    ).text).toBe("[p → q]");
+    ).text).toBe("P to Q");
   });
 
   it.each(["Matter", "Douglas Engelbart", "Engelbart"])(

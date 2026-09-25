@@ -97,7 +97,12 @@ for (const viewport of [
     // waiting for click() and then polling the DOM can miss a correctly shown
     // baseline that has already entered its repair reveal.
     const rawPaintReceiptPromise = page.evaluate((expectedText) =>
-      new Promise<{ animationCount: number; observed: boolean; visibleAfterTwoFrames: boolean }>((resolve) => {
+      new Promise<{
+        animationCount: number;
+        observed: boolean;
+        observedAtMs: number | null;
+        visibleAfterTwoFrames: boolean;
+      }>((resolve) => {
         const containsExpectedText = () => Array.from(
           document.querySelectorAll<HTMLElement>('[data-thought-id^="thought_"]'),
         ).some((element) => element.textContent?.includes(expectedText) === true);
@@ -107,10 +112,12 @@ for (const viewport of [
           settled = true;
           observer.disconnect();
           clearTimeout(timeout);
+          const observedAtMs = performance.now();
           requestAnimationFrame(() => requestAnimationFrame(() => resolve({
             animationCount: (window as Window & { __matterRepairAnimations?: unknown[] })
               .__matterRepairAnimations?.length ?? 0,
             observed: true,
+            observedAtMs,
             visibleAfterTwoFrames: containsExpectedText(),
           })));
         });
@@ -123,17 +130,19 @@ for (const viewport of [
             animationCount: (window as Window & { __matterRepairAnimations?: unknown[] })
               .__matterRepairAnimations?.length ?? 0,
             observed: false,
+            observedAtMs: null,
             visibleAfterTwoFrames: false,
           });
         }, 10_000);
       }), heardTranscript);
     await stop.click();
     const rawPaintReceipt = await rawPaintReceiptPromise;
-    expect(rawPaintReceipt).toEqual({
+    expect(rawPaintReceipt).toMatchObject({
       animationCount: 0,
       observed: true,
       visibleAfterTwoFrames: true,
     });
+    expect(rawPaintReceipt.observedAtMs).toEqual(expect.any(Number));
     await expect(admitted).toHaveCount(1, { timeout: FIXTURE_REPAIR_SETTLE_TIMEOUT_MS });
     await expect(heard).toHaveCount(0);
     const reveal = admitted.locator(".repair-text");
@@ -159,6 +168,8 @@ for (const viewport of [
       }).__matterRepairAnimations ?? [],
     );
     expect(animations.every(({ name }) => name === "material-grapheme-arrive")).toBe(true);
+    expect(Math.min(...animations.map(({ time }) => time)) - rawPaintReceipt.observedAtMs!)
+      .toBeGreaterThanOrEqual(REPAIR_REVEAL_HOLD_MS - 40);
     expect(Math.min(...authoredRevealDelays)).toBe(REPAIR_REVEAL_HOLD_MS);
     // Browser scheduling may dispatch separately delayed animationstart events
     // in one busy frame. The CSS timeline, not event-delivery jitter, owns the

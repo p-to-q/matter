@@ -372,6 +372,40 @@ describe("AdmissionDriver", () => {
     }));
   });
 
+  it("discards a late repair that already matches the local visible baseline", async () => {
+    const h = harness({
+      locale: "en-US",
+      transcribe: vi.fn(async (input) => ({
+        protocolVersion: "0.2" as const,
+        interactionId: input.interactionId,
+        attempt: input.attempt,
+        transcript: "code x helps",
+      })),
+      commit: vi.fn((): AdmissionStoreReceipt => ({
+        operation: "commit",
+        status: "committed",
+        revision: 5,
+        affectedNodeIds: ["thought_1"],
+        repairLeaseId: "repair_lease_voice_1",
+        admittedText: "Codex helps.",
+      })),
+      repair: vi.fn(async () => ({
+        text: "Codex helps.",
+        source: "model" as const,
+      })),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.settleRepair).toHaveBeenCalledWith({
+      repairLeaseId: "repair_lease_voice_1",
+      outcome: "discarded",
+    });
+    expect(h.onRepairCommitted).not.toHaveBeenCalled();
+  });
+
   it("computes repair beside the paint gate but cannot commit before baseline paint", async () => {
     let releasePaint!: () => void;
     const h = harness({

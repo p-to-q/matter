@@ -770,8 +770,9 @@ readable rather than labelling it corrupt. Record V4 also collapses the
 short-lived automatic `en-US` / `zh-CN` `[p → q]` duplicate only when the old
 row has the exact product-owned shape and no unknown relation; human-owned or
 ambiguous rows are never silently merged. On the current `zh-CN` speech path,
-two exact spoken aliases on the `[p → q]` lexeme compile through the same
-confirmed-rule path; they do not open a general phonetic, cross-locale, or
+two exact spoken aliases on the product-owned `[p → q]` starter compile through
+the same confirmed-rule path; a human-created homograph gains no relation. The
+aliases do not open a general phonetic, cross-locale, or
 prompt-based matching path.
 
 The recent evidence cohort is not an intent model. Explicit settings decisions

@@ -45,8 +45,9 @@ A fresh local Wiki begins with four editable product spellings, in stable order:
 entries rather than UI examples. A person may rename, rescope, remove, or export
 them; removal leaves negative authority so initialization never recreates a
 word the person deliberately removed. On the current Chinese speech path, the
-`[p → q]` entry owns two exact spoken aliases, `P to Q` and `p to q`; no general
-phonetic inference or cross-locale fallback is implied.
+product-owned `[p → q]` starter owns two exact spoken aliases, `P to Q` and
+`p to q`; a human-created entry with the same spelling does not inherit those
+relations. No general phonetic inference or cross-locale fallback is implied.
 
 Wiki is configuration, not a destination. Its entry belongs in the top-right
 settings menu immediately before Model API; opening it replaces the menu with

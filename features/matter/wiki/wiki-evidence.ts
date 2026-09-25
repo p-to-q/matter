@@ -177,7 +177,7 @@ export function ensureWikiStarterLexemes(state: WikiState): WikiTransitionResult
 
   const pToQ = lexemes.find((entry) =>
     entry.locale === "zh-CN" && entry.canonical === "[p → q]");
-  if (pToQ !== undefined) {
+  if (pToQ !== undefined && isAutomaticPToQStarter(state, pToQ)) {
     const lexemesById = new Map(lexemes.map((entry) => [entry.id, entry]));
     for (const form of P_TO_Q_FORMS) {
       const alias = storedAliasKey({ channel: "spoken", form }, pToQ.locale);
