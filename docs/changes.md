@@ -356,20 +356,18 @@ discover the title, an editorial transition presented as product behavior, and c
 audio or provider text to the public repository. This entry records the frozen
 workflow, not a completed QA or publication receipt.
 
-## 2026-09-17 — quiet controls retain marks instead of containers
+## 2026-09-17 — active rail modes retain marks instead of containers
 
 Changed: an active rail mode uses one four-pixel physical dot beneath its icon
-instead of a filled control, and the closed Ask Matter entry remains typographic
-through pointer hover and keyboard focus. The existing focus ring and complete
-hit targets remain unchanged.
+instead of a filled control. The existing focus ring and complete hit targets
+remain unchanged.
 
 Why: a persistent filled rectangle reads as another surface on the paper and
 competes with the material. Mode and focus still need distinct, perceivable
 receipts, but neither needs permanent status chrome.
 
-Forecloses: using the active-state mark as a replacement for accessible focus,
-shrinking pointer targets to match the visual dot, and turning the corner
-Inquiry entrance into a panel before the person opens it.
+Forecloses: using the active-state mark as a replacement for accessible focus
+and shrinking pointer targets to match the visual dot.
 
 ## 2026-09-17 — Voice acquisition has one failure channel
 
