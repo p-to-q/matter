@@ -44,7 +44,8 @@ import {
 
 /**
  * Version 2 stores only bounded cohorts. Machine proposals must first identify
- * one lexeme and then clear both activation and ambiguity gates.
+ * one lexeme and then clear both activation and ambiguity gates. These constants
+ * are a versioned corpus-calibration boundary, not shipped intent inference.
  */
 export const WIKI_SCORE_POLICY = Object.freeze({
   version: WIKI_SCORING_VERSION,
@@ -55,6 +56,16 @@ export const WIKI_SCORE_POLICY = Object.freeze({
   provisionalAmbiguityMargin: 4,
   confirmedRuleScore: 2_147_483_647,
 });
+
+export const WIKI_STARTER_LEXEMES = Object.freeze([
+  Object.freeze({ locale: "en-US" as const, canonical: "Engelbart", scope: "both" as const }),
+  Object.freeze({ locale: "en-US" as const, canonical: "Morphogenesis", scope: "both" as const }),
+  Object.freeze({ locale: "en-US" as const, canonical: "KFC", scope: "both" as const }),
+  Object.freeze({ locale: "zh-CN" as const, canonical: "[p → q]", scope: "both" as const }),
+]);
+
+const P_TO_Q_CANONICAL = "[p → q]";
+const P_TO_Q_FORMS = Object.freeze(["P to Q", "p to q"] as const);
 
 export function createEmptyWikiState(): WikiState {
   return freezeWikiState({
@@ -71,6 +82,173 @@ export function createEmptyWikiState(): WikiState {
     aliasTombstones: [],
     lexemeTombstones: [],
   });
+}
+
+/** Creates the four editable starter spellings in their stable product order. */
+export function createInitialWikiState(): WikiState {
+  return freezeWikiState({
+    ...createEmptyWikiState(),
+    nextLexemeId: WIKI_STARTER_LEXEMES.length + 1,
+    lexemes: WIKI_STARTER_LEXEMES.map((entry, index) => Object.freeze({
+      id: index + 1,
+      ...entry,
+      provenance: "aggregate-evidence" as const,
+      confirmedAtRevision: null,
+    })),
+    authorities: P_TO_Q_FORMS.map((form) => Object.freeze({
+      lexemeId: 4,
+      channel: "spoken" as const,
+      boundary: "word" as const,
+      form,
+      confirmedAtRevision: 0,
+    })),
+  });
+}
+
+/** Adds missing starter spellings once while respecting a person's tombstones,
+ * renamed entries, scope choices, and every existing canonical identity. */
+export function ensureWikiStarterLexemes(state: WikiState): WikiTransitionResult {
+  const validation = validateWikiState(state);
+  if (!validation.ok) return failure("INVALID_STATE", validation.message);
+  if (isPristineLegacyStarterState(state)) {
+    return success(createInitialWikiState(), true);
+  }
+
+  let lexemes = state.lexemes;
+  let authorities = state.authorities;
+  let changed = false;
+  const legacyPToQ = lexemes.find((entry) =>
+    entry.locale === "en-US" && entry.canonical === P_TO_Q_CANONICAL);
+  const currentPToQ = lexemes.find((entry) =>
+    entry.locale === "zh-CN" && entry.canonical === P_TO_Q_CANONICAL);
+  const legacyPToQRemoved = state.lexemeTombstones.some((entry) =>
+    entry.locale === "en-US" && entry.canonical === P_TO_Q_CANONICAL);
+  const safeLegacyPToQ = legacyPToQ !== undefined &&
+    isAutomaticPToQStarter(state, legacyPToQ);
+  const safeCurrentPToQ = currentPToQ !== undefined &&
+    isAutomaticPToQStarter(state, currentPToQ);
+
+  // Record V3 briefly shipped the product-owned p-to-q starter under en-US.
+  // V4 repairs only that exact automatic seed. Unknown relations and anything
+  // a person has taken over remain untouched rather than being guessed away.
+  if (legacyPToQRemoved && safeCurrentPToQ) {
+    lexemes = Object.freeze(lexemes.filter((entry) => entry.id !== currentPToQ.id));
+    authorities = Object.freeze(authorities.filter((entry) => entry.lexemeId !== currentPToQ.id));
+    changed = true;
+  } else if (safeLegacyPToQ && currentPToQ !== undefined) {
+    lexemes = Object.freeze(lexemes.filter((entry) => entry.id !== legacyPToQ.id));
+    authorities = Object.freeze(authorities.filter((entry) => entry.lexemeId !== legacyPToQ.id));
+    changed = true;
+  } else if (safeLegacyPToQ && currentPToQ === undefined && !legacyPToQRemoved) {
+    lexemes = Object.freeze(lexemes.map((entry) => entry.id === legacyPToQ.id
+      ? Object.freeze({ ...entry, locale: "zh-CN" as const })
+      : entry));
+    changed = true;
+  }
+
+  // A saturated decision ledger cannot prove that an absent starter was never
+  // removed. Human agency wins over optional seed completion.
+  if (state.automaticLearningSaturated) {
+    if (!changed) return success(state, false);
+    if (state.revision === Number.MAX_SAFE_INTEGER) {
+      return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
+    }
+    return commitAtRevision(state, state.revision + 1, { lexemes, authorities });
+  }
+
+  let nextLexemeId = state.nextLexemeId;
+  for (const starter of WIKI_STARTER_LEXEMES) {
+    if (starter.canonical === P_TO_Q_CANONICAL && legacyPToQRemoved) continue;
+    const key = lexemeKey(starter);
+    if (lexemes.some((entry) => lexemeKey(entry) === key) ||
+        state.lexemeTombstones.some((entry) => lexemeKey(entry) === key)) continue;
+    if (lexemes.length >= MAX_WIKI_LEXEMES || nextLexemeId === Number.MAX_SAFE_INTEGER) {
+      return failure("BOUND_EXCEEDED", "The Wiki lexeme bound is exceeded.");
+    }
+    lexemes = Object.freeze([...lexemes, Object.freeze({
+      id: nextLexemeId,
+      ...starter,
+      provenance: "aggregate-evidence" as const,
+      confirmedAtRevision: null,
+    })]);
+    nextLexemeId += 1;
+    changed = true;
+  }
+
+  const pToQ = lexemes.find((entry) =>
+    entry.locale === "zh-CN" && entry.canonical === "[p → q]");
+  if (pToQ !== undefined) {
+    const lexemesById = new Map(lexemes.map((entry) => [entry.id, entry]));
+    for (const form of P_TO_Q_FORMS) {
+      const alias = storedAliasKey({ channel: "spoken", form }, pToQ.locale);
+      const claimed = authorities.some((entry) => {
+        const target = lexemesById.get(entry.lexemeId);
+        return target !== undefined && storedAliasKey(entry, target.locale) === alias;
+      });
+      const rejected = state.aliasTombstones.some((entry) =>
+        entry.lexemeId === pToQ.id && entry.channel === "spoken" && entry.form === form);
+      if (claimed || rejected) continue;
+      if (authorities.length >= MAX_WIKI_AUTHORITY_RULES) {
+        return failure("BOUND_EXCEEDED", "The Wiki authority bound is exceeded.");
+      }
+      authorities = Object.freeze([...authorities, Object.freeze({
+        lexemeId: pToQ.id,
+        channel: "spoken" as const,
+        boundary: "word" as const,
+        form,
+        confirmedAtRevision: state.revision + 1,
+      })]);
+      changed = true;
+    }
+  }
+
+  if (!changed) return success(state, false);
+  if (state.revision === Number.MAX_SAFE_INTEGER) {
+    return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
+  }
+  return commitAtRevision(state, state.revision + 1, {
+    lexemes,
+    nextLexemeId,
+    authorities,
+  });
+}
+
+function isAutomaticPToQStarter(state: WikiState, lexeme: WikiLexeme): boolean {
+  if (
+    lexeme.canonical !== P_TO_Q_CANONICAL ||
+    lexeme.scope !== "both" ||
+    lexeme.provenance !== "aggregate-evidence" ||
+    lexeme.confirmedAtRevision !== null ||
+    state.evidence.some((entry) => entry.lexemeId === lexeme.id) ||
+    state.aliasTombstones.some((entry) => entry.lexemeId === lexeme.id)
+  ) return false;
+  return state.authorities.every((entry) => entry.lexemeId !== lexeme.id || (
+    entry.channel === "spoken" &&
+    entry.boundary === "word" &&
+    P_TO_Q_FORMS.includes(entry.form as (typeof P_TO_Q_FORMS)[number])
+  ));
+}
+
+function isPristineLegacyStarterState(state: WikiState): boolean {
+  const tail = ["Morphogenesis", "KFC", "[p → q]"];
+  const first = state.lexemes[0]?.canonical;
+  return state.revision === 0 &&
+    state.nextLexemeId === tail.length + 2 &&
+    state.recentObservationCount === 0 &&
+    !state.automaticLearningSaturated &&
+    state.evidence.length === 0 &&
+    state.authorities.length === 0 &&
+    state.aliasTombstones.length === 0 &&
+    state.lexemeTombstones.length === 0 &&
+    state.lexemes.length === tail.length + 1 &&
+    (first === "Matter" || first === "Douglas Engelbart" || first === "Engelbart") &&
+    state.lexemes.every((entry, index) =>
+      entry.id === index + 1 &&
+      entry.locale === "en-US" &&
+      (index === 0 || entry.canonical === tail[index - 1]) &&
+      entry.scope === "both" &&
+      entry.provenance === "human-confirmed" &&
+      entry.confirmedAtRevision === 0);
 }
 
 export function applyWikiEvent(state: WikiState, event: WikiEvent): WikiTransitionResult {

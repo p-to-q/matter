@@ -21,6 +21,7 @@ export const MAX_WIKI_LEXEMES = MAX_WIKI_EVIDENCE_RECORDS +
   MAX_WIKI_AUTHORITY_RULES + MAX_WIKI_TOMBSTONES;
 export const MAX_WIKI_LEXEME_TOMBSTONES = 5_000;
 export const MAX_WIKI_EVIDENCE_COUNT = 255;
+// Evidence-cohort aging cadence. This is not an interaction or user-intent window.
 export const WIKI_RECENT_OBSERVATION_WINDOW = 32;
 export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 32;
 // The lexeme schema may transiently represent every relation from a valid 4 MiB

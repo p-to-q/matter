@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyWikiEvent, createEmptyWikiState } from "./wiki-evidence";
+import { createInitialWikiState } from "./wiki-evidence";
 import {
   deriveWikiBoundary,
   projectWikiConfigurationRules,
@@ -59,5 +60,18 @@ describe("Wiki configuration projection", () => {
     expect(projectWikiConfigurationRules(created.state)).toEqual([
       expect.objectContaining({ canonical: "Engelbart" }),
     ]);
+  });
+
+  it("shows inactive automatic canonical entries without exposing their aliases", () => {
+    const configuration = projectWikiConfigurationRules(createInitialWikiState());
+
+    expect(configuration).toHaveLength(4);
+    expect(configuration.map((entry) => [entry.canonical, entry.origin])).toEqual([
+      ["Engelbart", "automatic"],
+      ["Morphogenesis", "automatic"],
+      ["KFC", "automatic"],
+      ["[p → q]", "automatic"],
+    ]);
+    expect(JSON.stringify(configuration)).not.toMatch(/P to Q|alias|form|channel/);
   });
 });

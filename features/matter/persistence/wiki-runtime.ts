@@ -10,7 +10,6 @@ import type {
 import {
   decideMatterWiki,
   getMatterWikiStatus,
-  matterWikiProjectionPolicy,
   readMatterWikiState,
   resetCorruptMatterWiki,
   retryMatterWikiAuthority,
@@ -78,7 +77,7 @@ function getConfigurationSnapshot(): MatterWikiConfigurationSnapshot {
     ),
     rules: state === null
       ? Object.freeze([])
-      : projectWikiConfigurationRules(state, matterWikiProjectionPolicy),
+      : projectWikiConfigurationRules(state),
   });
   return cachedSnapshot;
 }

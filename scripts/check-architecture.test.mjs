@@ -154,6 +154,8 @@ test("a type-only edge is not a runtime edge", () => {
   assert.deepEqual(importsOf('import "./a";'), ["./a"]);
   assert.deepEqual(importsOf('export { a } from "./a";'), ["./a"]);
   assert.deepEqual(importsOf('export type { A } from "./a";'), []);
+  assert.deepEqual(importsOf('const a = import("./a");'), ["./a"]);
+  assert.deepEqual(importsOf('const a = await import(`./${name}`);'), []);
   assert.deepEqual(
     architectureImportsOf('import type { WikiState } from "../wiki/wiki-model";'),
     ["../wiki/wiki-model"],
@@ -161,6 +163,23 @@ test("a type-only edge is not a runtime edge", () => {
   assert.deepEqual(architectureImportsOf('import type { A } from "./a";'), []);
   // A specifier inside a string or comment is not an import.
   assert.deepEqual(importsOf('const note = `import { a } from "./a"`;'), []);
+  assert.deepEqual(importsOf('const note = `import("./a")`;'), []);
+  assert.deepEqual(importsOf('// import("./a")\nconst value = 1;'), []);
+});
+
+test("a string-literal dynamic import cannot bypass architecture privacy", () => {
+  assert.deepEqual(
+    architectureImportsOf('return import("../wiki/wiki-model");'),
+    ["../wiki/wiki-model"],
+  );
+  assert.deepEqual(
+    architectureImportsOf('return import("@/features/matter/wiki/wiki-model");'),
+    ["@/features/matter/wiki/wiki-model"],
+  );
+  assert.deepEqual(
+    architectureImportsOf('return import("../wiki/wiki-model", { with: { type: "json" } });'),
+    ["../wiki/wiki-model"],
+  );
 });
 
 test("the deepest matching directory names the layer", () => {

@@ -40,10 +40,26 @@ exposes a separately confirmed reset only after strict decoding fails. Wiki
 still has no authority over the material turn: it proposes bounded replacements,
 while Matter alone validates and commits the resulting text.
 
+A fresh local Wiki begins with four editable product spellings, in stable order:
+`Engelbart`, `Morphogenesis`, `KFC`, and `[p → q]`. They are ordinary automatic
+entries rather than UI examples. A person may rename, rescope, remove, or export
+them; removal leaves negative authority so initialization never recreates a
+word the person deliberately removed. On the current Chinese speech path, the
+`[p → q]` entry owns two exact spoken aliases, `P to Q` and `p to q`; no general
+phonetic inference or cross-locale fallback is implied.
+
 Wiki is configuration, not a destination. Its entry belongs in the top-right
 settings menu immediately before Model API; opening it replaces the menu with
 one bounded, scrollable settings dialog. The first-level menu never renders the
 lexical list itself, and Matter exposes no standalone Wiki route.
+
+The current release keeps this configuration path honest: saving a canonical
+word records the preferred form and its possible voice/generated scope, but does
+not correct future or existing text. The selected scope becomes operational only
+after a verified matching path is enabled. Automatic aliases and
+the visible error-local confirmation path remain gated until their corpus and
+interaction evidence pass. The UI states this boundary directly instead of
+presenting stored configuration as an active correction.
 
 ## Two kinds of turn
 

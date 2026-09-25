@@ -1,26 +1,8 @@
 .section {
-  padding: 22px 20px 20px;
+  box-sizing: border-box;
+  min-height: 263px;
+  padding: 17px 16px 16px;
   color: var(--chrome-text);
-}
-
-.header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.introduction {
-  min-width: 0;
-  flex: 1;
-}
-
-.introduction p {
-  max-width: 410px;
-  margin: 0;
-  color: var(--chrome-muted);
-  font: 400 12.5px/1.65 var(--matter-face);
-  text-wrap: pretty;
 }
 
 .headerActions {
@@ -61,15 +43,15 @@
 }
 
 .headerActions button {
-  min-height: 34px;
+  min-height: 32px;
   color: var(--chrome-muted);
-  font: 500 11px/1 var(--matter-face);
+  font: 500 11px/1.2 var(--mono);
 }
 
 .exportButton {
   display: grid;
-  min-width: 88px;
-  padding: 0 9px;
+  min-width: 82px;
+  padding: 0 8px;
   place-items: center;
   text-align: center;
 }
@@ -95,8 +77,8 @@
 
 .addButton {
   display: inline-grid;
-  width: 34px;
-  min-width: 34px;
+  width: 32px;
+  min-width: 32px;
   padding: 0;
   place-items: center;
   border: 1px solid var(--chrome-line) !important;
@@ -140,19 +122,20 @@
 }
 
 .notice {
-  min-height: 18px;
-  margin-top: 10px;
+  display: none;
+  margin: 0 0 12px;
   opacity: 0;
   transition: opacity 140ms ease;
 }
 
 .notice[data-visible="true"] {
+  display: block;
   opacity: 1;
 }
 
 .empty {
-  padding: 28px 0 18px;
-  border-top: 1px solid var(--chrome-line);
+  margin-top: 0;
+  padding: 30px 2px 20px;
 }
 
 .empty p {
@@ -182,50 +165,109 @@
   min-width: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-top: 22px;
-  padding-bottom: 10px;
+  gap: 12px;
+  padding-bottom: 12px;
   border-bottom: 1px solid var(--chrome-line);
 }
 
 .filters {
-  display: inline-flex;
+  display: inline-grid;
+  box-sizing: border-box;
+  height: 34px;
   min-width: 0;
   align-items: center;
-  gap: 0;
-  padding: 2px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--chrome-text) 4%, transparent);
+  grid-template-columns: 54px 78px 78px;
+  padding: 0;
+  border: 1px solid var(--chrome-line);
+  border-radius: 5px;
+  background: transparent;
   overflow-x: auto;
   scrollbar-width: none;
 }
 
 .filters button {
+  position: relative;
   display: inline-flex;
-  min-height: 30px;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 28px;
   flex: 0 0 auto;
   align-items: center;
-  padding: 0 10px;
+  justify-content: center;
+  margin: 0 2px;
+  padding: 0 9px;
   border-radius: 3px;
-  font: 450 11px/1 var(--matter-face);
+  font: 450 12px/1 var(--matter-face);
+  transition: background-color 130ms ease, box-shadow 130ms ease, color 130ms ease;
+}
+
+.filters button:first-child {
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
+  margin: -1px 0 -1px -1px;
+  border: 1px solid color-mix(in srgb, var(--chrome-line) 72%, transparent);
+  border-radius: 5px;
+  background: transparent;
+  isolation: isolate;
+}
+
+.filters button:first-child::after {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  border-radius: 4px;
+  background: transparent;
+  content: "";
+  transform: scale(.925, .82);
+  transition: background-color 110ms ease, transform 170ms cubic-bezier(.2, .72, .2, 1);
+}
+
+.filters button:nth-child(3)::before {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: -2.5px;
+  width: 1px;
+  background: var(--chrome-line);
+  content: "";
+  pointer-events: none;
 }
 
 .filters button:hover,
 .filters button:focus-visible {
-  background: color-mix(in srgb, var(--chrome-text) 6%, transparent);
+  background: color-mix(in srgb, var(--chrome-text) 3%, transparent);
   color: var(--chrome-text);
 }
 
+.filters button:first-child:hover,
+.filters button:first-child:focus-visible,
+.filters button:first-child[aria-pressed="true"] {
+  background: transparent;
+}
+
+.filters button:first-child:hover::after,
+.filters button:first-child:focus-visible::after {
+  background: color-mix(in srgb, var(--chrome-text) 3%, transparent);
+}
+
 .filters button[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--chrome-text) 10%, transparent);
+  z-index: 1;
+  min-height: 28px;
+  background: color-mix(in srgb, var(--chrome-text) 7%, transparent);
   color: var(--chrome-text);
   font-weight: 550;
+}
+
+.filters button:first-child[aria-pressed="true"]::after {
+  background: color-mix(in srgb, var(--chrome-text) 7%, transparent);
+  transform: scale(1);
 }
 
 .total {
   flex: 0 0 auto;
   color: var(--chrome-muted);
-  font: 400 10px/1 var(--mono);
+  font: 400 10.5px/1.35 var(--mono);
   letter-spacing: .02em;
 }
 
@@ -261,16 +303,16 @@
   margin: 10px 0 0;
   padding: 0;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 7px;
+  gap: 6px;
   list-style: none;
 }
 
 .rules li {
   position: relative;
   min-width: 0;
-  min-height: 52px;
-  border: 1px solid color-mix(in srgb, var(--chrome-line) 72%, transparent);
-  border-radius: 4px;
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--chrome-line) 40%, transparent);
+  border-radius: 3px;
   overflow: hidden;
   background: transparent;
   transition: background-color 120ms ease, border-color 120ms ease;
@@ -278,18 +320,18 @@
 
 .rules li:hover,
 .rules li:focus-within {
-  border-color: color-mix(in srgb, var(--chrome-text) 58%, transparent);
-  background: color-mix(in srgb, var(--chrome-text) 5%, transparent);
+  border-color: color-mix(in srgb, var(--chrome-text) 22%, transparent);
+  background: transparent;
 }
 
 .mapping {
   display: block;
   width: 100%;
   min-width: 0;
-  min-height: 50px;
-  padding: 8px 66px 8px 13px;
+  min-height: 30px;
+  padding: 3px 50px 3px 10px;
   color: var(--chrome-text) !important;
-  font: 450 13px/1.3 var(--matter-face) !important;
+  font: 450 12.5px/1.25 var(--matter-face) !important;
   text-align: left;
 }
 
@@ -330,12 +372,12 @@
 
 .tileActions button {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   place-items: center;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--chrome-sheet) 88%, transparent);
+  background: transparent;
   color: var(--chrome-muted);
 }
 
@@ -346,8 +388,8 @@
 }
 
 .tileActions svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   fill: none;
   stroke: currentColor;
   stroke-linecap: round;
@@ -361,29 +403,8 @@
 
 .editor {
   display: grid;
-  gap: 14px;
-  margin-top: 22px;
-  padding-top: 16px;
-  border-top: 1px solid var(--chrome-line);
-}
-
-.editorHeading {
-  display: grid;
-  min-height: 34px;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-}
-
-.editorHeading button {
-  width: max-content;
-  min-height: 32px;
-  padding: 0 7px;
-  font: 500 10.5px/1 var(--matter-face);
-}
-
-.editorHeading strong {
-  color: var(--chrome-text);
-  font: 500 12px/1 var(--matter-face);
+  gap: 15px;
+  color: var(--chrome-muted);
 }
 
 .editor label {
@@ -394,7 +415,8 @@
 
 .editor label > span {
   color: var(--chrome-muted);
-  font: 500 11px/1 var(--matter-face);
+  font: 500 12px/1.35 var(--mono);
+  letter-spacing: .25px;
 }
 
 .editor input,
@@ -405,19 +427,19 @@
   border: 1px solid var(--chrome-line);
   border-radius: 4px;
   outline: 0;
-  background: transparent;
+  background: color-mix(in srgb, var(--chrome-sheet) 72%, transparent);
   color: var(--chrome-text);
-  font-size: 14px;
+  font: 400 13.5px/1.4 var(--mono);
 }
 
 .editor input {
-  height: 48px;
-  padding: 0 12px;
+  min-height: 44px;
+  padding: 8px 10px;
 }
 
 .editor select {
-  height: 42px;
-  padding: 0 36px 0 11px;
+  min-height: 44px;
+  padding: 8px 36px 8px 10px;
   appearance: none;
 }
 
@@ -426,21 +448,23 @@
   border-color: var(--chrome-text);
 }
 
+.editor input:focus-visible,
+.editor select:focus-visible {
+  border-color: var(--chrome-text);
+  outline: 0;
+}
+
 .scopeField {
-  grid-template-columns: 1fr minmax(190px, auto);
-  align-items: center;
-  padding: 2px 0;
+  grid-template-columns: 1fr;
 }
 
 .scopeField select {
-  width: auto;
-  min-width: 190px;
+  width: 100%;
 }
 
 .scopeControl {
   position: relative;
-  display: inline-grid;
-  justify-self: end;
+  display: grid;
 }
 
 .scopeControl::after {
@@ -458,43 +482,73 @@
 }
 
 .editorHint {
-  margin: -3px 0 0;
+  margin: -1px 0 0;
   color: var(--chrome-muted);
-  font: 400 11px/1.55 var(--matter-face);
+  font: 400 11.5px/1.6 var(--mono);
+  text-wrap: pretty;
 }
 
 .editorFooter {
   display: flex;
-  min-height: 36px;
+  min-height: 32px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-top: 4px;
+  padding-top: 1px;
 }
 
 .editorFooter button {
-  min-height: 34px;
-  padding: 0 10px;
-  font: 500 10.5px/1 var(--matter-face);
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--chrome-text);
+  font: 500 11px/1.2 var(--mono);
 }
 
 .editorActions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   margin-left: auto;
 }
 
 .editorActions button[type="submit"] {
-  min-width: 72px;
-  background: var(--chrome-primary);
-  color: var(--chrome-primary-fg);
+  border-color: var(--chrome-line);
+  background: transparent;
+  color: var(--chrome-text);
 }
 
 .editorActions button:not([type="submit"]):hover,
 .editorActions button:not([type="submit"]):focus-visible {
-  background: color-mix(in srgb, var(--chrome-text) 7%, transparent);
+  border-color: var(--chrome-text);
+  background: transparent;
   color: var(--chrome-text);
+}
+
+.editorActions button[type="submit"]:hover:not(:disabled),
+.editorActions button[type="submit"]:focus-visible {
+  border-color: var(--chrome-primary);
+  background: var(--chrome-primary);
+  color: var(--chrome-primary-fg);
+}
+
+.listFooter {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--chrome-line);
+}
+
+.listFooter p {
+  max-width: 520px;
+  margin: 0;
+  color: var(--chrome-muted);
+  font: 400 12px/1.65 var(--matter-face);
+  text-wrap: pretty;
 }
 
 .editorRemove {
@@ -548,31 +602,39 @@
 
 @media (max-width: 767px) {
   .section {
-    padding: 18px 10px 14px;
-  }
-
-  .header {
-    display: grid;
-    gap: 10px;
-  }
-
-  .headerActions {
-    justify-content: flex-end;
+    padding: 17px 8px 14px;
   }
 
   .listHeader {
-    align-items: flex-end;
+    flex-wrap: wrap;
   }
 
   .filters {
-    max-width: calc(100% - 44px);
+    height: 50px;
+    max-width: 100%;
+    border-radius: 5px;
+  }
+
+  .filters button[aria-pressed="true"] {
+    min-height: 44px;
+    border-radius: 3px;
+  }
+
+  .filters button:first-child {
+    height: 50px;
+    min-height: 50px;
+    border-radius: 5px;
+  }
+
+  .filters button:nth-child(3)::before {
+    top: 13px;
+    bottom: 13px;
   }
 
   .headerActions button,
   .filters button,
   .editor input,
   .editor select,
-  .editorHeading button,
   .editorFooter button,
   .search input,
   .mapping,
@@ -590,22 +652,17 @@
     font-size: 16px;
   }
 
-  .scopeField {
-    grid-template-columns: 1fr;
-  }
-
-  .scopeControl,
-  .scopeField select {
-    width: 100%;
-    justify-self: stretch;
-  }
-
   .tileActions {
     display: none;
   }
 
   .mapping {
     padding-right: 13px;
+  }
+
+  .listFooter {
+    display: grid;
+    gap: 8px;
   }
 }
 
@@ -636,6 +693,10 @@
   .notice,
   .rules li,
   .tileActions {
+    transition: none;
+  }
+
+  .filters button:first-child::after {
     transition: none;
   }
 

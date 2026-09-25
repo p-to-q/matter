@@ -6,6 +6,56 @@ export type WikiGenerationChannel = Readonly<{
   close(): void;
 }>;
 
+export type WikiGenerationRefreshQueue = Readonly<{
+  request(generation: number): Promise<void>;
+}>;
+
+/** Coalesces burst invalidations while still catching a newer generation that
+ * arrives during one durable refresh. No progress stops the loop until a later
+ * message or explicit retry, so a storage outage cannot spin in the background. */
+export function createWikiGenerationRefreshQueue(
+  readGeneration: () => number,
+  refresh: () => Promise<unknown>,
+): WikiGenerationRefreshQueue {
+  let highestRequestedGeneration = readGeneration();
+  let requestEpoch = 0;
+  let inFlight: Promise<void> | null = null;
+
+  const drain = async () => {
+    while (highestRequestedGeneration > readGeneration()) {
+      const before = readGeneration();
+      const attemptEpoch = requestEpoch;
+      try {
+        await refresh();
+      } catch {
+        // One invalidation arriving during the failed read authorizes exactly
+        // one fresh attempt. Without a newer request, stop instead of spinning.
+        if (requestEpoch === attemptEpoch) return;
+        continue;
+      }
+      if (readGeneration() <= before) {
+        if (requestEpoch === attemptEpoch) return;
+        continue;
+      }
+    }
+  };
+
+  return Object.freeze({
+    request(generation) {
+      if (!Number.isSafeInteger(generation) || generation < 1 ||
+          generation <= readGeneration()) return Promise.resolve();
+      highestRequestedGeneration = Math.max(highestRequestedGeneration, generation);
+      requestEpoch += 1;
+      if (inFlight === null) {
+        inFlight = drain().finally(() => {
+          inFlight = null;
+        });
+      }
+      return inFlight;
+    },
+  });
+}
+
 /** Cross-tab invalidation carries one number and never lexical content. */
 export function createWikiGenerationChannel(): WikiGenerationChannel {
   if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {

@@ -3,8 +3,10 @@ import { openDB } from "idb";
 import {
   applyWikiEvent,
   createEmptyWikiState,
+  createInitialWikiState,
   projectApplicableWikiRules,
 } from "../wiki/wiki-evidence";
+import { MAX_WIKI_LEXEMES } from "../wiki/wiki-model";
 import { createIndexedDbWikiRepository } from "./wiki-repository";
 
 vi.mock("idb", () => ({ openDB: vi.fn() }));
@@ -12,13 +14,26 @@ vi.mock("idb", () => ({ openDB: vi.fn() }));
 describe("IndexedDB Wiki repository", () => {
   beforeEach(() => vi.mocked(openDB).mockReset());
 
-  it("loads no Wiki without manufacturing durable authority", async () => {
+  it("atomically provisions the four starter spellings on first load", async () => {
+    const put = vi.fn().mockResolvedValue(undefined);
+    const transaction = {
+      store: { get: vi.fn().mockResolvedValue(undefined), put },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
     vi.mocked(openDB).mockResolvedValue({
-      get: vi.fn().mockResolvedValue(undefined),
+      transaction: vi.fn().mockReturnValue(transaction),
     } as never);
     const repository = createIndexedDbWikiRepository();
 
-    await expect(repository.load()).resolves.toEqual({ ok: true, value: null });
+    await expect(repository.load()).resolves.toEqual({
+      ok: true,
+      value: { state: createInitialWikiState(), writeGeneration: 1 },
+    });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      writeGeneration: 1,
+      state: createInitialWikiState(),
+    }));
   });
 
   it("saves a validated state at one compare-and-swap generation", async () => {
@@ -37,7 +52,7 @@ describe("IndexedDB Wiki repository", () => {
     await expect(repository.save(state, null)).resolves.toEqual({ ok: true, value: 1 });
     expect(put).toHaveBeenCalledWith({
       storageSchemaVersion: 1,
-      recordSchemaVersion: 2,
+      recordSchemaVersion: 4,
       key: "origin",
       writeGeneration: 1,
       state,
@@ -102,7 +117,7 @@ describe("IndexedDB Wiki repository", () => {
     const migrated = await repository.load();
     expect(migrated).toMatchObject({
       ok: true,
-      value: { writeGeneration: 7, state: { schemaVersion: 4 } },
+      value: { writeGeneration: 8, state: { schemaVersion: 4 } },
     });
     if (!migrated.ok || migrated.value === null) return;
     expect(migrated.value.state.lexemes[0].scope).toBe("both");
@@ -120,13 +135,14 @@ describe("IndexedDB Wiki repository", () => {
       scope: "spoken",
     });
     if (!spoken.ok) throw new Error(spoken.error.message);
-    await expect(repository.save(spoken.state, 7)).resolves.toEqual({ ok: true, value: 8 });
+    await expect(repository.save(spoken.state, 8)).resolves.toEqual({ ok: true, value: 9 });
     const reloadedSpoken = await repository.load();
     if (!reloadedSpoken.ok || reloadedSpoken.value === null) {
       throw new Error("Expected the spoken-only Wiki to reload.");
     }
-    expect(projectApplicableWikiRules(reloadedSpoken.value.state).map((rule) => rule.channel))
-      .toEqual(["spoken"]);
+    expect(projectApplicableWikiRules(reloadedSpoken.value.state)
+      .filter((rule) => rule.form === "Englebart" || rule.form === "Engel-bart")
+      .map((rule) => rule.channel)).toEqual(["spoken"]);
     expect(JSON.stringify({
       authorities: reloadedSpoken.value.state.authorities,
       evidence: reloadedSpoken.value.state.evidence,
@@ -141,18 +157,199 @@ describe("IndexedDB Wiki repository", () => {
       scope: "both",
     });
     if (!both.ok) throw new Error(both.error.message);
-    await expect(repository.save(both.state, 8)).resolves.toEqual({ ok: true, value: 9 });
+    await expect(repository.save(both.state, 9)).resolves.toEqual({ ok: true, value: 10 });
     const reloadedBoth = await repository.load();
     if (!reloadedBoth.ok || reloadedBoth.value === null) {
       throw new Error("Expected the restored Wiki to reload.");
     }
-    expect(projectApplicableWikiRules(reloadedBoth.value.state).map((rule) => rule.channel).sort())
-      .toEqual(["spoken", "written"]);
+    expect(projectApplicableWikiRules(reloadedBoth.value.state)
+      .filter((rule) => rule.form === "Englebart" || rule.form === "Engel-bart")
+      .map((rule) => rule.channel).sort()).toEqual(["spoken", "written"]);
     expect(JSON.stringify({
       authorities: reloadedBoth.value.state.authorities,
       evidence: reloadedBoth.value.state.evidence,
       aliasTombstones: reloadedBoth.value.state.aliasTombstones,
     })).toBe(relations);
+  });
+
+  it("does not replay removed starters after the one-time record migration", async () => {
+    const removed = applyWikiEvent(createInitialWikiState(), {
+      type: "remove-lexeme",
+      lexemeId: 1,
+    });
+    if (!removed.ok) throw new Error(removed.error.message);
+    const put = vi.fn();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({
+          storageSchemaVersion: 1,
+          recordSchemaVersion: 4,
+          key: "origin",
+          writeGeneration: 4,
+          state: removed.state,
+        }),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+
+    await expect(createIndexedDbWikiRepository().load()).resolves.toEqual({
+      ok: true,
+      value: { state: removed.state, writeGeneration: 4 },
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("loads a valid full Wiki when optional starter migration cannot fit", async () => {
+    const base = createEmptyWikiState();
+    const state = {
+      ...base,
+      nextLexemeId: MAX_WIKI_LEXEMES + 1,
+      lexemes: Array.from({ length: MAX_WIKI_LEXEMES }, (_, index) => ({
+        id: index + 1,
+        locale: "en-US" as const,
+        canonical: `term ${index}`,
+        scope: "both" as const,
+        provenance: "aggregate-evidence" as const,
+        confirmedAtRevision: null,
+      })),
+    };
+    const put = vi.fn();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({
+          storageSchemaVersion: 1,
+          recordSchemaVersion: 2,
+          key: "origin",
+          writeGeneration: 9,
+          state,
+        }),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+
+    const loaded = await createIndexedDbWikiRepository().load();
+    expect(loaded).toMatchObject({
+      ok: true,
+      value: { writeGeneration: 9, state: { lexemes: { length: MAX_WIKI_LEXEMES } } },
+    });
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("keeps a valid Wiki readable when optional starter migration cannot be saved", async () => {
+    const state = createEmptyWikiState();
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({
+          storageSchemaVersion: 1,
+          recordSchemaVersion: 2,
+          key: "origin",
+          writeGeneration: 5,
+          state,
+        }),
+        put: vi.fn().mockRejectedValue(new DOMException("full", "QuotaExceededError")),
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+
+    await expect(createIndexedDbWikiRepository().load()).resolves.toEqual({
+      ok: true,
+      value: { state, writeGeneration: 5 },
+    });
+    expect(transaction.abort).toHaveBeenCalledOnce();
+  });
+
+  it("persists the one-time record marker even when starter state is already complete", async () => {
+    const state = createInitialWikiState();
+    const put = vi.fn().mockResolvedValue(undefined);
+    const transaction = {
+      store: {
+        get: vi.fn().mockResolvedValue({
+          storageSchemaVersion: 1,
+          recordSchemaVersion: 2,
+          key: "origin",
+          writeGeneration: 12,
+          state,
+        }),
+        put,
+      },
+      abort: vi.fn(),
+      done: Promise.resolve(),
+    };
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn().mockReturnValue(transaction),
+    } as never);
+
+    await expect(createIndexedDbWikiRepository().load()).resolves.toEqual({
+      ok: true,
+      value: { state, writeGeneration: 13 },
+    });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      recordSchemaVersion: 4,
+      writeGeneration: 13,
+      state,
+    }));
+  });
+
+  it("migrates a V3 duplicate p-to-q starter once and keeps the V4 row stable", async () => {
+    const initial = createInitialWikiState();
+    const duplicate = {
+      ...initial,
+      nextLexemeId: 6,
+      lexemes: [...initial.lexemes, {
+        id: 5,
+        locale: "en-US" as const,
+        canonical: "[p → q]",
+        scope: "both" as const,
+        provenance: "aggregate-evidence" as const,
+        confirmedAtRevision: null,
+      }],
+    };
+    let stored: unknown = {
+      storageSchemaVersion: 1,
+      recordSchemaVersion: 3,
+      key: "origin",
+      writeGeneration: 7,
+      state: duplicate,
+    };
+    const put = vi.fn(async (value: unknown) => {
+      stored = value;
+    });
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn(() => ({
+        store: { get: vi.fn(async () => stored), put },
+        abort: vi.fn(),
+        done: Promise.resolve(),
+      })),
+    } as never);
+    const repository = createIndexedDbWikiRepository();
+
+    const migrated = await repository.load();
+    expect(migrated).toMatchObject({
+      ok: true,
+      value: { writeGeneration: 8 },
+    });
+    if (!migrated.ok || migrated.value === null) return;
+    expect(migrated.value.state.lexemes.filter((entry) => entry.canonical === "[p → q]")).toEqual([
+      expect.objectContaining({ id: 4, locale: "zh-CN" }),
+    ]);
+    expect(put).toHaveBeenCalledTimes(1);
+
+    await expect(repository.load()).resolves.toEqual(migrated);
+    expect(put).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a stale writer without replacing the other tab's Wiki", async () => {
@@ -291,11 +488,11 @@ describe("IndexedDB Wiki repository", () => {
 
     await expect(repository.resetCorrupt(6)).resolves.toEqual({
       ok: true,
-      value: { state: createEmptyWikiState(), writeGeneration: 7 },
+      value: { state: createInitialWikiState(), writeGeneration: 7 },
     });
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       writeGeneration: 7,
-      state: createEmptyWikiState(),
+      state: createInitialWikiState(),
     }));
   });
 

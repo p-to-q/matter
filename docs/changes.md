@@ -47,7 +47,14 @@ browser or OS download completion from a click receipt.
 Changed: Preview.59 introduces the settings-owned `词典 WIKI` surface and its
 strict V4 local authority. Applicability is reversible across spoken and written
 ingress, legacy states migrate without losing lineage, and the release build
-keeps uncalibrated automatic fitting off. The same candidate also carries the
+keeps uncalibrated automatic fitting off. First load atomically provisions the
+four editable automatic spellings `Engelbart`, `Morphogenesis`, `KFC`, and
+`[p → q]`; on the current `zh-CN` speech path the final entry owns exact spoken
+`P to Q` and `p to q` aliases,
+while canonical identity and tombstones keep later human changes durable.
+The record-V4 migration removes the temporary automatic cross-locale
+`[p → q]` duplicate without merging human-owned or relation-bearing entries.
+The same candidate also carries the
 auditable, deployment-excluded film source and the latest canvas interaction
 hardening without adding published media to the runtime.
 

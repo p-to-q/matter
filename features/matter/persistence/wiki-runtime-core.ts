@@ -4,7 +4,10 @@ import type {
   WikiDecision,
 } from "./wiki-coordinator";
 import { createWikiCoordinator } from "./wiki-coordinator";
-import { createWikiGenerationChannel } from "./wiki-generation-channel";
+import {
+  createWikiGenerationChannel,
+  createWikiGenerationRefreshQueue,
+} from "./wiki-generation-channel";
 import { createIndexedDbWikiRepository } from "./wiki-repository";
 import {
   WIKI_CONFIRMED_ONLY,
@@ -17,7 +20,7 @@ import type {
 import {
   matterWikiBasisPublication,
   matterWikiFittingMode,
-} from "./wiki-runtime-bridge";
+} from "./wiki-runtime-publication";
 
 export const matterWikiProjectionPolicy = matterWikiFittingMode === "latin-conservative"
   ? WIKI_WITH_PROVISIONAL
@@ -28,7 +31,7 @@ type MatterWikiRuntime = Readonly<{
   generationChannel: ReturnType<typeof createWikiGenerationChannel>;
 }>;
 
-const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime.v2");
+const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime.v6");
 const runtimeHost = globalThis as unknown as {
   [key: symbol]: MatterWikiRuntime | undefined;
 };
@@ -41,9 +44,12 @@ function createMatterWikiRuntime(): MatterWikiRuntime {
     matterWikiProjectionPolicy,
   );
   const generationChannel = createWikiGenerationChannel();
+  const refreshQueue = createWikiGenerationRefreshQueue(
+    () => coordinator.readBasis().snapshot.generation,
+    () => coordinator.retry(),
+  );
   void generationChannel.subscribe((generation) => {
-    if (generation <= coordinator.readBasis().snapshot.generation) return;
-    void coordinator.retry();
+    void refreshQueue.request(generation);
   });
   return Object.freeze({ coordinator, generationChannel });
 }

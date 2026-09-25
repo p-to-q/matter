@@ -64,6 +64,7 @@ function harness(options: {
   repair?: AdmissionDriverDependencies["repair"]["repair"];
   afterBaselineVisible?: AdmissionDriverDependencies["afterBaselineVisible"];
   onRepairCommitted?: AdmissionDriverDependencies["onRepairCommitted"];
+  locale?: AdmissionDriverDependencies["locale"];
 } = {}) {
   const voice = new ControlledVoice();
   const commit = options.commit ?? vi.fn((): AdmissionStoreReceipt => ({
@@ -106,7 +107,7 @@ function harness(options: {
     createMaterialId: () => "thought_1",
     canonicalNow: () => "2026-08-03T10:00:00.000Z",
     monotonicNow: () => 12,
-    locale: "zh-CN",
+    locale: options.locale ?? "zh-CN",
   });
   driver.updateScope(SCOPE);
   driver.setDeliveryVisibleNodeIds(new Set(["thought_1"]));
@@ -329,6 +330,46 @@ describe("AdmissionDriver", () => {
       signal: expect.any(AbortSignal),
     }));
     expect(request).not.toHaveProperty("vocabulary");
+  });
+
+  it("keeps local Wiki output out of the late-repair request", async () => {
+    const repair = vi.fn(async () => ({
+      text: "code x helps more.",
+      source: "model" as const,
+    }));
+    const h = harness({
+      locale: "en-US",
+      transcribe: vi.fn(async (input) => ({
+        protocolVersion: "0.2" as const,
+        interactionId: input.interactionId,
+        attempt: input.attempt,
+        transcript: "code x helps",
+      })),
+      commit: vi.fn((): AdmissionStoreReceipt => ({
+        operation: "commit",
+        status: "committed",
+        revision: 5,
+        affectedNodeIds: ["thought_1"],
+        repairLeaseId: "repair_lease_voice_1",
+        admittedText: "Codex helps.",
+      })),
+      repair,
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.commit).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      transcript: "code x helps.",
+    }));
+    expect(repair).toHaveBeenCalledWith(expect.objectContaining({
+      text: "code x helps.",
+    }));
+    expect(JSON.stringify(repair.mock.calls)).not.toContain("Codex");
+    expect(h.settleRepair).toHaveBeenCalledWith(expect.objectContaining({
+      text: "code x helps more.",
+    }));
   });
 
   it("computes repair beside the paint gate but cannot commit before baseline paint", async () => {

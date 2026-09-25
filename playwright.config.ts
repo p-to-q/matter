@@ -19,6 +19,10 @@ const localOrigin = `http://127.0.0.1:${requestedPort}`;
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
+  // Next development compilation is intentionally part of this release
+  // matrix. Keep individual expectations strict, but give one serial journey
+  // enough wall time to survive a cold compile on slower local filesystems.
+  timeout: 60_000,
   // Every project shares one fixture-backed Next development server. Two and
   // three browsers both starved otherwise green Voice, canvas, and Lasso
   // journeys on the release host. The complete functional matrix is serial;

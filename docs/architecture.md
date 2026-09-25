@@ -758,6 +758,31 @@ conflict, so a concurrent human turn is not silently discarded. Evidence-only
 writes reuse both compiled indexes until the applicable authority actually
 changes.
 
+The IndexedDB repository owns one atomic, record-versioned starter migration. A
+missing record, or an older valid record whose bounded decision ledger can still
+prove absence, receives `Engelbart`, `Morphogenesis`, `KFC`, and `[p → q]`
+before the first basis is published. The migration advances the write
+generation and records its completion even when all rows already exist. It
+respects canonical identity, tombstones, and a saturated decision ledger;
+browser components never fabricate starter rows, and a person's removal is not
+replayed by a later load. Capacity or quota failure leaves the prior valid Wiki
+readable rather than labelling it corrupt. Record V4 also collapses the
+short-lived automatic `en-US` / `zh-CN` `[p → q]` duplicate only when the old
+row has the exact product-owned shape and no unknown relation; human-owned or
+ambiguous rows are never silently merged. On the current `zh-CN` speech path,
+two exact spoken aliases on the `[p → q]` lexeme compile through the same
+confirmed-rule path; they do not open a general phonetic, cross-locale, or
+prompt-based matching path.
+
+The recent evidence cohort is not an intent model. Explicit settings decisions
+commit directly and never compete with evidence scores. A future visible-error
+decision must arrive through a composition-owned, one-shot capability carrying
+an opaque attribution token captured at application time; the token is bound to
+one basis/rule, visible occurrence, document/interaction epoch, and expiry. It
+does not carry surrounding material. The capability and its token land only in
+the same slice as the correction UI; no empty port is exported in advance, and
+later text diffs, undo, deletion, or repetition are never mined to infer intent.
+
 The researched pronunciation direction remains a compiler boundary, not a
 model or hot-path matcher. A future compiler may derive bounded local aliases
 only when a lexeme changes, then publish the same immutable exact-match indexes
