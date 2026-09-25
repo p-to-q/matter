@@ -14,8 +14,17 @@ const HEALTH_SURFACES = [
   "textSwap",
   "archiveExportImport",
 ];
-const SURFACE_STATES = new Set(["available", "fixture", "unavailable"]);
-const DEPLOYMENT_PROFILES = new Set(["browser-preview", "elastic-live"]);
+const SURFACE_STATES = new Set([
+  "available",
+  "fixture",
+  "user-configurable",
+  "unavailable",
+]);
+const DEPLOYMENT_PROFILES = new Set([
+  "browser-preview",
+  "elastic-live",
+  "material-user-provider",
+]);
 const MAX_ROOT_HTML_BYTES = 1_024 * 1_024;
 const MAX_HEALTH_BYTES = 32 * 1_024;
 const MAX_PROVIDER_SESSION_BYTES = 8 * 1_024;
@@ -53,7 +62,7 @@ export function normalizeDeploymentOrigin(value) {
   return url.origin;
 }
 
-export function inspectDeploymentHealth(value, expectedVersion, profile = "browser-preview") {
+export function inspectDeploymentHealth(value, expectedVersion, profile = "material-user-provider") {
   const failures = [];
   if (!DEPLOYMENT_PROFILES.has(profile)) return [`Unknown deployment profile ${String(profile)}.`];
   if (!isRecord(value)) return ["Health response is not an object."];
@@ -79,17 +88,25 @@ export function inspectDeploymentHealth(value, expectedVersion, profile = "brows
   if (value.surfaces.voiceAdmission !== "available") {
     failures.push("Public voice admission is not available.");
   }
-  const expectedTransformState = profile === "elastic-live" ? "available" : "unavailable";
+  const expectedMaterialStates = {
+    "browser-preview": Object.freeze({ transformTurn: "unavailable", textSwap: "unavailable" }),
+    "elastic-live": Object.freeze({ transformTurn: "available", textSwap: "unavailable" }),
+    "material-user-provider": Object.freeze({
+      transformTurn: "user-configurable",
+      textSwap: "user-configurable",
+    }),
+  }[profile];
+  const expectedTransformState = expectedMaterialStates.transformTurn;
   if (value.surfaces.transformTurn !== expectedTransformState) {
     failures.push(
       `Material model surface transformTurn must be ${expectedTransformState} for ${profile}.`,
     );
   }
-  // Point-and-Talk is Text Swap's current UI owner, but its public live gate
-  // remains independently closed. An Elastic promotion cannot silently widen
-  // that separate model authority.
-  if (value.surfaces.textSwap !== "unavailable") {
-    failures.push(`Public Text Swap surface must be unavailable for ${profile}.`);
+  const expectedTextSwapState = expectedMaterialStates.textSwap;
+  if (value.surfaces.textSwap !== expectedTextSwapState) {
+    failures.push(
+      `Material model surface textSwap must be ${expectedTextSwapState} for ${profile}.`,
+    );
   }
   return failures;
 }
@@ -386,7 +403,7 @@ async function readBoundedDeploymentJson(response, maxBytes) {
 export async function checkDeployment({
   origin,
   expectedVersion,
-  profile = "browser-preview",
+  profile = "material-user-provider",
   requireProviderSession = false,
   fetchImpl = fetch,
   expectedBrandAssets,
@@ -394,6 +411,7 @@ export async function checkDeployment({
   if (typeof requireProviderSession !== "boolean") {
     throw new Error("Provider-session deployment requirement must be boolean.");
   }
+  const providerSessionRequired = requireProviderSession || profile === "material-user-provider";
   const normalized = normalizeDeploymentOrigin(origin);
   const brandAssets = expectedBrandAssets ?? await readExpectedBrandAssets();
   const request = (path, init = {}) => fetchImpl(`${normalized}${path}`, {
@@ -409,12 +427,12 @@ export async function checkDeployment({
     request("/matter-ui/shadows-poster.jpg", { method: "HEAD" }),
     request("/manifest.webmanifest", { method: "GET" }),
     ...DEPLOYMENT_BRAND_ICONS.map((icon) => request(icon.path, { method: "GET" })),
-    ...(requireProviderSession
+    ...(providerSessionRequired
       ? [request("/api/provider-session", { method: "GET", credentials: "omit" })]
       : []),
   ]);
   const icons = remaining.slice(0, DEPLOYMENT_BRAND_ICONS.length);
-  const providerSession = requireProviderSession
+  const providerSession = providerSessionRequired
     ? remaining[DEPLOYMENT_BRAND_ICONS.length]
     : undefined;
   const failures = [];
@@ -494,7 +512,7 @@ export async function checkDeployment({
       failures.push(`${contract.path} body is invalid or exceeds its byte limit.`);
     }
   }
-  if (requireProviderSession) {
+  if (providerSessionRequired) {
     if (providerSession === undefined) {
       failures.push("Provider-session probe request failed.");
     } else if (providerSession.status !== 200) {
@@ -542,7 +560,7 @@ function readHtmlAttributes(tag) {
 export async function waitForDeployment({
   origin,
   expectedVersion,
-  profile = "browser-preview",
+  profile = "material-user-provider",
   requireProviderSession = false,
   waitMs = 0,
   intervalMs = 5_000,
@@ -620,7 +638,7 @@ async function main() {
 
 export function parseArguments(args) {
   let origin;
-  let profile = "browser-preview";
+  let profile = "material-user-provider";
   let waitMs = 0;
   let requireProviderSession = false;
   for (const value of args) {
@@ -639,7 +657,9 @@ export function parseArguments(args) {
     if (value.startsWith("--profile=")) {
       profile = value.slice("--profile=".length);
       if (!DEPLOYMENT_PROFILES.has(profile)) {
-        throw new Error("--profile must be browser-preview or elastic-live.");
+        throw new Error(
+          "--profile must be browser-preview, elastic-live, or material-user-provider.",
+        );
       }
       continue;
     }

@@ -44,6 +44,8 @@ test("builds an explicit hybrid demo without weakening production gates", () => 
   });
   assert.equal(environment.MATTER_TRANSFORM_ADAPTER, "fixture");
   assert.equal(environment.MATTER_TEXT_SWAP_ADAPTER, "live");
+  assert.equal(environment.MATTER_TRANSFORM_SURFACE, "public");
+  assert.equal(environment.MATTER_TEXT_SWAP_SURFACE, "public");
   assert.equal(environment.MATTER_LABEL_ADAPTER, "fixture");
   assert.equal(environment.MATTER_INQUIRY_ADAPTER, "live");
   assert.equal(environment.MATTER_TRANSCRIPTION_ADAPTER, "browser");

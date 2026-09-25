@@ -11,6 +11,7 @@ import {
   transcriptionTextFitsCapacity,
 } from "../protocol/transcription-contract";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
+import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import {
   normalizeSpokenTranscript,
   type TranscriptPauseEvidence,
@@ -95,14 +96,12 @@ export const fixtureTranscriptionAdapter: TranscriptionAdapter = async (request)
 });
 
 function resolveTranscriptionAdapter(purpose: TranscriptionRequest["purpose"]): TranscriptionAdapter {
-  // Preserve both existing voice paths exactly. Swap direction is a separate
-  // local tool capability and follows its own production-off adapter gate.
+  // Preserve both existing voice paths exactly. Swap direction belongs to the
+  // Text Swap product surface; provider promotion is a separate concern.
   const existingVoiceDisabled = purpose !== "swap-direction" &&
     process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED === "false";
-  const textSwapDisabled = purpose === "swap-direction" && (
-    process.env.MATTER_TEXT_SWAP_ADAPTER === "off" ||
-    (process.env.MATTER_TEXT_SWAP_ADAPTER === undefined && process.env.NODE_ENV === "production")
-  );
+  const textSwapDisabled = purpose === "swap-direction" &&
+    !materialModelSurfaceAuthorized("matter-text-swap");
   if (existingVoiceDisabled || textSwapDisabled) {
     throw new TranscriptionServerError(
       "TRANSCRIPTION_UNAVAILABLE",

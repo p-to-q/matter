@@ -5,8 +5,10 @@ Matter is an environment where thought becomes touchable material.
 Voice admits human language. On one contiguous range inside a passage the person has
 explicitly lassoed, the current source release implements one bounded Elastic
 Language operation: gesture fixes reference and degree, while the tool owns
-direction and bounds. Its public deployment gate remains closed, so it is not
-yet a publicly available transform. Structure keeps the lineage
+direction and bounds. Elastic and Text Swap are public product surfaces: a
+verified user-owned Model API lease may supply either one. Matter's managed
+adapters remain independently off, so this does not claim that Matter operates
+or has promoted a managed material model. Structure keeps the lineage
 between thoughts. AI is intelligence inside the material, not an agent standing
 outside it.
 
@@ -69,8 +71,8 @@ tree. The correction can settle only while that exact passage
 remains untouched. Admission and repair are separate
 pointer-undoable changes, so the person's first expression stays recoverable.
 
-**Material transformation — Elastic Language 2.** The implemented, deployment-gated
-transform acts on material that already exists. The first transform is deliberately closed: one lassoed current
+**Material transformation — Elastic Language 2.** The implemented transform
+acts on material that already exists. Its first operation is deliberately closed: one lassoed current
 contiguous range inside one node. Adjacent punctuation-bounded segments may
 join that range, so circling a whole multi-clause title still expresses one
 target. One valid range stays in the
@@ -94,7 +96,8 @@ settles the visible degree without spending a model request. The fixed pointer
 deadzone is only protection against an accidental start; every positive degree
 after it remains exactly human-owned. One subsequent tap inside the shaped
 address surface confirms that exact degree and may start the single transform
-only when its deployment gate is open. Enter or Space is the keyboard-equivalent
+only when that product surface is authorized and a provider candidate is
+available. Enter or Space is the keyboard-equivalent
 confirmation, never the primary instruction.
 The quiet
 selected state opens no empty tool lane; local space appears only when a grip
@@ -215,7 +218,10 @@ bounded material is sent to the chosen provider endpoint first; existing
 managed candidates remain fallback, and a repeatedly failing user candidate is
 briefly tried after a healthy managed candidate instead of spending every
 action's first attempt. An unpromoted product action does not
-become public merely because a user key is present.
+become public merely because a user key is present. Elastic and Text Swap now
+have explicit public product authorization, but their managed adapters remain
+off. Without a valid user lease they therefore fail as unavailable without
+borrowing a managed candidate or weakening either material contract.
 
 ## The handle stays with the person
 

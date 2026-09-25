@@ -235,22 +235,25 @@ describe("request model pool", () => {
   it.each([
     ["matter-transform", "MATTER_TRANSFORM_ADAPTER"],
     ["matter-text-swap", "MATTER_TEXT_SWAP_ADAPTER"],
-  ] as const)("keeps the private %s surface behind its product gate", (scenario, gate) => {
+  ] as const)("keeps %s behind its independent product surface", (scenario, gate) => {
+    const surface = scenario === "matter-transform"
+      ? "MATTER_TRANSFORM_SURFACE"
+      : "MATTER_TEXT_SWAP_SURFACE";
     const fallback: ScenarioAdapter = async () => ({ text: "fixture" });
     const closed = resolveScenarioRequestModelAdapter(sealedRequest(), scenario, {
       fallback,
       limits: DEFAULT_POOL_LIMITS,
-      environment: { ...ENVIRONMENT, [gate]: "fixture" },
+      environment: { ...ENVIRONMENT, NODE_ENV: "production", [surface]: "off", [gate]: "live" },
     });
-    expect(closed).toEqual({ adapter: fallback, cacheScope: "managed" });
+    expect(closed).toEqual({ adapter: null, cacheScope: "managed" });
 
-    const live = resolveScenarioRequestModelAdapter(sealedRequest(), scenario, {
-      fallback,
+    const userSupplied = resolveScenarioRequestModelAdapter(sealedRequest(), scenario, {
+      fallback: null,
       limits: DEFAULT_POOL_LIMITS,
-      environment: { ...ENVIRONMENT, [gate]: "live" },
+      environment: { ...ENVIRONMENT, NODE_ENV: "production", [surface]: "public", [gate]: "off" },
     });
-    expect(live.adapter).not.toBe(fallback);
-    expect(live.cacheScope).not.toBe("managed");
+    expect(userSupplied.adapter).not.toBeNull();
+    expect(userSupplied.cacheScope).not.toBe("managed");
   });
 
   it.each([
@@ -274,10 +277,15 @@ describe("request model pool", () => {
       }), { headers: { "content-type": "application/json" } });
     }));
     try {
+      const materialSurface = scenario === "matter-transform"
+        ? { MATTER_TRANSFORM_SURFACE: "public" }
+        : scenario === "matter-text-swap"
+          ? { MATTER_TEXT_SWAP_SURFACE: "public" }
+          : {};
       const resolution = resolveScenarioRequestModelAdapter(sealedRequest(), scenario, {
         fallback: null,
         limits: DEFAULT_POOL_LIMITS,
-        environment: { ...ENVIRONMENT, [gate]: "live" },
+        environment: { ...ENVIRONMENT, ...materialSurface, [gate]: "live" },
       });
       await expect(resolution.adapter!({
         scenario,

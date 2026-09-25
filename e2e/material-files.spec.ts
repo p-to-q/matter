@@ -194,15 +194,40 @@ test("a manual Pan gesture takes over the camera at its rendered mid-flight posi
 
   const row = page.locator("aside.material-files .material-file").nth(8);
   const world = page.locator(".matter-world");
-  // This proof must own a long enough transition to observe its handoff even
-  // when the full browser matrix is contending for CPU. Product timing is
-  // covered separately; this case verifies the interruption boundary.
   await world.evaluate((element) => {
-    (element as HTMLElement).style.setProperty("--index-camera-duration", "1200ms");
+    let attempts = 0;
+    const freezeAtMidpoint = () => {
+      attempts += 1;
+      const transition = element.getAnimations().find((animation) =>
+        animation instanceof CSSTransition && animation.transitionProperty === "transform");
+      if (transition === undefined) {
+        if (attempts < 8) requestAnimationFrame(freezeAtMidpoint);
+        else (element as HTMLElement).dataset.e2eCameraFrozen = "missing";
+        return;
+      }
+      transition.pause();
+      const endTime = Number(transition.effect?.getComputedTiming().endTime ?? 0);
+      if (!(endTime > 0)) {
+        (element as HTMLElement).dataset.e2eCameraFrozen = "invalid";
+        return;
+      }
+      transition.currentTime = endTime / 2;
+      (element as HTMLElement).dataset.e2eCameraFrozen = "true";
+    };
+    const observer = new MutationObserver(() => {
+      if (element.getAttribute("data-camera-motion") !== "index") return;
+      observer.disconnect();
+      requestAnimationFrame(freezeAtMidpoint);
+    });
+    observer.observe(element, { attributeFilter: ["data-camera-motion"] });
   });
   await row.locator(".material-file__open").click();
   await expect(world).toHaveAttribute("data-camera-motion", "index");
-  await page.waitForTimeout(60);
+  // The observer is installed before click because an action can return after
+  // a short transition has already settled on a loaded host.
+  await expect(world).toHaveAttribute("data-e2e-camera-frozen", "true");
+  await page.evaluate(() => new Promise<void>((resolve) =>
+    requestAnimationFrame(() => resolve())));
 
   const paper = await page.locator(".matter-document").boundingBox();
   if (paper === null) throw new Error("camera handoff paper is missing");
@@ -498,6 +523,10 @@ for (const viewport of [
     context,
     page,
   }) => {
+    // One continuous document journey owns directory geometry, disclosure,
+    // local context, persistence, search, selection, archive, and reload. Keep
+    // every action assertion bounded while giving the whole receipt room to run.
+    test.setTimeout(60_000);
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useDeferredValue,
   useEffect,
   useMemo,
   useRef,
@@ -43,17 +44,8 @@ type Editor = Readonly<{
 
 type RuleFilter = "all" | "automatic" | "confirmed";
 
-type WordExample = Readonly<{
-  canonical: string;
-  locale: CanvasLanguage;
-}>;
-
-const WORD_EXAMPLES: readonly WordExample[] = Object.freeze([
-  Object.freeze({ canonical: "Morphogenesis", locale: "en-US" }),
-  Object.freeze({ canonical: "Engelbart", locale: "en-US" }),
-  Object.freeze({ canonical: "KFC", locale: "en-US" }),
-  Object.freeze({ canonical: "[p → q]", locale: "en-US" }),
-]);
+const TRANSIENT_NOTICE_MS = 1_800;
+const EXPORT_CONFIRMATION_MS = 900;
 
 type Copy = Readonly<{
   title: string;
@@ -66,7 +58,6 @@ type Copy = Readonly<{
   automatic: string;
   manual: string;
   empty: string;
-  examples: string;
   noResults: (query: string) => string;
   word: string;
   editorHint: string;
@@ -122,9 +113,14 @@ export function WikiSettingsSection({
   const [visibleCount, setVisibleCount] = useState(LOAD_STEP);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
+  const [exported, setExported] = useState(false);
   const [removeRule, setRemoveRule] = useState<WikiConfigurationRule | null>(null);
   const [confirmRecovery, setConfirmRecovery] = useState(false);
   const removeConfirmRef = useRef<HTMLButtonElement>(null);
+  const addButtonRef = useRef<HTMLButtonElement>(null);
+  const noticeTimerRef = useRef<number | null>(null);
+  const restoreFocusRuleRef = useRef<string | null>(null);
+  const ruleButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 
   useEffect(() => {
     if (active) void matterWikiConfiguration.start();
@@ -134,15 +130,59 @@ export function WikiSettingsSection({
     if (removeRule !== null) removeConfirmRef.current?.focus();
   }, [removeRule]);
 
+  useEffect(() => () => {
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    if (editor !== null || restoreFocusRuleRef.current === null) return;
+    const ruleId = restoreFocusRuleRef.current;
+    restoreFocusRuleRef.current = null;
+    window.requestAnimationFrame(() => {
+      if (ruleId !== "add") {
+        const rule = ruleButtonRefs.current.get(ruleId);
+        if (rule !== undefined) {
+          rule.focus();
+          return;
+        }
+      }
+      addButtonRef.current?.focus();
+    });
+  }, [editor]);
+
+  const showNotice = (message: string, transient = false) => {
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+    setNotice(message);
+    setExported(false);
+    if (!transient) return;
+    noticeTimerRef.current = window.setTimeout(() => {
+      setNotice("");
+      noticeTimerRef.current = null;
+    }, TRANSIENT_NOTICE_MS);
+  };
+
+  const clearNotice = () => {
+    if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = null;
+    setNotice("");
+    setExported(false);
+  };
+
+  const deferredQuery = useDeferredValue(query);
+  const searchableRules = useMemo(() => snapshot.rules.map((rule) => Object.freeze({
+    rule,
+    searchKey: rule.canonical.toLocaleLowerCase(rule.locale),
+  })), [snapshot.rules]);
   const filtered = useMemo(() => {
-    const needle = query.trim().toLocaleLowerCase(language);
+    const needle = deferredQuery.trim().toLocaleLowerCase(language);
     const byOrigin = filter === "all"
-      ? snapshot.rules
-      : snapshot.rules.filter((rule) => rule.origin === filter);
-    if (needle.length === 0) return byOrigin;
-    return byOrigin.filter((rule) =>
-      rule.canonical.toLocaleLowerCase(rule.locale).includes(needle));
-  }, [filter, language, query, snapshot.rules]);
+      ? searchableRules
+      : searchableRules.filter(({ rule }) => rule.origin === filter);
+    if (needle.length === 0) return byOrigin.map(({ rule }) => rule);
+    return byOrigin
+      .filter(({ searchKey }) => searchKey.includes(needle))
+      .map(({ rule }) => rule);
+  }, [deferredQuery, filter, language, searchableRules]);
   const visible = filtered.slice(0, visibleCount);
   const normalizedEditor = editor === null ? null : normalizeInput(editor);
   const canSubmit = normalizedEditor !== null && editor !== null && (
@@ -155,7 +195,8 @@ export function WikiSettingsSection({
 
   const beginAdd = () => {
     if (snapshot.stateRevision === null) return;
-    setNotice("");
+    clearNotice();
+    restoreFocusRuleRef.current = "add";
     setRemoveRule(null);
     setEditor(Object.freeze({
       mode: "add",
@@ -167,23 +208,10 @@ export function WikiSettingsSection({
     }));
   };
 
-  const beginExample = (example: WordExample) => {
-    if (snapshot.stateRevision === null) return;
-    setNotice("");
-    setRemoveRule(null);
-    setEditor(Object.freeze({
-      mode: "add",
-      before: null,
-      openedAtRevision: snapshot.stateRevision,
-      locale: example.locale,
-      canonical: example.canonical,
-      scope: "both",
-    }));
-  };
-
   const beginEdit = (rule: WikiConfigurationRule) => {
     if (snapshot.stateRevision === null) return;
-    setNotice("");
+    clearNotice();
+    restoreFocusRuleRef.current = rule.id;
     setRemoveRule(null);
     setEditor(Object.freeze({
       mode: "edit",
@@ -219,7 +247,7 @@ export function WikiSettingsSection({
     if (editor === null || pending) return;
     const input = normalizeInput(editor);
     if (input === null) {
-      setNotice(copy.invalid);
+      showNotice(copy.invalid);
       return;
     }
     setPending(true);
@@ -234,7 +262,7 @@ export function WikiSettingsSection({
           );
     setPending(false);
     if (!result.ok) {
-      setNotice(result.code === "STALE_VIEW"
+      showNotice(result.code === "STALE_VIEW"
         ? copy.stale
         : result.code === "INVALID_DECISION"
           ? copy.duplicate
@@ -247,9 +275,10 @@ export function WikiSettingsSection({
       }
       return;
     }
+    restoreFocusRuleRef.current = editor.before?.id ?? "add";
     setEditor(null);
     if (filter === "automatic") setFilter("confirmed");
-    setNotice(copy.saved);
+    showNotice(copy.saved, true);
   };
 
   const remove = async (rule: WikiConfigurationRule) => {
@@ -259,9 +288,9 @@ export function WikiSettingsSection({
     setPending(false);
     setRemoveRule(null);
     if (result.ok) setEditor(null);
-    setNotice(result.ok
+    showNotice(result.ok
       ? copy.saved
-      : result.code === "STALE_VIEW" ? copy.stale : copy.failed);
+      : result.code === "STALE_VIEW" ? copy.stale : copy.failed, result.ok);
     if (!result.ok && result.code === "STALE_VIEW") {
       void refreshStaleEditor(editor);
     }
@@ -273,23 +302,28 @@ export function WikiSettingsSection({
     const result = await matterWikiConfiguration.resetCorrupt();
     setPending(false);
     setConfirmRecovery(false);
-    setNotice(result.ok ? copy.saved : copy.failed);
+    showNotice(result.ok ? copy.saved : copy.failed, result.ok);
   };
 
   const exportFile = async () => {
     const result = await matterWikiConfiguration.exportFile();
     if (!result.ok) {
-      setNotice(copy.failed);
+      showNotice(copy.failed);
       return;
     }
     downloadBytes(result.bytes, result.fileName);
-    setNotice(copy.exported);
+    clearNotice();
+    setExported(true);
+    noticeTimerRef.current = window.setTimeout(() => {
+      setExported(false);
+      noticeTimerRef.current = null;
+    }, EXPORT_CONFIRMATION_MS);
   };
 
   const closeEditor = () => {
     setEditor(null);
     setRemoveRule(null);
-    setNotice("");
+    clearNotice();
   };
 
   const degraded = snapshot.status.phase === "degraded";
@@ -303,18 +337,25 @@ export function WikiSettingsSection({
         </div>
         {editor === null ? <div className={styles.headerActions}>
           <button
+            aria-label={exported ? copy.exported : copy.export}
             className={styles.exportButton}
             disabled={snapshot.stateRevision === null}
             onClick={exportFile}
             type="button"
           >
-            {copy.export}
+            <span aria-hidden="true" className={styles.exportLabel} data-active={!exported}>
+              {copy.export}
+            </span>
+            <span aria-hidden="true" className={styles.exportLabel} data-active={exported}>
+              {copy.exported}
+            </span>
           </button>
           <button
             aria-label={copy.add}
             className={styles.addButton}
             disabled={snapshot.stateRevision === null}
             onClick={beginAdd}
+            ref={addButtonRef}
             title={copy.add}
             type="button"
           >
@@ -346,7 +387,12 @@ export function WikiSettingsSection({
           </button>
         </div>
       ) : null}
-      {notice.length > 0 ? <p aria-live="polite" className={styles.notice}>{notice}</p> : null}
+      <p aria-live="polite" className={styles.notice} data-visible={notice.length > 0}>
+        {notice || "\u00a0"}
+      </p>
+      <span aria-live="polite" className={styles.visuallyHidden}>
+        {exported ? copy.exported : ""}
+      </span>
 
       {editor !== null ? (
         <form className={styles.editor} onSubmit={submit}>
@@ -357,7 +403,7 @@ export function WikiSettingsSection({
           <label>
             <span>{copy.word}</span>
             <input
-              aria-describedby="matter-wiki-entry-hint"
+              aria-describedby="matter-wiki-editor-hint"
               autoCapitalize="none"
               autoComplete="off"
               autoFocus
@@ -366,7 +412,7 @@ export function WikiSettingsSection({
               maxLength={MAX_WIKI_CANONICAL_CODE_POINTS * 2}
               onChange={(event) => {
                 const canonical = event.currentTarget.value;
-                setNotice("");
+                clearNotice();
                 setEditor(Object.freeze({
                   ...editor,
                   canonical,
@@ -383,23 +429,28 @@ export function WikiSettingsSection({
           </label>
           <label className={styles.scopeField}>
             <span>{copy.scope}</span>
-            <select
-              disabled={pending}
-              onChange={(event) => {
-                setNotice("");
-                setEditor(Object.freeze({
-                  ...editor,
-                  scope: event.currentTarget.value as WikiLexemeScope,
-                }));
-              }}
-              value={editor.scope}
-            >
-              <option value="both">{copy.scopeBoth}</option>
-              <option value="spoken">{copy.scopeSpoken}</option>
-              <option value="written">{copy.scopeWritten}</option>
-            </select>
+            <span className={styles.scopeControl}>
+              <select
+                aria-describedby="matter-wiki-editor-hint"
+                disabled={pending}
+                onChange={(event) => {
+                  clearNotice();
+                  setEditor(Object.freeze({
+                    ...editor,
+                    scope: event.currentTarget.value as WikiLexemeScope,
+                  }));
+                }}
+                value={editor.scope}
+              >
+                <option value="both">{copy.scopeBoth}</option>
+                <option value="spoken">{copy.scopeSpoken}</option>
+                <option value="written">{copy.scopeWritten}</option>
+              </select>
+            </span>
           </label>
-          <p className={styles.editorHint} id="matter-wiki-entry-hint">{copy.editorHint}</p>
+          <p className={styles.editorHint} id="matter-wiki-editor-hint">
+            {copy.editorHint}
+          </p>
           <div className={styles.editorFooter}>
             {removeRule !== null && editor.before?.id === removeRule.id ? (
               <div
@@ -450,7 +501,7 @@ export function WikiSettingsSection({
           </div>
         </form>
       ) : (
-        <>
+        <div className={styles.browser}>
           {snapshot.rules.length > 0 ? (
             <div className={styles.listHeader}>
               <div aria-label={copy.filterLabel} className={styles.filters} role="group">
@@ -464,7 +515,6 @@ export function WikiSettingsSection({
                     }}
                     type="button"
                   >
-                    <OriginIcon origin={value} />
                     {value === "all" ? copy.all : value === "automatic" ? copy.automatic : copy.manual}
                   </button>
                 ))}
@@ -491,32 +541,23 @@ export function WikiSettingsSection({
           {snapshot.stateRevision === null ? null : snapshot.rules.length === 0 ? (
             <div className={styles.empty}>
               <p>{copy.empty}</p>
-              <div className={styles.examples}>
-                <span>{copy.examples}</span>
-                {WORD_EXAMPLES.map((example) => (
-                  <button
-                    key={`${example.locale}:${example.canonical}`}
-                    lang={example.locale}
-                    onClick={() => beginExample(example)}
-                    type="button"
-                  >
-                    {example.canonical}
-                  </button>
-                ))}
-              </div>
             </div>
           ) : filtered.length === 0 ? (
-            <p className={styles.empty}>{copy.noResults(query.trim())}</p>
+            <p className={styles.empty}>{copy.noResults(deferredQuery.trim())}</p>
           ) : (
             <ol className={styles.rules}>
               {visible.map((rule) => (
                 <li data-origin={rule.origin} key={rule.id}>
                   <button
+                    aria-label={`${rule.canonical} · ${rule.origin === "automatic" ? copy.automatic : copy.manual}`}
                     className={styles.mapping}
                     onClick={() => beginEdit(rule)}
+                    ref={(node) => {
+                      if (node === null) ruleButtonRefs.current.delete(rule.id);
+                      else ruleButtonRefs.current.set(rule.id, node);
+                    }}
                     type="button"
                   >
-                    <OriginIcon origin={rule.origin} />
                     <span lang={rule.locale}>{rule.canonical}</span>
                   </button>
                   <div className={styles.tileActions}>
@@ -554,22 +595,9 @@ export function WikiSettingsSection({
               {copy.loadMore} · {copy.count(visible.length, filtered.length)}
             </button>
           ) : null}
-        </>
+        </div>
       )}
     </section>
-  );
-}
-
-function OriginIcon({ origin }: Readonly<{ origin: RuleFilter }>) {
-  if (origin === "all") return null;
-  return origin === "automatic" ? (
-    <svg aria-hidden="true" className={styles.originIcon} viewBox="0 0 16 16">
-      <path d="M8 2.25c.45 2.95 1.8 4.3 4.75 4.75C9.8 7.45 8.45 8.8 8 11.75 7.55 8.8 6.2 7.45 3.25 7 6.2 6.55 7.55 5.2 8 2.25Z" />
-    </svg>
-  ) : (
-    <svg aria-hidden="true" className={styles.originIcon} fill="none" viewBox="0 0 16 16">
-      <path d="m3.3 11.9 1.2-3.65 5.8-5.8 3.25 3.25-5.8 5.8-3.65 1.2-.8-.8Zm2.05-3.25 2 2" />
-    </svg>
   );
 }
 
@@ -631,7 +659,7 @@ function downloadBytes(bytes: Uint8Array, fileName: string): void {
 
 const ENGLISH: Copy = Object.freeze({
   title: "WIKI",
-  description: "Keep the preferred spelling of important names and terms in one quiet, local dictionary. Its contents are never sent to a model.",
+  description: "Keep the preferred spelling of important names and terms on this device. This version does not send Wiki contents to a model.",
   filterLabel: "Word source",
   add: "Add word",
   export: "Export dictionary",
@@ -640,12 +668,11 @@ const ENGLISH: Copy = Object.freeze({
   automatic: "Automatically found",
   manual: "Confirmed",
   empty: "Keep a name or term here when its exact spelling matters.",
-  examples: "For example",
   noResults: (query) => query.length > 0 ? `No result for “${query}”.` : "No words in this view.",
   word: "Word or name",
-  editorHint: "Scope applies only to confirmed variants. Adding a word alone does not immediately rewrite material.",
-  scope: "Apply to",
-  scopeBoth: "Voice and generated text",
+  editorHint: "Choose where this spelling applies. New entries do not rewrite existing material.",
+  scope: "Use for",
+  scopeBoth: "All text",
   scopeSpoken: "Voice input",
   scopeWritten: "Generated text",
   back: "Back",
@@ -672,7 +699,7 @@ const ENGLISH: Copy = Object.freeze({
   duplicate: "This word already exists or conflicts with another entry.",
   bounded: "This dictionary has reached its local capacity.",
   invalid: "Enter a valid word or name.",
-  exported: "Wiki exported.",
+  exported: "Download started",
   total: (count) => count === 1 ? "1 word" : `${count} words`,
   count: (visible, total) => `${visible}/${total}`,
 });
@@ -680,7 +707,7 @@ const ENGLISH: Copy = Object.freeze({
 const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   ...ENGLISH,
   title: "词典 WIKI",
-  description: "在这里保留重要名字和术语的标准写法。词典内容不会发送给模型。",
+  description: "在这里保留重要名字和术语的标准写法。当前版本不会把词典内容发送给模型。",
   filterLabel: "词条来源",
   add: "添加词",
   export: "导出词典",
@@ -689,14 +716,13 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   automatic: "自动收录",
   manual: "人工确认",
   empty: "对写法有要求的名字和术语，可以先留在这里。",
-  examples: "例如",
   noResults: (query) => query.length > 0 ? `没有找到“${query}”。` : "这里还没有词。",
   word: "词语或名称",
-  editorHint: "作用范围只控制已确认的对应写法；仅加入一个新词不会立即改写材料。",
-  scope: "应用于",
-  scopeBoth: "语音与生成文字",
+  editorHint: "选择这个写法会用于哪些文字。新加入的词不会改写已有材料。",
+  scope: "用于",
+  scopeBoth: "所有文字",
   scopeSpoken: "语音输入",
-  scopeWritten: "生成文字",
+  scopeWritten: "生成内容",
   back: "返回",
   newWord: "添加词",
   entry: "词条",
@@ -721,7 +747,7 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   duplicate: "这个词已在词典中，或与另一词条冲突。",
   bounded: "词典已达到本地容量上限。",
   invalid: "请输入一个有效的词语或名称。",
-  exported: "已导出 matter-wiki.json。",
+  exported: "下载已开始",
   total: (count) => `${count} 个词`,
   count: (visible, total) => `${visible}/${total}`,
 });
@@ -729,7 +755,7 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
 const TRADITIONAL_CHINESE: Copy = Object.freeze({
   ...SIMPLIFIED_CHINESE,
   title: "詞典 WIKI",
-  description: "在這裡保留重要名字和術語的標準寫法。詞典只儲存在這台裝置上，不會傳送給模型。",
+  description: "在這裡保留重要名字和術語的標準寫法。目前版本不會把詞典內容傳送給模型。",
   add: "新增詞",
   export: "匯出詞典",
   search: "搜尋詞典",
@@ -737,14 +763,13 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
   automatic: "自動收錄",
   manual: "人工確認",
   empty: "對寫法有要求的名字和術語，可以先留在這裡。",
-  examples: "例如",
   noResults: (query) => query.length > 0 ? `找不到「${query}」。` : "這裡還沒有詞。",
   word: "詞語或名稱",
-  editorHint: "作用範圍只控制已確認的對應寫法；僅新增一個詞不會立即改寫材料。",
-  scope: "應用於",
-  scopeBoth: "語音與生成文字",
+  editorHint: "選擇這個寫法會用於哪些文字。新加入的詞不會改寫既有材料。",
+  scope: "用於",
+  scopeBoth: "所有文字",
   scopeSpoken: "語音輸入",
-  scopeWritten: "生成文字",
+  scopeWritten: "生成內容",
   back: "返回",
   newWord: "新增詞",
   entry: "詞條",
@@ -763,14 +788,14 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
   duplicate: "這個詞已在詞典中，或與另一詞條衝突。",
   bounded: "本機詞典已達安全容量上限。",
   invalid: "請輸入一個有效的詞語或名稱。",
-  exported: "詞典已匯出。",
+  exported: "下載已開始",
   total: (count) => `${count} 個詞`,
 });
 
 const JAPANESE: Copy = Object.freeze({
   ...ENGLISH,
   title: "辞書 WIKI",
-  description: "大切な名前や用語の正しい表記を、このデバイス上の辞書に保存します。モデルには送信されません。",
+  description: "大切な名前や用語の正しい表記を、このデバイスに保存します。現在のバージョンは辞書をモデルに送信しません。",
   add: "新しい語",
   export: "書き出す",
   search: "辞書を検索",
@@ -778,12 +803,11 @@ const JAPANESE: Copy = Object.freeze({
   automatic: "自動収録",
   manual: "確認済み",
   empty: "表記を大切にしたい名前や用語を、ここに残せます。",
-  examples: "たとえば",
   noResults: (query) => query.length > 0 ? `「${query}」は見つかりません。` : "この表示に語はありません。",
   word: "語句または名称",
-  editorHint: "適用先は確認済みの対応表記にのみ有効です。語を追加しただけで素材はすぐに書き換えられません。",
-  scope: "適用先",
-  scopeBoth: "音声と生成テキスト",
+  editorHint: "この表記を使う文字を選びます。新しい語は既存の素材を書き換えません。",
+  scope: "使用先",
+  scopeBoth: "すべての文字",
   scopeSpoken: "音声入力",
   scopeWritten: "生成テキスト",
   back: "戻る",
@@ -810,7 +834,7 @@ const JAPANESE: Copy = Object.freeze({
   duplicate: "この語はすでに存在するか、別の語と競合しています。",
   bounded: "ローカル辞書は安全な容量上限に達しました。",
   invalid: "有効な語句または名称を入力してください。",
-  exported: "辞書を書き出しました。",
+  exported: "書き出しを開始しました",
   total: (count) => `${count}語`,
   count: (visible, total) => `${visible}/${total}`,
 });
@@ -818,7 +842,7 @@ const JAPANESE: Copy = Object.freeze({
 const GERMAN: Copy = Object.freeze({
   ...ENGLISH,
   title: "WÖRTERBUCH WIKI",
-  description: "Bewahrt die bevorzugte Schreibweise wichtiger Namen und Begriffe in einem lokalen Wörterbuch auf. Der Inhalt wird nie an ein Modell gesendet.",
+  description: "Bewahrt die bevorzugte Schreibweise wichtiger Namen und Begriffe auf diesem Gerät auf. Diese Version sendet das Wiki nicht an ein Modell.",
   add: "Neues Wort",
   export: "Exportieren",
   search: "Wörter suchen",
@@ -826,12 +850,11 @@ const GERMAN: Copy = Object.freeze({
   automatic: "Automatisch erfasst",
   manual: "Bestätigt",
   empty: "Bewahren Sie hier Namen und Begriffe auf, deren genaue Schreibweise wichtig ist.",
-  examples: "Zum Beispiel",
   noResults: (query) => query.length > 0 ? `Kein Ergebnis für „${query}“.` : "Keine Wörter in dieser Ansicht.",
   word: "Wort oder Name",
-  editorHint: "Der Geltungsbereich betrifft nur bestätigte Varianten. Ein neues Wort allein ändert Material nicht sofort.",
+  editorHint: "Wählen Sie, wo diese Schreibweise gilt. Neue Wörter ändern bestehendes Material nicht.",
   scope: "Verwenden für",
-  scopeBoth: "Sprache und generierten Text",
+  scopeBoth: "Alle Texte",
   scopeSpoken: "Spracheingabe",
   scopeWritten: "Generierten Text",
   back: "Zurück",
@@ -858,7 +881,7 @@ const GERMAN: Copy = Object.freeze({
   duplicate: "Dieses Wort ist bereits vorhanden oder kollidiert mit einem anderen Eintrag.",
   bounded: "Das lokale WIKI hat seine sichere Kapazitätsgrenze erreicht.",
   invalid: "Geben Sie ein gültiges Wort oder einen Namen ein.",
-  exported: "Wörterbuch exportiert.",
+  exported: "Download gestartet",
   total: (count) => count === 1 ? "1 Wort" : `${count} Wörter`,
   count: (visible, total) => `${visible}/${total}`,
 });

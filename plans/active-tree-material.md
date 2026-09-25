@@ -1,7 +1,7 @@
 # Plan: Matter first release
 
 Status: Active  
-Current phase: 3 — Elastic source candidate proven; keep its production gate off until live evidence closes
+Current phase: 3 — public Elastic and Text Swap surfaces may use a user lease; managed promotion stays off
 Destination: the first usable public release at `ptoq.io/matter`
 
 This is the only roadmap. It ends at the first release; it is not a forecast of
@@ -125,7 +125,8 @@ automatic inference producer and error-local attribution remain gated.
 The settings projection now includes a reversible voice/generated-text scope,
 with V2/V3 migration to `both`, scope-aware disposable caches, and no deletion
 of disabled-channel lineage. Locale is inferred rather than exposed as another
-configuration burden.
+configuration burden. Vendor research also freezes a future local pronunciation
+compiler boundary, but no phonetic producer is enabled or claimed.
 
 ```text
 Outcome:    repeated recognition and wording mistakes disappear without asking
@@ -135,7 +136,7 @@ Boundary:   one origin-local locale × channel authority; deterministic evidence
             adapter behind a neutral captured lexical port; one browser-side
             MaterialIngress facade before an existing tree command; one
             error-local correction escape hatch
-Invariants: no Wiki value enters a model, wire request, archive, public action,
+Invariants: in this release, no Wiki value enters a model, wire request, archive, public action,
             or material history; generated and repaired output contributes zero
             evidence; old trees are not rescanned without authorship provenance;
             normal hits have no UI; human correction takes over one canonical
@@ -143,15 +144,18 @@ Invariants: no Wiki value enters a model, wire request, archive, public action,
             relearning; an exceptional configuration path permits explicit
             add/edit/remove/export; a corrupt row can be explicitly reset
             only while it remains corrupt; Wiki failure becomes identity or
-            last-good basis and never blocks material
+            last-good basis and never blocks material; any future pronunciation
+            work compiles bounded aliases on authority change and leaves the
+            synchronous material hot path exact-only
 Proof:      strict state codec and bounds; locale-isolation and ambiguity tests;
             immutable compiled matcher and operation budget; IndexedDB CAS;
             raw-before-lexical and final-after-lexical validation at every text
             ingress; architecture proof that server, protocol, API, and store
             cannot reach concrete Wiki
-Non-goals:  memory, RAG, embeddings, prompt vocabulary, model-managed learning,
+Non-goals:  memory, RAG, embeddings, prompt vocabulary in this release, model-managed learning,
             a review queue, permanent dictionary chrome, historical tree mining,
-            cross-account sync, dynamic plugins, or bulk editing
+            cross-account sync, dynamic plugins, bulk editing, runtime fuzzy
+            phonetic distance, or enabling pronunciation without corpus proof
 ```
 
 Automatic provisional rules stay off until a representative error corpus proves
@@ -162,9 +166,50 @@ responsibility later from a changed basis or from a whole-text diff. Applying a
 rule does not add an icon or hover action; attribution is disclosed only after
 the person invokes correction on the erroneous word.
 
-## Active correction — bounded localhost AI demonstration
+The next candidate is frozen but not active: exact Chinese homophones, only
+`an`/`ang`, `en`/`eng`, and `in`/`ing` as near-final pairs, and exact English
+phoneme identity from a pinned CMUdict snapshot. Polyphones, multiple English
+pronunciations, unknown names, collisions, cross-locale matches, and protected
+literals abstain. The compiled resource version participates in disposable
+cache identity, never durable human authority. Positive, adversarial,
+ambiguity, generated-output, protected-literal, and performance corpora are
+required before the gate can open.
 
-State: implemented and verified locally; no production promotion is authorized.
+## Active correction — user-supplied material model surfaces
+
+State: source configuration and deployment verifier implemented; production
+readback remains required after merge and deployment.
+
+```text
+Outcome:    Elastic and Text Swap remain usable product actions when a person
+            attaches one verified Model API lease, without promoting or paying
+            for a Matter-managed material provider
+Boundary:   separate server-owned product-surface gates, request-local provider
+            candidate construction, managed-adapter gates, no-store health, and
+            one deployment profile
+Invariants: both product surfaces are public; both managed adapters remain off;
+            a closed surface never decrypts or uses a user lease; a public
+            surface without a lease has no provider candidate; health reports
+            user-configurable without claiming credential presence, provider
+            reachability, output quality, or managed promotion
+Proof:      surface-gate and request-pool matrices; health and deployment-profile
+            tests; committed Vercel shape check; one post-deploy no-store health
+            readback and one explicit lease-owned strict turn per material action
+Non-goals:  managed Elastic or Text Swap promotion, weakening either harness,
+            treating user spend as Matter's promotion evidence, or restoring the
+            rejected paired material-live profile
+```
+
+`material-user-provider` is the current default deployment profile.
+`browser-preview` and `elastic-live` remain historical profile readers only.
+Their receipts continue to describe the deployments that produced them and
+must not be reused as proof of this source shape.
+
+## Historical correction — bounded localhost AI demonstration
+
+State: implemented and verified locally on 2026-09-05 under the then-current
+closed material-surface profile; retained as a historical receipt rather than a
+description of the current deployment contract.
 
 ```text
 Outcome:    a maintainer can demonstrate every current AI workflow on localhost

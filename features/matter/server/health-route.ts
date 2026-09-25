@@ -1,11 +1,14 @@
 import packageMetadata from "../../../package.json";
 import { DEFAULT_MATTER_BASE_PATH, normalizeMatterBasePath } from "../config/base-path";
 import { PROTOCOL_VERSION } from "../tree/model";
+import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import { readModelPool } from "./model-pool";
+import { providerSessionAvailable } from "./provider-session-crypto";
 
 export type MatterHealthSurface =
   | "available"
   | "fixture"
+  | "user-configurable"
   | "unavailable";
 
 export type MatterHealth = Readonly<{
@@ -76,7 +79,7 @@ function configuredBasePath(): string {
 }
 
 function thoughtLabelSurface(): MatterHealthSurface {
-  return adapterSurface(process.env.MATTER_LABEL_ADAPTER);
+  return userSupplySurface(process.env.MATTER_LABEL_ADAPTER);
 }
 
 function transcriptRepairSurface(): MatterHealthSurface {
@@ -84,22 +87,31 @@ function transcriptRepairSurface(): MatterHealthSurface {
     // The build never asks, so no server configuration can make this available.
     return "unavailable";
   }
-  return adapterSurface(process.env.MATTER_REPAIR_ADAPTER);
+  return userSupplySurface(process.env.MATTER_REPAIR_ADAPTER);
 }
 
 function inquirySurface(): MatterHealthSurface {
-  // Inquiry has no fixture by design, so it is available or it is not.
-  return process.env.MATTER_INQUIRY_ADAPTER === "live" && readModelPool().length > 0
-    ? "available"
-    : "unavailable";
+  // Inquiry has no fixture by design. A configured provider-session boundary
+  // still makes it user-configurable without claiming a managed model exists.
+  const managed = process.env.MATTER_INQUIRY_ADAPTER === "live" && readModelPool().length > 0;
+  if (managed) return "available";
+  return providerSessionAvailable() ? "user-configurable" : "unavailable";
 }
 
 function transformTurnSurface(): MatterHealthSurface {
-  return adapterSurface(process.env.MATTER_TRANSFORM_ADAPTER);
+  if (!materialModelSurfaceAuthorized("matter-transform")) return "unavailable";
+  return userSupplySurface(process.env.MATTER_TRANSFORM_ADAPTER);
 }
 
 function textSwapSurface(): MatterHealthSurface {
-  return adapterSurface(process.env.MATTER_TEXT_SWAP_ADAPTER);
+  if (!materialModelSurfaceAuthorized("matter-text-swap")) return "unavailable";
+  return userSupplySurface(process.env.MATTER_TEXT_SWAP_ADAPTER);
+}
+
+function userSupplySurface(configured: string | undefined): MatterHealthSurface {
+  const managed = adapterSurface(configured);
+  if (managed !== "unavailable") return managed;
+  return providerSessionAvailable() ? "user-configurable" : "unavailable";
 }
 
 /**

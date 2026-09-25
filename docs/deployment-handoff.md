@@ -150,12 +150,11 @@ shared outside the deployment secret store must be rotated before use.
   fallback. Prompt construction, bounds, adjudication, cancellation, cooldown,
   and load shedding stay in the existing harness — do not duplicate them in a
   route or Vercel Function.
-- `POST /api/turn` now exists as a fixture-gated material-transform vertical
-  slice with a browser receipt through atomic replacement, Undo/Redo, and
-  reload. `POST /api/text-swap` has the same proof behind its own independent
-  gate. Both remain unavailable for a live provider until their separate
-  multilingual acceptance corpora, the same distributed rate/spend controls,
-  and deployed-origin proof required by other model routes are in place.
+- `POST /api/turn` and `POST /api/text-swap` remain independent material
+  lifecycles with browser receipts through atomic replacement and exact Undo.
+  Their product surfaces are public and may use one verified user Model API
+  lease. Both managed adapters remain off until their separate acceptance
+  corpora, distributed rate/spend controls, and deployed-origin proofs exist.
 
 The relevant boundaries are [`reference/prompt-harness.md`](reference/prompt-harness.md),
 [`reference/voice-input.md`](reference/voice-input.md),
@@ -167,8 +166,8 @@ Set the `MATTER_MODEL_*` station values as encrypted **server** environment
 variables in the Matter Vercel project. Apply them to Production and, if a
 shared preview needs real answers, Preview. Do not place keys in `vercel.json`,
 repository files, browser-visible `NEXT_PUBLIC_*` variables, GitHub Actions
-secrets echoed into logs, or issue comments. The three adapter switches shown
-below are non-secret reviewed source configuration already declared by
+secrets echoed into logs, or issue comments. The product and adapter switches
+shown below are non-secret reviewed source configuration already declared by
 `vercel.json`; they are listed beside the pool only to make the complete runtime
 shape legible.
 
@@ -182,6 +181,10 @@ MATTER_MODEL_AIPING_ENABLE_THINKING=false
 MATTER_LABEL_ADAPTER=live
 MATTER_REPAIR_ADAPTER=live
 MATTER_INQUIRY_ADAPTER=live
+MATTER_TRANSFORM_SURFACE=public
+MATTER_TEXT_SWAP_SURFACE=public
+MATTER_TRANSFORM_ADAPTER=off
+MATTER_TEXT_SWAP_ADAPTER=off
 ```
 
 The Model API settings item is separately available only when the deployment has a
@@ -480,7 +483,30 @@ The default production gate remains completion of GitHub issue #34:
    dedicated-domain routing intact. No provider name, raw audio, material text,
    or key belongs in routine logs.
 
-## Browser-preview deployment
+## Current material-user-provider deployment
+
+The current source deployment contract uses `material-user-provider`; production
+must not claim this shape until its post-deploy readback matches. Elastic and
+Text Swap are public product surfaces, but their managed adapters remain
+explicitly `off`. A verified Model API lease may supply either request-local candidate;
+without one, the action is unavailable without falling through to Matter's
+managed pool. `/api/health` therefore reports both surfaces as
+`user-configurable`. That state proves the public surface and sealed
+provider-session boundary exist. It does not prove that a person saved a lease,
+that a provider answered, or that a managed candidate was promoted.
+
+The separation is runtime-owned:
+
+```text
+MATTER_TRANSFORM_SURFACE=public      MATTER_TRANSFORM_ADAPTER=off
+MATTER_TEXT_SWAP_SURFACE=public      MATTER_TEXT_SWAP_ADAPTER=off
+```
+
+Do not replace `off` with `live` merely to make health say `available`.
+Managed promotion still requires its own corpus, distributed-control, spend,
+origin, and rollback evidence.
+
+## Historical browser-preview deployment profile
 
 The public production `browser-preview` profile is not credential-free. Labels,
 transcript repair, and Ask Matter retain their three existing live gates and
@@ -491,13 +517,13 @@ turn the three existing gates off and use their deterministic, verbatim, or
 stated-unavailable floors, but it does not satisfy the current production
 deployment check.
 
-## Deployment and future Elastic promotion
+## Deployment verification and historical profile readers
 
 Do not add or rotate a provider secret merely to test the UI. Before changing a
 live gate, first configure the controls above, then create a fresh reviewed
 version and let its Vercel build run.
 
-After each browser-preview deployment, verify the dedicated origin. `--wait=120`
+After each current deployment, verify the dedicated origin. `--wait=120`
 retries the same bounded receipt during the normal edge propagation window; it
 does not relax a failing version or surface check.
 
@@ -505,21 +531,21 @@ does not relax a failing version or surface check.
 npm run check:deployment -- https://matter.ptoq.io --wait=120
 ```
 
-That command defaults to `--profile=browser-preview`: it requires both
-`transformTurn` and `textSwap` to report `unavailable`. A reviewed Elastic
-promotion uses the explicit profile below only after the Elastic corpus,
-distributed rate rule, owner-approved spend cap/alerts, isolated credential,
-and rollback receipts exist:
+That command defaults to `--profile=material-user-provider`: it requires both
+`transformTurn` and `textSwap` to report `user-configurable`. The historical
+profiles remain explicit readers for old deployments and receipts. They must
+never be used to reinterpret a current deployment:
 
 ```bash
+npm run check:deployment -- https://matter.ptoq.io --profile=browser-preview --wait=120
 npm run check:deployment -- https://matter.ptoq.io --profile=elastic-live --wait=120
 ```
 
-The live profile proves that Elastic is configured while the Point-and-Talk
-Text Swap provider remains unavailable. It does not call the provider and is never a
-substitute for one successful strict synthetic Elastic turn through the
-deployed route. The superseded paired `material-live` profile is rejected so a
-release cannot silently revive Text Swap.
+`browser-preview` proves both material-model surfaces were unavailable;
+`elastic-live` proves that a managed Elastic candidate was configured while
+Text Swap remained unavailable. Neither profile calls a provider or substitutes
+for a strict origin turn. The superseded paired `material-live` profile remains
+rejected.
 
 Candidate quality and origin operation are deliberately separate. The language
 evaluation defaults to an ordinary skipped test. First use its zero-call `plan`
@@ -619,20 +645,23 @@ Manually verify, with a normal browser and no repository secrets:
   `https://matter.ptoq.io/matter` is 404;
 - `/api/health` reports the deployed version, empty base path, and separate
   truthful states: `thoughtLabel`, `transcriptRepair`, and `inquiry` are
-  `available`, while `transformTurn` and `textSwap` are `unavailable`;
+  `available`, while `transformTurn` and `textSwap` are `user-configurable`;
 - browser speech works where the browser provides it; unsupported speech stays
   on-device or reports a truthful limitation;
 - one bounded synthetic call per existing live surface proves the relay rather
   than merely its configuration: labels and repair report `model`, and inquiry
   reports `answered`; and
+- one ordinary user-owned test lease can complete one strict Elastic and one
+  strict Text Swap turn, then removal returns both actions to truthful
+  unavailability without changing health's `user-configurable` state; and
 - no provider identity or response error leaks into the page. The deterministic,
   verbatim, and stated-unavailable floors remain rollback behavior, not the
   expected production receipt while those gates are live.
 
-For any future Elastic promotion, repeat the origin check with one strict
-synthetic selected passage after its own corpus and origin tooling are current.
-Verify rate limits and spend alarms there, rather than treating the existing
-browser-preview health receipt as Elastic model proof.
+For any future managed Elastic or Text Swap promotion, repeat the origin check
+with one strict synthetic selected passage after that scenario's own corpus and
+origin tooling are current. Verify rate limits and spend alarms there, rather
+than treating `user-configurable` or a user-owned call as managed-model proof.
 
 Rollback is a Vercel deployment rollback plus disabling the affected scenario
 gate; rotate a credential if there is any possibility it reached logs or a
@@ -643,20 +672,20 @@ or to bypass the scenario adjudicator.
 
 - Issue #34: deployment controls and a real-origin receipt.
 - Issue #12: the fixture `/api/turn` browser loop is proven; run its
-  multilingual Elastic evaluation, then enable it only after the distributed
-  controls and its own real-origin receipt exist. `/api/text-swap` remains a
-  dormant, unavailable grammar with no first-release UI or promotion claim.
+  multilingual Elastic evaluation before any managed-adapter promotion. Text
+  Swap remains a separate managed-promotion decision even though its product
+  surface can now use a user-owned lease.
 - Issue #8: complete the active-document pointer/recovery boundary before
   promising multi-document persistence beyond the current local home document.
 
 Validation: local `npm run check` and full Chromium E2E must pass before every
-source preview; after a browser-preview Vercel promotion, run the default
-deployment check and the manual real-origin receipt above. Run the explicit
-`--profile=elastic-live` check only for a reviewed Elastic promotion. With the
-Elastic gate open, `/api/health` reports `thoughtLabel`,
-`transcriptRepair`, `inquiry`, and `transformTurn` as `available`, while
-`textSwap` remains `unavailable`; `available` means a pool is configured, never
-that a relay answered.
+source preview; after a current Vercel promotion, run the default
+`material-user-provider` deployment check and the manual real-origin receipt
+above. Run the explicit `--profile=browser-preview` or
+`--profile=elastic-live` checks only when reading a deployment that intentionally
+uses that historical shape. `available` means a managed pool is configured;
+`user-configurable` means a user lease may supply the action. Neither state
+means a relay answered.
 
 The existing deployed-origin sampler still plans the historical paired Elastic
 and Text Swap calls. Do not run it as current release evidence. Elastic live
@@ -669,6 +698,7 @@ in-memory governors do not replace edge rate limits; archive imports intentional
 begin a new undo journal; and no existing browser can reconstruct command history
 that predates journal storage.
 
-Next: the deployment owner supplies the distributed-rate and provider-spend
-receipts required by issue #34, closes that blocker, and keeps the material
-model gates unavailable until their separate promotion evidence is complete.
+Next: verify the exact production health shape and one lease-owned material turn
+without changing either managed adapter. The deployment owner still supplies
+the distributed-rate and provider-spend receipts required before any managed
+promotion.

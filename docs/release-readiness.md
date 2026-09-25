@@ -2,9 +2,9 @@
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. The current source identifies
-`0.2.0-preview.59`; exact public identity still requires a no-store production
+`0.2.0-preview.60`; exact public identity still requires a no-store production
 health readback after the corresponding `main` deployment. This is a deployed
-source identity, not an immutable release: no Preview.59 tag or GitHub
+source identity, not an immutable release: no Preview.60 tag or GitHub
 prerelease exists. Production Model API
 remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
 ring is valid and redeployed, and publication remains withheld until the strict
@@ -58,8 +58,42 @@ The current online-safe claim is narrow:
   deterministic navigation labels, with an independently gated managed proposal
   immediate transcript admission, with local repair rules and an independently gated managed proposal
   lightweight Ask Matter boundary, with its server-side answer adapter independently gated
-  no live material-transformation provider in the published preview profile
+  public Elastic and Text Swap surfaces supplied only by a verified user Model API lease
+  no managed material-transformation adapter in the current deployment profile
 ```
+
+## Current material-provider gate — 2026-09-25
+
+The source configuration is a **GO** for the `material-user-provider` profile:
+Elastic and Text Swap have separate public product gates, while
+`MATTER_TRANSFORM_ADAPTER` and `MATTER_TEXT_SWAP_ADAPTER` remain `off`. A valid
+sealed Model API lease may provide the request-local candidate for either
+surface. No lease means no candidate; the route cannot borrow Matter's managed
+pool or interpret the presence of a credential as authorization for a closed
+surface.
+
+Health must report both `transformTurn` and `textSwap` as
+`user-configurable`. That state verifies product authorization plus the sealed
+provider-session capability. It does not verify a saved credential, provider
+reachability, answer quality, or managed promotion. The deployment checker now
+defaults to this profile. `browser-preview` and `elastic-live` remain historical
+profile readers and do not certify the current source shape.
+
+Managed Elastic and managed Text Swap remain **NO-GO**. Each still needs its own
+frozen corpus, paid evidence, distributed abuse and spend controls, strict
+origin turn, and rollback receipt before its adapter may change to `live`.
+
+The exact local Preview.60 candidate passed `npm run check`: 153 Node boundary
+tests, 326 Markdown files, the 547-file / 8-layer architecture gate, 2,840
+Vitest cases with five explicit skips, type generation, TypeScript,
+zero-warning lint, the production build, and the runtime-artifact budget. Its
+complete Chromium matrix then passed 175 cases with 15 capability-gated skips
+and no retries. The functional matrix now runs serially because two and three
+browsers repeatedly starved one shared Next development server; focused
+concurrency, admission, and rate-limit proofs remain separate. Test-only
+handoffs now bind the real CSS transition, response gate, and remounted DOM
+owner instead of relying on sleeps. This remains local candidate evidence: it
+does not prove a provider answer, a GitHub deployment, or production identity.
 
 ## Wiki verifier gate — 2026-09-25
 
@@ -91,6 +125,16 @@ material consumption, and settings projection; confirmed exact authority stays
 available. Enabling the existing experimental fitting mode is not a substitute
 for calibration and does not satisfy this gate.
 
+The next researched candidate remains **NO-GO** as well. Its frozen shape is a
+local pronunciation compiler that may emit exact aliases only when canonical
+authority changes: exact Chinese homophones, the three Mandarin final pairs
+`an`/`ang`, `en`/`eng`, and `in`/`ing`, and exact English phoneme-sequence
+identity from a pinned CMUdict snapshot. It adds no runtime fuzzy matcher and no
+Wiki prompt context. Polyphones, multi-pronunciation English entries, unknown
+names, cross-locale matches, and collisions abstain. No portion may ship without
+the positive, adversarial, ambiguity, protected-literal, generated-output, and
+performance corpus for the exact compiler and resource version.
+
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
 boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:
 the Web Speech API owns recognition when available, while `/api/transcribe`
@@ -104,9 +148,11 @@ proof uses the inverse capability pair and never contacts browser speech.
 
 The local release suite also sets the independent transform and Text Swap
 adapters to their closed synthetic fixtures. The dedicated public configuration
-sets neither generative adapter, so both routes remain unavailable rather than
-falling back to fixture prose or borrowing the already-live label/repair/inquiry
-pool. Their browser receipts prove interaction and mutation boundaries only.
+opens both product surfaces and explicitly sets both managed adapters to `off`.
+A verified request-local Model API lease may supply either route; without one,
+the route has no candidate and cannot fall back to fixture prose or borrow the
+already-live label/repair/inquiry pool. Browser fixture receipts prove
+interaction and mutation boundaries only; they are not provider-quality proof.
 
 `GET /matter/api/health` reports this boundary for the default mount. A
 dedicated-domain deployment with an empty `MATTER_BASE_PATH` reports the same

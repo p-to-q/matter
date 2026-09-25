@@ -431,15 +431,17 @@ After a reviewed deployment of the next exact source SHA, run:
 npm run check:deployment -- https://matter.ptoq.io --wait=120
 ```
 
-The expected browser-preview health shape is: label, repair, inquiry and voice
-admission available; transform and Text Swap unavailable. This only proves
-configuration. Follow the existing private synthetic-turn procedure before
-claiming provider-answer evidence.
+The default `material-user-provider` profile requires label, repair, inquiry and
+voice admission to remain available, and both transform and Text Swap to report
+`user-configurable`. It also verifies the anonymous provider-session receipt by
+default. That receipt proves only that the session-sealing boundary is installed
+and anonymously empty; it deliberately does not spend a provider request or
+expose any key. Historical deployments must opt into their explicit
+`browser-preview` or `elastic-live` profile instead of weakening this default.
 
-For Preview.57 and later candidates that claim Model API, add
-`--require-provider-session`. The stricter receipt proves only that the session
-sealing boundary is installed and anonymously empty; it deliberately does not
-spend a provider request or expose any key.
+The deployment receipt proves configuration, not a provider answer. Follow the
+existing private synthetic-turn procedure before claiming provider-answer
+evidence.
 
 If a live surface must be stopped, disable its corresponding server gate first,
 then roll back the Vercel deployment. Rotate the provider key whenever exposure

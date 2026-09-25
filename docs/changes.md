@@ -17,6 +17,31 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-25 — user leases supply public material surfaces without managed promotion
+
+Changed: Elastic and Text Swap now have independent public product-surface
+gates while both managed adapters remain off. A verified Model API lease may
+supply either request-local candidate; health reports this shape as
+`user-configurable`, and `material-user-provider` is the default deployment
+profile. Historical `browser-preview` and `elastic-live` profile readers remain
+available for their original receipts. Wiki remains entirely outside model
+requests. Vendor research freezes a future local pronunciation compiler to
+exact homophones, three Mandarin final pairs, and exact pinned-CMUdict English
+pronunciations, but keeps it disabled until its exact corpus passes. Wiki export
+reports only that a browser download began, never that a file was saved.
+
+Why: product authorization, a person's provider choice, and Matter-managed
+promotion are different decisions. Keeping them separate makes both material
+actions usable without converting private lexical authority into prompt context
+or presenting uncalibrated phonetic matching as a shipped capability.
+
+Forecloses: using a user key to bypass a closed product surface; falling through
+to an unpromoted managed material adapter; interpreting `user-configurable` as
+provider health; sending Wiki content in this release or adding a future
+lexical-hint path without a separate privacy and prompt-harness freeze; enabling
+approximate pronunciation without versioned corpus evidence; and claiming
+browser or OS download completion from a click receipt.
+
 ## 2026-09-25 — Preview.59 keeps Wiki authority local and reversible
 
 Changed: Preview.59 introduces the settings-owned `词典 WIKI` surface and its

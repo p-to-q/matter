@@ -329,10 +329,14 @@ advances nor clears the governor's coarser direct-adapter health. The key and co
 history, local documents, routine observations, logs, health/drain keys, or answer
 cache keys. Reviewed provider/model identifiers may index disposable server
 health, but never enter material, browser status, or routine model observations.
-A saved user candidate may supply the already-public repair, label, and Inquiry
-surfaces independently of Matter's managed-provider gate. Elastic and Text Swap
-remain excluded until their separate product gate opens; configuration cannot
-promote an unreleased action.
+A saved user candidate may supply repair, label, Inquiry, Elastic, and Text Swap
+independently of Matter's managed-provider gate. Product authorization and
+managed promotion remain two separate controls: `MATTER_TRANSFORM_SURFACE` and
+`MATTER_TEXT_SWAP_SURFACE` admit the public actions, while their corresponding
+`*_ADAPTER` values decide whether a managed candidate may join the pool. The
+public deployment opens both surfaces and keeps both managed adapters off. A
+missing or invalid user lease therefore yields no candidate; it cannot borrow a
+managed provider, and a configured credential cannot promote a closed surface.
 
 Candidate transport fallback and scenario policy stay separate. Label and
 repair have useful floors and stop after the first transport-complete answer is
@@ -754,6 +758,18 @@ conflict, so a concurrent human turn is not silently discarded. Evidence-only
 writes reuse both compiled indexes until the applicable authority actually
 changes.
 
+The researched pronunciation direction remains a compiler boundary, not a
+model or hot-path matcher. A future compiler may derive bounded local aliases
+only when a lexeme changes, then publish the same immutable exact-match indexes
+MaterialIngress already consumes. The first proposed corpus target is limited
+to exact homophones, the three Mandarin final pairs `an`/`ang`, `en`/`eng`, and
+`in`/`ing`, and exact English pronunciation identity from a pinned CMUdict
+snapshot. It must preserve locale, token boundaries, protected literals,
+applicability scope, ambiguity abstention, and human tombstones. Approximate
+phoneme distance, cross-locale fallback, runtime network lookup, and model
+prompt bias remain excluded. No compiler or provisional alias becomes active
+until positive and adversarial corpora prove precision for that exact version.
+
 Browser speech recognition is the narrow platform-capability exception: it uses
 no Matter credential, exposes no provider choice in the client, and commits
 only through the same bounded human-admission command. Any configurable or
@@ -773,19 +789,21 @@ utterance.
 `app/api/health` is a deployment probe, not a debug console; under the Matter
 base path it is reached as `/matter/api/health`. It reports only stable Matter
 surface states: protocol version, app version, configured base path, and whether
-first-release gates are available, fixture-only, unavailable, or not yet
-implemented. It never returns provider names, raw environment values, stored
-material, transcripts, or lineage.
+a surface is managed-available, fixture-only, user-configurable, or unavailable.
+`user-configurable` means the product action and sealed Model API boundary are
+available but no managed adapter is being claimed; it never means a credential
+exists or a provider answered. Health never returns provider names, raw
+environment values, stored material, transcripts, or lineage.
 
-Elastic Language and Text Swap remain independent health surfaces. Point-and-Talk
-now exposes Text Swap locally in the browser, while its live provider gate remains
-closed in the published deployment profiles. The deployment receipt has two explicit profiles:
-`browser-preview` requires both material-model gates to remain unavailable;
-`elastic-live` requires Elastic to be configured and Text Swap to remain
-unavailable. Health proves configuration only; a successful strict Elastic
-turn and the external rate/spend receipts are still required before a live
-claim. The superseded paired `material-live` profile is rejected rather than
-quietly enabling a provider surface without its separate promotion evidence.
+Elastic Language and Text Swap remain independent health surfaces. The current
+`material-user-provider` deployment profile requires both to be
+`user-configurable`: both product surfaces are public, both managed adapters are
+off, and a person may supply a verified request-local Model API lease. Health
+proves configuration only; an end-to-end material turn remains separate
+evidence. The older `browser-preview` and `elastic-live` profiles remain valid
+historical receipt readers for deployments that actually used those shapes;
+they are not the current default and must not be used to reinterpret a new
+deployment. The superseded paired `material-live` profile remains rejected.
 
 The complete dependency choice and rejected foundations are in
 [`reference/foundation.md`](reference/foundation.md). The short version: Matter

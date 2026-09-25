@@ -6,6 +6,7 @@ import {
   readModelPool,
   type PoolLimits,
 } from "./model-pool";
+import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import { readProviderCredential } from "./provider-session-crypto";
 import { createUserPoolCandidate } from "./user-provider-registry";
 
@@ -25,7 +26,7 @@ const SCENARIO_GATES: Readonly<Record<MatterScenarioId, string>> = Object.freeze
 
 // These surfaces are already part of the public product. A valid user lease
 // may supply their provider even when Matter's managed adapter is intentionally
-// disabled. Private material mutations still require their explicit live gate.
+// disabled. Material mutations carry a separate product-surface gate below.
 const USER_PROVIDER_PUBLIC_SCENARIOS: ReadonlySet<MatterScenarioId> = new Set([
   "matter-transcript-repair",
   "matter-thought-label",
@@ -45,8 +46,14 @@ export function resolveScenarioRequestModelAdapter(
 ): RequestModelResolution {
   const environment = options.environment ?? process.env;
   const managedAuthorized = environment[SCENARIO_GATES[scenario]] === "live";
+  const userAuthorized = scenario === "matter-transform" || scenario === "matter-text-swap"
+    ? materialModelSurfaceAuthorized(scenario, environment)
+    : USER_PROVIDER_PUBLIC_SCENARIOS.has(scenario);
+  if (!userAuthorized) {
+    return Object.freeze({ adapter: null, cacheScope: "managed" });
+  }
   return resolveRequestModelAdapter(request, {
-    userAuthorized: managedAuthorized || USER_PROVIDER_PUBLIC_SCENARIOS.has(scenario),
+    userAuthorized,
     managedAuthorized,
     fallback: options.fallback,
     limits: options.limits,
@@ -57,8 +64,8 @@ export function resolveScenarioRequestModelAdapter(
 
 /**
  * Inserts a session candidate only for an authorized product surface. Public
- * Repair, Label, and Inquiry may use it without a managed gate; private
- * mutation surfaces still require that gate. The global pool array is never
+ * Repair, Label, and Inquiry may use it without a managed gate; material
+ * mutations require their independent surface gate. The global pool array is never
  * mutated, and the global scenario governor remains the sole concurrency owner
  * across credentials while request-owned health stays scoped.
  */

@@ -160,7 +160,9 @@ export function findProblems(graph) {
       }
     }
 
-    // 5. Wiki is local lexical authority, never model context or wire data.
+    // 5. In this release, Wiki is local lexical authority, never model context
+    //    or wire data. A future adapter must reopen the documented privacy and
+    //    prompt-harness freeze instead of silently crossing this graph boundary.
     // Browser-side composition may adapt its compiled snapshot to the neutral
     // lexical port, but a server, protocol, or API route has no reason to know
     // that the Wiki exists.

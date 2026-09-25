@@ -37,7 +37,7 @@ const HEALTH_SURFACE_KEYS = Object.freeze([
   "transformTurn",
   "voiceAdmission",
 ]);
-const HEALTH_STATES = new Set(["available", "fixture", "unavailable"]);
+const HEALTH_STATES = new Set(["available", "fixture", "user-configurable", "unavailable"]);
 const CLOSED_FALLBACK_REASONS = new Set([
   "MODEL_BUSY",
   "MODEL_REJECTED",

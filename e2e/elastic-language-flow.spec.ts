@@ -1114,6 +1114,10 @@ async function runElasticReceipt(
     end: number;
     selectedText: string;
   }> | null = null;
+  let releaseTurn!: () => void;
+  const turnGate = new Promise<void>((resolve) => {
+    releaseTurn = resolve;
+  });
   page.on("pageerror", (error) => browserErrors.push(error.message));
   page.on("console", (message) => {
     if (message.type() === "error") browserErrors.push(message.text());
@@ -1129,7 +1133,10 @@ async function runElasticReceipt(
       end: envelope.selection.end,
       selectedText: envelope.selection.selectedText,
     });
-    await new Promise((resolve) => setTimeout(resolve, 350));
+    // Hold the fixture at the wire boundary until the test has observed the
+    // requesting geometry. A fixed delay races a loaded runner and can let the
+    // committed result remove that transient surface before it is sampled.
+    await turnGate;
     await route.continue();
   });
 
@@ -1211,6 +1218,7 @@ async function runElasticReceipt(
     window.dispatchEvent(new Event("resize"));
   });
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
+  releaseTurn();
   // A fresh development server may compile the fixture route only after this
   // first explicit confirmation. Keep that infrastructure wait local; the
   // interaction and request-count assertions above retain the normal budget.

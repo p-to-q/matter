@@ -6,7 +6,7 @@ const requestedPort = Number(process.env.MATTER_E2E_PORT ?? "3100");
 if (!Number.isSafeInteger(requestedPort) || requestedPort < 1_024 || requestedPort > 65_535) {
   throw new Error("MATTER_E2E_PORT must be an integer between 1024 and 65535.");
 }
-const requestedServerTimeoutMs = Number(process.env.MATTER_E2E_SERVER_TIMEOUT_MS ?? "60000");
+const requestedServerTimeoutMs = Number(process.env.MATTER_E2E_SERVER_TIMEOUT_MS ?? "120000");
 if (
   !Number.isSafeInteger(requestedServerTimeoutMs) ||
   requestedServerTimeoutMs < 10_000 ||
@@ -19,10 +19,11 @@ const localOrigin = `http://127.0.0.1:${requestedPort}`;
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
-  // Every project shares one fixture-backed Next server. Keep enough browser
-  // concurrency to expose cross-feature interference without starving that
-  // single server and turning five-second interaction receipts into load tests.
-  workers: 3,
+  // Every project shares one fixture-backed Next development server. Two and
+  // three browsers both starved otherwise green Voice, canvas, and Lasso
+  // journeys on the release host. The complete functional matrix is serial;
+  // concurrency, admission, and rate limits keep their own focused proofs.
+  workers: 1,
   retries: process.env.CI ? 2 : 0,
   reporter: "line",
   use: {
@@ -56,6 +57,7 @@ export default defineConfig({
       MATTER_TRANSCRIPTION_ADAPTER: "fixture",
       MATTER_FIXTURE_ADMISSION_TRANSCRIPT: "呃，我觉得我觉得这个方案可以但是它的实现事件比预期长",
       MATTER_INQUIRY_ADAPTER: "off",
+      MATTER_TRANSFORM_SURFACE: "public",
       MATTER_TRANSFORM_ADAPTER: "fixture",
       MATTER_E2E_RUNNER: "playwright",
       NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED: "false",
@@ -64,6 +66,7 @@ export default defineConfig({
       MATTER_REPAIR_ADAPTER: "fixture",
       MATTER_FIXTURE_REPAIR: "我觉得这个方案可以，但是它的实现时间比预期长。",
       MATTER_TEXT_SWAP_ADAPTER: "fixture",
+      MATTER_TEXT_SWAP_SURFACE: "public",
       MATTER_FIXTURE_SWAP_DIRECTION_TRANSCRIPT: "换一种更凝练的说法",
       NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED: "true",
       NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED: localTranscriptionReceipt
