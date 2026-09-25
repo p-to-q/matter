@@ -549,7 +549,6 @@ export function WikiSettingsSection({
               {visible.map((rule) => (
                 <li data-origin={rule.origin} key={rule.id}>
                   <button
-                    aria-label={`${rule.canonical} · ${rule.origin === "automatic" ? copy.automatic : copy.manual}`}
                     className={styles.mapping}
                     onClick={() => beginEdit(rule)}
                     ref={(node) => {
@@ -559,6 +558,9 @@ export function WikiSettingsSection({
                     type="button"
                   >
                     <span lang={rule.locale}>{rule.canonical}</span>
+                    <span className={styles.visuallyHidden}>
+                      {` · ${rule.origin === "automatic" ? copy.automatic : copy.manual}`}
+                    </span>
                   </button>
                   <div className={styles.tileActions}>
                     <button
