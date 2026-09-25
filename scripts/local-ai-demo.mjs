@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -124,10 +125,42 @@ export function localAiDemoExitCode(code, signal, forwardedSignal) {
   return 1;
 }
 
+/** Refuses a split localhost where IPv4 and IPv6 serve different builds. */
+export async function assertLocalDemoPortAvailable(
+  port,
+  probe = probeLoopbackHost,
+) {
+  for (const host of ["127.0.0.1", "::1"]) {
+    try {
+      await probe(host, port);
+    } catch (error) {
+      const code = error && typeof error === "object" && "code" in error
+        ? error.code
+        : null;
+      if (code === "EAFNOSUPPORT" || code === "EADDRNOTAVAIL") continue;
+      throw new Error(`Port ${port} is already in use on localhost (${host}).`, {
+        cause: error,
+      });
+    }
+  }
+}
+
+function probeLoopbackHost(host, port) {
+  return new Promise((resolveProbe, rejectProbe) => {
+    const server = createServer();
+    server.unref();
+    server.once("error", rejectProbe);
+    server.listen({ host, port, exclusive: true }, () => {
+      server.close((error) => error === undefined ? resolveProbe() : rejectProbe(error));
+    });
+  });
+}
+
 async function main() {
   const options = parseLocalAiDemoArguments(process.argv.slice(2));
   if (existsSync(".env.local")) process.loadEnvFile(".env.local");
   const environment = createLocalAiDemoEnvironment(process.env, options);
+  await assertLocalDemoPortAvailable(options.port);
   for (const line of localAiDemoSummary(environment, options)) console.log(line);
 
   const child = spawn(process.execPath, [

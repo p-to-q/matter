@@ -33,10 +33,8 @@ emoji veto it. Literal
 masking and locale-specific classification happen before
 rendering so an ambiguous bare number word, code span, URL, email, or quoted
 phrase remains untouched.
-When its existing gate is enabled, it may send only that one utterance, locale,
-and an optional bounded vocabulary hint to `POST /api/repair`; the current
-browser deliberately omits the hint until the active working context can be
-captured synchronously. The model may resolve an abandoned
+When its existing gate is enabled, it may send only that one utterance and
+locale to `POST /api/repair`. The model may resolve an abandoned
 start, contextual filler, correction, or forced grammar seam, and may redraft
 that locally into the shortest natural written phrasing, but never receives
 a tree, node, address, or repair capability. The rule floor wins on timeout,
@@ -50,6 +48,18 @@ question type, and claim order remain invariant. The first expression stays visi
 perceptual floor before any correction, and admission and repair remain
 separately undoable. Free rewriting remains an explicit selected-material
 transformation.
+
+Immediately before any accepted text becomes one tree command, the browser may
+ask one captured local lexical session for a deterministic suggestion. Wiki is
+the current adapter, not part of the material model, memory, or model context.
+Human admission and repair use its spoken view; only newly generated spans use
+its written view. Matter validates both the source and any suggested result, and
+Wiki cannot authorize or publish a command. Only a successfully committed human
+admission advances Wiki observation. Repair, transformation, text swap, and all
+other generated text contribute no learning evidence, and existing material is never rescanned because a
+persisted node does not prove human authorship. Routine hits are silent. Only a
+person who chooses to correct an erroneous visible word enters the Wiki's
+exceptional calibration or configuration path.
 
 Moving a node is a durable tree mutation. Exact source and target child-order
 mementos make one undo restore the previous virtual file-system projection and

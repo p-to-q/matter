@@ -21,6 +21,16 @@ import type { ThoughtTree } from "../tree/model";
 import { buildTransformPlan, parseTransformEnvelope } from "../protocol/transform-contract";
 import { buildTextSwapPlan, parseTextSwapEnvelope } from "../protocol/text-swap-contract";
 import { selectLineage } from "../tree/selectors";
+import { compileWikiBasis, type WikiBasis } from "../wiki/wiki-basis";
+import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
+import type { WikiChannel } from "../wiki/wiki-model";
+import { createWikiMaterialLexicalPort } from "../application/wiki-material-lexical-adapter";
+import {
+  IDENTITY_MATERIAL_LEXICAL_PORT,
+  IDENTITY_MATERIAL_LEXICAL_SESSION,
+  type MaterialLexicalPort,
+} from "../application/material-lexical-port";
+import type { MaterialLexicalObservationPort } from "../application/material-lexical-observation-port";
 
 describe("Matter store", () => {
   it("opens the pre-admission document with quiet identity and no sample material", () => {
@@ -154,6 +164,152 @@ describe("Matter store", () => {
     expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
     expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
     expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("我觉得可以。");
+  });
+
+  it("applies one captured spoken Wiki basis before admission", () => {
+    const basis = confirmedWikiBasis("spoken", "code x", "Codex", 1);
+    const store = createMatterStore("root", {
+      materialLexical: createWikiMaterialLexicalPort(() => basis),
+    });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    const receipt = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_wiki",
+      commandId: "human_admission_wiki",
+      nodeId: "voice_node_wiki",
+      createdAt: "2026-09-24T00:00:00.000Z",
+      transcript: "code x helps",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "en-US",
+    });
+
+    expect(receipt).toMatchObject({
+      status: "committed",
+      admittedText: "Codex helps.",
+    });
+    expect(store.getState().tree.nodes.voice_node_wiki.text).toBe("Codex helps.");
+    expect(store.getState().history.entries).toHaveLength(1);
+  });
+
+  it("keeps admission available while durable Wiki authority is unresolved", () => {
+    const store = createMatterStore("root", {
+      materialLexical: IDENTITY_MATERIAL_LEXICAL_PORT,
+    });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    expect(store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_wiki_loading",
+      commandId: "human_admission_wiki_loading",
+      nodeId: "voice_node_wiki_loading",
+      createdAt: "2026-09-24T00:00:00.000Z",
+      transcript: "a thought",
+      expectedDocumentEpoch: 0,
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_wiki_loading.text).toBe("a thought.");
+    expect(store.getState().history.entries).toHaveLength(1);
+  });
+
+  it("reuses the admission lexical session for its late repair lease", () => {
+    let captures = 0;
+    const materialLexical: MaterialLexicalPort = Object.freeze({
+      capture: () => {
+        captures += 1;
+        return IDENTITY_MATERIAL_LEXICAL_SESSION;
+      },
+    });
+    let nowMs = 100;
+    const store = createMatterStore("root", {
+      materialLexical,
+      monotonicNow: () => nowMs,
+    });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_lexical_lease",
+      commandId: "human_admission_lexical_lease",
+      nodeId: "voice_node_lexical_lease",
+      createdAt: "2026-09-24T00:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    nowMs = 200;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-09-24T00:00:00.100Z",
+    })).toMatchObject({ status: "committed" });
+    expect(captures).toBe(1);
+  });
+
+  it("observes only a successfully committed human admission", () => {
+    const observed: unknown[] = [];
+    const humanAdmissionObservation: MaterialLexicalObservationPort = Object.freeze({
+      observeCommitted: (request: unknown) => observed.push(request),
+    });
+    const store = createMatterStore("root", { humanAdmissionObservation });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+
+    expect(store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_observation",
+      commandId: "human_admission_observation",
+      nodeId: "voice_node_observation",
+      createdAt: "2026-09-24T00:00:00.000Z",
+      transcript: "Englebart described the demo",
+      expectedDocumentEpoch: 0,
+      repairLocale: "en-US",
+    })).toMatchObject({ status: "committed" });
+    expect(observed).toEqual([{
+      locale: "en-US",
+      channel: "spoken",
+      text: "Englebart described the demo",
+    }]);
+
+    expect(store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: -1,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_observation_rejected",
+      commandId: "human_admission_observation_rejected",
+      nodeId: "voice_node_observation_rejected",
+      createdAt: "2026-09-24T00:00:01.000Z",
+      transcript: "Englebart again",
+      expectedDocumentEpoch: -1,
+      repairLocale: "en-US",
+    })).toMatchObject({ status: "rejected" });
+    expect(observed).toHaveLength(1);
   });
 
   it("rejects an admission from an earlier document epoch", () => {
@@ -430,6 +586,38 @@ describe("Matter store", () => {
       createdAt: "2026-08-11T10:00:12.001Z",
     })).toMatchObject({ status: "rejected", errorCode: "REPAIR_EXPIRED" });
     expect(store.getState().tree.nodes.voice_node_expiry.text).toBe("呃，我觉得可以。");
+  });
+
+  it("does not let a caller timestamp extend the store-owned repair lease", () => {
+    let nowMs = 100;
+    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_future_caller_clock",
+      commandId: "human_admission_future_caller_clock",
+      nodeId: "voice_node_future_caller_clock",
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 1_000_000,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+
+    nowMs = 12_101;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-08-11T10:00:12.001Z",
+    })).toMatchObject({ status: "rejected", errorCode: "REPAIR_EXPIRED" });
   });
 
   it("restores the admission and repair as two undo steps after hydration", () => {
@@ -1170,4 +1358,24 @@ function branchValues() {
     nodeId: `thought_branch_${branchSequence}`,
     createdAt: `2026-08-09T00:00:${String(branchSequence).padStart(2, "0")}.000Z`,
   };
+}
+
+function confirmedWikiBasis(
+  channel: WikiChannel,
+  form: string,
+  canonical: string,
+  generation: number,
+): WikiBasis {
+  const transitioned = applyWikiEvent(createEmptyWikiState(), {
+    type: "confirm-rule",
+    locale: "en-US",
+    channel,
+    boundary: "word",
+    form,
+    canonical,
+  });
+  if (!transitioned.ok) throw new Error(transitioned.error.message);
+  const compiled = compileWikiBasis(transitioned.state, generation);
+  if (!compiled.ok) throw new Error(compiled.error.message);
+  return compiled.basis;
 }

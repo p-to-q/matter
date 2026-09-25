@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
-import { useMatterStore } from "../store/matter-store";
+import { useMatterStore } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { useAdmission } from "../interaction/use-admission";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
@@ -21,8 +21,10 @@ import {
   type SeededBranchTextResolver,
 } from "../material/seeded-material-core";
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
+import { useWikiAuthority } from "../persistence/use-wiki-authority";
 
 export function MatterApp() {
+  useWikiAuthority();
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);

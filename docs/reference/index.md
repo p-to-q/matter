@@ -19,6 +19,7 @@ ordinary component and store work needs no matching document.
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
 | [`prompt-harness.md`](prompt-harness.md) | how any Matter prompt is built, budgeted, and judged |
 | [`local-ai-demo.md`](local-ai-demo.md) | running and verifying the bounded localhost AI surface without changing production authority |
+| [`wiki.md`](wiki.md) | local lexical authority, evidence, commit, privacy, and recovery boundaries |
 | [`../../studio/film/README.md`](../../studio/film/README.md) | recording the private blank-to-material Matter film with DOM-bound camera cues and closed publication fixtures |
 | [`action-lasso-provider-research.md`](action-lasso-provider-research.md) | submitted-operation ownership, complete-path lasso accuracy, and a closed private-provider session |
 | [`thought-label.md`](thought-label.md) | naming a node in the material index |

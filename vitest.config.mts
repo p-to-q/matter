@@ -9,8 +9,11 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Several suites enforce real latency budgets. Leave CPU headroom so
+    // file-level parallelism cannot turn scheduler contention into false reds.
+    maxWorkers: "30%",
     include: [
-      "features/**/*.test.ts",
+      "features/**/*.test.{ts,tsx}",
       "next.config.test.ts",
       "scripts/**/*.test.mjs",
       "studio/**/*.test.ts",
@@ -31,6 +34,7 @@ export default defineConfig({
       "scripts/label-eval-plan.test.mjs",
       "studio/film/boundary.test.mjs",
       "studio/film/copy.test.mjs",
+      "studio/film/preflight.test.mjs",
       "studio/film/render.test.mjs",
     ],
   },

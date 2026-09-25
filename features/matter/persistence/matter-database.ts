@@ -8,17 +8,17 @@ import { openDB } from "idb";
 import type { SnapshotBundle } from "./snapshot-codec";
 import type { TreeHistory } from "../tree/history";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
+import type { WikiState } from "../wiki/wiki-model";
 
 /**
  * Opens the one browser database Matter owns.
  *
- * Both stores live here because a single origin may hold only one version of a
+ * All stores live here because a single origin may hold only one version of a
  * named database: two modules opening `ptoq-matter` with different versions
  * would deadlock each other. The schema therefore moves as a whole.
  *
- * `snapshots` is durable material. `labels` keeps bounded derived model rows
- * beside durable manual names; neither is material, so both stay outside the
- * snapshot and the archive remains exactly what a person wrote.
+ * `snapshots` is durable material. Labels, inquiries, and Wiki authority stay
+ * outside the snapshot, so the archive remains exactly what a person wrote.
  */
 
 export const STORAGE_SCHEMA_VERSION = 1 as const;
@@ -97,6 +97,17 @@ export type StoredInquiryRecord = Readonly<{
   exchanges: readonly StoredInquiryExchange[];
 }>;
 
+export const WIKI_RECORD_KEY = "origin" as const;
+
+/** Wiki is local lexical authority. It is neither material nor a model cache. */
+export type StoredWikiRecord = Readonly<{
+  storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
+  recordSchemaVersion: 1 | 2;
+  key: typeof WIKI_RECORD_KEY;
+  writeGeneration: number;
+  state: WikiState;
+}>;
+
 export interface MatterDatabase extends DBSchema {
   snapshots: {
     key: string;
@@ -114,10 +125,14 @@ export interface MatterDatabase extends DBSchema {
     key: string;
     value: StoredInquiryRecord;
   };
+  wiki: {
+    key: typeof WIKI_RECORD_KEY;
+    value: StoredWikiRecord;
+  };
 }
 
 const DATABASE_NAME = "ptoq-matter";
-const DATABASE_VERSION = 4;
+export const MATTER_DATABASE_VERSION = 5;
 /** Two maximum documents stay warm; manual names are not part of this cache. */
 export const MAX_CACHED_MODEL_LABELS = MAX_NODES_PER_TREE * 2;
 
@@ -146,43 +161,62 @@ export function createMatterDatabaseHandle(): {
     const resetIfCurrent = () => {
       if (databasePromise === owner.opening) databasePromise = null;
     };
-    const opening = openDB<MatterDatabase>(DATABASE_NAME, DATABASE_VERSION, {
-      upgrade(db, oldVersion, _newVersion, transaction) {
-        if (!db.objectStoreNames.contains("snapshots")) {
-          db.createObjectStore("snapshots", { keyPath: "treeId" });
+    const opening = new Promise<IDBPDatabase<MatterDatabase>>((resolveOpen, rejectOpen) => {
+      let abandoned = false;
+      const nativeOpen = openDB<MatterDatabase>(DATABASE_NAME, MATTER_DATABASE_VERSION, {
+        upgrade(db, oldVersion, _newVersion, transaction) {
+          if (!db.objectStoreNames.contains("snapshots")) {
+            db.createObjectStore("snapshots", { keyPath: "treeId" });
+          }
+          const existingLabels = db.objectStoreNames.contains("labels");
+          const labels = existingLabels
+            ? transaction.objectStore("labels")
+            : db.createObjectStore("labels", { keyPath: "key" });
+          if (!labels.indexNames.contains("treeId")) {
+            labels.createIndex("treeId", "treeId");
+          }
+          if (!labels.indexNames.contains("originUpdatedAt")) {
+            labels.createIndex("originUpdatedAt", ["origin", "updatedAt"]);
+          }
+          if (existingLabels && oldVersion < 4) {
+            // Queue the first cursor request before the upgrade callback returns.
+            // The versionchange transaction then remains the sole owner until the
+            // complete legacy cache has converged to the new global bound.
+            void retainNewestModelLabels(labels, MAX_CACHED_MODEL_LABELS).catch(() => {
+              try {
+                transaction.abort();
+              } catch {
+                // The transaction already failed; the open will reject as well.
+              }
+            });
+          }
+          if (!db.objectStoreNames.contains("inquiryRecords")) {
+            db.createObjectStore("inquiryRecords", { keyPath: "treeId" });
+          }
+          if (!db.objectStoreNames.contains("wiki")) {
+            db.createObjectStore("wiki", { keyPath: "key" });
+          }
+        },
+        blocked() {
+          abandoned = true;
+          resetIfCurrent();
+          const error = new Error("The Matter database upgrade is blocked by another tab.");
+          error.name = "BlockedError";
+          rejectOpen(error);
+        },
+        terminated: resetIfCurrent,
+        blocking() {
+          void owner.opening?.then((db) => db.close()).catch(() => undefined);
+          resetIfCurrent();
+        },
+      });
+      void nativeOpen.then((db) => {
+        if (abandoned) {
+          db.close();
+          return;
         }
-        const existingLabels = db.objectStoreNames.contains("labels");
-        const labels = existingLabels
-          ? transaction.objectStore("labels")
-          : db.createObjectStore("labels", { keyPath: "key" });
-        if (!labels.indexNames.contains("treeId")) {
-          labels.createIndex("treeId", "treeId");
-        }
-        if (!labels.indexNames.contains("originUpdatedAt")) {
-          labels.createIndex("originUpdatedAt", ["origin", "updatedAt"]);
-        }
-        if (existingLabels && oldVersion < 4) {
-          // Queue the first cursor request before the upgrade callback returns.
-          // The versionchange transaction then remains the sole owner until the
-          // complete legacy cache has converged to the new global bound.
-          void retainNewestModelLabels(labels, MAX_CACHED_MODEL_LABELS).catch(() => {
-            try {
-              transaction.abort();
-            } catch {
-              // The transaction already failed; the open will reject as well.
-            }
-          });
-        }
-        if (!db.objectStoreNames.contains("inquiryRecords")) {
-          db.createObjectStore("inquiryRecords", { keyPath: "treeId" });
-        }
-      },
-      blocked: resetIfCurrent,
-      terminated: resetIfCurrent,
-      blocking() {
-        void owner.opening?.then((db) => db.close()).catch(() => undefined);
-        resetIfCurrent();
-      },
+        resolveOpen(db);
+      }, rejectOpen);
     });
     owner.opening = opening;
     databasePromise = opening;

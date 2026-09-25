@@ -19,6 +19,30 @@ and let it grow once without surrendering authorship. The release
 should make that loop understandable in one sitting before it earns more memory,
 sync, or surface area.
 
+Matter may keep one thin local Wiki of lexical authority behind that loop. Its
+success is invisible: familiar names and forms arrive correctly without a
+prompt, badge, review queue, or permanent dictionary interface. A person enters
+that system only when the automatic result feels wrong. Editing one canonical
+word makes that human spelling authoritative for every hidden local alias;
+removing it prevents automatic reconstruction. Generated material may receive
+an exact correction but never teaches the Wiki or enters model context through
+it. The quiet **Wiki** surface opened from Matter settings presents one list of
+canonical words, where the person can add, rename, choose whether one word may
+apply to voice, generated text, or both, remove, or export it. Locale remains
+inferred rather than becoming a person-facing setting. This applicability
+choice only enables or disables use of stored authority; changing it never
+deletes aliases or evidence. The surface does not expose confidence or a
+`heard-as → write-as` rule editor. The Chinese menu label is `词典 WIKI`; the
+engineering boundary remains Wiki. A damaged local record
+exposes a separately confirmed reset only after strict decoding fails. Wiki
+still has no authority over the material turn: it proposes bounded replacements,
+while Matter alone validates and commits the resulting text.
+
+Wiki is configuration, not a destination. Its entry belongs in the top-right
+settings menu immediately before Model API; opening it replaces the menu with
+one bounded, scrollable settings dialog. The first-level menu never renders the
+lexical list itself, and Matter exposes no standalone Wiki route.
+
 ## Two kinds of turn
 
 **Material admission.** A person speaks at the empty root or, when no passage is

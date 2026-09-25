@@ -1,10 +1,6 @@
 import { isMatterLocale } from "../config/locales";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import {
-  MAX_VOCABULARY_TERMS,
-  MAX_VOCABULARY_TERM_CODE_UNITS,
-} from "../material/material-vocabulary";
-import {
   MAX_REPAIR_TEXT_CODE_UNITS,
   TRANSCRIPT_REPAIR_PROMPT_VERSION,
   type RepairSource,
@@ -46,12 +42,6 @@ export type RepairRequest = Readonly<{
   attempt: number;
   locale: string;
   text: string;
-  /**
-   * Terms drawn from the person's own visible material, most-used first. Bounded
-   * and optional: an older client, or a tree with nothing repeated in it, simply
-   * sends none. No node id, depth, or ordering leaves the browser with them.
-   */
-  vocabulary?: readonly string[];
 }>;
 
 export type RepairSuccess = Readonly<{
@@ -112,7 +102,6 @@ export function parseRepairRequest(value: unknown): RepairRequestParse {
     "attempt",
     "locale",
     "text",
-    "vocabulary",
   ])) {
     return invalid("The repair request fields are invalid.");
   }
@@ -132,9 +121,6 @@ export function parseRepairRequest(value: unknown): RepairRequestParse {
   const text = boundedText(value.text, MAX_REPAIR_TEXT_CODE_UNITS);
   if (text === null || text.trim().length === 0) return invalid("The repair transcript is invalid.");
 
-  const vocabulary = parseVocabulary(value.vocabulary);
-  if (vocabulary === null) return invalid("The repair vocabulary is invalid.");
-
   return Object.freeze({
     ok: true,
     request: Object.freeze({
@@ -144,7 +130,6 @@ export function parseRepairRequest(value: unknown): RepairRequestParse {
       attempt: value.attempt,
       locale,
       text,
-      ...(vocabulary.length === 0 ? {} : { vocabulary }),
     }),
   });
 }
@@ -181,23 +166,6 @@ export function isRepairSuccess(
     return false;
   }
   return true;
-}
-
-/**
- * A hint is the most droppable field on this boundary, so it is bounded rather
- * than trusted: too many terms, or one too long, is a client that has gone
- * wrong, and the repair is still perfectly possible without any of them.
- */
-function parseVocabulary(value: unknown): readonly string[] | null {
-  if (value === undefined) return Object.freeze([]);
-  if (!Array.isArray(value) || value.length > MAX_VOCABULARY_TERMS) return null;
-  const terms: string[] = [];
-  for (const entry of value) {
-    const term = boundedText(entry, MAX_VOCABULARY_TERM_CODE_UNITS);
-    if (term === null || term.trim().length === 0) return null;
-    terms.push(term);
-  }
-  return Object.freeze(terms);
 }
 
 function isAttempt(value: unknown): value is number {

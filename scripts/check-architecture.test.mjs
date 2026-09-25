@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildRepositoryGraph, findProblems, importsOf, layerOf } from "./check-architecture.mjs";
+import {
+  architectureImportsOf,
+  buildRepositoryGraph,
+  findProblems,
+  importsOf,
+  layerOf,
+} from "./check-architecture.mjs";
 
 test("the repository holds its own shape", () => {
   assert.deepEqual(findProblems(buildRepositoryGraph()), []);
@@ -42,6 +48,48 @@ test("a check that cannot fail proves nothing", () => {
         ["studio/film/copy.mjs", []],
       ]),
       expect: /must not depend on studio code/u,
+    },
+    {
+      why: "a server prompt reaching local lexical authority",
+      graph: new Map([
+        ["features/matter/server/repair-harness.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /Wiki is local-only/u,
+    },
+    {
+      why: "a wire contract serializing local lexical authority",
+      graph: new Map([
+        ["features/matter/protocol/repair-contract.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /Wiki is local-only/u,
+    },
+    {
+      why: "an API route reaching local lexical authority",
+      graph: new Map([
+        ["app/api/repair/route.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /Wiki is local-only/u,
+    },
+    {
+      why: "a server relaying through an application service to local lexical authority",
+      graph: new Map([
+        ["features/matter/server/repair-harness.ts", ["features/matter/application/material-ingress.ts"]],
+        ["features/matter/application/material-ingress.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /repair-harness\.ts -> features\/matter\/application\/material-ingress\.ts -> features\/matter\/wiki\/wiki-model\.ts/u,
+    },
+    {
+      why: "the store selecting a concrete lexical authority",
+      graph: new Map([
+        ["features/matter/store/matter-store.ts", ["features/matter/application/wiki-material-lexical-adapter.ts"]],
+        ["features/matter/application/wiki-material-lexical-adapter.ts", ["features/matter/wiki/wiki-basis.ts"]],
+        ["features/matter/wiki/wiki-basis.ts", []],
+      ]),
+      expect: /store may depend only on the neutral material lexical port/u,
     },
     {
       why: "two transports importing each other",
@@ -106,6 +154,11 @@ test("a type-only edge is not a runtime edge", () => {
   assert.deepEqual(importsOf('import "./a";'), ["./a"]);
   assert.deepEqual(importsOf('export { a } from "./a";'), ["./a"]);
   assert.deepEqual(importsOf('export type { A } from "./a";'), []);
+  assert.deepEqual(
+    architectureImportsOf('import type { WikiState } from "../wiki/wiki-model";'),
+    ["../wiki/wiki-model"],
+  );
+  assert.deepEqual(architectureImportsOf('import type { A } from "./a";'), []);
   // A specifier inside a string or comment is not an import.
   assert.deepEqual(importsOf('const note = `import { a } from "./a"`;'), []);
 });
@@ -121,5 +174,7 @@ test("the deepest matching directory names the layer", () => {
 
 function LAYER_NAME(file) {
   const index = layerOf(file);
-  return index === null ? null : ["tree", "material", "protocol", "domain", "adapter", "store", "composition"][index];
+  return index === null ? null : [
+    "tree", "material", "protocol", "domain", "application", "adapter", "store", "composition",
+  ][index];
 }

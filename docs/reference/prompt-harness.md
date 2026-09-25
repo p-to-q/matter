@@ -81,10 +81,7 @@ different shape because each scenario withholds something different:
   while wholesale rewriting is impossible. Numeric and unit facts, literal
   addresses, negation, uncertainty, quantifiers, and ordering cues are locked.
   One separately checked deletion-only shape permits adopting the replacement
-  side of an explicit correction; it cannot insert or reorder anything. This is
-  also what lets repair accept a vocabulary hint
-  safely: a term from the person's own material may correct a misheard word, and
-  still cannot be inserted into a sentence that did not contain it
+  side of an explicit correction; it cannot insert or reorder anything
   ([`voice-input.md`](voice-input.md));
 - labelling re-runs the browser's own validation, then requires the answer to
   beat the deterministic label it would replace, so a model cannot rename a node

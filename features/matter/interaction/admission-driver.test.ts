@@ -309,7 +309,7 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getState()).toEqual({ phase: "idle" });
   });
 
-  it("gives the repair request no vocabulary outside its owned admission material", async () => {
+  it("keeps the repair request bounded to its owned admission material", async () => {
     const repair = vi.fn(async (input) => ({
       text: input.text,
       source: "rules" as const,
@@ -320,7 +320,15 @@ describe("AdmissionDriver", () => {
     h.voice.finish({ interactionId: "voice_1", attempt: 1 });
     await settle();
 
-    expect(repair).toHaveBeenCalledWith(expect.objectContaining({ vocabulary: [] }));
+    const request = repair.mock.calls[0]?.[0];
+    expect(request).toEqual(expect.objectContaining({
+      operationId: "voice_1",
+      attempt: 1,
+      locale: "zh-CN",
+      text: expect.any(String),
+      signal: expect.any(AbortSignal),
+    }));
+    expect(request).not.toHaveProperty("vocabulary");
   });
 
   it("computes repair beside the paint gate but cannot commit before baseline paint", async () => {

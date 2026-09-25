@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   assertConfiguredPool,
+  assertLocalDemoPortAvailable,
   createLocalAiDemoEnvironment,
   localAiDemoExitCode,
   localAiDemoSummary,
@@ -93,4 +94,19 @@ test("reports an unexpected child signal as failure without penalising an operat
   assert.equal(localAiDemoExitCode(null, "SIGTERM", "SIGINT"), 1);
   assert.equal(localAiDemoExitCode(null, "SIGKILL", null), 1);
   assert.equal(localAiDemoExitCode(null, null, null), 1);
+});
+
+test("checks both localhost families and rejects either occupied endpoint", async () => {
+  const checked = [];
+  await assertLocalDemoPortAvailable(3000, async (host, port) => {
+    checked.push([host, port]);
+  });
+  assert.deepEqual(checked, [["127.0.0.1", 3000], ["::1", 3000]]);
+
+  await assert.rejects(
+    assertLocalDemoPortAvailable(3000, async (host) => {
+      if (host === "::1") throw Object.assign(new Error("busy"), { code: "EADDRINUSE" });
+    }),
+    /already in use on localhost \(::1\)/,
+  );
 });

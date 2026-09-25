@@ -1,5 +1,10 @@
 # Protocol 0.2
 
+The local Wiki is deliberately absent from every wire contract. No mapping,
+evidence score, applied rule, or lexical hint is serialized to a model-facing
+request. Canonicalization happens only after a response returns to the
+browser-side material ingress boundary.
+
 ## Locale contract
 
 Locale fields use the supported BCP 47 values `zh-CN`, `en-US`, `ja-JP`,
@@ -626,7 +631,6 @@ export type RepairRequest = {
   attempt: number;
   locale: string;
   text: string;
-  vocabulary?: string[];   // bounded terms from the person's own material
 };
 
 export type RepairSuccess = {
@@ -653,15 +657,8 @@ deterministic rule floor, not the raw transcript. The only error codes are
 `INVALID_REQUEST` and `REPAIR_FAILED`, and neither reaches the person, because
 the browser already holds durable material and keeps the rule floor.
 
-`vocabulary` is a bounded recognition hint, not material structure: terms the person already repeated
-in their own visible material, most-used first, carrying no node id, depth, or
-ordering. It can only help a model recognise a word that was said —
-`adjudicateRepair` gives the hint no special authority, and still applies the
-same edit, growth, fact, and order guards. Absent, malformed, or over-long
-vocabulary is refused or ignored, and repair proceeds without it.
-
-Bounds: transcript 2,000 code units, vocabulary 24 terms of 32 code units,
-request and response 12 KiB, provider deadline scaled to the utterance with a
+Bounds: transcript 2,000 code units, request and response 12 KiB, provider
+deadline scaled to the utterance with a
 six-second floor and eight-second ceiling, a 9,500 ms route deadline, and an
 11,000 ms browser deadline. The twelve-second store lease remains the final
 authority.

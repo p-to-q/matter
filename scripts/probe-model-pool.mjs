@@ -28,7 +28,7 @@ import { pathToFileURL } from "node:url";
 import { isInquiryAnswerProse } from "../features/matter/protocol/inquiry-answer-policy.mjs";
 
 export const PROTOCOL_VERSION = "0.2";
-export const REPAIR_PROMPT_VERSION = "transcript-repair/4";
+export const REPAIR_PROMPT_VERSION = "transcript-repair/5";
 export const LABEL_PROMPT_VERSION = "thought-label/4";
 export const APP_VERSION = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
@@ -105,7 +105,6 @@ export function repairRequest(round) {
     // Missing punctuation and one spoken homophone, so a model that answers
     // has one unambiguous repair and remains distinguishable from the floor.
     text: `probe round ${round} the quiet room held it’s shape until morning came`,
-    vocabulary: [],
   });
 }
 

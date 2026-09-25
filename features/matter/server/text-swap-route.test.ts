@@ -5,6 +5,7 @@ import type { ScenarioAdapter, ScenarioCall } from "./harness";
 import type { MaterialTurnObservationOptions } from "./material-turn-observation";
 import { resetTransformAdmissionForTests } from "./transform-admission";
 import { fixtureTextSwapAdapter } from "./text-swap-provider";
+import { LAUNCH_POINT_TALK_FIXTURE } from "./text-swap-fixtures";
 import {
   TEXT_SWAP_ROUTE_TIMEOUT_MS,
   handleTextSwapRequest,
@@ -50,6 +51,20 @@ describe("text swap route", () => {
     expect(routineReceipt).not.toContain(PASSAGE);
     expect(routineReceipt).not.toContain(DIRECTION);
     expect(routineReceipt).not.toContain("swap_route");
+  });
+
+  it("runs the named launch Point Talk child through the complete route", async () => {
+    const response = await post(launchBody());
+    expect(response.status).toBe(200);
+    const parsedRequest = parseTextSwapEnvelope(launchBody());
+    if (!parsedRequest.ok) throw new Error("launch text swap fixture must parse");
+    const plan = parseTextSwapPlan(await response.json(), parsedRequest.envelope);
+    expect(plan?.action).toMatchObject({
+      nodeId: "launch_child",
+      start: 0,
+      end: LAUNCH_POINT_TALK_FIXTURE.passage.length,
+      text: LAUNCH_POINT_TALK_FIXTURE.text,
+    });
   });
 
   it("gives the provider ancestors only and represents the selected passage once", async () => {
@@ -182,6 +197,43 @@ function body(overrides: Record<string, unknown> = {}) {
       { id: "thought", text: TEXT, parentId: null, createdAt: TIME, updatedAt: TIME },
     ] },
     ...overrides,
+  };
+}
+
+function launchBody() {
+  return {
+    protocolVersion: "0.2",
+    requestVersion: "text-swap/2",
+    id: "launch_swap_route",
+    treeId: "launch_tree",
+    mode: "transform",
+    operation: "paraphrase-in-place",
+    treeRevision: 3,
+    selection: {
+      type: "segment-range",
+      nodeId: "launch_child",
+      start: 0,
+      end: LAUNCH_POINT_TALK_FIXTURE.passage.length,
+      selectedText: LAUNCH_POINT_TALK_FIXTURE.passage,
+    },
+    direction: { text: LAUNCH_POINT_TALK_FIXTURE.direction },
+    locale: LAUNCH_POINT_TALK_FIXTURE.locale,
+    context: { lineage: [
+      {
+        id: "launch_root",
+        text: "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。",
+        parentId: null,
+        createdAt: TIME,
+        updatedAt: TIME,
+      },
+      {
+        id: "launch_child",
+        text: LAUNCH_POINT_TALK_FIXTURE.passage,
+        parentId: "launch_root",
+        createdAt: TIME,
+        updatedAt: TIME,
+      },
+    ] },
   };
 }
 

@@ -1,11 +1,12 @@
 {
   "name": "ptoq-matter",
-  "version": "0.2.0-preview.58",
+  "version": "0.2.0-preview.59",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "dev:ai": "node scripts/local-ai-demo.mjs",
     "film:capture": "node studio/film/render.mjs",
+    "film:preflight": "node studio/film/preflight.mjs",
     "dev:webpack": "next dev --webpack",
     "build": "next build --webpack && npm run check:runtime",
     "start": "next start",
@@ -19,7 +20,7 @@
     "bench:persistence": "env MATTER_PERSISTENCE_BENCHMARK=1 vitest run features/matter/persistence/persistence-performance.test.ts --reporter=verbose && node scripts/measure-persistence-indexeddb.mjs",
     "typegen": "next typegen --webpack",
     "check": "npm run doctor && npm run check:docs && npm test && npm run typegen && npm run typecheck && npm run lint && npm run build",
-    "test": "node --test scripts/check-markdown-links.test.mjs scripts/check-deployment.test.mjs scripts/check-vercel-config.test.mjs scripts/check-runtime-artifact.test.mjs scripts/check-architecture.test.mjs scripts/probe-model-pool.test.mjs scripts/local-ai-demo.test.mjs scripts/probe-local-ai.test.mjs scripts/label-corpus.test.mjs scripts/label-eval-plan.test.mjs studio/film/boundary.test.mjs studio/film/copy.test.mjs studio/film/render.test.mjs && node studio/film/boundary.mjs && node scripts/check-vercel-config.mjs && node scripts/check-architecture.mjs && vitest run",
+    "test": "node --test scripts/check-markdown-links.test.mjs scripts/check-deployment.test.mjs scripts/check-vercel-config.test.mjs scripts/check-runtime-artifact.test.mjs scripts/check-architecture.test.mjs scripts/probe-model-pool.test.mjs scripts/local-ai-demo.test.mjs scripts/probe-local-ai.test.mjs scripts/label-corpus.test.mjs scripts/label-eval-plan.test.mjs studio/film/boundary.test.mjs studio/film/copy.test.mjs studio/film/preflight.test.mjs studio/film/render.test.mjs && node studio/film/boundary.mjs && node scripts/check-vercel-config.mjs && node scripts/check-architecture.mjs && vitest run",
     "test:watch": "vitest",
     "test:e2e": "node scripts/run-e2e.mjs",
     "test:receipt": "env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true npm run build && env MATTER_BASE_PATH=/matter MATTER_PERFORMANCE_FIXTURE=true MATTER_RUN_PERFORMANCE_RECEIPT=true node scripts/run-e2e.mjs e2e/rooted-performance.spec.ts --config=playwright.production.config.ts",
@@ -53,7 +54,7 @@
     "nanoid": "3.3.18",
     "sharp": "0.35.4",
     "onnxruntime-node": {
-      "adm-zip": "0.6.0"
+      "adm-zip": "0.6.1"
     }
   },
   "license": "UNLICENSED",

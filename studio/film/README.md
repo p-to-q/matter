@@ -215,6 +215,10 @@ it never records the live answer text. The filmed turn still performs its own
 route, visible-answer, and exactly-once assertions rather than inheriting the
 preflight as proof.
 
+```bash
+npm run film:preflight -- --execute
+```
+
 ## Why not desktop capture or CI as the master
 
 FFmpeg's macOS display input can record a whole screen, but that includes

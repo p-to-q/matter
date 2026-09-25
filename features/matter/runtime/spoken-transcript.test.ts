@@ -5,8 +5,21 @@ import {
   normalizeSpokenTranscript,
   planSpokenTranscriptPunctuation,
 } from "./spoken-transcript";
+import { LAUNCH_POINT_TALK_FIXTURE } from "../server/text-swap-fixtures";
 
 describe("spoken transcript punctuation", () => {
+  it("keeps the named launch Point Talk direction stable across both voice boundaries", () => {
+    const server = normalizeSpokenTranscript({
+      text: LAUNCH_POINT_TALK_FIXTURE.direction,
+      locale: LAUNCH_POINT_TALK_FIXTURE.locale,
+    });
+    expect(server).toBe(LAUNCH_POINT_TALK_FIXTURE.direction);
+    expect(normalizeSpokenTranscript({
+      text: server,
+      locale: LAUNCH_POINT_TALK_FIXTURE.locale,
+    })).toBe(LAUNCH_POINT_TALK_FIXTURE.direction);
+  });
+
   it("keeps astral text and refuses malformed input before normalization", () => {
     expect(normalizeSpokenTranscript({ text: "保留🚀这个想法", locale: "zh-CN" }))
       .toBe("保留🚀这个想法。");

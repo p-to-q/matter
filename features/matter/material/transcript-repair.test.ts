@@ -11,8 +11,6 @@ import {
 } from "./transcript-repair";
 
 const zh = (text: string) => normalizeRepairInput({ text, locale: "zh-CN" });
-const zhWith = (text: string, vocabulary: readonly string[]) =>
-  normalizeRepairInput({ text, locale: "zh-CN", vocabulary });
 const en = (text: string) => normalizeRepairInput({ text, locale: "en-US" });
 
 describe("repairSkeleton", () => {
@@ -27,19 +25,10 @@ describe("repairSkeleton", () => {
 });
 
 describe("normalizeRepairInput", () => {
-  it("carries a vocabulary hint and defaults it to none", () => {
-    expect(zh("我在想这件事到底该怎么做").vocabulary).toEqual([]);
-    expect(zhWith("我在想这件事到底该怎么做", ["留白"]).vocabulary).toEqual(["留白"]);
-  });
-
-  it("cannot let a hint widen what an answer may change", () => {
-    const original = zhWith("这个功能的实现事件比预期长", ["实现时间", "留白", "呼吸"]);
-    // The hinted term is accepted only where it repairs a word that was said.
-    expect(adjudicateRepair(original, "这个功能的实现时间比预期长。").ok).toBe(true);
-    // Reaching for a hinted term the speaker never said costs edits it lacks.
-    expect(adjudicateRepair(original, "这个功能的留白和呼吸都比预期长。")).toEqual({
-      ok: false,
-      reason: "MEANING_CHANGED",
+  it("trims the utterance without changing its locale", () => {
+    expect(normalizeRepairInput({ text: "  我在想这件事。  ", locale: "zh-CN" })).toEqual({
+      text: "我在想这件事。",
+      locale: "zh-CN",
     });
   });
 });
@@ -61,11 +50,9 @@ describe("decideRepairRequest", () => {
     expect(decideRepairRequest(zh("字".repeat(2_001)))).toBe(false);
   });
 
-  it("declines malformed source or vocabulary while accepting astral text", () => {
+  it("declines malformed source while accepting astral text", () => {
     expect(decideRepairRequest(zh("我在想🚀这件事该怎么做"))).toBe(true);
     expect(decideRepairRequest(zh("我在想\uD800这件事该怎么做"))).toBe(false);
-    expect(decideRepairRequest(zhWith("我在想这件事该怎么做", ["bad\uDC00term"])))
-      .toBe(false);
   });
 });
 
@@ -255,7 +242,7 @@ describe("adjudicateRepair", () => {
     });
   });
 
-  it("locks relations, speaker, question type, identifiers, and existing vocabulary", () => {
+  it("locks relations, speaker, question type, and identifiers", () => {
     expect(adjudicateRepair(
       en("i think we test first and then ship API v2"),
       "I think we ship first and then test API v2.",
@@ -273,24 +260,8 @@ describe("adjudicateRepair", () => {
       "I think the API is somewhat unstable.",
     )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
     expect(adjudicateRepair(
-      normalizeRepairInput({
-        text: "i think Matter is kind of difficult to explain",
-        locale: "en-US",
-        vocabulary: ["Matter"],
-      }),
-      "I think the product is somewhat difficult to explain.",
-    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
-    expect(adjudicateRepair(
       en("i think we should test this"),
       "I think I should test this.",
-    )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
-    expect(adjudicateRepair(
-      normalizeRepairInput({
-        text: "i think Matter is kind of difficult to explain",
-        locale: "en-US",
-        vocabulary: ["Matter"],
-      }),
-      "I think Mattermost is kind of difficult to explain.",
     )).toEqual({ ok: false, reason: "MEANING_CHANGED" });
   });
 

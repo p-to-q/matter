@@ -88,11 +88,6 @@ export function compileRepairPrompt(input: NormalizedRepairInput): string {
     ],
     material: [
       fence("utterance", input.text),
-      ...(input.vocabulary.length === 0 ? [] : [fence(
-        "their-words",
-        input.vocabulary.join(" / "),
-        "Words this person uses in their other thoughts. Use one only to recognise a word they did say and the recognizer wrote down wrong. Never insert one that is not in the utterance, and never reach for one because it seems apt:",
-      )]),
     ],
   });
 }

@@ -78,18 +78,11 @@ describe("parseRepairRequest", () => {
     });
   });
 
-  it("accepts a bounded vocabulary hint and treats absence as none", () => {
-    const withHint = parseRepairRequest({ ...BODY, vocabulary: ["留白", "呼吸"] });
-    expect(withHint.ok && withHint.request.vocabulary).toEqual(["留白", "呼吸"]);
-    const withoutHint = parseRepairRequest(BODY);
-    expect(withoutHint.ok && withoutHint.request.vocabulary).toBeUndefined();
-  });
-
-  it("refuses a vocabulary that is too long, too many, or not text", () => {
-    expect(parseRepairRequest({ ...BODY, vocabulary: Array(25).fill("留白") }).ok).toBe(false);
-    expect(parseRepairRequest({ ...BODY, vocabulary: ["字".repeat(33)] }).ok).toBe(false);
-    expect(parseRepairRequest({ ...BODY, vocabulary: [" "] }).ok).toBe(false);
-    expect(parseRepairRequest({ ...BODY, vocabulary: "留白" }).ok).toBe(false);
+  it("rejects the retired vocabulary field instead of silently ignoring it", () => {
+    expect(parseRepairRequest({ ...BODY, vocabulary: ["留白", "呼吸"] })).toEqual({
+      ok: false,
+      message: "The repair request fields are invalid.",
+    });
   });
 
   it("rejects an empty or over-long transcript", () => {
@@ -97,11 +90,10 @@ describe("parseRepairRequest", () => {
     expect(parseRepairRequest({ ...BODY, text: "字".repeat(2_001) }).ok).toBe(false);
   });
 
-  it("accepts astral text and rejects malformed transcript or vocabulary text", () => {
+  it("accepts astral text and rejects malformed transcript text", () => {
     expect(parseRepairRequest({ ...BODY, text: "保留🚀这个词。" }).ok).toBe(true);
     for (const malformed of ["bad\uD800text", "bad\uDC00text"]) {
       expect(parseRepairRequest({ ...BODY, text: malformed }).ok).toBe(false);
-      expect(parseRepairRequest({ ...BODY, vocabulary: [malformed] }).ok).toBe(false);
     }
   });
 });

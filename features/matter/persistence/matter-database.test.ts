@@ -140,5 +140,47 @@ describe("Matter database upgrades", () => {
       "originUpdatedAt",
       ["origin", "updatedAt"],
     );
+    expect(createObjectStore).toHaveBeenCalledWith("wiki", { keyPath: "key" });
+  });
+
+  it("adds the Wiki store through the one database version owner", async () => {
+    const createObjectStore = vi.fn().mockReturnValue({});
+    const database = {
+      objectStoreNames: { contains: (name: string) => name !== "wiki" },
+      createObjectStore,
+      close: vi.fn(),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const handle = createMatterDatabaseHandle();
+
+    await handle.open();
+    const callbacks = vi.mocked(openDB).mock.calls[0]?.[2];
+    callbacks?.upgrade?.(
+      database as never,
+      4,
+      5,
+      { objectStore: vi.fn(() => ({ indexNames: { contains: () => true } })) } as never,
+      new Event("upgradeneeded") as IDBVersionChangeEvent,
+    );
+
+    expect(createObjectStore).toHaveBeenCalledExactlyOnceWith("wiki", { keyPath: "key" });
+  });
+
+  it("rejects a blocked open and lets an explicit retry create a new attempt", async () => {
+    let callbacks: Parameters<typeof openDB>[2] | undefined;
+    vi.mocked(openDB).mockImplementationOnce((_name, _version, options) => {
+      callbacks = options;
+      return new Promise(() => undefined) as never;
+    });
+    const database = { close: vi.fn() };
+    vi.mocked(openDB).mockResolvedValueOnce(database as never);
+    const handle = createMatterDatabaseHandle();
+
+    const blocked = handle.open();
+    callbacks?.blocked?.(0, 5, new Event("blocked") as IDBVersionChangeEvent);
+    await expect(blocked).rejects.toMatchObject({ name: "BlockedError" });
+    await expect(handle.open()).resolves.toBe(database);
+
+    expect(openDB).toHaveBeenCalledTimes(2);
   });
 });

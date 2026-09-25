@@ -172,9 +172,9 @@ describe("fixtureRepairAdapter", () => {
     const result = await fixtureRepairAdapter(
       {
         scenario: "matter-transcript-repair",
-        prompt: compileRepairPrompt({ text: "我一直在想这件事到底该怎么做 句号", locale: "zh-CN", vocabulary: [] }),
+        prompt: compileRepairPrompt({ text: "我一直在想这件事到底该怎么做 句号", locale: "zh-CN" }),
         locale: "zh-CN",
-        input: { text: "我一直在想这件事到底该怎么做 句号", locale: "zh-CN", vocabulary: [] },
+        input: { text: "我一直在想这件事到底该怎么做 句号", locale: "zh-CN" },
         deadlineMs: 1_200,
         maxOutputTokens: 128,
       },
@@ -187,9 +187,9 @@ describe("fixtureRepairAdapter", () => {
     const result = await fixtureRepairAdapter(
       {
         scenario: "matter-transcript-repair",
-        prompt: compileRepairPrompt({ text: "we finally did it", locale: "en-US", vocabulary: [] }),
+        prompt: compileRepairPrompt({ text: "we finally did it", locale: "en-US" }),
         locale: "en-US",
-        input: { text: "we finally did it", locale: "en-US", vocabulary: [] },
+        input: { text: "we finally did it", locale: "en-US" },
         deadlineMs: 1_200,
         maxOutputTokens: 128,
       },
@@ -350,21 +350,13 @@ function chatResponse(text: string, status = 200): Response {
 }
 
 describe("compileRepairPrompt", () => {
-  const prompt = compileRepairPrompt({ text: "我在想<这件事>该怎么做", locale: "zh-CN", vocabulary: [] });
+  const prompt = compileRepairPrompt({ text: "我在想<这件事>该怎么做", locale: "zh-CN" });
 
   it("carries no MATTER background, because this runs once per utterance", () => {
     expect(prompt).not.toContain("Matter is a canvas for thinking");
   });
 
-  it("offers the person's own terms only for recognising what they said", () => {
-    const hinted = compileRepairPrompt({
-      text: "这个功能的实现事件比预期长",
-      locale: "zh-CN",
-      vocabulary: ["实现时间", "留白"],
-    });
-    expect(hinted).toContain("<their-words>实现时间 / 留白</their-words>");
-    expect(hinted).toContain("Never insert one that is not in the utterance");
-    // A tree with nothing repeated in it sends nothing, and says nothing.
+  it("carries no document-derived terms", () => {
     expect(prompt).not.toContain("their-words");
   });
 

@@ -25,7 +25,7 @@ import { isWellFormedUnicodeText } from "../tree/unicode-text";
  * parse it, and a request whose prompt version the server does not recognise is
  * refused rather than answered by a different scenario than the client asked for.
  */
-export const TRANSCRIPT_REPAIR_PROMPT_VERSION = "transcript-repair/4";
+export const TRANSCRIPT_REPAIR_PROMPT_VERSION = "transcript-repair/5";
 
 export const MAX_REPAIR_TEXT_CODE_UNITS = MAX_NODE_TEXT_CODE_UNITS;
 
@@ -68,21 +68,14 @@ export type RepairSource = "verbatim" | "model";
 export type NormalizedRepairInput = Readonly<{
   text: string;
   locale: string;
-  /**
-   * Terms the person already uses elsewhere in their own material. A hint for
-   * recognising a misheard word, never a licence to insert one — the edit
-   * budget below is what makes that distinction enforceable rather than asked.
-   */
-  vocabulary: readonly string[];
 }>;
 
 export function normalizeRepairInput(
-  input: Readonly<{ text: string; locale: string; vocabulary?: readonly string[] }>,
+  input: Readonly<{ text: string; locale: string }>,
 ): NormalizedRepairInput {
   return Object.freeze({
     text: input.text.trim(),
     locale: input.locale,
-    vocabulary: Object.freeze([...(input.vocabulary ?? [])]),
   });
 }
 
@@ -104,8 +97,7 @@ export function decideRepairRequest(input: NormalizedRepairInput): boolean {
   if (
     input.text.length === 0 ||
     input.text.length > MAX_REPAIR_TEXT_CODE_UNITS ||
-    !isWellFormedUnicodeText(input.text) ||
-    input.vocabulary.some((term) => !isWellFormedUnicodeText(term))
+    !isWellFormedUnicodeText(input.text)
   ) return false;
   const minimum = input.locale === "zh-CN" || input.locale === "zh-TW"
     ? MIN_CJK_REPAIR_SKELETON_LENGTH
@@ -163,9 +155,7 @@ export function adjudicateRepair(
 ): RepairAdjudication {
   if (typeof candidate !== "string") return reject("EMPTY");
   if (
-    !isWellFormedUnicodeText(original.text) ||
-    original.vocabulary.some((term) => !isWellFormedUnicodeText(term)) ||
-    !isWellFormedUnicodeText(candidate)
+    !isWellFormedUnicodeText(original.text) || !isWellFormedUnicodeText(candidate)
   ) return reject("NOT_ONE_UTTERANCE");
   const text = unwrapQuoted(stripFence(candidate).trim());
   if (text.length === 0) return reject("EMPTY");
@@ -338,10 +328,6 @@ function preservesProtectedMeaning(original: NormalizedRepairInput, candidate: s
     originalIdentifiers.length > 0 &&
     !sameSequence(originalIdentifiers, stableIdentifierFacts(candidate))
   ) return false;
-  for (const term of original.vocabulary) {
-    const count = vocabularyCount(original.text, term);
-    if (count > 0 && vocabularyCount(candidate, term) !== count) return false;
-  }
   for (const pattern of PROTECTED_MEANING_PATTERNS) {
     if (!sameSequence(matches(original.text, pattern), matches(candidate, pattern))) return false;
   }
@@ -373,30 +359,6 @@ function stableIdentifierFacts(value: string): readonly string[] {
   return [...value.matchAll(
     /\b(?:v\d+(?:\.\d+)+|[A-Z]{2,}\d*|[A-Za-z][A-Za-z0-9]*[._-][A-Za-z0-9._-]+|[A-Za-z]+\d+)\b/gu,
   )].map((match) => (match[0] ?? "").toLocaleLowerCase());
-}
-
-function vocabularyCount(value: string, term: string): number {
-  if (term.length === 0) return 0;
-  let count = 0;
-  let cursor = 0;
-  const haystack = value.toLocaleLowerCase();
-  const needle = term.toLocaleLowerCase();
-  while (cursor <= haystack.length - needle.length) {
-    const found = haystack.indexOf(needle, cursor);
-    if (found < 0) break;
-    if (
-      !/^\p{Script=Latin}[\p{Script=Latin}\p{N}'’-]*$/u.test(needle) ||
-      isLatinTermBoundary(haystack, found, needle.length)
-    ) count += 1;
-    cursor = found + needle.length;
-  }
-  return count;
-}
-
-function isLatinTermBoundary(value: string, start: number, length: number): boolean {
-  const before = start === 0 ? "" : value[start - 1] ?? "";
-  const after = value[start + length] ?? "";
-  return !/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after);
 }
 
 function isQuestion(value: string, locale: string): boolean {

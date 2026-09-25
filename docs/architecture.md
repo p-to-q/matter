@@ -26,9 +26,8 @@ protects literals, applies locale-specific disfluency cleanup, classifies only
 high-confidence spoken number/date/time/version/unit spans, renders them without
 numeric precision loss, then settles punctuation and casing. It may then ask
 the existing managed repair route to improve that floor. The request carries
-one utterance, locale, and an optional bounded vocabulary hint, never tree
-identity or address. The current browser omits that hint until the active
-working-context owner can supply it synchronously. A model may make one
+one utterance and locale, never tree identity, address, or document-derived
+terms. A model may make one
 evidence-backed faithful redraft of broken spoken
 grammar, but clean prose keeps a narrow edit budget and numbers, units, stable
 identifiers, vocabulary, speaker, modality, relations, question type, and claim
@@ -654,8 +653,12 @@ features/matter/
   server/public-provider-fetch.ts  closed DNS-checked, address-pinned HTTPS operations
   server/provider-session-*.ts     sealed fixed-lifetime credential and route boundary
   config/inquiry.ts                neutral inquiry bounds and current scope vocabulary
+  application/material-lexical-port.ts  neutral captured suggestion capability
+  application/material-ingress.ts  pure final text preparation before one tree command
+  application/wiki-material-lexical-adapter.ts  the only Wiki-to-ingress adapter
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules
+  wiki/                            bounded local lexical authority and compiled matcher
   material/inquiry-context.ts      bounded visible-lineage inquiry projection
   layout/                          visible traversal and focus/fold projection
   tools/                           pure capability projection and closed intents
@@ -709,6 +712,47 @@ or memory index belongs in its own repository beside persistence, stores
 revision-addressed derived records, and may supply context only through an
 explicit context projector. It must not become hidden retrieval for generative
 tree changes.
+
+Wiki is a separate local lexical authority, not memory. Its durable state and
+compiled basis stay browser-side and never reach protocol, server, provider,
+prompt, or public agent actions. Matter core consumes only
+`application/material-lexical-port.ts`: a synchronous capability that captures
+one immutable session and may suggest ordered replacement patches inside the
+explicit eligible ranges. The neutral port validates and applies those patches;
+the Wiki adapter never owns a whole replacement candidate. The adapter is
+selected in the browser composition root. Store and MaterialIngress do not know Wiki state,
+evidence, repositories, or coordinator methods, and the architecture check
+forbids the store from reaching concrete Wiki code through any import path.
+
+`application/material-ingress.ts` validates a candidate, asks the captured
+session once, validates any changed candidate again, and returns one existing
+tree command. The lexical port cannot choose reference, direction, degree,
+lineage, command shape, persistence, history, or publication. A missing,
+throwing, or malformed adapter becomes identity; it cannot make material
+unavailable. A coherent changed suggestion that violates the final Matter
+contract is still rejected rather than published.
+
+Wiki capabilities remain deliberately separate. The hot path receives only a
+captured read session; the successful human-admission owner alone receives a
+bounded observation sink; repair, transform, text-swap, and recovery code cannot
+obtain that write capability. Exceptional correction receives only addressed
+lexeme decisions; the settings-owned Wiki surface receives a canonical-word configuration projection
+plus a reversible per-lexeme applicability scope and the one lossless
+`matter-wiki.json` export. Scope is an allow-list consumed by projection and
+cache compilation, not ownership of stored relations: aliases, evidence, and
+tombstones survive a disabled channel. Locale remains inferred at the settings
+edge. Corrupt-storage recovery receives a distinct,
+transaction-guarded reset operation. Cross-tab invalidation broadcasts only a
+monotonic generation, never lexical content. No
+caller receives a generic dispatcher, service locator, plugin registry, or the
+whole coordinator. Personal customization is versioned data and explicit
+capability, not executable policy injection. Automatic evidence production is
+separate and generated ingress cannot obtain it. Loading or storage failure
+leaves material on the empty or last valid basis and degrades only Wiki.
+Observation writes rebase the same content-minimal batch after a cross-tab CAS
+conflict, so a concurrent human turn is not silently discarded. Evidence-only
+writes reuse both compiled indexes until the applicable authority actually
+changes.
 
 Browser speech recognition is the narrow platform-capability exception: it uses
 no Matter credential, exposes no provider choice in the client, and commits
