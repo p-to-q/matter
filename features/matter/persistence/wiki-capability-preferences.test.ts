@@ -1,12 +1,20 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_WIKI_CAPABILITY_PREFERENCES,
   MAX_WIKI_CAPABILITY_PREFERENCES_STORAGE_LENGTH,
-  WikiCapabilityPreferencesController,
   parseWikiCapabilityPreferences,
   serializeWikiCapabilityPreferences,
-  type WikiCapabilityPreferencesPort,
 } from "./wiki-capability-preferences";
+import {
+  WikiCapabilityPreferencesController,
+  type WikiCapabilityPreferencesPort,
+} from "./wiki-capability-preferences-controller";
+import {
+  isMatterWikiAutomaticCollectionEnabled,
+  isMatterWikiPhoneticFittingEnabled,
+} from "./wiki-capability-preferences-reader";
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("Wiki capability preferences", () => {
   it("defaults both independent local capabilities on", () => {
@@ -63,6 +71,61 @@ describe("Wiki capability preferences", () => {
     });
     expect(controller.getSnapshot()).toBe(DEFAULT_WIKI_CAPABILITY_PREFERENCES);
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("fails safe when saved preferences are malformed or unreadable", () => {
+    const malformed = new WikiCapabilityPreferencesController(port("not-json").value);
+    const unreadable = new WikiCapabilityPreferencesController({
+      ...port().value,
+      read: () => {
+        throw new Error("storage denied");
+      },
+    });
+
+    expect(malformed.getSnapshot()).toMatchObject({
+      automaticCollection: false,
+      phoneticFitting: false,
+    });
+    expect(unreadable.getSnapshot()).toEqual(malformed.getSnapshot());
+  });
+
+  it("fails safe on malformed cross-tab updates", () => {
+    const fixture = port();
+    const controller = new WikiCapabilityPreferencesController(fixture.value);
+
+    fixture.receive("not-json");
+
+    expect(controller.getSnapshot()).toMatchObject({
+      automaticCollection: false,
+      phoneticFitting: false,
+    });
+  });
+
+  it("keeps the compact material-path reader default-on but fails safe", () => {
+    let stored: string | null = null;
+    vi.stubGlobal("localStorage", { getItem: () => stored });
+
+    expect(isMatterWikiAutomaticCollectionEnabled()).toBe(true);
+    expect(isMatterWikiPhoneticFittingEnabled()).toBe(true);
+
+    stored = "not-json";
+    expect(isMatterWikiAutomaticCollectionEnabled()).toBe(false);
+    expect(isMatterWikiPhoneticFittingEnabled()).toBe(false);
+
+    stored = serializeWikiCapabilityPreferences({
+      ...DEFAULT_WIKI_CAPABILITY_PREFERENCES,
+      automaticCollection: false,
+    });
+    expect(isMatterWikiAutomaticCollectionEnabled()).toBe(false);
+    expect(isMatterWikiPhoneticFittingEnabled()).toBe(true);
+
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("storage denied");
+      },
+    });
+    expect(isMatterWikiAutomaticCollectionEnabled()).toBe(false);
+    expect(isMatterWikiPhoneticFittingEnabled()).toBe(false);
   });
 
   it("rejects malformed, extra, wrong-version, and oversized storage", () => {

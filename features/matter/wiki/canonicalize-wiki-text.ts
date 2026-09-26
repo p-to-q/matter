@@ -1,6 +1,6 @@
 import type { WikiChannel } from "./wiki-model";
 import type { MatterLocale } from "../config/locales";
-import { hasUnsafeWikiFormatControl } from "./wiki-invariants";
+import { hasUnsafeWikiFormatControl } from "./wiki-text-safety";
 import type {
   CompiledWikiRule,
   CompiledWikiSnapshot,

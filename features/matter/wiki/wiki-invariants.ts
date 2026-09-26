@@ -30,6 +30,7 @@ import {
   WIKI_ALIAS_PRODUCER_WEIGHTS,
   isWikiLearningCount,
 } from "./wiki-learning-policy";
+import { hasUnsafeWikiFormatControl } from "./wiki-text-safety";
 
 const ASCII_CONTROL = /[\u0000-\u001f\u007f]/u;
 
@@ -333,18 +334,6 @@ function isWikiText(value: unknown, maxCodePoints: number): value is string {
     value.trim() === value &&
     value.normalize("NFC") === value &&
     Array.from(value).length <= maxCodePoints;
-}
-
-const EMOJI_ZWJ_PREFIX = /\p{Extended_Pictographic}(?:\ufe0f|\p{Emoji_Modifier})?\u200d(?=\p{Extended_Pictographic})/gu;
-
-/** Reject invisible and bidi formatting controls. U+200D is retained only
- * between emoji pictographs, never as an invisible distinction in text. */
-export function hasUnsafeWikiFormatControl(value: string): boolean {
-  const withoutValidEmojiJoiners = value.replace(EMOJI_ZWJ_PREFIX, "");
-  for (const codePoint of withoutValidEmojiJoiners) {
-    if (/\p{Cf}/u.test(codePoint)) return true;
-  }
-  return false;
 }
 
 function isWikiLexeme(value: unknown): value is WikiLexeme {

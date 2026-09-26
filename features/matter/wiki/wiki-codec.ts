@@ -22,6 +22,7 @@ import {
   WIKI_RECENT_OBSERVATION_WINDOW,
   WIKI_SCHEMA_VERSION,
   WIKI_SCORING_VERSION,
+  isWikiStarterLexemeIdentity,
   type WikiAliasDescriptor,
   type WikiAliasEvidenceAggregate,
   type WikiAuthorityRule,
@@ -456,7 +457,6 @@ function parseAliasEvidence(value: unknown): WikiAliasEvidenceAggregate | null {
       (value.phase !== "candidate" && value.phase !== "active") ||
       !isEvidenceCount(value.support) ||
       value.support === 0 ||
-      (value.phase === "active" && value.support === 0) ||
       !isQuietTurns(value.quietTurns)) return null;
   return Object.freeze({
     ...descriptor,
@@ -618,7 +618,9 @@ function splitLegacyEvidence(
     }
   }
   const identityById = new Map(lexemes
-    .filter((lexeme) => lexeme.provenance === "aggregate-evidence")
+    .filter((lexeme) =>
+      lexeme.provenance === "aggregate-evidence" &&
+      !isWikiStarterLexemeIdentity(lexeme))
     .map((lexeme) => [lexeme.id, {
       locale: lexeme.locale,
       canonical: lexeme.canonical,

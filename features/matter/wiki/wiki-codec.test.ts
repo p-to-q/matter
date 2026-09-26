@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseWikiEvent, parseWikiState, wikiStateStorageBytes } from "./wiki-codec";
-import { applyWikiEvent, createEmptyWikiState } from "./wiki-evidence";
+import {
+  applyWikiEvent,
+  applyWikiObservationBatch,
+  createEmptyWikiState,
+} from "./wiki-evidence";
 import { MAX_WIKI_STATE_BYTES, type WikiEvent } from "./wiki-model";
 
 describe("Wiki codec", () => {
@@ -249,6 +253,53 @@ describe("Wiki codec", () => {
         }],
       },
     });
+  });
+
+  it("keeps V4 starter recurrence out of the term ledger while legacy aliases decay", () => {
+    const parsed = parseWikiState({
+      schemaVersion: 4,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: 4,
+      nextLexemeId: 2,
+      recentObservationCount: 3,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Engelbart",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      }],
+      evidence: [{
+        lexemeId: 1,
+        channel: "spoken",
+        boundary: "word",
+        form: "engel bard",
+        counts: { historicalMaterial: 1, recentMaterial: 2, machineInference: 4 },
+      }],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    });
+    if (!parsed.ok) throw new Error(parsed.message);
+
+    expect(parsed.state.termEvidence).toEqual([]);
+    expect(parsed.state.aliasEvidence).toEqual([
+      expect.objectContaining({ form: "engel bard", support: 4 }),
+    ]);
+
+    let state = parsed.state;
+    for (let index = 0; index < 96; index += 1) {
+      const aged = applyWikiObservationBatch(state, []);
+      if (!aged.ok) throw new Error(aged.error.message);
+      state = aged.state;
+    }
+    expect(state.aliasEvidence).toEqual([]);
+    expect(state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "Engelbart", provenance: "aggregate-evidence" }),
+    ]);
   });
 
   it("does not migrate automatic recurrence onto a human-owned lexeme", () => {

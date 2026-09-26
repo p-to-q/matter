@@ -16,8 +16,7 @@ describe("WikiSettingsSection", () => {
     expect(markup).toContain("只有已验证并发布的本地规则可以改写材料");
     expect(markup).toContain("关闭收词");
     expect(markup).toContain("关闭近音");
-    expect(markup).toMatch(/aria-pressed="true"[^>]*>关闭收词<\/button>/);
-    expect(markup).toMatch(/aria-pressed="true"[^>]*>关闭近音<\/button>/);
+    expect(source).not.toContain("aria-pressed={capabilityPreferences");
     expect(markup).toContain("自动添加");
     expect(markup).toContain("手动添加");
     expect(source).toContain('scope: "可用于"');

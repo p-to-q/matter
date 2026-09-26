@@ -23,6 +23,8 @@ import {
   WIKI_FITTING_VERSION,
   WIKI_SCHEMA_VERSION,
   WIKI_SCORING_VERSION,
+  WIKI_STARTER_LEXEMES,
+  isWikiStarterLexemeIdentity,
   type WikiAliasDescriptor,
   type WikiAliasEvidenceAggregate,
   type WikiEvent,
@@ -54,13 +56,6 @@ export const WIKI_SCORE_POLICY = Object.freeze({
   version: WIKI_SCORING_VERSION,
   confirmedRuleScore: 2_147_483_647,
 });
-
-export const WIKI_STARTER_LEXEMES = Object.freeze([
-  Object.freeze({ locale: "en-US" as const, canonical: "Engelbart", scope: "both" as const }),
-  Object.freeze({ locale: "en-US" as const, canonical: "Morphogenesis", scope: "both" as const }),
-  Object.freeze({ locale: "en-US" as const, canonical: "KFC", scope: "both" as const }),
-  Object.freeze({ locale: "zh-CN" as const, canonical: "[p → q]", scope: "both" as const }),
-]);
 
 const P_TO_Q_CANONICAL = "[p → q]";
 const P_TO_Q_FORMS = Object.freeze(["P to Q", "p to q"] as const);
@@ -435,11 +430,13 @@ function observeEvidence(
   const revision = state.revision + 1;
   if (event.source === "recent-material") {
     const existingLexeme = findLexeme(working, event);
-    if (existingLexeme?.provenance === "human-confirmed") {
-      return success(state, false);
-    }
     const index = working.termEvidence.findIndex((entry) =>
       lexemeKey(entry) === lexemeKey(event));
+    if (existingLexeme?.provenance === "human-confirmed" ||
+        (index === -1 && existingLexeme?.provenance === "aggregate-evidence" &&
+          isWikiStarterLexemeIdentity(existingLexeme))) {
+      return success(state, false);
+    }
     if (index === -1 && working.termEvidence.length >= MAX_WIKI_EVIDENCE_RECORDS) {
       return failure("BOUND_EXCEEDED", "The Wiki term evidence bound is exceeded.");
     }

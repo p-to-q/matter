@@ -53,15 +53,15 @@ to clear both an activation floor and an ambiguity margin. Routine provisional
 creation and application require no human confirmation. Material frequency can
 support a candidate but can never invent the relation between two forms.
 
-Evidence is deliberately lossy and bounded. Wiki retains only saturating
-aggregate counts. Explicitly human observations first enter a recent cohort;
-after a bounded number of later human observations they age into a decaying
-historical cohort. It stores no passage, node id, tree id, timestamp,
+Evidence is deliberately lossy and bounded. Record V5 keeps separate term and
+alias ledgers with saturating support and a candidate-local quiet counter. One
+successful human admission is one logical clock tick; after a bounded number
+of quiet ticks, only the candidate that was absent decays. It stores no passage,
+node id, tree id, timestamp,
 transcript, prompt, model answer, embedding, occurrence list, or source address.
-Recent human evidence has more weight than historical human evidence. Existing
-trees are not rescanned because persisted nodes do not prove whether their text
-was human- or model-authored. Model-generated material contributes zero learning
-evidence: it can be corrected by Wiki, but it cannot teach Wiki. Machine
+Existing trees are not rescanned because persisted nodes do not prove whether
+their text was human- or model-authored. Model-generated material contributes
+zero learning evidence: it can be corrected by Wiki, but it cannot teach Wiki. Machine
 inference counts decay with the same observation clock, including successful
 human admissions that produce no candidate, so one early false proposal cannot
 remain silently active forever. Only the successful human-admission owner may
@@ -80,8 +80,9 @@ code. They must be calibrated against a representative error corpus before a
 provisional mapping is enabled for release; changing them is a scoring-version
 decision, not an incidental refactor.
 
-The 32-observation recent cohort is an evidence-aging clock, not a user-intent
-window. It says how quickly aggregate evidence loses recency. One future
+The 32-admission candidate-local quiet horizon is an evidence-aging clock, not
+a user-intent window. It says how quickly one unobserved candidate loses support
+without creating a global cohort boundary. One future
 interaction owner may classify an exact applied occurrence after bounded
 foreground-visible survival, but it never infers intent from generic deletion,
 Material Undo or Redo, repetition, a later whole-text diff, or nearby pointer
@@ -276,9 +277,12 @@ generated text, or both. It does not expose aliases, matcher channels,
 confidence, evidence scores, or a routine clear action. Source filters use the
 lifecycle labels `Automatically added` and `Manually added`: editing an
 automatic entry promotes it to confirmed authority. The single lossless
-personal-data format is `matter-wiki.json`; there is no import UI. Schema V4
-stores scope explicitly; strict V2 and V3 migration assigns `both` so an upgrade
-cannot silently disable previously applicable authority. Strictly corrupt local state
+personal-data format is `matter-wiki.json`; there is no import UI. Schema V5
+stores scope explicitly and separates term recurrence from alias-relation
+evidence into candidate-local ledgers. Strict V2 and V3 migration assigns `both`
+so an upgrade cannot silently disable previously applicable authority; strict
+V4 migration preserves its existing scope while splitting the former aggregate.
+Strictly corrupt local state
 exposes an explicit reset that rechecks the row inside the write transaction and
 refuses to replace data that has become valid. It must not require the person
 to understand evidence scores, provisional state, or matcher boundaries.

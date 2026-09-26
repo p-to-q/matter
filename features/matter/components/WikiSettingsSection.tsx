@@ -16,8 +16,9 @@ import {
 } from "../persistence/wiki-runtime";
 import {
   DEFAULT_WIKI_CAPABILITY_PREFERENCES,
-  matterWikiCapabilityPreferences,
 } from "../persistence/wiki-capability-preferences";
+import { matterWikiCapabilityPreferences } from
+  "../persistence/wiki-capability-preferences-controller";
 import type {
   WikiConfigurationInput,
   WikiConfigurationRule,
@@ -616,7 +617,6 @@ export function WikiSettingsSection({
             </div>
             <div className={styles.capabilityActions}>
               <button
-                aria-pressed={capabilityPreferences.automaticCollection}
                 onClick={toggleAutomaticCollection}
                 type="button"
               >
@@ -625,7 +625,6 @@ export function WikiSettingsSection({
                   : copy.enableAutomaticCollection}
               </button>
               <button
-                aria-pressed={capabilityPreferences.phoneticFitting}
                 onClick={togglePhoneticFitting}
                 type="button"
               >

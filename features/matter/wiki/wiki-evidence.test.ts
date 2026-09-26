@@ -5,6 +5,7 @@ import {
   applyWikiObservationBatch,
   clearWikiState,
   createEmptyWikiState,
+  createInitialWikiState,
   projectApplicableWikiRules,
 } from "./wiki-evidence";
 import {
@@ -53,6 +54,22 @@ describe("Wiki evidence and authority", () => {
       expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
     ]);
     expect(state.termEvidence[0]).toMatchObject({ phase: "collected", support: 2 });
+  });
+
+  it("keeps untouched product starters outside the term-aging ledger", () => {
+    const state = createInitialWikiState();
+    const result = applyWikiObservationBatch(state, state.lexemes.map((lexeme) => ({
+      type: "observe-evidence" as const,
+      locale: lexeme.locale,
+      channel: "spoken" as const,
+      boundary: "word" as const,
+      form: `${lexeme.canonical} heard`,
+      canonical: lexeme.canonical,
+      source: "recent-material" as const,
+    })));
+
+    expect(result).toEqual({ ok: true, state, changed: false });
+    expect(state.termEvidence).toEqual([]);
   });
 
   it("ages term evidence on its own quiet horizon without a global cohort", () => {
