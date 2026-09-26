@@ -31,7 +31,7 @@
     "eval:language": "vitest run scripts/material-language-eval.test.mjs"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.0",
     "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "next": "16.3.4",
