@@ -37,6 +37,16 @@ const EMPTY_WIKI_BASIS: WikiBasis = Object.freeze({
       totalCodePoints: 0,
     }),
   }),
+  confirmedSnapshot: Object.freeze({
+    generation: 0,
+    rules: Object.freeze([]),
+    views: emptyLocaleRecords(emptyChannelViews),
+    stats: Object.freeze({
+      ruleCount: 0,
+      trieNodeCount: MATTER_LOCALES.length * 2,
+      totalCodePoints: 0,
+    }),
+  }),
   fitSnapshot: Object.freeze({
     fittingVersion: WIKI_FITTING_VERSION,
     identities: Object.freeze([]),
@@ -50,7 +60,9 @@ const EMPTY_WIKI_BASIS: WikiBasis = Object.freeze({
 });
 
 type MatterWikiBasisPublication = { current: WikiBasis };
-const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v1");
+// The key versions the in-memory basis ABI across Fast Refresh. A stale cell
+// must never survive a required snapshot-shape change.
+const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v2");
 const publicationHost = globalThis as unknown as {
   [key: symbol]: MatterWikiBasisPublication | undefined;
 };

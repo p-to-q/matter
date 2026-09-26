@@ -81,13 +81,14 @@ provisional mapping is enabled for release; changing them is a scoring-version
 decision, not an incidental refactor.
 
 The 32-observation recent cohort is an evidence-aging clock, not a user-intent
-window. It says how quickly aggregate evidence loses recency; it does not infer
-that a deletion, undo, repeated word, later edit, or nearby pointer action means
-"remember this spelling." No such general intent inference exists in this
-release, and the current `recent-material` evidence source has no production
-producer. The ordering of authority is nevertheless fixed: an addressed human
-decision bypasses scoring; an automatic proposal must pass both scoring gates;
-an ambiguous proposal abstains.
+window. It says how quickly aggregate evidence loses recency. One future
+interaction owner may classify an exact applied occurrence after bounded
+foreground-visible survival, but it never infers intent from generic deletion,
+Material Undo or Redo, repetition, a later whole-text diff, or nearby pointer
+activity. The current `recent-material` evidence source still has no production
+producer. The ordering of authority is fixed: an addressed human decision
+bypasses scoring; an automatic proposal must pass both scoring gates; an
+ambiguous proposal abstains.
 
 Two deterministic human decision representations are defined. Settings may create, rename,
 scope, or remove one canonical lexeme as an explicit local configuration
@@ -171,16 +172,18 @@ transaction, quota failure, or corrupt durable row cannot replace the last
 valid in-memory basis. Corrupt data is retained for recovery rather than
 silently treated as an empty Wiki.
 
-The compiled dual-channel trie and fitting index are disposable caches. They are bounded by rule
-count and total code points, partitioned by exact locale and channel, contains
-no evidence scores, and is rebuilt from the validated durable state.
-MaterialIngress reads it synchronously; it never waits for IndexedDB or
-recompiles on a material hot path. Evidence-only writes reuse the exact trie
-until applicable authority changes, and reuse the fitting index until lexeme
-identity, scope, or provenance changes. Written-only lexemes never enter the
-spoken fitting index. Before hydration or after storage failure,
+The compiled dual-channel tries and fitting index are disposable caches. Each
+basis contains the release-selected matcher snapshot and a confirmed-only
+fallback. Both are bounded by rule count and total code points, partitioned by
+exact locale and channel, contain no evidence scores, and are rebuilt from the
+validated durable state. MaterialIngress chooses one immutable snapshot when a
+turn begins; it never waits for IndexedDB, reads preference state during a
+match, or recompiles on a material hot path. Evidence-only writes reuse the
+exact tries until applicable authority changes, and reuse the fitting index
+until lexeme identity, scope, or provenance changes. Written-only lexemes never
+enter the spoken fitting index. Before hydration or after storage failure,
 material uses the empty or last valid basis; only Wiki learning degrades.
-One compile is reused for durable publication. A content-free BroadcastChannel
+One compiled basis is reused for durable publication. A content-free BroadcastChannel
 message carries only the newer write generation so another tab can refresh its
 own durable record. Burst generations coalesce behind one in-flight refresh;
 completion loops only when the published basis still trails the highest seen
@@ -280,6 +283,15 @@ exposes an explicit reset that rechecks the row inside the write transaction and
 refuses to replace data that has become valid. It must not require the person
 to understand evidence scores, provisional state, or matcher boundaries.
 
+Two quiet underlined actions at the lower-right of the main Wiki surface store
+local permission for automatic term collection and phonetic fitting. Both
+preferences default on and may be turned off independently; the action text
+changes from `Turn off` to `Turn on` in place. They live in a strict, versioned
+local preference record outside the dictionary export and material history.
+Effective automation is always the intersection of that local permission and a
+release-qualified runtime capability. A preference cannot qualify a producer,
+manufacture an alias, or make an unavailable capability active.
+
 The implementation exposes capabilities rather than one Wiki service:
 
 - material ingress may capture a read-only lexical session;
@@ -338,12 +350,12 @@ positive and negative corpus receipts exist.
 
 ## Automatic-learning calibration boundary
 
-`wiki-learning-policy.ts` is a pure, non-runtime calibration slice. Nothing in
-MaterialIngress, persistence, projection, or the settings UI imports it yet. It
-exists to make the next schema transition testable before durable state or user
-material can depend on it.
+`wiki-learning-policy.ts` is the pure domain policy used by V5 evidence aging,
+competition, and offline calibration. It has no DOM, persistence, provider,
+model, or settings dependency. Runtime projection still supplies no qualified
+producer, so consuming the policy cannot activate automatic aliases.
 
-The policy separates two facts which the current V4 aggregate still mixes:
+Record V5 separates two facts which the former V4 aggregate mixed:
 
 - term evidence asks whether one canonical word should become a collected Wiki
   entry; and
@@ -384,22 +396,73 @@ exact `3 versus 1` and restricted `4 versus 2`, but abstains on exact `3 versus
 2` or restricted `4 versus 3`. Retention uses score `5` and margin `3`; a
 challenger never inherits that lower gate. Competition is immediate
 counter-evidence, while one addressed human reject or replacement bypasses the
-score and becomes durable authority. Silence, ordinary deletion, and Undo do
-not become negative votes. The resolver also requires an explicit set of
-release-qualified producer versions, so adding a classifier to source code
-cannot silently grant it runtime authority.
+score and becomes durable authority. Production projection currently supplies
+an empty qualification set, so adding a classifier to source code cannot
+silently grant it runtime authority. A later bridge must consume the complete
+qualified producer, resource, and corpus identity rather than reconstructing
+authority from a producer id.
 
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
 `human-admission` environment. Generated output and protected text produce zero
-votes and do not advance the learning clock. Offline evaluation compares a
-lexicographic vector: false applications, then applications to protected or
-generated material, must remain zero before correct applications, activation
-latency, or transition churn can improve. No reward or adaptive optimizer enters
-the running product.
+votes and do not advance the learning clock. Offline producer evaluation
+compares one frozen case set lexicographically: false and protected/generated
+applications remain the first vetoes, followed by misses, before correct
+applications, latency, or transition churn can improve. Producer qualification
+separately binds producer, resource, and corpus versions and digests. The
+manifest owns the sorted labelled cases and their complete producer inputs; the
+receipt supplies only outputs and measurements. Qualification recomputes the
+corpus digest and hashes the bounded raw producer and resource artifacts,
+requires positive, adversarial, ambiguity,
+locale-isolation, protected, generated, and capacity/performance classes, and
+fails malformed, incomplete, mismatched, oversized, or duplicated candidates
+closed. This verifier does not execute the producer and therefore cannot prove
+that a self-reported receipt came from the supplied bytes. A controlled harness
+must execute the pinned artifacts and own receipt production before any real
+candidate can qualify. Its synthetic unit fixture proves the parser and gate,
+not a language capability: no controlled harness, licensed resource, or real
+qualification receipt exists, so the release-qualified producer set remains
+empty.
 
-The next durable step is a strict V5 split-ledger migration with provisional
-projection still disabled. It must pass compatibility, cross-tab, capacity, and
-rollback proof before any producer or status copy is enabled. Until that step
-and each producer corpus pass, the existing exact-only UI and release gate remain
-the truthful product behavior.
+Interaction evaluation is a separate labelled corpus. One exact applied
+occurrence reaches exactly one terminal state:
+
+```text
+pending -> explicit-confirm | explicit-reject | explicit-replace
+        -> survived-horizon | censored
+```
+
+`survived-horizon` is the bounded form of foreground dwell plus no addressed
+reversal. Visible exposure accumulates only while that exact occurrence remains
+current and emits once at a corpus-calibrated horizon. It is weak implicit
+retention evidence, never human confirmation and never permission to bootstrap
+an inactive relation. A later independent application creates another
+occurrence; the first one cannot award nested dwell, next-action, and reuse
+votes to itself. Hidden-tab time, hover, selection, copy, unrelated edits, page
+exit, and generic silence remain censored or invalid proxies. Censoring stays
+neutral and is reported with its denominator, so evaluation cannot improve by
+manufacturing attribution.
+
+Material Undo and Redo are a separate tree-history system. Wiki neither
+observes nor interprets them, and no Wiki authority, evidence, or terminal
+metric changes because that history moved. If a material mutation removes the
+visible address, the transient occurrence simply ceases to exist without a Wiki
+event. A future Wiki reversal, if the product ever needs one, owns a separate
+explicit decision, implementation, and persistence lifecycle. It may reuse
+strict contract principles but never the material history framework, command
+types, stack, or state. Generated output may
+receive an explicit addressed human decision, but contributes zero implicit
+learning; protected text may never receive an application. The interaction evaluator
+reports unsafe attribution, false implicit positives, explicit reject rate,
+survived counts, exposure counts, censor rate, and decision latency on a fixed
+corpus. It does not turn censored exposure into a failed survival. No arbitrary
+energy weights, adaptive optimizer, telemetry, or online reinforcement learning
+enters the running product.
+
+V5 persists term and alias evidence as separate bounded ledgers, with
+provisional projection still disabled. Legacy aggregate evidence migrates to a
+zero-weight producer and therefore cannot acquire authority during migration.
+The migration must pass compatibility, cross-tab, capacity, and corrupt-input
+proof before any producer or status copy is enabled. Until a real producer
+corpus and the later one-shot attribution lifecycle pass, the existing
+exact-only UI and empty release gate remain the truthful product behavior.

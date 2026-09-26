@@ -9,9 +9,10 @@ import {
   advanceWikiTermQuietTurn,
   ageWikiAliasCandidate,
   ageWikiTermEvidence,
-  compareWikiLearningReward,
+  compareWikiLearningCorpusEvaluations,
   decideWikiSoftCandidateAdmission,
-  evaluateWikiLearning,
+  evaluateWikiLearningCorpus,
+  evaluateWikiLearningInteractions,
   isWikiAliasCandidateEvictable,
   isWikiTermCandidateEvictable,
   observeWikiAliasCandidate,
@@ -24,7 +25,8 @@ import {
   type WikiAliasCandidate,
   type WikiAliasEvidenceProducer,
   type WikiAliasReleaseQualification,
-  type WikiLearningEvaluationCase,
+  type WikiLearningCorpusCase,
+  type WikiLearningInteractionCase,
   type WikiTermEvidence,
 } from "./wiki-learning-policy";
 
@@ -367,7 +369,7 @@ describe("Wiki learning policy", () => {
 
   it("evaluates replay outcomes with safety ahead of recall and latency", () => {
     let candidate = alias("expected", "en-exact-homophone-v1", 0);
-    const cases: WikiLearningEvaluationCase[] = [];
+    const cases: WikiLearningCorpusCase[] = [];
     let previousPhase = candidate.phase;
     for (let turn = 1; turn <= 3; turn += 1) {
       candidate = observeWikiAliasCandidate(candidate);
@@ -378,6 +380,7 @@ describe("Wiki learning policy", () => {
       const transitions = candidate.phase === previousPhase ? 0 : 1;
       previousPhase = candidate.phase;
       cases.push({
+        caseId: `activation-${turn}`,
         expectedActionId: "expected",
         appliedActionId: candidate.phase === "active" ? candidate.candidateId : null,
         activationLatencyTurns: candidate.phase === "active" ? turn : 0,
@@ -385,7 +388,7 @@ describe("Wiki learning policy", () => {
       });
     }
 
-    const calibrated = evaluateWikiLearning(cases);
+    const calibrated = evaluateWikiLearningCorpus("activation-corpus-v1", cases);
     expect(calibrated).toMatchObject({
       caseCount: 3,
       correctApplications: 1,
@@ -393,22 +396,39 @@ describe("Wiki learning policy", () => {
       missedApplications: 2,
       activationLatencyTurns: 3,
       phaseTransitions: 1,
-      reward: [0, 0, 1, -3, 0, -1],
+      score: [0, 0, -2, 1, -3, 0, -1],
     });
 
-    const reckless = evaluateWikiLearning([
+    const reckless = evaluateWikiLearningCorpus("activation-corpus-v1", [
       ...cases,
       {
+        caseId: "negative-1",
         expectedActionId: null,
         appliedActionId: "wrong",
         protectedOrGenerated: true,
       },
     ]);
-    expect(compareWikiLearningReward(calibrated.reward, reckless.reward)).toBe(1);
+    expect(() => compareWikiLearningCorpusEvaluations(calibrated, reckless))
+      .toThrow(TypeError);
+
+    const safer = evaluateWikiLearningCorpus("activation-corpus-v1", cases.map((item) => ({
+      ...item,
+      appliedActionId: item.expectedActionId,
+    })));
+    expect(compareWikiLearningCorpusEvaluations(safer, calibrated)).toBe(1);
+
+    const relabelled = evaluateWikiLearningCorpus("activation-corpus-v1", cases.map(
+      (item, index) => index === 0
+        ? { ...item, expectedActionId: "different-expected-action" }
+        : item,
+    ));
+    expect(() => compareWikiLearningCorpusEvaluations(calibrated, relabelled))
+      .toThrow(TypeError);
   });
 
   it("counts a protected matching action as unsafe and never correct", () => {
-    const evaluation = evaluateWikiLearning([{
+    const evaluation = evaluateWikiLearningCorpus("protected-corpus-v1", [{
+      caseId: "protected-1",
       expectedActionId: "same",
       appliedActionId: "same",
       protectedOrGenerated: true,
@@ -420,18 +440,122 @@ describe("Wiki learning policy", () => {
       falseApplications: 1,
       protectedOrGeneratedApplications: 1,
       demotionLatencyTurns: 2,
-      reward: [-1, -1, 0, 0, -2, 0],
+      score: [-1, -1, 0, 0, 0, -2, 0],
     });
   });
 
   it("bounds every evaluation metric before accumulation", () => {
-    expect(() => evaluateWikiLearning([{
+    expect(() => evaluateWikiLearningCorpus("bounded-corpus-v1", [{
+      caseId: "bounded-1",
       expectedActionId: null,
       appliedActionId: null,
       activationLatencyTurns: 4_097,
     }])).toThrow(RangeError);
   });
+
+  it("settles each occurrence once and reports denominated interaction outcomes", () => {
+    const evaluation = evaluateWikiLearningInteractions([
+      {
+        occurrenceId: "explicit-accept",
+        environment: "human-material",
+        expectedDisposition: "accepted",
+        terminalOutcome: "explicit-confirm",
+        attribution: "exact-occurrence",
+        decisionLatencyTurns: 2,
+      },
+      {
+        occurrenceId: "explicit-reject",
+        environment: "generated-output",
+        expectedDisposition: "rejected",
+        terminalOutcome: "explicit-replace",
+        attribution: "exact-occurrence",
+        decisionLatencyTurns: 1,
+      },
+      interaction("survived", "accepted", "survived-horizon"),
+      interaction("censored", "unknown", "censored"),
+    ]);
+
+    expect(evaluation).toEqual({
+      outcomeCount: 4,
+      explicitAcceptances: 1,
+      explicitRejections: 1,
+      survivedHorizons: 1,
+      censoredOutcomes: 1,
+      eligibleCensoredOutcomes: 1,
+      unsafeOutcomes: 0,
+      unattributedOutcomes: 0,
+      generatedExcludedOutcomes: 0,
+      implicitExposureCount: 2,
+      falseImplicitPositives: 0,
+      incorrectExplicitDecisions: 0,
+      decisionLatencyTurns: 3,
+      explicitRejectRate: { numerator: 1, denominator: 2 },
+      censorRate: { numerator: 1, denominator: 2 },
+    });
+  });
+
+  it("separates unsafe attribution, generated exclusion, and false implicit approval", () => {
+    const evaluation = evaluateWikiLearningInteractions([
+      {
+        ...interaction("unattributed", "rejected", "survived-horizon"),
+        attribution: "unattributed",
+      },
+      {
+        ...interaction("protected", "unknown", "survived-horizon"),
+        environment: "protected-text",
+      },
+      {
+        ...interaction("generated", "accepted", "survived-horizon"),
+        environment: "generated-output",
+      },
+      interaction("false-positive", "rejected", "survived-horizon"),
+      {
+        ...interaction("generated-censor", "unknown", "censored"),
+        environment: "generated-output",
+      },
+      {
+        ...interaction("unattributed-censor", "unknown", "censored"),
+        attribution: "unattributed",
+      },
+    ]);
+
+    expect(evaluation).toMatchObject({
+      unsafeOutcomes: 2,
+      unattributedOutcomes: 2,
+      generatedExcludedOutcomes: 2,
+      falseImplicitPositives: 1,
+      survivedHorizons: 1,
+      censoredOutcomes: 2,
+      eligibleCensoredOutcomes: 0,
+      implicitExposureCount: 1,
+      censorRate: { numerator: 0, denominator: 1 },
+    });
+  });
+
+  it("rejects duplicate occurrence settlement and latency on implicit outcomes", () => {
+    expect(() => evaluateWikiLearningInteractions([{
+      ...interaction("implicit-latency", "accepted", "survived-horizon"),
+      decisionLatencyTurns: 1,
+    }])).toThrow(TypeError);
+    const duplicated = interaction("same", "unknown", "censored");
+    expect(() => evaluateWikiLearningInteractions([duplicated, duplicated]))
+      .toThrow(TypeError);
+  });
 });
+
+function interaction(
+  occurrenceId: string,
+  expectedDisposition: WikiLearningInteractionCase["expectedDisposition"],
+  terminalOutcome: WikiLearningInteractionCase["terminalOutcome"],
+): WikiLearningInteractionCase {
+  return {
+    occurrenceId,
+    environment: "human-material",
+    expectedDisposition,
+    terminalOutcome,
+    attribution: "exact-occurrence",
+  };
+}
 
 function term(
   phase: WikiTermEvidence["phase"],

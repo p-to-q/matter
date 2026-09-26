@@ -4,29 +4,32 @@ import {
   MAX_WIKI_AUTHORITY_RULES,
   MAX_WIKI_APPLICABLE_CODE_POINTS,
   MAX_WIKI_CANONICAL_CODE_POINTS,
-  MAX_WIKI_EVIDENCE_COUNT,
   MAX_WIKI_EVIDENCE_RECORDS,
   MAX_WIKI_FORM_CODE_POINTS,
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_TOMBSTONES,
   WIKI_FITTING_VERSION,
-  WIKI_RECENT_OBSERVATION_WINDOW,
   WIKI_SCHEMA_VERSION,
   WIKI_SCORING_VERSION,
   type WikiAliasDescriptor,
+  type WikiAliasEvidenceAggregate,
   type WikiAuthorityRule,
   type WikiBoundary,
   type WikiChannel,
-  type WikiEvidenceAggregate,
-  type WikiEvidenceCounts,
   type WikiLexeme,
   type WikiLexemeScope,
   type WikiLexemeTombstone,
   type WikiRuleDescriptor,
   type WikiState,
+  type WikiTermEvidenceAggregate,
   type WikiTombstone,
 } from "./wiki-model";
+import {
+  MAX_WIKI_LEARNING_QUIET_TURNS,
+  WIKI_ALIAS_PRODUCER_WEIGHTS,
+  isWikiLearningCount,
+} from "./wiki-learning-policy";
 
 const ASCII_CONTROL = /[\u0000-\u001f\u007f]/u;
 
@@ -82,10 +85,10 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
         "fittingVersion",
         "revision",
         "nextLexemeId",
-        "recentObservationCount",
         "automaticLearningSaturated",
         "lexemes",
-        "evidence",
+        "termEvidence",
+        "aliasEvidence",
         "authorities",
         "aliasTombstones",
         "lexemeTombstones",
@@ -104,20 +107,17 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     return invalid("The Wiki automatic-learning latch is invalid.");
   }
   if (
-    !Number.isSafeInteger(state.recentObservationCount) ||
-    state.recentObservationCount < 0 ||
-    state.recentObservationCount > WIKI_RECENT_OBSERVATION_WINDOW
-  ) return invalid("The Wiki recent evidence window is invalid.");
-  if (
     !Array.isArray(state.lexemes) ||
-    !Array.isArray(state.evidence) ||
+    !Array.isArray(state.termEvidence) ||
+    !Array.isArray(state.aliasEvidence) ||
     !Array.isArray(state.authorities) ||
     !Array.isArray(state.aliasTombstones) ||
     !Array.isArray(state.lexemeTombstones)
   ) return invalid("The Wiki collections are invalid.");
   if (
     state.lexemes.length > MAX_WIKI_LEXEMES ||
-    state.evidence.length > MAX_WIKI_EVIDENCE_RECORDS ||
+    state.termEvidence.length > MAX_WIKI_EVIDENCE_RECORDS ||
+    state.aliasEvidence.length > MAX_WIKI_EVIDENCE_RECORDS ||
     state.authorities.length > MAX_WIKI_AUTHORITY_RULES ||
     state.aliasTombstones.length > MAX_WIKI_TOMBSTONES ||
     state.lexemeTombstones.length > MAX_WIKI_LEXEME_TOMBSTONES
@@ -126,6 +126,7 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
   const lexemeIds = new Set<number>();
   const lexemeKeys = new Set<string>();
   const lexemesById = new Map<number, WikiLexeme>();
+  const lexemesByKey = new Map<string, WikiLexeme>();
   for (const lexeme of state.lexemes) {
     if (!isWikiLexeme(lexeme) || lexeme.id >= state.nextLexemeId) {
       return invalid("A Wiki lexeme is invalid.");
@@ -140,20 +141,38 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     lexemeIds.add(lexeme.id);
     lexemeKeys.add(key);
     lexemesById.set(lexeme.id, lexeme);
+    lexemesByKey.set(key, lexeme);
   }
 
-  const evidenceKeys = new Set<string>();
-  for (const aggregate of state.evidence) {
-    if (!hasExactKeys(aggregate, ["lexemeId", "channel", "boundary", "form", "counts"]) ||
-      !isWikiAliasDescriptor(aggregate) ||
-      !("counts" in aggregate) ||
-      !isEvidenceCounts(aggregate.counts) ||
-      !isValidAliasTarget(aggregate, lexemesById)) {
-      return invalid("A Wiki evidence record is invalid.");
+  const termEvidenceKeys = new Set<string>();
+  for (const aggregate of state.termEvidence) {
+    if (!isWikiTermEvidenceAggregate(aggregate)) {
+      return invalid("A Wiki term evidence record is invalid.");
     }
-    const key = storedDescriptorKey(aggregate);
-    if (evidenceKeys.has(key)) return invalid("Wiki evidence records are duplicated.");
-    evidenceKeys.add(key);
+    const key = lexemeKey(aggregate);
+    if (termEvidenceKeys.has(key)) {
+      return invalid("Wiki term evidence records are duplicated.");
+    }
+    if (aggregate.phase === "collected" && !lexemeKeys.has(key)) {
+      return invalid("Collected Wiki term evidence has no lexeme.");
+    }
+    if (lexemesByKey.get(key)?.provenance === "human-confirmed") {
+      return invalid("Human-owned Wiki lexemes cannot retain automatic recurrence.");
+    }
+    termEvidenceKeys.add(key);
+  }
+
+  const aliasEvidenceKeys = new Set<string>();
+  for (const aggregate of state.aliasEvidence) {
+    if (!isWikiAliasEvidenceAggregate(aggregate) ||
+        !isValidAliasTarget(aggregate, lexemesById)) {
+      return invalid("A Wiki alias evidence record is invalid.");
+    }
+    const key = aliasEvidenceKey(aggregate);
+    if (aliasEvidenceKeys.has(key)) {
+      return invalid("Wiki alias evidence records are duplicated.");
+    }
+    aliasEvidenceKeys.add(key);
   }
 
   const authorityAliases = new Set<string>();
@@ -224,7 +243,10 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
 
 export function freezeWikiState(state: WikiState): WikiState {
   const lexemes = state.lexemes.map(freezeLexeme).sort(compareLexeme);
-  const evidence = state.evidence.map(freezeEvidence).sort(compareAliasDescriptor);
+  const termEvidence = state.termEvidence.map(freezeTermEvidence)
+    .sort(compareLexemeIdentity);
+  const aliasEvidence = state.aliasEvidence.map(freezeAliasEvidence)
+    .sort(compareAliasEvidence);
   const authorities = state.authorities.map(freezeAuthority).sort(compareAliasDescriptor);
   const aliasTombstones = state.aliasTombstones
     .map(freezeTombstone)
@@ -242,10 +264,10 @@ export function freezeWikiState(state: WikiState): WikiState {
     fittingVersion: WIKI_FITTING_VERSION,
     revision: state.revision,
     nextLexemeId: state.nextLexemeId,
-    recentObservationCount: state.recentObservationCount,
     automaticLearningSaturated: state.automaticLearningSaturated,
     lexemes: Object.freeze(lexemes),
-    evidence: Object.freeze(evidence),
+    termEvidence: Object.freeze(termEvidence),
+    aliasEvidence: Object.freeze(aliasEvidence),
     authorities: Object.freeze(authorities),
     aliasTombstones: Object.freeze(aliasTombstones),
     lexemeTombstones: Object.freeze(lexemeTombstones),
@@ -357,19 +379,36 @@ function isValidAliasTarget(
   return lexeme !== undefined && value.form !== lexeme.canonical;
 }
 
-function isEvidenceCounts(value: unknown): value is WikiEvidenceCounts {
-  if (!isPlainObject(value) || !hasExactKeys(value, [
-    "historicalMaterial", "recentMaterial", "machineInference",
-  ])) return false;
-  const counts = [value.historicalMaterial, value.recentMaterial, value.machineInference];
-  return counts.every(isEvidenceCount) && counts.some((count) => count > 0);
+function isWikiTermEvidenceAggregate(value: unknown): value is WikiTermEvidenceAggregate {
+  return isPlainObject(value) &&
+    hasExactKeys(value, ["locale", "canonical", "phase", "support", "quietTurns"]) &&
+    typeof value.locale === "string" && isMatterLocale(value.locale) &&
+    isWikiCanonical(value.canonical) &&
+    (value.phase === "candidate" || value.phase === "collected") &&
+    isWikiLearningCount(value.support) &&
+    isWikiQuietTurns(value.quietTurns) &&
+    (value.phase !== "candidate" || value.support < 2) &&
+    (value.phase !== "collected" || value.support >= 1);
 }
 
-function isEvidenceCount(value: unknown): value is number {
-  return typeof value === "number" &&
-    Number.isSafeInteger(value) &&
-    value >= 0 &&
-    value <= MAX_WIKI_EVIDENCE_COUNT;
+function isWikiAliasEvidenceAggregate(value: unknown): value is WikiAliasEvidenceAggregate {
+  return isPlainObject(value) &&
+    hasExactKeys(value, [
+      "lexemeId", "channel", "boundary", "form", "producer", "phase", "support",
+      "quietTurns",
+    ]) &&
+    typeof value.producer === "string" &&
+    Object.hasOwn(WIKI_ALIAS_PRODUCER_WEIGHTS, value.producer) &&
+    (value.phase === "candidate" || value.phase === "active") &&
+    isWikiLearningCount(value.support) &&
+    value.support > 0 &&
+    isWikiQuietTurns(value.quietTurns) &&
+    isWikiAliasDescriptor(value);
+}
+
+function isWikiQuietTurns(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0 &&
+    (value as number) <= MAX_WIKI_LEARNING_QUIET_TURNS;
 }
 
 function isLexemeId(value: unknown): value is number {
@@ -391,13 +430,26 @@ function freezeLexeme(value: WikiLexeme): WikiLexeme {
   });
 }
 
-function freezeEvidence(value: WikiEvidenceAggregate): WikiEvidenceAggregate {
+function freezeTermEvidence(value: WikiTermEvidenceAggregate): WikiTermEvidenceAggregate {
+  return Object.freeze({
+    locale: value.locale,
+    canonical: value.canonical,
+    phase: value.phase,
+    support: value.support,
+    quietTurns: value.quietTurns,
+  });
+}
+
+function freezeAliasEvidence(value: WikiAliasEvidenceAggregate): WikiAliasEvidenceAggregate {
   return Object.freeze({
     lexemeId: value.lexemeId,
     channel: value.channel,
     boundary: value.boundary,
     form: value.form,
-    counts: Object.freeze({ ...value.counts }),
+    producer: value.producer,
+    phase: value.phase,
+    support: value.support,
+    quietTurns: value.quietTurns,
   });
 }
 
@@ -437,6 +489,17 @@ function compareAliasDescriptor(left: WikiAliasDescriptor, right: WikiAliasDescr
     compareText(left.channel, right.channel) ||
     compareText(left.form, right.form) ||
     compareText(left.boundary, right.boundary);
+}
+
+function aliasEvidenceKey(value: WikiAliasEvidenceAggregate): string {
+  return JSON.stringify([storedDescriptorKey(value), value.producer]);
+}
+
+function compareAliasEvidence(
+  left: WikiAliasEvidenceAggregate,
+  right: WikiAliasEvidenceAggregate,
+): number {
+  return compareAliasDescriptor(left, right) || compareText(left.producer, right.producer);
 }
 
 function compareText(left: string, right: string): number {

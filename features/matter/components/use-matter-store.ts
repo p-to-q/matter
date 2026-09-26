@@ -12,6 +12,8 @@ import {
   createWikiMaterialLexicalPort,
 } from "../application/wiki-material-lexical-adapter";
 import {
+  isMatterWikiAutomaticCollectionEnabled,
+  isMatterWikiPhoneticFittingEnabled,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
   matterWikiFittingMode,
@@ -27,12 +29,16 @@ const singletonInitialDocument = normalizeMatterInitialDocument(
 
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
-  materialLexical: createWikiMaterialLexicalPort(readMatterWikiBasis),
+  materialLexical: createWikiMaterialLexicalPort(readMatterWikiBasis, {
+    phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
+  }),
   humanAdmissionObservation: createWikiMaterialLexicalObservationPort(
     readMatterWikiBasis,
     observeMatterWikiEvidence,
     {
       mode: matterWikiFittingMode,
+      automaticCollectionEnabled: isMatterWikiAutomaticCollectionEnabled,
+      phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
     },
   ),
   initialTitle: singletonInitialDocument === "empty"

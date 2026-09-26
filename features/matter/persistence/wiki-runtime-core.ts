@@ -31,7 +31,7 @@ type MatterWikiRuntime = Readonly<{
   generationChannel: ReturnType<typeof createWikiGenerationChannel>;
 }>;
 
-const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime.v6");
+const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime.v7");
 const runtimeHost = globalThis as unknown as {
   [key: symbol]: MatterWikiRuntime | undefined;
 };

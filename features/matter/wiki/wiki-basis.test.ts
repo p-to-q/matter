@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { compileWikiBasis, EMPTY_WIKI_BASIS } from "./wiki-basis";
 import { WikiBasisOwner } from "./wiki-basis-owner";
 import { projectWikiConfigurationRules } from "./wiki-configuration";
-import { applyWikiEvent, createEmptyWikiState } from "./wiki-evidence";
+import {
+  applyWikiEvent,
+  createEmptyWikiState,
+  WIKI_WITH_PROVISIONAL,
+} from "./wiki-evidence";
 import {
   MAX_WIKI_APPLICABLE_CODE_POINTS,
   MAX_WIKI_APPLICABLE_RULES,
@@ -20,9 +24,15 @@ describe("Wiki basis", () => {
         rules: [],
         stats: { ruleCount: 0, trieNodeCount: 10, totalCodePoints: 0 },
       },
+      confirmedSnapshot: {
+        generation: 0,
+        rules: [],
+        stats: { ruleCount: 0, trieNodeCount: 10, totalCodePoints: 0 },
+      },
     });
     expect(Object.isFrozen(EMPTY_WIKI_BASIS)).toBe(true);
     expect(Object.isFrozen(EMPTY_WIKI_BASIS.snapshot)).toBe(true);
+    expect(Object.isFrozen(EMPTY_WIKI_BASIS.confirmedSnapshot)).toBe(true);
   });
 
   it("compiles only rules activated by evidence policy", () => {
@@ -60,6 +70,19 @@ describe("Wiki basis", () => {
     ]);
   });
 
+  it("shares one matcher when the release projection adds no provisional rule", () => {
+    const compiled = compileWikiBasis(
+      confirmedState("code x", "Codex"),
+      1,
+      undefined,
+      WIKI_WITH_PROVISIONAL,
+    );
+
+    expect(compiled.ok).toBe(true);
+    if (!compiled.ok) return;
+    expect(compiled.basis.confirmedSnapshot).toBe(compiled.basis.snapshot);
+  });
+
   it("publishes and reads one exact compiled reference", () => {
     const owner = new WikiBasisOwner();
     const published = owner.publish(confirmedState("code x", "Codex"), 1);
@@ -92,6 +115,9 @@ describe("Wiki basis", () => {
     expect(second.basis.snapshot.generation).toBe(2);
     expect(second.basis.snapshot.views).toBe(first.basis.snapshot.views);
     expect(second.basis.snapshot.rules).toBe(first.basis.snapshot.rules);
+    expect(second.basis.confirmedSnapshot.rules).toBe(
+      first.basis.confirmedSnapshot.rules,
+    );
     expect(second.basis.fitSnapshot).toBe(first.basis.fitSnapshot);
   });
 
@@ -194,14 +220,14 @@ function oversizedWikiState(): WikiState {
   });
   return {
     schemaVersion: WIKI_SCHEMA_VERSION,
-    scoringVersion: 2,
+    scoringVersion: 3,
     fittingVersion: 1,
     revision: 1,
     nextLexemeId: 2_001,
-    recentObservationCount: 0,
     automaticLearningSaturated: false,
     lexemes,
-    evidence: [],
+    termEvidence: [],
+    aliasEvidence: [],
     authorities: lexemes.map((lexeme, index) => {
       const suffix = index.toString().padStart(4, "0");
       return {
@@ -232,14 +258,14 @@ function maximumMatcherState(): WikiState {
   });
   return {
     schemaVersion: WIKI_SCHEMA_VERSION,
-    scoringVersion: 2,
+    scoringVersion: 3,
     fittingVersion: 1,
     revision: 1,
     nextLexemeId: MAX_WIKI_APPLICABLE_RULES + 1,
-    recentObservationCount: 0,
     automaticLearningSaturated: false,
     lexemes,
-    evidence: [],
+    termEvidence: [],
+    aliasEvidence: [],
     authorities: lexemes.map((lexeme, index) => ({
       lexemeId: lexeme.id,
       channel: "written" as const,

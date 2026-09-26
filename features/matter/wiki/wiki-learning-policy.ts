@@ -116,7 +116,8 @@ export type WikiTermLearningReplay = Readonly<{
 
 export type WikiSoftCandidateAdmission = "insert" | "update" | "drop";
 
-export type WikiLearningEvaluationCase = Readonly<{
+export type WikiLearningCorpusCase = Readonly<{
+  caseId: string;
   expectedActionId: string | null;
   appliedActionId: string | null;
   protectedOrGenerated?: boolean;
@@ -125,16 +126,20 @@ export type WikiLearningEvaluationCase = Readonly<{
   phaseTransitions?: number;
 }>;
 
-export type WikiLearningReward = readonly [
+export type WikiLearningCorpusScore = readonly [
   negativeFalseApplications: number,
   negativeProtectedApplications: number,
+  negativeMissedApplications: number,
   correctApplications: number,
   negativeActivationLatency: number,
   negativeDemotionLatency: number,
   negativePhaseTransitions: number,
 ];
 
-export type WikiLearningEvaluation = Readonly<{
+export type WikiLearningCorpusEvaluation = Readonly<{
+  corpusId: string;
+  caseIds: readonly string[];
+  caseSignatures: readonly string[];
   caseCount: number;
   correctApplications: number;
   falseApplications: number;
@@ -143,7 +148,60 @@ export type WikiLearningEvaluation = Readonly<{
   activationLatencyTurns: number;
   demotionLatencyTurns: number;
   phaseTransitions: number;
-  reward: WikiLearningReward;
+  score: WikiLearningCorpusScore;
+}>;
+
+export type WikiLearningInteractionAttribution =
+  | "exact-occurrence"
+  | "unattributed";
+
+export type WikiLearningInteractionEnvironment =
+  | "human-material"
+  | "generated-output"
+  | "protected-text";
+
+export type WikiLearningExpectedDisposition =
+  | "accepted"
+  | "rejected"
+  | "unknown";
+
+export type WikiLearningTerminalOutcome =
+  | "explicit-confirm"
+  | "explicit-reject"
+  | "explicit-replace"
+  | "survived-horizon"
+  | "censored";
+
+export type WikiLearningInteractionCase = Readonly<{
+  occurrenceId: string;
+  environment: WikiLearningInteractionEnvironment;
+  expectedDisposition: WikiLearningExpectedDisposition;
+  terminalOutcome: WikiLearningTerminalOutcome;
+  attribution: WikiLearningInteractionAttribution;
+  decisionLatencyTurns?: number;
+}>;
+
+export type WikiLearningRate = Readonly<{
+  numerator: number;
+  denominator: number;
+}>;
+
+export type WikiLearningInteractionEvaluation = Readonly<{
+  outcomeCount: number;
+  explicitAcceptances: number;
+  explicitRejections: number;
+  survivedHorizons: number;
+  censoredOutcomes: number;
+  eligibleCensoredOutcomes: number;
+  unsafeOutcomes: number;
+  unattributedOutcomes: number;
+  generatedExcludedOutcomes: number;
+  implicitExposureCount: number;
+  falseImplicitPositives: number;
+  incorrectExplicitDecisions: number;
+  decisionLatencyTurns: number;
+  explicitRejectRate: WikiLearningRate;
+  censorRate: WikiLearningRate;
 }>;
 
 export function isWikiLearningCount(value: unknown): value is number {
@@ -508,9 +566,11 @@ export function replayWikiAliasLearning(
   });
 }
 
-export function evaluateWikiLearning(
-  cases: readonly WikiLearningEvaluationCase[],
-): WikiLearningEvaluation {
+export function evaluateWikiLearningCorpus(
+  corpusId: string,
+  cases: readonly WikiLearningCorpusCase[],
+): WikiLearningCorpusEvaluation {
+  assertIdentifier(corpusId, "corpusId");
   assertReplayBounds(cases.length, "cases");
   let correctApplications = 0;
   let falseApplications = 0;
@@ -519,9 +579,20 @@ export function evaluateWikiLearning(
   let activationLatencyTurns = 0;
   let demotionLatencyTurns = 0;
   let phaseTransitions = 0;
+  const caseIds = new Set<string>();
+  const caseSignatures: string[] = [];
 
   for (const item of cases) {
     assertEvaluationCase(item);
+    if (caseIds.has(item.caseId)) {
+      throw new TypeError("learning corpus case ids must be unique");
+    }
+    caseIds.add(item.caseId);
+    caseSignatures.push(JSON.stringify({
+      caseId: item.caseId,
+      expectedActionId: item.expectedActionId,
+      protectedOrGenerated: item.protectedOrGenerated === true,
+    }));
     activationLatencyTurns += item.activationLatencyTurns ?? 0;
     demotionLatencyTurns += item.demotionLatencyTurns ?? 0;
     phaseTransitions += item.phaseTransitions ?? 0;
@@ -541,15 +612,19 @@ export function evaluateWikiLearning(
     }
   }
 
-  const reward: WikiLearningReward = Object.freeze([
+  const score: WikiLearningCorpusScore = Object.freeze([
     negateCount(falseApplications),
     negateCount(protectedOrGeneratedApplications),
+    negateCount(missedApplications),
     correctApplications,
     negateCount(activationLatencyTurns),
     negateCount(demotionLatencyTurns),
     negateCount(phaseTransitions),
   ]);
   return Object.freeze({
+    corpusId,
+    caseIds: Object.freeze([...caseIds].sort()),
+    caseSignatures: Object.freeze(caseSignatures.sort()),
     caseCount: cases.length,
     correctApplications,
     falseApplications,
@@ -558,20 +633,122 @@ export function evaluateWikiLearning(
     activationLatencyTurns,
     demotionLatencyTurns,
     phaseTransitions,
-    reward,
+    score,
   });
 }
 
-/** Lexicographic comparison keeps safety ahead of recall and latency. */
-export function compareWikiLearningReward(
-  left: WikiLearningReward,
-  right: WikiLearningReward,
+/** Compares only evaluations from the same frozen opportunity set. */
+export function compareWikiLearningCorpusEvaluations(
+  left: WikiLearningCorpusEvaluation,
+  right: WikiLearningCorpusEvaluation,
 ): -1 | 0 | 1 {
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] > right[index]) return 1;
-    if (left[index] < right[index]) return -1;
+  if (left.corpusId !== right.corpusId ||
+      left.caseSignatures.length !== right.caseSignatures.length ||
+      left.caseSignatures.some((signature, index) =>
+        signature !== right.caseSignatures[index])) {
+    throw new TypeError("learning corpus evaluations must share one frozen case set");
+  }
+  for (let index = 0; index < left.score.length; index += 1) {
+    if (left.score[index] > right.score[index]) return 1;
+    if (left.score[index] < right.score[index]) return -1;
   }
   return 0;
+}
+
+/** Evaluates a fixed, labelled interaction corpus one terminal occurrence at a time. */
+export function evaluateWikiLearningInteractions(
+  outcomes: readonly WikiLearningInteractionCase[],
+): WikiLearningInteractionEvaluation {
+  assertReplayBounds(outcomes.length, "outcomes");
+  let explicitAcceptances = 0;
+  let explicitRejections = 0;
+  let survivedHorizons = 0;
+  let censoredOutcomes = 0;
+  let eligibleCensoredOutcomes = 0;
+  let unsafeOutcomes = 0;
+  let unattributedOutcomes = 0;
+  let generatedExcludedOutcomes = 0;
+  let falseImplicitPositives = 0;
+  let incorrectExplicitDecisions = 0;
+  let decisionLatencyTurns = 0;
+  const occurrenceIds = new Set<string>();
+
+  for (const outcome of outcomes) {
+    assertInteractionOutcome(outcome);
+    if (occurrenceIds.has(outcome.occurrenceId)) {
+      throw new TypeError("interaction occurrence must settle exactly once");
+    }
+    occurrenceIds.add(outcome.occurrenceId);
+
+    const isCensored = outcome.terminalOutcome === "censored";
+    const isExplicitAcceptance = outcome.terminalOutcome === "explicit-confirm";
+    const isExplicitRejection = outcome.terminalOutcome === "explicit-reject" ||
+      outcome.terminalOutcome === "explicit-replace";
+    if (outcome.environment === "protected-text") {
+      if (isCensored) censoredOutcomes += 1;
+      else unsafeOutcomes += 1;
+      continue;
+    }
+    if (outcome.environment === "generated-output" &&
+        !isExplicitAcceptance && !isExplicitRejection) {
+      generatedExcludedOutcomes += 1;
+      if (isCensored) censoredOutcomes += 1;
+      continue;
+    }
+    if (outcome.attribution !== "exact-occurrence") {
+      unattributedOutcomes += 1;
+      if (isCensored) censoredOutcomes += 1;
+      else unsafeOutcomes += 1;
+      continue;
+    }
+
+    if (isExplicitAcceptance || isExplicitRejection) {
+      decisionLatencyTurns += outcome.decisionLatencyTurns ?? 0;
+      if (isExplicitAcceptance) {
+        explicitAcceptances += 1;
+        if (outcome.expectedDisposition === "rejected") {
+          incorrectExplicitDecisions += 1;
+        }
+      } else {
+        explicitRejections += 1;
+        if (outcome.expectedDisposition === "accepted") {
+          incorrectExplicitDecisions += 1;
+        }
+      }
+      continue;
+    }
+    if (isCensored) {
+      censoredOutcomes += 1;
+      eligibleCensoredOutcomes += 1;
+      continue;
+    }
+    if (outcome.terminalOutcome === "survived-horizon") {
+      survivedHorizons += 1;
+      if (outcome.expectedDisposition === "rejected") {
+        falseImplicitPositives += 1;
+      }
+    }
+  }
+
+  const explicitDecisionCount = explicitAcceptances + explicitRejections;
+  const implicitOpportunityCount = survivedHorizons + eligibleCensoredOutcomes;
+  return Object.freeze({
+    outcomeCount: outcomes.length,
+    explicitAcceptances,
+    explicitRejections,
+    survivedHorizons,
+    censoredOutcomes,
+    eligibleCensoredOutcomes,
+    unsafeOutcomes,
+    unattributedOutcomes,
+    generatedExcludedOutcomes,
+    implicitExposureCount: implicitOpportunityCount,
+    falseImplicitPositives,
+    incorrectExplicitDecisions,
+    decisionLatencyTurns,
+    explicitRejectRate: freezeRate(explicitRejections, explicitDecisionCount),
+    censorRate: freezeRate(eligibleCensoredOutcomes, implicitOpportunityCount),
+  });
 }
 
 function activeCandidateId(
@@ -651,7 +828,8 @@ function assertReplayObservations(
   for (const observation of observations) assertIdentifier(observation, label);
 }
 
-function assertEvaluationCase(item: WikiLearningEvaluationCase): void {
+function assertEvaluationCase(item: WikiLearningCorpusCase): void {
+  assertIdentifier(item.caseId, "caseId");
   if (item.expectedActionId !== null) {
     assertIdentifier(item.expectedActionId, "expectedActionId");
   }
@@ -661,6 +839,38 @@ function assertEvaluationCase(item: WikiLearningEvaluationCase): void {
   assertOptionalReplayMetric(item.activationLatencyTurns, "activationLatencyTurns");
   assertOptionalReplayMetric(item.demotionLatencyTurns, "demotionLatencyTurns");
   assertOptionalReplayMetric(item.phaseTransitions, "phaseTransitions");
+}
+
+function assertInteractionOutcome(outcome: WikiLearningInteractionCase): void {
+  assertIdentifier(outcome.occurrenceId, "occurrenceId");
+  if (outcome.attribution !== "exact-occurrence" &&
+    outcome.attribution !== "unattributed") {
+    throw new TypeError("interaction attribution is invalid");
+  }
+  if (outcome.environment !== "human-material" &&
+    outcome.environment !== "generated-output" &&
+    outcome.environment !== "protected-text") {
+    throw new TypeError("interaction environment is invalid");
+  }
+  if (outcome.expectedDisposition !== "accepted" &&
+    outcome.expectedDisposition !== "rejected" &&
+    outcome.expectedDisposition !== "unknown") {
+    throw new TypeError("interaction expected disposition is invalid");
+  }
+  if (outcome.terminalOutcome !== "explicit-confirm" &&
+    outcome.terminalOutcome !== "explicit-reject" &&
+    outcome.terminalOutcome !== "explicit-replace" &&
+    outcome.terminalOutcome !== "survived-horizon" &&
+    outcome.terminalOutcome !== "censored") {
+    throw new TypeError("interaction terminal outcome is invalid");
+  }
+  assertOptionalReplayMetric(outcome.decisionLatencyTurns, "decisionLatencyTurns");
+  const isExplicit = outcome.terminalOutcome === "explicit-confirm" ||
+    outcome.terminalOutcome === "explicit-reject" ||
+    outcome.terminalOutcome === "explicit-replace";
+  if (!isExplicit && outcome.decisionLatencyTurns !== undefined) {
+    throw new TypeError("only explicit decisions carry decision latency");
+  }
 }
 
 function assertIdentifier(value: string, label: string): void {
@@ -713,6 +923,10 @@ function saturatingIncrement(value: number): number {
 
 function negateCount(value: number): number {
   return value === 0 ? 0 : -value;
+}
+
+function freezeRate(numerator: number, denominator: number): WikiLearningRate {
+  return Object.freeze({ numerator, denominator });
 }
 
 function findDuplicatedCandidateIds(

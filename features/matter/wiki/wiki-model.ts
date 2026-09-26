@@ -4,9 +4,14 @@
  */
 
 import type { MatterLocale } from "../config/locales";
+import type {
+  WikiAliasEvidenceProducer,
+  WikiAutomaticAliasPhase,
+  WikiAutomaticTermPhase,
+} from "./wiki-learning-policy";
 
-export const WIKI_SCHEMA_VERSION = 4 as const;
-export const WIKI_SCORING_VERSION = 2 as const;
+export const WIKI_SCHEMA_VERSION = 5 as const;
+export const WIKI_SCORING_VERSION = 3 as const;
 export const WIKI_FITTING_VERSION = 1 as const;
 
 export const MAX_WIKI_FORM_CODE_POINTS = 64;
@@ -67,14 +72,21 @@ export type WikiAliasDescriptor = Readonly<{
   form: string;
 }>;
 
-export type WikiEvidenceCounts = Readonly<{
-  historicalMaterial: number;
-  recentMaterial: number;
-  machineInference: number;
+/** Canonical recurrence and relation evidence are separate durable facts.
+ * A frequent term can never lend authority to an alias relation. */
+export type WikiTermEvidenceAggregate = Readonly<{
+  locale: MatterLocale;
+  canonical: string;
+  phase: WikiAutomaticTermPhase;
+  support: number;
+  quietTurns: number;
 }>;
 
-export type WikiEvidenceAggregate = WikiAliasDescriptor & Readonly<{
-  counts: WikiEvidenceCounts;
+export type WikiAliasEvidenceAggregate = WikiAliasDescriptor & Readonly<{
+  producer: WikiAliasEvidenceProducer;
+  phase: WikiAutomaticAliasPhase;
+  support: number;
+  quietTurns: number;
 }>;
 
 export type WikiAuthorityRule = WikiAliasDescriptor & Readonly<{
@@ -97,10 +109,10 @@ export type WikiState = Readonly<{
   fittingVersion: typeof WIKI_FITTING_VERSION;
   revision: number;
   nextLexemeId: number;
-  recentObservationCount: number;
   automaticLearningSaturated: boolean;
   lexemes: readonly WikiLexeme[];
-  evidence: readonly WikiEvidenceAggregate[];
+  termEvidence: readonly WikiTermEvidenceAggregate[];
+  aliasEvidence: readonly WikiAliasEvidenceAggregate[];
   authorities: readonly WikiAuthorityRule[];
   aliasTombstones: readonly WikiTombstone[];
   lexemeTombstones: readonly WikiLexemeTombstone[];

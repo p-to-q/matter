@@ -69,7 +69,8 @@ function getConfigurationSnapshot(): MatterWikiConfigurationSnapshot {
     status,
     stateRevision: state?.revision ?? null,
     hasStoredData: state !== null && (
-      state.evidence.length > 0 ||
+      state.termEvidence.length > 0 ||
+      state.aliasEvidence.length > 0 ||
       state.lexemes.length > 0 ||
       state.authorities.length > 0 ||
       state.aliasTombstones.length > 0 ||

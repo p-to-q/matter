@@ -7,6 +7,7 @@ import {
   WIKI_WITH_PROVISIONAL,
 } from "../wiki/wiki-evidence";
 import { WikiBasisOwner } from "../wiki/wiki-basis-owner";
+import type { WikiState } from "../wiki/wiki-model";
 
 const DECISION = Object.freeze({
   type: "confirm-rule" as const,
@@ -209,13 +210,14 @@ describe("Wiki coordinator", () => {
       ok: true,
       changed: true,
       generation: 2,
-      stateRevision: 3,
+      stateRevision: 2,
     });
     expect(repository.save).toHaveBeenCalledTimes(2);
-    expect(coordinator.readState()?.evidence).toEqual([
+    expect(coordinator.readState()?.aliasEvidence).toEqual([
       expect.objectContaining({
         form: "Englebart",
-        counts: { historicalMaterial: 0, recentMaterial: 0, machineInference: 1 },
+        producer: "legacy-v1",
+        support: 1,
       }),
     ]);
   });
@@ -241,7 +243,7 @@ describe("Wiki coordinator", () => {
     expect(repository.save).toHaveBeenCalledTimes(1);
   });
 
-  it("activates a unique automatic alias only after repeated evidence", async () => {
+  it("keeps repeated legacy alias evidence non-authoritative", async () => {
     const repository = fakeRepository();
     repository.save
       .mockResolvedValueOnce({ ok: true, value: 1 })
@@ -267,9 +269,10 @@ describe("Wiki coordinator", () => {
       expect(coordinator.readBasis().snapshot.rules).toEqual([]);
     }
     await coordinator.observe([OBSERVATION]);
-    expect(coordinator.readBasis().snapshot.rules).toEqual([
-      expect.objectContaining({ form: "Englebart", canonical: "Engelbart" }),
-    ]);
+    expect(coordinator.readBasis().snapshot.rules).toEqual([]);
+    expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({
+      producer: "legacy-v1", support: 4, phase: "candidate",
+    });
   });
 
   it("does not consume a persisted provisional rule while automatic fitting is off", async () => {
@@ -307,9 +310,7 @@ describe("Wiki coordinator", () => {
     await Promise.all([stable.start(), experimental.start()]);
 
     expect(stable.readBasis().snapshot.rules).toEqual([]);
-    expect(experimental.readBasis().snapshot.rules).toEqual([
-      expect.objectContaining({ form: "Englebart", canonical: "Engelbart" }),
-    ]);
+    expect(experimental.readBasis().snapshot.rules).toEqual([]);
   });
 
   it("allows an explicit retry after a temporary persistence failure", async () => {
@@ -368,7 +369,7 @@ describe("Wiki coordinator", () => {
   });
 
   it("rebases simultaneous observations from different tabs without losing evidence", async () => {
-    const shared = sharedRepositoryPair();
+    const shared = sharedRepositoryPair(createdLexemeState());
     const first = createWikiCoordinator(shared.first);
     const second = createWikiCoordinator(shared.second);
     await Promise.all([first.start(), second.start()]);
@@ -385,14 +386,13 @@ describe("Wiki coordinator", () => {
     const latest = await shared.first.load();
     expect(latest.ok).toBe(true);
     if (!latest.ok || latest.value === null) return;
-    expect(latest.value.writeGeneration).toBe(2);
-    expect(latest.value.state.recentObservationCount).toBe(2);
-    expect(latest.value.state.evidence.map((entry) => entry.form))
+    expect(latest.value.writeGeneration).toBe(3);
+    expect(latest.value.state.aliasEvidence.map((entry) => entry.form))
       .toEqual(["Engelbartt", "Englebart"]);
   });
 
   it("rebases the same simultaneous observation into a count of two", async () => {
-    const shared = sharedRepositoryPair();
+    const shared = sharedRepositoryPair(createdLexemeState());
     const first = createWikiCoordinator(shared.first);
     const second = createWikiCoordinator(shared.second);
     await Promise.all([first.start(), second.start()]);
@@ -405,13 +405,13 @@ describe("Wiki coordinator", () => {
     const latest = await shared.first.load();
     expect(latest.ok).toBe(true);
     if (!latest.ok || latest.value === null) return;
-    expect(latest.value.state.evidence).toEqual([
+    expect(latest.value.state.aliasEvidence).toEqual([
       expect.objectContaining({
         form: "Englebart",
-        counts: { historicalMaterial: 0, recentMaterial: 0, machineInference: 2 },
+        producer: "legacy-v1",
+        support: 2,
       }),
     ]);
-    expect(latest.value.state.recentObservationCount).toBe(2);
   });
 
   it("rejects a stale configuration view before applying its decision", async () => {
@@ -505,13 +505,15 @@ function fakeRepository(): WikiRepository & {
   };
 }
 
-function sharedRepositoryPair(): Readonly<{
+function sharedRepositoryPair(initialState?: WikiState): Readonly<{
   first: WikiRepository;
   second: WikiRepository;
 }> {
   let durable: Awaited<ReturnType<WikiRepository["load"]>> = {
     ok: true,
-    value: null,
+    value: initialState === undefined
+      ? null
+      : { state: initialState, writeGeneration: 1 },
   };
   let firstRoundArrivals = 0;
   let releaseFirstRound!: () => void;
@@ -559,4 +561,15 @@ function sharedRepositoryPair(): Readonly<{
     close() {},
   });
   return Object.freeze({ first: create(), second: create() });
+}
+
+function createdLexemeState(): WikiState {
+  const result = applyWikiEvent(createEmptyWikiState(), {
+    type: "create-lexeme",
+    locale: "en-US",
+    canonical: "Engelbart",
+    scope: "both",
+  });
+  if (!result.ok) throw new Error(result.error.message);
+  return result.state;
 }

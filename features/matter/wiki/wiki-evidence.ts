@@ -9,28 +9,23 @@ import {
   lexemeKey,
   storedAliasKey,
   storedDecisionKey,
-  storedDescriptorKey,
   validateWikiState,
 } from "./wiki-invariants";
 import {
   MAX_WIKI_AUTHORITY_RULES,
   MAX_WIKI_APPLICABLE_CODE_POINTS,
   MAX_WIKI_APPLICABLE_RULES,
-  MAX_WIKI_EVIDENCE_COUNT,
   MAX_WIKI_EVIDENCE_RECORDS,
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_OBSERVATIONS_PER_BATCH,
   MAX_WIKI_TOMBSTONES,
   WIKI_FITTING_VERSION,
-  WIKI_RECENT_OBSERVATION_WINDOW,
   WIKI_SCHEMA_VERSION,
   WIKI_SCORING_VERSION,
   type WikiAliasDescriptor,
+  type WikiAliasEvidenceAggregate,
   type WikiEvent,
-  type WikiEvidenceAggregate,
-  type WikiEvidenceCounts,
-  type WikiEvidenceSource,
   type WikiLexeme,
   type WikiLexemeScope,
   type WikiLexemeTombstone,
@@ -41,19 +36,22 @@ import {
   type WikiTombstone,
   type WikiTransitionResult,
 } from "./wiki-model";
+import {
+  advanceWikiAliasQuietTurn,
+  advanceWikiTermQuietTurn,
+  observeWikiAliasCandidate,
+  observeWikiTermEvidence,
+  reconcileWikiTermEvidence,
+  resolveWikiAliasCompetition,
+  scoreWikiAliasCandidate,
+} from "./wiki-learning-policy";
 
 /**
- * Version 2 stores only bounded cohorts. Machine proposals must first identify
- * one lexeme and then clear both activation and ambiguity gates. These constants
- * are a versioned corpus-calibration boundary, not shipped intent inference.
+ * Confirmed authority retains its existing maximal score receipt. Provisional
+ * scoring is owned by wiki-learning-policy and remains release-gated.
  */
 export const WIKI_SCORE_POLICY = Object.freeze({
   version: WIKI_SCORING_VERSION,
-  historicalMaterialWeight: 1,
-  recentMaterialWeight: 4,
-  machineInferenceWeight: 3,
-  provisionalActivationScore: 12,
-  provisionalAmbiguityMargin: 4,
   confirmedRuleScore: 2_147_483_647,
 });
 
@@ -74,10 +72,10 @@ export function createEmptyWikiState(): WikiState {
     fittingVersion: WIKI_FITTING_VERSION,
     revision: 0,
     nextLexemeId: 1,
-    recentObservationCount: 0,
     automaticLearningSaturated: false,
     lexemes: [],
-    evidence: [],
+    termEvidence: [],
+    aliasEvidence: [],
     authorities: [],
     aliasTombstones: [],
     lexemeTombstones: [],
@@ -219,7 +217,8 @@ function isAutomaticPToQStarter(state: WikiState, lexeme: WikiLexeme): boolean {
     lexeme.scope !== "both" ||
     lexeme.provenance !== "aggregate-evidence" ||
     lexeme.confirmedAtRevision !== null ||
-    state.evidence.some((entry) => entry.lexemeId === lexeme.id) ||
+    state.termEvidence.some((entry) => lexemeKey(entry) === lexemeKey(lexeme)) ||
+    state.aliasEvidence.some((entry) => entry.lexemeId === lexeme.id) ||
     state.aliasTombstones.some((entry) => entry.lexemeId === lexeme.id)
   ) return false;
   return state.authorities.every((entry) => entry.lexemeId !== lexeme.id || (
@@ -234,9 +233,9 @@ function isPristineLegacyStarterState(state: WikiState): boolean {
   const first = state.lexemes[0]?.canonical;
   return state.revision === 0 &&
     state.nextLexemeId === tail.length + 2 &&
-    state.recentObservationCount === 0 &&
     !state.automaticLearningSaturated &&
-    state.evidence.length === 0 &&
+    state.termEvidence.length === 0 &&
+    state.aliasEvidence.length === 0 &&
     state.authorities.length === 0 &&
     state.aliasTombstones.length === 0 &&
     state.lexemeTombstones.length === 0 &&
@@ -275,17 +274,22 @@ export function applyWikiObservationBatch(
   }
   const unique = new Map<string, WikiObserveEvidenceEvent>();
   for (const event of events) {
-    const key = JSON.stringify([
-      event.locale,
-      event.channel,
-      event.boundary,
-      event.form,
-      event.canonical,
-      event.source,
-    ]);
+    // A human-admission tick can mention one canonical through several visible
+    // occurrences. Recurrence is evidence across turns, not raw frequency
+    // within one material change. Alias relations remain descriptor-specific.
+    const key = event.source === "recent-material"
+      ? JSON.stringify([event.source, event.locale, event.canonical])
+      : JSON.stringify([
+          event.source,
+          event.locale,
+          event.channel,
+          event.boundary,
+          event.form,
+          event.canonical,
+        ]);
     unique.set(key, event);
   }
-  let working = advanceHumanObservation(state, unique.size > 0);
+  let working = advanceUnobservedEvidence(state, [...unique.values()]);
   for (const event of [...unique.values()].sort(compareObservation)) {
     const result = applyWikiEvent(working, event);
     if (!result.ok) return result;
@@ -300,29 +304,23 @@ export function clearWikiState(state: WikiState): WikiTransitionResult {
   if (!validation.ok) return failure("INVALID_STATE", validation.message);
   if (
     state.lexemes.length === 0 &&
-    state.evidence.length === 0 &&
+    state.termEvidence.length === 0 &&
+    state.aliasEvidence.length === 0 &&
     state.authorities.length === 0 &&
     state.aliasTombstones.length === 0 &&
     state.lexemeTombstones.length === 0 &&
-    state.recentObservationCount === 0 &&
     !state.automaticLearningSaturated
   ) return success(state, false);
   return commit(state, {
     nextLexemeId: state.nextLexemeId,
-    recentObservationCount: 0,
     automaticLearningSaturated: false,
     lexemes: Object.freeze([]),
-    evidence: Object.freeze([]),
+    termEvidence: Object.freeze([]),
+    aliasEvidence: Object.freeze([]),
     authorities: Object.freeze([]),
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
   });
-}
-
-export function scoreWikiEvidence(counts: WikiEvidenceCounts): number {
-  return counts.historicalMaterial * WIKI_SCORE_POLICY.historicalMaterialWeight +
-    counts.recentMaterial * WIKI_SCORE_POLICY.recentMaterialWeight +
-    counts.machineInference * WIKI_SCORE_POLICY.machineInferenceWeight;
 }
 
 export type WikiProjectionPolicy = Readonly<{ includeProvisional: boolean }>;
@@ -366,9 +364,9 @@ export function projectApplicableWikiRules(
     return lexeme === undefined ? "" : storedAliasKey(authority, lexeme.locale);
   }));
   const tombstones = new Set(state.aliasTombstones.map(storedDecisionKey));
-  const candidatesByAlias = new Map<string, ScoredCandidate[]>();
+  const candidatesByAlias = new Map<string, WikiAliasEvidenceAggregate[]>();
 
-  for (const aggregate of state.evidence) {
+  for (const aggregate of state.aliasEvidence) {
     const lexeme = lexemes.get(aggregate.lexemeId);
     if (lexeme === undefined || !scopeIncludes(lexeme.scope, aggregate.channel)) continue;
     if (canonicalKeys.has(lexemeKey({
@@ -377,26 +375,35 @@ export function projectApplicableWikiRules(
     }))) continue;
     const alias = storedAliasKey(aggregate, lexeme.locale);
     if (confirmedAliases.has(alias) || tombstones.has(storedDecisionKey(aggregate))) continue;
-    if (aggregate.counts.machineInference === 0) continue;
     const candidates = candidatesByAlias.get(alias) ?? [];
-    candidates.push({ aggregate, lexeme, score: scoreWikiEvidence(aggregate.counts) });
+    candidates.push(aggregate);
     candidatesByAlias.set(alias, candidates);
   }
 
   const provisional: WikiMatchRule[] = [];
-  for (const candidates of candidatesByAlias.values()) {
-    candidates.sort(compareScoredCandidate);
-    const winner = candidates[0];
-    const runnerUp = candidates[1];
-    if (winner.score < WIKI_SCORE_POLICY.provisionalActivationScore) continue;
-    if (runnerUp !== undefined &&
-      winner.score - runnerUp.score < WIKI_SCORE_POLICY.provisionalAmbiguityMargin) continue;
+  const qualifiedProducers = new Set<WikiAliasEvidenceAggregate["producer"]>();
+  for (const evidence of candidatesByAlias.values()) {
+    const candidates = evidence.map((aggregate) => ({
+      candidateId: storedAliasEvidenceKey(aggregate),
+      producer: aggregate.producer,
+      phase: aggregate.phase,
+      support: aggregate.support,
+      quietTurns: aggregate.quietTurns,
+    }));
+    const resolved = resolveWikiAliasCompetition(candidates, qualifiedProducers);
+    const winner = resolved.find((candidate) => candidate.phase === "active");
+    if (winner === undefined) continue;
+    const aggregate = evidence.find((entry) =>
+      storedAliasEvidenceKey(entry) === winner.candidateId);
+    if (aggregate === undefined) continue;
+    const lexeme = lexemes.get(aggregate.lexemeId);
+    if (lexeme === undefined) continue;
     provisional.push(resolveRule(
-      winner.aggregate,
-      winner.lexeme,
+      aggregate,
+      lexeme,
       "provisional",
       "aggregate-evidence",
-      winner.score,
+      scoreWikiAliasCandidate(winner),
     ));
   }
 
@@ -426,44 +433,170 @@ function observeEvidence(
   if (hasLexemeTombstone(state, event)) return success(state, false);
   const working = state;
   const revision = state.revision + 1;
-  const ensured = ensureLexeme(working, event, "aggregate-evidence", revision);
-  if (!ensured.ok) return ensured.result;
-  if (!scopeIncludes(ensured.lexeme.scope, event.channel)) return success(state, false);
-  const descriptor = aliasDescriptor(event, ensured.lexeme.id);
-  const key = storedDescriptorKey(descriptor);
-  const index = working.evidence.findIndex((entry) => storedDescriptorKey(entry) === key);
-  if (index === -1 && working.evidence.length >= MAX_WIKI_EVIDENCE_RECORDS) {
-    return failure("BOUND_EXCEEDED", "The Wiki evidence bound is exceeded.");
+  if (event.source === "recent-material") {
+    const existingLexeme = findLexeme(working, event);
+    if (existingLexeme?.provenance === "human-confirmed") {
+      return success(state, false);
+    }
+    const index = working.termEvidence.findIndex((entry) =>
+      lexemeKey(entry) === lexemeKey(event));
+    if (index === -1 && working.termEvidence.length >= MAX_WIKI_EVIDENCE_RECORDS) {
+      return failure("BOUND_EXCEEDED", "The Wiki term evidence bound is exceeded.");
+    }
+    const previous = index === -1
+      ? Object.freeze({
+          phase: "candidate" as const,
+          support: 0,
+          quietTurns: 0,
+        })
+      : working.termEvidence[index];
+    const observed = reconcileWikiTermEvidence(observeWikiTermEvidence(previous));
+    const termEvidence = [...working.termEvidence];
+    const aggregate = Object.freeze({
+      locale: event.locale,
+      canonical: event.canonical,
+      ...observed,
+    });
+    if (index === -1) termEvidence.push(aggregate);
+    else termEvidence[index] = aggregate;
+    if (aggregate.phase === "candidate") {
+      return commitAtRevision(working, revision, { termEvidence });
+    }
+    const ensured = ensureLexeme(working, event, "aggregate-evidence", revision);
+    if (!ensured.ok) return ensured.result;
+    return commitAtRevision(working, revision, {
+      lexemes: ensured.lexemes,
+      nextLexemeId: ensured.nextLexemeId,
+      termEvidence,
+    });
   }
-  const previous = index === -1 ? emptyEvidence(descriptor) : working.evidence[index];
-  const counts = incrementEvidence(previous.counts, event.source);
-  if (counts === previous.counts && event.source === "machine-inference" && !ensured.changed) {
+
+  const lexeme = findLexeme(working, event);
+  if (lexeme === undefined || !scopeIncludes(lexeme.scope, event.channel)) {
     return success(state, false);
   }
-  const evidence = [...working.evidence];
-  const aggregate = Object.freeze({ ...descriptor, counts });
-  if (index === -1) evidence.push(aggregate);
-  else evidence[index] = aggregate;
+  const descriptor = aliasDescriptor(event, lexeme.id);
+  const producer = "legacy-v1" as const;
+  const key = storedAliasEvidenceKey({ ...descriptor, producer });
+  const index = working.aliasEvidence.findIndex((entry) =>
+    storedAliasEvidenceKey(entry) === key);
+  if (index === -1 && working.aliasEvidence.length >= MAX_WIKI_EVIDENCE_RECORDS) {
+    return failure("BOUND_EXCEEDED", "The Wiki alias evidence bound is exceeded.");
+  }
+  const previous = index === -1
+    ? Object.freeze({
+        ...descriptor,
+        producer,
+        phase: "candidate" as const,
+        support: 0,
+        quietTurns: 0,
+      })
+    : working.aliasEvidence[index];
+  const observed = observeWikiAliasCandidate({
+    candidateId: key,
+    producer: previous.producer,
+    phase: previous.phase,
+    support: previous.support,
+    quietTurns: previous.quietTurns,
+  });
+  if (observed.support === previous.support) {
+    return success(state, false);
+  }
+  const aliasEvidence = [...working.aliasEvidence];
+  const aggregate = Object.freeze({
+    ...descriptor,
+    producer: observed.producer,
+    phase: observed.phase,
+    support: observed.support,
+    quietTurns: observed.quietTurns,
+  });
+  if (index === -1) aliasEvidence.push(aggregate);
+  else aliasEvidence[index] = aggregate;
   return commitAtRevision(working, revision, {
-    lexemes: ensured.lexemes,
-    nextLexemeId: ensured.nextLexemeId,
-    evidence,
-    recentObservationCount: working.recentObservationCount,
+    aliasEvidence,
   });
 }
 
-function advanceHumanObservation(
+function advanceUnobservedEvidence(
   state: WikiState,
-  hasIncomingEvidence: boolean,
+  events: readonly WikiObserveEvidenceEvent[],
 ): WikiState {
-  if (state.evidence.length === 0 && !hasIncomingEvidence) return state;
-  const working = state.recentObservationCount === WIKI_RECENT_OBSERVATION_WINDOW
-    ? ageRecentEvidence(state)
-    : state;
+  if (state.termEvidence.length === 0 && state.aliasEvidence.length === 0) return state;
+  const observedTerms = new Set(events
+    .filter((event) => event.source === "recent-material")
+    .map((event) => lexemeKey(event)));
+  const observedAliases = new Set(events
+    .filter((event) => event.source === "machine-inference")
+    .map((event) => JSON.stringify([
+      event.locale, event.channel, event.boundary, event.form, event.canonical, "legacy-v1",
+    ])));
+  const agedTermEvidence = state.termEvidence.map((entry) => {
+    if (observedTerms.has(lexemeKey(entry))) return entry;
+    const aged = advanceWikiTermQuietTurn(entry);
+    return Object.freeze({
+      locale: entry.locale,
+      canonical: entry.canonical,
+      ...reconcileWikiTermEvidence(aged),
+    });
+  });
+  const lexemesById = new Map(state.lexemes.map((lexeme) => [lexeme.id, lexeme]));
+  const aliasEvidence = state.aliasEvidence.map((entry) => {
+    const lexeme = lexemesById.get(entry.lexemeId);
+    const observedKey = lexeme === undefined ? "" : JSON.stringify([
+      lexeme.locale, entry.channel, entry.boundary, entry.form, lexeme.canonical, entry.producer,
+    ]);
+    if (observedAliases.has(observedKey)) return entry;
+    const aged = advanceWikiAliasQuietTurn({
+      candidateId: storedAliasEvidenceKey(entry),
+      producer: entry.producer,
+      phase: entry.phase,
+      support: entry.support,
+      quietTurns: entry.quietTurns,
+    });
+    return Object.freeze({
+      ...entry,
+      phase: aged.phase,
+      support: aged.support,
+      quietTurns: aged.quietTurns,
+    });
+  }).filter((entry) => entry.support > 0);
+  const dependentLexemeIds = new Set([
+    ...aliasEvidence.map((entry) => entry.lexemeId),
+    ...state.authorities.map((entry) => entry.lexemeId),
+    ...state.aliasTombstones.map((entry) => entry.lexemeId),
+  ]);
+  const dependentTermKeys = new Set(state.lexemes
+    .filter((lexeme) => dependentLexemeIds.has(lexeme.id))
+    .map(lexemeKey));
+  // A zero-support term row is the cleanup owner while another relation still
+  // depends on its aggregate lexeme. Drop both only after the last dependency
+  // disappears, otherwise the lexeme can become an uncollectable UI orphan.
+  const termEvidence = agedTermEvidence.filter((entry) =>
+    entry.support > 0 || dependentTermKeys.has(lexemeKey(entry))
+  );
+  const retainedTermKeys = new Set(termEvidence.map(lexemeKey));
+  const expiredTermKeys = new Set(agedTermEvidence
+    .filter((entry) => !retainedTermKeys.has(lexemeKey(entry)))
+    .map(lexemeKey));
+  const lexemes = state.lexemes.filter((lexeme) => {
+    if (lexeme.provenance !== "aggregate-evidence" ||
+        !expiredTermKeys.has(lexemeKey(lexeme))) return true;
+    return aliasEvidence.some((entry) => entry.lexemeId === lexeme.id) ||
+      state.authorities.some((entry) => entry.lexemeId === lexeme.id) ||
+      state.aliasTombstones.some((entry) => entry.lexemeId === lexeme.id);
+  });
+  const changed = termEvidence.length !== state.termEvidence.length ||
+    aliasEvidence.length !== state.aliasEvidence.length ||
+    lexemes.length !== state.lexemes.length ||
+    termEvidence.some((entry, index) => entry !== state.termEvidence[index]) ||
+    aliasEvidence.some((entry, index) => entry !== state.aliasEvidence[index]);
+  if (!changed) return state;
   const next = freezeWikiState({
-    ...working,
+    ...state,
     revision: state.revision + 1,
-    recentObservationCount: working.recentObservationCount + 1,
+    lexemes,
+    termEvidence,
+    aliasEvidence,
   });
   return validateWikiState(next).ok ? next : state;
 }
@@ -512,6 +645,7 @@ function confirmRule(
   return commitAtRevision(state, revision, {
     lexemes: ensured.lexemes,
     nextLexemeId: ensured.nextLexemeId,
+    termEvidence: ensured.termEvidence,
     lexemeTombstones: removeLexemeTombstone(state.lexemeTombstones, event),
     authorities,
     aliasTombstones,
@@ -589,6 +723,7 @@ function replaceRule(
   return commitAtRevision(state, revision, {
     lexemes: ensured.lexemes,
     nextLexemeId: ensured.nextLexemeId,
+    termEvidence: ensured.termEvidence,
     lexemeTombstones: removeLexemeTombstone(state.lexemeTombstones, event.after),
     authorities,
     aliasTombstones,
@@ -617,6 +752,7 @@ function createLexeme(
   return commitAtRevision(state, revision, {
     lexemes: ensured.lexemes,
     nextLexemeId: ensured.nextLexemeId,
+    termEvidence: ensured.termEvidence,
     lexemeTombstones,
     authorities: protectedIdentity.authorities,
     aliasTombstones: protectedIdentity.aliasTombstones,
@@ -647,7 +783,23 @@ function renameLexeme(
     // Scope is an applicability preference, not ownership of the stored
     // relations. Changing it must remain reversible and cannot tombstone or
     // discard evidence collected for the temporarily disabled channel.
-    return commitAtRevision(state, revision, { lexemes });
+    const protectedIdentity = protectCanonicalIdentity(
+      state,
+      lexemes,
+      event.locale,
+      event.canonical,
+      revision,
+    );
+    return commitAtRevision(state, revision, {
+      lexemes,
+      // Human ownership replaces automatic recurrence evidence; retaining it
+      // would give one identity two independent sources of canonical authority.
+      termEvidence: state.termEvidence.filter((entry) =>
+        lexemeKey(entry) !== lexemeKey(lexeme)),
+      authorities: protectedIdentity.authorities,
+      aliasTombstones: protectedIdentity.aliasTombstones,
+      automaticLearningSaturated: protectedIdentity.automaticLearningSaturated,
+    });
   }
   if (state.lexemes.some((entry) =>
     entry.id !== lexeme.id && entry.locale === event.locale &&
@@ -666,7 +818,7 @@ function renameLexeme(
       })
     : entry);
   // A canonical never needs to alias to itself after a rename.
-  const evidence = state.evidence.filter((entry) =>
+  const aliasEvidence = state.aliasEvidence.filter((entry) =>
     entry.lexemeId !== lexeme.id || entry.form !== event.canonical);
   const authorities = state.authorities.filter((entry) =>
     entry.lexemeId !== lexeme.id || entry.form !== event.canonical);
@@ -688,9 +840,15 @@ function renameLexeme(
     removedIdentity.tombstones,
     { locale: event.locale, canonical: event.canonical },
   );
+  const renamedKeys = new Set([
+    lexemeKey(lexeme),
+    lexemeKey({ locale: event.locale, canonical: event.canonical }),
+  ]);
   return commitAtRevision(state, revision, {
     lexemes,
-    evidence,
+    termEvidence: state.termEvidence.filter((entry) =>
+      !renamedKeys.has(lexemeKey(entry))),
+    aliasEvidence,
     authorities: protectedIdentity.authorities,
     aliasTombstones: protectedIdentity.aliasTombstones,
     lexemeTombstones,
@@ -702,7 +860,7 @@ function renameLexeme(
 /** A person's canonical spelling outranks every alias with the same visible form. */
 function protectCanonicalIdentity(
   state: Pick<WikiState,
-    "evidence" | "authorities" | "aliasTombstones" | "automaticLearningSaturated">,
+    "aliasEvidence" | "authorities" | "aliasTombstones" | "automaticLearningSaturated">,
   lexemes: readonly WikiLexeme[],
   locale: WikiRuleDescriptor["locale"],
   canonical: string,
@@ -713,7 +871,7 @@ function protectCanonicalIdentity(
   automaticLearningSaturated: boolean;
 }> {
   const lexemesById = new Map(lexemes.map((entry) => [entry.id, entry]));
-  const conflicts = [...state.authorities, ...state.evidence].filter((entry) => {
+  const conflicts = [...state.authorities, ...state.aliasEvidence].filter((entry) => {
     const target = lexemesById.get(entry.lexemeId);
     return target !== undefined && target.locale === locale && entry.form === canonical &&
       target.canonical !== canonical;
@@ -758,7 +916,9 @@ function removeLexeme(
   );
   return commitAtRevision(state, revision, {
     lexemes: state.lexemes.filter((entry) => entry.id !== lexeme.id),
-    evidence: state.evidence.filter((entry) => entry.lexemeId !== lexeme.id),
+    termEvidence: state.termEvidence.filter((entry) =>
+      lexemeKey(entry) !== lexemeKey(lexeme)),
+    aliasEvidence: state.aliasEvidence.filter((entry) => entry.lexemeId !== lexeme.id),
     authorities: state.authorities.filter((entry) => entry.lexemeId !== lexeme.id),
     aliasTombstones: state.aliasTombstones.filter((entry) => entry.lexemeId !== lexeme.id),
     lexemeTombstones: removedIdentity.tombstones,
@@ -776,6 +936,9 @@ function ensureLexeme(
   revision: number,
 ): EnsureLexemeResult {
   const requestedScope = identity.scope ?? identity.channel ?? "both";
+  const termEvidence = provenance === "human-confirmed"
+    ? state.termEvidence.filter((entry) => lexemeKey(entry) !== lexemeKey(identity))
+    : state.termEvidence;
   const existing = findLexeme(state, identity);
   if (existing !== undefined) {
     const scope = existing.provenance === "human-confirmed" && provenance !== "human-confirmed"
@@ -789,7 +952,7 @@ function ensureLexeme(
       scope === existing.scope
     ) {
       return { ok: true, lexeme: existing, lexemes: state.lexemes,
-        nextLexemeId: state.nextLexemeId, changed: false };
+        termEvidence, nextLexemeId: state.nextLexemeId, changed: false };
     }
     const promoted = Object.freeze({
       ...existing,
@@ -803,13 +966,14 @@ function ensureLexeme(
     });
     if (promoted.scope === existing.scope && promoted.provenance === existing.provenance) {
       return { ok: true, lexeme: existing, lexemes: state.lexemes,
-        nextLexemeId: state.nextLexemeId, changed: false };
+        termEvidence, nextLexemeId: state.nextLexemeId, changed: false };
     }
     return {
       ok: true,
       lexeme: promoted,
       lexemes: Object.freeze(state.lexemes.map((entry) =>
         entry.id === existing.id ? promoted : entry)),
+      termEvidence,
       nextLexemeId: state.nextLexemeId,
       changed: true,
     };
@@ -829,6 +993,7 @@ function ensureLexeme(
     ok: true,
     lexeme,
     lexemes: Object.freeze([...state.lexemes, lexeme]),
+    termEvidence,
     nextLexemeId: state.nextLexemeId + 1,
     changed: true,
   };
@@ -872,6 +1037,18 @@ function aliasDescriptor(
   });
 }
 
+function storedAliasEvidenceKey(
+  evidence: WikiAliasDescriptor & Pick<WikiAliasEvidenceAggregate, "producer">,
+): string {
+  return JSON.stringify([
+    evidence.lexemeId,
+    evidence.channel,
+    evidence.boundary,
+    evidence.form,
+    evidence.producer,
+  ]);
+}
+
 function resolveRule(
   alias: WikiAliasDescriptor,
   lexeme: WikiLexeme,
@@ -889,39 +1066,6 @@ function resolveRule(
     provenance,
     score,
   });
-}
-
-function incrementEvidence(
-  counts: WikiEvidenceCounts,
-  source: WikiEvidenceSource,
-): WikiEvidenceCounts {
-  const key = source === "recent-material" ? "recentMaterial" : "machineInference";
-  const next = Math.min(MAX_WIKI_EVIDENCE_COUNT, counts[key] + 1);
-  return next === counts[key] ? counts : Object.freeze({ ...counts, [key]: next });
-}
-
-function emptyEvidence(descriptor: WikiAliasDescriptor): WikiEvidenceAggregate {
-  return Object.freeze({
-    ...descriptor,
-    counts: Object.freeze({ historicalMaterial: 0, recentMaterial: 0, machineInference: 0 }),
-  });
-}
-
-function ageRecentEvidence(state: WikiState): WikiState {
-  const evidence = state.evidence.map((entry) => Object.freeze({
-    ...entry,
-    counts: Object.freeze({
-      historicalMaterial: Math.min(
-        MAX_WIKI_EVIDENCE_COUNT,
-        Math.floor(entry.counts.historicalMaterial / 2) + entry.counts.recentMaterial,
-      ),
-      recentMaterial: 0,
-      machineInference: Math.floor(entry.counts.machineInference / 2),
-    }),
-  })).filter((entry) =>
-    entry.counts.historicalMaterial + entry.counts.recentMaterial +
-    entry.counts.machineInference > 0);
-  return freezeWikiState({ ...state, recentObservationCount: 0, evidence });
 }
 
 function upsertAliasTombstone(
@@ -1030,11 +1174,6 @@ function isWikiEvent(event: WikiEvent): boolean {
     (event.source === "recent-material" || event.source === "machine-inference");
 }
 
-function compareScoredCandidate(left: ScoredCandidate, right: ScoredCandidate): number {
-  return right.score - left.score || left.lexeme.id - right.lexeme.id ||
-    compareText(storedDescriptorKey(left.aggregate), storedDescriptorKey(right.aggregate));
-}
-
 function compareObservation(
   left: WikiObserveEvidenceEvent,
   right: WikiObserveEvidenceEvent,
@@ -1057,17 +1196,12 @@ function failure(
   return Object.freeze({ ok: false, error: Object.freeze({ code, message }) });
 }
 
-type ScoredCandidate = Readonly<{
-  aggregate: WikiEvidenceAggregate;
-  lexeme: WikiLexeme;
-  score: number;
-}>;
-
 type EnsureLexemeResult =
   | Readonly<{
       ok: true;
       lexeme: WikiLexeme;
       lexemes: readonly WikiLexeme[];
+      termEvidence: readonly WikiState["termEvidence"][number][];
       nextLexemeId: number;
       changed: boolean;
     }>

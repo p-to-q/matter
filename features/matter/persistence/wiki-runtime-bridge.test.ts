@@ -2,10 +2,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { compileWikiBasis } from "../wiki/wiki-basis";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
 
-const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v1");
+const LEGACY_BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v1");
+const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v2");
 const bridgeHost = globalThis as unknown as { [key: symbol]: unknown };
 
 afterEach(() => {
+  delete bridgeHost[LEGACY_BRIDGE_KEY];
   delete bridgeHost[BRIDGE_KEY];
   vi.resetModules();
 });
@@ -19,6 +21,22 @@ describe("Wiki runtime bridge", () => {
     if (!compiled.ok) throw new Error(compiled.error.message);
 
     expect(bridge.readMatterWikiBasis()).toEqual(compiled.basis);
+  });
+
+  it("does not reuse a legacy Fast Refresh cell after the basis ABI changes", async () => {
+    bridgeHost[LEGACY_BRIDGE_KEY] = Object.freeze({
+      current: Object.freeze({ stateRevision: 99 }),
+    });
+    delete bridgeHost[BRIDGE_KEY];
+    vi.resetModules();
+
+    const bridge = await import("./wiki-runtime-bridge");
+
+    expect(bridge.readMatterWikiBasis()).toMatchObject({
+      stateRevision: 0,
+      confirmedSnapshot: { generation: 0, rules: [] },
+    });
+    expect(bridgeHost[BRIDGE_KEY]).toBeDefined();
   });
 
   it("keeps the Store reader on one published basis across module re-evaluation", async () => {

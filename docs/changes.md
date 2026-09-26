@@ -17,6 +17,44 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-26 — Wiki evidence is split before automation earns authority
+
+Changed: local Wiki record V5 stores canonical-term recurrence and alias
+relation evidence in separate bounded ledgers with candidate-local quiet clocks.
+Strict V2/V3/V4 migration keeps recurrence only for aggregate-owned lexemes,
+adds zero-support cleanup owners for machine-only legacy relations, discards
+recurrence attached to human-owned lexemes, and assigns legacy machine counts
+to a zero-weight producer. Provisional projection remains disabled. A separate
+offline qualification boundary now binds producer,
+resource, and corpus identities to complete safety, ambiguity, locale,
+capacity, and performance receipts. Its manifest owns expected labels, its
+receipt carries outputs and measurements only, and qualification recomputes
+corpus and bounded artifact digests while retaining the complete identity.
+Offline interaction calibration evaluates one terminal outcome per exact
+occurrence and reports survived and censored exposure separately, alongside
+rejection and unsafe-attribution metrics, without live reward weights. The
+Wiki list keeps its existing shape and adds two default-on, independently
+persistent, underlined local permission actions for automatic collection and
+phonetic fitting. They can restrict a qualified runtime capability but cannot
+qualify or activate one. Each published Wiki basis carries both the selected
+release projection and a confirmed-only projection; Material ingress captures
+exactly one at turn start, so pausing fitting is deterministic without adding
+authority metadata or preference checks to matcher order.
+
+Why: term frequency can justify listing a word but cannot prove that one heard
+form should rewrite to it. Splitting those facts removes the old accidental
+authority path, while strict qualification and single-settlement interaction
+evidence keep background automation measurable without turning the person into
+a reviewer. Material Undo and Redo remain wholly separate from Wiki. Any future
+Wiki reversal must be implemented independently; only its strict contract
+properties may resemble material history.
+
+Forecloses: lending canonical frequency to an alias, enabling a producer merely
+because code exists, treating a synthetic unit fixture as a real language
+qualification, stacking several implicit rewards on one application, mining
+material history as lexical intent, or exposing scores, candidate queues, and
+confirmation work in settings.
+
 ## 2026-09-25 — user leases supply public material surfaces without managed promotion
 
 Changed: Elastic and Text Swap now have independent public product-surface

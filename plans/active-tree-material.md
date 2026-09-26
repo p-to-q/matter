@@ -169,7 +169,8 @@ the person invokes correction on the erroneous word.
 Maintainer clarification, 2026-09-25: `WIKI_RECENT_OBSERVATION_WINDOW` is only
 the bounded evidence-cohort aging cadence; it is not a user-intent window. The
 current release has no production `recent-material` producer and must not infer
-intent from ordinary delete, undo, repetition, or later edits. Settings
+intent from generic deletion, Material Undo or Redo, repetition, or later
+whole-text edits. Settings
 create/rename/scope/remove decisions are direct human authority and bypass
 scoring. Confirm/reject/replace remain the exact domain outlet for a later
 error-local correction, but the composition-owned one-shot token and its UI must
@@ -234,38 +235,64 @@ Counter-evidence is narrow and attributable. A competing canonical for the same
 locale/channel/form reduces the winner margin after every successful admission
 and may make the resolver abstain immediately, without waiting for aging. One
 addressed human reject, replacement, or removal bypasses scoring and becomes
-confirmed authority or a tombstone. Silence, ordinary delete, and Undo are not
-negative votes because they cannot identify which hidden relation a person
-rejected.
+confirmed authority or a tombstone. Passive use may become weak positive
+evidence, but only after one exact applied occurrence survives one
+foreground-visible, corpus-calibrated horizon. It settles once; a later
+reapplication is a new occurrence rather than another reward tier for the first.
+Material Undo and Redo remain a completely separate tree-history system. Wiki
+neither listens to nor interprets them. If the visible address disappears, the
+transient occurrence expires without a Wiki event. A future Wiki reversal, if
+needed, owns an independent implementation, explicit decision, and persistence
+lifecycle; only strict contract principles may be shared with material history,
+never its command types, state, stack, or framework.
 
 Environment, reward, and evaluation stay outside production authority. A pure
 trace-replay harness treats `(Wiki state, logical tick)` as the environment and
 the deterministic collect, activate, demote, evict, or abstain transition as
 the action. Its evaluation is lexicographic rather than a runtime scalar:
-false rewrites and protected/generated rewrites must remain zero before recall,
-activation latency, demotion latency, or churn may improve. Corpus receipts also
-hold state bytes, compile and match latency, and cross-tab CAS retries. Runtime
+false rewrites and protected/generated rewrites must remain zero, then misses
+are minimized before correct applications, activation latency, demotion latency,
+or churn may improve. Corpus receipts also hold state bytes, compile and match
+latency, and cross-tab CAS retries. Runtime
 weights remain versioned integers frozen from those receipts; they never adapt
-from live user material.
+from live user material. A second fixed interaction corpus labels expected
+accept, reject, or unknown outcomes and observes exactly one explicit decision,
+survived horizon, or censored terminal state per occurrence.
+It reports denominated reject and censor rates plus raw survived exposure,
+unsafe-attribution, and false implicit-positive counts instead of inventing live
+reward weights. Censored exposure never becomes a failed survival. Generated
+output contributes no implicit evidence; an explicit addressed human decision
+may still become authority. Censoring is neutral.
 
 The implementation order is fixed:
 
 1. land the pure integer policy and replay proof without changing runtime;
 2. migrate to separate term and alias ledgers while provisional projection stays
    release-gated;
-3. add versioned, local, corpus-qualified term and pronunciation producers;
-4. publish one truthful runtime capability snapshot to the existing Wiki
-   settings surface; and
-5. enable local automation by default only after positive, adversarial,
+3. land the strict manifest-owned-corpus and raw-artifact qualification boundary
+   while its release set and runtime bridge remain empty;
+4. add versioned local term and pronunciation producers with real qualified
+   receipts;
+5. add the one-shot occurrence owner and addressed correction command;
+6. publish one truthful runtime capability snapshot alongside the existing
+   local permission preferences in the Wiki settings surface; and
+7. enable local automation by default only after positive, adversarial,
    ambiguity, protected-literal, cross-tab, capacity, and performance gates pass.
 
-The existing Wiki list remains the end-to-end surface. Hidden candidates do not
-appear there. Collected terms appear under `Automatically added`; a person edit
-promotes one to confirmed authority, and removal creates a tombstone. The UI
-must derive `exact-only`, `pronunciation`, `full-auto`, or `paused` from the
-published runtime capability, never from an environment variable, starter row,
-or optimistic preference. It adds no score, confidence, language picker,
-review queue, or rule table.
+The existing Wiki list remains the end-to-end surface. V5 adds only two quiet,
+default-on local permission actions in its lower-right footer: automatic term
+collection and phonetic fitting. They persist separately from Wiki data and
+Material history, and can only restrict a capability that has independently
+passed the release gate; they cannot promote an inactive producer. Hidden candidates do not appear there. Collected terms
+appear under `Automatically added`; a person edit promotes one to confirmed
+authority, and removal creates a tombstone. Routine learning, matching,
+survival, and decay remain invisible, so a person can benefit without ever
+opening Wiki. Only an obvious error that the person elects to correct exposes
+the narrow local takeover. A later UI must derive `exact-only`,
+`pronunciation`, `full-auto`, or `paused` from the published runtime capability,
+never from an environment variable, starter row, or optimistic preference. The
+local actions express permission, not availability. The surface adds no score,
+confidence, language picker, review queue, alias table, or confirmation workload.
 
 The next candidate is frozen but not active: exact Chinese homophones, only
 `an`/`ang`, `en`/`eng`, and `in`/`ing` as near-final pairs, and exact English

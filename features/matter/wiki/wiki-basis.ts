@@ -19,7 +19,10 @@ import {
 
 export type WikiBasis = Readonly<{
   stateRevision: number;
+  /** Release-qualified projection selected by the runtime policy. */
   snapshot: CompiledWikiSnapshot;
+  /** Human-confirmed fallback used when local fitting permission is paused. */
+  confirmedSnapshot: CompiledWikiSnapshot;
   fitSnapshot: WikiFitSnapshot;
 }>;
 
@@ -66,16 +69,11 @@ export function compileWikiBasis(
   }
 
   const applicable = projectApplicableWikiRules(parsed.state, projectionPolicy);
-  const compiled = previousBasis !== undefined &&
-      compiledRulesMatch(applicable, previousBasis.snapshot.rules)
-    ? Object.freeze({
-        ok: true as const,
-        snapshot: Object.freeze({
-          ...previousBasis.snapshot,
-          generation,
-        }),
-      })
-    : compileWikiRules(applicable, generation);
+  const compiled = compileWithReuse(
+    applicable,
+    generation,
+    previousBasis?.snapshot,
+  );
   if (!compiled.ok) {
     return Object.freeze({
       ok: false,
@@ -86,17 +84,52 @@ export function compileWikiBasis(
       }),
     });
   }
+  const confirmedApplicable = projectionPolicy.includeProvisional
+    ? projectApplicableWikiRules(parsed.state, WIKI_CONFIRMED_ONLY)
+    : applicable;
+  const confirmed = compiledRulesMatch(confirmedApplicable, compiled.snapshot.rules)
+    ? compiled
+    : compileWithReuse(
+        confirmedApplicable,
+        generation,
+        previousBasis?.confirmedSnapshot,
+      );
+  if (!confirmed.ok) {
+    return Object.freeze({
+      ok: false,
+      error: Object.freeze({
+        code: "COMPILE_FAILED",
+        message: "The confirmed Wiki rules could not be compiled.",
+        issues: confirmed.issues,
+      }),
+    });
+  }
 
   return Object.freeze({
     ok: true,
     basis: Object.freeze({
       stateRevision: parsed.state.revision,
       snapshot: compiled.snapshot,
+      confirmedSnapshot: confirmed.snapshot,
       fitSnapshot: previousBasis !== undefined &&
           wikiFitSnapshotMatchesState(previousBasis.fitSnapshot, parsed.state)
         ? previousBasis.fitSnapshot
         : compileWikiFitSnapshot(parsed.state),
     }),
+  });
+}
+
+function compileWithReuse(
+  applicable: ReturnType<typeof projectApplicableWikiRules>,
+  generation: number,
+  previous: CompiledWikiSnapshot | undefined,
+): ReturnType<typeof compileWikiRules> {
+  if (previous === undefined || !compiledRulesMatch(applicable, previous.rules)) {
+    return compileWikiRules(applicable, generation);
+  }
+  return Object.freeze({
+    ok: true as const,
+    snapshot: Object.freeze({ ...previous, generation }),
   });
 }
 

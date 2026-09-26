@@ -1,7 +1,7 @@
 .section {
   box-sizing: border-box;
   min-height: 263px;
-  padding: 17px 16px 16px;
+  padding: 17px 16px 7px;
   color: var(--chrome-text);
 }
 
@@ -146,6 +146,12 @@
 .browser,
 .editor {
   animation: wiki-view-enter 160ms cubic-bezier(.2, .7, .2, 1) both;
+}
+
+.browser {
+  display: flex;
+  min-height: 239px;
+  flex-direction: column;
 }
 
 @keyframes wiki-view-enter {
@@ -534,13 +540,44 @@
 }
 
 .listFooter {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-top: 14px;
+  display: grid;
+  gap: 14px;
+  margin-top: auto;
   padding-top: 12px;
   border-top: 1px solid var(--chrome-line);
+}
+
+.footerSummary {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.capabilityActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  gap: 11px;
+  white-space: nowrap;
+}
+
+.capabilityActions button {
+  min-height: 20px;
+  padding: 0;
+  color: color-mix(in srgb, var(--chrome-text) 78%, transparent);
+  font: 450 11.5px/1.35 var(--matter-face);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.capabilityActions button:hover,
+.capabilityActions button:focus-visible {
+  background: transparent;
+  color: var(--chrome-text);
 }
 
 .listFooter p {
@@ -641,7 +678,8 @@
   .tileActions button,
   .editorRemoveConfirm button,
   .confirm button,
-  .loadMore {
+  .loadMore,
+  .capabilityActions button {
     min-width: 44px;
     min-height: 44px;
   }
@@ -661,8 +699,16 @@
   }
 
   .listFooter {
-    display: grid;
     gap: 8px;
+  }
+
+  .footerSummary {
+    align-items: baseline;
+  }
+
+  .capabilityActions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 
