@@ -2,19 +2,26 @@
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. The current source identifies
-`0.2.0-preview.62`; exact public identity still requires a no-store production
-health readback after the corresponding `main` deployment. This is a deployed
-source identity, not an immutable release: no Preview.62 tag or GitHub
-prerelease exists. Production Model API
-remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
-ring is valid and redeployed, and publication remains withheld until the strict
-six-round managed-pool probe passes. The latest annotated tag and GitHub
-prerelease therefore remain Preview.52 at `6a4931b`; neither may be advanced by
-borrowing an older pool receipt. The repository maintainer operates only
-through GitHub: a topic push triggers Preview and a `main` update triggers
-Production. No manual Vercel command, project binding, credential, or
-environment edit is part of this release. A package version alone proves
-neither source nor live identity.
+`0.2.0-preview.62`. PR #119 merged to `main` at
+`2345b24a829c6b0460d21e389fb39f31464f4360`; the exact merged-main CI completed
+successfully, the linked Production deployment completed successfully, and a
+fresh no-store read from `https://matter.ptoq.io/api/health` identified
+Preview.62 with `age: 0` and a cache miss. This is deployed source identity,
+not an immutable release: no Preview.62 tag or GitHub prerelease exists.
+
+The same fresh public receipt keeps both material model surfaces
+`unavailable`, and the anonymous `provider-session/4` receipt returns the exact
+empty shape with `available: false`. Production Model API therefore remains
+blocked by issue #104 until the deployment owner installs a valid independent
+`MATTER_PROVIDER_SESSION_KEYS` ring and the resulting deployment passes the
+strict checker. Publication also remains withheld until the strict six-round
+managed-pool probe passes. The latest annotated tag and GitHub prerelease
+therefore remain Preview.52 at `6a4931b`; neither may be advanced by borrowing
+an older pool receipt. The repository maintainer operates only through GitHub:
+a topic push triggers Preview and a `main` update triggers Production. No
+manual Vercel command, project binding, credential, or environment edit is
+part of this release. A package version alone proves neither source nor live
+identity.
 
 ## Receipt verification — 0.2.0-preview.57
 
