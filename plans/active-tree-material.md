@@ -178,6 +178,95 @@ applied basis/rule to one visible occurrence and current document/interaction
 epoch, carries no surrounding passage, and expires rather than being rebuilt
 from a later diff.
 
+Maintainer freeze, 2026-09-26: automatic collection and alias fitting use two
+separate bounded ledgers. Canonical recurrence may decide that a word is worth
+listing, but it can never prove that one observed form should rewrite to that
+canonical word. Alias authority therefore accepts only relation-specific
+producer evidence or one addressed human decision. This separation replaces
+the current mixed `historical + recent + machine` score before either automatic
+capability can become release-default behavior.
+
+The local learner is a deterministic state machine, not online reinforcement
+learning. One successful human admission is one logical environment tick;
+generated, repaired, transformed, imported, undone, or rescanned text produces
+no tick reward and no evidence. Within one tick, an identical candidate counts
+at most once. The first three or four independent turns provide the useful
+information. Each candidate owns a bounded quiet counter; there is no global
+cohort edge. Term evidence uses one saturating integer support value:
+
+```text
+support'   = min(255, support + one bounded observation)
+observed  = support', quiet = 0
+not observed for 32 successful human admissions:
+            support = floor(support / 2), quiet = 0
+
+candidate -> collected when support >= 2
+collected -> candidate only when support = 0
+```
+
+Two independent human turns therefore surface a name at any position in the
+product lifetime; no global boundary can erase the second vote. The one-count
+retention band prevents a collected term from flickering out at the first quiet
+far-horizon aging; without new evidence it sinks on the next aging, while
+repeatedly reinforced support can survive proportionally longer. A fully
+decayed machine-only candidate with no authority, alias evidence, or tombstone
+may be evicted without creating negative authority. Human-owned terms, product
+seeds, and tombstones never participate in automatic eviction.
+
+Alias evidence is relation-specific and carries one versioned producer id. Its
+bounded support decays by half only after that candidate has been absent from
+32 successful human admissions. A candidate
+may rise only when its producer is release-qualified, the weighted winner meets
+the activation threshold, and its lead over the runner-up meets an ambiguity
+margin. Exact-pronunciation evidence has integer weight `3`; restricted
+near-sound and internal-orthographic evidence has weight `2`. The shared
+activation score is `8`, so an unopposed exact relation may rise on its third
+independent turn and a restricted relation on its fourth. Activation margin `4`
+blocks exact `3 versus 2` and near `4 versus 3` contests, while accepting exact
+`3 versus 1` and near `4 versus 2`. An active alias uses retention score `5`
+and margin `3`, but a challenger must always clear the higher activation gate.
+A resource or classifier change changes the producer or fitting version rather
+than silently reinterpreting old votes. Disablement removes provisional aliases
+from the compiled basis without deleting their evidence. Confirmed human and
+product rules remain exact authority.
+
+Counter-evidence is narrow and attributable. A competing canonical for the same
+locale/channel/form reduces the winner margin after every successful admission
+and may make the resolver abstain immediately, without waiting for aging. One
+addressed human reject, replacement, or removal bypasses scoring and becomes
+confirmed authority or a tombstone. Silence, ordinary delete, and Undo are not
+negative votes because they cannot identify which hidden relation a person
+rejected.
+
+Environment, reward, and evaluation stay outside production authority. A pure
+trace-replay harness treats `(Wiki state, logical tick)` as the environment and
+the deterministic collect, activate, demote, evict, or abstain transition as
+the action. Its evaluation is lexicographic rather than a runtime scalar:
+false rewrites and protected/generated rewrites must remain zero before recall,
+activation latency, demotion latency, or churn may improve. Corpus receipts also
+hold state bytes, compile and match latency, and cross-tab CAS retries. Runtime
+weights remain versioned integers frozen from those receipts; they never adapt
+from live user material.
+
+The implementation order is fixed:
+
+1. land the pure integer policy and replay proof without changing runtime;
+2. migrate to separate term and alias ledgers while provisional projection stays
+   release-gated;
+3. add versioned, local, corpus-qualified term and pronunciation producers;
+4. publish one truthful runtime capability snapshot to the existing Wiki
+   settings surface; and
+5. enable local automation by default only after positive, adversarial,
+   ambiguity, protected-literal, cross-tab, capacity, and performance gates pass.
+
+The existing Wiki list remains the end-to-end surface. Hidden candidates do not
+appear there. Collected terms appear under `Automatically added`; a person edit
+promotes one to confirmed authority, and removal creates a tombstone. The UI
+must derive `exact-only`, `pronunciation`, `full-auto`, or `paused` from the
+published runtime capability, never from an environment variable, starter row,
+or optimistic preference. It adds no score, confidence, language picker,
+review queue, or rule table.
+
 The next candidate is frozen but not active: exact Chinese homophones, only
 `an`/`ang`, `en`/`eng`, and `in`/`ing` as near-final pairs, and exact English
 phoneme identity from a pinned CMUdict snapshot. Polyphones, multiple English

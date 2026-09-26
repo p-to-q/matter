@@ -335,3 +335,71 @@ canonical word in settings alone does not assert an alias and therefore does
 not promise an immediate correction. The first public release of automatic
 matching remains **NO-GO** until a real visible-error correction path and its
 positive and negative corpus receipts exist.
+
+## Automatic-learning calibration boundary
+
+`wiki-learning-policy.ts` is a pure, non-runtime calibration slice. Nothing in
+MaterialIngress, persistence, projection, or the settings UI imports it yet. It
+exists to make the next schema transition testable before durable state or user
+material can depend on it.
+
+The policy separates two facts which the current V4 aggregate still mixes:
+
+- term evidence asks whether one canonical word should become a collected Wiki
+  entry; and
+- alias evidence asks whether one particular local `form → canonical` relation
+  may become provisional rewrite authority.
+
+Term frequency cannot contribute to alias authority. A successful human
+admission is one logical clock tick and an identical candidate contributes at
+most once in that tick. Each candidate owns a bounded quiet counter instead of
+sharing a global cohort boundary. Term support uses one bounded integer:
+
+```text
+support = min(255, support + one observation)
+observed: quiet = 0
+absent from 32 successful human admissions:
+          support = floor(support / 2), quiet = 0
+
+candidate -> collected at support >= 2
+collected -> candidate only at support = 0
+```
+
+The first and second independent turns are therefore meaningful immediately at
+any position in the product lifetime; no global boundary can erase the second
+vote. Thirty-two consecutive quiet human admissions are a candidate-local
+far-horizon aging boundary, never an activation requirement. The one-count
+retention band prevents a collected term from flickering out at the first quiet
+horizon; without new evidence it sinks at the next aging, while stronger
+repeated support survives proportionally longer. Fully decayed machine-only candidates
+may be evicted only when they have no authority, alias evidence, or tombstone.
+Human decisions and product seeds never enter that eviction policy.
+
+Alias evidence is producer-specific. Exact pronunciation producers have
+calibration weight `3`; restricted near-sound and internal orthographic
+producers have weight `2`; migrated legacy evidence has weight `0`. Activation
+score `8` makes the earliest unopposed gates three independent turns for exact
+relations and four for restricted relations. Activation margin `4` accepts
+exact `3 versus 1` and restricted `4 versus 2`, but abstains on exact `3 versus
+2` or restricted `4 versus 3`. Retention uses score `5` and margin `3`; a
+challenger never inherits that lower gate. Competition is immediate
+counter-evidence, while one addressed human reject or replacement bypasses the
+score and becomes durable authority. Silence, ordinary deletion, and Undo do
+not become negative votes. The resolver also requires an explicit set of
+release-qualified producer versions, so adding a classifier to source code
+cannot silently grant it runtime authority.
+
+These values are versioned calibration candidates, not evidence that a language
+producer is ready. The bounded replay harness admits observations only from the
+`human-admission` environment. Generated output and protected text produce zero
+votes and do not advance the learning clock. Offline evaluation compares a
+lexicographic vector: false applications, then applications to protected or
+generated material, must remain zero before correct applications, activation
+latency, or transition churn can improve. No reward or adaptive optimizer enters
+the running product.
+
+The next durable step is a strict V5 split-ledger migration with provisional
+projection still disabled. It must pass compatibility, cross-tab, capacity, and
+rollback proof before any producer or status copy is enabled. Until that step
+and each producer corpus pass, the existing exact-only UI and release gate remain
+the truthful product behavior.
