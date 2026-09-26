@@ -168,7 +168,10 @@ whose failure reaches a person, and a recorded expectation for inquiry latency
 so that "slow" is distinguishable from "down" without reading this file. Until
 that exists, every occurrence of this will be found the same way.
 
-### Current Preview.57 publication gate
+### Historical Preview.57 publication gate
+
+This section is superseded and must not be used as the current publication
+gate. It remains only as the immutable receipt for that older candidate.
 
 After the exact Preview.57 source has passed topic and merged-main CI and its
 automatic Preview and Production deployments, run:
