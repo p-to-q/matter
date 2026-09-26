@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 import {
   MATTER_SITE_LAST_UPDATED_ISO,
   MATTER_SITE_URL,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [{

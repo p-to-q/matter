@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og";
 import {
   MATTER_PRODUCT_TAGLINE,
   MATTER_PRODUCT_TITLE,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 export function GET() {
   return new ImageResponse(

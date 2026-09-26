@@ -4,7 +4,7 @@ import {
   MATTER_PRODUCT_NAME,
   MATTER_SITE_URL,
   matterUrl,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 /**
  * Installability is claimed at the manifest layer only. `standalone` plus a

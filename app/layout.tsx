@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import { getMatterSchemaOrgGraph } from "@/features/matter/seo/schema-org";
+import { getMatterSchemaOrgGraph } from "@/features/matter/public/schema-org";
 import {
   MATTER_MANIFEST_URL,
   MATTER_OG_IMAGE_URL,
@@ -11,7 +11,7 @@ import {
   MATTER_PRODUCT_TITLE,
   MATTER_PUBLIC_ORIGIN,
   MATTER_SITE_URL,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 const departureMono = localFont({
   display: "swap",
