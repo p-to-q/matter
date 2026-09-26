@@ -80,9 +80,50 @@ code. They must be calibrated against a representative error corpus before a
 provisional mapping is enabled for release; changing them is a scoring-version
 decision, not an incidental refactor.
 
+The 32-observation recent cohort is an evidence-aging clock, not a user-intent
+window. It says how quickly aggregate evidence loses recency; it does not infer
+that a deletion, undo, repeated word, later edit, or nearby pointer action means
+"remember this spelling." No such general intent inference exists in this
+release, and the current `recent-material` evidence source has no production
+producer. The ordering of authority is nevertheless fixed: an addressed human
+decision bypasses scoring; an automatic proposal must pass both scoring gates;
+an ambiguous proposal abstains.
+
+Two deterministic human decision representations are defined. Settings may create, rename,
+scope, or remove one canonical lexeme as an explicit local configuration
+decision. Domain events can confirm, reject, or replace one exact alias, but no
+production surface is yet authorized to emit those events. The latter remains
+reserved for the error-local correction path. It must be introduced together
+with the UI that owns one short-lived, one-shot attribution token captured when
+the rule was applied. That token binds the applied basis and rule to the exact
+visible occurrence and current document/interaction epoch; it contains no
+surrounding passage and expires instead of reconstructing intent from a later
+whole-text diff. Until that complete path exists, Matter does not create an
+empty generic decision port or claim that a canonical settings entry corrects
+future text by itself.
+
 No rule falls back across locales. The same form may resolve differently in
 `zh-CN`, `zh-TW`, `ja-JP`, `de-DE`, and `en-US`; an unsupported or missing
 locale cannot activate a rule.
+
+The repository provisions `Engelbart`, `Morphogenesis`, `KFC`, and `[p → q]` as
+ordinary automatic lexemes on the first successful local load. On Matter's
+current `zh-CN` speech path, that product-owned `[p → q]` starter owns the two
+exact spoken aliases `P to Q` and `p to q`; a human-created homograph owns no
+such relation. These are bounded product
+rules, not approximate pronunciation fitting. The repository also performs that
+provisioning as a one-time record-versioned migration for older valid records.
+Existing canonical identity, scope, provenance, tombstones, and a saturated
+decision ledger win; a migration that cannot fit or commit leaves the prior
+valid Wiki readable. Scope filters the hidden aliases instead of deleting them,
+so restoring spoken scope restores exact authority. The UI
+does not synthesize these rows and recovery restores the same starter state. A
+record-V4 repair consolidates the former automatic `en-US` `[p → q]` seed with
+its `zh-CN` successor only when its scope, provenance, and relations still prove
+that it is product-owned. It abstains around human ownership or unknown evidence.
+A one-time compatibility migration replaces a former `Matter` or
+`Douglas Engelbart` starter only when the complete four-entry legacy set
+remains pristine; any human change disables that migration.
 
 ## Commit boundary
 
@@ -141,7 +182,10 @@ spoken fitting index. Before hydration or after storage failure,
 material uses the empty or last valid basis; only Wiki learning degrades.
 One compile is reused for durable publication. A content-free BroadcastChannel
 message carries only the newer write generation so another tab can refresh its
-own durable record. Observation CAS conflicts rehydrate and reapply the same
+own durable record. Burst generations coalesce behind one in-flight refresh;
+completion loops only when the published basis still trails the highest seen
+generation, and no storage progress stops the loop rather than spinning.
+Observation CAS conflicts rehydrate and reapply the same
 logical batch against the newer authority with a strict retry bound; an unsaved
 attempt never advances the durable human-turn clock. A candidate exceeding the byte budget is rejected as a
 normal capacity result before persistence, leaving current authority ready.
@@ -169,8 +213,9 @@ In the current release, Wiki is never serialized into a model request, system
 prompt, harness, server route, provider cache key, telemetry record, material
 archive, or public agent action. This includes the whole dictionary, a filtered
 dictionary, selected canonical terms, and derived pronunciation aliases.
-Server, protocol, and API modules are statically forbidden from importing Wiki
-code, so a later product idea cannot silently widen today's privacy boundary.
+Server, protocol, and API modules are forbidden from importing Wiki code through
+either static imports or string-literal dynamic imports, so a later product idea
+cannot silently widen today's privacy boundary.
 
 The former transcript-repair `vocabulary` hint was removed rather than reused.
 Repair receives one utterance and locale. Local lexical authority is applied
@@ -226,7 +271,7 @@ interface language rather than exposed as a picker.
 One `Use for` selector controls the lexeme's reversible applicability to voice,
 generated text, or both. It does not expose aliases, matcher channels,
 confidence, evidence scores, or a routine clear action. Source filters use the
-truthful lifecycle labels `Automatically found` and `Confirmed`: editing an
+lifecycle labels `Automatically added` and `Manually added`: editing an
 automatic entry promotes it to confirmed authority. The single lossless
 personal-data format is `matter-wiki.json`; there is no import UI. Schema V4
 stores scope explicitly; strict V2 and V3 migration assigns `both` so an upgrade
@@ -282,7 +327,9 @@ sync, and model prompt injection are out of scope.
 
 The same release gate controls both halves of provisional authority: when the
 candidate producer is off, persisted provisional rules are also excluded from
-the compiled material basis and from the settings projection. This prevents an
+the compiled material basis. Their canonical lexemes remain visible in the
+settings projection as automatic entries, without implying that an alias is
+active. This prevents an
 older experiment from remaining active after the feature is disabled. Adding a
 canonical word in settings alone does not assert an alias and therefore does
 not promise an immediate correction. The first public release of automatic

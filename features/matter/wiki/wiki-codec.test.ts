@@ -64,7 +64,7 @@ describe("Wiki codec", () => {
     expect(parseWikiEvent({ ...event("confirm-rule"), form: "é" }).ok).toBe(true);
   });
 
-  it("rejects invisible and bidi format controls but keeps emoji joiners", () => {
+  it("rejects invisible and bidi format controls but keeps valid emoji joiners", () => {
     for (const form of ["co\u200bdex", "co\u202edex", "co\u2066dex"]) {
       expect(parseWikiEvent({
         type: "confirm-rule",
@@ -81,8 +81,26 @@ describe("Wiki codec", () => {
       channel: "written",
       boundary: "literal",
       form: "woman developer",
-      canonical: "👩‍💻",
+      canonical: "👩🏽‍💻",
     }).ok).toBe(true);
+    expect(parseWikiEvent({
+      type: "confirm-rule",
+      locale: "en-US",
+      channel: "written",
+      boundary: "literal",
+      form: "family",
+      canonical: "👨‍👩‍👧‍👦",
+    }).ok).toBe(true);
+    for (const canonical of ["a‍b", "‍👩", "👩‍", "👩‍‍💻"]) {
+      expect(parseWikiEvent({
+        type: "confirm-rule",
+        locale: "en-US",
+        channel: "written",
+        boundary: "literal",
+        form: "unsafe joiner",
+        canonical,
+      }).ok).toBe(false);
+    }
   });
 
   it("rejects duplicated, future, and contradictory durable decisions", () => {

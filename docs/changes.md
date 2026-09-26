@@ -47,7 +47,14 @@ browser or OS download completion from a click receipt.
 Changed: Preview.59 introduces the settings-owned `词典 WIKI` surface and its
 strict V4 local authority. Applicability is reversible across spoken and written
 ingress, legacy states migrate without losing lineage, and the release build
-keeps uncalibrated automatic fitting off. The same candidate also carries the
+keeps uncalibrated automatic fitting off. First load atomically provisions the
+four editable automatic spellings `Engelbart`, `Morphogenesis`, `KFC`, and
+`[p → q]`; on the current `zh-CN` speech path the final entry owns exact spoken
+`P to Q` and `p to q` aliases,
+while canonical identity and tombstones keep later human changes durable.
+The record-V4 migration removes the temporary automatic cross-locale
+`[p → q]` duplicate without merging human-owned or relation-bearing entries.
+The same candidate also carries the
 auditable, deployment-excluded film source and the latest canvas interaction
 hardening without adding published media to the runtime.
 
@@ -349,20 +356,18 @@ discover the title, an editorial transition presented as product behavior, and c
 audio or provider text to the public repository. This entry records the frozen
 workflow, not a completed QA or publication receipt.
 
-## 2026-09-17 — quiet controls retain marks instead of containers
+## 2026-09-17 — active rail modes retain marks instead of containers
 
 Changed: an active rail mode uses one four-pixel physical dot beneath its icon
-instead of a filled control, and the closed Ask Matter entry remains typographic
-through pointer hover and keyboard focus. The existing focus ring and complete
-hit targets remain unchanged.
+instead of a filled control. The existing focus ring and complete hit targets
+remain unchanged.
 
 Why: a persistent filled rectangle reads as another surface on the paper and
 competes with the material. Mode and focus still need distinct, perceivable
 receipts, but neither needs permanent status chrome.
 
-Forecloses: using the active-state mark as a replacement for accessible focus,
-shrinking pointer targets to match the visual dot, and turning the corner
-Inquiry entrance into a panel before the person opens it.
+Forecloses: using the active-state mark as a replacement for accessible focus
+and shrinking pointer targets to match the visual dot.
 
 ## 2026-09-17 — Voice acquisition has one failure channel
 

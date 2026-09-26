@@ -166,6 +166,18 @@ responsibility later from a changed basis or from a whole-text diff. Applying a
 rule does not add an icon or hover action; attribution is disclosed only after
 the person invokes correction on the erroneous word.
 
+Maintainer clarification, 2026-09-25: `WIKI_RECENT_OBSERVATION_WINDOW` is only
+the bounded evidence-cohort aging cadence; it is not a user-intent window. The
+current release has no production `recent-material` producer and must not infer
+intent from ordinary delete, undo, repetition, or later edits. Settings
+create/rename/scope/remove decisions are direct human authority and bypass
+scoring. Confirm/reject/replace remain the exact domain outlet for a later
+error-local correction, but the composition-owned one-shot token and its UI must
+land together; no generic decision port is added in advance. The token binds the
+applied basis/rule to one visible occurrence and current document/interaction
+epoch, carries no surrounding passage, and expires rather than being rebuilt
+from a later diff.
+
 The next candidate is frozen but not active: exact Chinese homophones, only
 `an`/`ang`, `en`/`eng`, and `in`/`ing` as near-final pairs, and exact English
 phoneme identity from a pinned CMUdict snapshot. Polyphones, multiple English

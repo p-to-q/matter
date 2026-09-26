@@ -84,7 +84,8 @@ type LateRepairBasis = Readonly<{
   operation: VoiceOperation;
   repairLeaseId: string;
   nodeId: string;
-  baseline: string;
+  repairText: string;
+  visibleBaseline: string;
   admittedAtMs: number;
   locale: MatterLocale;
 }>;
@@ -497,7 +498,8 @@ export class AdmissionDriver {
               operation,
               repairLeaseId: receipt.repairLeaseId,
               nodeId,
-              baseline: typeof receipt.admittedText === "string"
+              repairText: baseline,
+              visibleBaseline: typeof receipt.admittedText === "string"
                 ? receipt.admittedText
                 : baseline,
               admittedAtMs,
@@ -577,14 +579,15 @@ export class AdmissionDriver {
       .then(() => this.dependencies.repair.repair({
         operationId: input.operation.interactionId,
         attempt: input.operation.attempt,
-        text: input.baseline,
+        text: input.repairText,
         locale: input.locale,
         signal: resources.controller.signal,
       }))
       .then((result) => {
         if (
           resources.controller.signal.aborted ||
-          result.text === input.baseline
+          result.text === input.repairText ||
+          result.text === input.visibleBaseline
         ) {
           this.discardLateRepair(key, "Transcript repair produced no admissible change.");
           return;

@@ -2,9 +2,9 @@
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. The current source identifies
-`0.2.0-preview.60`; exact public identity still requires a no-store production
+`0.2.0-preview.61`; exact public identity still requires a no-store production
 health readback after the corresponding `main` deployment. This is a deployed
-source identity, not an immutable release: no Preview.60 tag or GitHub
+source identity, not an immutable release: no Preview.61 tag or GitHub
 prerelease exists. Production Model API
 remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
 ring is valid and redeployed, and publication remains withheld until the strict
@@ -83,8 +83,8 @@ Managed Elastic and managed Text Swap remain **NO-GO**. Each still needs its own
 frozen corpus, paid evidence, distributed abuse and spend controls, strict
 origin turn, and rollback receipt before its adapter may change to `live`.
 
-The exact local Preview.60 candidate passed `npm run check`: 153 Node boundary
-tests, 326 Markdown files, the 547-file / 8-layer architecture gate, 2,840
+The exact local Preview.61 candidate passed `npm run check`: 154 Node boundary
+tests, 326 Markdown files, the 549-file / 8-layer architecture gate, 2,868
 Vitest cases with five explicit skips, type generation, TypeScript,
 zero-warning lint, the production build, and the runtime-artifact budget. Its
 complete Chromium matrix then passed 175 cases with 15 capability-gated skips

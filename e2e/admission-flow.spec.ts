@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { REPAIR_REVEAL_HOLD_MS } from "../features/matter/interaction/repair-reveal";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const heardTranscript = "呃，我觉得我觉得这个方案可以，但是它的实现事件比预期长。";
@@ -7,12 +8,17 @@ const repairedTranscript = "我觉得这个方案可以，但是它的实现时�
 // the 12 s repair lease while allowing a loaded parallel browser to schedule
 // the otherwise immediate fixture round trip.
 const FIXTURE_REPAIR_SETTLE_TIMEOUT_MS = 5_000;
+// Browser fake-device acquisition is outside the product request path and can
+// be slow on a cold Chromium host. The visible permission phase remains under
+// assertion while the release receipt waits for the synthetic device.
+const FIXTURE_RECORDING_START_TIMEOUT_MS = 30_000;
 
 for (const viewport of [
   { name: "laptop", width: 1280, height: 800 },
   { name: "narrow", width: 390, height: 844 },
 ]) {
   test(`voice admits one undoable top-level thought at ${viewport.name} width`, async ({ page }) => {
+    test.setTimeout(90_000);
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -51,7 +57,7 @@ for (const viewport of [
     const stop = page
       .getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
       .getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true });
-    await expect(stop).toBeVisible();
+    await expect(stop).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
     await expect(page.getByRole("button", {
       name: fixtureUiCopy.voiceTool.stopRecording,
       exact: true,
@@ -90,14 +96,53 @@ for (const viewport of [
     // The fixture model resolves immediately. Observe the paint directly;
     // waiting for click() and then polling the DOM can miss a correctly shown
     // baseline that has already entered its repair reveal.
-    const rawSeenAtPromise = (async () => {
-      await expect(heard).toHaveCount(1);
-      return page.evaluate(() => new Promise<number>((resolve) => {
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve(performance.now())));
-      }));
-    })();
+    const rawPaintReceiptPromise = page.evaluate((expectedText) =>
+      new Promise<{
+        animationCount: number;
+        observed: boolean;
+        observedAtMs: number | null;
+        visibleAfterTwoFrames: boolean;
+      }>((resolve) => {
+        const containsExpectedText = () => Array.from(
+          document.querySelectorAll<HTMLElement>('[data-thought-id^="thought_"]'),
+        ).some((element) => element.textContent?.includes(expectedText) === true);
+        let settled = false;
+        const observer = new MutationObserver(() => {
+          if (!containsExpectedText() || settled) return;
+          settled = true;
+          observer.disconnect();
+          clearTimeout(timeout);
+          const observedAtMs = performance.now();
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve({
+            animationCount: (window as Window & { __matterRepairAnimations?: unknown[] })
+              .__matterRepairAnimations?.length ?? 0,
+            observed: true,
+            observedAtMs,
+            visibleAfterTwoFrames: containsExpectedText(),
+          })));
+        });
+        observer.observe(document.body, { characterData: true, childList: true, subtree: true });
+        const timeout = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          observer.disconnect();
+          resolve({
+            animationCount: (window as Window & { __matterRepairAnimations?: unknown[] })
+              .__matterRepairAnimations?.length ?? 0,
+            observed: false,
+            observedAtMs: null,
+            visibleAfterTwoFrames: false,
+          });
+        }, 10_000);
+      }), heardTranscript);
     await stop.click();
-    const rawSeenAt = await rawSeenAtPromise;
+    const rawPaintReceipt = await rawPaintReceiptPromise;
+    expect(rawPaintReceipt).toMatchObject({
+      animationCount: 0,
+      observed: true,
+      visibleAfterTwoFrames: true,
+    });
+    expect(rawPaintReceipt.observedAtMs).toEqual(expect.any(Number));
     await expect(admitted).toHaveCount(1, { timeout: FIXTURE_REPAIR_SETTLE_TIMEOUT_MS });
     await expect(heard).toHaveCount(0);
     const reveal = admitted.locator(".repair-text");
@@ -123,7 +168,9 @@ for (const viewport of [
       }).__matterRepairAnimations ?? [],
     );
     expect(animations.every(({ name }) => name === "material-grapheme-arrive")).toBe(true);
-    expect(Math.min(...animations.map(({ time }) => time)) - rawSeenAt).toBeGreaterThanOrEqual(120);
+    expect(Math.min(...animations.map(({ time }) => time)) - rawPaintReceipt.observedAtMs!)
+      .toBeGreaterThanOrEqual(REPAIR_REVEAL_HOLD_MS - 40);
+    expect(Math.min(...authoredRevealDelays)).toBe(REPAIR_REVEAL_HOLD_MS);
     // Browser scheduling may dispatch separately delayed animationstart events
     // in one busy frame. The CSS timeline, not event-delivery jitter, owns the
     // reading-order stagger.
@@ -272,7 +319,7 @@ test("a denied microphone leaves material unchanged and Record again starts a fr
   await expect(retry).toBeFocused();
   await retry.press("Enter");
   const recording = page.locator('.admission-feedback[data-phase="recording"]');
-  await expect(recording).toBeVisible();
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
   await expect(recording.getByRole("button", { name: "停止录音", exact: true })).toBeFocused();
   await page.waitForTimeout(350);
   await recording.getByRole("button", { name: "停止录音", exact: true }).click();
@@ -327,7 +374,9 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
   const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
 
   await voiceTool.click();
-  await expect(page.locator('.admission-feedback[data-phase="recording"]')).toBeVisible();
+  await expect(page.locator('.admission-feedback[data-phase="recording"]')).toBeVisible({
+    timeout: FIXTURE_RECORDING_START_TIMEOUT_MS,
+  });
   await settings.click();
   await page.getByRole("menuitem", { name: "模型 API", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "模型 API", exact: true });
@@ -340,7 +389,7 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
   // A fresh capture proves that modal cancellation released the microphone.
   await voiceTool.click();
   const recording = page.locator('.admission-feedback[data-phase="recording"]');
-  await expect(recording).toBeVisible();
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
   await page.waitForTimeout(350);
   await recording.getByRole("button", { name: "停止录音", exact: true }).click();
   await expect.poll(() => transcriptionRequested).toBe(true);
@@ -402,7 +451,7 @@ test("a transcription outage keeps material unchanged and Record again can recov
   const voiceTool = page.locator('[data-tool-id="voice"]');
   await voiceTool.click();
   let recording = page.locator('.admission-feedback[data-phase="recording"]');
-  await expect(recording).toBeVisible();
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
   await page.waitForTimeout(350);
   await recording.getByRole("button", { name: "停止录音", exact: true }).click();
   await expect.poll(() => transcriptionRequests).toBe(1);
@@ -426,7 +475,7 @@ test("a transcription outage keeps material unchanged and Record again can recov
   await expect(retry).toBeFocused();
   await retry.press("Enter");
   recording = page.locator('.admission-feedback[data-phase="recording"]');
-  await expect(recording).toBeVisible();
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
   const stop = recording.getByRole("button", { name: "停止录音", exact: true });
   await expect(stop).toBeFocused();
   await page.waitForTimeout(350);

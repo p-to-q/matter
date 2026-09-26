@@ -49,7 +49,7 @@ const EXPORT_CONFIRMATION_MS = 900;
 
 type Copy = Readonly<{
   title: string;
-  description: string;
+  footerNote: string;
   filterLabel: string;
   add: string;
   export: string;
@@ -65,9 +65,6 @@ type Copy = Readonly<{
   scopeBoth: string;
   scopeSpoken: string;
   scopeWritten: string;
-  back: string;
-  newWord: string;
-  entry: string;
   addToDictionary: string;
   save: string;
   confirmWriting: string;
@@ -331,39 +328,6 @@ export function WikiSettingsSection({
 
   return (
     <section aria-busy={pending} aria-label={copy.title} className={styles.section}>
-      <header className={styles.header}>
-        <div className={styles.introduction}>
-          <p>{copy.description}</p>
-        </div>
-        {editor === null ? <div className={styles.headerActions}>
-          <button
-            aria-label={exported ? copy.exported : copy.export}
-            className={styles.exportButton}
-            disabled={snapshot.stateRevision === null}
-            onClick={exportFile}
-            type="button"
-          >
-            <span aria-hidden="true" className={styles.exportLabel} data-active={!exported}>
-              {copy.export}
-            </span>
-            <span aria-hidden="true" className={styles.exportLabel} data-active={exported}>
-              {copy.exported}
-            </span>
-          </button>
-          <button
-            aria-label={copy.add}
-            className={styles.addButton}
-            disabled={snapshot.stateRevision === null}
-            onClick={beginAdd}
-            ref={addButtonRef}
-            title={copy.add}
-            type="button"
-          >
-            <span aria-hidden="true">＋</span>
-          </button>
-        </div> : null}
-      </header>
-
       {snapshot.status.phase === "loading" ? <p className={styles.state}>{copy.loading}</p> : null}
       {degraded ? (
         <div className={styles.state}>
@@ -396,10 +360,6 @@ export function WikiSettingsSection({
 
       {editor !== null ? (
         <form className={styles.editor} onSubmit={submit}>
-          <div className={styles.editorHeading}>
-            <button disabled={pending} onClick={closeEditor} type="button">← {copy.back}</button>
-            <strong>{editor.mode === "add" ? copy.newWord : copy.entry}</strong>
-          </div>
           <label>
             <span>{copy.word}</span>
             <input
@@ -502,26 +462,50 @@ export function WikiSettingsSection({
         </form>
       ) : (
         <div className={styles.browser}>
-          {snapshot.rules.length > 0 ? (
-            <div className={styles.listHeader}>
-              <div aria-label={copy.filterLabel} className={styles.filters} role="group">
-                {(["all", "automatic", "confirmed"] as const).map((value) => (
-                  <button
-                    aria-pressed={filter === value}
-                    key={value}
-                    onClick={() => {
-                      setFilter(value);
-                      setVisibleCount(LOAD_STEP);
-                    }}
-                    type="button"
-                  >
-                    {value === "all" ? copy.all : value === "automatic" ? copy.automatic : copy.manual}
-                  </button>
-                ))}
-              </div>
-              <span className={styles.total}>{copy.total(filtered.length)}</span>
+          <div className={styles.listHeader}>
+            <div aria-label={copy.filterLabel} className={styles.filters} role="group">
+              {(["all", "automatic", "confirmed"] as const).map((value) => (
+                <button
+                  aria-pressed={filter === value}
+                  key={value}
+                  onClick={() => {
+                    setFilter(value);
+                    setVisibleCount(LOAD_STEP);
+                  }}
+                  type="button"
+                >
+                  {value === "all" ? copy.all : value === "automatic" ? copy.automatic : copy.manual}
+                </button>
+              ))}
             </div>
-          ) : null}
+            <div className={styles.headerActions}>
+              <button
+                aria-label={exported ? copy.exported : copy.export}
+                className={styles.exportButton}
+                disabled={snapshot.stateRevision === null}
+                onClick={exportFile}
+                type="button"
+              >
+                <span aria-hidden="true" className={styles.exportLabel} data-active={!exported}>
+                  {copy.export}
+                </span>
+                <span aria-hidden="true" className={styles.exportLabel} data-active={exported}>
+                  {copy.exported}
+                </span>
+              </button>
+              <button
+                aria-label={copy.add}
+                className={styles.addButton}
+                disabled={snapshot.stateRevision === null}
+                onClick={beginAdd}
+                ref={addButtonRef}
+                title={copy.add}
+                type="button"
+              >
+                <span aria-hidden="true">＋</span>
+              </button>
+            </div>
+          </div>
 
           {snapshot.rules.length > 6 || query.length > 0 ? (
             <label className={styles.search}>
@@ -597,6 +581,11 @@ export function WikiSettingsSection({
               {copy.loadMore} · {copy.count(visible.length, filtered.length)}
             </button>
           ) : null}
+
+          <footer className={styles.listFooter}>
+            <p>{copy.footerNote}</p>
+            <span className={styles.total}>{copy.total(filtered.length)}</span>
+          </footer>
         </div>
       )}
     </section>
@@ -661,28 +650,25 @@ function downloadBytes(bytes: Uint8Array, fileName: string): void {
 
 const ENGLISH: Copy = Object.freeze({
   title: "WIKI",
-  description: "Keep the preferred spelling of important names and terms on this device. This version does not send Wiki contents to a model.",
+  footerNote: "Words stay on this device and are never sent to a model. Only verified exact matches are active; phonetic fitting and unconfirmed correction remain off.",
   filterLabel: "Word source",
   add: "Add word",
   export: "Export dictionary",
   search: "Search words",
   all: "All",
-  automatic: "Automatically found",
-  manual: "Confirmed",
-  empty: "Keep a name or term here when its exact spelling matters.",
+  automatic: "Automatically added",
+  manual: "Manually added",
+  empty: "No words yet. Use + to add a preferred spelling.",
   noResults: (query) => query.length > 0 ? `No result for “${query}”.` : "No words in this view.",
   word: "Word or name",
-  editorHint: "Choose where this spelling applies. New entries do not rewrite existing material.",
-  scope: "Use for",
+  editorHint: "Save one preferred spelling and where it may apply. Verified exact matches may be used; phonetic fitting and unconfirmed correction remain off.",
+  scope: "May apply to",
   scopeBoth: "All text",
   scopeSpoken: "Voice input",
   scopeWritten: "Generated text",
-  back: "Back",
-  newWord: "Add word",
-  entry: "Word",
   addToDictionary: "Add to dictionary",
   save: "Save",
-  confirmWriting: "Confirm spelling",
+  confirmWriting: "Confirm",
   cancel: "Cancel",
   edit: "Edit",
   remove: "Remove",
@@ -694,7 +680,7 @@ const ENGLISH: Copy = Object.freeze({
   unavailable: "Local words are temporarily unavailable.",
   damaged: "The saved Wiki is damaged.",
   recover: "Recover",
-  recoverQuestion: "Replace the damaged data with an empty Wiki?",
+  recoverQuestion: "Replace the damaged data with the starter Wiki?",
   saved: "Saved locally.",
   failed: "Not saved. Retry after refreshing.",
   stale: "WIKI changed in another window. Review this word again.",
@@ -709,28 +695,27 @@ const ENGLISH: Copy = Object.freeze({
 const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   ...ENGLISH,
   title: "词典 WIKI",
-  description: "在这里保留重要名字和术语的标准写法。当前版本不会把词典内容发送给模型。",
+  footerNote: "词典只保存在这台设备上，不会发送给模型。当前只启用已验证的精确匹配；近音拟合与未确认的自动纠正仍未启用。",
   filterLabel: "词条来源",
   add: "添加词",
   export: "导出词典",
   search: "搜索词语或名称",
   all: "全部",
-  automatic: "自动收录",
-  manual: "人工确认",
-  empty: "对写法有要求的名字和术语，可以先留在这里。",
-  noResults: (query) => query.length > 0 ? `没有找到“${query}”。` : "这里还没有词。",
+  automatic: "自动添加",
+  manual: "手动添加",
+  empty: "还没有词。用右上角的 ＋ 添加一个标准写法。",
+  noResults: (query) => query.length > 0
+    ? `没有找到“${query}”。`
+    : "还没有词。用右上角的 ＋ 添加一个标准写法。",
   word: "词语或名称",
-  editorHint: "选择这个写法会用于哪些文字。新加入的词不会改写已有材料。",
-  scope: "用于",
+  editorHint: "保存一个标准写法，并选择它可用于哪里。已验证的精确匹配可以生效；近音拟合与未确认的自动纠正仍未启用。",
+  scope: "可用于",
   scopeBoth: "所有文字",
   scopeSpoken: "语音输入",
   scopeWritten: "生成内容",
-  back: "返回",
-  newWord: "添加词",
-  entry: "词条",
   addToDictionary: "加入词典",
   save: "保存",
-  confirmWriting: "确认这个写法",
+  confirmWriting: "确认",
   cancel: "取消",
   edit: "修改",
   remove: "移出词典",
@@ -742,7 +727,7 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   unavailable: "本地词典暂时不可用。",
   damaged: "保存的词典已损坏。",
   recover: "恢复",
-  recoverQuestion: "用空白词典替换损坏的数据？",
+  recoverQuestion: "用初始词典替换损坏的数据？",
   saved: "已保存在这台设备上。",
   failed: "没有保存。材料仍可正常使用，请稍后重试。",
   stale: "词典已在另一个窗口更新，请再确认一次。",
@@ -757,27 +742,26 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
 const TRADITIONAL_CHINESE: Copy = Object.freeze({
   ...SIMPLIFIED_CHINESE,
   title: "詞典 WIKI",
-  description: "在這裡保留重要名字和術語的標準寫法。目前版本不會把詞典內容傳送給模型。",
+  footerNote: "詞典只儲存在這台裝置上，不會傳送給模型。目前只啟用已驗證的精確匹配；近音擬合與未確認的自動糾正仍未啟用。",
   add: "新增詞",
   export: "匯出詞典",
   search: "搜尋詞典",
   all: "全部",
-  automatic: "自動收錄",
-  manual: "人工確認",
-  empty: "對寫法有要求的名字和術語，可以先留在這裡。",
-  noResults: (query) => query.length > 0 ? `找不到「${query}」。` : "這裡還沒有詞。",
+  automatic: "自動新增",
+  manual: "手動新增",
+  empty: "還沒有詞。用右上角的 ＋ 新增一個標準寫法。",
+  noResults: (query) => query.length > 0
+    ? `找不到「${query}」。`
+    : "還沒有詞。用右上角的 ＋ 新增一個標準寫法。",
   word: "詞語或名稱",
-  editorHint: "選擇這個寫法會用於哪些文字。新加入的詞不會改寫既有材料。",
-  scope: "用於",
+  editorHint: "儲存一個標準寫法，並選擇它可用於哪裡。已驗證的精確匹配可以生效；近音擬合與未確認的自動糾正仍未啟用。",
+  scope: "可用於",
   scopeBoth: "所有文字",
   scopeSpoken: "語音輸入",
   scopeWritten: "生成內容",
-  back: "返回",
-  newWord: "新增詞",
-  entry: "詞條",
   addToDictionary: "加入詞典",
   save: "儲存",
-  confirmWriting: "確認寫法",
+  confirmWriting: "確認",
   cancel: "取消",
   edit: "修改",
   remove: "移除",
@@ -797,27 +781,26 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
 const JAPANESE: Copy = Object.freeze({
   ...ENGLISH,
   title: "辞書 WIKI",
-  description: "大切な名前や用語の正しい表記を、このデバイスに保存します。現在のバージョンは辞書をモデルに送信しません。",
+  footerNote: "語はこのデバイスにのみ保存され、モデルには送信されません。検証済みの完全一致だけが有効で、近似発音と未確認の自動修正は無効です。",
   add: "新しい語",
   export: "書き出す",
   search: "辞書を検索",
   all: "すべて",
-  automatic: "自動収録",
-  manual: "確認済み",
-  empty: "表記を大切にしたい名前や用語を、ここに残せます。",
-  noResults: (query) => query.length > 0 ? `「${query}」は見つかりません。` : "この表示に語はありません。",
+  automatic: "自動追加",
+  manual: "手動追加",
+  empty: "まだ語はありません。＋ から正しい表記を追加できます。",
+  noResults: (query) => query.length > 0
+    ? `「${query}」は見つかりません。`
+    : "まだ語はありません。右上の ＋ から正しい表記を追加できます。",
   word: "語句または名称",
-  editorHint: "この表記を使う文字を選びます。新しい語は既存の素材を書き換えません。",
-  scope: "使用先",
+  editorHint: "標準表記と適用先を保存します。検証済みの完全一致は使用できますが、近似発音と未確認の自動修正は無効です。",
+  scope: "使用可能な入力元",
   scopeBoth: "すべての文字",
   scopeSpoken: "音声入力",
   scopeWritten: "生成テキスト",
-  back: "戻る",
-  newWord: "新しい語",
-  entry: "語",
   addToDictionary: "辞書に追加",
   save: "保存",
-  confirmWriting: "表記を確認",
+  confirmWriting: "確認",
   cancel: "キャンセル",
   edit: "編集",
   remove: "削除",
@@ -829,7 +812,7 @@ const JAPANESE: Copy = Object.freeze({
   unavailable: "ローカル辞書を一時的に利用できません。",
   damaged: "保存した辞書が破損しています。",
   recover: "復旧",
-  recoverQuestion: "破損したデータを空の辞書に置き換えますか？",
+  recoverQuestion: "破損したデータを初期辞書に置き換えますか？",
   saved: "ローカルに保存しました。",
   failed: "保存できませんでした。更新して再試行してください。",
   stale: "辞書が別のウィンドウで更新されました。もう一度確認してください。",
@@ -844,27 +827,26 @@ const JAPANESE: Copy = Object.freeze({
 const GERMAN: Copy = Object.freeze({
   ...ENGLISH,
   title: "WÖRTERBUCH WIKI",
-  description: "Bewahrt die bevorzugte Schreibweise wichtiger Namen und Begriffe auf diesem Gerät auf. Diese Version sendet das Wiki nicht an ein Modell.",
+  footerNote: "Wörter bleiben auf diesem Gerät und werden nie an ein Modell gesendet. Nur geprüfte exakte Treffer sind aktiv; phonetische und unbestätigte Korrekturen bleiben aus.",
   add: "Neues Wort",
   export: "Exportieren",
   search: "Wörter suchen",
   all: "Alle",
-  automatic: "Automatisch erfasst",
-  manual: "Bestätigt",
-  empty: "Bewahren Sie hier Namen und Begriffe auf, deren genaue Schreibweise wichtig ist.",
-  noResults: (query) => query.length > 0 ? `Kein Ergebnis für „${query}“.` : "Keine Wörter in dieser Ansicht.",
+  automatic: "Automatisch hinzugefügt",
+  manual: "Manuell hinzugefügt",
+  empty: "Noch keine Wörter. Mit + kann eine bevorzugte Schreibweise hinzugefügt werden.",
+  noResults: (query) => query.length > 0
+    ? `Kein Ergebnis für „${query}“.`
+    : "Noch keine Wörter. Mit ＋ oben rechts kann eine bevorzugte Schreibweise hinzugefügt werden.",
   word: "Wort oder Name",
-  editorHint: "Wählen Sie, wo diese Schreibweise gilt. Neue Wörter ändern bestehendes Material nicht.",
-  scope: "Verwenden für",
+  editorHint: "Speichert eine bevorzugte Schreibweise und ihren Geltungsbereich. Geprüfte exakte Treffer können gelten; phonetische und unbestätigte Korrekturen bleiben aus.",
+  scope: "Mögliche Quellen",
   scopeBoth: "Alle Texte",
   scopeSpoken: "Spracheingabe",
   scopeWritten: "Generierten Text",
-  back: "Zurück",
-  newWord: "Neues Wort",
-  entry: "Eintrag",
   addToDictionary: "Zum Wörterbuch hinzufügen",
   save: "Speichern",
-  confirmWriting: "Schreibweise bestätigen",
+  confirmWriting: "Bestätigen",
   cancel: "Abbrechen",
   edit: "Bearbeiten",
   remove: "Entfernen",
@@ -876,7 +858,7 @@ const GERMAN: Copy = Object.freeze({
   unavailable: "Das lokale Wörterbuch ist vorübergehend nicht verfügbar.",
   damaged: "Das gespeicherte Wörterbuch ist beschädigt.",
   recover: "Wiederherstellen",
-  recoverQuestion: "Beschädigte Daten durch ein leeres Wörterbuch ersetzen?",
+  recoverQuestion: "Beschädigte Daten durch das Ausgangswörterbuch ersetzen?",
   saved: "Lokal gespeichert.",
   failed: "Nicht gespeichert. Nach Aktualisierung erneut versuchen.",
   stale: "Das WIKI wurde in einem anderen Fenster geändert. Bitte erneut prüfen.",

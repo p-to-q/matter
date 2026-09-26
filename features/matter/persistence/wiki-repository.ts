@@ -3,10 +3,14 @@ import {
   createMatterDatabaseHandle,
   STORAGE_SCHEMA_VERSION,
   WIKI_RECORD_KEY,
+  WIKI_RECORD_SCHEMA_VERSION,
   type StoredWikiRecord,
 } from "./matter-database";
 import { parseWikiState, wikiStateStorageBytes } from "../wiki/wiki-codec";
-import { createEmptyWikiState } from "../wiki/wiki-evidence";
+import {
+  createInitialWikiState,
+  ensureWikiStarterLexemes,
+} from "../wiki/wiki-evidence";
 import type { WikiState } from "../wiki/wiki-model";
 import { MAX_WIKI_STATE_BYTES } from "../wiki/wiki-model";
 
@@ -15,6 +19,10 @@ export const MAX_STORED_WIKI_BYTES = MAX_WIKI_STATE_BYTES;
 export type LoadedWiki = Readonly<{
   state: WikiState;
   writeGeneration: number;
+}>;
+
+type ParsedStoredWiki = LoadedWiki & Readonly<{
+  recordSchemaVersion: StoredWikiRecord["recordSchemaVersion"];
 }>;
 
 export type WikiRepository = Readonly<{
@@ -33,7 +41,7 @@ export type WikiRepository = Readonly<{
  * The caller compiles and validates a candidate snapshot before saving it. A
  * successful transaction is therefore the linearization point after which an
  * in-memory compiled snapshot may be swapped. Corrupt rows are retained for
- * recovery and are never silently replaced by an empty Wiki.
+ * recovery and are never silently replaced by a valid starter Wiki.
  */
 export function createIndexedDbWikiRepository(): WikiRepository {
   const handle = createMatterDatabaseHandle();
@@ -42,12 +50,59 @@ export function createIndexedDbWikiRepository(): WikiRepository {
   return Object.freeze({
     async load() {
       try {
-        const stored: unknown = await (await database()).get("wiki", WIKI_RECORD_KEY);
-        if (stored === undefined) return success(null);
+        const db = await database();
+        const transaction = db.transaction("wiki", "readwrite");
+        observeTransactionCompletion(transaction);
+        const stored: unknown = await transaction.store.get(WIKI_RECORD_KEY);
+        if (stored === undefined) {
+          const state = createInitialWikiState();
+          const initialized: StoredWikiRecord = Object.freeze({
+            storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+            recordSchemaVersion: WIKI_RECORD_SCHEMA_VERSION,
+            key: WIKI_RECORD_KEY,
+            writeGeneration: 1,
+            state,
+          });
+          await transaction.store.put(initialized);
+          await transaction.done;
+          return success(Object.freeze({ state, writeGeneration: 1 }));
+        }
         const parsed = parseStoredWikiRecord(stored);
-        return parsed === null
-          ? failure("PERSISTENCE_CORRUPT", "The saved Wiki is invalid.")
-          : success(parsed);
+        if (parsed === null) {
+          return abort(transaction, "PERSISTENCE_CORRUPT", "The saved Wiki is invalid.");
+        }
+        if (parsed.recordSchemaVersion === WIKI_RECORD_SCHEMA_VERSION) {
+          await transaction.done;
+          return success(toLoadedWiki(parsed));
+        }
+        const migrated = ensureWikiStarterLexemes(parsed.state);
+        if (!migrated.ok || wikiStateStorageBytes(migrated.state) > MAX_STORED_WIKI_BYTES) {
+          await transaction.done;
+          return success(toLoadedWiki(parsed));
+        }
+        const writeGeneration = nextGeneration(parsed.writeGeneration);
+        if (writeGeneration === null) {
+          await transaction.done;
+          return success(toLoadedWiki(parsed));
+        }
+        const initialized: StoredWikiRecord = Object.freeze({
+          storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+          recordSchemaVersion: WIKI_RECORD_SCHEMA_VERSION,
+          key: WIKI_RECORD_KEY,
+          writeGeneration,
+          state: migrated.state,
+        });
+        try {
+          await transaction.store.put(initialized);
+          await transaction.done;
+        } catch {
+          await abandonOptionalMigration(transaction);
+          return success(toLoadedWiki(parsed));
+        }
+        return success(Object.freeze({
+          state: migrated.state,
+          writeGeneration,
+        }));
       } catch {
         return failure("PERSISTENCE_UNAVAILABLE", "Wiki storage is unavailable.");
       }
@@ -99,7 +154,7 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         }
         const stored: StoredWikiRecord = Object.freeze({
           storageSchemaVersion: STORAGE_SCHEMA_VERSION,
-          recordSchemaVersion: 2,
+          recordSchemaVersion: WIKI_RECORD_SCHEMA_VERSION,
           key: WIKI_RECORD_KEY,
           writeGeneration,
           state: parsedCandidate.state,
@@ -138,10 +193,10 @@ export function createIndexedDbWikiRepository(): WikiRepository {
             "The Wiki write generation is exhausted.",
           );
         }
-        const state = createEmptyWikiState();
+        const state = createInitialWikiState();
         const stored: StoredWikiRecord = Object.freeze({
           storageSchemaVersion: STORAGE_SCHEMA_VERSION,
-          recordSchemaVersion: 2,
+          recordSchemaVersion: WIKI_RECORD_SCHEMA_VERSION,
           key: WIKI_RECORD_KEY,
           writeGeneration,
           state,
@@ -158,7 +213,7 @@ export function createIndexedDbWikiRepository(): WikiRepository {
   });
 }
 
-function parseStoredWikiRecord(value: unknown): LoadedWiki | null {
+function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "storageSchemaVersion",
     "recordSchemaVersion",
@@ -168,7 +223,9 @@ function parseStoredWikiRecord(value: unknown): LoadedWiki | null {
   ])) return null;
   if (
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
-    (value.recordSchemaVersion !== 1 && value.recordSchemaVersion !== 2) ||
+    (value.recordSchemaVersion !== 1 && value.recordSchemaVersion !== 2 &&
+      value.recordSchemaVersion !== 3 &&
+      value.recordSchemaVersion !== WIKI_RECORD_SCHEMA_VERSION) ||
     value.key !== WIKI_RECORD_KEY ||
     !Number.isSafeInteger(value.writeGeneration) ||
     (value.writeGeneration as number) < 1 ||
@@ -179,8 +236,16 @@ function parseStoredWikiRecord(value: unknown): LoadedWiki | null {
     ? Object.freeze({
         state: parsed.state,
         writeGeneration: value.writeGeneration as number,
+        recordSchemaVersion: value.recordSchemaVersion as StoredWikiRecord["recordSchemaVersion"],
       })
     : null;
+}
+
+function toLoadedWiki(parsed: ParsedStoredWiki): LoadedWiki {
+  return Object.freeze({
+    state: parsed.state,
+    writeGeneration: parsed.writeGeneration,
+  });
 }
 
 async function abort(
@@ -214,6 +279,21 @@ function observeTransactionCompletion(
   transaction: Readonly<{ done: Promise<unknown> }>,
 ): void {
   void transaction.done.catch(() => undefined);
+}
+
+async function abandonOptionalMigration(
+  transaction: Readonly<{ abort(): void; done: Promise<unknown> }>,
+): Promise<void> {
+  try {
+    transaction.abort();
+  } catch {
+    // IndexedDB may already have aborted the failed optional migration.
+  }
+  try {
+    await transaction.done;
+  } catch {
+    // A failed starter migration must not make an otherwise valid Wiki unreadable.
+  }
 }
 
 function writeFailure(error: unknown): RepositoryResult<never> {

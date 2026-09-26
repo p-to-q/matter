@@ -1137,7 +1137,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
           >
             <header className={styles.dialogHeader}>
               <h2 id="matter-wiki-title">{copy.wiki}</h2>
-              <button aria-label={`${copy.close}: ${copy.wiki}`} onClick={() => closeOverlay()} type="button">
+              <button autoFocus aria-label={`${copy.close}: ${copy.wiki}`} onClick={() => closeOverlay()} type="button">
                 <CloseIcon />
               </button>
             </header>

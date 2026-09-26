@@ -1,9 +1,4 @@
 import type { MatterLocale } from "../config/locales";
-import {
-  projectApplicableWikiRules,
-  WIKI_CONFIRMED_ONLY,
-  type WikiProjectionPolicy,
-} from "./wiki-evidence";
 import type { WikiBoundary, WikiLexemeScope, WikiState } from "./wiki-model";
 
 const WORD_EDGE = /^[\p{L}\p{M}\p{N}].*[\p{L}\p{M}\p{N}]$/u;
@@ -43,17 +38,8 @@ export function deriveWikiBoundary(
 /** Projects canonical lexemes only; fitting scores and channel plumbing stay internal. */
 export function projectWikiConfigurationRules(
   state: WikiState,
-  policy: WikiProjectionPolicy = WIKI_CONFIRMED_ONLY,
 ): readonly WikiConfigurationRule[] {
-  const active = projectApplicableWikiRules(state, policy);
-  const activeAutomatic = new Set(active
-    .filter((rule) => rule.authority === "provisional")
-    .map((rule) => JSON.stringify([rule.locale, rule.canonical])));
-
-  return Object.freeze(state.lexemes
-    .filter((lexeme) => lexeme.provenance === "human-confirmed" ||
-      activeAutomatic.has(JSON.stringify([lexeme.locale, lexeme.canonical])))
-    .map((lexeme) => Object.freeze({
+  return Object.freeze(state.lexemes.map((lexeme) => Object.freeze({
       id: String(lexeme.id),
       lexemeId: lexeme.id,
       locale: lexeme.locale,

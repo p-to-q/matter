@@ -4,7 +4,7 @@ import { fixtureUiCopy } from "./matter-ui-copy";
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 
 test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({ page }) => {
-  test.setTimeout(45_000);
+  test.setTimeout(75_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   const inquiryQuestions: string[] = [];
   await page.route("**/api/inquiry", async (route) => {
@@ -107,6 +107,40 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     letterSpacing: "0.7px",
     lineHeight: "20px",
   });
+  const bottomChromeTone = {
+    theme: await paper.getAttribute("data-canvas-theme"),
+    guidance: await guidance.locator(".matter-guidance__next").evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { color: style.color, fontWeight: style.fontWeight };
+    }),
+    ask: await askMatter.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        color: style.color,
+        fontWeight: style.fontWeight,
+        surface: getComputedStyle(element, "::before").backgroundColor,
+      };
+    }),
+  };
+  expect(bottomChromeTone).toEqual(bottomChromeTone.theme === "dark"
+    ? {
+        theme: "dark",
+        guidance: { color: "rgb(240, 242, 243)", fontWeight: "400" },
+        ask: {
+          color: "rgb(22, 29, 39)",
+          fontWeight: "500",
+          surface: "rgb(245, 245, 242)",
+        },
+      }
+    : {
+        theme: "light",
+        guidance: { color: "rgb(22, 29, 39)", fontWeight: "400" },
+        ask: {
+          color: "rgb(245, 245, 242)",
+          fontWeight: "500",
+          surface: "rgb(22, 29, 39)",
+        },
+      });
   expect(await measureControlFloor(page, '[data-chrome-region="desktop"] [data-chrome-control]')).toEqual([]);
   const bottomChrome = page.locator('[data-chrome-region="bottom"]');
   const topOptical = await readOpticalClearance(page.locator('[data-chrome-region="top"]'));

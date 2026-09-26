@@ -313,11 +313,14 @@ function isWikiText(value: unknown, maxCodePoints: number): value is string {
     Array.from(value).length <= maxCodePoints;
 }
 
-/** Reject invisible and bidi formatting controls while preserving U+200D,
- * which is required inside valid emoji grapheme sequences. */
+const EMOJI_ZWJ_PREFIX = /\p{Extended_Pictographic}(?:\ufe0f|\p{Emoji_Modifier})?\u200d(?=\p{Extended_Pictographic})/gu;
+
+/** Reject invisible and bidi formatting controls. U+200D is retained only
+ * between emoji pictographs, never as an invisible distinction in text. */
 export function hasUnsafeWikiFormatControl(value: string): boolean {
-  for (const codePoint of value) {
-    if (codePoint !== "\u200d" && /\p{Cf}/u.test(codePoint)) return true;
+  const withoutValidEmojiJoiners = value.replace(EMOJI_ZWJ_PREFIX, "");
+  for (const codePoint of withoutValidEmojiJoiners) {
+    if (/\p{Cf}/u.test(codePoint)) return true;
   }
   return false;
 }

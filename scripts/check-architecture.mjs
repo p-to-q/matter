@@ -8,13 +8,15 @@
  * exceptions to them, because a check that fails on the day it lands is a check
  * someone silences. The exceptions are gone, so the rules can be held.
  *
- * Deliberately narrow. It reads static import specifiers only, and it does not
- * try to be a type system, a layering framework, or a lint plugin. Every rule
- * here answers a question that has already cost this repository something.
+ * Deliberately narrow. It reads resolvable static and string-literal dynamic
+ * import specifiers; it does not try to be a type system, a layering framework,
+ * or a lint plugin. Every rule here answers a question that has already cost
+ * this repository something.
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import ts from "typescript";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const SOURCE_ROOTS = ["features", "app", "scripts", "studio"];
@@ -48,13 +50,13 @@ const PROVIDER_MODULE = "features/matter/server/model-pool.ts";
 const WIKI_ROOT = "features/matter/wiki/";
 
 /**
- * Static value specifiers only.
+ * Runtime value specifiers only.
  *
- * A dynamic import is a runtime decision rather than a shape, and `import type`
- * is erased before anything runs — the rule these serve is about the *runtime*
- * graph, so counting a type-only edge would report a dependency the built
- * output does not contain. A type-only import pointing the wrong way is still
- * worth noticing in review; it is simply not this check's claim.
+ * `import type` is erased before anything runs, so counting a type-only edge
+ * would report a dependency the built output does not contain. String-literal
+ * dynamic imports are runtime edges and must remain visible to privacy,
+ * provider, layer, and cycle checks. Computed specifiers cannot be resolved to
+ * repository files here and remain a review concern.
  */
 export function importsOf(source) {
   const specifiers = [];
@@ -77,6 +79,29 @@ export function importsOf(source) {
   for (const [, specifier] of source.matchAll(/(?:^|\n)\s*import\s*["']([^"']+)["']/gu)) {
     specifiers.push(specifier);
   }
+  specifiers.push(...dynamicImportsOf(source));
+  return specifiers;
+}
+
+function dynamicImportsOf(source) {
+  const file = ts.createSourceFile(
+    "architecture-input.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    false,
+    ts.ScriptKind.TSX,
+  );
+  const specifiers = [];
+  const visit = (node) => {
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length >= 1 &&
+      ts.isStringLiteralLike(node.arguments[0])
+    ) specifiers.push(node.arguments[0].text);
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
   return specifiers;
 }
 

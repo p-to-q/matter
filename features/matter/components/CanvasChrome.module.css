@@ -785,6 +785,17 @@
   width: min(700px, calc(100% - 48px));
   max-height: min(720px, calc(100% - 48px));
   grid-template-rows: auto minmax(0, 1fr);
+  background: color-mix(in srgb, var(--chrome-sheet) 94%, transparent);
+}
+
+.wikiDialog .dialogHeader {
+  min-height: 52px;
+}
+
+.wikiDialog .dialogHeader h2 {
+  font-size: 13px;
+  letter-spacing: .8px;
+  text-transform: none;
 }
 
 .wikiDialogBody {
@@ -1062,6 +1073,7 @@
   }
 
   .wikiDialog {
+    height: min(570px, calc(100% - 24px));
     max-height: calc(100% - 24px);
   }
 

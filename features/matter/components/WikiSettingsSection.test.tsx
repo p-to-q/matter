@@ -13,7 +13,10 @@ describe("WikiSettingsSection", () => {
     const source = readFileSync(new URL("./WikiSettingsSection.tsx", import.meta.url), "utf8");
 
     expect(markup).toContain('aria-label="词典 WIKI"');
-    expect(markup).toContain("在这里保留重要名字和术语的标准写法");
+    expect(markup).toContain("当前只启用已验证的精确匹配");
+    expect(markup).toContain("自动添加");
+    expect(markup).toContain("手动添加");
+    expect(source).toContain('scope: "可用于"');
     expect(source).toContain('scopeBoth: "所有文字"');
     expect(source).toContain('scopeSpoken: "语音输入"');
     expect(source).toContain('scopeWritten: "生成内容"');
@@ -45,7 +48,9 @@ describe("WikiSettingsSection", () => {
 
     expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*min-height: 44px;/s);
     expect(css).toContain(".editorRemove");
-    expect(css).toMatch(/\.rules li:hover,[\s\S]*background:[\s\S]*5%/s);
+    expect(css).toMatch(/\.rules li:hover,[\s\S]*background:\s*transparent/s);
+    expect(css).toMatch(/\.tileActions button:hover,[\s\S]*background:\s*var\(--chrome-primary\)/s);
+    expect(css).toMatch(/first-child\[aria-pressed="true"\]::after[\s\S]*transform:\s*scale\(1\)/s);
     expect(css).toMatch(/\.editor input,[\s\S]*\.search input\s*\{\s*font-size:\s*16px;/s);
     expect(css).toMatch(/@media \(hover: none\), \(pointer: coarse\)[\s\S]*\.tileActions\s*\{\s*display:\s*none;/s);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation:\s*none;/s);
