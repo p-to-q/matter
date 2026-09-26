@@ -4,7 +4,7 @@ import {
   MATTER_PRODUCT_DESCRIPTION,
   MATTER_PRODUCT_TITLE,
   MATTER_SITE_URL,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 export const metadata: Metadata = {
   title: { absolute: MATTER_PRODUCT_TITLE },

@@ -9,7 +9,7 @@ import {
   MATTER_SITE_LAST_UPDATED_ISO,
   MATTER_SITE_URL,
   MATTER_SITEMAP_URL,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 const full = `# Matter — Full Product Map
 

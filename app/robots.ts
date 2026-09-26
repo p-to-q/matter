@@ -3,7 +3,7 @@ import {
   MATTER_BASE_PATH,
   MATTER_PUBLIC_ORIGIN,
   MATTER_SITEMAP_URL,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 const CRAWLER_USER_AGENTS = [
   "Googlebot",

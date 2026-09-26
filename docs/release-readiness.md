@@ -2,9 +2,9 @@
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. The current source identifies
-`0.2.0-preview.61`; exact public identity still requires a no-store production
+`0.2.0-preview.62`; exact public identity still requires a no-store production
 health readback after the corresponding `main` deployment. This is a deployed
-source identity, not an immutable release: no Preview.61 tag or GitHub
+source identity, not an immutable release: no Preview.62 tag or GitHub
 prerelease exists. Production Model API
 remains unavailable until the deployment-owned `MATTER_PROVIDER_SESSION_KEYS`
 ring is valid and redeployed, and publication remains withheld until the strict
@@ -134,6 +134,21 @@ Wiki prompt context. Polyphones, multi-pronunciation English entries, unknown
 names, cross-locale matches, and collisions abstain. No portion may ship without
 the positive, adversarial, ambiguity, protected-literal, generated-output, and
 performance corpus for the exact compiler and resource version.
+
+Schema V5 is the current local candidate, not a released automatic capability.
+It separates canonical-term recurrence from alias-relation evidence, migrates
+V2/V3/V4 machine evidence into a zero-weight legacy producer, and keeps one
+candidate-local quiet clock per bounded ledger row. The offline qualification
+parser binds complete case inputs, expected labels, producer/resource bytes,
+corpus identity, safety classes, capacity, and performance limits. It does not
+execute those bytes or prove that a receipt came from them; no controlled
+execution harness, real producer corpus, or licensed pronunciation resource is
+present. The runtime-qualified release set and provisional bridge therefore
+remain empty. The exact human authority continues unchanged. Two default-on
+local preferences let a person independently pause automatic collection or
+phonetic fitting. They are additional runtime restrictions, not availability
+claims: with the current empty qualified release set, neither preference can
+activate a producer or provisional rewrite.
 
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
 boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:

@@ -13,7 +13,10 @@ describe("WikiSettingsSection", () => {
     const source = readFileSync(new URL("./WikiSettingsSection.tsx", import.meta.url), "utf8");
 
     expect(markup).toContain('aria-label="词典 WIKI"');
-    expect(markup).toContain("当前只启用已验证的精确匹配");
+    expect(markup).toContain("只有已验证并发布的本地规则可以改写材料");
+    expect(markup).toContain("关闭收词");
+    expect(markup).toContain("关闭近音");
+    expect(source).not.toContain("aria-pressed={capabilityPreferences");
     expect(markup).toContain("自动添加");
     expect(markup).toContain("手动添加");
     expect(source).toContain('scope: "可用于"');
@@ -56,5 +59,7 @@ describe("WikiSettingsSection", () => {
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)[\s\S]*animation:\s*none;/s);
     expect(css).toMatch(/\.exportButton\s*\{[\s\S]*display:\s*grid;/s);
     expect(css).toContain('.exportLabel[data-active="false"]');
+    expect(css).toMatch(/\.capabilityActions button\s*{[^}]*text-decoration:\s*underline/s);
+    expect(css).toMatch(/\.capabilityActions button:hover,[\s\S]*background:\s*transparent/s);
   });
 });

@@ -224,7 +224,7 @@ function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
   if (
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
     (value.recordSchemaVersion !== 1 && value.recordSchemaVersion !== 2 &&
-      value.recordSchemaVersion !== 3 &&
+      value.recordSchemaVersion !== 3 && value.recordSchemaVersion !== 4 &&
       value.recordSchemaVersion !== WIKI_RECORD_SCHEMA_VERSION) ||
     value.key !== WIKI_RECORD_KEY ||
     !Number.isSafeInteger(value.writeGeneration) ||

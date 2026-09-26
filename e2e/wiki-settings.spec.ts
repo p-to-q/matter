@@ -5,18 +5,18 @@ import { decodeWikiExport } from "../features/matter/wiki/wiki-export";
 const WIKI_TITLE = "词典 WIKI";
 const STARTER_WORDS = ["Engelbart", "Morphogenesis", "KFC", "[p → q]"] as const;
 const WIKI_STATE_KEYS = Object.freeze([
+  "aliasEvidence",
   "aliasTombstones",
   "authorities",
   "automaticLearningSaturated",
-  "evidence",
   "fittingVersion",
   "lexemeTombstones",
   "lexemes",
   "nextLexemeId",
-  "recentObservationCount",
   "revision",
   "schemaVersion",
   "scoringVersion",
+  "termEvidence",
 ]);
 
 test.describe.configure({ timeout: 90_000 });
@@ -164,6 +164,8 @@ test("desktop Wiki preserves a person's explicit dictionary journey and exports 
   expect(envelope.formatVersion).toBe(2);
   const state = envelope.state as Record<string, unknown>;
   expect(Object.keys(state).sort()).toEqual(WIKI_STATE_KEYS);
+  expect(state.termEvidence).toEqual([]);
+  expect(state.aliasEvidence).toEqual([]);
   const lexemes = state.lexemes as Array<Record<string, unknown>>;
   expect(lexemes).toHaveLength(5);
   expect(Object.keys(lexemes[0]!).sort()).toEqual([

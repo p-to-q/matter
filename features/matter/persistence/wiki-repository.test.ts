@@ -52,7 +52,7 @@ describe("IndexedDB Wiki repository", () => {
     await expect(repository.save(state, null)).resolves.toEqual({ ok: true, value: 1 });
     expect(put).toHaveBeenCalledWith({
       storageSchemaVersion: 1,
-      recordSchemaVersion: 4,
+      recordSchemaVersion: 5,
       key: "origin",
       writeGeneration: 1,
       state,
@@ -84,8 +84,13 @@ describe("IndexedDB Wiki repository", () => {
       state = decided.state;
     }
     const legacyState = {
-      ...JSON.parse(JSON.stringify(state)),
       schemaVersion: 3,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: state.revision,
+      nextLexemeId: state.nextLexemeId,
+      recentObservationCount: 0,
+      automaticLearningSaturated: false,
       lexemes: state.lexemes.map((lexeme) => ({
         id: lexeme.id,
         locale: lexeme.locale,
@@ -93,6 +98,10 @@ describe("IndexedDB Wiki repository", () => {
         provenance: lexeme.provenance,
         confirmedAtRevision: lexeme.confirmedAtRevision,
       })),
+      evidence: [],
+      authorities: state.authorities,
+      aliasTombstones: state.aliasTombstones,
+      lexemeTombstones: state.lexemeTombstones,
     };
     let stored: unknown = {
       storageSchemaVersion: 1,
@@ -117,13 +126,14 @@ describe("IndexedDB Wiki repository", () => {
     const migrated = await repository.load();
     expect(migrated).toMatchObject({
       ok: true,
-      value: { writeGeneration: 8, state: { schemaVersion: 4 } },
+      value: { writeGeneration: 8, state: { schemaVersion: 5 } },
     });
     if (!migrated.ok || migrated.value === null) return;
     expect(migrated.value.state.lexemes[0].scope).toBe("both");
     const relations = JSON.stringify({
       authorities: migrated.value.state.authorities,
-      evidence: migrated.value.state.evidence,
+      termEvidence: migrated.value.state.termEvidence,
+      aliasEvidence: migrated.value.state.aliasEvidence,
       aliasTombstones: migrated.value.state.aliasTombstones,
     });
 
@@ -145,7 +155,8 @@ describe("IndexedDB Wiki repository", () => {
       .map((rule) => rule.channel)).toEqual(["spoken"]);
     expect(JSON.stringify({
       authorities: reloadedSpoken.value.state.authorities,
-      evidence: reloadedSpoken.value.state.evidence,
+      termEvidence: reloadedSpoken.value.state.termEvidence,
+      aliasEvidence: reloadedSpoken.value.state.aliasEvidence,
       aliasTombstones: reloadedSpoken.value.state.aliasTombstones,
     })).toBe(relations);
 
@@ -167,7 +178,8 @@ describe("IndexedDB Wiki repository", () => {
       .map((rule) => rule.channel).sort()).toEqual(["spoken", "written"]);
     expect(JSON.stringify({
       authorities: reloadedBoth.value.state.authorities,
-      evidence: reloadedBoth.value.state.evidence,
+      termEvidence: reloadedBoth.value.state.termEvidence,
+      aliasEvidence: reloadedBoth.value.state.aliasEvidence,
       aliasTombstones: reloadedBoth.value.state.aliasTombstones,
     })).toBe(relations);
   });
@@ -199,9 +211,14 @@ describe("IndexedDB Wiki repository", () => {
 
     await expect(createIndexedDbWikiRepository().load()).resolves.toEqual({
       ok: true,
-      value: { state: removed.state, writeGeneration: 4 },
+      value: { state: removed.state, writeGeneration: 5 },
     });
-    expect(put).not.toHaveBeenCalled();
+    expect(put).toHaveBeenCalledOnce();
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      recordSchemaVersion: 5,
+      writeGeneration: 5,
+      state: removed.state,
+    }));
   });
 
   it("loads a valid full Wiki when optional starter migration cannot fit", async () => {
@@ -298,7 +315,7 @@ describe("IndexedDB Wiki repository", () => {
       value: { state, writeGeneration: 13 },
     });
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 4,
+      recordSchemaVersion: 5,
       writeGeneration: 13,
       state,
     }));

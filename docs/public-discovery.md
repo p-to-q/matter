@@ -11,7 +11,7 @@ Matter into a chat product.
 
 ## One origin resolver
 
-`features/matter/seo/site.ts` is the only owner of the public origin and the
+`features/matter/public/site.ts` is the only owner of the public origin and the
 Matter mount. It resolves values in this order:
 
 1. `MATTER_PUBLIC_ORIGIN`, when it is a valid HTTP(S) origin;

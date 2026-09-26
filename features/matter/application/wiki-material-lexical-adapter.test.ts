@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { compileWikiBasis, type WikiBasis } from "../wiki/wiki-basis";
+import {
+  compileWikiBasis,
+  EMPTY_WIKI_BASIS,
+  type WikiBasis,
+} from "../wiki/wiki-basis";
+import { compileWikiRules } from "../wiki/wiki-compiler";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
 import {
   canonicalizeMaterialText,
@@ -95,6 +100,94 @@ describe("Wiki material lexical adapter", () => {
     });
 
     expect(observed).toEqual([[]]);
+  });
+
+  it("lets independent local preferences restrict fitting and observation", () => {
+    const created = applyWikiEvent(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    });
+    if (!created.ok) throw new Error(created.error.message);
+    const compiled = compileWikiBasis(created.state, 3);
+    if (!compiled.ok) throw new Error(compiled.error.message);
+    const observed: unknown[] = [];
+    let automaticCollection = true;
+    let phoneticFitting = false;
+    const observer = createWikiMaterialLexicalObservationPort(
+      () => compiled.basis,
+      (events) => observed.push(events),
+      {
+        mode: "latin-conservative",
+        automaticCollectionEnabled: () => automaticCollection,
+        phoneticFittingEnabled: () => phoneticFitting,
+      },
+    );
+
+    observeCommittedMaterialText(observer, {
+      locale: "en-US",
+      channel: "spoken",
+      text: "Englebart spoke",
+    });
+    automaticCollection = false;
+    observeCommittedMaterialText(observer, {
+      locale: "en-US",
+      channel: "spoken",
+      text: "Englebart spoke",
+    });
+    phoneticFitting = true;
+    observeCommittedMaterialText(observer, {
+      locale: "en-US",
+      channel: "spoken",
+      text: "Englebart spoke",
+    });
+
+    expect(observed).toEqual([
+      [],
+      [expect.objectContaining({ form: "Englebart", canonical: "Engelbart" })],
+    ]);
+  });
+
+  it("captures the confirmed fallback while phonetic fitting is paused", () => {
+    const released = compileWikiRules([{
+      locale: "en-US",
+      channel: "spoken",
+      boundary: "word",
+      form: "englebart",
+      canonical: "Engelbart",
+      authority: "provisional",
+      provenance: "aggregate-evidence",
+      score: 1,
+    }], 4);
+    if (!released.ok) throw new Error(released.issues[0]?.message);
+    const basisWithReleasedFitting: WikiBasis = Object.freeze({
+      ...EMPTY_WIKI_BASIS,
+      stateRevision: 7,
+      snapshot: released.snapshot,
+      confirmedSnapshot: Object.freeze({
+        ...EMPTY_WIKI_BASIS.confirmedSnapshot,
+        generation: 4,
+      }),
+    });
+    let enabled = false;
+    const port = createWikiMaterialLexicalPort(
+      () => basisWithReleasedFitting,
+      { phoneticFittingEnabled: () => enabled },
+    );
+    const request = Object.freeze({
+      locale: "en-US" as const,
+      channel: "spoken" as const,
+      text: "englebart spoke",
+    });
+
+    expect(canonicalizeMaterialText(port.capture(), request).text).toBe(
+      "englebart spoke",
+    );
+    enabled = true;
+    expect(canonicalizeMaterialText(port.capture(), request).text).toBe(
+      "Engelbart spoke",
+    );
   });
 });
 

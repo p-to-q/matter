@@ -4,9 +4,14 @@
  */
 
 import type { MatterLocale } from "../config/locales";
+import type {
+  WikiAliasEvidenceProducer,
+  WikiAutomaticAliasPhase,
+  WikiAutomaticTermPhase,
+} from "./wiki-learning-policy";
 
-export const WIKI_SCHEMA_VERSION = 4 as const;
-export const WIKI_SCORING_VERSION = 2 as const;
+export const WIKI_SCHEMA_VERSION = 5 as const;
+export const WIKI_SCORING_VERSION = 3 as const;
 export const WIKI_FITTING_VERSION = 1 as const;
 
 export const MAX_WIKI_FORM_CODE_POINTS = 64;
@@ -21,7 +26,7 @@ export const MAX_WIKI_LEXEMES = MAX_WIKI_EVIDENCE_RECORDS +
   MAX_WIKI_AUTHORITY_RULES + MAX_WIKI_TOMBSTONES;
 export const MAX_WIKI_LEXEME_TOMBSTONES = 5_000;
 export const MAX_WIKI_EVIDENCE_COUNT = 255;
-// Evidence-cohort aging cadence. This is not an interaction or user-intent window.
+// Candidate-local quiet cadence. This is not an interaction or user-intent window.
 export const WIKI_RECENT_OBSERVATION_WINDOW = 32;
 export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 32;
 // The lexeme schema may transiently represent every relation from a valid 4 MiB
@@ -31,6 +36,22 @@ export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 32;
 export const MAX_WIKI_STATE_BYTES = 9 * 1_024 * 1_024;
 export const MAX_WIKI_APPLICABLE_RULES = 5_000;
 export const MAX_WIKI_APPLICABLE_CODE_POINTS = 256_000;
+
+export const WIKI_STARTER_LEXEMES = Object.freeze([
+  Object.freeze({ locale: "en-US" as const, canonical: "Engelbart", scope: "both" as const }),
+  Object.freeze({ locale: "en-US" as const, canonical: "Morphogenesis", scope: "both" as const }),
+  Object.freeze({ locale: "en-US" as const, canonical: "KFC", scope: "both" as const }),
+  Object.freeze({ locale: "zh-CN" as const, canonical: "[p → q]", scope: "both" as const }),
+]);
+
+/** Product starter identity is locale-bound; a same-spelling custom entry in
+ * another locale remains an ordinary term candidate. */
+export function isWikiStarterLexemeIdentity(
+  value: Readonly<{ locale: MatterLocale; canonical: string }>,
+): boolean {
+  return WIKI_STARTER_LEXEMES.some((starter) =>
+    starter.locale === value.locale && starter.canonical === value.canonical);
+}
 
 export type WikiChannel = "spoken" | "written";
 export type WikiLexemeScope = WikiChannel | "both";
@@ -67,14 +88,21 @@ export type WikiAliasDescriptor = Readonly<{
   form: string;
 }>;
 
-export type WikiEvidenceCounts = Readonly<{
-  historicalMaterial: number;
-  recentMaterial: number;
-  machineInference: number;
+/** Canonical recurrence and relation evidence are separate durable facts.
+ * A frequent term can never lend authority to an alias relation. */
+export type WikiTermEvidenceAggregate = Readonly<{
+  locale: MatterLocale;
+  canonical: string;
+  phase: WikiAutomaticTermPhase;
+  support: number;
+  quietTurns: number;
 }>;
 
-export type WikiEvidenceAggregate = WikiAliasDescriptor & Readonly<{
-  counts: WikiEvidenceCounts;
+export type WikiAliasEvidenceAggregate = WikiAliasDescriptor & Readonly<{
+  producer: WikiAliasEvidenceProducer;
+  phase: WikiAutomaticAliasPhase;
+  support: number;
+  quietTurns: number;
 }>;
 
 export type WikiAuthorityRule = WikiAliasDescriptor & Readonly<{
@@ -97,10 +125,10 @@ export type WikiState = Readonly<{
   fittingVersion: typeof WIKI_FITTING_VERSION;
   revision: number;
   nextLexemeId: number;
-  recentObservationCount: number;
   automaticLearningSaturated: boolean;
   lexemes: readonly WikiLexeme[];
-  evidence: readonly WikiEvidenceAggregate[];
+  termEvidence: readonly WikiTermEvidenceAggregate[];
+  aliasEvidence: readonly WikiAliasEvidenceAggregate[];
   authorities: readonly WikiAuthorityRule[];
   aliasTombstones: readonly WikiTombstone[];
   lexemeTombstones: readonly WikiLexemeTombstone[];

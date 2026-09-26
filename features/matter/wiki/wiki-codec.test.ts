@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { parseWikiEvent, parseWikiState, wikiStateStorageBytes } from "./wiki-codec";
-import { applyWikiEvent, createEmptyWikiState } from "./wiki-evidence";
+import {
+  applyWikiEvent,
+  applyWikiObservationBatch,
+  createEmptyWikiState,
+} from "./wiki-evidence";
 import { MAX_WIKI_STATE_BYTES, type WikiEvent } from "./wiki-model";
 
 describe("Wiki codec", () => {
@@ -158,8 +162,13 @@ describe("Wiki codec", () => {
     });
     if (!created.ok) throw new Error(created.error.message);
     const legacy = {
-      ...JSON.parse(JSON.stringify(created.state)),
       schemaVersion: 3,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: created.state.revision,
+      nextLexemeId: created.state.nextLexemeId,
+      recentObservationCount: 0,
+      automaticLearningSaturated: false,
       lexemes: created.state.lexemes.map((lexeme) => ({
         id: lexeme.id,
         locale: lexeme.locale,
@@ -167,6 +176,10 @@ describe("Wiki codec", () => {
         provenance: lexeme.provenance,
         confirmedAtRevision: lexeme.confirmedAtRevision,
       })),
+      evidence: [],
+      authorities: created.state.authorities,
+      aliasTombstones: created.state.aliasTombstones,
+      lexemeTombstones: created.state.lexemeTombstones,
     };
 
     const parsed = parseWikiState(legacy);
@@ -174,10 +187,185 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         lexemes: [{ canonical: "Engelbart", scope: "both" }],
       },
     });
+  });
+
+  it("strictly splits V4 recurrence from zero-weight legacy relation evidence", () => {
+    const parsed = parseWikiState({
+      schemaVersion: 4,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: 7,
+      nextLexemeId: 2,
+      recentObservationCount: 19,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Codex",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      }],
+      evidence: [
+        {
+          lexemeId: 1,
+          channel: "spoken",
+          boundary: "word",
+          form: "code x",
+          counts: { historicalMaterial: 0, recentMaterial: 1, machineInference: 4 },
+        },
+        {
+          lexemeId: 1,
+          channel: "written",
+          boundary: "literal",
+          form: "cod ex",
+          counts: { historicalMaterial: 1, recentMaterial: 0, machineInference: 0 },
+        },
+      ],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    });
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      state: {
+        schemaVersion: 5,
+        scoringVersion: 3,
+        termEvidence: [{
+          locale: "en-US",
+          canonical: "Codex",
+          phase: "candidate",
+          support: 1,
+          quietTurns: 0,
+        }],
+        aliasEvidence: [{
+          lexemeId: 1,
+          form: "code x",
+          producer: "legacy-v1",
+          phase: "candidate",
+          support: 4,
+          quietTurns: 0,
+        }],
+      },
+    });
+  });
+
+  it("keeps V4 starter recurrence out of the term ledger while legacy aliases decay", () => {
+    const parsed = parseWikiState({
+      schemaVersion: 4,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: 4,
+      nextLexemeId: 2,
+      recentObservationCount: 3,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Engelbart",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      }],
+      evidence: [{
+        lexemeId: 1,
+        channel: "spoken",
+        boundary: "word",
+        form: "engel bard",
+        counts: { historicalMaterial: 1, recentMaterial: 2, machineInference: 4 },
+      }],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    });
+    if (!parsed.ok) throw new Error(parsed.message);
+
+    expect(parsed.state.termEvidence).toEqual([]);
+    expect(parsed.state.aliasEvidence).toEqual([
+      expect.objectContaining({ form: "engel bard", support: 4 }),
+    ]);
+
+    let state = parsed.state;
+    for (let index = 0; index < 96; index += 1) {
+      const aged = applyWikiObservationBatch(state, []);
+      if (!aged.ok) throw new Error(aged.error.message);
+      state = aged.state;
+    }
+    expect(state.aliasEvidence).toEqual([]);
+    expect(state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "Engelbart", provenance: "aggregate-evidence" }),
+    ]);
+  });
+
+  it("does not migrate automatic recurrence onto a human-owned lexeme", () => {
+    const parsed = parseWikiState({
+      schemaVersion: 4,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: 2,
+      nextLexemeId: 2,
+      recentObservationCount: 7,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Codex",
+        scope: "both",
+        provenance: "human-confirmed",
+        confirmedAtRevision: 2,
+      }],
+      evidence: [{
+        lexemeId: 1,
+        channel: "spoken",
+        boundary: "word",
+        form: "code x",
+        counts: { historicalMaterial: 3, recentMaterial: 2, machineInference: 1 },
+      }],
+      authorities: [{
+        lexemeId: 1,
+        channel: "spoken",
+        boundary: "word",
+        form: "code x",
+        confirmedAtRevision: 2,
+      }],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    });
+
+    expect(parsed).toMatchObject({
+      ok: true,
+      state: {
+        termEvidence: [],
+        aliasEvidence: [{ producer: "legacy-v1", support: 1 }],
+        authorities: [{ form: "code x" }],
+      },
+    });
+  });
+
+  it("rejects V5 recurrence attached to a human-owned lexeme", () => {
+    const state = applyWikiEvent(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Codex",
+      scope: "both",
+    });
+    if (!state.ok) throw new Error(state.error.message);
+
+    expect(parseWikiState({
+      ...state.state,
+      termEvidence: [{
+        locale: "en-US",
+        canonical: "Codex",
+        phase: "candidate",
+        support: 1,
+        quietTurns: 0,
+      }],
+    })).toMatchObject({ ok: false });
   });
 
   it("accepts only one evidence observation per event", () => {
@@ -230,7 +418,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         fittingVersion: 1,
         revision: 2,
         nextLexemeId: 3,

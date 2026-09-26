@@ -766,7 +766,13 @@ generation and records its completion even when all rows already exist. It
 respects canonical identity, tombstones, and a saturated decision ledger;
 browser components never fabricate starter rows, and a person's removal is not
 replayed by a later load. Capacity or quota failure leaves the prior valid Wiki
-readable rather than labelling it corrupt. Record V4 also collapses the
+readable rather than labelling it corrupt. Record V5 stores canonical recurrence
+and alias-relation evidence in separate bounded ledgers. Strict V2/V3/V4
+migration retains recurrence only for aggregate-owned lexemes, discards the
+redundant recurrence of human-owned lexemes, and maps old machine counts only to
+a zero-weight legacy alias producer, so loading an older record cannot activate
+provisional authority. The global observation counter is removed;
+each candidate owns its bounded quiet clock. Record V4 also collapses the
 short-lived automatic `en-US` / `zh-CN` `[p → q]` duplicate only when the old
 row has the exact product-owned shape and no unknown relation; human-owned or
 ambiguous rows are never silently merged. On the current `zh-CN` speech path,
@@ -781,8 +787,37 @@ decision must arrive through a composition-owned, one-shot capability carrying
 an opaque attribution token captured at application time; the token is bound to
 one basis/rule, visible occurrence, document/interaction epoch, and expiry. It
 does not carry surrounding material. The capability and its token land only in
-the same slice as the correction UI; no empty port is exported in advance, and
-later text diffs, undo, deletion, or repetition are never mined to infer intent.
+the same slice as the correction UI; no empty port is exported in advance. A
+bounded foreground-visible survival horizon may later provide one weak terminal
+observation for that exact occurrence, never nested milestones or initial
+activation authority. Material Undo and Redo remain a separate tree-history
+system: Wiki does not observe, replay, or interpret them. Any future reversal of
+Wiki authority owns its own implementation, contract, and persistence
+lifecycle. It may reuse contract principles, but never the material-history
+framework, command types, stack, or state.
+
+Producer qualification is another offline boundary. The manifest owns the
+labelled corpus and complete case inputs while the receipt carries outputs and
+measurements only. The
+gate recomputes the corpus digest, hashes bounded raw producer/resource
+artifacts, and retains the complete versioned identity after complete positive,
+adversarial, ambiguity, locale-isolation, protected, generated, and
+capacity/performance proof. Unknown, malformed, mismatched, incomplete,
+oversized, or duplicated candidates fail closed. The gate itself grants no
+runtime authority; the current release set and bridge remain empty until a real
+licensed resource and corpus receipt exist. The verifier cannot prove receipt
+provenance by itself; a controlled harness must execute the pinned artifacts
+and produce the receipt before a runtime release identity can exist. None of
+this exposes scoring, candidate review, language selection, or confirmation
+work to the person. The settings surface does expose two independent default-on
+local permission preferences for automatic collection and phonetic fitting.
+They are stored outside the dictionary record and material history; every
+runtime consumer applies them only as an additional restriction on a
+release-qualified capability, never as authority by themselves.
+The published Wiki basis carries one runtime-selected snapshot and one
+confirmed-only fallback. Material ingress chooses one snapshot when it captures
+the lexical session and retains that immutable choice for the complete turn;
+the matcher itself never reads preferences, evidence scores, or authority.
 
 The researched pronunciation direction remains a compiler boundary, not a
 model or hot-path matcher. A future compiler may derive bounded local aliases

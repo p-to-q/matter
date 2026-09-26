@@ -169,7 +169,8 @@ the person invokes correction on the erroneous word.
 Maintainer clarification, 2026-09-25: `WIKI_RECENT_OBSERVATION_WINDOW` is only
 the bounded evidence-cohort aging cadence; it is not a user-intent window. The
 current release has no production `recent-material` producer and must not infer
-intent from ordinary delete, undo, repetition, or later edits. Settings
+intent from generic deletion, Material Undo or Redo, repetition, or later
+whole-text edits. Settings
 create/rename/scope/remove decisions are direct human authority and bypass
 scoring. Confirm/reject/replace remain the exact domain outlet for a later
 error-local correction, but the composition-owned one-shot token and its UI must
@@ -177,6 +178,121 @@ land together; no generic decision port is added in advance. The token binds the
 applied basis/rule to one visible occurrence and current document/interaction
 epoch, carries no surrounding passage, and expires rather than being rebuilt
 from a later diff.
+
+Maintainer freeze, 2026-09-26: automatic collection and alias fitting use two
+separate bounded ledgers. Canonical recurrence may decide that a word is worth
+listing, but it can never prove that one observed form should rewrite to that
+canonical word. Alias authority therefore accepts only relation-specific
+producer evidence or one addressed human decision. This separation replaces
+the current mixed `historical + recent + machine` score before either automatic
+capability can become release-default behavior.
+
+The local learner is a deterministic state machine, not online reinforcement
+learning. One successful human admission is one logical environment tick;
+generated, repaired, transformed, imported, undone, or rescanned text produces
+no tick reward and no evidence. Within one tick, an identical candidate counts
+at most once. The first three or four independent turns provide the useful
+information. Each candidate owns a bounded quiet counter; there is no global
+cohort edge. Term evidence uses one saturating integer support value:
+
+```text
+support'   = min(255, support + one bounded observation)
+observed  = support', quiet = 0
+not observed for 32 successful human admissions:
+            support = floor(support / 2), quiet = 0
+
+candidate -> collected when support >= 2
+collected -> candidate only when support = 0
+```
+
+Two independent human turns therefore surface a name at any position in the
+product lifetime; no global boundary can erase the second vote. The one-count
+retention band prevents a collected term from flickering out at the first quiet
+far-horizon aging; without new evidence it sinks on the next aging, while
+repeatedly reinforced support can survive proportionally longer. A fully
+decayed machine-only candidate with no authority, alias evidence, or tombstone
+may be evicted without creating negative authority. Human-owned terms, product
+seeds, and tombstones never participate in automatic eviction.
+
+Alias evidence is relation-specific and carries one versioned producer id. Its
+bounded support decays by half only after that candidate has been absent from
+32 successful human admissions. A candidate
+may rise only when its producer is release-qualified, the weighted winner meets
+the activation threshold, and its lead over the runner-up meets an ambiguity
+margin. Exact-pronunciation evidence has integer weight `3`; restricted
+near-sound and internal-orthographic evidence has weight `2`. The shared
+activation score is `8`, so an unopposed exact relation may rise on its third
+independent turn and a restricted relation on its fourth. Activation margin `4`
+blocks exact `3 versus 2` and near `4 versus 3` contests, while accepting exact
+`3 versus 1` and near `4 versus 2`. An active alias uses retention score `5`
+and margin `3`, but a challenger must always clear the higher activation gate.
+A resource or classifier change changes the producer or fitting version rather
+than silently reinterpreting old votes. Disablement removes provisional aliases
+from the compiled basis without deleting their evidence. Confirmed human and
+product rules remain exact authority.
+
+Counter-evidence is narrow and attributable. A competing canonical for the same
+locale/channel/form reduces the winner margin after every successful admission
+and may make the resolver abstain immediately, without waiting for aging. One
+addressed human reject, replacement, or removal bypasses scoring and becomes
+confirmed authority or a tombstone. Passive use may become weak positive
+evidence, but only after one exact applied occurrence survives one
+foreground-visible, corpus-calibrated horizon. It settles once; a later
+reapplication is a new occurrence rather than another reward tier for the first.
+Material Undo and Redo remain a completely separate tree-history system. Wiki
+neither listens to nor interprets them. If the visible address disappears, the
+transient occurrence expires without a Wiki event. A future Wiki reversal, if
+needed, owns an independent implementation, explicit decision, and persistence
+lifecycle; only strict contract principles may be shared with material history,
+never its command types, state, stack, or framework.
+
+Environment, reward, and evaluation stay outside production authority. A pure
+trace-replay harness treats `(Wiki state, logical tick)` as the environment and
+the deterministic collect, activate, demote, evict, or abstain transition as
+the action. Its evaluation is lexicographic rather than a runtime scalar:
+false rewrites and protected/generated rewrites must remain zero, then misses
+are minimized before correct applications, activation latency, demotion latency,
+or churn may improve. Corpus receipts also hold state bytes, compile and match
+latency, and cross-tab CAS retries. Runtime
+weights remain versioned integers frozen from those receipts; they never adapt
+from live user material. A second fixed interaction corpus labels expected
+accept, reject, or unknown outcomes and observes exactly one explicit decision,
+survived horizon, or censored terminal state per occurrence.
+It reports denominated reject and censor rates plus raw survived exposure,
+unsafe-attribution, and false implicit-positive counts instead of inventing live
+reward weights. Censored exposure never becomes a failed survival. Generated
+output contributes no implicit evidence; an explicit addressed human decision
+may still become authority. Censoring is neutral.
+
+The implementation order is fixed:
+
+1. land the pure integer policy and replay proof without changing runtime;
+2. migrate to separate term and alias ledgers while provisional projection stays
+   release-gated;
+3. land the strict manifest-owned-corpus and raw-artifact qualification boundary
+   while its release set and runtime bridge remain empty;
+4. add versioned local term and pronunciation producers with real qualified
+   receipts;
+5. add the one-shot occurrence owner and addressed correction command;
+6. publish one truthful runtime capability snapshot alongside the existing
+   local permission preferences in the Wiki settings surface; and
+7. enable local automation by default only after positive, adversarial,
+   ambiguity, protected-literal, cross-tab, capacity, and performance gates pass.
+
+The existing Wiki list remains the end-to-end surface. V5 adds only two quiet,
+default-on local permission actions in its lower-right footer: automatic term
+collection and phonetic fitting. They persist separately from Wiki data and
+Material history, and can only restrict a capability that has independently
+passed the release gate; they cannot promote an inactive producer. Hidden candidates do not appear there. Collected terms
+appear under `Automatically added`; a person edit promotes one to confirmed
+authority, and removal creates a tombstone. Routine learning, matching,
+survival, and decay remain invisible, so a person can benefit without ever
+opening Wiki. Only an obvious error that the person elects to correct exposes
+the narrow local takeover. A later UI must derive `exact-only`,
+`pronunciation`, `full-auto`, or `paused` from the published runtime capability,
+never from an environment variable, starter row, or optimistic preference. The
+local actions express permission, not availability. The surface adds no score,
+confidence, language picker, review queue, alias table, or confirmation workload.
 
 The next candidate is frozen but not active: exact Chinese homophones, only
 `an`/`ang`, `en`/`eng`, and `in`/`ing` as near-final pairs, and exact English

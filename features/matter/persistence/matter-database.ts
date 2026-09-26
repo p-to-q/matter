@@ -98,12 +98,12 @@ export type StoredInquiryRecord = Readonly<{
 }>;
 
 export const WIKI_RECORD_KEY = "origin" as const;
-export const WIKI_RECORD_SCHEMA_VERSION = 4 as const;
+export const WIKI_RECORD_SCHEMA_VERSION = 5 as const;
 
 /** Wiki is local lexical authority. It is neither material nor a model cache. */
 export type StoredWikiRecord = Readonly<{
   storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
-  recordSchemaVersion: 1 | 2 | 3 | typeof WIKI_RECORD_SCHEMA_VERSION;
+  recordSchemaVersion: 1 | 2 | 3 | 4 | typeof WIKI_RECORD_SCHEMA_VERSION;
   key: typeof WIKI_RECORD_KEY;
   writeGeneration: number;
   state: WikiState;

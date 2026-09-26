@@ -5,8 +5,8 @@ import {
   applyWikiObservationBatch,
   clearWikiState,
   createEmptyWikiState,
+  createInitialWikiState,
   projectApplicableWikiRules,
-  scoreWikiEvidence,
 } from "./wiki-evidence";
 import {
   MAX_WIKI_EVIDENCE_COUNT,
@@ -23,71 +23,149 @@ describe("Wiki evidence and authority", () => {
     const state = createEmptyWikiState();
 
     expect(state).toEqual({
-      schemaVersion: 4,
-      scoringVersion: 2,
+      schemaVersion: 5,
+      scoringVersion: 3,
       fittingVersion: 1,
       revision: 0,
       nextLexemeId: 1,
-      recentObservationCount: 0,
       automaticLearningSaturated: false,
       lexemes: [],
-      evidence: [],
+      termEvidence: [],
+      aliasEvidence: [],
       authorities: [],
       aliasTombstones: [],
       lexemeTombstones: [],
     });
     expect(WIKI_SCORE_POLICY.version).toBe(WIKI_SCORING_VERSION);
     expect(Object.isFrozen(state)).toBe(true);
-    expect(Object.isFrozen(state.evidence)).toBe(true);
+    expect(Object.isFrozen(state.termEvidence)).toBe(true);
+    expect(Object.isFrozen(state.aliasEvidence)).toBe(true);
   });
 
-  it("weights recent aggregate evidence above historical evidence", () => {
-    expect(scoreWikiEvidence({
-      historicalMaterial: 1,
-      recentMaterial: 0,
-      machineInference: 0,
-    })).toBe(1);
-    expect(scoreWikiEvidence({
-      historicalMaterial: 0,
-      recentMaterial: 1,
-      machineInference: 0,
-    })).toBe(4);
-  });
-
-  it("ages recent human evidence by observation count without rescanning material", () => {
-    let state = repeatEvidence(
-      createEmptyWikiState(),
-      "recent-material",
-      32,
-    );
-    expect(state.recentObservationCount).toBe(32);
-    expect(state.evidence[0].counts).toMatchObject({
-      historicalMaterial: 0,
-      recentMaterial: 32,
-    });
+  it("keeps the first term observation hidden and collects it on the second turn", () => {
+    let state = applyObservationBatch(createEmptyWikiState(), [observe("recent-material")]);
+    expect(state.lexemes).toEqual([]);
+    expect(state.termEvidence).toEqual([
+      expect.objectContaining({ canonical: "Codex", phase: "candidate", support: 1 }),
+    ]);
 
     state = applyObservationBatch(state, [observe("recent-material")]);
-    expect(state.recentObservationCount).toBe(1);
-    expect(state.evidence[0].counts).toMatchObject({
-      historicalMaterial: 32,
-      recentMaterial: 1,
-    });
+    expect(state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
+    ]);
+    expect(state.termEvidence[0]).toMatchObject({ phase: "collected", support: 2 });
   });
 
-  it("ages machine proposals so an old false inference cannot stay active forever", () => {
-    let state = repeatEvidence(createEmptyWikiState(), "machine-inference", 4);
-    expect(projectApplicableWikiRules(state)).toHaveLength(1);
+  it("keeps untouched product starters outside the term-aging ledger", () => {
+    const state = createInitialWikiState();
+    const result = applyWikiObservationBatch(state, state.lexemes.map((lexeme) => ({
+      type: "observe-evidence" as const,
+      locale: lexeme.locale,
+      channel: "spoken" as const,
+      boundary: "word" as const,
+      form: `${lexeme.canonical} heard`,
+      canonical: lexeme.canonical,
+      source: "recent-material" as const,
+    })));
 
-    for (let index = 0; index < 33; index += 1) {
-      state = applyObservationBatch(state, [{
-        ...observe("recent-material", "Human term"),
-        form: "human term",
-      }]);
+    expect(result).toEqual({ ok: true, state, changed: false });
+    expect(state.termEvidence).toEqual([]);
+  });
+
+  it("ages term evidence on its own quiet horizon without a global cohort", () => {
+    let state = applyObservationBatch(createEmptyWikiState(), [observe("recent-material")]);
+    for (let index = 0; index < 31; index += 1) state = applyObservationBatch(state, []);
+    expect(state.termEvidence[0]).toMatchObject({ support: 1, quietTurns: 31 });
+
+    state = applyObservationBatch(state, []);
+    expect(state.termEvidence).toEqual([]);
+    expect(state.lexemes).toEqual([]);
+  });
+
+  it("ages zero-weight legacy alias evidence without activating it", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
+    });
+    state = repeatEvidence(state, "machine-inference", 4);
+    expect(projectApplicableWikiRules(state)).toEqual([]);
+
+    for (let index = 0; index < 32; index += 1) state = applyObservationBatch(state, []);
+
+    expect(state.aliasEvidence[0]).toMatchObject({ support: 2, quietTurns: 0 });
+    expect(projectApplicableWikiRules(state)).toEqual([]);
+  });
+
+  it("collects a machine-only migrated lexeme after its alias expires", () => {
+    const parsed = parseWikiState({
+      schemaVersion: 4,
+      scoringVersion: 2,
+      fittingVersion: 1,
+      revision: 3,
+      nextLexemeId: 2,
+      recentObservationCount: 0,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Codex",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      }],
+      evidence: [{
+        lexemeId: 1,
+        channel: "spoken",
+        boundary: "word",
+        form: "code x",
+        counts: { historicalMaterial: 0, recentMaterial: 0, machineInference: 1 },
+      }],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    });
+    if (!parsed.ok) throw new Error(parsed.message);
+    let state = parsed.state;
+
+    expect(state.termEvidence).toEqual([
+      expect.objectContaining({ canonical: "Codex", support: 0 }),
+    ]);
+    for (let index = 0; index < 32; index += 1) {
+      state = applyObservationBatch(state, []);
     }
 
-    expect(state.evidence.find((entry) => entry.form === "code x")?.counts)
-      .toMatchObject({ machineInference: 2 });
-    expect(projectApplicableWikiRules(state)).toEqual([]);
+    expect(state.aliasEvidence).toEqual([]);
+    expect(state.termEvidence).toEqual([]);
+    expect(state.lexemes).toEqual([]);
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
+  });
+
+  it("retains a zero-support term until its last alias dependency expires", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+    state = repeatEvidence(state, "machine-inference", 4);
+
+    for (let index = 0; index < 60; index += 1) {
+      state = applyObservationBatch(state, []);
+    }
+
+    expect(state.termEvidence).toEqual([
+      expect.objectContaining({ canonical: "Codex", phase: "candidate", support: 0 }),
+    ]);
+    expect(state.aliasEvidence).toEqual([
+      expect.objectContaining({ support: 2 }),
+    ]);
+    expect(state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
+    ]);
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
+
+    for (let index = 0; index < 36; index += 1) {
+      state = applyObservationBatch(state, []);
+    }
+
+    expect(state.termEvidence).toEqual([]);
+    expect(state.aliasEvidence).toEqual([]);
+    expect(state.lexemes).toEqual([]);
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
   });
 
   it("ages one human turn once even for a full observation batch", () => {
@@ -105,19 +183,37 @@ describe("Wiki evidence and authority", () => {
 
     state = applyObservationBatch(state, events);
 
-    expect(state.recentObservationCount).toBe(1);
-    expect(state.evidence).toHaveLength(32);
+    expect(state.aliasEvidence).toHaveLength(32);
+    expect(state.aliasEvidence.every((entry) => entry.quietTurns === 0)).toBe(true);
+  });
+
+  it("counts one canonical at most once in a human-admission tick", () => {
+    const state = applyObservationBatch(createEmptyWikiState(), [
+      observe("recent-material"),
+      {
+        ...observe("recent-material"),
+        channel: "written",
+        form: "codex",
+      },
+    ]);
+
+    expect(state.termEvidence).toEqual([
+      expect.objectContaining({ canonical: "Codex", phase: "candidate", support: 1 }),
+    ]);
+    expect(state.lexemes).toEqual([]);
   });
 
   it("lets candidate-free human turns age an old machine proposal", () => {
-    let state = repeatEvidence(createEmptyWikiState(), "machine-inference", 4);
-    expect(projectApplicableWikiRules(state)).toHaveLength(1);
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
+    });
+    state = repeatEvidence(state, "machine-inference", 4);
 
-    for (let index = 0; index < 33; index += 1) {
+    for (let index = 0; index < 32; index += 1) {
       state = applyObservationBatch(state, []);
     }
 
-    expect(state.evidence[0].counts.machineInference).toBe(2);
+    expect(state.aliasEvidence[0].support).toBe(2);
     expect(projectApplicableWikiRules(state)).toEqual([]);
   });
 
@@ -127,70 +223,37 @@ describe("Wiki evidence and authority", () => {
       .toEqual({ ok: true, state, changed: false });
   });
 
-  it("removes fully decayed machine evidence without blocking a later observation", () => {
-    let state = apply(createEmptyWikiState(), observe("machine-inference"));
-    for (let index = 0; index < 33; index += 1) {
-      state = applyObservationBatch(state, [{
-        ...observe("recent-material", "OpenAI"),
-        form: "open eye",
-      }]);
-    }
-
-    expect(state.revision).toBeGreaterThan(34);
-    expect(state.evidence).toEqual([
-      expect.objectContaining({
-        form: "open eye",
-        counts: {
-          historicalMaterial: 32,
-          recentMaterial: 1,
-          machineInference: 0,
-        },
-      }),
+  it("removes fully decayed alias evidence without blocking a later observation", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
+    });
+    state = apply(state, observe("machine-inference"));
+    for (let index = 0; index < 32; index += 1) state = applyObservationBatch(state, []);
+    expect(state.aliasEvidence).toEqual([]);
+    state = apply(state, observe("machine-inference"));
+    expect(state.aliasEvidence).toEqual([
+      expect.objectContaining({ form: "code x", support: 1 }),
     ]);
   });
 
   it("does not let material frequency invent an alias relation", () => {
-    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 33);
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 3);
 
-    expect(state.evidence[0].counts.historicalMaterial).toBe(32);
-    expect(state.evidence[0].counts.recentMaterial).toBe(1);
-
+    expect(state.termEvidence[0]).toMatchObject({ phase: "collected", support: 3 });
+    expect(state.aliasEvidence).toEqual([]);
     expect(projectApplicableWikiRules(state)).toEqual([]);
 
     state = apply(state, observe("machine-inference"));
-    expect(projectApplicableWikiRules(state)).toEqual([
-      expect.objectContaining({
-        form: "code x",
-        canonical: "Codex",
-        authority: "provisional",
-        provenance: "aggregate-evidence",
-      }),
-    ]);
-  });
-
-  it("fails closed when provisional candidates remain ambiguous", () => {
-    let state = createEmptyWikiState();
-    state = repeatEvidence(state, "machine-inference", 4, "Codex");
-    state = repeatEvidence(state, "machine-inference", 4, "Codecs");
+    expect(state.aliasEvidence[0]).toMatchObject({ producer: "legacy-v1", support: 1 });
     expect(projectApplicableWikiRules(state)).toEqual([]);
-
-    state = apply(state, observe("recent-material", "Codex"));
-    expect(projectApplicableWikiRules(state)).toEqual([
-      expect.objectContaining({ canonical: "Codex", authority: "provisional", score: 16 }),
-    ]);
   });
 
-  it("keeps a below-floor runner-up in the ambiguity decision", () => {
-    let state = createEmptyWikiState();
-    state = repeatEvidence(state, "machine-inference", 4, "Codex");
-    state = repeatEvidence(state, "machine-inference", 3, "Codecs");
-
-    expect(scoreWikiEvidence(
-      state.evidence.find((entry) => canonicalOf(state, entry.lexemeId) === "Codex")!.counts,
-    )).toBe(12);
-    expect(scoreWikiEvidence(
-      state.evidence.find((entry) => canonicalOf(state, entry.lexemeId) === "Codecs")!.counts,
-    )).toBe(9);
+  it("keeps legacy migrated relations non-authoritative regardless of vote count", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2, "Codex");
+    state = repeatEvidence(state, "machine-inference", 32, "Codex");
+    expect(state.aliasEvidence[0]).toMatchObject({
+      producer: "legacy-v1", phase: "candidate", support: 32,
+    });
     expect(projectApplicableWikiRules(state)).toEqual([]);
   });
 
@@ -255,8 +318,8 @@ describe("Wiki evidence and authority", () => {
       changed: true,
       state: {
         revision: confirmed.revision + 1,
-        recentObservationCount: 0,
-        evidence: [],
+        termEvidence: [],
+        aliasEvidence: [],
         authorities: [],
         aliasTombstones: [],
         lexemeTombstones: [],
@@ -265,7 +328,9 @@ describe("Wiki evidence and authority", () => {
   });
 
   it("keeps rejected candidates tombstoned through later observations", () => {
-    let state = createEmptyWikiState();
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
+    });
     state = repeatEvidence(state, "machine-inference", 4);
     state = apply(state, decision("reject-rule"));
     state = repeatEvidence(state, "recent-material", 32);
@@ -365,6 +430,96 @@ describe("Wiki evidence and authority", () => {
       .toEqual(["Douglas Engelbart", "Douglas Engelbart"]);
   });
 
+  it("retires automatic recurrence when a person renames a collected term", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+    const lexeme = state.lexemes[0];
+    expect(lexeme).toMatchObject({
+      canonical: "Codex",
+      provenance: "aggregate-evidence",
+    });
+
+    state = apply(state, {
+      type: "rename-lexeme",
+      lexemeId: lexeme.id,
+      locale: "en-US",
+      canonical: "OpenAI Codex",
+      scope: "both",
+    });
+
+    expect(state.lexemes[0]).toMatchObject({
+      canonical: "OpenAI Codex",
+      provenance: "human-confirmed",
+    });
+    expect(state.termEvidence).toEqual([]);
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
+  });
+
+  it("retires recurrence through every human lexeme promotion path", () => {
+    const collected = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+
+    const created = apply(collected, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Codex",
+      scope: "both",
+    });
+    expect(created.termEvidence).toEqual([]);
+    expect(created.lexemes[0]).toMatchObject({ provenance: "human-confirmed" });
+
+    const confirmed = apply(collected, decision("confirm-rule", "Codex"));
+    expect(confirmed.termEvidence).toEqual([]);
+    expect(confirmed.lexemes[0]).toMatchObject({ provenance: "human-confirmed" });
+
+    let replaceBase = apply(createEmptyWikiState(), decision("confirm-rule", "Origin"));
+    replaceBase = repeatEvidence(replaceBase, "recent-material", 2, "Codex");
+    const replaced = apply(replaceBase, {
+      type: "replace-rule",
+      before: descriptor("code x", "Origin"),
+      after: descriptor("codex voice", "Codex"),
+    });
+    expect(replaced.termEvidence).toEqual([]);
+    expect(replaced.lexemes.find((entry) => entry.canonical === "Codex"))
+      .toMatchObject({ provenance: "human-confirmed" });
+  });
+
+  it("does not recreate recurrence after a person owns the canonical", () => {
+    const confirmed = apply(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Codex",
+      scope: "both",
+    });
+    const result = applyWikiObservationBatch(confirmed, [
+      observe("recent-material"),
+      observe("recent-material"),
+    ]);
+
+    expect(result).toEqual({ ok: true, state: confirmed, changed: false });
+    expect(confirmed.termEvidence).toEqual([]);
+  });
+
+  it("does not project a stored active alias before its producer is qualified", () => {
+    const base = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
+    });
+    const state = Object.freeze({
+      ...base,
+      aliasEvidence: Object.freeze([Object.freeze({
+        lexemeId: base.lexemes[0].id,
+        channel: "spoken" as const,
+        boundary: "word" as const,
+        form: "code x",
+        producer: "en-exact-homophone-v1" as const,
+        phase: "active" as const,
+        support: 3,
+        quietTurns: 0,
+      })]),
+    });
+
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
+    expect(projectApplicableWikiRules(state)).toEqual([]);
+  });
+
   it("changes applicability without deleting disabled-channel lineage", () => {
     let state = apply(createEmptyWikiState(), {
       type: "create-lexeme",
@@ -388,7 +543,8 @@ describe("Wiki evidence and authority", () => {
       channel: "written",
     });
     const beforeRelations = JSON.stringify({
-      evidence: state.evidence,
+      termEvidence: state.termEvidence,
+      aliasEvidence: state.aliasEvidence,
       authorities: state.authorities,
       aliasTombstones: state.aliasTombstones,
       lexemeTombstones: state.lexemeTombstones,
@@ -405,7 +561,8 @@ describe("Wiki evidence and authority", () => {
     expect(projectApplicableWikiRules(state).map((rule) => rule.channel))
       .toEqual(["spoken"]);
     expect(JSON.stringify({
-      evidence: state.evidence,
+      termEvidence: state.termEvidence,
+      aliasEvidence: state.aliasEvidence,
       authorities: state.authorities,
       aliasTombstones: state.aliasTombstones,
       lexemeTombstones: state.lexemeTombstones,
@@ -421,7 +578,8 @@ describe("Wiki evidence and authority", () => {
     expect(projectApplicableWikiRules(state).map((rule) => rule.channel).sort())
       .toEqual(["spoken", "written"]);
     expect(JSON.stringify({
-      evidence: state.evidence,
+      termEvidence: state.termEvidence,
+      aliasEvidence: state.aliasEvidence,
       authorities: state.authorities,
       aliasTombstones: state.aliasTombstones,
       lexemeTombstones: state.lexemeTombstones,
@@ -477,12 +635,16 @@ describe("Wiki evidence and authority", () => {
   });
 
   it("cascades a removed lexeme and prevents automatic recreation", () => {
-    let state = repeatEvidence(createEmptyWikiState(), "machine-inference", 4, "Engelbart");
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
+    });
+    state = repeatEvidence(state, "machine-inference", 4, "Engelbart");
     const lexeme = state.lexemes[0];
     state = apply(state, { type: "remove-lexeme", lexemeId: lexeme.id });
 
     expect(state.lexemes).toEqual([]);
-    expect(state.evidence).toEqual([]);
+    expect(state.termEvidence).toEqual([]);
+    expect(state.aliasEvidence).toEqual([]);
     expect(state.lexemeTombstones).toHaveLength(1);
     expect(Object.keys(state.lexemeTombstones[0] ?? {})).toEqual([
       "locale", "canonical", "rejectedAtRevision",
@@ -505,6 +667,35 @@ describe("Wiki evidence and authority", () => {
     expect(state.authorities).toEqual([]);
     expect(state.aliasTombstones).toHaveLength(1);
     expect(state.lexemes.map((entry) => entry.canonical)).toEqual(["Codex", "code x"]);
+  });
+
+  it("protects a same-spelling automatic lexeme when a person takes it over", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Other", scope: "both",
+    });
+    state = apply(state, {
+      ...observe("machine-inference", "Other"),
+      form: "Codex",
+    });
+    state = repeatEvidence(state, "recent-material", 2, "Codex");
+    const automatic = state.lexemes.find((entry) => entry.canonical === "Codex");
+    if (automatic === undefined) throw new Error("automatic lexeme was not collected");
+
+    state = apply(state, {
+      type: "rename-lexeme",
+      lexemeId: automatic.id,
+      locale: automatic.locale,
+      canonical: automatic.canonical,
+      scope: automatic.scope,
+    });
+
+    expect(state.aliasTombstones).toContainEqual(expect.objectContaining({
+      form: "Codex",
+    }));
+    state = apply(state, { type: "remove-lexeme", lexemeId: automatic.id });
+    expect(state.aliasTombstones).toContainEqual(expect.objectContaining({
+      form: "Codex",
+    }));
   });
 
   it("rejects a human alias decision that would rewrite another canonical", () => {
@@ -664,11 +855,13 @@ describe("Wiki evidence and authority", () => {
   });
 
   it("saturates bounded aggregate counts without advancing an unchanged revision", () => {
-    let state = createEmptyWikiState();
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
+    });
     for (let index = 0; index < MAX_WIKI_EVIDENCE_COUNT; index += 1) {
       state = apply(state, observe("machine-inference"));
     }
-    expect(state.evidence[0].counts.machineInference).toBe(MAX_WIKI_EVIDENCE_COUNT);
+    expect(state.aliasEvidence[0].support).toBe(MAX_WIKI_EVIDENCE_COUNT);
     const saturatedRevision = state.revision;
 
     const result = applyWikiEvent(state, observe("machine-inference"));
@@ -700,6 +893,16 @@ function observe(
     form: "code x",
     canonical,
     source,
+  };
+}
+
+function descriptor(form: string, canonical: string) {
+  return {
+    locale: "en-US" as const,
+    channel: "spoken" as const,
+    boundary: "word" as const,
+    form,
+    canonical,
   };
 }
 

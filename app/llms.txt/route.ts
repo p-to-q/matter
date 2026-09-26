@@ -5,7 +5,7 @@ import {
   MATTER_ROBOTS_URL,
   MATTER_SITE_URL,
   MATTER_SITEMAP_URL,
-} from "@/features/matter/seo/site";
+} from "@/features/matter/public/site";
 
 const llms = `# Matter
 

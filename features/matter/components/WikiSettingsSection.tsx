@@ -14,6 +14,11 @@ import {
   matterWikiConfiguration,
   type MatterWikiConfigurationSnapshot,
 } from "../persistence/wiki-runtime";
+import {
+  DEFAULT_WIKI_CAPABILITY_PREFERENCES,
+} from "../persistence/wiki-capability-preferences";
+import { matterWikiCapabilityPreferences } from
+  "../persistence/wiki-capability-preferences-controller";
 import type {
   WikiConfigurationInput,
   WikiConfigurationRule,
@@ -71,6 +76,10 @@ type Copy = Readonly<{
   cancel: string;
   edit: string;
   remove: string;
+  disableAutomaticCollection: string;
+  enableAutomaticCollection: string;
+  disablePhoneticFitting: string;
+  enablePhoneticFitting: string;
   removeQuestion: string;
   confirm: string;
   loadMore: string;
@@ -103,6 +112,11 @@ export function WikiSettingsSection({
     matterWikiConfiguration.subscribe,
     matterWikiConfiguration.getSnapshot,
     () => SERVER_SNAPSHOT,
+  );
+  const capabilityPreferences = useSyncExternalStore(
+    matterWikiCapabilityPreferences.subscribe,
+    matterWikiCapabilityPreferences.getSnapshot,
+    () => DEFAULT_WIKI_CAPABILITY_PREFERENCES,
   );
   const [editor, setEditor] = useState<Editor | null>(null);
   const [query, setQuery] = useState("");
@@ -315,6 +329,20 @@ export function WikiSettingsSection({
       setExported(false);
       noticeTimerRef.current = null;
     }, EXPORT_CONFIRMATION_MS);
+  };
+
+  const toggleAutomaticCollection = () => {
+    const result = matterWikiCapabilityPreferences.setAutomaticCollection(
+      !capabilityPreferences.automaticCollection,
+    );
+    if (!result.ok) showNotice(copy.failed);
+  };
+
+  const togglePhoneticFitting = () => {
+    const result = matterWikiCapabilityPreferences.setPhoneticFitting(
+      !capabilityPreferences.phoneticFitting,
+    );
+    if (!result.ok) showNotice(copy.failed);
   };
 
   const closeEditor = () => {
@@ -583,8 +611,28 @@ export function WikiSettingsSection({
           ) : null}
 
           <footer className={styles.listFooter}>
-            <p>{copy.footerNote}</p>
-            <span className={styles.total}>{copy.total(filtered.length)}</span>
+            <div className={styles.footerSummary}>
+              <p>{copy.footerNote}</p>
+              <span className={styles.total}>{copy.total(filtered.length)}</span>
+            </div>
+            <div className={styles.capabilityActions}>
+              <button
+                onClick={toggleAutomaticCollection}
+                type="button"
+              >
+                {capabilityPreferences.automaticCollection
+                  ? copy.disableAutomaticCollection
+                  : copy.enableAutomaticCollection}
+              </button>
+              <button
+                onClick={togglePhoneticFitting}
+                type="button"
+              >
+                {capabilityPreferences.phoneticFitting
+                  ? copy.disablePhoneticFitting
+                  : copy.enablePhoneticFitting}
+              </button>
+            </div>
           </footer>
         </div>
       )}
@@ -650,7 +698,7 @@ function downloadBytes(bytes: Uint8Array, fileName: string): void {
 
 const ENGLISH: Copy = Object.freeze({
   title: "WIKI",
-  footerNote: "Words stay on this device and are never sent to a model. Only verified exact matches are active; phonetic fitting and unconfirmed correction remain off.",
+  footerNote: "Words stay on this device and are never sent to a model. Only locally released, verified rules may change material.",
   filterLabel: "Word source",
   add: "Add word",
   export: "Export dictionary",
@@ -661,7 +709,7 @@ const ENGLISH: Copy = Object.freeze({
   empty: "No words yet. Use + to add a preferred spelling.",
   noResults: (query) => query.length > 0 ? `No result for “${query}”.` : "No words in this view.",
   word: "Word or name",
-  editorHint: "Save one preferred spelling and where it may apply. Verified exact matches may be used; phonetic fitting and unconfirmed correction remain off.",
+  editorHint: "Save one preferred spelling and where it may apply. Unverified fitting never changes material.",
   scope: "May apply to",
   scopeBoth: "All text",
   scopeSpoken: "Voice input",
@@ -672,6 +720,10 @@ const ENGLISH: Copy = Object.freeze({
   cancel: "Cancel",
   edit: "Edit",
   remove: "Remove",
+  disableAutomaticCollection: "Disable learning",
+  enableAutomaticCollection: "Enable learning",
+  disablePhoneticFitting: "Disable fitting",
+  enablePhoneticFitting: "Enable fitting",
   removeQuestion: "Remove?",
   confirm: "Confirm",
   loadMore: "Load more",
@@ -695,7 +747,7 @@ const ENGLISH: Copy = Object.freeze({
 const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   ...ENGLISH,
   title: "词典 WIKI",
-  footerNote: "词典只保存在这台设备上，不会发送给模型。当前只启用已验证的精确匹配；近音拟合与未确认的自动纠正仍未启用。",
+  footerNote: "词典只保存在这台设备上，不会发送给模型。只有已验证并发布的本地规则可以改写材料。",
   filterLabel: "词条来源",
   add: "添加词",
   export: "导出词典",
@@ -708,7 +760,7 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
     ? `没有找到“${query}”。`
     : "还没有词。用右上角的 ＋ 添加一个标准写法。",
   word: "词语或名称",
-  editorHint: "保存一个标准写法，并选择它可用于哪里。已验证的精确匹配可以生效；近音拟合与未确认的自动纠正仍未启用。",
+  editorHint: "保存一个标准写法，并选择它可用于哪里。未通过验证的拟合不会改写材料。",
   scope: "可用于",
   scopeBoth: "所有文字",
   scopeSpoken: "语音输入",
@@ -719,6 +771,10 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   cancel: "取消",
   edit: "修改",
   remove: "移出词典",
+  disableAutomaticCollection: "关闭收词",
+  enableAutomaticCollection: "开启收词",
+  disablePhoneticFitting: "关闭近音",
+  enablePhoneticFitting: "开启近音",
   removeQuestion: "从词典中移除这个词？",
   confirm: "确认",
   loadMore: "加载更多",
@@ -742,7 +798,7 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
 const TRADITIONAL_CHINESE: Copy = Object.freeze({
   ...SIMPLIFIED_CHINESE,
   title: "詞典 WIKI",
-  footerNote: "詞典只儲存在這台裝置上，不會傳送給模型。目前只啟用已驗證的精確匹配；近音擬合與未確認的自動糾正仍未啟用。",
+  footerNote: "詞典只儲存在這台裝置上，不會傳送給模型。只有已驗證並發佈的本機規則可以改寫材料。",
   add: "新增詞",
   export: "匯出詞典",
   search: "搜尋詞典",
@@ -754,7 +810,7 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
     ? `找不到「${query}」。`
     : "還沒有詞。用右上角的 ＋ 新增一個標準寫法。",
   word: "詞語或名稱",
-  editorHint: "儲存一個標準寫法，並選擇它可用於哪裡。已驗證的精確匹配可以生效；近音擬合與未確認的自動糾正仍未啟用。",
+  editorHint: "儲存一個標準寫法，並選擇它可用於哪裡。未通過驗證的擬合不會改寫材料。",
   scope: "可用於",
   scopeBoth: "所有文字",
   scopeSpoken: "語音輸入",
@@ -765,6 +821,10 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
   cancel: "取消",
   edit: "修改",
   remove: "移除",
+  disableAutomaticCollection: "關閉收詞",
+  enableAutomaticCollection: "開啟收詞",
+  disablePhoneticFitting: "關閉近音",
+  enablePhoneticFitting: "開啟近音",
   loadMore: "載入更多",
   loading: "正在載入本機詞典…",
   unavailable: "本機詞典暫時無法使用。",
@@ -781,7 +841,7 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
 const JAPANESE: Copy = Object.freeze({
   ...ENGLISH,
   title: "辞書 WIKI",
-  footerNote: "語はこのデバイスにのみ保存され、モデルには送信されません。検証済みの完全一致だけが有効で、近似発音と未確認の自動修正は無効です。",
+  footerNote: "語はこのデバイスにのみ保存され、モデルには送信されません。検証・公開済みのローカルルールだけが素材を変更できます。",
   add: "新しい語",
   export: "書き出す",
   search: "辞書を検索",
@@ -793,7 +853,7 @@ const JAPANESE: Copy = Object.freeze({
     ? `「${query}」は見つかりません。`
     : "まだ語はありません。右上の ＋ から正しい表記を追加できます。",
   word: "語句または名称",
-  editorHint: "標準表記と適用先を保存します。検証済みの完全一致は使用できますが、近似発音と未確認の自動修正は無効です。",
+  editorHint: "標準表記と適用先を保存します。未検証のフィッティングは素材を変更しません。",
   scope: "使用可能な入力元",
   scopeBoth: "すべての文字",
   scopeSpoken: "音声入力",
@@ -804,6 +864,10 @@ const JAPANESE: Copy = Object.freeze({
   cancel: "キャンセル",
   edit: "編集",
   remove: "削除",
+  disableAutomaticCollection: "自動収集をオフ",
+  enableAutomaticCollection: "自動収集をオン",
+  disablePhoneticFitting: "近似発音をオフ",
+  enablePhoneticFitting: "近似発音をオン",
   removeQuestion: "削除しますか？",
   confirm: "確認",
   loadMore: "さらに読み込む",
@@ -827,7 +891,7 @@ const JAPANESE: Copy = Object.freeze({
 const GERMAN: Copy = Object.freeze({
   ...ENGLISH,
   title: "WÖRTERBUCH WIKI",
-  footerNote: "Wörter bleiben auf diesem Gerät und werden nie an ein Modell gesendet. Nur geprüfte exakte Treffer sind aktiv; phonetische und unbestätigte Korrekturen bleiben aus.",
+  footerNote: "Wörter bleiben auf diesem Gerät und werden nie an ein Modell gesendet. Nur geprüfte, lokal veröffentlichte Regeln dürfen Material ändern.",
   add: "Neues Wort",
   export: "Exportieren",
   search: "Wörter suchen",
@@ -839,7 +903,7 @@ const GERMAN: Copy = Object.freeze({
     ? `Kein Ergebnis für „${query}“.`
     : "Noch keine Wörter. Mit ＋ oben rechts kann eine bevorzugte Schreibweise hinzugefügt werden.",
   word: "Wort oder Name",
-  editorHint: "Speichert eine bevorzugte Schreibweise und ihren Geltungsbereich. Geprüfte exakte Treffer können gelten; phonetische und unbestätigte Korrekturen bleiben aus.",
+  editorHint: "Speichert eine bevorzugte Schreibweise und ihren Geltungsbereich. Ungeprüfte Anpassungen ändern kein Material.",
   scope: "Mögliche Quellen",
   scopeBoth: "Alle Texte",
   scopeSpoken: "Spracheingabe",
@@ -850,6 +914,10 @@ const GERMAN: Copy = Object.freeze({
   cancel: "Abbrechen",
   edit: "Bearbeiten",
   remove: "Entfernen",
+  disableAutomaticCollection: "Wortsammlung ausschalten",
+  enableAutomaticCollection: "Wortsammlung einschalten",
+  disablePhoneticFitting: "Lautabgleich ausschalten",
+  enablePhoneticFitting: "Lautabgleich einschalten",
   removeQuestion: "Entfernen?",
   confirm: "Bestätigen",
   loadMore: "Mehr laden",
