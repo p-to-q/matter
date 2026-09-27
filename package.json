@@ -32,7 +32,7 @@
     "qualify:wiki": "env MATTER_RUN_WIKI_QUALIFICATION=1 vitest run features/matter/wiki/wiki-qualified-producer-releases.test.ts features/matter/wiki/wiki-qualified-learning-policy.test.ts --reporter=verbose --maxWorkers=1"
   },
   "dependencies": {
-    "@huggingface/transformers": "^4.2.0",
+    "@huggingface/transformers": "^4.3.0",
     "fflate": "^0.8.3",
     "idb": "^8.0.3",
     "next": "16.3.4",
