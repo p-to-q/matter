@@ -1,10 +1,11 @@
 # Preview deployment-owner handoff
 
-Status: the public origin identifies itself as Preview.62 through the automatic
-GitHub-linked Production path after PR #119 reached `main` at
-`2345b24a829c6b0460d21e389fb39f31464f4360`. The exact merged-main CI, linked
-Production deployment, and bounded no-store public-origin identity proof are
-complete. Immutable publication is withheld: the fresh anonymous
+Status: the public origin identifies itself as Preview.63 through the automatic
+GitHub-linked Production path after PRs #121 and #122 reached `main` at
+`c691cc73f76c98ecf5cf83d425898d1b19023300`. Exact merged-main CI run
+`36335534841`, linked Production deployment `6695177071`, and the bounded
+no-store public-origin identity proof are complete. Immutable publication is
+withheld: the fresh anonymous
 `provider-session/4` receipt still returns `available: false`, both public
 material model surfaces consequently remain `unavailable`, and issue #104 is
 still open for the deployment-owned sealing ring. The strict deployment checker
