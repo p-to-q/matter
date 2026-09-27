@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WikiRepository } from "./wiki-repository";
-import { createWikiCoordinator } from "./wiki-coordinator";
 import {
+  applyBoundedWikiObservationBatch,
+  createWikiCoordinator,
+} from "./wiki-coordinator";
+import {
+  applyWikiObservationBatch,
   applyWikiEvent,
   createEmptyWikiState,
   WIKI_WITH_PROVISIONAL,
 } from "../wiki/wiki-evidence";
 import { WikiBasisOwner } from "../wiki/wiki-basis-owner";
+import { wikiStateStorageBytes } from "../wiki/wiki-codec";
+import type { WikiAliasEvidenceProducer } from "../wiki/wiki-learning-policy";
 import type { WikiState } from "../wiki/wiki-model";
 
 const DECISION = Object.freeze({
@@ -26,6 +32,7 @@ const OBSERVATION = Object.freeze({
   form: "Englebart",
   canonical: "Engelbart",
   source: "machine-inference" as const,
+  producer: "legacy-v1" as const,
 });
 
 describe("Wiki coordinator", () => {
@@ -189,6 +196,31 @@ describe("Wiki coordinator", () => {
     expect(coordinator.readBasis().snapshot.rules).toHaveLength(2);
   });
 
+  it("rejects an observation derived before a same-tab decision", async () => {
+    const repository = fakeRepository();
+    const coordinator = createWikiCoordinator(repository);
+    await coordinator.start();
+    const derivedFrom = coordinator.readBasis();
+
+    await expect(coordinator.decide({
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    })).resolves.toMatchObject({ ok: true, generation: 1, stateRevision: 1 });
+    await expect(coordinator.observe(
+      [OBSERVATION],
+      undefined,
+      {
+        generation: derivedFrom.snapshot.generation,
+        stateRevision: derivedFrom.stateRevision,
+      },
+    )).resolves.toEqual({ ok: false, code: "STALE_VIEW" });
+
+    expect(repository.save).toHaveBeenCalledOnce();
+    expect(coordinator.readState()?.aliasEvidence).toEqual([]);
+  });
+
   it("persists one deduplicated observation batch with one CAS", async () => {
     const repository = fakeRepository();
     repository.save
@@ -218,6 +250,168 @@ describe("Wiki coordinator", () => {
         form: "Englebart",
         producer: "legacy-v1",
         support: 1,
+      }),
+    ]);
+  });
+
+  it("keeps existing evidence and quiet aging when a new row exceeds the byte budget", () => {
+    const state = createdLexemeState();
+    const seeded = applyWikiObservationBatch(state, [OBSERVATION]);
+    if (!seeded.ok) throw new Error(seeded.error.message);
+    const newTerm = Object.freeze({
+      type: "observe-evidence" as const,
+      source: "recent-material" as const,
+      locale: "en-US" as const,
+      canonical: "Lexicorium",
+      producer: "locale-segment-v1" as const,
+    });
+    const qualified = new Set<WikiAliasEvidenceProducer>();
+    const knownOnly = applyWikiObservationBatch(
+      seeded.state,
+      [OBSERVATION],
+      { term: "observed", alias: "observed" },
+      qualified,
+    );
+    if (!knownOnly.ok) throw new Error(knownOnly.error.message);
+
+    const advanced = applyBoundedWikiObservationBatch(
+      seeded.state,
+      [OBSERVATION, newTerm],
+      { term: "observed", alias: "observed" },
+      qualified,
+      wikiStateStorageBytes(knownOnly.state),
+    );
+    expect(advanced).toMatchObject({ ok: true, changed: true });
+    if (!advanced.ok) return;
+    expect(advanced.state.termEvidence).toEqual([]);
+    expect(advanced.state.aliasEvidence).toEqual([
+      expect.objectContaining({ form: "Englebart", support: 2 }),
+    ]);
+
+    const quietOnly = applyWikiObservationBatch(
+      seeded.state,
+      [],
+      { term: "observed", alias: "quiet" },
+      qualified,
+    );
+    if (!quietOnly.ok) throw new Error(quietOnly.error.message);
+    const aged = applyBoundedWikiObservationBatch(
+      seeded.state,
+      [newTerm],
+      { term: "observed", alias: "quiet" },
+      qualified,
+      wikiStateStorageBytes(quietOnly.state),
+    );
+    expect(aged).toMatchObject({ ok: true, changed: true });
+    if (!aged.ok) return;
+    expect(aged.state.termEvidence).toEqual([]);
+    expect(aged.state.aliasEvidence[0]).toMatchObject({ quietTurns: 1 });
+  });
+
+  it("retains a term producer upgrade when an unseen row exceeds the byte budget", () => {
+    const legacy: WikiState = Object.freeze({
+      ...createEmptyWikiState(),
+      revision: 1,
+      termEvidence: Object.freeze([Object.freeze({
+        locale: "en-US" as const,
+        canonical: "Lexicorium",
+        producer: "legacy-term-v1" as const,
+        phase: "candidate" as const,
+        support: 1,
+        quietTurns: 0,
+      })]),
+    });
+    const upgrade = Object.freeze({
+      type: "observe-evidence" as const,
+      source: "recent-material" as const,
+      locale: "en-US" as const,
+      canonical: "Lexicorium",
+      producer: "locale-segment-v1" as const,
+    });
+    const unseen = Object.freeze({
+      ...upgrade,
+      canonical: "Morphogenesis",
+    });
+    const dispositions = Object.freeze({ term: "observed" as const, alias: "paused" as const });
+    const qualified = new Set<WikiAliasEvidenceProducer>();
+    const upgraded = applyWikiObservationBatch(
+      legacy,
+      [upgrade],
+      dispositions,
+      qualified,
+    );
+    if (!upgraded.ok) throw new Error(upgraded.error.message);
+    const attempted = applyWikiObservationBatch(
+      legacy,
+      [upgrade, unseen],
+      dispositions,
+      qualified,
+    );
+    if (!attempted.ok) throw new Error(attempted.error.message);
+    const budget = wikiStateStorageBytes(upgraded.state);
+    expect(wikiStateStorageBytes(attempted.state)).toBeGreaterThan(budget);
+
+    const bounded = applyBoundedWikiObservationBatch(
+      legacy,
+      [upgrade, unseen],
+      dispositions,
+      qualified,
+      budget,
+    );
+    expect(bounded).toMatchObject({ ok: true, changed: true });
+    if (!bounded.ok) return;
+    expect(bounded.state.termEvidence).toEqual([
+      expect.objectContaining({
+        canonical: "Lexicorium",
+        producer: "locale-segment-v1",
+        support: 1,
+      }),
+    ]);
+  });
+
+  it("retains an alias producer upgrade when an unseen row exceeds the byte budget", () => {
+    const seeded = applyWikiObservationBatch(createdLexemeState(), [OBSERVATION]);
+    if (!seeded.ok) throw new Error(seeded.error.message);
+    const upgrade = Object.freeze({
+      ...OBSERVATION,
+      producer: "latin-internal-edit-v2" as const,
+    });
+    const unseen = Object.freeze({
+      ...upgrade,
+      form: "Engelbartt",
+    });
+    const dispositions = Object.freeze({ term: "paused" as const, alias: "observed" as const });
+    const qualified = new Set<WikiAliasEvidenceProducer>(["latin-internal-edit-v2"]);
+    const upgraded = applyWikiObservationBatch(
+      seeded.state,
+      [upgrade],
+      dispositions,
+      qualified,
+    );
+    if (!upgraded.ok) throw new Error(upgraded.error.message);
+    const attempted = applyWikiObservationBatch(
+      seeded.state,
+      [upgrade, unseen],
+      dispositions,
+      qualified,
+    );
+    if (!attempted.ok) throw new Error(attempted.error.message);
+    const budget = wikiStateStorageBytes(upgraded.state);
+    expect(wikiStateStorageBytes(attempted.state)).toBeGreaterThan(budget);
+
+    const bounded = applyBoundedWikiObservationBatch(
+      seeded.state,
+      [upgrade, unseen],
+      dispositions,
+      qualified,
+      budget,
+    );
+    expect(bounded).toMatchObject({ ok: true, changed: true });
+    if (!bounded.ok) return;
+    expect(bounded.state.aliasEvidence).toEqual([
+      expect.objectContaining({
+        form: "Englebart",
+        producer: "latin-internal-edit-v2",
       }),
     ]);
   });
@@ -368,7 +562,7 @@ describe("Wiki coordinator", () => {
     ]);
   });
 
-  it("rebases simultaneous observations from different tabs without losing evidence", async () => {
+  it("hydrates the latest basis and returns a stale view on an observation conflict", async () => {
     const shared = sharedRepositoryPair(createdLexemeState());
     const first = createWikiCoordinator(shared.first);
     const second = createWikiCoordinator(shared.second);
@@ -379,29 +573,35 @@ describe("Wiki coordinator", () => {
       second.observe([{ ...OBSERVATION, form: "Engelbartt" }]),
     ]);
 
-    expect(results).toEqual([
-      expect.objectContaining({ ok: true, changed: true }),
-      expect.objectContaining({ ok: true, changed: true }),
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([
+      { ok: false, code: "STALE_VIEW" },
     ]);
     const latest = await shared.first.load();
     expect(latest.ok).toBe(true);
     if (!latest.ok || latest.value === null) return;
-    expect(latest.value.writeGeneration).toBe(3);
-    expect(latest.value.state.aliasEvidence.map((entry) => entry.form))
-      .toEqual(["Engelbartt", "Englebart"]);
+    expect(latest.value.writeGeneration).toBe(2);
+    expect(latest.value.state.aliasEvidence).toHaveLength(1);
+    expect(["Engelbartt", "Englebart"]).toContain(
+      latest.value.state.aliasEvidence[0]?.form,
+    );
   });
 
-  it("rebases the same simultaneous observation into a count of two", async () => {
+  it("does not replay stale automatic evidence inside the coordinator", async () => {
     const shared = sharedRepositoryPair(createdLexemeState());
     const first = createWikiCoordinator(shared.first);
     const second = createWikiCoordinator(shared.second);
     await Promise.all([first.start(), second.start()]);
 
-    await Promise.all([
+    const results = await Promise.all([
       first.observe([OBSERVATION]),
       second.observe([OBSERVATION]),
     ]);
 
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([
+      { ok: false, code: "STALE_VIEW" },
+    ]);
     const latest = await shared.first.load();
     expect(latest.ok).toBe(true);
     if (!latest.ok || latest.value === null) return;
@@ -409,7 +609,7 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         form: "Englebart",
         producer: "legacy-v1",
-        support: 2,
+        support: 1,
       }),
     ]);
   });

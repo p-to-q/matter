@@ -1,6 +1,8 @@
 import { isMatterLocale } from "../config/locales";
 import {
   freezeWikiState,
+  isNormalizedFrozenWikiState,
+  isValidatedFrozenWikiState,
   isWikiAliasDescriptor,
   isWikiBoundary,
   isWikiCanonical,
@@ -27,7 +29,6 @@ import {
   type WikiAliasEvidenceAggregate,
   type WikiAuthorityRule,
   type WikiEvent,
-  type WikiEvidenceSource,
   type WikiLexeme,
   type WikiLexemeTombstone,
   type WikiRuleDescriptor,
@@ -38,12 +39,16 @@ import {
 import {
   MAX_WIKI_LEARNING_QUIET_TURNS,
   WIKI_ALIAS_PRODUCER_WEIGHTS,
+  isWikiAliasEvidenceProducer,
+  isWikiStoredTermEvidenceProducer,
+  isWikiTermEvidenceProducer,
   reconcileWikiTermEvidence,
 } from "./wiki-learning-policy";
 
 const LEGACY_RELATION_SCHEMA_VERSION = 2;
 const LEGACY_LEXEME_SCHEMA_VERSION = 3;
 const LEGACY_SCOPED_LEXEME_SCHEMA_VERSION = 4;
+const LEGACY_SPLIT_LEDGER_SCHEMA_VERSION = 5;
 const LEGACY_SCORING_VERSION = 2;
 
 export type WikiStateParse =
@@ -63,8 +68,20 @@ export function wikiStateStorageBytes(value: unknown): number {
   }
 }
 
-/** Strictly parses V5 or deterministically migrates a valid V2/V3/V4 state. */
+/** Strictly parses V6 or deterministically migrates a valid V2-V5 state. */
 export function parseWikiState(value: unknown): WikiStateParse {
+  // In-process domain transitions already own one strictly validated, deeply
+  // immutable value. Reusing that exact object avoids reparsing recovery-sized
+  // ledgers; structured clones and all external values still take the full path.
+  if (isValidatedFrozenWikiState(value)) {
+    return Object.freeze({ ok: true, state: value });
+  }
+  if (isNormalizedFrozenWikiState(value)) {
+    const validation = validateWikiState(value);
+    return validation.ok
+      ? Object.freeze({ ok: true, state: value })
+      : invalidState(validation.message);
+  }
   if (!isPlainObject(value)) return invalidState("The Wiki state is not an object.");
   if (value.schemaVersion === LEGACY_RELATION_SCHEMA_VERSION) return parseLegacyWikiState(value);
   if (value.schemaVersion === LEGACY_LEXEME_SCHEMA_VERSION) {
@@ -72,6 +89,9 @@ export function parseWikiState(value: unknown): WikiStateParse {
   }
   if (value.schemaVersion === LEGACY_SCOPED_LEXEME_SCHEMA_VERSION) {
     return parseLegacyScopedLexemeWikiState(value);
+  }
+  if (value.schemaVersion === LEGACY_SPLIT_LEDGER_SCHEMA_VERSION) {
+    return parseLegacySplitLedgerWikiState(value);
   }
   if (value.schemaVersion !== WIKI_SCHEMA_VERSION || !hasExactKeys(value, [
     "schemaVersion",
@@ -169,15 +189,38 @@ export function parseWikiEvent(value: unknown): WikiEventParse {
     }) });
   }
   if (value.type === "observe-evidence") {
+    if (value.source === "recent-material") {
+      if (!hasExactKeys(value, [
+        "type", "source", "locale", "canonical", "producer",
+      ])) return invalidEvent("The Wiki evidence event fields are invalid.");
+      if (typeof value.locale !== "string" || !isMatterLocale(value.locale) ||
+          !isWikiCanonical(value.canonical) ||
+          !isWikiTermEvidenceProducer(value.producer)) {
+        return invalidEvent("The Wiki evidence event is invalid.");
+      }
+      return Object.freeze({ ok: true, event: Object.freeze({
+        type: "observe-evidence",
+        source: "recent-material",
+        locale: value.locale,
+        canonical: value.canonical,
+        producer: value.producer,
+      }) });
+    }
+    if (value.source !== "machine-inference") {
+      return invalidEvent("The Wiki evidence event is invalid.");
+    }
     if (!hasExactKeys(value, [
-      "type", "locale", "channel", "boundary", "form", "canonical", "source",
+      "type", "source", "locale", "channel", "boundary", "form", "canonical", "producer",
     ])) return invalidEvent("The Wiki evidence event fields are invalid.");
     const descriptor = parseDescriptor(value);
-    if (descriptor === null || !isEvidenceSource(value.source)) {
+    if (descriptor === null || !isWikiAliasEvidenceProducer(value.producer)) {
       return invalidEvent("The Wiki evidence event is invalid.");
     }
     return Object.freeze({ ok: true, event: Object.freeze({
-      type: "observe-evidence", ...descriptor, source: value.source,
+      type: "observe-evidence",
+      ...descriptor,
+      source: "machine-inference",
+      producer: value.producer,
     }) });
   }
   if (value.type === "replace-rule") {
@@ -201,6 +244,73 @@ export function parseWikiEvent(value: unknown): WikiEventParse {
       : Object.freeze({ ok: true, event: Object.freeze({ type: value.type, ...descriptor }) });
   }
   return invalidEvent("The Wiki event type is unsupported.");
+}
+
+function parseLegacySplitLedgerWikiState(
+  value: Record<string, unknown>,
+): WikiStateParse {
+  if (!hasExactKeys(value, [
+    "schemaVersion",
+    "scoringVersion",
+    "fittingVersion",
+    "revision",
+    "nextLexemeId",
+    "automaticLearningSaturated",
+    "lexemes",
+    "termEvidence",
+    "aliasEvidence",
+    "authorities",
+    "aliasTombstones",
+    "lexemeTombstones",
+  ]) || value.scoringVersion !== WIKI_SCORING_VERSION ||
+      value.fittingVersion !== WIKI_FITTING_VERSION ||
+      !isRevision(value.revision) || !isLexemeId(value.nextLexemeId) ||
+      typeof value.automaticLearningSaturated !== "boolean") {
+    return invalidState("The legacy split-ledger Wiki state is invalid.");
+  }
+  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLexeme);
+  const legacyTermEvidence = parseArray(
+    value.termEvidence,
+    MAX_WIKI_EVIDENCE_RECORDS,
+    parseLegacyTermEvidence,
+  );
+  const aliasEvidence = parseArray(
+    value.aliasEvidence,
+    MAX_WIKI_EVIDENCE_RECORDS,
+    parseAliasEvidence,
+  );
+  const authorities = parseArray(value.authorities, MAX_WIKI_AUTHORITY_RULES, parseAuthority);
+  const aliasTombstones = parseArray(
+    value.aliasTombstones,
+    MAX_WIKI_TOMBSTONES,
+    parseAliasTombstone,
+  );
+  const lexemeTombstones = parseArray(
+    value.lexemeTombstones,
+    MAX_WIKI_LEXEME_TOMBSTONES,
+    parseLexemeTombstone,
+  );
+  if (lexemes === null || legacyTermEvidence === null || aliasEvidence === null ||
+      authorities === null || aliasTombstones === null || lexemeTombstones === null) {
+    return invalidState("A legacy split-ledger Wiki collection is invalid.");
+  }
+  return validateParsedState(freezeWikiState({
+    schemaVersion: WIKI_SCHEMA_VERSION,
+    scoringVersion: WIKI_SCORING_VERSION,
+    fittingVersion: WIKI_FITTING_VERSION,
+    revision: value.revision,
+    nextLexemeId: value.nextLexemeId,
+    automaticLearningSaturated: value.automaticLearningSaturated,
+    lexemes,
+    termEvidence: Object.freeze(legacyTermEvidence.map((entry) => Object.freeze({
+      ...entry,
+      producer: "legacy-term-v1" as const,
+    }))),
+    aliasEvidence,
+    authorities,
+    aliasTombstones,
+    lexemeTombstones,
+  }));
 }
 
 function parseLegacyWikiState(value: Record<string, unknown>): WikiStateParse {
@@ -431,12 +541,34 @@ function parseLexeme(value: unknown): WikiLexeme | null {
 
 function parseTermEvidence(value: unknown): WikiTermEvidenceAggregate | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
+    "locale", "canonical", "producer", "phase", "support", "quietTurns",
+  ]) || typeof value.locale !== "string" || !isMatterLocale(value.locale) ||
+      !isWikiCanonical(value.canonical) ||
+      typeof value.producer !== "string" ||
+      !isWikiStoredTermEvidenceProducer(value.producer) ||
+      (value.phase !== "candidate" && value.phase !== "collected") ||
+      !isEvidenceCount(value.support) ||
+      !isQuietTurns(value.quietTurns) ||
+      (value.phase === "candidate" && value.support >= 2)) return null;
+  return Object.freeze({
+    locale: value.locale,
+    canonical: value.canonical,
+    producer: value.producer,
+    phase: value.phase,
+    support: value.support,
+    quietTurns: value.quietTurns,
+  });
+}
+
+function parseLegacyTermEvidence(
+  value: unknown,
+): Omit<WikiTermEvidenceAggregate, "producer"> | null {
+  if (!isPlainObject(value) || !hasExactKeys(value, [
     "locale", "canonical", "phase", "support", "quietTurns",
   ]) || typeof value.locale !== "string" || !isMatterLocale(value.locale) ||
       !isWikiCanonical(value.canonical) ||
       (value.phase !== "candidate" && value.phase !== "collected") ||
-      !isEvidenceCount(value.support) ||
-      !isQuietTurns(value.quietTurns) ||
+      !isEvidenceCount(value.support) || !isQuietTurns(value.quietTurns) ||
       (value.phase === "candidate" && value.support >= 2)) return null;
   return Object.freeze({
     locale: value.locale,
@@ -634,6 +766,7 @@ function splitLegacyEvidence(
     const identity = identityById.get(lexemeId);
     return identity === undefined ? [] : [Object.freeze({
       ...identity,
+      producer: "legacy-term-v1" as const,
       ...reconciled,
     })];
   });
@@ -661,10 +794,6 @@ function parseArray<Value>(
     result.push(parsed);
   }
   return Object.freeze(result);
-}
-
-function isEvidenceSource(value: unknown): value is WikiEvidenceSource {
-  return value === "recent-material" || value === "machine-inference";
 }
 
 function isEvidenceCount(value: unknown): value is number {

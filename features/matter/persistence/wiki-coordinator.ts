@@ -18,8 +18,14 @@ import {
   MAX_WIKI_STATE_BYTES,
   type WikiEvent,
   type WikiObserveEvidenceEvent,
+  type WikiObservationDispositions,
   type WikiState,
+  type WikiTransitionResult,
 } from "../wiki/wiki-model";
+import {
+  isWikiAliasEvidenceProducer,
+  type WikiAliasEvidenceProducer,
+} from "../wiki/wiki-learning-policy";
 
 export type WikiCoordinatorStatus =
   | Readonly<{ phase: "loading" }>
@@ -31,6 +37,11 @@ export type WikiCoordinatorStatus =
     }>;
 
 export type WikiDecision = Exclude<WikiEvent, { type: "observe-evidence" }>;
+
+export type WikiObservationView = Readonly<{
+  generation: number;
+  stateRevision: number;
+}>;
 
 export type WikiCoordinatorResult =
   | Readonly<{ ok: true; changed: boolean; generation: number; stateRevision: number }>
@@ -55,6 +66,8 @@ export type WikiCoordinator = Readonly<{
   decide(event: WikiDecision, expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
   observe(
     events: readonly WikiObserveEvidenceEvent[],
+    dispositions?: WikiObservationDispositions,
+    expectedView?: WikiObservationView,
   ): Promise<WikiCoordinatorResult>;
   clear(expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
   resetCorrupt(): Promise<WikiCoordinatorResult>;
@@ -69,6 +82,39 @@ type ReadyAuthority = {
 };
 
 const MAX_OBSERVATION_REBASE_ATTEMPTS = 4;
+
+/**
+ * Applies automatic evidence under the durable byte budget. When a batch would
+ * overflow, known relations may still gain support and quiet ledgers may still
+ * decay; only rows that would allocate a new durable identity are discarded.
+ */
+export function applyBoundedWikiObservationBatch(
+  state: WikiState,
+  events: readonly WikiObserveEvidenceEvent[],
+  dispositions: WikiObservationDispositions | undefined,
+  qualifiedAliasProducers: ReadonlySet<WikiAliasEvidenceProducer>,
+  maxStateBytes = MAX_WIKI_STATE_BYTES,
+): WikiTransitionResult {
+  const result = applyWikiObservationBatch(
+    state,
+    events,
+    dispositions,
+    qualifiedAliasProducers,
+  );
+  if (!result.ok || !result.changed ||
+      wikiStateStorageBytes(result.state) <= maxStateBytes) return result;
+
+  const retained = events.filter((event) => observationExists(state, event));
+  const fallback = applyWikiObservationBatch(
+    state,
+    retained,
+    dispositions,
+    qualifiedAliasProducers,
+  );
+  if (!fallback.ok || !fallback.changed ||
+      wikiStateStorageBytes(fallback.state) <= maxStateBytes) return fallback;
+  return Object.freeze({ ok: true, state, changed: false });
+}
 
 /**
  * Serializes hydrate, transition, compile, CAS-save, and basis publication.
@@ -87,6 +133,12 @@ export function createWikiCoordinator(
   let mutationTail: Promise<unknown> = Promise.resolve();
   let disposed = false;
   const listeners = new Set<() => void>();
+  const qualifiedAliasProducers = new Set<WikiAliasEvidenceProducer>(
+    projectionPolicy.qualifiedProducerReleases.flatMap((release) =>
+      isWikiAliasEvidenceProducer(release.identity.producerId)
+        ? [release.identity.producerId]
+        : []),
+  );
 
   const publishStatus = (next: WikiCoordinatorStatus) => {
     if (disposed) return;
@@ -179,6 +231,8 @@ export function createWikiCoordinator(
     transition: (state: WikiState) => ReturnType<typeof applyWikiEvent>,
     expectedStateRevision?: number,
     rebaseOnConflict = false,
+    softBoundAsNoop = false,
+    expectedGeneration?: number,
   ): Promise<WikiCoordinatorResult> => {
     const operation = mutationTail.then(async (): Promise<WikiCoordinatorResult> => {
       if (disposed || ready === null) {
@@ -188,6 +242,10 @@ export function createWikiCoordinator(
         expectedStateRevision !== undefined &&
         expectedStateRevision !== ready.state.revision
       ) return Object.freeze({ ok: false, code: "STALE_VIEW" });
+      if (expectedGeneration !== undefined &&
+          expectedGeneration !== (ready.writeGeneration ?? 0)) {
+        return Object.freeze({ ok: false, code: "STALE_VIEW" });
+      }
 
       const attemptLimit = rebaseOnConflict ? MAX_OBSERVATION_REBASE_ATTEMPTS : 1;
       for (let attempt = 0; attempt < attemptLimit; attempt += 1) {
@@ -214,6 +272,16 @@ export function createWikiCoordinator(
         // Keep a normal capacity limit distinct from corrupt durable storage.
         // The current compiled authority remains healthy when a candidate is too large.
         if (wikiStateStorageBytes(result.state) > MAX_WIKI_STATE_BYTES) {
+          // Automatic evidence is disposable. Under byte pressure it pauses
+          // without degrading Wiki or blocking later human decisions.
+          if (softBoundAsNoop) {
+            return Object.freeze({
+              ok: true,
+              changed: false,
+              generation: authority.writeGeneration ?? 0,
+              stateRevision: authority.state.revision,
+            });
+          }
           return Object.freeze({ ok: false, code: "BOUND_EXCEEDED" });
         }
 
@@ -349,11 +417,21 @@ export function createWikiCoordinator(
       (state) => applyWikiEvent(state, event),
       expectedStateRevision,
     ),
-    observe: (events) => enqueue(
-      (state) => applyWikiObservationBatch(state, events),
-      undefined,
-      true,
-    ),
+    async observe(events, dispositions, expectedView) {
+      await start();
+      return enqueue(
+        (state) => applyBoundedWikiObservationBatch(
+          state,
+          events,
+          dispositions,
+          qualifiedAliasProducers,
+        ),
+        expectedView?.stateRevision,
+        false,
+        true,
+        expectedView?.generation,
+      );
+    },
     clear: (expectedStateRevision) => enqueue(clearWikiState, expectedStateRevision),
     resetCorrupt: enqueueCorruptReset,
     dispose() {
@@ -363,6 +441,24 @@ export function createWikiCoordinator(
       repository.close();
     },
   });
+}
+
+function observationExists(
+  state: WikiState,
+  event: WikiObserveEvidenceEvent,
+): boolean {
+  if (event.source === "recent-material") {
+    return state.termEvidence.some((entry) =>
+      entry.locale === event.locale &&
+      entry.canonical === event.canonical);
+  }
+  const lexeme = state.lexemes.find((entry) =>
+    entry.locale === event.locale && entry.canonical === event.canonical);
+  return lexeme !== undefined && state.aliasEvidence.some((entry) =>
+    entry.lexemeId === lexeme.id &&
+    entry.channel === event.channel &&
+    entry.boundary === event.boundary &&
+    entry.form === event.form);
 }
 
 async function safeLoad(

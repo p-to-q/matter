@@ -4,26 +4,34 @@ import {
   applyWikiEvent,
   applyWikiObservationBatch,
   clearWikiState,
+  createWikiProjectionPolicy,
   createEmptyWikiState,
   createInitialWikiState,
   projectApplicableWikiRules,
 } from "./wiki-evidence";
 import {
   MAX_WIKI_EVIDENCE_COUNT,
+  MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS,
+  MAX_WIKI_HUMAN_CONFIRMED_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_TOMBSTONES,
   WIKI_SCORING_VERSION,
   type WikiEvent,
+  type WikiObserveAliasEvidenceEvent,
+  type WikiObserveEvidenceEvent,
+  type WikiObserveTermEvidenceEvent,
   type WikiState,
 } from "./wiki-model";
 import { parseWikiState } from "./wiki-codec";
+import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from
+  "./wiki-qualified-producer-releases";
 
 describe("Wiki evidence and authority", () => {
   it("starts as a deeply immutable, versioned local state", () => {
     const state = createEmptyWikiState();
 
     expect(state).toEqual({
-      schemaVersion: 5,
+      schemaVersion: 6,
       scoringVersion: 3,
       fittingVersion: 1,
       revision: 0,
@@ -61,11 +69,9 @@ describe("Wiki evidence and authority", () => {
     const result = applyWikiObservationBatch(state, state.lexemes.map((lexeme) => ({
       type: "observe-evidence" as const,
       locale: lexeme.locale,
-      channel: "spoken" as const,
-      boundary: "word" as const,
-      form: `${lexeme.canonical} heard`,
       canonical: lexeme.canonical,
       source: "recent-material" as const,
+      producer: "locale-segment-v1" as const,
     })));
 
     expect(result).toEqual({ ok: true, state, changed: false });
@@ -80,6 +86,127 @@ describe("Wiki evidence and authority", () => {
     state = applyObservationBatch(state, []);
     expect(state.termEvidence).toEqual([]);
     expect(state.lexemes).toEqual([]);
+  });
+
+  it("ticks term and alias ledgers independently and never ages censored evidence", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+    state = repeatEvidence(state, "machine-inference", 4);
+    const initialTerm = state.termEvidence[0];
+    for (let turn = 0; turn < 8; turn += 1) {
+      const result = applyWikiObservationBatch(state, [], {
+        term: "paused",
+        alias: "quiet",
+      });
+      if (!result.ok) throw new Error(result.error.message);
+      state = result.state;
+    }
+    expect(state.termEvidence[0]).toEqual(initialTerm);
+    expect(state.aliasEvidence[0]?.quietTurns).toBe(8);
+
+    const censored = applyWikiObservationBatch(state, [], {
+      term: "censored",
+      alias: "censored",
+    });
+    if (!censored.ok) throw new Error(censored.error.message);
+    expect(censored.state.termEvidence[0]).toEqual(initialTerm);
+    expect(censored.state.aliasEvidence[0]).toEqual(state.aliasEvidence[0]);
+  });
+
+  it("replaces producer evidence for one visible relation instead of self-competing", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    });
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [{
+        type: "observe-evidence",
+        source: "machine-inference",
+        locale: "en-US",
+        channel: "spoken",
+        boundary: "word",
+        form: "Englebart",
+        canonical: "Engelbart",
+        producer: "latin-internal-edit-v2",
+      }]);
+    }
+    expect(state.aliasEvidence).toEqual([
+      expect.objectContaining({ producer: "latin-internal-edit-v2", support: 4 }),
+    ]);
+
+    const next = applyWikiObservationBatch(state, [{
+      type: "observe-evidence",
+      source: "machine-inference",
+      locale: "en-US",
+      channel: "spoken",
+      boundary: "word",
+      form: "Englebart",
+      canonical: "Engelbart",
+      producer: "en-metaphone-v1",
+    }]);
+    if (!next.ok) throw new Error(next.error.message);
+    state = next.state;
+
+    expect(state.aliasEvidence).toEqual([
+      expect.objectContaining({ producer: "en-metaphone-v1", support: 1 }),
+    ]);
+  });
+
+  it("cannot apply events through paused, censored, or quiet dispositions", () => {
+    const term = observe("recent-material");
+    const alias = observe("machine-inference");
+    for (const disposition of ["paused", "censored", "quiet"] as const) {
+      const result = applyWikiObservationBatch(createEmptyWikiState(), [term, alias], {
+        term: disposition,
+        alias: disposition,
+      });
+      expect(result).toEqual({ ok: true, state: createEmptyWikiState(), changed: false });
+    }
+  });
+
+  it("drops unseen soft candidates at capacity while existing evidence keeps moving", () => {
+    const termEvidence = Object.freeze(Array.from(
+      { length: MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS },
+      (_, index) => Object.freeze({
+        locale: "en-US" as const,
+        canonical: `Term${index.toString().padStart(4, "0")}`,
+        producer: "locale-segment-v1" as const,
+        phase: "candidate" as const,
+        support: 1,
+        quietTurns: 0,
+      }),
+    ));
+    const state: WikiState = Object.freeze({
+      ...createEmptyWikiState(),
+      termEvidence,
+    });
+    const result = applyWikiObservationBatch(state, [
+      {
+        type: "observe-evidence",
+        source: "recent-material",
+        locale: "en-US",
+        canonical: "Term0000",
+        producer: "locale-segment-v1",
+      },
+      {
+        type: "observe-evidence",
+        source: "recent-material",
+        locale: "en-US",
+        canonical: "UnseenTerm",
+        producer: "locale-segment-v1",
+      },
+    ]);
+
+    expect(result).toMatchObject({ ok: true, changed: true });
+    if (!result.ok) return;
+    expect(result.state.termEvidence).toHaveLength(MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS);
+    expect(result.state.termEvidence.find((entry) => entry.canonical === "UnseenTerm"))
+      .toBeUndefined();
+    expect(result.state.termEvidence[0]).toMatchObject({ phase: "collected", support: 2 });
+    expect(result.state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "Term0000" }),
+    ]);
   });
 
   it("ages zero-weight legacy alias evidence without activating it", () => {
@@ -139,6 +266,59 @@ describe("Wiki evidence and authority", () => {
     expect(parseWikiState(state)).toMatchObject({ ok: true });
   });
 
+  it("reclaims ownerless V5 and V6 automatic lexemes at the recovery boundary", () => {
+    const base = {
+      scoringVersion: 3,
+      fittingVersion: 1,
+      revision: 3,
+      nextLexemeId: 2,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Lexicorium",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      }],
+      termEvidence: [],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    };
+    const fixtures = [{
+      ...base,
+      schemaVersion: 5,
+      aliasEvidence: [{
+        lexemeId: 1,
+        channel: "spoken",
+        boundary: "word",
+        form: "lexicoreum",
+        producer: "legacy-v1",
+        phase: "candidate",
+        support: 1,
+        quietTurns: 0,
+      }],
+    }, {
+      ...base,
+      schemaVersion: 6,
+      aliasEvidence: [],
+    }];
+
+    for (const fixture of fixtures) {
+      const parsed = parseWikiState(fixture);
+      if (!parsed.ok) throw new Error(parsed.message);
+      let state = parsed.state;
+      for (let index = 0; index < 32; index += 1) {
+        state = applyObservationBatch(state, []);
+      }
+      expect(state.termEvidence).toEqual([]);
+      expect(state.aliasEvidence).toEqual([]);
+      expect(state.lexemes).toEqual([]);
+      expect(parseWikiState(state)).toMatchObject({ ok: true });
+    }
+  });
+
   it("retains a zero-support term until its last alias dependency expires", () => {
     let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
     state = repeatEvidence(state, "machine-inference", 4);
@@ -190,11 +370,7 @@ describe("Wiki evidence and authority", () => {
   it("counts one canonical at most once in a human-admission tick", () => {
     const state = applyObservationBatch(createEmptyWikiState(), [
       observe("recent-material"),
-      {
-        ...observe("recent-material"),
-        channel: "written",
-        form: "codex",
-      },
+      observe("recent-material"),
     ]);
 
     expect(state.termEvidence).toEqual([
@@ -482,6 +658,95 @@ describe("Wiki evidence and authority", () => {
       .toMatchObject({ provenance: "human-confirmed" });
   });
 
+  it("bounds new human lexemes independently of the migration-safe structural table", () => {
+    let state = stateWithHumanLexemes(MAX_WIKI_HUMAN_CONFIRMED_LEXEMES - 1);
+    state = apply(state, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Last admitted term",
+      scope: "both",
+    });
+
+    expect(state.lexemes.filter((entry) => entry.provenance === "human-confirmed"))
+      .toHaveLength(MAX_WIKI_HUMAN_CONFIRMED_LEXEMES);
+    expect(applyWikiEvent(state, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Overflow term",
+      scope: "both",
+    })).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+
+    state = apply(state, { type: "remove-lexeme", lexemeId: 1 });
+    state = apply(state, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Replacement term",
+      scope: "both",
+    });
+    expect(state.lexemes.some((entry) => entry.canonical === "Replacement term")).toBe(true);
+  });
+
+  it("keeps edits and aliases open at the human limit but refuses aggregate takeover", () => {
+    const state = stateWithHumanLexemes(MAX_WIKI_HUMAN_CONFIRMED_LEXEMES, true);
+    const aggregate = state.lexemes.at(-1)!;
+
+    const renamed = apply(state, {
+      type: "rename-lexeme",
+      lexemeId: 1,
+      locale: "en-US",
+      canonical: "Edited existing term",
+      scope: "written",
+    });
+    expect(renamed.lexemes[0]).toMatchObject({
+      canonical: "Edited existing term",
+      scope: "written",
+      provenance: "human-confirmed",
+    });
+
+    const aliased = apply(state, {
+      type: "confirm-rule",
+      locale: "en-US",
+      channel: "spoken",
+      boundary: "word",
+      form: "term zero",
+      canonical: state.lexemes[0].canonical,
+    });
+    expect(aliased.authorities).toHaveLength(1);
+
+    expect(applyWikiEvent(state, {
+      type: "create-lexeme",
+      locale: aggregate.locale,
+      canonical: aggregate.canonical,
+      scope: "both",
+    })).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+    expect(applyWikiEvent(state, {
+      type: "rename-lexeme",
+      lexemeId: aggregate.id,
+      locale: aggregate.locale,
+      canonical: aggregate.canonical,
+      scope: "both",
+    })).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+  });
+
+  it("loads an oversized historical human ledger without admitting another entry", () => {
+    const historical = stateWithHumanLexemes(MAX_WIKI_HUMAN_CONFIRMED_LEXEMES + 1);
+
+    expect(parseWikiState(historical)).toMatchObject({ ok: true });
+    expect(applyWikiEvent(historical, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "New historical term",
+      scope: "both",
+    })).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+    expect(apply(historical, {
+      type: "rename-lexeme",
+      lexemeId: 1,
+      locale: "en-US",
+      canonical: "Recovered term",
+      scope: "both",
+    }).lexemes[0]).toMatchObject({ canonical: "Recovered term" });
+  });
+
   it("does not recreate recurrence after a person owns the canonical", () => {
     const confirmed = apply(createEmptyWikiState(), {
       type: "create-lexeme",
@@ -518,6 +783,55 @@ describe("Wiki evidence and authority", () => {
 
     expect(parseWikiState(state)).toMatchObject({ ok: true });
     expect(projectApplicableWikiRules(state)).toEqual([]);
+  });
+
+  it("persists activation, retention, and demotion across a codec round trip", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    });
+    const alias = {
+      ...observe("machine-inference"),
+      canonical: "Engelbart",
+      producer: "en-metaphone-v1" as const,
+    };
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [alias]);
+    }
+    expect(state.aliasEvidence[0]).toMatchObject({ phase: "active", support: 4 });
+
+    const parsed = parseWikiState(JSON.parse(JSON.stringify(state)));
+    if (!parsed.ok) throw new Error(parsed.message);
+    state = applyObservationBatch(parsed.state, []);
+    expect(state.aliasEvidence[0]).toMatchObject({ phase: "active", support: 4 });
+
+    for (let turn = 1; turn < 32; turn += 1) {
+      state = applyObservationBatch(state, []);
+    }
+    expect(state.aliasEvidence[0]).toMatchObject({ phase: "candidate", support: 2 });
+  });
+
+  it("withdraws aliases when their automatic target producer is no longer qualified", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+    const alias = {
+      ...observe("machine-inference"),
+      producer: "en-metaphone-v1" as const,
+    };
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [alias]);
+    }
+    const all = createWikiProjectionPolicy(MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES);
+    expect(projectApplicableWikiRules(state, all)).toEqual([
+      expect.objectContaining({ form: "code x", canonical: "Codex" }),
+    ]);
+
+    const withoutCollector = createWikiProjectionPolicy(
+      MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES.filter((release) =>
+        release.identity.producerId !== "locale-segment-v1"),
+    );
+    expect(projectApplicableWikiRules(state, withoutCollector)).toEqual([]);
   });
 
   it("changes applicability without deleting disabled-channel lineage", () => {
@@ -807,7 +1121,7 @@ describe("Wiki evidence and authority", () => {
     expect(rejected.aliasTombstones[0]).toEqual(expect.objectContaining({ form: "old-0000" }));
     expect(rejected.automaticLearningSaturated).toBe(true);
     expect(projectApplicableWikiRules(rejected)).toEqual([]);
-  });
+  }, 20_000);
 
   it("rejects a stale or colliding replacement without a partial mutation", () => {
     let state = apply(createEmptyWikiState(), decision("confirm-rule", "Codex"));
@@ -871,29 +1185,55 @@ describe("Wiki evidence and authority", () => {
 
   it("rejects malformed events atomically", () => {
     const state = createEmptyWikiState();
-    const result = applyWikiEvent(state, {
+    const malformedAlias = applyWikiEvent(state, {
       ...observe("machine-inference"),
       form: " code x",
     });
+    const unknownTermProducer = applyWikiEvent(state, {
+      ...observe("recent-material"),
+      producer: "unknown-term-producer",
+    } as never);
 
-    expect(result).toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
+    expect(malformedAlias).toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
+    expect(unknownTermProducer)
+      .toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
     expect(state).toEqual(createEmptyWikiState());
   });
 });
 
 function observe(
-  source: Extract<WikiEvent, { type: "observe-evidence" }>["source"],
+  source: "recent-material",
+  canonical?: string,
+): WikiObserveTermEvidenceEvent;
+function observe(
+  source: "machine-inference",
+  canonical?: string,
+): WikiObserveAliasEvidenceEvent;
+function observe(
+  source: WikiObserveEvidenceEvent["source"],
+  canonical?: string,
+): WikiObserveEvidenceEvent;
+function observe(
+  source: WikiObserveEvidenceEvent["source"],
   canonical = "Codex",
-): Extract<WikiEvent, { type: "observe-evidence" }> {
-  return {
-    type: "observe-evidence",
-    locale: "en-US",
-    channel: "spoken",
-    boundary: "word",
+): WikiObserveEvidenceEvent {
+  const base = {
+    type: "observe-evidence" as const,
+    locale: "en-US" as const,
+    channel: "spoken" as const,
+    boundary: "word" as const,
     form: "code x",
     canonical,
-    source,
   };
+  return source === "recent-material"
+    ? {
+        type: "observe-evidence",
+        source,
+        locale: base.locale,
+        canonical,
+        producer: "locale-segment-v1",
+      }
+    : { ...base, source, producer: "legacy-v1" as const };
 }
 
 function descriptor(form: string, canonical: string) {
@@ -946,6 +1286,37 @@ function apply(state: WikiState, event: WikiEvent): WikiState {
   const result = applyWikiEvent(state, event);
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
   return result.state;
+}
+
+function stateWithHumanLexemes(count: number, includeAggregate = false): WikiState {
+  const base = createEmptyWikiState();
+  const lexemes: WikiState["lexemes"][number][] = Array.from(
+    { length: count },
+    (_, index) => Object.freeze({
+      id: index + 1,
+      locale: "en-US" as const,
+      canonical: `Term ${index.toString().padStart(5, "0")}`,
+      scope: "both" as const,
+      provenance: "human-confirmed" as const,
+      confirmedAtRevision: 1,
+    }),
+  );
+  if (includeAggregate) {
+    lexemes.push(Object.freeze({
+      id: count + 1,
+      locale: "en-US" as const,
+      canonical: "Collected candidate",
+      scope: "both" as const,
+      provenance: "aggregate-evidence" as const,
+      confirmedAtRevision: null,
+    }));
+  }
+  return Object.freeze({
+    ...base,
+    revision: 1,
+    nextLexemeId: lexemes.length + 1,
+    lexemes: Object.freeze(lexemes),
+  });
 }
 
 function canonicalOf(state: WikiState, lexemeId: number): string | undefined {

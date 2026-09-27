@@ -119,14 +119,19 @@ Non-goals:  a paid run, new quality evidence, weakening the Label adjudicator,
 
 State: lexeme-first domain, persistence, neutral patch-based lexical port,
 separate human-observation capability, Wiki adapter, material-ingress foundation,
-canonical-word settings surface, strict export, cross-tab observation rebase,
-negative-capacity learning latch, and corrupt-row recovery implemented;
-automatic inference producer and error-local attribution remain gated.
+canonical-word settings surface, strict export, cross-tab admission rederivation,
+negative-capacity learning latch, bounded automatic term collection, a
+runtime-qualified internal-Latin-edit producer, offline-qualified
+English/Mandarin pronunciation research producers, and corrupt-row recovery
+implemented; high-ambiguity pronunciation projection, error-local attribution,
+and recognizer-time bias remain gated.
 The settings projection now includes a reversible voice/generated-text scope,
 with V2/V3 migration to `both`, scope-aware disposable caches, and no deletion
 of disabled-channel lineage. Locale is inferred rather than exposed as another
-configuration burden. Vendor research also freezes a future local pronunciation
-compiler boundary, but no phonetic producer is enabled or claimed.
+configuration burden. The offline pronunciation qualification compiler uses
+pinned `double-metaphone` and `pinyin-pro` resources. The product's lazy Wiki
+runtime ships neither resource; it does not claim acoustic confidence or feed
+lexical context to a recognizer.
 
 ```text
 Outcome:    repeated recognition and wording mistakes disappear without asking
@@ -144,8 +149,8 @@ Invariants: in this release, no Wiki value enters a model, wire request, archive
             relearning; an exceptional configuration path permits explicit
             add/edit/remove/export; a corrupt row can be explicitly reset
             only while it remains corrupt; Wiki failure becomes identity or
-            last-good basis and never blocks material; any future pronunciation
-            work compiles bounded aliases on authority change and leaves the
+            last-good basis and never blocks material; pronunciation work
+            compiles bounded aliases on authority change and leaves the
             synchronous material hot path exact-only
 Proof:      strict state codec and bounds; locale-isolation and ambiguity tests;
             immutable compiled matcher and operation budget; IndexedDB CAS;
@@ -158,19 +163,20 @@ Non-goals:  memory, RAG, embeddings, prompt vocabulary in this release, model-ma
             phonetic distance, or enabling pronunciation without corpus proof
 ```
 
-Automatic provisional rules stay off until a representative error corpus proves
-their precision, ambiguity rejection, locale isolation, and generated-output
-exclusion. The exceptional correction surface must retain only a short-lived,
+Automatic provisional rules stay release-gated by representative corpora that
+prove precision, ambiguity rejection, locale isolation, generated-output
+exclusion, capacity, and performance. The exceptional correction surface must
+retain only a short-lived,
 content-minimal attribution token for the exact applied rule; it must not infer
 responsibility later from a changed basis or from a whole-text diff. Applying a
 rule does not add an icon or hover action; attribution is disclosed only after
 the person invokes correction on the erroneous word.
 
-Maintainer clarification, 2026-09-25: `WIKI_RECENT_OBSERVATION_WINDOW` is only
-the bounded evidence-cohort aging cadence; it is not a user-intent window. The
-current release has no production `recent-material` producer and must not infer
-intent from generic deletion, Material Undo or Redo, repetition, or later
-whole-text edits. Settings
+Maintainer clarification, 2026-09-25: the candidate-local 32-turn quiet horizon
+is only a far-horizon aging cadence; it is not a user-intent window. The
+production `recent-material` producers receive only a bounded successful human
+admission and must not infer intent from generic deletion, Material Undo or
+Redo, repetition within one turn, or later whole-text edits. Settings
 create/rename/scope/remove decisions are direct human authority and bypass
 scoring. Confirm/reject/replace remain the exact domain outlet for a later
 error-local correction, but the composition-owned one-shot token and its UI must
@@ -184,8 +190,16 @@ separate bounded ledgers. Canonical recurrence may decide that a word is worth
 listing, but it can never prove that one observed form should rewrite to that
 canonical word. Alias authority therefore accepts only relation-specific
 producer evidence or one addressed human decision. This separation replaces
-the current mixed `historical + recent + machine` score before either automatic
-capability can become release-default behavior.
+the mixed `historical + recent + machine` score before either automatic
+capability becomes release-default behavior.
+
+Maintainer correction, 2026-09-27: one successful admission may yield both a
+broad term event and a more specific fitting event. If exactly one released
+internal-edit relation targets an eligible existing canonical, the broad event
+for that same source is omitted for that admission; multiple candidate targets
+omit nothing and abstain. This is batch arbitration, not shared scoring. It
+prevents two-turn term collection from making the four-turn relation
+unreachable while keeping every existing canonical a hard no-op veto.
 
 The local learner is a deterministic state machine, not online reinforcement
 learning. One successful human admission is one logical environment tick;
@@ -264,22 +278,23 @@ reward weights. Censored exposure never becomes a failed survival. Generated
 output contributes no implicit evidence; an explicit addressed human decision
 may still become authority. Censoring is neutral.
 
-The implementation order is fixed:
+The implementation order remains explicit:
 
-1. land the pure integer policy and replay proof without changing runtime;
-2. migrate to separate term and alias ledgers while provisional projection stays
-   release-gated;
-3. land the strict manifest-owned-corpus and raw-artifact qualification boundary
-   while its release set and runtime bridge remain empty;
-4. add versioned local term and pronunciation producers with real qualified
-   receipts;
-5. add the one-shot occurrence owner and addressed correction command;
-6. publish one truthful runtime capability snapshot alongside the existing
-   local permission preferences in the Wiki settings surface; and
-7. enable local automation by default only after positive, adversarial,
-   ambiguity, protected-literal, cross-tab, capacity, and performance gates pass.
+1. complete: pure integer policy and replay proof;
+2. complete: separate term and alias ledgers with strict migration;
+3. complete: manifest-owned corpora, raw-artifact hashes, and controlled
+   qualification receipts;
+4. complete: versioned local term and fitting producers in the offline
+   qualification catalog;
+5. deferred: one-shot occurrence owner and addressed correction command;
+6. complete: truthful runtime release identities plus independent local
+   permissions; and
+7. complete for automatic collection and bounded internal-edit fitting:
+   default-on local automation after positive, adversarial, ambiguity,
+   protected, generated, cross-tab, capacity, and performance gates; exact
+   homophone and Mandarin pronunciation producers remain offline-only.
 
-The existing Wiki list remains the end-to-end surface. V5 adds only two quiet,
+The existing Wiki list remains the end-to-end surface. V6 adds only two quiet,
 default-on local permission actions in its lower-right footer: automatic term
 collection and phonetic fitting. They persist separately from Wiki data and
 Material history, and can only restrict a capability that has independently
@@ -294,14 +309,15 @@ never from an environment variable, starter row, or optimistic preference. The
 local actions express permission, not availability. The surface adds no score,
 confidence, language picker, review queue, alias table, or confirmation workload.
 
-The next candidate is frozen but not active: exact Chinese homophones, only
-`an`/`ang`, `en`/`eng`, and `in`/`ing` as near-final pairs, and exact English
-phoneme identity from a pinned CMUdict snapshot. Polyphones, multiple English
-pronunciations, unknown names, collisions, cross-locale matches, and protected
-literals abstain. The compiled resource version participates in disposable
-cache identity, never durable human authority. Positive, adversarial,
-ambiguity, generated-output, protected-literal, and performance corpora are
-required before the gate can open.
+The bounded product release uses one conservative internal ASCII edit. Exact
+Mandarin pinyin identity, the `an`/`ang`, `en`/`eng`, and `in`/`ing` final pairs,
+and exact Double Metaphone identity remain reproducible qualification-only
+candidates rather than runtime rewrite authority. Single-character polyphones,
+unknown names, candidate collisions, cross-locale matches, and protected
+literals abstain. Compiled resource versions participate in disposable cache
+identity, never durable human authority. Homophone projection, broader phoneme
+distance, ASR phrase bias, and acoustic alternatives remain gated behind a
+future concrete recognition adapter.
 
 ## Active correction — user-supplied material model surfaces
 

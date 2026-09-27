@@ -269,6 +269,10 @@ describe("Wiki producer qualification", () => {
       ...value.manifest,
       identity: { ...value.manifest.identity, producerId: "unknown-producer" },
     }, value.receipt, value.artifacts)).reasons).toEqual(["invalid-manifest"]);
+    expect((await qualifyWikiProducer({
+      ...value.manifest,
+      identity: { ...value.manifest.identity, producerVersion: "2.0.0" },
+    }, value.receipt, value.artifacts)).reasons).toEqual(["invalid-manifest"]);
     expect((await qualifyWikiProducer(value.manifest, {
       ...value.receipt,
       outputs: [...value.receipt.outputs, value.receipt.outputs[0]],

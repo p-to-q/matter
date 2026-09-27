@@ -12,7 +12,11 @@ import {
   ensureWikiStarterLexemes,
 } from "../wiki/wiki-evidence";
 import type { WikiState } from "../wiki/wiki-model";
-import { MAX_WIKI_STATE_BYTES } from "../wiki/wiki-model";
+import {
+  MAX_LEGACY_WIKI_STATE_BYTES,
+  MAX_WIKI_STATE_BYTES,
+  WIKI_SCHEMA_VERSION,
+} from "../wiki/wiki-model";
 
 export const MAX_STORED_WIKI_BYTES = MAX_WIKI_STATE_BYTES;
 
@@ -221,18 +225,23 @@ function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
     "writeGeneration",
     "state",
   ])) return null;
+  const rawStateIsCurrent = isPlainObject(value.state) &&
+    value.state.schemaVersion === WIKI_SCHEMA_VERSION;
+  const maximumRawBytes = rawStateIsCurrent
+    ? MAX_STORED_WIKI_BYTES
+    : MAX_LEGACY_WIKI_STATE_BYTES;
   if (
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
-    (value.recordSchemaVersion !== 1 && value.recordSchemaVersion !== 2 &&
-      value.recordSchemaVersion !== 3 && value.recordSchemaVersion !== 4 &&
-      value.recordSchemaVersion !== WIKI_RECORD_SCHEMA_VERSION) ||
+    !Number.isSafeInteger(value.recordSchemaVersion) ||
+    (value.recordSchemaVersion as number) < 1 ||
+    (value.recordSchemaVersion as number) > WIKI_RECORD_SCHEMA_VERSION ||
     value.key !== WIKI_RECORD_KEY ||
     !Number.isSafeInteger(value.writeGeneration) ||
     (value.writeGeneration as number) < 1 ||
-    wikiStateStorageBytes(value.state) > MAX_STORED_WIKI_BYTES
+    wikiStateStorageBytes(value.state) > maximumRawBytes
   ) return null;
   const parsed = parseWikiState(value.state);
-  return parsed.ok
+  return parsed.ok && wikiStateStorageBytes(parsed.state) <= MAX_STORED_WIKI_BYTES
     ? Object.freeze({
         state: parsed.state,
         writeGeneration: value.writeGeneration as number,

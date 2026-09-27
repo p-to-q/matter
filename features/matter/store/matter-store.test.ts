@@ -271,7 +271,23 @@ describe("Matter store", () => {
     const humanAdmissionObservation: MaterialLexicalObservationPort = Object.freeze({
       observeCommitted: (request: unknown) => observed.push(request),
     });
-    const store = createMatterStore("root", { humanAdmissionObservation });
+    const materialLexical: MaterialLexicalPort = Object.freeze({
+      capture: () => Object.freeze({
+        snapshot: Object.freeze({ generation: 1, sourceRevision: 1 }),
+        canonicalize: () => Object.freeze({
+          status: "changed" as const,
+          patches: Object.freeze([Object.freeze({
+            start: 0,
+            end: "Englebart".length,
+            replacement: "Engelbart",
+          })]),
+        }),
+      }),
+    });
+    const store = createMatterStore("root", {
+      humanAdmissionObservation,
+      materialLexical,
+    });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
 
@@ -290,9 +306,16 @@ describe("Matter store", () => {
       repairLocale: "en-US",
     })).toMatchObject({ status: "committed" });
     expect(observed).toEqual([{
-      locale: "en-US",
-      channel: "spoken",
-      text: "Englebart described the demo",
+      observed: {
+        locale: "en-US",
+        channel: "spoken",
+        text: "Englebart described the demo",
+      },
+      committed: {
+        locale: "en-US",
+        channel: "spoken",
+        text: "Engelbart described the demo.",
+      },
     }]);
 
     expect(store.getState().admitHumanTranscript({

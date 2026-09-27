@@ -78,12 +78,12 @@ import {
   captureMaterialLexicalSession,
   IDENTITY_MATERIAL_LEXICAL_PORT,
   type MaterialLexicalPort,
-  type MaterialLexicalRequest,
   type MaterialLexicalSession,
 } from "../application/material-lexical-port";
 import {
   IDENTITY_MATERIAL_LEXICAL_OBSERVATION_PORT,
   observeCommittedMaterialText,
+  type MaterialLexicalObservation,
   type MaterialLexicalObservationPort,
 } from "../application/material-lexical-observation-port";
 
@@ -466,7 +466,9 @@ export function createMatterStore(
 
     admitHumanTranscript: (anchor, values) => {
       let receipt: AdmissionStoreReceipt | undefined;
-      const committedObservation: { current: MaterialLexicalRequest | null } = { current: null };
+      const committedObservation: { current: MaterialLexicalObservation | null } = {
+        current: null,
+      };
       set((current) => {
         const leaseAdmittedAtMs = monotonicNow();
         pruneExpiredRepairLeases(repairLeases, leaseAdmittedAtMs);
@@ -527,9 +529,16 @@ export function createMatterStore(
         receipt = result.receipt;
         if (result.ok) {
           committedObservation.current = Object.freeze({
-            locale: lexicalLocale,
-            channel: "spoken" as const,
-            text: values.transcript,
+            observed: Object.freeze({
+              locale: lexicalLocale,
+              channel: "spoken" as const,
+              text: values.transcript,
+            }),
+            committed: Object.freeze({
+              locale: lexicalLocale,
+              channel: "spoken" as const,
+              text: prepared.admittedText,
+            }),
           });
         }
         if (
@@ -581,7 +590,8 @@ export function createMatterStore(
       if (committedObservation.current !== null) {
         observeCommittedMaterialText(
           humanAdmissionObservation,
-          committedObservation.current,
+          committedObservation.current.observed,
+          committedObservation.current.committed,
         );
       }
       return requireSynchronousReceipt(receipt);

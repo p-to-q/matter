@@ -15,16 +15,25 @@ import { isWellFormedUnicodeText } from "../tree/unicode-text";
 export const WIKI_PRODUCER_QUALIFICATION_VERSION = 2 as const;
 export const MAX_WIKI_PRODUCER_CORPUS_CASES = 4_096;
 export const MAX_WIKI_PRODUCER_RELEASE_CANDIDATES = 16;
+// One case may carry the eight live candidates plus the ninth candidate that
+// proves a runtime pronunciation bucket fails closed on overflow.
+export const MAX_WIKI_PRODUCER_CASE_CANONICALS = 9;
 export const MAX_WIKI_PRODUCER_ARTIFACT_BYTES = 1 * 1024 * 1024;
 export const MAX_WIKI_PRODUCER_RESOURCE_BYTES = 8 * 1024 * 1024;
 export const MAX_WIKI_PRODUCER_COMBINED_ARTIFACT_BYTES = 8 * 1024 * 1024;
-export const WIKI_PRODUCER_QUALIFICATION_CAPACITY_ENTRIES = 5_000;
+export const WIKI_PRODUCER_QUALIFICATION_CAPACITY_ENTRIES = 512;
 export const MIN_WIKI_PRODUCER_QUALIFICATION_LOOKUP_SAMPLES = 1_000;
-export const MAX_WIKI_PRODUCER_QUALIFICATION_COMPILE_MICROS = 250_000;
-export const MAX_WIKI_PRODUCER_QUALIFICATION_LOOKUP_P95_MICROS = 1_000;
+// Compilation runs only after local authority changes and publishes by atomic
+// basis replacement. The durable Wiki may be larger; pronunciation fitting is
+// qualified at its independently bounded 512-target derived-index ceiling.
+export const MAX_WIKI_PRODUCER_QUALIFICATION_COMPILE_MICROS = 750_000;
+export const MAX_WIKI_PRODUCER_QUALIFICATION_LOOKUP_P95_MICROS = 3_000;
 
 export const WIKI_PRODUCER_IDS = Object.freeze([
+  "shape-specific-v1",
+  "locale-segment-v1",
   "latin-internal-edit-v2",
+  "en-metaphone-v1",
   "en-exact-homophone-v1",
   "zh-exact-homophone-v1",
   "zh-final-pair-v1",
@@ -182,6 +191,16 @@ export type WikiProducerReleaseQualification = Readonly<{
   decisions: readonly WikiProducerQualificationDecision[];
 }>;
 
+/** Strictly parses the compact identity allowed to cross into runtime policy. */
+export function isWikiQualifiedProducerRelease(
+  value: unknown,
+): value is WikiQualifiedProducerRelease {
+  return isRecord(value) && hasOnlyKeys(value, [
+    "qualificationVersion", "identity", "corpus",
+  ]) && value.qualificationVersion === WIKI_PRODUCER_QUALIFICATION_VERSION &&
+    parseIdentity(value.identity) !== null && parseCorpusIdentity(value.corpus) !== null;
+}
+
 const DIGEST_PATTERN = /^sha256:[0-9a-f]{64}$/;
 const VERSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/;
 const MAX_BOUNDED_METRIC = 1_000_000_000;
@@ -277,7 +296,8 @@ export async function qualifyWikiProducer(
 
 /**
  * Returns complete identities only for unique, fully passing candidates.
- * The result is still offline evidence; no runtime bridge consumes it today.
+ * Runtime may consume only these compact identities, never a producer id by
+ * itself or any manifest-owned corpus material.
  */
 export async function qualifyWikiProducerReleases(
   candidates: readonly WikiProducerReleaseCandidate[],
@@ -557,7 +577,9 @@ function parseIdentity(value: unknown): WikiProducerIdentity | null {
     "producerId", "producerVersion", "producerDigest", "resourceId", "resourceVersion",
     "resourceDigest",
   ]) || !isProducerId(value.producerId) || !isVersion(value.producerVersion) ||
-      !isDigest(value.producerDigest) || !isVersion(value.resourceId) ||
+      !isDigest(value.producerDigest) ||
+      !producerMajorMatchesId(value.producerId, value.producerVersion) ||
+      !isVersion(value.resourceId) ||
       !isVersion(value.resourceVersion) || !isDigest(value.resourceDigest)) return null;
   return Object.freeze({
     producerId: value.producerId,
@@ -567,6 +589,14 @@ function parseIdentity(value: unknown): WikiProducerIdentity | null {
     resourceVersion: value.resourceVersion,
     resourceDigest: value.resourceDigest,
   });
+}
+
+function producerMajorMatchesId(
+  producerId: WikiQualifiableProducerId,
+  producerVersion: string,
+): boolean {
+  const match = /-v([1-9][0-9]*)$/u.exec(producerId);
+  return match !== null && producerVersion.startsWith(`${match[1]}.`);
 }
 
 function parseCorpusIdentity(value: unknown): WikiProducerCorpusIdentity | null {
@@ -695,7 +725,8 @@ function isExpectedInput(value: unknown): value is WikiProducerExpectedCase["inp
     (value.channel === "spoken" || value.channel === "written") &&
     (value.boundary === "literal" || value.boundary === "word") &&
     isBoundedText(value.observedForm) && Array.isArray(value.candidateCanonicals) &&
-    value.candidateCanonicals.length > 0 && value.candidateCanonicals.length <= 8 &&
+    value.candidateCanonicals.length > 0 &&
+    value.candidateCanonicals.length <= MAX_WIKI_PRODUCER_CASE_CANONICALS &&
     value.candidateCanonicals.every(isBoundedText) &&
     new Set(value.candidateCanonicals).size === value.candidateCanonicals.length &&
     (value.environment === "human-material" || value.environment === "protected-text" ||

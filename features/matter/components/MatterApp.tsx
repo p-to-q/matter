@@ -141,6 +141,7 @@ export function MatterApp() {
   useLayoutEffect(() => {
     if (
       seededSessionRelocalizer === null ||
+      !persistence.initialReconciliationComplete ||
       persistence.status.phase === "loading" ||
       admission.state.phase !== "idle"
     ) return;
@@ -153,6 +154,7 @@ export function MatterApp() {
     canvasPreferences.preferences.language,
     documentEpoch,
     localizeSeededMaterial,
+    persistence.initialReconciliationComplete,
     persistence.status.phase,
     seededSessionRelocalizer,
   ]);

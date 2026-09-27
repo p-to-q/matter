@@ -12,11 +12,9 @@ import {
   createWikiMaterialLexicalPort,
 } from "../application/wiki-material-lexical-adapter";
 import {
-  isMatterWikiAutomaticCollectionEnabled,
   isMatterWikiPhoneticFittingEnabled,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
-  matterWikiFittingMode,
 } from "../persistence/wiki-runtime-bridge";
 import {
   createMatterStore,
@@ -33,13 +31,7 @@ const matterStore = createMatterStore(singletonInitialDocument, {
     phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
   }),
   humanAdmissionObservation: createWikiMaterialLexicalObservationPort(
-    readMatterWikiBasis,
     observeMatterWikiEvidence,
-    {
-      mode: matterWikiFittingMode,
-      automaticCollectionEnabled: isMatterWikiAutomaticCollectionEnabled,
-      phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
-    },
   ),
   initialTitle: singletonInitialDocument === "empty"
     ? EMPTY_MATTER_DOCUMENT_TITLE

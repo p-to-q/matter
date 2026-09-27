@@ -29,6 +29,7 @@ function validMetrics() {
     prerenderedApiRoutes: [],
     forbiddenTraceFiles: [],
     browserFallbackNodeTraceFiles: [],
+    offlineWikiQualificationAssets: [],
     productionSourceMaps: 0,
   };
 }
@@ -124,6 +125,15 @@ test("keeps seed localization in exactly one lazy browser chunk", () => {
   );
 });
 
+test("keeps offline Wiki qualification inventory out of browser artifacts", () => {
+  const metrics = validMetrics();
+  metrics.offlineWikiQualificationAssets = ["chunks/wiki-runtime.12345678.js"];
+  assert.match(
+    inspectRuntimeArtifact(metrics).failures.join("\n"),
+    /offline Wiki qualification metadata/u,
+  );
+});
+
 test("reads root and server traces while budgeting every public asset", async () => {
   const root = await mkdtemp(join(tmpdir(), "matter-runtime-artifact-"));
   try {
@@ -211,6 +221,7 @@ test("reads root and server traces while budgeting every public asset", async ()
       "chunks/seed-localization.12345678.js",
     ]);
     assert.deepEqual(metrics.seedMaterialCopyAssets, metrics.seedLocalizationAssets);
+    assert.deepEqual(metrics.offlineWikiQualificationAssets, []);
     const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
     assert.match(failures, /docs\/root\.md/u);
     assert.match(failures, /\.env\.local/u);

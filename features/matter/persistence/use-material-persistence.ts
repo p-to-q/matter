@@ -24,6 +24,7 @@ export function useMaterialPersistence(
   const [documentBasisOwner] = useState(() => new DocumentBasisOwner(tree, documentEpoch));
   const initialHistoryRef = useRef(history);
   const startedRef = useRef(false);
+  const [initialReconciliationComplete, setInitialReconciliationComplete] = useState(false);
   const startPromiseRef = useRef<ReturnType<typeof controller.start> | null>(null);
   const lifecycleRef = useRef(0);
   const importCoordinator = useMemo(() => createDocumentImportCoordinator(
@@ -56,6 +57,7 @@ export function useMaterialPersistence(
         controller.declareConflict(decision.tree, latestHistoryRef.current);
       }
       startedRef.current = true;
+      setInitialReconciliationComplete(true);
     });
     return () => {
       active = false;
@@ -86,6 +88,7 @@ export function useMaterialPersistence(
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
   return Object.freeze({
+    initialReconciliationComplete,
     status,
     retry: controller.retry,
     resolveConflict,

@@ -17,6 +17,46 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-27 — bounded local Wiki automation separates proof from authority
+
+Changed: successful human material admission now drives two local term
+producers and one bounded internal-Latin-edit producer through the V6 split
+ledgers.
+Ordinary locale segments require recurrence; all-caps, internal-capital, and
+Katakana forms may collect immediately, while ordinary title case does not.
+The product runtime releases only conservative internal-edit fitting. Pinned
+Double Metaphone, tone-bearing Mandarin pinyin, and the three final pairs remain
+in the offline qualification catalog because transcript-only homophones lack
+enough semantic or acoustic evidence to rewrite visible material. Every
+catalogued producer is bound to a complete versioned artifact/resource/corpus
+identity and controlled positive, adversarial, ambiguity, locale, protected,
+generated, capacity, and performance receipts; an explicit narrower allow-list
+owns product authority.
+The scoring policy has a separate manifest-owned replay receipt covering
+activation, competition, decay, collection, non-human exclusion, and projection;
+producer success alone cannot qualify default-on learning.
+When one admission yields a unique allowlisted internal-edit relation, its broad
+source-term event is omitted so two-turn collection cannot make the four-turn
+relation unreachable. Competing targets suppress nothing, and every existing
+canonical remains a hard no-op veto.
+The two default-on Wiki actions now pause real collection or fitting paths.
+New human-confirmed lexemes stop at 5,000, while a distinct 15,000-row
+structural ceiling keeps formerly valid V2-V5 states recoverable and editable.
+Loading a valid V5 record now persists its V6 split-ledger normalization once,
+using the existing monotonic compare-and-swap generation; a failed optional
+migration leaves the prior valid record readable.
+
+Why: a quiet automatic dictionary is useful only when discovery is generous,
+rewrite authority is conservative, and offline reproducibility is not mistaken
+for permission to alter material. Lazy producers keep fitting work out of the
+initial material bundle; immutable compiled snapshots keep the synchronous
+ingress path exact and bounded.
+
+Forecloses: product rewrites from exact homophone or Mandarin pronunciation
+evidence alone, prompt glossary injection, runtime network lookup, cross-locale
+fallback, acoustic-confidence claims, ordinary title-case one-shot collection,
+unqualified producer activation, and learning from generated or protected text.
+
 ## 2026-09-26 — Wiki evidence is split before automation earns authority
 
 Changed: local Wiki record V5 stores canonical-term recurrence and alias
