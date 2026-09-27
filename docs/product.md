@@ -55,12 +55,15 @@ one bounded, scrollable settings dialog. The first-level menu never renders the
 lexical list itself, and Matter exposes no standalone Wiki route.
 
 The current release keeps this configuration path honest: saving a canonical
-word records the preferred form and its possible voice/generated scope, but does
-not correct future or existing text. The selected scope becomes operational only
-after a verified matching path is enabled. Automatic aliases and
-the visible error-local confirmation path remain gated until their corpus and
-interaction evidence pass. The UI states this boundary directly instead of
-presenting stored configuration as an active correction.
+word records the preferred form and its possible voice/generated scope, but the
+row alone does not invent a hidden alias and existing material is never
+rescanned. Automatic collection and one bounded internal-Latin-edit producer
+are operational only through the release-qualified local path. English
+homophone and Mandarin pronunciation producers remain offline qualification
+candidates rather than product rewrite authority, and the visible error-local
+confirmation path remains gated until its interaction evidence passes. The UI
+states this boundary directly instead of presenting stored configuration as a
+promise that every similar-sounding form will be corrected.
 
 ## Two kinds of turn
 

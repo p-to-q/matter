@@ -35,6 +35,14 @@ const VISUAL_MEDIA = Object.freeze([
 ]);
 const SEED_LOCALIZATION_CHUNK_SENTINEL = "matter-seeded-session-localization";
 const SEED_MATERIAL_COPY_CHUNK_SENTINEL = "matter-seeded-material-copy";
+const OFFLINE_WIKI_QUALIFICATION_SENTINELS = Object.freeze([
+  "double-metaphone",
+  "pinyin-pro",
+  // Package names may disappear during bundling. These stable data/code
+  // literals catch the corresponding offline engines after minification.
+  "ORCHES|ARCHIT|ORCHID",
+  "bǎng páng pāng",
+]);
 
 export function inspectRuntimeArtifact(metrics) {
   const failures = [];
@@ -113,6 +121,9 @@ export function inspectRuntimeArtifact(metrics) {
   for (const file of metrics.browserFallbackNodeTraceFiles) {
     failures.push(`Server trace includes browser-fallback-only package ${file}.`);
   }
+  for (const asset of metrics.offlineWikiQualificationAssets) {
+    failures.push(`Browser artifact includes offline Wiki qualification metadata ${asset}.`);
+  }
   if (metrics.productionSourceMaps > 0) {
     failures.push(`Production artifact contains ${metrics.productionSourceMaps} browser/server source map(s).`);
   }
@@ -166,6 +177,10 @@ export async function readRuntimeArtifact(root = process.cwd()) {
       SEED_MATERIAL_COPY_CHUNK_SENTINEL,
     )
   ).map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
+  const browserJavaScript = staticFiles.filter((file) => extname(file) === ".js");
+  const offlineWikiQualificationAssets = (
+    await filesContainingAny(browserJavaScript, OFFLINE_WIKI_QUALIFICATION_SENTINELS)
+  ).map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
   const prerendered = Object.keys(prerender.routes ?? {});
   const metadataImageAssets = serverFiles.filter((file) => (
     /\/app\/(?:icon\d+|apple-icon)\.(?:ico|jpe?g|png|svg)\.body$/u.test(file)
@@ -186,6 +201,7 @@ export async function readRuntimeArtifact(root = process.cwd()) {
     fontAssets: Object.freeze(fontAssets),
     seedLocalizationAssets: Object.freeze(seedLocalizationAssets),
     seedMaterialCopyAssets: Object.freeze(seedMaterialCopyAssets),
+    offlineWikiQualificationAssets: Object.freeze(offlineWikiQualificationAssets),
     metadataImageAssets: Object.freeze(
       metadataImageAssets.map((file) => relative(nextRoot, file).split(sep).join("/")),
     ),
@@ -224,6 +240,15 @@ async function filesContaining(files, needle) {
   const matching = [];
   for (const file of files) {
     if ((await readFile(file, "utf8")).includes(needle)) matching.push(file);
+  }
+  return matching;
+}
+
+async function filesContainingAny(files, needles) {
+  const matching = [];
+  for (const file of files) {
+    const contents = await readFile(file, "utf8");
+    if (needles.some((needle) => contents.includes(needle))) matching.push(file);
   }
   return matching;
 }

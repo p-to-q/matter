@@ -28,11 +28,21 @@ import {
 import {
   MAX_WIKI_LEARNING_QUIET_TURNS,
   WIKI_ALIAS_PRODUCER_WEIGHTS,
+  isWikiStoredTermEvidenceProducer,
   isWikiLearningCount,
 } from "./wiki-learning-policy";
 import { hasUnsafeWikiFormatControl } from "./wiki-text-safety";
 
 const ASCII_CONTROL = /[\u0000-\u001f\u007f]/u;
+const VALID_WIKI_STATE = Object.freeze({ ok: true as const });
+
+// These caches recognize only objects normalized by this module and then
+// proven by the complete invariant pass below. They are process-local,
+// disposable acceleration; persistence and every external value still cross
+// the strict parser before they can become authority.
+const normalizedWikiStates = new WeakSet<object>();
+const validatedWikiStates = new WeakSet<object>();
+const normalizedWikiCollections = new WeakSet<object>();
 
 export type WikiInvariantResult =
   | Readonly<{ ok: true }>
@@ -96,6 +106,7 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
       ])) {
     return invalid("The Wiki state is not an object.");
   }
+  if (validatedWikiStates.has(state)) return VALID_WIKI_STATE;
   if (
     state.schemaVersion !== WIKI_SCHEMA_VERSION ||
     state.scoringVersion !== WIKI_SCORING_VERSION ||
@@ -239,27 +250,54 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     lexemeTombstoneKeys.add(key);
   }
 
-  return Object.freeze({ ok: true });
+  if (normalizedWikiStates.has(state)) validatedWikiStates.add(state);
+  return VALID_WIKI_STATE;
+}
+
+/** Recognizes one exact immutable state that already passed every invariant.
+ * This never admits structured-clone, JSON, or caller-authored input. */
+export function isValidatedFrozenWikiState(value: unknown): value is WikiState {
+  return typeof value === "object" && value !== null && validatedWikiStates.has(value);
+}
+
+/** Recognizes module-normalized input that is safe to validate without first
+ * cloning. It is not authority until `validateWikiState` succeeds. */
+export function isNormalizedFrozenWikiState(value: unknown): value is WikiState {
+  return typeof value === "object" && value !== null && normalizedWikiStates.has(value);
 }
 
 export function freezeWikiState(state: WikiState): WikiState {
-  const lexemes = state.lexemes.map(freezeLexeme).sort(compareLexeme);
-  const termEvidence = state.termEvidence.map(freezeTermEvidence)
-    .sort(compareLexemeIdentity);
-  const aliasEvidence = state.aliasEvidence.map(freezeAliasEvidence)
-    .sort(compareAliasEvidence);
-  const authorities = state.authorities.map(freezeAuthority).sort(compareAliasDescriptor);
-  const aliasTombstones = state.aliasTombstones
-    .map(freezeTombstone)
-    .sort(compareAliasDescriptor);
-  const lexemeTombstones = state.lexemeTombstones
-    .map((value) => Object.freeze({
+  const lexemes = freezeWikiCollection(state.lexemes, freezeLexeme, compareLexeme);
+  const termEvidence = freezeWikiCollection(
+    state.termEvidence,
+    freezeTermEvidence,
+    compareLexemeIdentity,
+  );
+  const aliasEvidence = freezeWikiCollection(
+    state.aliasEvidence,
+    freezeAliasEvidence,
+    compareAliasEvidence,
+  );
+  const authorities = freezeWikiCollection(
+    state.authorities,
+    freezeAuthority,
+    compareAliasDescriptor,
+  );
+  const aliasTombstones = freezeWikiCollection(
+    state.aliasTombstones,
+    freezeTombstone,
+    compareAliasDescriptor,
+  );
+  const lexemeTombstones = freezeWikiCollection(
+    state.lexemeTombstones,
+    (value) => Object.freeze({
       locale: value.locale,
       canonical: value.canonical,
       rejectedAtRevision: value.rejectedAtRevision,
-    }))
-    .sort(compareLexemeIdentity);
-  return Object.freeze({
+    }),
+    compareLexemeIdentity,
+  );
+  const normalized = Object.freeze({
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: WIKI_FITTING_VERSION,
@@ -273,6 +311,19 @@ export function freezeWikiState(state: WikiState): WikiState {
     aliasTombstones: Object.freeze(aliasTombstones),
     lexemeTombstones: Object.freeze(lexemeTombstones),
   });
+  normalizedWikiStates.add(normalized);
+  return normalized;
+}
+
+function freezeWikiCollection<T>(
+  values: readonly T[],
+  freezeValue: (value: T) => T,
+  compare: (left: T, right: T) => number,
+): readonly T[] {
+  if (normalizedWikiCollections.has(values)) return values;
+  const normalized = Object.freeze(values.map(freezeValue).sort(compare));
+  normalizedWikiCollections.add(normalized);
+  return normalized;
 }
 
 export function descriptorKey(value: WikiRuleDescriptor): string {
@@ -370,9 +421,13 @@ function isValidAliasTarget(
 
 function isWikiTermEvidenceAggregate(value: unknown): value is WikiTermEvidenceAggregate {
   return isPlainObject(value) &&
-    hasExactKeys(value, ["locale", "canonical", "phase", "support", "quietTurns"]) &&
+    hasExactKeys(value, [
+      "locale", "canonical", "producer", "phase", "support", "quietTurns",
+    ]) &&
     typeof value.locale === "string" && isMatterLocale(value.locale) &&
     isWikiCanonical(value.canonical) &&
+    typeof value.producer === "string" &&
+    isWikiStoredTermEvidenceProducer(value.producer) &&
     (value.phase === "candidate" || value.phase === "collected") &&
     isWikiLearningCount(value.support) &&
     isWikiQuietTurns(value.quietTurns) &&
@@ -423,6 +478,7 @@ function freezeTermEvidence(value: WikiTermEvidenceAggregate): WikiTermEvidenceA
   return Object.freeze({
     locale: value.locale,
     canonical: value.canonical,
+    producer: value.producer,
     phase: value.phase,
     support: value.support,
     quietTurns: value.quietTurns,

@@ -193,8 +193,13 @@ export function isWikiRangeEligible(
   ranges: readonly WikiEligibleRange[],
   firstPossibleRange: number,
 ): boolean {
-  const range = ranges[firstPossibleRange];
-  return range !== undefined && start >= range.start && end <= range.end;
+  for (let index = firstPossibleRange; index < ranges.length; index += 1) {
+    const range = ranges[index];
+    if (range === undefined || range.start >= end) return false;
+    if (range.end <= start) continue;
+    return start >= range.start && end <= range.end;
+  }
+  return false;
 }
 
 function segmentText(text: string): Grapheme[] {
@@ -234,15 +239,20 @@ export function wikiRangeOverlapsProtected(
   return false;
 }
 
-export function findProtectedWikiSpans(text: string): readonly WikiProtectedSpan[] {
+export function findProtectedWikiSpans(
+  text: string,
+  level: "matching" | "evidence" = "matching",
+): readonly WikiProtectedSpan[] {
   if (!MAY_CONTAIN_PROTECTED_LITERAL.test(text)) return Object.freeze([]);
-  const spans = Array.from(text.matchAll(protectedLiteralPattern()), (match) =>
+  const spans = Array.from(text.matchAll(protectedLiteralPattern(level)), (match) =>
     Object.freeze([match.index, match.index + match[0].length] as const));
   return Object.freeze(spans);
 }
 
-function protectedLiteralPattern(): RegExp {
-  return /```[^]*?(?:```|$)|`[^`\n]*(?:`|$)|\u201c[^\u201d\n]*(?:\u201d|$)|\u2018[^\u2019\n]*(?:\u2019|$)|\u300c[^\u300d\n]*(?:\u300d|$)|\u300e[^\u300f\n]*(?:\u300f|$)|"[^"\n]*(?:"|$)|(?:https?:\/\/|[Ww]{3}\.)[^\s\uff0c\u3002\uff01\uff1f\uff1b\uff1a]+|[\p{L}\p{N}.!#$%&'*+\-/=?^_`{|}~]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+|(?:\\\\|\/\/)[^\s\uff0c\u3002\uff01\uff1f\uff1b\uff1a]+|(?<![\p{L}\p{N}._~-])(?:[\p{L}\p{N}._~!$&'()*+;=:@%-]+[\\/])+[\p{L}\p{N}._~!$&'()*+;=:@%\\/-]+|(?:\.{0,2}\/|\/)[\p{L}\p{N}._~!$&'()*+;=:@%\-/]+|[A-Za-z]:\\[^\s\uff0c\u3002\uff01\uff1f\uff1b\uff1a]+|--[A-Za-z][A-Za-z0-9-]*|\b(?:\d{1,3}\.){3}\d{1,3}\b|\b[Vv]?\d+(?:\.\d+){1,3}\b|(?<![\p{L}\p{N}_$])[\p{L}\p{N}$]+(?:_[\p{L}\p{N}$]+)+(?![\p{L}\p{N}_$])|(?<![\p{L}\p{N}_$])[\p{L}\p{N}_$]+(?:\.[\p{L}\p{N}_$]+)+(?![\p{L}\p{N}_$])|\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)\b/gu;
+function protectedLiteralPattern(level: "matching" | "evidence"): RegExp {
+  const shared = "```[^]*?(?:```|$)|`[^`\\n]*(?:`|$)|\\u201c[^\\u201d\\n]*(?:\\u201d|$)|\\u2018[^\\u2019\\n]*(?:\\u2019|$)|\\u300c[^\\u300d\\n]*(?:\\u300d|$)|\\u300e[^\\u300f\\n]*(?:\\u300f|$)|\"[^\"\\n]*(?:\"|$)|(?:https?:\\/\\/|[Ww]{3}\\.)[^\\s\\uff0c\\u3002\\uff01\\uff1f\\uff1b\\uff1a]+|[\\p{L}\\p{N}.!#$%&'*+\\-/=?^_`{|}~]+@[\\p{L}\\p{N}-]+(?:\\.[\\p{L}\\p{N}-]+)+|(?:\\\\\\\\|\\/\\/)[^\\s\\uff0c\\u3002\\uff01\\uff1f\\uff1b\\uff1a]+|(?<![\\p{L}\\p{N}._~-])(?:[\\p{L}\\p{N}._~!$&'()*+;=:@%-]+[\\\\/])+[\\p{L}\\p{N}._~!$&'()*+;=:@%\\\\/-]+|(?:\\.{0,2}\\/|\\/)[\\p{L}\\p{N}._~!$&'()*+;=:@%\\-/]+|[A-Za-z]:\\\\[^\\s\\uff0c\\u3002\\uff01\\uff1f\\uff1b\\uff1a]+|--[A-Za-z][A-Za-z0-9-]*|\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b|\\b[Vv]?\\d+(?:\\.\\d+){1,3}\\b|(?<![\\p{L}\\p{N}_$])[\\p{L}\\p{N}$]+(?:_[\\p{L}\\p{N}$]+)+(?![\\p{L}\\p{N}_$])|(?<![\\p{L}\\p{N}_$])[\\p{L}\\p{N}_$]+(?:\\.[\\p{L}\\p{N}_$]+)+(?![\\p{L}\\p{N}_$])";
+  const identifiers = "|\\b(?:[a-z]+[A-Z][A-Za-z0-9]*|[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*)\\b";
+  return new RegExp(level === "matching" ? shared + identifiers : shared, "gu");
 }
 
 function result(

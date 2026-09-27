@@ -19,6 +19,52 @@ export const WIKI_TERM_SCORE_POLICY = Object.freeze({
   retentionSupport: 1,
 });
 
+export type WikiTermEvidenceProducer =
+  | "shape-specific-v1"
+  | "locale-segment-v1";
+
+/** Persisted provenance includes a zero-authority migration marker. New
+ * observations can never create it. */
+export type WikiStoredTermEvidenceProducer =
+  | WikiTermEvidenceProducer
+  | "legacy-term-v1";
+
+/** Shape-specific terms may surface after one turn; broad lexical segments
+ * require recurrence. Both still contribute at most one event per turn. */
+export const WIKI_TERM_PRODUCER_WEIGHTS: Readonly<
+  Record<WikiTermEvidenceProducer, 1 | 2>
+> = Object.freeze({
+  "shape-specific-v1": 2,
+  "locale-segment-v1": 1,
+});
+
+export function isWikiTermEvidenceProducer(
+  value: unknown,
+): value is WikiTermEvidenceProducer {
+  return typeof value === "string" && Object.hasOwn(WIKI_TERM_PRODUCER_WEIGHTS, value);
+}
+
+export function isWikiStoredTermEvidenceProducer(
+  value: unknown,
+): value is WikiStoredTermEvidenceProducer {
+  return value === "legacy-term-v1" || isWikiTermEvidenceProducer(value);
+}
+
+/** One aggregate term may become a fitting or rewrite target only while its
+ * evidence is still live and its exact producer release remains qualified. */
+export function isQualifiedCollectedWikiTermEvidence(
+  evidence: Readonly<{
+    producer: WikiStoredTermEvidenceProducer;
+    phase: WikiAutomaticTermPhase;
+    support: number;
+  }> | undefined,
+  qualifiedProducers: ReadonlySet<WikiTermEvidenceProducer>,
+): boolean {
+  return evidence !== undefined && evidence.phase === "collected" &&
+    evidence.support > 0 && isWikiTermEvidenceProducer(evidence.producer) &&
+    qualifiedProducers.has(evidence.producer);
+}
+
 export const WIKI_ALIAS_SCORE_POLICY = Object.freeze({
   activationScore: 8,
   retentionScore: 5,
@@ -29,6 +75,7 @@ export const WIKI_ALIAS_SCORE_POLICY = Object.freeze({
 export type WikiAliasEvidenceProducer =
   | "legacy-v1"
   | "latin-internal-edit-v2"
+  | "en-metaphone-v1"
   | "en-exact-homophone-v1"
   | "zh-exact-homophone-v1"
   | "zh-final-pair-v1";
@@ -38,10 +85,17 @@ export const WIKI_ALIAS_PRODUCER_WEIGHTS: Readonly<
 > = Object.freeze({
   "legacy-v1": 0,
   "latin-internal-edit-v2": 2,
+  "en-metaphone-v1": 2,
   "en-exact-homophone-v1": 3,
   "zh-exact-homophone-v1": 3,
   "zh-final-pair-v1": 2,
 });
+
+export function isWikiAliasEvidenceProducer(
+  value: unknown,
+): value is WikiAliasEvidenceProducer {
+  return typeof value === "string" && Object.hasOwn(WIKI_ALIAS_PRODUCER_WEIGHTS, value);
+}
 
 export type WikiAutomaticTermPhase = "candidate" | "collected";
 
@@ -217,11 +271,12 @@ export function scoreWikiTermEvidence(evidence: WikiTermEvidence): number {
 /** An observation wins over pending quiet-time decay on the same human tick. */
 export function observeWikiTermEvidence(
   evidence: WikiTermEvidence,
+  increment: 1 | 2 = 1,
 ): WikiTermEvidence {
   assertTermEvidence(evidence);
   return freezeTermEvidence({
     ...evidence,
-    support: saturatingIncrement(evidence.support),
+    support: Math.min(MAX_WIKI_LEARNING_COUNT, evidence.support + increment),
     quietTurns: 0,
   });
 }
@@ -768,7 +823,7 @@ function assertTermEvidence(evidence: WikiTermEvidence): void {
 
 function assertAliasCandidate(candidate: WikiAliasCandidate): void {
   assertIdentifier(candidate.candidateId, "candidateId");
-  if (!(candidate.producer in WIKI_ALIAS_PRODUCER_WEIGHTS)) {
+  if (!Object.hasOwn(WIKI_ALIAS_PRODUCER_WEIGHTS, candidate.producer)) {
     throw new TypeError("alias producer is invalid");
   }
   if (candidate.phase !== "candidate" && candidate.phase !== "active") {

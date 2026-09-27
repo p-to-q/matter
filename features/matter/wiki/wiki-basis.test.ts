@@ -5,15 +5,21 @@ import { projectWikiConfigurationRules } from "./wiki-configuration";
 import {
   applyWikiEvent,
   createEmptyWikiState,
+  createWikiProjectionPolicy,
   WIKI_WITH_PROVISIONAL,
 } from "./wiki-evidence";
 import {
   MAX_WIKI_APPLICABLE_CODE_POINTS,
   MAX_WIKI_APPLICABLE_RULES,
+  MAX_WIKI_LEXEMES,
   WIKI_SCHEMA_VERSION,
   type WikiEvent,
   type WikiState,
 } from "./wiki-model";
+import { freezeWikiState, validateWikiState } from "./wiki-invariants";
+import { parseWikiState } from "./wiki-codec";
+import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from
+  "./wiki-qualified-producer-releases";
 
 describe("Wiki basis", () => {
   it("provides one deeply immutable empty basis", () => {
@@ -44,6 +50,7 @@ describe("Wiki basis", () => {
       form: "code x",
       canonical: "Codex",
       source: "machine-inference",
+      producer: "legacy-v1",
     });
     state = apply(state, {
       type: "confirm-rule",
@@ -106,6 +113,7 @@ describe("Wiki basis", () => {
       form: "code ex",
       canonical: "Codex",
       source: "machine-inference",
+      producer: "legacy-v1",
     });
 
     const second = compileWikiBasis(observed, 2, first.basis);
@@ -119,6 +127,61 @@ describe("Wiki basis", () => {
       first.basis.confirmedSnapshot.rules,
     );
     expect(second.basis.fitSnapshot).toBe(first.basis.fitSnapshot);
+  });
+
+  it("rejects invalid generations before the immutable reuse path", () => {
+    const state = confirmedState("code x", "Codex");
+    const first = compileWikiBasis(state, 1);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    for (const generation of [-1, Number.NaN]) {
+      expect(compileWikiBasis(state, generation, first.basis)).toMatchObject({
+        ok: false,
+        error: {
+          code: "COMPILE_FAILED",
+          message: "The applicable Wiki rules could not be compiled.",
+          issues: [{ code: "INVALID_GENERATION", ruleIndexes: [] }],
+        },
+      });
+    }
+  });
+
+  it("reuses fitting only for the same complete qualified release identity", () => {
+    const state = confirmedState("code x", "Codex");
+    const release = MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES.find((candidate) =>
+      candidate.identity.producerId === "latin-internal-edit-v2");
+    if (release === undefined) throw new Error("Missing latin-internal-edit-v2 release.");
+    const policy = createWikiProjectionPolicy([release]);
+    const first = compileWikiBasis(state, 1, undefined, policy);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const same = compileWikiBasis(state, 2, first.basis, policy);
+    expect(same.ok).toBe(true);
+    if (!same.ok) return;
+    expect(same.basis.fitSnapshot).toBe(first.basis.fitSnapshot);
+
+    const changedRelease = Object.freeze({
+      ...release,
+      identity: Object.freeze({
+        ...release.identity,
+        resourceVersion: "2.0.2",
+      }),
+    });
+    const changed = compileWikiBasis(
+      state,
+      3,
+      same.basis,
+      createWikiProjectionPolicy([changedRelease]),
+    );
+    expect(changed.ok).toBe(true);
+    if (!changed.ok) return;
+    expect(changed.basis.fitSnapshot).not.toBe(same.basis.fitSnapshot);
+    expect(changed.basis.fitSnapshot.qualifiedProducerReleases[0]?.identity)
+      .toMatchObject({
+        producerId: "latin-internal-edit-v2",
+        resourceVersion: "2.0.2",
+      });
   });
 
   it("does not replace the current reference for stale or failed candidates", () => {
@@ -192,7 +255,60 @@ describe("Wiki basis", () => {
     expect(compiled.basis.snapshot.stats.trieNodeCount).toBeLessThanOrEqual(
       10 + MAX_WIKI_APPLICABLE_RULES * 32,
     );
-  });
+  }, 20_000);
+
+  it("reuses a recovery-sized immutable basis without rescanning 15,000 rows", () => {
+    const state = recoverySizeState();
+    const first = compileWikiBasis(state, 1);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const parsed = parseWikiState(state);
+    expect(parsed.ok && parsed.state === state).toBe(true);
+
+    const startedAt = performance.now();
+    const next = compileWikiBasis(state, 2, first.basis);
+    const compileMillis = performance.now() - startedAt;
+
+    expect(next.ok).toBe(true);
+    if (!next.ok) return;
+    expect(next.basis.snapshot.generation).toBe(2);
+    expect(next.basis.snapshot.views).toBe(first.basis.snapshot.views);
+    expect(next.basis.snapshot.rules).toBe(first.basis.snapshot.rules);
+    expect(next.basis.fitSnapshot).toBe(first.basis.fitSnapshot);
+    // Before the immutable-source receipt this path took 469-1,578 ms on the
+    // verifier host despite returning the same indexes. Keep ample CI headroom
+    // while proving that the recovery ledger is no longer on the hot path.
+    expect(compileMillis).toBeLessThan(250);
+  }, 20_000);
+
+  it("reuses recovery-sized indexes when compact term support changes no authority", () => {
+    const state = recoverySizeState(true);
+    const first = compileWikiBasis(state, 1);
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    const changed = freezeWikiState({
+      ...state,
+      revision: 2,
+      termEvidence: Object.freeze([
+        Object.freeze({ ...state.termEvidence[0]!, support: 3 }),
+      ]),
+    });
+    expect(validateWikiState(changed)).toEqual({ ok: true });
+    expect(changed.lexemes).toBe(state.lexemes);
+    expect(changed.authorities).toBe(state.authorities);
+    const parsed = parseWikiState(changed);
+    expect(parsed.ok && parsed.state === changed).toBe(true);
+
+    const startedAt = performance.now();
+    const next = compileWikiBasis(changed, 2, first.basis);
+    const compileMillis = performance.now() - startedAt;
+
+    expect(next.ok).toBe(true);
+    if (!next.ok) return;
+    expect(next.basis.snapshot.views).toBe(first.basis.snapshot.views);
+    expect(next.basis.fitSnapshot).toBe(first.basis.fitSnapshot);
+    expect(compileMillis).toBeLessThan(250);
+  }, 20_000);
 });
 
 function confirmedState(form: string, canonical: string): WikiState {
@@ -276,6 +392,42 @@ function maximumMatcherState(): WikiState {
     aliasTombstones: [],
     lexemeTombstones: [],
   };
+}
+
+function recoverySizeState(withTermEvidence = false): WikiState {
+  const lexemes = Array.from({ length: MAX_WIKI_LEXEMES }, (_, index) => ({
+    id: index + 1,
+    locale: "en-US" as const,
+    canonical: `Term${index.toString(36).padStart(8, "0")}`,
+    scope: "both" as const,
+    provenance: index === 0 && withTermEvidence
+      ? "aggregate-evidence" as const
+      : "human-confirmed" as const,
+    confirmedAtRevision: index === 0 && withTermEvidence ? null : 1,
+  }));
+  return freezeWikiState({
+    schemaVersion: WIKI_SCHEMA_VERSION,
+    scoringVersion: 3,
+    fittingVersion: 1,
+    revision: 1,
+    nextLexemeId: MAX_WIKI_LEXEMES + 1,
+    automaticLearningSaturated: false,
+    lexemes,
+    termEvidence: withTermEvidence
+      ? Object.freeze([Object.freeze({
+          locale: "en-US" as const,
+          canonical: lexemes[0]!.canonical,
+          producer: "locale-segment-v1" as const,
+          phase: "collected" as const,
+          support: 2,
+          quietTurns: 0,
+        })])
+      : Object.freeze([]),
+    aliasEvidence: Object.freeze([]),
+    authorities: Object.freeze([]),
+    aliasTombstones: Object.freeze([]),
+    lexemeTombstones: Object.freeze([]),
+  });
 }
 
 function apply(state: WikiState, event: WikiEvent): WikiState {

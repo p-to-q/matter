@@ -4,21 +4,30 @@ import {
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
-  type WikiEligibleRange,
 } from "./canonicalize-wiki-text";
+import type { WikiAdmissionObservation } from "./wiki-admission";
+import {
+  isQualifiedCollectedWikiTermEvidence,
+  isWikiAliasEvidenceProducer,
+  isWikiTermEvidenceProducer,
+  type WikiAliasEvidenceProducer,
+  type WikiTermEvidenceProducer,
+} from "./wiki-learning-policy";
 import {
   MAX_WIKI_OBSERVATIONS_PER_BATCH,
-  type WikiChannel,
+  MAX_WIKI_FITTING_TARGETS,
+  isWikiStarterLexemeIdentity,
   type WikiLexeme,
   type WikiObserveEvidenceEvent,
   type WikiState,
 } from "./wiki-model";
+import type { WikiQualifiedProducerRelease } from "./wiki-producer-qualification";
 
-const MIN_FIT_GRAPHEMES = 7;
+const MIN_EDIT_GRAPHEMES = 7;
 const MAX_FIT_GRAPHEMES = 48;
 const MAX_FIT_BUCKET_SIZE = 8;
-const LATIN_WORD = /^\p{Script=Latin}[\p{Script=Latin}\p{M}]*$/u;
-const GRAPHEME_SEGMENTER = new Intl.Segmenter("und", { granularity: "grapheme" });
+const LATIN_WORD = /^[A-Za-z]+$/u;
+const WORD_SEGMENTERS = new Map<MatterLocale, Intl.Segmenter>();
 
 type FitLexeme = Readonly<{
   locale: MatterLocale;
@@ -34,10 +43,17 @@ type FitBucket = Readonly<{
 
 export type WikiFitSnapshot = Readonly<{
   fittingVersion: number;
+  /** Complete release authority that produced this disposable index. */
+  qualifiedProducerReleases: readonly WikiQualifiedProducerRelease[];
   identities: readonly Readonly<Pick<
     WikiLexeme,
-    "id" | "locale" | "canonical" | "scope" | "provenance"
-  >>[];
+    "id" | "locale" | "canonical" | "scope" | "provenance" | "confirmedAtRevision"
+  > & {
+    /** Producer identity is part of cache authority for aggregate targets. */
+    termProducer: WikiTermEvidenceProducer | "legacy-term-v1" | null;
+    termPhase: "candidate" | "collected" | null;
+  }>[];
+  /** Conservative orthographic buckets retained as an independent producer. */
   buckets: Readonly<Record<MatterLocale, Readonly<Record<string, FitBucket>>>>;
   stats: Readonly<{
     eligibleLexemeCount: number;
@@ -46,148 +62,312 @@ export type WikiFitSnapshot = Readonly<{
   }>;
 }>;
 
-export type WikiFittingRequest = Readonly<{
-  locale: MatterLocale;
-  channel: WikiChannel;
-  text: string;
-  eligibleRanges?: readonly WikiEligibleRange[];
-}>;
+export type WikiFittingRequest = WikiAdmissionObservation;
 
 /**
- * Compiles a disposable, bounded candidate index. Only person-confirmed
- * lexemes may teach the first fitting adapter; aggregate candidates cannot
- * recursively reinforce themselves.
+ * Compiles the one released product fitting index from the current canonical
+ * lexicon. Pronunciation experiments live in the offline qualification harness;
+ * their packages and indexes must never enter this product runtime module.
  */
-export function compileWikiFitSnapshot(state: WikiState): WikiFitSnapshot {
-  const mutable = Object.fromEntries([
-    "zh-CN", "zh-TW", "en-US", "ja-JP", "de-DE",
-  ].map((locale) => [locale, new Map<string, FitLexeme[]>()])) as Record<
-    MatterLocale,
-    Map<string, FitLexeme[]>
-  >;
+export function compileWikiFitSnapshot(
+  state: WikiState,
+  releases: readonly WikiQualifiedProducerRelease[] = Object.freeze([]),
+): WikiFitSnapshot {
+  const qualifiedProducerReleases = freezeQualifiedProducerReleases(releases);
+  const qualifiedTermProducers = termProducerSet(qualifiedProducerReleases);
+  const qualifiedAliasProducers = aliasProducerSet(qualifiedProducerReleases);
+  const edit = localeMaps();
   let eligibleLexemeCount = 0;
+  const termEvidenceByIdentity = new Map(state.termEvidence.map((entry) => [
+    JSON.stringify([entry.locale, entry.canonical]),
+    entry,
+  ]));
 
-  for (const lexeme of state.lexemes) {
-    if (lexeme.provenance !== "human-confirmed" || lexeme.scope === "written") continue;
+  const rankedLexemes = [...state.lexemes].sort((left, right) =>
+    fitTargetRank(left) - fitTargetRank(right) ||
+    (right.confirmedAtRevision ?? 0) - (left.confirmedAtRevision ?? 0) ||
+    right.id - left.id);
+  for (const lexeme of rankedLexemes) {
+    if (eligibleLexemeCount >= MAX_WIKI_FITTING_TARGETS) break;
+    if (lexeme.scope === "written") continue;
+    const termEvidence = termEvidenceByIdentity.get(JSON.stringify([
+      lexeme.locale,
+      lexeme.canonical,
+    ]));
+    if (lexeme.provenance === "aggregate-evidence" &&
+        !isWikiStarterLexemeIdentity(lexeme) &&
+        !isQualifiedCollectedWikiTermEvidence(termEvidence, qualifiedTermProducers)) {
+      continue;
+    }
     const candidate = toFitLexeme(lexeme);
     if (candidate === null) continue;
-    eligibleLexemeCount += 1;
-    for (const key of bucketKeys(candidate.graphemes)) {
-      const bucket = mutable[lexeme.locale].get(key);
-      if (bucket === undefined) mutable[lexeme.locale].set(key, [candidate]);
-      else if (bucket.length <= MAX_FIT_BUCKET_SIZE) bucket.push(candidate);
+    let indexed = false;
+
+    const internalEditTarget = lexeme.provenance === "human-confirmed" ||
+      isWikiStarterLexemeIdentity(lexeme) ||
+      termEvidence?.producer === "shape-specific-v1";
+    if (qualifiedAliasProducers.has("latin-internal-edit-v2") &&
+        internalEditTarget && candidate.locale === "en-US" &&
+        candidate.graphemes.length >= MIN_EDIT_GRAPHEMES) {
+      for (const key of editBucketKeys(candidate.graphemes)) {
+        addBucket(edit[candidate.locale], key, candidate);
+      }
+      indexed = true;
     }
+
+    if (indexed) eligibleLexemeCount += 1;
   }
 
   let bucketCount = 0;
   let overflowBucketCount = 0;
-  const buckets = Object.freeze(Object.fromEntries(Object.entries(mutable).map(
-    ([locale, index]) => [locale, freezeBuckets(index, () => {
-      bucketCount += 1;
-    }, () => {
-      overflowBucketCount += 1;
-    })],
-  )) as Record<MatterLocale, Readonly<Record<string, FitBucket>>>);
-
+  const buckets = freezeLocaleBuckets(edit, () => {
+    bucketCount += 1;
+  }, () => {
+    overflowBucketCount += 1;
+  });
   return Object.freeze({
     fittingVersion: state.fittingVersion,
+    qualifiedProducerReleases,
     identities: Object.freeze(state.lexemes.map((lexeme) => Object.freeze({
       id: lexeme.id,
       locale: lexeme.locale,
       canonical: lexeme.canonical,
       scope: lexeme.scope,
       provenance: lexeme.provenance,
+      confirmedAtRevision: lexeme.confirmedAtRevision,
+      termProducer: termEvidenceByIdentity.get(JSON.stringify([
+        lexeme.locale,
+        lexeme.canonical,
+      ]))?.producer ?? null,
+      termPhase: termEvidenceByIdentity.get(JSON.stringify([
+        lexeme.locale,
+        lexeme.canonical,
+      ]))?.phase ?? null,
     }))),
     buckets,
-    stats: Object.freeze({ eligibleLexemeCount, bucketCount, overflowBucketCount }),
+    stats: Object.freeze({
+      eligibleLexemeCount,
+      bucketCount,
+      overflowBucketCount,
+    }),
   });
+}
+
+function fitTargetRank(lexeme: WikiLexeme): number {
+  if (isWikiStarterLexemeIdentity(lexeme)) return 0;
+  return lexeme.provenance === "human-confirmed" ? 1 : 2;
 }
 
 export function wikiFitSnapshotMatchesState(
   snapshot: WikiFitSnapshot,
   state: WikiState,
+  releases: readonly WikiQualifiedProducerRelease[] = Object.freeze([]),
 ): boolean {
+  const qualifiedProducerReleases = freezeQualifiedProducerReleases(releases);
   if (snapshot.fittingVersion !== state.fittingVersion ||
-      snapshot.identities.length !== state.lexemes.length) return false;
+      snapshot.identities.length !== state.lexemes.length ||
+      !qualifiedProducerReleasesMatch(
+        snapshot.qualifiedProducerReleases,
+        qualifiedProducerReleases,
+      )) return false;
+  const termEvidenceByIdentity = new Map(state.termEvidence.map((entry) => [
+    JSON.stringify([entry.locale, entry.canonical]),
+    entry,
+  ]));
   return snapshot.identities.every((identity, index) => {
     const lexeme = state.lexemes[index];
     return lexeme !== undefined && identity.id === lexeme.id &&
       identity.locale === lexeme.locale && identity.canonical === lexeme.canonical &&
-      identity.scope === lexeme.scope && identity.provenance === lexeme.provenance;
+      identity.scope === lexeme.scope && identity.provenance === lexeme.provenance &&
+      identity.confirmedAtRevision === lexeme.confirmedAtRevision &&
+      identity.termProducer === (termEvidenceByIdentity.get(JSON.stringify([
+        lexeme.locale,
+        lexeme.canonical,
+      ]))?.producer ?? null) &&
+      identity.termPhase === (termEvidenceByIdentity.get(JSON.stringify([
+        lexeme.locale,
+        lexeme.canonical,
+      ]))?.phase ?? null);
   });
 }
 
-/**
- * Produces conservative Latin orthographic evidence for committed human
- * speech. It never rewrites text, scans every lexeme, or claims phonetic
- * coverage for a locale without a pinned pronunciation adapter.
- */
+function termProducerSet(
+  releases: readonly WikiQualifiedProducerRelease[],
+): ReadonlySet<WikiTermEvidenceProducer> {
+  return new Set(releases.flatMap((release) =>
+    isWikiTermEvidenceProducer(release.identity.producerId)
+      ? [release.identity.producerId]
+      : []));
+}
+
+function aliasProducerSet(
+  releases: readonly WikiQualifiedProducerRelease[],
+): ReadonlySet<WikiAliasEvidenceProducer> {
+  return new Set(releases.flatMap((release) =>
+    isWikiAliasEvidenceProducer(release.identity.producerId)
+      ? [release.identity.producerId]
+      : []));
+}
+
+function freezeQualifiedProducerReleases(
+  releases: readonly WikiQualifiedProducerRelease[],
+): readonly WikiQualifiedProducerRelease[] {
+  return Object.freeze(sortQualifiedProducerReleases(releases.filter((release) =>
+    release.identity.producerId === "latin-internal-edit-v2" ||
+    isWikiTermEvidenceProducer(release.identity.producerId))).map((release) =>
+    Object.freeze({
+      qualificationVersion: release.qualificationVersion,
+      identity: Object.freeze({
+        producerId: release.identity.producerId,
+        producerVersion: release.identity.producerVersion,
+        producerDigest: release.identity.producerDigest,
+        resourceId: release.identity.resourceId,
+        resourceVersion: release.identity.resourceVersion,
+        resourceDigest: release.identity.resourceDigest,
+      }),
+      corpus: Object.freeze({
+        corpusVersion: release.corpus.corpusVersion,
+        corpusDigest: release.corpus.corpusDigest,
+      }),
+    })));
+}
+
+function sortQualifiedProducerReleases(
+  releases: readonly WikiQualifiedProducerRelease[],
+): WikiQualifiedProducerRelease[] {
+  return [...releases].sort(compareQualifiedProducerRelease);
+}
+
+function compareQualifiedProducerRelease(
+  left: WikiQualifiedProducerRelease,
+  right: WikiQualifiedProducerRelease,
+): number {
+  return compareText(left.identity.producerId, right.identity.producerId) ||
+    left.qualificationVersion - right.qualificationVersion ||
+    compareText(left.identity.producerVersion, right.identity.producerVersion) ||
+    compareText(left.identity.producerDigest, right.identity.producerDigest) ||
+    compareText(left.identity.resourceId, right.identity.resourceId) ||
+    compareText(left.identity.resourceVersion, right.identity.resourceVersion) ||
+    compareText(left.identity.resourceDigest, right.identity.resourceDigest) ||
+    compareText(left.corpus.corpusVersion, right.corpus.corpusVersion) ||
+    compareText(left.corpus.corpusDigest, right.corpus.corpusDigest);
+}
+
+function qualifiedProducerReleasesMatch(
+  left: readonly WikiQualifiedProducerRelease[],
+  right: readonly WikiQualifiedProducerRelease[],
+): boolean {
+  return left.length === right.length && left.every((release, index) => {
+    const candidate = right[index];
+    return candidate !== undefined &&
+      compareQualifiedProducerRelease(release, candidate) === 0;
+  });
+}
+
+/** Produces local relation evidence; it never rewrites or scans every lexeme. */
 export function fitCommittedWikiText(
   snapshot: WikiFitSnapshot,
   request: WikiFittingRequest,
+  enabledProducers?: ReadonlySet<WikiAliasEvidenceProducer>,
 ): readonly WikiObserveEvidenceEvent[] {
+  return fitCommittedWikiTextResult(snapshot, request, enabledProducers).events;
+}
+
+export type WikiFittingResult = Readonly<{
+  status: "ok" | "censored";
+  events: readonly WikiObserveEvidenceEvent[];
+}>;
+
+export function fitCommittedWikiTextResult(
+  snapshot: WikiFitSnapshot,
+  request: WikiFittingRequest,
+  enabledProducers?: ReadonlySet<WikiAliasEvidenceProducer>,
+): WikiFittingResult {
   if (request.channel !== "spoken" || request.text.length === 0) {
-    return Object.freeze([]);
+    return Object.freeze({ status: "censored", events: Object.freeze([]) });
   }
   const eligibleRanges = normalizeWikiEligibleRanges(
     request.eligibleRanges,
     request.text.length,
   );
-  if (eligibleRanges === null) return Object.freeze([]);
+  if (eligibleRanges === null) {
+    return Object.freeze({ status: "censored", events: Object.freeze([]) });
+  }
   const protectedSpans = findProtectedWikiSpans(request.text);
-  const segmenter = new Intl.Segmenter(request.locale, { granularity: "word" });
+  const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
-
-  for (const segment of segmenter.segment(request.text)) {
-    if (!segment.isWordLike) continue;
+  const words = [...segmenter.segment(request.text)].flatMap((segment) => {
+    if (!segment.isWordLike) return [];
     const start = segment.index;
     const end = start + segment.segment.length;
-    if (
-      !isWikiRangeEligible(start, end, eligibleRanges, 0) ||
-      wikiRangeOverlapsProtected(start, end, protectedSpans, 0)
-    ) continue;
-    const form = segment.segment.normalize("NFC");
-    if (!LATIN_WORD.test(form)) continue;
-    const folded = fold(form, request.locale);
-    const graphemes = splitGraphemes(folded);
-    if (graphemes.length < MIN_FIT_GRAPHEMES || graphemes.length > MAX_FIT_GRAPHEMES) {
-      continue;
+    if (!isWikiRangeEligible(start, end, eligibleRanges, 0) ||
+        wikiRangeOverlapsProtected(start, end, protectedSpans, 0)) return [];
+    return [Object.freeze({ start, end })];
+  });
+
+  for (const word of words) {
+    const form = request.text.slice(word.start, word.end).normalize("NFC");
+    if (LATIN_WORD.test(form)) {
+      collectLatinEditEvents(snapshot, request.locale, form, events, enabledProducers);
     }
-    const candidates = collectCandidates(snapshot, request.locale, graphemes);
-    for (const candidate of candidates) {
-      if (candidate.folded === folded || !isOneConservativeEdit(graphemes, candidate.graphemes)) {
-        continue;
-      }
-      const event: WikiObserveEvidenceEvent = Object.freeze({
-        type: "observe-evidence",
-        locale: request.locale,
-        channel: "spoken",
-        boundary: "word",
-        form,
-        canonical: candidate.canonical,
-        source: "machine-inference",
-      });
-      events.set(JSON.stringify([
-        event.locale,
-        event.channel,
-        event.boundary,
-        event.form,
-        event.canonical,
-        event.source,
-      ]), event);
-      if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) return Object.freeze([]);
+    if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) {
+      return Object.freeze({ status: "censored", events: Object.freeze([]) });
     }
   }
-  return Object.freeze([...events.values()].sort(compareEvent));
+  return Object.freeze({
+    status: "ok",
+    events: Object.freeze([...events.values()].sort(compareEvent)),
+  });
+}
+
+function collectLatinEditEvents(
+  snapshot: WikiFitSnapshot,
+  locale: MatterLocale,
+  form: string,
+  events: Map<string, WikiObserveEvidenceEvent>,
+  enabled: ReadonlySet<WikiAliasEvidenceProducer> | undefined,
+): void {
+  if (locale !== "en-US" ||
+      !snapshotHasAliasProducer(snapshot, "latin-internal-edit-v2") ||
+      !producerEnabled("latin-internal-edit-v2", enabled)) return;
+  const folded = fold(form, locale);
+  const graphemes = splitGraphemes(folded);
+  if (graphemes.length < MIN_EDIT_GRAPHEMES || graphemes.length > MAX_FIT_GRAPHEMES) {
+    return;
+  }
+  const candidates = collectEditCandidates(snapshot, locale, graphemes);
+  // A form already owned by the canonical lexicon is a hard no-op, not a
+  // low-scoring alternative that repeated machine evidence may outvote.
+  if (candidates.some((candidate) => candidate.folded === folded)) return;
+  for (const candidate of candidates) {
+    if (candidate.folded === folded ||
+        !isOneConservativeEdit(graphemes, candidate.graphemes)) continue;
+    const event: WikiObserveEvidenceEvent = Object.freeze({
+      type: "observe-evidence",
+      locale,
+      channel: "spoken",
+      boundary: "word",
+      form,
+      canonical: candidate.canonical,
+      source: "machine-inference",
+      producer: "latin-internal-edit-v2",
+    });
+    events.set(JSON.stringify([locale, form, candidate.canonical]), event);
+  }
+}
+
+function snapshotHasAliasProducer(
+  snapshot: WikiFitSnapshot,
+  producer: WikiAliasEvidenceProducer,
+): boolean {
+  return snapshot.qualifiedProducerReleases.some((release) =>
+    release.identity.producerId === producer);
 }
 
 function toFitLexeme(lexeme: WikiLexeme): FitLexeme | null {
-  if (!LATIN_WORD.test(lexeme.canonical)) return null;
   const folded = fold(lexeme.canonical, lexeme.locale);
   const graphemes = splitGraphemes(folded);
-  if (graphemes.length < MIN_FIT_GRAPHEMES || graphemes.length > MAX_FIT_GRAPHEMES) {
-    return null;
-  }
+  if (graphemes.length === 0 || graphemes.length > MAX_FIT_GRAPHEMES) return null;
   return Object.freeze({
     locale: lexeme.locale,
     canonical: lexeme.canonical,
@@ -196,13 +376,13 @@ function toFitLexeme(lexeme: WikiLexeme): FitLexeme | null {
   });
 }
 
-function collectCandidates(
+function collectEditCandidates(
   snapshot: WikiFitSnapshot,
   locale: MatterLocale,
   graphemes: readonly string[],
 ): readonly FitLexeme[] {
   const result = new Map<string, FitLexeme>();
-  for (const key of bucketKeys(graphemes)) {
+  for (const key of editBucketKeys(graphemes)) {
     const bucket = snapshot.buckets[locale][key];
     if (bucket === undefined || bucket.overflow) continue;
     for (const lexeme of bucket.lexemes) result.set(lexeme.canonical, lexeme);
@@ -210,7 +390,7 @@ function collectCandidates(
   return [...result.values()];
 }
 
-function bucketKeys(graphemes: readonly string[]): readonly string[] {
+function editBucketKeys(graphemes: readonly string[]): readonly string[] {
   const first = graphemes.slice(0, 2).join("");
   const last = graphemes.slice(-2).join("");
   return Object.freeze([
@@ -218,6 +398,35 @@ function bucketKeys(graphemes: readonly string[]): readonly string[] {
     `${graphemes.length}:${first}:${last}`,
     `${graphemes.length + 1}:${first}:${last}`,
   ]);
+}
+
+function localeMaps(): Record<MatterLocale, Map<string, FitLexeme[]>> {
+  return Object.fromEntries([
+    "zh-CN", "zh-TW", "en-US", "ja-JP", "de-DE",
+  ].map((locale) => [locale, new Map<string, FitLexeme[]>()])) as Record<
+    MatterLocale,
+    Map<string, FitLexeme[]>
+  >;
+}
+
+function addBucket(
+  target: Map<string, FitLexeme[]>,
+  key: string,
+  candidate: FitLexeme,
+): void {
+  const bucket = target.get(key);
+  if (bucket === undefined) target.set(key, [candidate]);
+  else if (bucket.length <= MAX_FIT_BUCKET_SIZE) bucket.push(candidate);
+}
+
+function freezeLocaleBuckets(
+  input: Record<MatterLocale, Map<string, FitLexeme[]>>,
+  onBucket: () => void,
+  onOverflow: () => void,
+): Readonly<Record<MatterLocale, Readonly<Record<string, FitBucket>>>> {
+  return Object.freeze(Object.fromEntries(Object.entries(input).map(
+    ([locale, index]) => [locale, freezeBuckets(index, onBucket, onOverflow)],
+  )) as Record<MatterLocale, Readonly<Record<string, FitBucket>>>);
 }
 
 function freezeBuckets(
@@ -275,17 +484,34 @@ function isOneConservativeEdit(
   return true;
 }
 
+function producerEnabled(
+  producer: WikiAliasEvidenceProducer,
+  enabled: ReadonlySet<WikiAliasEvidenceProducer> | undefined,
+): boolean {
+  return enabled === undefined || enabled.has(producer);
+}
+
 function fold(value: string, locale: MatterLocale): string {
   return value.normalize("NFC").toLocaleLowerCase(locale).normalize("NFC");
 }
 
 function splitGraphemes(value: string): string[] {
-  return Array.from(GRAPHEME_SEGMENTER.segment(value), (entry) => entry.segment);
+  return [...value];
+}
+
+function wordSegmenter(locale: MatterLocale): Intl.Segmenter {
+  const cached = WORD_SEGMENTERS.get(locale);
+  if (cached !== undefined) return cached;
+  const created = new Intl.Segmenter(locale, { granularity: "word" });
+  WORD_SEGMENTERS.set(locale, created);
+  return created;
 }
 
 function compareEvent(left: WikiObserveEvidenceEvent, right: WikiObserveEvidenceEvent): number {
+  if (left.source !== "machine-inference" || right.source !== "machine-inference") return 0;
   return compareText(left.locale, right.locale) ||
-    compareText(left.form, right.form) || compareText(left.canonical, right.canonical);
+    compareText(left.form, right.form) || compareText(left.canonical, right.canonical) ||
+    compareText(left.producer, right.producer);
 }
 
 function compareLexeme(left: FitLexeme, right: FitLexeme): number {

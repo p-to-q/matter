@@ -5,9 +5,11 @@ import {
   WIKI_FITTING_VERSION,
   type WikiChannel,
 } from "../wiki/wiki-model";
+import { MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS } from
+  "../wiki/wiki-runtime-producer-releases";
 
 export const matterWikiFittingMode =
-  process.env.NEXT_PUBLIC_MATTER_WIKI_FITTING === "latin-conservative"
+  MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS.includes("latin-internal-edit-v2")
     ? "latin-conservative" as const
     : "off" as const;
 
@@ -42,6 +44,7 @@ const EMPTY_WIKI_BASIS: WikiBasis = Object.freeze({
   confirmedSnapshot: EMPTY_SNAPSHOT,
   fitSnapshot: Object.freeze({
     fittingVersion: WIKI_FITTING_VERSION,
+    qualifiedProducerReleases: Object.freeze([]),
     identities: Object.freeze([]),
     buckets: emptyLocaleRecords(() => Object.freeze({})),
     stats: Object.freeze({
@@ -55,7 +58,7 @@ const EMPTY_WIKI_BASIS: WikiBasis = Object.freeze({
 type MatterWikiBasisPublication = { current: WikiBasis };
 // The key versions the in-memory basis ABI across Fast Refresh. A stale cell
 // must never survive a required snapshot-shape change.
-const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v2");
+const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v5");
 const publicationHost = globalThis as unknown as {
   [key: symbol]: MatterWikiBasisPublication | undefined;
 };

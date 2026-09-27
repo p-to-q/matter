@@ -1,13 +1,17 @@
 # Release readiness
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. The current source identifies
-`0.2.0-preview.62`. PR #119 merged to `main` at
+the complete generative product loop yet. The current deployable source
+identifies `0.2.0-preview.63`; its local Wiki automation receipt is recorded
+below, while its exact PR, merged-main CI, Production deployment, and public
+readback are still pending. Preview.62 remains the last verified Production
+identity: PR #119 merged to `main` at
 `2345b24a829c6b0460d21e389fb39f31464f4360`; the exact merged-main CI completed
 successfully, the linked Production deployment completed successfully, and a
 fresh no-store read from `https://matter.ptoq.io/api/health` identified
-Preview.62 with `age: 0` and a cache miss. This is deployed source identity,
-not an immutable release: no Preview.62 tag or GitHub prerelease exists.
+Preview.62 with `age: 0` and a cache miss. That is deployed source identity,
+not an immutable release: no Preview.62 or Preview.63 tag or GitHub prerelease
+exists.
 
 The same fresh public receipt keeps both material model surfaces
 `unavailable`, and the anonymous `provider-session/4` receipt returns the exact
@@ -102,60 +106,53 @@ handoffs now bind the real CSS transition, response gate, and remounted DOM
 owner instead of relying on sleeps. This remains local candidate evidence: it
 does not prove a provider answer, a GitHub deployment, or production identity.
 
-## Wiki verifier gate — 2026-09-25
+## Wiki automation verifier gate — 2026-09-27
 
-The local Wiki foundation is a source-level **GO** for continued integration:
-strict versioned local persistence, compare-and-swap writes, bounded immutable
-compiled indexes, a synchronous MaterialIngress port, fail-open storage
-behavior, content-free cross-tab invalidation, pointer-owned settings, lossless
-export, and static exclusion from protocol, server, provider, prompt, archive,
-and public-agent boundaries are implemented and independently checked.
-Schema V4 adds one reversible lexeme scope. V2/V3 migration defaults to `both`;
-scope-only edits retain every alias, evidence aggregate, and tombstone; fitting
-cache identity includes scope; and a written-only lexeme cannot enter spoken
-fitting. The settings surface infers locale, persists scope, and exports the
-same strict state rather than presenting a decorative selector.
+The current source candidate is a bounded local automation slice, not a memory
+layer. Schema V6 keeps canonical-term and alias-relation evidence in separate
+bounded ledgers, binds automatic term evidence to a versioned producer family,
+and migrates older producer-less evidence into zero authority. Automatic
+collection observes only successful human material admission. Spoken fitting
+may use the raw admitted transcript, while collection sees only the validated
+committed material; generated and protected text cannot teach either ledger.
 
-Automatic lexical benefit is still **NO-GO** for a public release. The default
-build excludes provisional production and consumption. The controlled producer
-is intentionally limited to spoken, single-token Latin orthographic candidates;
-it has no Chinese phonetic fitting, English homophone proof, written-channel
-producer, or production error-site action that confirms a visible
-`observed form → canonical word` relation. A canonical word added in settings
-therefore records local intent but, by itself, cannot promise that later speech
-or generated text will change. The settings surface must not be cited as an
-end-to-end correction receipt until that admission path and representative
-positive/negative corpus pass are present.
+Two independent default-on local preferences pause real collection or the
+currently released fitting path. They do not qualify a producer, delete
+evidence, or widen scope. Six controlled-harness identities remain in the
+offline qualification catalog; the narrower product runtime allow-list contains
+two term producers and only the bounded Latin internal-edit producer. Every
+identity binds exact producer, resource, and manifest-owned corpus digests.
+`npm run qualify:wiki` re-executes
+positive, adversarial, ambiguity, locale-isolation, protected, generated,
+capacity, and performance cases. The derived automatic reservoir and fitting
+indexes are bounded at 512 targets and 1,000 qualification lookups; the separate
+human-confirmed dictionary admits at most 5,000 entries, while the wider
+15,000-row structural ceiling remains recovery-only for formerly valid states.
+The same command separately replays the production scoring policy across
+activation, competition, decay, term collection, non-human exclusion, and
+qualified projection, binding its constants, sources, qualification catalog,
+corpus, and outputs to a compact release receipt.
 
-The release gate is fail-closed: one switch controls provisional production,
-material consumption, and settings projection; confirmed exact authority stays
-available. Enabling the existing experimental fitting mode is not a substitute
-for calibration and does not satisfy this gate.
+The released fitting boundary is one internal ASCII edit with canonical no-op,
+collision, locale, scope, protected-literal, and evidence gates. Exact Double
+Metaphone, exact tone-bearing Mandarin pinyin, and `an`/`ang`, `en`/`eng`, and
+`in`/`ing` final-pair producers remain qualification-only because a transcript
+alone cannot disambiguate otherwise valid homophones. A canonical word added in
+settings still does not invent a relation by itself. Recognizer phrase bias,
+Wiki prompt injection, runtime network lookup, broader regional fuzzy rules,
+hidden retrieval, and Material Undo coupling remain **NO-GO**.
 
-The next researched candidate remains **NO-GO** as well. Its frozen shape is a
-local pronunciation compiler that may emit exact aliases only when canonical
-authority changes: exact Chinese homophones, the three Mandarin final pairs
-`an`/`ang`, `en`/`eng`, and `in`/`ing`, and exact English phoneme-sequence
-identity from a pinned CMUdict snapshot. It adds no runtime fuzzy matcher and no
-Wiki prompt context. Polyphones, multi-pronunciation English entries, unknown
-names, cross-locale matches, and collisions abstain. No portion may ship without
-the positive, adversarial, ambiguity, protected-literal, generated-output, and
-performance corpus for the exact compiler and resource version.
-
-Schema V5 is the current local candidate, not a released automatic capability.
-It separates canonical-term recurrence from alias-relation evidence, migrates
-V2/V3/V4 machine evidence into a zero-weight legacy producer, and keeps one
-candidate-local quiet clock per bounded ledger row. The offline qualification
-parser binds complete case inputs, expected labels, producer/resource bytes,
-corpus identity, safety classes, capacity, and performance limits. It does not
-execute those bytes or prove that a receipt came from them; no controlled
-execution harness, real producer corpus, or licensed pronunciation resource is
-present. The runtime-qualified release set and provisional bridge therefore
-remain empty. The exact human authority continues unchanged. Two default-on
-local preferences let a person independently pause automatic collection or
-phonetic fitting. They are additional runtime restrictions, not availability
-claims: with the current empty qualified release set, neither preference can
-activate a producer or provisional rewrite.
+The exact local Preview.63 candidate passed `npm run check`: 155 Node boundary
+tests, 326 Markdown files, the 576-file / 8-layer architecture gate, 2,998
+Vitest cases with five explicit skips, type generation, TypeScript,
+zero-warning lint, the production build, and the runtime-artifact budget. Its
+focused Chromium Wiki matrix passed 4/4 cases, including manual authority,
+spoken fixture admission, persistence/reload, mobile touch sizing, and medium
+layout. An independent verifier found no P0 or P1 blocker. Pull-request CI,
+merged-main CI, Production deployment, and public-origin readback remain
+pending. Local qualification is capability evidence, not a production
+deployment receipt; exact GitHub identities are recorded only after those
+gates complete.
 
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
 boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:

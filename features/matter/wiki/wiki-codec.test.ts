@@ -5,7 +5,20 @@ import {
   applyWikiObservationBatch,
   createEmptyWikiState,
 } from "./wiki-evidence";
-import { MAX_WIKI_STATE_BYTES, type WikiEvent } from "./wiki-model";
+import { compileWikiFitSnapshot } from "./wiki-fitting";
+import {
+  MAX_LEGACY_WIKI_STATE_BYTES,
+  MAX_WIKI_EVIDENCE_RECORDS,
+  MAX_WIKI_MIGRATION_HEADROOM_BYTES,
+  MAX_WIKI_STATE_BYTES,
+  type WikiEvent,
+} from "./wiki-model";
+import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from
+  "./wiki-qualified-producer-releases";
+
+const LOCALE_SEGMENT_RELEASES = MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES.filter(
+  (release) => release.identity.producerId === "locale-segment-v1",
+);
 
 describe("Wiki codec", () => {
   it("round-trips a strict immutable state", () => {
@@ -19,6 +32,22 @@ describe("Wiki codec", () => {
     expect(Object.isFrozen(parsed.state)).toBe(true);
     expect(Object.isFrozen(parsed.state.authorities)).toBe(true);
     expect(Object.isFrozen(parsed.state.authorities[0])).toBe(true);
+  });
+
+  it("still detaches an externally frozen state before granting authority", () => {
+    const transition = applyWikiEvent(createEmptyWikiState(), event("confirm-rule"));
+    if (!transition.ok) throw new Error(transition.error.message);
+    const external = deepFreeze(JSON.parse(JSON.stringify(transition.state)));
+
+    const first = parseWikiState(external);
+    const second = parseWikiState(external);
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(first.state).not.toBe(external);
+    expect(second.state).not.toBe(external);
+    expect(second.state).not.toBe(first.state);
   });
 
   it("rejects schema v1 and unsupported locales instead of widening scope", () => {
@@ -187,7 +216,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         lexemes: [{ canonical: "Engelbart", scope: "both" }],
       },
     });
@@ -234,11 +263,12 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         scoringVersion: 3,
         termEvidence: [{
           locale: "en-US",
           canonical: "Codex",
+          producer: "legacy-term-v1",
           phase: "candidate",
           support: 1,
           quietTurns: 0,
@@ -254,6 +284,114 @@ describe("Wiki codec", () => {
       },
     });
   });
+
+  it("migrates V5 recurrence without granting a qualified fitting target", () => {
+    const legacy = {
+      schemaVersion: 5,
+      scoringVersion: 3,
+      fittingVersion: 1,
+      revision: 2,
+      nextLexemeId: 2,
+      automaticLearningSaturated: false,
+      lexemes: [{
+        id: 1,
+        locale: "en-US",
+        canonical: "Lexicorium",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      }],
+      termEvidence: [{
+        locale: "en-US",
+        canonical: "Lexicorium",
+        phase: "collected",
+        support: 2,
+        quietTurns: 0,
+      }],
+      aliasEvidence: [],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    };
+    const parsed = parseWikiState(legacy);
+    if (!parsed.ok) throw new Error(parsed.message);
+
+    expect(parsed.state.termEvidence).toEqual([
+      expect.objectContaining({ producer: "legacy-term-v1", phase: "collected" }),
+    ]);
+    expect(parseWikiState(JSON.parse(JSON.stringify(parsed.state))))
+      .toEqual({ ok: true, state: parsed.state });
+    expect(compileWikiFitSnapshot(
+      parsed.state,
+      LOCALE_SEGMENT_RELEASES,
+    ).stats.eligibleLexemeCount).toBe(0);
+
+    let observed = parsed.state;
+    for (let turn = 0; turn < 2; turn += 1) {
+      const result = applyWikiObservationBatch(observed, [{
+        type: "observe-evidence",
+        source: "recent-material",
+        locale: "en-US",
+        canonical: "Lexicorium",
+        producer: "locale-segment-v1",
+      }]);
+      if (!result.ok) throw new Error(result.error.message);
+      observed = result.state;
+    }
+    expect(compileWikiFitSnapshot(
+      observed,
+      LOCALE_SEGMENT_RELEASES,
+    ).stats.eligibleLexemeCount).toBe(0);
+    expect(parseWikiState({
+      ...legacy,
+      termEvidence: [{ ...legacy.termEvidence[0], producer: "locale-segment-v1" }],
+    }).ok).toBe(false);
+  });
+
+  it("reserves a proved byte allowance for the largest V5 term-ledger migration", () => {
+    const lexemes = Array.from({ length: MAX_WIKI_EVIDENCE_RECORDS }, (_, index) => ({
+      id: index + 1,
+      locale: "en-US" as const,
+      canonical: `Term ${index.toString().padStart(5, "0")}`,
+      scope: "both" as const,
+      provenance: "aggregate-evidence" as const,
+      confirmedAtRevision: null,
+    }));
+    const legacy = {
+      schemaVersion: 5,
+      scoringVersion: 3,
+      fittingVersion: 1,
+      revision: 1,
+      nextLexemeId: MAX_WIKI_EVIDENCE_RECORDS + 1,
+      automaticLearningSaturated: false,
+      lexemes,
+      termEvidence: lexemes.map((entry) => ({
+        locale: entry.locale,
+        canonical: entry.canonical,
+        phase: "candidate" as const,
+        support: 1,
+        quietTurns: 0,
+      })),
+      aliasEvidence: [],
+      authorities: [],
+      aliasTombstones: [],
+      lexemeTombstones: [],
+    };
+    const legacyBytes = wikiStateStorageBytes(legacy);
+    const parsed = parseWikiState(legacy);
+    if (!parsed.ok) throw new Error(parsed.message);
+    const migratedBytes = wikiStateStorageBytes(parsed.state);
+    const producerFieldBytes = new TextEncoder()
+      .encode(',"producer":"legacy-term-v1"').byteLength;
+
+    expect(legacyBytes).toBeLessThanOrEqual(MAX_LEGACY_WIKI_STATE_BYTES);
+    expect(migratedBytes - legacyBytes)
+      .toBe(producerFieldBytes * MAX_WIKI_EVIDENCE_RECORDS);
+    expect(migratedBytes - legacyBytes).toBeLessThanOrEqual(
+      MAX_WIKI_MIGRATION_HEADROOM_BYTES,
+    );
+    expect(migratedBytes).toBeLessThanOrEqual(MAX_WIKI_STATE_BYTES);
+  }, 20_000);
 
   it("keeps V4 starter recurrence out of the term ledger while legacy aliases decay", () => {
     const parsed = parseWikiState({
@@ -347,7 +485,7 @@ describe("Wiki codec", () => {
     });
   });
 
-  it("rejects V5 recurrence attached to a human-owned lexeme", () => {
+  it("rejects V6 recurrence attached to a human-owned lexeme", () => {
     const state = applyWikiEvent(createEmptyWikiState(), {
       type: "create-lexeme",
       locale: "en-US",
@@ -361,6 +499,7 @@ describe("Wiki codec", () => {
       termEvidence: [{
         locale: "en-US",
         canonical: "Codex",
+        producer: "locale-segment-v1",
         phase: "candidate",
         support: 1,
         quietTurns: 0,
@@ -418,7 +557,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         fittingVersion: 1,
         revision: 2,
         nextLexemeId: 3,
@@ -482,7 +621,7 @@ describe("Wiki codec", () => {
     if (!parsed.ok) return;
     expect(parsed.state.lexemes).toHaveLength(5_001);
     expect(wikiStateStorageBytes(parsed.state)).toBeLessThanOrEqual(MAX_WIKI_STATE_BYTES);
-  });
+  }, 20_000);
 });
 
 function event(type: "confirm-rule" | "reject-rule"): WikiEvent;
@@ -490,7 +629,7 @@ function event(type: "observe-evidence"): WikiEvent;
 function event(type: "confirm-rule" | "reject-rule" | "observe-evidence"): WikiEvent {
   const value = descriptor("code x", "Codex");
   if (type === "observe-evidence") {
-    return { type, ...value, source: "machine-inference" };
+    return { type, ...value, source: "machine-inference", producer: "legacy-v1" };
   }
   return { type, ...value };
 }
@@ -503,4 +642,10 @@ function descriptor(form: string, canonical: string) {
     form,
     canonical,
   });
+}
+
+function deepFreeze<T>(value: T): T {
+  if (typeof value !== "object" || value === null || Object.isFrozen(value)) return value;
+  for (const child of Object.values(value)) deepFreeze(child);
+  return Object.freeze(value);
 }

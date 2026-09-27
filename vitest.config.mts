@@ -15,6 +15,7 @@ export default defineConfig({
     include: [
       "features/**/*.test.{ts,tsx}",
       "next.config.test.ts",
+      "scripts/**/*.test.ts",
       "scripts/**/*.test.mjs",
       "studio/**/*.test.ts",
     ],

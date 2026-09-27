@@ -61,5 +61,7 @@ describe("WikiSettingsSection", () => {
     expect(css).toContain('.exportLabel[data-active="false"]');
     expect(css).toMatch(/\.capabilityActions button\s*{[^}]*text-decoration:\s*underline/s);
     expect(css).toMatch(/\.capabilityActions button:hover,[\s\S]*background:\s*transparent/s);
+    expect(css).toMatch(/\.section\s*\{[^}]*min-height:\s*287px;/s);
+    expect(css).toMatch(/\.browser\s*\{[^}]*min-height:\s*263px;/s);
   });
 });

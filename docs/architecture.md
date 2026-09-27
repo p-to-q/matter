@@ -753,10 +753,15 @@ whole coordinator. Personal customization is versioned data and explicit
 capability, not executable policy injection. Automatic evidence production is
 separate and generated ingress cannot obtain it. Loading or storage failure
 leaves material on the empty or last valid basis and degrades only Wiki.
-Observation writes rebase the same content-minimal batch after a cross-tab CAS
-conflict, so a concurrent human turn is not silently discarded. Evidence-only
-writes reuse both compiled indexes until the applicable authority actually
-changes.
+Observation writes never replay a content-minimal derived batch after a
+cross-tab CAS conflict. The background admission owner retains the bounded raw
+turn, rehydrates, rereads current capability preferences, and derives a fresh
+batch from the newer basis under a strict retry bound. Evidence-only writes
+reuse both compiled indexes until the applicable authority actually changes.
+Recovery-sized immutable states may carry a process-local weak validation
+receipt so unchanged collections avoid another full scan; external or persisted
+values never receive that receipt before strict decoding and the complete
+invariant pass.
 
 The IndexedDB repository owns one atomic, record-versioned starter migration. A
 missing record, or an older valid record whose bounded decision ledger can still
@@ -766,12 +771,16 @@ generation and records its completion even when all rows already exist. It
 respects canonical identity, tombstones, and a saturated decision ledger;
 browser components never fabricate starter rows, and a person's removal is not
 replayed by a later load. Capacity or quota failure leaves the prior valid Wiki
-readable rather than labelling it corrupt. Record V5 stores canonical recurrence
-and alias-relation evidence in separate bounded ledgers. Strict V2/V3/V4
+readable rather than labelling it corrupt. Record V6 stores canonical recurrence
+and alias-relation evidence in separate bounded ledgers and binds each automatic
+term row to the producer family that earned it. Strict V2/V3/V4/V5
 migration retains recurrence only for aggregate-owned lexemes, discards the
 redundant recurrence of human-owned lexemes, and maps old machine counts only to
-a zero-weight legacy alias producer, so loading an older record cannot activate
-provisional authority. The global observation counter is removed;
+a zero-weight legacy producer, so loading an older record cannot activate
+collection or provisional authority. A valid V5 row advances its outer record
+marker and write generation in the same optional IndexedDB transaction, so the
+V6 split is durable after one load; quota or transaction failure leaves the
+older valid row readable. The global observation counter is removed;
 each candidate owns its bounded quiet clock. Record V4 also collapses the
 short-lived automatic `en-US` / `zh-CN` `[p → q]` duplicate only when the old
 row has the exact product-owned shape and no unknown relation; human-owned or
@@ -804,32 +813,78 @@ artifacts, and retains the complete versioned identity after complete positive,
 adversarial, ambiguity, locale-isolation, protected, generated, and
 capacity/performance proof. Unknown, malformed, mismatched, incomplete,
 oversized, or duplicated candidates fail closed. The gate itself grants no
-runtime authority; the current release set and bridge remain empty until a real
-licensed resource and corpus receipt exist. The verifier cannot prove receipt
-provenance by itself; a controlled harness must execute the pinned artifacts
-and produce the receipt before a runtime release identity can exist. None of
+runtime authority. Controlled local harnesses execute and hash every catalogued
+term or fitting producer, its pinned resource, manifest-owned corpus, and
+capacity/performance run. A separate explicit product allow-list selects a
+strict subset of those complete qualified identities for runtime collection or
+projection. That allow-list lives in a product-only manifest; the browser never
+imports the larger offline inventory, and the production-artifact gate rejects
+either phonetic qualification package name in emitted JavaScript. The generic
+verifier cannot prove receipt provenance by itself;
+every new producer still needs its own controlled harness and a separate
+product decision before a runtime release identity can exist. None of
 this exposes scoring, candidate review, language selection, or confirmation
 work to the person. The settings surface does expose two independent default-on
 local permission preferences for automatic collection and phonetic fitting.
 They are stored outside the dictionary record and material history; every
 runtime consumer applies them only as an additional restriction on a
 release-qualified capability, never as authority by themselves.
+
+Default-on automation has a second, independent release receipt for the policy
+that consumes qualified producers. Its manifest-owned replay covers exact and
+restricted activation, ambiguity margin abstention, quiet decay and retention,
+two-turn ordinary-term collection, non-human zero-vote behavior, and qualified
+versus unqualified projection. The compact receipt binds the policy and scoring
+versions, every gate and producer weight, policy source digest, qualification
+catalog digest, corpus digest, and result digest. `npm run qualify:wiki` must
+reproduce both producer and policy receipts; neither receipt can substitute for
+the other.
 The published Wiki basis carries one runtime-selected snapshot and one
 confirmed-only fallback. Material ingress chooses one snapshot when it captures
 the lexical session and retains that immutable choice for the complete turn;
 the matcher itself never reads preferences, evidence scores, or authority.
 
-The researched pronunciation direction remains a compiler boundary, not a
-model or hot-path matcher. A future compiler may derive bounded local aliases
-only when a lexeme changes, then publish the same immutable exact-match indexes
-MaterialIngress already consumes. The first proposed corpus target is limited
-to exact homophones, the three Mandarin final pairs `an`/`ang`, `en`/`eng`, and
-`in`/`ing`, and exact English pronunciation identity from a pinned CMUdict
-snapshot. It must preserve locale, token boundaries, protected literals,
-applicability scope, ambiguity abstention, and human tombstones. Approximate
-phoneme distance, cross-locale fallback, runtime network lookup, and model
-prompt bias remain excluded. No compiler or provisional alias becomes active
-until positive and adversarial corpora prove precision for that exact version.
+The released fitting baseline preserves that compiler boundary. Canonical
+lexemes compile into a bounded orthographic index only when authority changes;
+spoken human admissions probe bounded local candidates, and a qualified
+provisional winner compiles into the same immutable exact-match index
+MaterialIngress already consumes. Runtime authority currently covers one
+conservative internal ASCII edit. Exact Double Metaphone identity, exact
+tone-bearing Mandarin pinyin identity, and the three Mandarin final pairs
+`an`/`ang`, `en`/`eng`, and `in`/`ing` remain reproducible offline research
+candidates but cannot observe, project, or rewrite product material. Locale,
+token boundaries, scope, protected literals, canonical no-op authority,
+ambiguity abstention, generated exclusion, and human tombstones remain hard
+gates. Approximate phoneme distance, cross-locale fallback, runtime network
+lookup, recognizer phrase bias, and model prompt bias remain excluded.
+
+Automatic collection is a separate pair of producers behind the same release
+identity boundary. Pinned `Intl.Segmenter` conformance fixtures guard locale word
+boundaries. All-caps, internal-capital identifiers, and Katakana may collect in
+one successful human turn; ordinary locale segments require two. Ordinary
+title case receives no shortcut. Generated output, protected ranges, malformed
+ranges, and repeated occurrences inside one turn produce no additional
+evidence. The two independent settings preferences can pause collection or
+fitting immediately, but cannot qualify a producer or delete its ledger.
+At the shared admission boundary, one unique allowlisted internal-edit relation
+may suppress only the broad term event for that same observed source. Competing
+targets suppress nothing and abstain. This keeps the ledgers independent while
+preventing soft term discovery from pre-empting a more specific fitting vote;
+existing canonicals remain a hard no-op authority.
+New human-confirmed lexemes remain bounded at 5,000. A separate 15,000-row
+structural ceiling exists only to recover every formerly valid V2-V5 state;
+recovery above the human bound permits editing and removal but admits no new
+human lexeme until capacity is released. The disposable automatic
+collection reservoir and pronunciation indexes are independently bounded at 512
+targets; starter and recent human-confirmed authority is selected before
+aggregate authority. The smaller derived bound limits compilation and lookup
+work without deleting explicit dictionary data.
+At the 9 MiB plus 256 KiB persistence boundary, an automatic batch first retries only
+already-known rows plus ledger aging; unseen allocations are discarded before
+known evidence or decay. The final 256 KiB is the proved maximum allowance for
+adding a producer identity to every V5 term row during V6 recovery. Explicit
+human decisions retain their separate hard capacity error instead of being
+silently dropped.
 
 Browser speech recognition is the narrow platform-capability exception: it uses
 no Matter credential, exposes no provider choice in the client, and commits

@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { compileWikiBasis } from "../wiki/wiki-basis";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
-import type { WikiObserveEvidenceEvent } from "../wiki/wiki-model";
 import {
   DEFAULT_WIKI_CAPABILITY_PREFERENCES,
   serializeWikiCapabilityPreferences,
 } from "./wiki-capability-preferences";
 
-const LEGACY_BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v1");
-const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v2");
+const LEGACY_BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v3");
+const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v5");
 const bridgeHost = globalThis as unknown as { [key: symbol]: unknown };
 
 afterEach(() => {
@@ -76,31 +75,28 @@ describe("Wiki runtime bridge", () => {
     });
   });
 
-  it("does not forward an in-flight batch after both permissions are disabled", async () => {
-    let serialized = serializeWikiCapabilityPreferences(
-      DEFAULT_WIKI_CAPABILITY_PREFERENCES,
-    );
+  it("does not load the runtime when both permissions are already disabled", async () => {
+    const serialized = serializeWikiCapabilityPreferences({
+      ...DEFAULT_WIKI_CAPABILITY_PREFERENCES,
+      automaticCollection: false,
+      phoneticFitting: false,
+    });
     vi.stubGlobal("localStorage", {
       getItem: () => serialized,
     });
     const observe = vi.fn();
     vi.doMock("./wiki-runtime-core", () => ({
-      observeMatterWikiEvidence: observe,
+      observeMatterWikiCommittedMaterial: observe,
     }));
     const bridge = await import("./wiki-runtime-bridge");
 
-    bridge.observeMatterWikiEvidence(EVIDENCE_EVENTS);
-    serialized = serializeWikiCapabilityPreferences({
-      ...DEFAULT_WIKI_CAPABILITY_PREFERENCES,
-      automaticCollection: false,
-      phoneticFitting: false,
-    });
+    bridge.observeMatterWikiEvidence(ADMISSION);
     await vi.dynamicImportSettled();
 
     expect(observe).not.toHaveBeenCalled();
   });
 
-  it("refilters an in-flight batch against the latest per-channel permissions", async () => {
+  it("forwards no frozen permission snapshot to the lazy runtime", async () => {
     let serialized = serializeWikiCapabilityPreferences(
       DEFAULT_WIKI_CAPABILITY_PREFERENCES,
     );
@@ -109,11 +105,11 @@ describe("Wiki runtime bridge", () => {
     });
     const observe = vi.fn();
     vi.doMock("./wiki-runtime-core", () => ({
-      observeMatterWikiEvidence: observe,
+      observeMatterWikiCommittedMaterial: observe,
     }));
     const bridge = await import("./wiki-runtime-bridge");
 
-    bridge.observeMatterWikiEvidence(EVIDENCE_EVENTS);
+    bridge.observeMatterWikiEvidence(ADMISSION);
     serialized = serializeWikiCapabilityPreferences({
       ...DEFAULT_WIKI_CAPABILITY_PREFERENCES,
       automaticCollection: false,
@@ -121,27 +117,16 @@ describe("Wiki runtime bridge", () => {
     await vi.dynamicImportSettled();
 
     expect(observe).toHaveBeenCalledOnce();
-    expect(observe).toHaveBeenCalledWith([EVIDENCE_EVENTS[1]]);
+    expect(observe).toHaveBeenCalledWith(ADMISSION);
   });
 });
 
-const EVIDENCE_EVENTS = Object.freeze([
-  Object.freeze({
-    type: "observe-evidence",
-    source: "recent-material",
-    locale: "en-US",
-    channel: "written",
-    boundary: "word",
-    form: "englebart",
-    canonical: "Engelbart",
-  }),
-  Object.freeze({
-    type: "observe-evidence",
-    source: "machine-inference",
-    locale: "en-US",
-    channel: "spoken",
-    boundary: "word",
-    form: "engel bark",
-    canonical: "Engelbart",
-  }),
-]) satisfies readonly WikiObserveEvidenceEvent[];
+const ADMISSION_TEXT = Object.freeze({
+  locale: "en-US" as const,
+  channel: "spoken" as const,
+  text: "Englebart spoke",
+});
+const ADMISSION = Object.freeze({
+  observed: ADMISSION_TEXT,
+  committed: ADMISSION_TEXT,
+});

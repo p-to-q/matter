@@ -53,7 +53,7 @@ to clear both an activation floor and an ambiguity margin. Routine provisional
 creation and application require no human confirmation. Material frequency can
 support a candidate but can never invent the relation between two forms.
 
-Evidence is deliberately lossy and bounded. Record V5 keeps separate term and
+Evidence is deliberately lossy and bounded. Record V6 keeps separate term and
 alias ledgers with saturating support and a candidate-local quiet counter. One
 successful human admission is one logical clock tick; after a bounded number
 of quiet ticks, only the candidate that was absent decays. It stores no passage,
@@ -82,12 +82,14 @@ decision, not an incidental refactor.
 
 The 32-admission candidate-local quiet horizon is an evidence-aging clock, not
 a user-intent window. It says how quickly one unobserved candidate loses support
-without creating a global cohort boundary. One future
+without creating a global cohort boundary. The production `recent-material`
+source receives only a successful, validated human admission; it records one
+content-minimal candidate vote per turn and never observes a later document
+diff. One future
 interaction owner may classify an exact applied occurrence after bounded
 foreground-visible survival, but it never infers intent from generic deletion,
 Material Undo or Redo, repetition, a later whole-text diff, or nearby pointer
-activity. The current `recent-material` evidence source still has no production
-producer. The ordering of authority is fixed: an addressed human decision
+activity. The ordering of authority is fixed: an addressed human decision
 bypasses scoring; an automatic proposal must pass both scoring gates; an
 ambiguous proposal abstains.
 
@@ -182,17 +184,27 @@ turn begins; it never waits for IndexedDB, reads preference state during a
 match, or recompiles on a material hot path. Evidence-only writes reuse the
 exact tries until applicable authority changes, and reuse the fitting index
 until lexeme identity, scope, or provenance changes. Written-only lexemes never
-enter the spoken fitting index. Before hydration or after storage failure,
+enter the spoken fitting index. A process-local weak receipt lets a deeply
+frozen state that already passed every invariant reuse those unchanged indexes;
+structured clones, persisted rows, and caller-authored objects still cross the
+complete strict parser. The receipt is disposable and is never serialized.
+Before hydration or after storage failure,
 material uses the empty or last valid basis; only Wiki learning degrades.
 One compiled basis is reused for durable publication. A content-free BroadcastChannel
 message carries only the newer write generation so another tab can refresh its
 own durable record. Burst generations coalesce behind one in-flight refresh;
 completion loops only when the published basis still trails the highest seen
 generation, and no storage progress stops the loop rather than spinning.
-Observation CAS conflicts rehydrate and reapply the same
-logical batch against the newer authority with a strict retry bound; an unsaved
-attempt never advances the durable human-turn clock. A candidate exceeding the byte budget is rejected as a
-normal capacity result before persistence, leaving current authority ready.
+Observation CAS conflicts never replay a derived evidence batch. The background
+admission FIFO rehydrates, rereads capability preferences, and re-derives term
+and fitting evidence from the original human turn against the newer authority,
+with a strict retry bound; an unsaved attempt never advances the durable
+human-turn clock. The material commit itself does not wait for that background
+work. When an automatic batch
+would exceed the byte budget, the coordinator retries already-known relations
+and quiet aging without unseen allocations; if even that cannot fit, it becomes
+a no-op and leaves current authority ready. Explicit decisions still return a
+normal capacity error rather than being silently discarded.
 
 The browser composition owns one Wiki runtime for the lifetime of the origin.
 Development Fast Refresh reuses that coordinator and generation channel rather
@@ -277,11 +289,16 @@ generated text, or both. It does not expose aliases, matcher channels,
 confidence, evidence scores, or a routine clear action. Source filters use the
 lifecycle labels `Automatically added` and `Manually added`: editing an
 automatic entry promotes it to confirmed authority. The single lossless
-personal-data format is `matter-wiki.json`; there is no import UI. Schema V5
-stores scope explicitly and separates term recurrence from alias-relation
-evidence into candidate-local ledgers. Strict V2 and V3 migration assigns `both`
-so an upgrade cannot silently disable previously applicable authority; strict
-V4 migration preserves its existing scope while splitting the former aggregate.
+personal-data format is `matter-wiki.json`; there is no import UI. Schema V6
+stores scope explicitly, separates term recurrence from alias-relation evidence
+into candidate-local ledgers, and records the producer family for automatic term
+evidence. Strict V2 and V3 migration assigns `both` so an upgrade cannot silently
+disable previously applicable authority; strict V4 migration preserves its
+existing scope while splitting the former aggregate, and strict V5 migration
+maps producer-less term evidence to a zero-authority legacy producer.
+The repository writes that V5-to-V6 normalization back once with a monotonic
+record generation. If the optional migration write cannot commit, the valid V5
+row remains readable and a later ordinary write may converge it.
 Strictly corrupt local state
 exposes an explicit reset that rechecks the row inside the write transaction and
 refuses to replace data that has become valid. It must not require the person
@@ -307,35 +324,44 @@ The implementation exposes capabilities rather than one Wiki service:
 These capabilities are not a plugin framework. Personal customization changes
 data; release-wide scoring and locale inference remain versioned product policy.
 
-The implemented candidate producer is deliberately narrower than the product
-direction: it considers only person-confirmed, single-token Latin lexemes of
-7–48 graphemes, uses bounded buckets and one conservative internal orthographic
-edit, and abstains on bucket overflow or ambiguity. It is not phonetic matching,
-English homophone support, Chinese front/back-nasal support, or automatic
-canonical discovery. It remains off by default and may be enabled only with
-`NEXT_PUBLIC_MATTER_WIKI_FITTING=latin-conservative` for controlled corpus work.
+The released automatic baseline is deliberately broad in discovery and narrow
+in authority. Automatic collection observes only successful human admissions.
+Locale word segmentation may collect ordinary Latin, Han, and Japanese words
+after recurrence; all-caps, internal-capital identifiers such as `OpenAI`, and
+Katakana may surface after one turn. Ordinary title case does not receive that
+shortcut. Stop words, numeric-only tokens, protected literals, generated
+ranges, malformed ranges, and over-capacity batches produce no evidence. Host
+`Intl.Segmenter` behavior must pass a pinned multi-locale conformance fixture or
+collection fails closed.
 
-Research freezes the next candidate as a local **pronunciation compiler**, not
-a fuzzy matcher and not a model feature. It may run only when canonical
-authority changes, emit bounded aliases into the existing immutable exact-match
-index, and stay absent from the synchronous material hot path. Its first corpus
-target is deliberately finite:
+Near-sound fitting is a local compiler, not a fuzzy hot-path matcher and not a
+model feature. It rebuilds bounded disposable indexes only when Wiki authority
+changes, observes spoken human admission only, and projects a relation into the
+existing immutable exact-match index only after independent turns clear the
+score and ambiguity margin. The product runtime currently releases one
+conservative internal ASCII-Latin edit after four turns. It requires a bounded
+single internal edit toward an eligible canonical target; a form that is itself
+already canonical is a hard no-op authority.
 
-- exact Chinese homophones under one pinned locale-owned pronunciation table;
-- only the Mandarin final confusions `an`/`ang`, `en`/`eng`, and `in`/`ing`,
-  with the rest of the syllable and locale unchanged; and
-- exact English phoneme-sequence identity from one pinned, licensed CMUdict
-  snapshot, with no grapheme or phoneme-distance fallback.
+Exact Double Metaphone identity, exact tone-bearing Mandarin pinyin identity,
+and `an`/`ang`, `en`/`eng`, and `in`/`ing` final-pair normalization remain in the
+offline qualification catalog only. Their deterministic implementations and
+corpora are useful research evidence, but a transcript supplies neither audio
+confidence nor semantic proof that one otherwise valid homophone should replace
+another. They therefore cannot observe runtime evidence, project a rule, or
+rewrite visible material. Single-character Chinese polyphones, cross-locale
+matches, multiple candidate canonicals, protected literals, collisions, bucket
+overflow, and insufficient human evidence abstain. Exact producer and resource
+versions participate in disposable cache and qualification identity; changing
+either cannot reinterpret durable human authority or tombstones.
 
-Polyphones, unknown names, multiple English pronunciations, cross-locale
-matches, protected literals, collisions, bucket overflow, and insufficient
-human evidence all abstain. A pronunciation resource version becomes part of
-the disposable-cache identity; changing it cannot reinterpret durable human
-authority or tombstones. No portion is enabled until representative positive,
-negative, ambiguity, locale-isolation, protected-literal, generated-output, and
-performance corpora pass for the exact compiler and resource version. Until
-then the product must not claim Chinese near-sound, English homophone, or
-unconfirmed automatic correction as an available capability.
+Collection and fitting remain separate ledgers, but their events share one
+admission boundary. When exactly one runtime-allowlisted internal-edit relation
+targets an existing eligible canonical, that admission does not also teach the
+same observed source as a new broad locale term. Multiple candidate targets do
+not suppress collection and remain ambiguous. This narrow arbitration prevents
+soft discovery from racing the more specific relation while preserving every
+human-confirmed or already-collected canonical as a hard no-op veto.
 
 Confirmed corrections and the deterministic ingress boundary do not depend on
 that gate. Bulk editing, imports, public sharing, vector search, cross-account
@@ -348,18 +374,21 @@ settings projection as automatic entries, without implying that an alias is
 active. This prevents an
 older experiment from remaining active after the feature is disabled. Adding a
 canonical word in settings alone does not assert an alias and therefore does
-not promise an immediate correction. The first public release of automatic
-matching remains **NO-GO** until a real visible-error correction path and its
-positive and negative corpus receipts exist.
+not promise an immediate correction: a relation still requires independent
+observations from one qualified producer. The existing Wiki edit/remove surface,
+immediate global pause, and human tombstones are the bounded takeover path.
+Recognizer-time phrase bias and broader pronunciation distance remain **NO-GO**
+until a concrete ASR adapter owns their privacy and evaluation contract.
 
 ## Automatic-learning calibration boundary
 
-`wiki-learning-policy.ts` is the pure domain policy used by V5 evidence aging,
+`wiki-learning-policy.ts` is the pure domain policy used by V6 evidence aging,
 competition, and offline calibration. It has no DOM, persistence, provider,
-model, or settings dependency. Runtime projection still supplies no qualified
-producer, so consuming the policy cannot activate automatic aliases.
+model, or settings dependency. Runtime projection accepts only complete
+qualified release identities; a producer name or preference alone cannot
+activate an automatic alias.
 
-Record V5 separates two facts which the former V4 aggregate mixed:
+Record V6 separates two facts which the former V4 aggregate mixed:
 
 - term evidence asks whether one canonical word should become a collected Wiki
   entry; and
@@ -400,11 +429,17 @@ exact `3 versus 1` and restricted `4 versus 2`, but abstains on exact `3 versus
 2` or restricted `4 versus 3`. Retention uses score `5` and margin `3`; a
 challenger never inherits that lower gate. Competition is immediate
 counter-evidence, while one addressed human reject or replacement bypasses the
-score and becomes durable authority. Production projection currently supplies
-an empty qualification set, so adding a classifier to source code cannot
-silently grant it runtime authority. A later bridge must consume the complete
-qualified producer, resource, and corpus identity rather than reconstructing
-authority from a producer id.
+score and becomes durable authority. Production projection supplies complete
+runtime-allowlisted identities for two term producers and one fitting producer.
+The offline qualification catalog also contains three higher-ambiguity
+pronunciation producers, but qualification is not product authority. Evidence
+stores the versioned producer family id; qualification admits it only while one
+exact current release for that family is present. The
+qualification parser enforces that a producer id ending in `-vN` matches
+version major `N`, so any change that can alter candidate semantics must use a
+new family id rather than reinterpret old machine votes under a new digest.
+Merely adding source code, turning on a preference, or persisting old evidence still
+cannot grant runtime authority.
 
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
@@ -420,13 +455,38 @@ corpus digest and hashes the bounded raw producer and resource artifacts,
 requires positive, adversarial, ambiguity,
 locale-isolation, protected, generated, and capacity/performance classes, and
 fails malformed, incomplete, mismatched, oversized, or duplicated candidates
-closed. This verifier does not execute the producer and therefore cannot prove
-that a self-reported receipt came from the supplied bytes. A controlled harness
-must execute the pinned artifacts and own receipt production before any real
-candidate can qualify. Its synthetic unit fixture proves the parser and gate,
-not a language capability: no controlled harness, licensed resource, or real
-qualification receipt exists, so the release-qualified producer set remains
-empty.
+closed. The generic verifier does not execute a producer and therefore cannot
+prove that a self-reported receipt came from supplied bytes. Controlled local
+harnesses close that gap for every catalogued producer: they execute exact hashed
+producer artifacts, hash manifest-owned corpora and pinned resources, and
+measure the complete 512-target derived-index bound plus 1,000 lookups. The
+live wall-clock receipt runs three serial trials and records the best complete
+trial as the uncontended host estimate; a sustained regression must exceed the
+fixed gate in every trial. The
+separate 5,000-entry human-confirmed dictionary bound is covered by admission,
+removal/reopening, and over-bound recovery tests. The 15,000-row structural
+lexeme ceiling exists only to load every formerly valid V2-V5 state and is not
+an allowance for new human entries. Neither bound is misreported as the
+automatic hot-index size. The persistence ceiling is 9 MiB plus a proved
+256 KiB V5-to-V6 producer-field allowance. Every committed receipt reports zero
+false applications for cases labelled adversarial or ambiguous by its frozen
+corpus, plus zero cross-locale, protected, or generated applications, and stays
+below the background-compile and hot-lookup budgets. That bounded result is not
+a claim that an otherwise valid homophone is semantically unambiguous; the
+separate runtime allow-list remains the product safety gate.
+`npm run qualify:wiki` reruns the controlled receipts; source, resource, corpus,
+or output drift invalidates the compact runtime identity. The synthetic generic
+fixture continues to prove only the parser and gate.
+
+The default-on learning policy has its own controlled receipt rather than
+borrowing producer success. A manifest-owned replay runs the production state
+transitions and projection over six scenarios: exact three-turn activation,
+restricted four-turn activation, ambiguity-margin abstention, quiet decay and
+retention, two-turn ordinary-term collection, and generated/protected zero-vote
+behavior. Its compact release binds policy and scoring versions, all gates and
+weights, the policy source digest, the exact qualification catalog, corpus
+digest, and result digest. Any change to those inputs invalidates
+`npm run qualify:wiki` until the expected replay is deliberately requalified.
 
 Interaction evaluation is a separate labelled corpus. One exact applied
 occurrence reaches exactly one terminal state:
@@ -463,10 +523,44 @@ corpus. It does not turn censored exposure into a failed survival. No arbitrary
 energy weights, adaptive optimizer, telemetry, or online reinforcement learning
 enters the running product.
 
-V5 persists term and alias evidence as separate bounded ledgers, with
-provisional projection still disabled. Legacy aggregate evidence migrates to a
-zero-weight producer and therefore cannot acquire authority during migration.
-The migration must pass compatibility, cross-tab, capacity, and corrupt-input
-proof before any producer or status copy is enabled. Until a real producer
-corpus and the later one-shot attribution lifecycle pass, the existing
-exact-only UI and empty release gate remain the truthful product behavior.
+V6 persists term and alias evidence as separate bounded ledgers and records the
+producer family for automatic term evidence. Legacy aggregate evidence migrates
+to a zero-weight producer and therefore cannot acquire authority during
+migration.
+Runtime-allowlisted fitting producers may project provisional rules only after
+their own relation evidence clears the calibrated gate; closing `近音`
+immediately selects the confirmed-only snapshot without deleting evidence.
+Implicit survival reward and one-shot occurrence attribution remain gated.
+
+## Research translated into the boundary
+
+Speech platforms place custom vocabulary at recognition time, but their own
+documentation treats bias as probabilistic and warns that stronger boost can
+raise false positives. The Web Speech draft likewise defines phrase bias as a
+recognizer-owned likelihood boost, not a post-transcript truth source. Matter
+therefore keeps phrase bias out of Wiki until one concrete recognition adapter
+owns its privacy and evaluation contract:
+
+- [Google Speech adaptation](https://docs.cloud.google.com/speech-to-text/docs/adaptation-model)
+- [Web Speech contextual bias](https://webaudio.github.io/web-speech-api/#dom-speechrecognition-phrases)
+
+Local dictation products demonstrate two useful but separable mechanisms:
+repeated proper-name discovery and explicit deterministic replacement. Matter
+adopts the former as bounded term evidence and keeps relation authority in its
+separate alias ledger; it does not adopt prompt glossary injection or whole-
+text correction diffs. See [Yap vocabulary learning](https://github.com/AkuchiS/yap)
+and [Voquill personal dictionary](https://github.com/voquill/voquill).
+
+The qualification harness uses exact, pinned dependencies rather than model
+prompt glossaries: MIT-licensed `pinyin-pro` for deterministic tone-bearing
+Mandarin keys and MIT-licensed `double-metaphone` for bounded English phonetic
+codes. They remain inside offline qualification tooling and never enter the
+product runtime or material bundle. The runtime allow-list is a separate
+product-only manifest, and the production-artifact gate mechanically rejects
+either offline phonetic package name. This trade keeps experiments reproducible
+without claiming acoustic confidence or a full pronunciation lexicon. Their current
+catalog qualification does not grant runtime rewrite authority; promoting one
+would require a new explicit product decision and false-rewrite evidence.
+
+- [pinyin-pro](https://github.com/zh-lx/pinyin-pro)
+- [double-metaphone](https://github.com/words/double-metaphone)

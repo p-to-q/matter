@@ -1,23 +1,20 @@
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
-import { fitCommittedWikiText } from "../wiki/wiki-fitting";
 import type { WikiBasis } from "../wiki/wiki-basis";
-import type { WikiObserveEvidenceEvent } from "../wiki/wiki-model";
 import type {
   MaterialLexicalPort,
   MaterialLexicalSuggestion,
   MaterialLexicalSession,
 } from "./material-lexical-port";
 import type { MaterialLexicalObservationPort } from "./material-lexical-observation-port";
-
-export type WikiFittingPolicy = Readonly<{
-  mode: "off" | "latin-conservative";
-  automaticCollectionEnabled?: () => boolean;
-  phoneticFittingEnabled?: () => boolean;
-}>;
+import type { MaterialLexicalObservation } from "./material-lexical-observation-port";
 
 export type WikiConsumptionPolicy = Readonly<{
   phoneticFittingEnabled?: () => boolean;
 }>;
+
+export type WikiCommittedObservationSink = (
+  observation: MaterialLexicalObservation,
+) => void;
 
 /**
  * Adapts Wiki's compiled basis to the only lexical capability Matter consumes.
@@ -69,20 +66,9 @@ export function createWikiMaterialLexicalPort(
 
 /** Write capability exposed only to the successful human-admission owner. */
 export function createWikiMaterialLexicalObservationPort(
-  readBasis: () => WikiBasis,
-  observeEvidence: (events: readonly WikiObserveEvidenceEvent[]) => void,
-  policy: WikiFittingPolicy,
+  observeCommitted: WikiCommittedObservationSink,
 ): MaterialLexicalObservationPort {
   return Object.freeze({
-    observeCommitted: (request) => {
-      const events = policy.mode === "latin-conservative" &&
-        policy.phoneticFittingEnabled?.() !== false
-        ? fitCommittedWikiText(readBasis().fitSnapshot, request)
-        : Object.freeze([]);
-      if (policy.automaticCollectionEnabled?.() === false &&
-          policy.phoneticFittingEnabled?.() === false) return;
-      // An empty batch still advances the bounded human-turn aging clock.
-      observeEvidence(events);
-    },
+    observeCommitted,
   });
 }

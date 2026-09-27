@@ -1,6 +1,6 @@
 .section {
   box-sizing: border-box;
-  min-height: 263px;
+  min-height: 287px;
   padding: 17px 16px 7px;
   color: var(--chrome-text);
 }
@@ -150,7 +150,7 @@
 
 .browser {
   display: flex;
-  min-height: 239px;
+  min-height: 263px;
   flex-direction: column;
 }
 

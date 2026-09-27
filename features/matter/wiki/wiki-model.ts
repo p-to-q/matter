@@ -8,15 +8,27 @@ import type {
   WikiAliasEvidenceProducer,
   WikiAutomaticAliasPhase,
   WikiAutomaticTermPhase,
+  WikiStoredTermEvidenceProducer,
+  WikiTermEvidenceProducer,
 } from "./wiki-learning-policy";
 
-export const WIKI_SCHEMA_VERSION = 5 as const;
+export const WIKI_SCHEMA_VERSION = 6 as const;
 export const WIKI_SCORING_VERSION = 3 as const;
 export const WIKI_FITTING_VERSION = 1 as const;
 
 export const MAX_WIKI_FORM_CODE_POINTS = 64;
 export const MAX_WIKI_CANONICAL_CODE_POINTS = 128;
 export const MAX_WIKI_EVIDENCE_RECORDS = 5_000;
+/** V2-V5 recovery accepts 5,000 rows; new automatic learning deliberately
+ * keeps a smaller active reservoir that can be qualified on the UI thread. */
+export const MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS = 512;
+/** Pronunciation fitting is a disposable hot index, not the durable Wiki.
+ * Explicit rules remain available up to their independent 5,000-rule bound. */
+export const MAX_WIKI_FITTING_TARGETS = 512;
+/** New human-owned dictionary entries have their own product limit. The wider
+ * structural lexeme bound below exists only so every valid V2-V5 state remains
+ * recoverable before a person decides what to keep. */
+export const MAX_WIKI_HUMAN_CONFIRMED_LEXEMES = 5_000;
 export const MAX_WIKI_AUTHORITY_RULES = 5_000;
 export const MAX_WIKI_TOMBSTONES = 5_000;
 // A valid V2 state could contain disjoint canonical identities in each of its
@@ -31,9 +43,13 @@ export const WIKI_RECENT_OBSERVATION_WINDOW = 32;
 export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 32;
 // The lexeme schema may transiently represent every relation from a valid 4 MiB
 // V2 state as both a stable lexeme and an id-based alias. V4 adds one bounded
-// scope field to every V3 lexeme; the extra MiB keeps every formerly valid V3
-// row saveable after migration without weakening any collection bound.
-export const MAX_WIKI_STATE_BYTES = 9 * 1_024 * 1_024;
+// scope field to every V3 lexeme; 9 MiB keeps every formerly valid V2-V4 row
+// saveable. V6 adds one fixed producer field to at most 5,000 V5 term rows;
+// 256 KiB is a proved migration allowance, not an unbounded growth reserve.
+export const MAX_LEGACY_WIKI_STATE_BYTES = 9 * 1_024 * 1_024;
+export const MAX_WIKI_MIGRATION_HEADROOM_BYTES = 256 * 1_024;
+export const MAX_WIKI_STATE_BYTES = MAX_LEGACY_WIKI_STATE_BYTES +
+  MAX_WIKI_MIGRATION_HEADROOM_BYTES;
 export const MAX_WIKI_APPLICABLE_RULES = 5_000;
 export const MAX_WIKI_APPLICABLE_CODE_POINTS = 256_000;
 
@@ -93,6 +109,7 @@ export type WikiAliasDescriptor = Readonly<{
 export type WikiTermEvidenceAggregate = Readonly<{
   locale: MatterLocale;
   canonical: string;
+  producer: WikiStoredTermEvidenceProducer;
   phase: WikiAutomaticTermPhase;
   support: number;
   quietTurns: number;
@@ -141,9 +158,33 @@ export type WikiMatchRule = WikiRuleDescriptor & Readonly<{
   score: number;
 }>;
 
-export type WikiObserveEvidenceEvent = WikiRuleDescriptor & Readonly<{
+export type WikiObserveTermEvidenceEvent = Readonly<{
   type: "observe-evidence";
-  source: WikiEvidenceSource;
+  source: "recent-material";
+  locale: MatterLocale;
+  canonical: string;
+  producer: WikiTermEvidenceProducer;
+}>;
+
+export type WikiObserveAliasEvidenceEvent = WikiRuleDescriptor & Readonly<{
+  type: "observe-evidence";
+  source: "machine-inference";
+  producer: WikiAliasEvidenceProducer;
+}>;
+
+export type WikiObserveEvidenceEvent =
+  | WikiObserveTermEvidenceEvent
+  | WikiObserveAliasEvidenceEvent;
+
+export type WikiEvidenceTickDisposition =
+  | "observed"
+  | "quiet"
+  | "paused"
+  | "censored";
+
+export type WikiObservationDispositions = Readonly<{
+  term: WikiEvidenceTickDisposition;
+  alias: WikiEvidenceTickDisposition;
 }>;
 
 export type WikiConfirmRuleEvent = WikiRuleDescriptor & Readonly<{

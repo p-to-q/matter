@@ -48,105 +48,33 @@ describe("Wiki material lexical adapter", () => {
     });
   });
 
-  it("reports fitting evidence from committed human speech against the captured basis", () => {
-    const created = applyWikiEvent(createEmptyWikiState(), {
-      type: "create-lexeme",
-      locale: "en-US",
-      canonical: "Engelbart",
-      scope: "both",
-    });
-    if (!created.ok) throw new Error(created.error.message);
-    const compiled = compileWikiBasis(created.state, 3);
-    if (!compiled.ok) throw new Error(compiled.error.message);
+  it("forwards one ephemeral human admission without importing producer policy", () => {
     const observed: unknown[] = [];
-    const observer = createWikiMaterialLexicalObservationPort(
-      () => compiled.basis,
-      (events) => observed.push({ events }),
-      { mode: "latin-conservative" },
-    );
+    const observer = createWikiMaterialLexicalObservationPort((request) => {
+      observed.push(request);
+    });
 
     observeCommittedMaterialText(observer, {
       locale: "en-US",
       channel: "spoken",
       text: "Englebart spoke",
-    });
-    observeCommittedMaterialText(observer, {
-      locale: "en-US",
-      channel: "written",
-      text: "Englebart wrote",
+      eligibleRanges: [{ start: 0, end: 10 }],
     });
 
     expect(observed).toEqual([{
-      events: [expect.objectContaining({ form: "Englebart", canonical: "Engelbart" })],
-    }, {
-      events: [],
-    }]);
-  });
-
-  it("keeps automatic fitting off while still reporting a human turn", () => {
-    const compiled = compileWikiBasis(createEmptyWikiState(), 0);
-    if (!compiled.ok) throw new Error(compiled.error.message);
-    const observed: unknown[] = [];
-    const observer = createWikiMaterialLexicalObservationPort(
-      () => compiled.basis,
-      (events) => observed.push(events),
-      { mode: "off" },
-    );
-
-    observeCommittedMaterialText(observer, {
-      locale: "en-US",
-      channel: "spoken",
-      text: "Englebart spoke",
-    });
-
-    expect(observed).toEqual([[]]);
-  });
-
-  it("lets independent local preferences restrict fitting and observation", () => {
-    const created = applyWikiEvent(createEmptyWikiState(), {
-      type: "create-lexeme",
-      locale: "en-US",
-      canonical: "Engelbart",
-      scope: "both",
-    });
-    if (!created.ok) throw new Error(created.error.message);
-    const compiled = compileWikiBasis(created.state, 3);
-    if (!compiled.ok) throw new Error(compiled.error.message);
-    const observed: unknown[] = [];
-    let automaticCollection = true;
-    let phoneticFitting = false;
-    const observer = createWikiMaterialLexicalObservationPort(
-      () => compiled.basis,
-      (events) => observed.push(events),
-      {
-        mode: "latin-conservative",
-        automaticCollectionEnabled: () => automaticCollection,
-        phoneticFittingEnabled: () => phoneticFitting,
+      observed: {
+        locale: "en-US",
+        channel: "spoken",
+        text: "Englebart spoke",
+        eligibleRanges: [{ start: 0, end: 10 }],
       },
-    );
-
-    observeCommittedMaterialText(observer, {
-      locale: "en-US",
-      channel: "spoken",
-      text: "Englebart spoke",
-    });
-    automaticCollection = false;
-    observeCommittedMaterialText(observer, {
-      locale: "en-US",
-      channel: "spoken",
-      text: "Englebart spoke",
-    });
-    phoneticFitting = true;
-    observeCommittedMaterialText(observer, {
-      locale: "en-US",
-      channel: "spoken",
-      text: "Englebart spoke",
-    });
-
-    expect(observed).toEqual([
-      [],
-      [expect.objectContaining({ form: "Englebart", canonical: "Engelbart" })],
-    ]);
+      committed: {
+        locale: "en-US",
+        channel: "spoken",
+        text: "Englebart spoke",
+        eligibleRanges: [{ start: 0, end: 10 }],
+      },
+    }]);
   });
 
   it("captures the confirmed fallback while phonetic fitting is paused", () => {

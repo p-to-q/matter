@@ -1,4 +1,4 @@
-import type { WikiObserveEvidenceEvent } from "../wiki/wiki-model";
+import type { WikiAdmissionTurn } from "../wiki/wiki-admission";
 import {
   isMatterWikiAutomaticCollectionEnabled,
   isMatterWikiPhoneticFittingEnabled,
@@ -19,18 +19,11 @@ export {
 
 /** A successful human turn may wake the local runtime, but never waits for it. */
 export function observeMatterWikiEvidence(
-  events: readonly WikiObserveEvidenceEvent[],
+  request: WikiAdmissionTurn,
 ): void {
   if (!isMatterWikiAutomaticCollectionEnabled() &&
       !isMatterWikiPhoneticFittingEnabled()) return;
   void import("./wiki-runtime-core")
-    .then(({ observeMatterWikiEvidence: observe }) => {
-      const automaticCollection = isMatterWikiAutomaticCollectionEnabled();
-      const phoneticFitting = isMatterWikiPhoneticFittingEnabled();
-      if (!automaticCollection && !phoneticFitting) return;
-      observe(events.filter((event) => event.source === "recent-material"
-        ? automaticCollection
-        : phoneticFitting));
-    })
+    .then(({ observeMatterWikiCommittedMaterial: observe }) => observe(request))
     .catch(() => undefined);
 }

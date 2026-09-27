@@ -10,30 +10,69 @@ import {
 } from "./wiki-generation-channel";
 import { createIndexedDbWikiRepository } from "./wiki-repository";
 import {
-  WIKI_CONFIRMED_ONLY,
-  WIKI_WITH_PROVISIONAL,
+  createWikiProjectionPolicy,
 } from "../wiki/wiki-evidence";
+import {
+  MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS,
+  MATTER_WIKI_RUNTIME_PRODUCER_RELEASES,
+  MATTER_WIKI_RUNTIME_TERM_PRODUCERS,
+} from
+  "../wiki/wiki-runtime-producer-releases";
 import type {
-  WikiObserveEvidenceEvent,
+  WikiObservationDispositions,
   WikiState,
 } from "../wiki/wiki-model";
+import {
+  combineWikiAdmissionEvidence,
+  hasWikiAdmissionContent,
+  type WikiAdmissionTurn,
+} from "../wiki/wiki-admission";
+import { collectCommittedWikiTermsResult } from "../wiki/wiki-term-collection";
+import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting";
+import { MAX_WIKI_OBSERVATIONS_PER_BATCH } from "../wiki/wiki-model";
+import type {
+  WikiAliasEvidenceProducer,
+  WikiTermEvidenceProducer,
+} from "../wiki/wiki-learning-policy";
 import {
   matterWikiBasisPublication,
   matterWikiFittingMode,
 } from "./wiki-runtime-publication";
+import {
+  isMatterWikiAutomaticCollectionEnabled,
+  isMatterWikiPhoneticFittingEnabled,
+} from "./wiki-capability-preferences-reader";
 
-export const matterWikiProjectionPolicy = matterWikiFittingMode === "latin-conservative"
-  ? WIKI_WITH_PROVISIONAL
-  : WIKI_CONFIRMED_ONLY;
+export const matterWikiProjectionPolicy = createWikiProjectionPolicy(
+  matterWikiFittingMode === "latin-conservative"
+    ? MATTER_WIKI_RUNTIME_PRODUCER_RELEASES
+    : Object.freeze([]),
+);
 
 type MatterWikiRuntime = Readonly<{
   coordinator: ReturnType<typeof createWikiCoordinator>;
   generationChannel: ReturnType<typeof createWikiGenerationChannel>;
+  start(): Promise<WikiCoordinatorStatus>;
+  retry(): Promise<WikiCoordinatorStatus>;
+  announceGeneration(generation: number): void;
+  enqueueAdmission(task: () => Promise<void>): void;
+  dispose(): void;
 }>;
 
-const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime.v7");
+type MatterWikiRuntimeSlot = Readonly<{
+  abi: 12;
+  runtime: MatterWikiRuntime;
+}>;
+
+const RUNTIME_ABI = 12 as const;
+const MAX_ADMISSION_CAS_ATTEMPTS = 4;
+const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
+const LEGACY_RUNTIME_KEYS = Object.freeze([
+  Symbol.for("ptoq.matter.wiki-runtime.v7"),
+  Symbol.for("ptoq.matter.wiki-runtime.v8"),
+]);
 const runtimeHost = globalThis as unknown as {
-  [key: symbol]: MatterWikiRuntime | undefined;
+  [key: symbol]: MatterWikiRuntimeSlot | MatterWikiRuntime | undefined;
 };
 
 /** One origin-local authority survives client Fast Refresh as one ownership unit. */
@@ -44,38 +83,160 @@ function createMatterWikiRuntime(): MatterWikiRuntime {
     matterWikiProjectionPolicy,
   );
   const generationChannel = createWikiGenerationChannel();
+  let announcedGeneration = coordinator.readBasis().snapshot.generation;
+  let admissionTail = Promise.resolve();
+  let disposed = false;
+  const announceGeneration = (generation: number) => {
+    if (!Number.isSafeInteger(generation) || generation < 1 ||
+        generation <= announcedGeneration) return;
+    announcedGeneration = generation;
+    try {
+      generationChannel.publish(generation);
+    } catch {
+      // Cross-tab invalidation is advisory and cannot fail a durable operation.
+    }
+  };
+  const announceStatus = (status: WikiCoordinatorStatus): WikiCoordinatorStatus => {
+    if (status.phase === "ready") announceGeneration(status.generation);
+    return status;
+  };
+  const start = async () => announceStatus(await coordinator.start());
+  const retry = async () => announceStatus(await coordinator.retry());
   const refreshQueue = createWikiGenerationRefreshQueue(
     () => coordinator.readBasis().snapshot.generation,
-    () => coordinator.retry(),
+    retry,
   );
-  void generationChannel.subscribe((generation) => {
+  const unsubscribe = generationChannel.subscribe((generation) => {
     void refreshQueue.request(generation);
   });
-  return Object.freeze({ coordinator, generationChannel });
+  return Object.freeze({
+    coordinator,
+    generationChannel,
+    start,
+    retry,
+    announceGeneration,
+    enqueueAdmission(task) {
+      if (disposed) return;
+      const run = async () => {
+        if (disposed) return;
+        try {
+          await task();
+        } catch {
+          // Automatic evidence is advisory; one failed turn cannot block later admissions.
+        }
+      };
+      admissionTail = admissionTail.then(run, run);
+    },
+    dispose() {
+      disposed = true;
+      unsubscribe();
+      generationChannel.close();
+      coordinator.dispose();
+    },
+  });
 }
 
-const runtime = runtimeHost[RUNTIME_KEY] ?? createMatterWikiRuntime();
-runtimeHost[RUNTIME_KEY] = runtime;
+for (const legacyRuntimeKey of LEGACY_RUNTIME_KEYS) {
+  const legacyRuntime = runtimeHost[legacyRuntimeKey] as MatterWikiRuntime | undefined;
+  if (legacyRuntime === undefined) continue;
+  legacyRuntime.generationChannel.close();
+  legacyRuntime.coordinator.dispose();
+  delete runtimeHost[legacyRuntimeKey];
+}
+const previousSlot = runtimeHost[RUNTIME_KEY] as MatterWikiRuntimeSlot | undefined;
+if (previousSlot !== undefined && previousSlot.abi !== RUNTIME_ABI) {
+  previousSlot.runtime.dispose();
+}
+const runtimeSlot: MatterWikiRuntimeSlot = previousSlot?.abi === RUNTIME_ABI
+  ? previousSlot
+  : Object.freeze({ abi: RUNTIME_ABI, runtime: createMatterWikiRuntime() });
+runtimeHost[RUNTIME_KEY] = runtimeSlot;
+const runtime = runtimeSlot.runtime;
 const matterWikiCoordinator = runtime.coordinator;
+const qualifiedAliasProducers = new Set<WikiAliasEvidenceProducer>(
+  MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS,
+);
+const qualifiedTermProducers = new Set<WikiTermEvidenceProducer>(
+  MATTER_WIKI_RUNTIME_TERM_PRODUCERS,
+);
 
 /** Stable synchronous reader used by material commit closures. */
 export const readMatterWikiBasis = matterWikiCoordinator.readBasis;
 
 /** Lifecycle capability used by composition without exposing mutation methods. */
-export const startMatterWikiAuthority = matterWikiCoordinator.start;
+export const startMatterWikiAuthority = runtime.start;
 
-/** Background evidence is best-effort and never participates in material commit. */
-export function observeMatterWikiEvidence(
-  events: readonly WikiObserveEvidenceEvent[],
+/** Runs local producers only after the lazy Wiki runtime owns the current basis. */
+export function observeMatterWikiCommittedMaterial(
+  request: WikiAdmissionTurn,
 ): void {
-  void publishChanged(matterWikiCoordinator.observe(events));
+  runtime.enqueueAdmission(async () => {
+    const status = await runtime.start();
+    if (status.phase !== "ready") return;
+    await observeHydratedMatterWikiCommittedMaterial(request);
+  });
+}
+
+async function observeHydratedMatterWikiCommittedMaterial(
+  request: WikiAdmissionTurn,
+): Promise<void> {
+  if (request.observed.locale !== request.committed.locale ||
+      request.observed.channel !== request.committed.channel) return;
+  for (let attempt = 0; attempt < MAX_ADMISSION_CAS_ATTEMPTS; attempt += 1) {
+    const permissions = Object.freeze({
+      automaticCollection: isMatterWikiAutomaticCollectionEnabled(),
+      phoneticFitting: isMatterWikiPhoneticFittingEnabled(),
+    });
+    if (!permissions.automaticCollection && !permissions.phoneticFitting) return;
+    const basis = readMatterWikiBasis();
+    const termResult = permissions.automaticCollection
+      ? collectCommittedWikiTermsResult(request.committed, qualifiedTermProducers)
+      : Object.freeze({ status: "censored" as const, events: Object.freeze([]) });
+    const fittingResult = permissions.phoneticFitting
+      ? fitCommittedWikiTextResult(
+          basis.fitSnapshot,
+          request.observed,
+          qualifiedAliasProducers,
+        )
+      : Object.freeze({ status: "censored" as const, events: Object.freeze([]) });
+    const events = combineWikiAdmissionEvidence(termResult.events, fittingResult.events);
+    const termEvents = events.filter((event) => event.source === "recent-material");
+    const fittingEvents = fittingResult.events;
+    const overflow = events.length > MAX_WIKI_OBSERVATIONS_PER_BATCH;
+    const termContent = permissions.automaticCollection &&
+      hasWikiAdmissionContent(request.committed, "evidence");
+    const aliasContent = permissions.phoneticFitting &&
+      request.observed.channel === "spoken" &&
+      hasWikiAdmissionContent(request.observed, "matching");
+    const dispositions: WikiObservationDispositions = Object.freeze({
+      term: !permissions.automaticCollection
+        ? "paused"
+        : overflow || termResult.status === "censored" || !termContent
+          ? "censored"
+          : termEvents.length > 0 ? "observed" : "quiet",
+      alias: !permissions.phoneticFitting
+        ? "paused"
+        : overflow || fittingResult.status === "censored" || !aliasContent
+          ? "censored"
+          : fittingEvents.length > 0 ? "observed" : "quiet",
+    });
+    const result = await publishChanged(matterWikiCoordinator.observe(
+      overflow ? Object.freeze([]) : events,
+      dispositions,
+      Object.freeze({
+        generation: basis.snapshot.generation,
+        stateRevision: basis.stateRevision,
+      }),
+    ));
+    if (result.ok || result.code !== "STALE_VIEW") return;
+  }
 }
 
 export const subscribeMatterWikiAuthority = matterWikiCoordinator.subscribe;
 export const readMatterWikiState = (): WikiState | null => matterWikiCoordinator.readState();
 export const getMatterWikiStatus = (): WikiCoordinatorStatus => matterWikiCoordinator.getStatus();
 export const retryMatterWikiAuthority = (): Promise<WikiCoordinatorStatus> =>
-  matterWikiCoordinator.retry();
+  runtime.retry();
 
 export function decideMatterWiki(
   event: WikiDecision,
@@ -92,6 +253,6 @@ async function publishChanged(
   operation: Promise<WikiCoordinatorResult>,
 ): Promise<WikiCoordinatorResult> {
   const result = await operation;
-  if (result.ok && result.changed) runtime.generationChannel.publish(result.generation);
+  if (result.ok) runtime.announceGeneration(result.generation);
   return result;
 }
