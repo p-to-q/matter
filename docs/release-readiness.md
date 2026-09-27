@@ -2,16 +2,16 @@
 
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
 the complete generative product loop yet. The current deployable source
-identifies `0.2.0-preview.63`; its local Wiki automation receipt is recorded
-below, while its exact PR, merged-main CI, Production deployment, and public
-readback are still pending. Preview.62 remains the last verified Production
-identity: PR #119 merged to `main` at
-`2345b24a829c6b0460d21e389fb39f31464f4360`; the exact merged-main CI completed
-successfully, the linked Production deployment completed successfully, and a
-fresh no-store read from `https://matter.ptoq.io/api/health` identified
-Preview.62 with `age: 0` and a cache miss. That is deployed source identity,
-not an immutable release: no Preview.62 or Preview.63 tag or GitHub prerelease
-exists.
+identifies `0.2.0-preview.63`. PR #121 introduced the bounded local Wiki slice;
+PR #122 refreshed its source-bound qualification receipt after the reviewed
+release-reconciliation fix, yielding final source commit
+`c691cc73f76c98ecf5cf83d425898d1b19023300`. Exact merged-main CI run
+`36335534841` completed successfully, linked Production deployment
+`6695177071` completed successfully, and a fresh no-store read from
+`https://matter.ptoq.io/api/health` identified Preview.63 with `age: 0` and a
+cache miss. The bounded `browser-preview` deployment checker matched in one
+probe. That is deployed source identity, not an immutable release: no
+Preview.63 tag or GitHub prerelease exists.
 
 The same fresh public receipt keeps both material model surfaces
 `unavailable`, and the anonymous `provider-session/4` receipt returns the exact
@@ -143,16 +143,18 @@ Wiki prompt injection, runtime network lookup, broader regional fuzzy rules,
 hidden retrieval, and Material Undo coupling remain **NO-GO**.
 
 The exact local Preview.63 candidate passed `npm run check`: 155 Node boundary
-tests, 326 Markdown files, the 576-file / 8-layer architecture gate, 2,998
-Vitest cases with five explicit skips, type generation, TypeScript,
-zero-warning lint, the production build, and the runtime-artifact budget. Its
-focused Chromium Wiki matrix passed 4/4 cases, including manual authority,
-spoken fixture admission, persistence/reload, mobile touch sizing, and medium
-layout. An independent verifier found no P0 or P1 blocker. Pull-request CI,
-merged-main CI, Production deployment, and public-origin readback remain
-pending. Local qualification is capability evidence, not a production
-deployment receipt; exact GitHub identities are recorded only after those
-gates complete.
+tests, 326 Markdown files, the 576-file / 8-layer architecture gate, type
+generation, TypeScript, zero-warning lint, the production build, and the
+runtime-artifact budget. Its focused Chromium Wiki matrix passed 4/4 cases,
+including manual authority, spoken fixture admission, persistence/reload,
+mobile touch sizing, and medium layout. An independent verifier found no P0 or
+P1 blocker. The final PR #122 head then passed CI run `36334852074`; exact
+merged-main CI run `36335534841` passed 155 Node boundary tests, 3,002 Vitest
+cases with four explicit skips, all type/build/artifact gates, and 176 Chromium
+cases. Production deployment `6695177071` and the public-origin
+`browser-preview` readback passed for that exact source. Local qualification is
+capability evidence and this is a deployed-source receipt, not authorization
+for immutable publication or broader model authority.
 
 Local e2e uses `MATTER_TRANSCRIPTION_ADAPTER=fixture` to prove the strict HTTP
 boundary. The dedicated public preview uses `MATTER_TRANSCRIPTION_ADAPTER=browser`:
