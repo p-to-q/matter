@@ -38,6 +38,10 @@ const SEED_MATERIAL_COPY_CHUNK_SENTINEL = "matter-seeded-material-copy";
 const OFFLINE_WIKI_QUALIFICATION_SENTINELS = Object.freeze([
   "double-metaphone",
   "pinyin-pro",
+  // Package names may disappear during bundling. These stable data/code
+  // literals catch the corresponding offline engines after minification.
+  "ORCHES|ARCHIT|ORCHID",
+  "bǎng páng pāng",
 ]);
 
 export function inspectRuntimeArtifact(metrics) {

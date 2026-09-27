@@ -26,6 +26,9 @@ const ENGLISH_VOICE_LABELS = Object.freeze({
   recordTopLevelThought: voiceToolCopy("en-US").recordTopLevelThought,
   stopRecording: voiceToolCopy("en-US").stopRecording,
 });
+// MediaRecorder emits 250 ms chunks. One bounded interval plus scheduling
+// headroom proves that the synthetic fixture contains audio before Stop.
+const MIN_SYNTHETIC_CAPTURE_MS = 350;
 
 test.describe.configure({ timeout: 300_000 });
 
@@ -458,7 +461,10 @@ async function admitVoice(
   const stop = page.getByRole("navigation", { name: labels.editingTools })
     .getByRole("button", { name: labels.stopRecording, exact: true });
   await expect(stop).toBeVisible({ timeout: 30_000 });
-  await page.waitForTimeout(350);
+  const captureStartedAt = Date.now();
+  await expect.poll(() => Date.now() - captureStartedAt, {
+    timeout: MIN_SYNTHETIC_CAPTURE_MS + 1_000,
+  }).toBeGreaterThanOrEqual(MIN_SYNTHETIC_CAPTURE_MS);
   await stop.click();
   await expect(page.locator("[data-thought-id]")).toHaveCount(expectedNodeCount, {
     timeout: 10_000,

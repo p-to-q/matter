@@ -834,6 +834,95 @@ describe("Wiki evidence and authority", () => {
     expect(projectApplicableWikiRules(state, withoutCollector)).toEqual([]);
   });
 
+  it("advances one revision when release reconciliation is the only batch change", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    });
+    const alias = {
+      ...observe("machine-inference"),
+      canonical: "Engelbart",
+      producer: "en-metaphone-v1" as const,
+    };
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [alias]);
+    }
+    expect(state.aliasEvidence[0]).toMatchObject({ phase: "active" });
+
+    const previousRevision = state.revision;
+    const reconciled = applyWikiObservationBatch(
+      state,
+      [],
+      { term: "paused", alias: "censored" },
+      new Set(),
+    );
+
+    expect(reconciled).toMatchObject({ ok: true, changed: true });
+    if (!reconciled.ok) return;
+    expect(reconciled.state.revision).toBe(previousRevision + 1);
+    expect(reconciled.state.aliasEvidence[0]).toMatchObject({ phase: "candidate" });
+  });
+
+  it("does not spend a second revision when aging already advanced the batch", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    });
+    const alias = {
+      ...observe("machine-inference"),
+      canonical: "Engelbart",
+      producer: "en-metaphone-v1" as const,
+    };
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [alias]);
+    }
+
+    const previousRevision = state.revision;
+    const reconciled = applyWikiObservationBatch(
+      state,
+      [],
+      { term: "paused", alias: "quiet" },
+      new Set(),
+    );
+
+    expect(reconciled).toMatchObject({ ok: true, changed: true });
+    if (!reconciled.ok) return;
+    expect(reconciled.state.revision).toBe(previousRevision + 1);
+    expect(reconciled.state.aliasEvidence[0]).toMatchObject({
+      phase: "candidate",
+      quietTurns: 1,
+    });
+  });
+
+  it("fails phase-only reconciliation at the revision bound", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Engelbart",
+      scope: "both",
+    });
+    const alias = {
+      ...observe("machine-inference"),
+      canonical: "Engelbart",
+      producer: "en-metaphone-v1" as const,
+    };
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [alias]);
+    }
+    const bounded = Object.freeze({ ...state, revision: Number.MAX_SAFE_INTEGER });
+
+    expect(applyWikiObservationBatch(
+      bounded,
+      [],
+      { term: "paused", alias: "censored" },
+      new Set(),
+    )).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+  });
+
   it("changes applicability without deleting disabled-channel lineage", () => {
     let state = apply(createEmptyWikiState(), {
       type: "create-lexeme",

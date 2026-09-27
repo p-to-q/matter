@@ -328,15 +328,22 @@ export function applyWikiObservationBatch(
     if (!result.ok) return result;
     working = result.state;
   }
-  working = reconcileAliasEvidencePhases(working, qualifiedAliasProducers);
+  const reconciled = reconcileAliasEvidencePhases(
+    working,
+    qualifiedAliasProducers,
+    working.revision === state.revision,
+  );
+  if (!reconciled.ok) return reconciled;
+  working = reconciled.state;
   return success(working, working !== state);
 }
 
 function reconcileAliasEvidencePhases(
   state: WikiState,
   qualifiedProducers: WikiAliasReleaseQualification,
-): WikiState {
-  if (state.aliasEvidence.length === 0) return state;
+  mustAdvanceRevision: boolean,
+): WikiTransitionResult {
+  if (state.aliasEvidence.length === 0) return success(state, false);
   const lexemes = new Map(state.lexemes.map((lexeme) => [lexeme.id, lexeme]));
   const groups = new Map<string, WikiAliasEvidenceAggregate[]>();
   for (const entry of state.aliasEvidence) {
@@ -365,9 +372,15 @@ function reconcileAliasEvidencePhases(
     changed = true;
     return Object.freeze({ ...entry, phase });
   });
-  if (!changed) return state;
-  const next = freezeWikiState({ ...state, aliasEvidence: Object.freeze(aliasEvidence) });
-  return validateWikiState(next).ok ? next : state;
+  if (!changed) return success(state, false);
+  if (mustAdvanceRevision && state.revision === Number.MAX_SAFE_INTEGER) {
+    return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
+  }
+  return commitAtRevision(
+    state,
+    mustAdvanceRevision ? state.revision + 1 : state.revision,
+    { aliasEvidence: Object.freeze(aliasEvidence) },
+  );
 }
 
 /** Clears learned and explicit authority without resetting monotonic lineage. */

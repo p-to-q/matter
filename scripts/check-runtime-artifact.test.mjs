@@ -161,6 +161,10 @@ test("reads root and server traces while budgeting every public asset", async ()
       ),
       writeFile(join(root, ".next/static/chunks/app.12345678.js"), "console.log('matter')"),
       writeFile(
+        join(root, ".next/static/chunks/offline-wiki.abcdef12.js"),
+        "const pronunciationDictionary = 'bǎng páng pāng';",
+      ),
+      writeFile(
         join(root, ".next/static/chunks/seed-localization.12345678.js"),
         "matter-seeded-session-localization matter-seeded-material-copy",
       ),
@@ -221,12 +225,15 @@ test("reads root and server traces while budgeting every public asset", async ()
       "chunks/seed-localization.12345678.js",
     ]);
     assert.deepEqual(metrics.seedMaterialCopyAssets, metrics.seedLocalizationAssets);
-    assert.deepEqual(metrics.offlineWikiQualificationAssets, []);
+    assert.deepEqual(metrics.offlineWikiQualificationAssets, [
+      "chunks/offline-wiki.abcdef12.js",
+    ]);
     const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
     assert.match(failures, /docs\/root\.md/u);
     assert.match(failures, /\.env\.local/u);
     assert.match(failures, /root\.test\.ts/u);
     assert.match(failures, /adm-zip/u);
+    assert.match(failures, /offline Wiki qualification metadata/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
