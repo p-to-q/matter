@@ -57,7 +57,7 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
       "locale-segment-v1": 1,
     }),
   }),
-  policySourceDigest: "sha256:0a6ac4068d09bcdea7966eabfa26961b27c939cfbf87934e76a7433b3d499cae",
+  policySourceDigest: "sha256:55ae9c27e8ee6f7b2b0bb0c848a27c7c441804c46c42e32b60468c5770c9f267",
   corpus: Object.freeze({
     corpusVersion: "wiki-learning-policy-v3-corpus/1",
     corpusDigest: "sha256:1966beb0b5336edbe83c81bc3c7955d870dc0325b35460edcdafac988e9e08ab",
