@@ -216,8 +216,12 @@ therefore cannot be reinterpreted as a locally short answer.
 
 The boundary is fail-closed for every explicit terminator. Known complete values
 may return text; truncation, guardrail/refusal, tool/continuation, conflicting
-fields, and explicit unknown values cannot. A missing field remains a counted
-compatibility path while deployed relays are measured. Production receipts keep
+fields, and explicit unknown values cannot. The managed pool and every
+compatible user transport read one shared vocabulary in `completion-outcome.ts`,
+so a terminator cannot answer on one lane and be refused on the other; official
+single-vendor wires keep their own narrower lists. A missing field remains a
+counted compatibility path for managed relays while they are measured; a
+reviewed user transport requires an explicit terminator. Production receipts keep
 only closed counts — attempt, timeout, failure, truncation, refusal, unknown,
 missing, and explicit-action scenario rejection — never the relay's raw
 vocabulary.

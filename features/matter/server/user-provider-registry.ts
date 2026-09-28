@@ -6,6 +6,7 @@ import {
   isValidUserProviderApiKey,
   normalizeUserProviderEndpoint,
 } from "../protocol/provider-session-contract";
+import { classifyCompletionTerminators } from "./completion-outcome";
 import type {
   PoolCandidate,
   PoolCompletionDisposition,
@@ -733,9 +734,11 @@ function chatTransport(input: Readonly<{
       ...(input.store === undefined ? {} : { store: input.store }),
       messages: [{ role: "user", content: call.prompt }],
     }),
+    // A compatible mirror reads the same relay families as the managed pool,
+    // so it shares that one stop vocabulary rather than keeping a drifting copy.
     parseCompletion: (payload) => parseChatCompletion(
       payload,
-      input.completion === "official" ? classifyOfficialChatCompletion : classifyCompatibleChatCompletion,
+      input.completion === "official" ? classifyOfficialChatCompletion : classifyCompletionTerminators,
     ),
   });
 }
@@ -926,30 +929,6 @@ function classifyOfficialChatCompletion(choice: Readonly<Record<string, unknown>
     case "tool_calls": return "tool-or-continuation";
     default: return "unknown-terminator";
   }
-}
-
-function classifyCompatibleChatCompletion(choice: Readonly<Record<string, unknown>>): PoolCompletionDisposition {
-  const raw = [choice.finish_reason, choice.stop_reason];
-  if (raw.some((reason) => reason !== undefined && reason !== null && typeof reason !== "string")) {
-    return "unknown-terminator";
-  }
-  const reasons = raw
-    .filter((reason): reason is string => typeof reason === "string")
-    .map((reason) => reason.trim().toLowerCase());
-  if (reasons.length === 0) return "missing";
-  if (reasons.some((reason) => reason.length === 0)) return "unknown-terminator";
-  const dispositions = reasons.map((reason): PoolCompletionDisposition => {
-    if (reason === "stop" || reason === "end_turn" || reason === "stop_sequence") return "complete";
-    if (reason === "length" || reason === "max_tokens") return "truncated";
-    if (reason === "content_filter" || reason === "refusal" || reason === "safety") return "blocked-or-refused";
-    if (reason === "function_call" || reason === "tool_calls" || reason === "tool_use") return "tool-or-continuation";
-    return "unknown-terminator";
-  });
-  if (dispositions.every((value) => value === "complete")) return "complete";
-  if (dispositions.includes("unknown-terminator")) return "unknown-terminator";
-  if (dispositions.includes("blocked-or-refused")) return "blocked-or-refused";
-  if (dispositions.includes("tool-or-continuation")) return "tool-or-continuation";
-  return "truncated";
 }
 
 function acceptsJsonResponse(response: Response): boolean {
