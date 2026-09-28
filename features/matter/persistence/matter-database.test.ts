@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import {
   createMatterDatabaseHandle,
+  MATTER_DATABASE_VERSION,
   MAX_CACHED_MODEL_LABELS,
 } from "./matter-database";
 
@@ -164,6 +165,35 @@ describe("Matter database upgrades", () => {
     );
 
     expect(createObjectStore).toHaveBeenCalledExactlyOnceWith("wiki", { keyPath: "key" });
+  });
+
+  it("adds the per-step undo journal store at v6 without touching stored rows", async () => {
+    const createObjectStore = vi.fn().mockReturnValue({});
+    const database = {
+      objectStoreNames: { contains: (name: string) => name !== "historyEntries" },
+      createObjectStore,
+      close: vi.fn(),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const handle = createMatterDatabaseHandle();
+
+    await handle.open();
+    expect(vi.mocked(openDB).mock.calls[0]?.[1]).toBe(MATTER_DATABASE_VERSION);
+    expect(MATTER_DATABASE_VERSION).toBe(6);
+    const objectStore = vi.fn(() => ({ indexNames: { contains: () => true } }));
+    vi.mocked(openDB).mock.calls[0]?.[2]?.upgrade?.(
+      database as never,
+      5,
+      6,
+      { objectStore } as never,
+      new Event("upgradeneeded") as IDBVersionChangeEvent,
+    );
+
+    expect(createObjectStore).toHaveBeenCalledExactlyOnceWith("historyEntries", {
+      keyPath: ["treeId", "epoch", "stack", "position"],
+    });
+    // Legacy inline journals migrate lazily on each row's first save.
+    expect(objectStore).not.toHaveBeenCalledWith("snapshots");
   });
 
   it("rejects a blocked open and lets an explicit retry create a new attempt", async () => {

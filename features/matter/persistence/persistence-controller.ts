@@ -3,17 +3,39 @@ import type {
   DocumentRepository,
   ImportedSnapshotReservation,
   RepositoryErrorCode,
+  RepositoryResult,
+  SnapshotBasis,
 } from "./document-repository";
-import { treeToBundle } from "./snapshot-codec";
+import {
+  emptyHistoryJournal,
+  FULL_HISTORY_RETENTION,
+  shedHistoryRetention,
+  type HistoryRetention,
+} from "./history-journal";
+import type { RecoveredHistory } from "./history-recovery";
+import { treeToBundle, type SnapshotBundle } from "./snapshot-codec";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
 import { createTreeHistory, type TreeHistory } from "../tree/history";
+
+/**
+ * `released`: storage pressure kept material durable by saving fewer undo
+ * steps than this tab still holds. `unavailable`: stored or in-memory undo
+ * steps could not be restored or no longer applied, and were released.
+ */
+export type HistoryNotice = "released" | "unavailable";
 
 export type PersistenceStatus = Readonly<{
   phase: "loading" | "saved" | "saving" | "error";
   persistedRevision: number | null;
   dirtyRevision: number | null;
   errorCode: RepositoryErrorCode | null;
+  historyNotice: HistoryNotice | null;
+}>;
+
+export type StoredDocument = Readonly<{
+  storedTree: ThoughtTree | null;
+  storedHistory: RecoveredHistory | null;
 }>;
 
 export type ImportedDocumentPreparation = Readonly<{
@@ -31,10 +53,7 @@ export type ImportedDocumentRejection = Readonly<{
 }>;
 
 export type PersistenceController = Readonly<{
-  start(tree: ThoughtTree, history?: TreeHistory): Promise<Readonly<{
-    storedTree: ThoughtTree | null;
-    storedHistory: unknown | null;
-  }>>;
+  start(tree: ThoughtTree, history?: TreeHistory): Promise<StoredDocument>;
   publish(tree: ThoughtTree, history?: TreeHistory): void;
   prepareImportedTree(tree: ThoughtTree): Promise<ImportedDocumentPreparation | ImportedDocumentRejection>;
   activateImportedDocument(prepared: ImportedDocumentPreparation): void;
@@ -54,12 +73,22 @@ export type PersistenceController = Readonly<{
    */
   declareConflict(tree: ThoughtTree, history?: TreeHistory): void;
   retry(): void;
-  resolveConflict(): Promise<Readonly<{ storedTree: ThoughtTree | null; storedHistory: unknown | null }>>;
+  resolveConflict(): Promise<StoredDocument>;
+  /** Undo steps were released because they could not be restored or applied. */
+  reportHistoryUnavailable(): void;
+  /** The person has seen the history notice where recovery lives. */
+  acknowledgeHistoryNotice(): void;
   flush(): void;
   dispose(): void;
   getStatus(): PersistenceStatus;
   subscribe(listener: () => void): () => void;
 }>;
+
+type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
+
+const NO_STORED_DOCUMENT: StoredDocument = Object.freeze({ storedTree: null, storedHistory: null });
+/** No row is known: the first save creates one, or meets another tab's as a conflict. */
+const UNKNOWN_BASIS: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
 
 export function createPersistenceController(repository: DocumentRepository): PersistenceController {
   let active = true;
@@ -67,30 +96,71 @@ export function createPersistenceController(repository: DocumentRepository): Per
   let writing = false;
   let activeTreeId: string | null = null;
   let documentEpoch = 0;
-  let baseGeneration: number | null = null;
-  let pending: Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null = null;
-  let writingDocument: Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null = null;
+  let basis: SnapshotBasis = UNKNOWN_BASIS;
+  // Storage pressure lowers durable history for the rest of the document
+  // epoch; an explicit retry or a new document restores full retention.
+  let retention: HistoryRetention = FULL_HISTORY_RETENTION;
+  let pending: PendingDocument | null = null;
+  let writingDocument: PendingDocument | null = null;
   let importAttemptSequence = 0;
   let activeImportAttempt: number | null = null;
   let corruptRecovery: Readonly<{
     basis: CorruptSnapshotBasis;
     documentEpoch: number;
-    dirtyDocument: Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
+    dirtyDocument: PendingDocument;
   }> | null = null;
   let status: PersistenceStatus = Object.freeze({
     phase: "loading",
     persistedRevision: null,
     dirtyRevision: null,
     errorCode: null,
+    historyNotice: null,
   });
   const listeners = new Set<() => void>();
   // Async repository writes may overlap a publish() call; reading through this
   // seam prevents compile-time narrowing from erasing that runtime transition.
-  const currentPending = (): Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null => pending;
+  const currentPending = (): PendingDocument | null => pending;
 
   const update = (next: PersistenceStatus) => {
     status = Object.freeze(next);
     for (const listener of listeners) listener();
+  };
+
+  const beginDocument = (treeId: string) => {
+    activeImportAttempt = null;
+    corruptRecovery = null;
+    activeTreeId = treeId;
+    documentEpoch += 1;
+    basis = UNKNOWN_BASIS;
+    retention = FULL_HISTORY_RETENTION;
+  };
+
+  /**
+   * Material before history: when storage refuses the write, the same
+   * transaction is retried with fewer durable undo steps before the save is
+   * reported as storage-full. Only a snapshot that cannot fit alone fails.
+   */
+  const saveShedding = async (
+    document: PendingDocument,
+    bundle: SnapshotBundle,
+    saveEpoch: number,
+  ): Promise<Readonly<{ saved: RepositoryResult<SnapshotBasis>; retention: HistoryRetention }>> => {
+    let attempt = retention;
+    for (;;) {
+      const saved = await repository.save({
+        treeId: document.tree.id,
+        treeRevision: document.tree.revision,
+        bundle,
+        basis,
+        history: document.history,
+        retention: attempt,
+      });
+      if (saved.ok || saved.error.code !== "PERSISTENCE_STORAGE_FULL") return { saved, retention: attempt };
+      if (!active || saveEpoch !== documentEpoch) return { saved, retention: attempt };
+      const next = shedHistoryRetention(document.history, attempt);
+      if (next === null) return { saved, retention: attempt };
+      attempt = next;
+    }
   };
 
   const drain = async () => {
@@ -101,10 +171,10 @@ export function createPersistenceController(repository: DocumentRepository): Per
       const pendingDocument = pending;
       pending = null;
       writingDocument = pendingDocument;
-      const { tree, history } = pendingDocument;
+      const { tree } = pendingDocument;
       update({
+        ...status,
         phase: "saving",
-        persistedRevision: status.persistedRevision,
         dirtyRevision: tree.revision,
         errorCode: null,
       });
@@ -116,20 +186,23 @@ export function createPersistenceController(repository: DocumentRepository): Per
         update({ ...status, phase: "error", dirtyRevision: tree.revision, errorCode: "PERSISTENCE_WRITE_FAILED" });
         break;
       }
-      const saved = await repository.save(tree.id, tree.revision, bundle, baseGeneration, history);
+      const { saved, retention: savedRetention } = await saveShedding(pendingDocument, bundle, drainEpoch);
       if (!active || drainEpoch !== documentEpoch || tree.id !== activeTreeId) break;
       if (!saved.ok) {
         pending ??= pendingDocument;
         update({ ...status, phase: "error", dirtyRevision: pending.tree.revision, errorCode: saved.error.code });
         break;
       }
-      baseGeneration = saved.value;
+      basis = saved.value;
+      const shed = savedRetention !== retention;
+      retention = savedRetention;
       const queuedAfterWrite = currentPending();
       update({
         phase: queuedAfterWrite === null ? "saved" : "saving",
         persistedRevision: tree.revision,
         dirtyRevision: queuedAfterWrite?.tree.revision ?? null,
         errorCode: null,
+        historyNotice: shed ? "released" : status.historyNotice,
       });
     }
     writingDocument = null;
@@ -137,30 +210,45 @@ export function createPersistenceController(repository: DocumentRepository): Per
     if (active && pending !== null && status.phase !== "error") void drain();
   };
 
+  const adoptLoaded = (
+    loaded: Readonly<{ tree: ThoughtTree; history: RecoveredHistory; basis: SnapshotBasis }>,
+  ): StoredDocument => {
+    basis = loaded.basis;
+    update({
+      phase: "saved",
+      persistedRevision: loaded.tree.revision,
+      dirtyRevision: null,
+      errorCode: null,
+      historyNotice: null,
+    });
+    return Object.freeze({ storedTree: loaded.tree, storedHistory: loaded.history });
+  };
+
   return Object.freeze({
     async start(tree, history = createTreeHistory()) {
-      activeImportAttempt = null;
-      corruptRecovery = null;
-      activeTreeId = tree.id;
-      documentEpoch += 1;
+      beginDocument(tree.id);
       const startEpoch = documentEpoch;
       const loaded = await repository.load(tree.id);
-      if (!active || startEpoch !== documentEpoch) return Object.freeze({ storedTree: null, storedHistory: null });
+      if (!active || startEpoch !== documentEpoch) return NO_STORED_DOCUMENT;
       if (!loaded.ok) {
         ready = true;
         pending = Object.freeze({ tree, history });
-        update({ phase: "error", persistedRevision: null, dirtyRevision: tree.revision, errorCode: loaded.error.code });
-        return Object.freeze({ storedTree: null, storedHistory: null });
+        update({
+          phase: "error",
+          persistedRevision: null,
+          dirtyRevision: tree.revision,
+          errorCode: loaded.error.code,
+          historyNotice: null,
+        });
+        return NO_STORED_DOCUMENT;
       }
       ready = true;
-      baseGeneration = loaded.value?.writeGeneration ?? null;
       if (loaded.value === null) {
         pending = Object.freeze({ tree, history });
         void drain();
-        return Object.freeze({ storedTree: null, storedHistory: null });
+        return NO_STORED_DOCUMENT;
       }
-      update({ phase: "saved", persistedRevision: loaded.value.tree.revision, dirtyRevision: null, errorCode: null });
-      return Object.freeze({ storedTree: loaded.value.tree, storedHistory: loaded.value.history ?? null });
+      return adoptLoaded(loaded.value);
     },
 
     publish(tree, history = createTreeHistory()) {
@@ -224,7 +312,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
         tree.id,
         tree.revision,
         bundle,
-        loaded.value?.writeGeneration ?? null,
+        loaded.value?.basis.writeGeneration ?? null,
       );
       if (!active || activeImportAttempt !== attemptId) {
         if (reserved.ok) await repository.rollbackImportedSnapshot(reserved.value);
@@ -236,7 +324,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
         attemptId,
         createdSnapshot: loaded.value === null,
         tree,
-        writeGeneration: reserved.value.imported.writeGeneration,
+        writeGeneration: reserved.value.basis.writeGeneration,
         reservation: reserved.value,
       });
     },
@@ -245,18 +333,16 @@ export function createPersistenceController(repository: DocumentRepository): Per
       if (activeImportAttempt !== prepared.attemptId) return;
       // Late writes from the previous document are ignored by their epoch once
       // this switch takes effect; the imported tree already has a successful CAS.
-      activeImportAttempt = null;
-      corruptRecovery = null;
-      documentEpoch += 1;
-      activeTreeId = prepared.tree.id;
+      beginDocument(prepared.tree.id);
       ready = true;
-      baseGeneration = prepared.writeGeneration;
+      basis = prepared.reservation.basis;
       pending = null;
       update({
         phase: "saved",
         persistedRevision: prepared.tree.revision,
         dirtyRevision: null,
         errorCode: null,
+        historyNotice: null,
       });
     },
 
@@ -282,8 +368,13 @@ export function createPersistenceController(repository: DocumentRepository): Per
         }
         return errorCode;
       }
-      if (prepared.tree.id === activeTreeId) {
-        baseGeneration = rolledBack.value.writeGeneration;
+      // Rollback restores the exact row the import replaced, journal included.
+      // Only when that row is the one this basis describes does the restored
+      // generation become the CAS basis; otherwise another tab wrote it, and
+      // the next save must meet that newer row as a conflict.
+      const previousGeneration = prepared.reservation.previous?.writeGeneration ?? null;
+      if (prepared.tree.id === activeTreeId && previousGeneration === basis.writeGeneration) {
+        basis = Object.freeze({ writeGeneration: rolledBack.value.writeGeneration, journal: basis.journal });
       }
       if (active && pending !== null && status.phase !== "error") void drain();
       return null;
@@ -339,13 +430,13 @@ export function createPersistenceController(repository: DocumentRepository): Per
       } catch {
         return Object.freeze({ ok: false, errorCode: "PERSISTENCE_WRITE_FAILED" });
       }
-      const replaced = await repository.replaceCorrupt(
-        replacement.tree.id,
-        replacement.tree.revision,
+      const replaced = await repository.replaceCorrupt({
+        treeId: replacement.tree.id,
+        treeRevision: replacement.tree.revision,
         bundle,
-        replacement.history,
-        recovery.basis,
-      );
+        history: replacement.history,
+        retention,
+      }, recovery.basis);
       if (!replaced.ok) {
         corruptRecovery = null;
         update({ ...status, errorCode: replaced.error.code });
@@ -355,10 +446,11 @@ export function createPersistenceController(repository: DocumentRepository): Per
       if (!active || recovery.documentEpoch !== documentEpoch || replacement.tree.id !== activeTreeId) {
         return Object.freeze({ ok: false, errorCode: "PERSISTENCE_CONFLICT" });
       }
-      baseGeneration = replaced.value;
+      basis = replaced.value;
       if (pending === replacement) pending = null;
       const queued = pending;
       update({
+        ...status,
         phase: queued === null ? "saved" : "saving",
         persistedRevision: replacement.tree.revision,
         dirtyRevision: queued?.tree.revision ?? null,
@@ -372,8 +464,8 @@ export function createPersistenceController(repository: DocumentRepository): Per
       if (!active || !ready || tree.id !== activeTreeId) return;
       pending = Object.freeze({ tree, history });
       update({
+        ...status,
         phase: "error",
-        persistedRevision: status.persistedRevision,
         dirtyRevision: tree.revision,
         errorCode: "PERSISTENCE_CONFLICT",
       });
@@ -382,17 +474,18 @@ export function createPersistenceController(repository: DocumentRepository): Per
     retry() {
       if (!active || !ready || pending === null) return;
       if (status.errorCode === "PERSISTENCE_CONFLICT" || status.errorCode === "PERSISTENCE_CORRUPT") return;
+      retention = FULL_HISTORY_RETENTION;
       update({ ...status, phase: "saving", errorCode: null });
       void drain();
     },
 
     async resolveConflict() {
       if (!active || !ready || pending === null || status.errorCode !== "PERSISTENCE_CONFLICT") {
-        return Object.freeze({ storedTree: null, storedHistory: null });
+        return NO_STORED_DOCUMENT;
       }
       const dirtyDocument = pending;
       const loaded = await repository.load(dirtyDocument.tree.id);
-      if (!active) return Object.freeze({ storedTree: null, storedHistory: null });
+      if (!active) return NO_STORED_DOCUMENT;
       if (!loaded.ok || loaded.value === null) {
         update({
           ...status,
@@ -400,20 +493,24 @@ export function createPersistenceController(repository: DocumentRepository): Per
           dirtyRevision: pending?.tree.revision ?? dirtyDocument.tree.revision,
           errorCode: loaded.ok ? "PERSISTENCE_CONFLICT" : loaded.error.code,
         });
-        return Object.freeze({ storedTree: null, storedHistory: null });
+        return NO_STORED_DOCUMENT;
       }
       // A commit after the explicit reload gesture wins locally. It keeps the
       // conflict unresolved rather than being silently discarded by hydration.
-      if (pending !== dirtyDocument) return Object.freeze({ storedTree: null, storedHistory: null });
+      if (pending !== dirtyDocument) return NO_STORED_DOCUMENT;
       pending = null;
-      baseGeneration = loaded.value.writeGeneration;
-      update({
-        phase: "saved",
-        persistedRevision: loaded.value.tree.revision,
-        dirtyRevision: null,
-        errorCode: null,
-      });
-      return Object.freeze({ storedTree: loaded.value.tree, storedHistory: loaded.value.history ?? null });
+      retention = FULL_HISTORY_RETENTION;
+      return adoptLoaded(loaded.value);
+    },
+
+    reportHistoryUnavailable() {
+      if (!active || status.historyNotice === "unavailable") return;
+      update({ ...status, historyNotice: "unavailable" });
+    },
+
+    acknowledgeHistoryNotice() {
+      if (!active || status.historyNotice === null) return;
+      update({ ...status, historyNotice: null });
     },
 
     flush() {

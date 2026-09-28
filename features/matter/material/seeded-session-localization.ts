@@ -161,7 +161,7 @@ function isOwnedSeedNode(node: ThoughtNode, spec: BootstrapNode): boolean {
 
 function historyBytesAreExact(history: TreeHistory): boolean {
   let total = 0;
-  for (const entry of [...history.entries, ...(history.redoEntries ?? [])]) {
+  for (const entry of [...history.entries, ...history.redoEntries]) {
     const bytes = estimateSerializedInverseBytes(entry.inverse);
     if (entry.retainedInverseBytes !== bytes) return false;
     total += bytes;
@@ -175,7 +175,7 @@ function localizeSeededHistory(
   locale: MatterLocale,
 ): Readonly<{ changed: boolean; history: TreeHistory }> | null {
   const entries = localizeHistoryEntries(history.entries, locale);
-  const redoEntries = localizeHistoryEntries(history.redoEntries ?? [], locale);
+  const redoEntries = localizeHistoryEntries(history.redoEntries, locale);
   if (entries === null || redoEntries === null) return null;
   const changed = entries.changed || redoEntries.changed;
   if (!changed) return Object.freeze({ changed: false, history });

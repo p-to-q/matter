@@ -129,7 +129,7 @@ describe("rooted material fixture", () => {
     );
     if (!firstCommit.ok) throw new Error(firstCommit.error.code);
 
-    const undone = undoTreeHistory(firstCommit.tree, firstCommit.history);
+    const undone = undoTreeHistory(firstCommit.tree, firstCommit.history, TEST_HISTORY_LIMITS);
     if (!undone.ok) throw new Error(undone.error.code);
     const secondCommand = createBranchChildCommand(
       undone.tree,

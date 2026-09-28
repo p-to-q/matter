@@ -94,6 +94,8 @@ export type MaterialFilesProps = Readonly<{
     status: PersistenceStatus;
     retry: () => void;
     resolveConflict: () => void;
+    /** Opening Archive, where recovery lives, is where the notice is read. */
+    acknowledgeHistoryNotice?: () => void;
   }>;
 }>;
 
@@ -1013,6 +1015,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                     setArchiveError(null);
                     setPreparedImport(null);
                     setMode("archive");
+                    props.persistence.acknowledgeHistoryNotice?.();
                   }}
                   type="button"
                 >
@@ -1374,7 +1377,13 @@ export function MaterialFiles(props: MaterialFilesProps) {
             <span className="material-files__profile-copy">
               <span className="material-files__profile-name">{copy.identityName}</span>
               <span className="material-files__profile-meta">
-                {showSaving && !persistenceFailed ? copy.saving : copy.localOnly}
+                {showSaving && !persistenceFailed
+                  ? copy.saving
+                  : props.persistence.status.historyNotice === "unavailable"
+                    ? copy.historyUnavailable
+                    : props.persistence.status.historyNotice === "released"
+                      ? copy.historyReleased
+                      : copy.localOnly}
                 {showSaving && !persistenceFailed ? (
                   <span
                     aria-hidden="true"

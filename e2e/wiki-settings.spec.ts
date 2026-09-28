@@ -517,7 +517,7 @@ async function readStoredWikiTerm(
   canonical: string,
 ): Promise<{ support: number; phase: string } | null> {
   return page.evaluate(async (requestedCanonical) => {
-    const open = indexedDB.open("ptoq-matter", 5);
+    const open = indexedDB.open("ptoq-matter");
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
@@ -552,7 +552,7 @@ async function readStoredWikiAlias(
   writeGeneration: number;
 } | null> {
   return page.evaluate(async ({ requestedCanonical, requestedForm }) => {
-    const open = indexedDB.open("ptoq-matter", 5);
+    const open = indexedDB.open("ptoq-matter");
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
@@ -592,7 +592,7 @@ async function readStoredWikiAlias(
 
 async function readStoredWikiGeneration(page: Page): Promise<number> {
   return page.evaluate(async () => {
-    const open = indexedDB.open("ptoq-matter", 5);
+    const open = indexedDB.open("ptoq-matter");
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);

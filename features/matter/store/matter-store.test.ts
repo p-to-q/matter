@@ -18,6 +18,7 @@ import { relocalizeSeededSession } from "../material/seeded-session-localization
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
+import type { TreeHistory } from "../tree/history";
 import { buildTransformPlan, parseTransformEnvelope } from "../protocol/transform-contract";
 import { buildTextSwapPlan, parseTextSwapEnvelope } from "../protocol/text-swap-contract";
 import { selectLineage } from "../tree/selectors";
@@ -679,7 +680,7 @@ describe("Matter store", () => {
     const tree = structuredClone(source.getState().tree) as ThoughtTree;
     const history = structuredClone(source.getState().history);
     const restored = createMatterStore("root", { documentRoot: true });
-    expect(restored.getState().hydrateSnapshot(tree, history)).toMatchObject({ status: "hydrated" });
+    expect(restored.getState().hydrateSnapshot(tree, recovered(history))).toMatchObject({ status: "hydrated" });
     expect(restored.getState().undo()).toMatchObject({ status: "committed" });
     expect(restored.getState().tree.nodes.voice_node_reload.text).toBe("呃，我觉得可以。");
     expect(restored.getState().undo()).toMatchObject({ status: "committed" });
@@ -696,13 +697,78 @@ describe("Matter store", () => {
     const persistedHistory = structuredClone(source.getState().history);
 
     const restored = createMatterStore("root", { documentRoot: true });
-    expect(restored.getState().hydrateSnapshot(persistedTree, persistedHistory)).toMatchObject({
+    expect(restored.getState().hydrateSnapshot(persistedTree, recovered(persistedHistory))).toMatchObject({
       operation: "hydrate",
       status: "hydrated",
+      historyReleased: false,
     });
     expect(restored.getState().history.entries).toHaveLength(1);
     expect(restored.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(restored.getState().tree.nodes[rootId]?.children).toEqual(childrenBeforeCommit);
+  });
+
+  it("reports a stored journal whose next Undo no longer applies and releases that stack", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    source.getState().extendMaterial(rootId, branchValues());
+    const persistedHistory = structuredClone(source.getState().history);
+    source.getState().extendMaterial(rootId, branchValues());
+    // The stored tree moved on without its journal: the top inverse is stale.
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(persistedTree, recovered(persistedHistory))).toMatchObject({
+      status: "hydrated",
+      historyReleased: true,
+    });
+    expect(restored.getState().tree).toEqual(persistedTree);
+    expect(restored.getState().history.entries).toEqual([]);
+  });
+
+  it("carries a storage-side release through hydration even when the rest restores", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    source.getState().extendMaterial(rootId, branchValues());
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(
+      persistedTree,
+      recovered(source.getState().history, true),
+    )).toMatchObject({ status: "hydrated", historyReleased: true });
+    expect(restored.getState().history.entries).toHaveLength(1);
+  });
+
+  it("releases an undo stack whose restored step fails at use without changing material", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    source.getState().extendMaterial(rootId, branchValues());
+    source.getState().extendMaterial(rootId, branchValues());
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+    const persistedHistory = structuredClone(source.getState().history) as TreeHistory;
+    // Only the top is dry-run on hydration; a deeper damaged step waits.
+    const [oldest, newest] = persistedHistory.entries;
+    if (oldest === undefined || newest === undefined) throw new Error("two steps expected");
+    persistedHistory.entries = [{ ...oldest, inverse: { ...oldest.inverse, expectedTreeId: "another" } }, newest];
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(persistedTree, recovered(persistedHistory))).toMatchObject({
+      historyReleased: false,
+    });
+    expect(restored.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    const beforeFailure = restored.getState().tree;
+    expect(restored.getState().undo()).toMatchObject({
+      operation: "undo",
+      status: "rejected",
+      errorCode: "HISTORY_UNAVAILABLE",
+    });
+    expect(restored.getState().tree).toBe(beforeFailure);
+    expect(restored.getState().history.entries).toEqual([]);
+    expect(restored.getState().history.redoEntries).toHaveLength(1);
+    expect(restored.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
   });
 
   it("creates isolated deterministic sessions", () => {
@@ -1332,6 +1398,7 @@ describe("Matter store", () => {
       operation: "hydrate",
       status: "hydrated",
       revision: storedTree.revision,
+      historyReleased: false,
     });
     expect(store.getState().tree).toEqual(storedTree);
     expect(store.getState().history.entries).toEqual([]);
@@ -1373,6 +1440,10 @@ describe("Matter store", () => {
     });
   });
 });
+
+function recovered(history: unknown, released = false) {
+  return { history: structuredClone(history) as TreeHistory, released };
+}
 
 let branchSequence = 0;
 function branchValues() {

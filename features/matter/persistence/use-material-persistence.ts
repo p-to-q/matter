@@ -5,15 +5,16 @@ import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
 import { createIndexedDbDocumentRepository } from "./document-repository";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
+import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
 import { createPersistenceController } from "./persistence-controller";
-import type { DocumentSwitchReceipt } from "../store/matter-store";
+import type { DocumentSwitchReceipt, MatterStoreReceipt } from "../store/matter-store";
 
 export function useMaterialPersistence(
   tree: ThoughtTree,
   history: TreeHistory,
   documentEpoch: number,
-  hydrateSnapshot: (tree: ThoughtTree, history?: unknown) => unknown,
+  hydrateSnapshot: (tree: ThoughtTree, history?: RecoveredHistory | null) => MatterStoreReceipt,
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
 ) {
   const [controller] = useState(() =>
@@ -32,6 +33,14 @@ export function useMaterialPersistence(
     switchDocument,
     () => documentBasisOwner.read(),
   ), [controller, documentBasisOwner, switchDocument]);
+  // Stored steps that cannot be restored with their material are released in
+  // the store; the durability owner carries the one notice about it.
+  const hydrateStored = useCallback((storedTree: ThoughtTree, storedHistory: RecoveredHistory | null) => {
+    const receipt = hydrateSnapshot(storedTree, storedHistory);
+    if (receipt.operation === "hydrate" && receipt.status === "hydrated" && receipt.historyReleased) {
+      controller.reportHistoryUnavailable();
+    }
+  }, [controller, hydrateSnapshot]);
 
   useLayoutEffect(() => {
     latestTreeRef.current = tree;
@@ -48,7 +57,7 @@ export function useMaterialPersistence(
     void startPromiseRef.current.then(({ storedTree, storedHistory }) => {
       if (!active) return;
       const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, storedTree);
-      if (decision.action === "hydrate") hydrateSnapshot(decision.tree, storedHistory);
+      if (decision.action === "hydrate") hydrateStored(decision.tree, storedHistory);
       else if (decision.action === "publish") controller.publish(decision.tree, latestHistoryRef.current);
       // Material committed during the load window does not descend from the
       // stored session. Neither is written over the other; the index footer
@@ -67,7 +76,7 @@ export function useMaterialPersistence(
         if (lifecycleRef.current === lifecycle) controller.dispose();
       });
     };
-  }, [controller, hydrateSnapshot]);
+  }, [controller, hydrateStored]);
 
   useEffect(() => {
     if (startedRef.current) controller.publish(tree, history);
@@ -83,8 +92,8 @@ export function useMaterialPersistence(
 
   const resolveConflict = useCallback(async () => {
     const result = await controller.resolveConflict();
-    if (result.storedTree !== null) hydrateSnapshot(result.storedTree, result.storedHistory);
-  }, [controller, hydrateSnapshot]);
+    if (result.storedTree !== null) hydrateStored(result.storedTree, result.storedHistory);
+  }, [controller, hydrateStored]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
   return Object.freeze({
@@ -95,6 +104,8 @@ export function useMaterialPersistence(
     importMaterial: importCoordinator.importValidatedTree,
     exportCorruptRecovery: controller.exportCorruptRecovery,
     replaceCorrupt: controller.replaceCorrupt,
+    reportHistoryUnavailable: controller.reportHistoryUnavailable,
+    acknowledgeHistoryNotice: controller.acknowledgeHistoryNotice,
   });
 }
 

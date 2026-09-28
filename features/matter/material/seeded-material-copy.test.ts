@@ -176,7 +176,7 @@ describe("localized seeded material copy", () => {
     expect(localized.tree.nodes[root.id].text).toBe(editedText);
     expect(canReplayTreeHistory(localized.tree, localized.history)).toBe(true);
 
-    const undone = undoTreeHistory(localized.tree, localized.history);
+    const undone = undoTreeHistory(localized.tree, localized.history, TEST_HISTORY_LIMITS);
     if (!undone.ok) throw new Error(undone.error.code);
     expect(undone.tree.nodes[root.id].text).toBe(seededNodeText("en-US", "root"));
 

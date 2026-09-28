@@ -42,6 +42,8 @@ export type MaterialFilesCopy = Readonly<{
   filterMaterialFiles: string;
   findThought: string;
   hideMaterialFiles: string;
+  historyReleased: string;
+  historyUnavailable: string;
   includeWhenCopying: (title: string) => string;
   identityName: string;
   localOnly: string;
@@ -106,6 +108,8 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   filterMaterialFiles: "Filter material files",
   findThought: "Find thought",
   hideMaterialFiles: "Hide material files",
+  historyReleased: "Older undo steps won’t be kept after reload",
+  historyUnavailable: "Earlier changes can no longer be undone",
   includeWhenCopying: (title) => `Include ${title} when copying`,
   identityName: "Quarrier",
   localOnly: "Kept only on this device",
@@ -170,6 +174,8 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   filterMaterialFiles: "筛选材料文件",
   findThought: "寻找想法",
   hideMaterialFiles: "隐藏材料文件",
+  historyReleased: "重新载入后不再保留较早的撤销步骤",
+  historyUnavailable: "更早的更改已无法撤销",
   includeWhenCopying: (title) => `复制时包含：${title}`,
   identityName: "采石者",
   localOnly: "仅存于这台设备",
@@ -234,6 +240,8 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   filterMaterialFiles: "篩選材料檔案",
   findThought: "尋找想法",
   hideMaterialFiles: "隱藏材料檔案",
+  historyReleased: "重新載入後不再保留較早的復原步驟",
+  historyUnavailable: "較早的變更已無法復原",
   includeWhenCopying: (title) => `複製時包含：${title}`,
   identityName: "採石者",
   localOnly: "僅存於這台裝置",
@@ -298,6 +306,8 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   filterMaterialFiles: "素材ファイルを絞り込む",
   findThought: "考えを探す",
   hideMaterialFiles: "素材ファイルを隠す",
+  historyReleased: "再読み込み後は古い取り消し履歴を保持しません",
+  historyUnavailable: "以前の変更は取り消せなくなりました",
   includeWhenCopying: (title) => `コピーに${title}を含める`,
   identityName: "石を切る人",
   localOnly: "この端末にのみ保存",
@@ -362,6 +372,8 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   filterMaterialFiles: "Materialdateien filtern",
   findThought: "Gedanken finden",
   hideMaterialFiles: "Materialdateien ausblenden",
+  historyReleased: "Ältere Rückgängig-Schritte bleiben nach dem Neuladen nicht erhalten",
+  historyUnavailable: "Frühere Änderungen lassen sich nicht mehr rückgängig machen",
   includeWhenCopying: (title) => `${title} beim Kopieren einbeziehen`,
   identityName: "Steinbrecher",
   localOnly: "Nur auf diesem Gerät",

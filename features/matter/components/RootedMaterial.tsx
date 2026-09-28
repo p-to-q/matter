@@ -234,6 +234,7 @@ export type RootedMaterialProps = {
     status: PersistenceStatus;
     retry: () => void;
     resolveConflict: () => void;
+    acknowledgeHistoryNotice?: () => void;
   }>;
   /** Fixture-only timing marks expose the cold canvas path without changing it. */
   performanceMarking?: boolean;

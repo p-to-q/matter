@@ -12,6 +12,7 @@ import { useCanvasPreferences } from "./use-canvas-preferences";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import type {
+  MatterStoreReceipt,
   TextSwapCommittedChange,
   TransformCommittedChange,
 } from "../store/matter-store";
@@ -159,14 +160,17 @@ export function MatterApp() {
     seededSessionRelocalizer,
   ]);
   const clearRepairPresentations = admission.clearRepairPresentations;
+  const reportHistoryUnavailable = persistence.reportHistoryUnavailable;
+  // A step that no longer applies releases its stack in the store; the
+  // durability surface carries the one quiet notice about it.
   const undoWithPresentationReset = useCallback(() => {
     clearRepairPresentations();
-    undo();
-  }, [clearRepairPresentations, undo]);
+    if (isHistoryUnavailable(undo())) reportHistoryUnavailable();
+  }, [clearRepairPresentations, reportHistoryUnavailable, undo]);
   const redoWithPresentationReset = useCallback(() => {
     clearRepairPresentations();
-    redo();
-  }, [clearRepairPresentations, redo]);
+    if (isHistoryUnavailable(redo())) reportHistoryUnavailable();
+  }, [clearRepairPresentations, redo, reportHistoryUnavailable]);
   const admissionAnchor = createAdmissionAnchor(tree, navigation);
   const removeCurrentThought = useCallback(() => removeSelected({
     commandId: `human_removal_${createOperationId()}`,
@@ -219,7 +223,7 @@ export function MatterApp() {
   return (
     <RootedMaterial
       canUndo={history.entries.length > 0}
-      canRedo={(history.redoEntries?.length ?? 0) > 0}
+      canRedo={history.redoEntries.length > 0}
       canvasPreferences={canvasPreferences}
       locale={canvasPreferences.preferences.language}
       documentEpoch={documentEpoch}
@@ -265,6 +269,12 @@ function createOperationId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID().replaceAll("-", "")
     : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function isHistoryUnavailable(receipt: MatterStoreReceipt): boolean {
+  return receipt.status === "rejected" &&
+    "errorCode" in receipt &&
+    receipt.errorCode === "HISTORY_UNAVAILABLE";
 }
 
 function archiveFailure(code: string) {

@@ -12,7 +12,7 @@ import {
   LEGACY_MATTER_DOCUMENT_TITLE,
   normalizeMatterInitialDocument,
 } from "../config/initial-document";
-import type { TreeHistoryLimits } from "../tree/history";
+import { MATTER_HISTORY_LIMITS, type TreeHistoryLimits } from "../tree/history";
 import {
   clearSelection,
   createNavigationState,
@@ -56,7 +56,7 @@ import type { ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
-import { recoverPersistedHistory } from "../persistence/history-recovery";
+import { attachRecoveredHistory, type RecoveredHistory } from "../persistence/history-recovery";
 import {
   type TransformEnvelope,
   type TransformPlan,
@@ -87,12 +87,12 @@ import {
   type MaterialLexicalObservationPort,
 } from "../application/material-lexical-observation-port";
 
-const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
-  // Durable history must not silently discard an old inverse. Browser storage
-  // remains the physical limit and surfaces a recoverable save error instead.
-  maxEntries: Number.MAX_SAFE_INTEGER,
-  maxRetainedInverseBytes: Number.MAX_SAFE_INTEGER,
-});
+// Undo keeps the newest 1,000 steps within 32 MiB of exact inverses across
+// both stacks and releases older ones; the byte bound admits every legal
+// inverse, so a valid change is never refused. Archive export is long-term
+// recovery. Only an abnormal release (an unreadable or no longer applicable
+// step) is announced; reaching the bound is ordinary editing.
+const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = MATTER_HISTORY_LIMITS;
 
 function locallyDecorateAdjudicatedRepair(
   verdict: ReturnType<typeof adjudicateRepair>,
@@ -134,7 +134,13 @@ export type NavigationReceipt =
     };
 
 export type HydrationReceipt =
-  | { operation: "hydrate"; status: "hydrated"; revision: number }
+  | {
+      operation: "hydrate";
+      status: "hydrated";
+      revision: number;
+      /** Stored undo steps existed but could not be restored with this material. */
+      historyReleased: boolean;
+    }
   | { operation: "hydrate"; status: "rejected"; revision: number; errorCode: "TREE_INVARIANT_VIOLATION" };
 
 export type DocumentSwitchReceipt =
@@ -305,7 +311,7 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   focus: (nodeId: string) => MatterStoreReceipt;
   showFull: () => MatterStoreReceipt;
   toggleFold: (nodeId: string) => MatterStoreReceipt;
-  hydrateSnapshot: (tree: ThoughtTree, history?: unknown) => MatterStoreReceipt;
+  hydrateSnapshot: (tree: ThoughtTree, history?: RecoveredHistory | null) => MatterStoreReceipt;
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt;
   clearError: () => void;
 };
@@ -776,7 +782,7 @@ export function createMatterStore(
     undo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const result = undoSession(runtimeState(current));
+        const result = undoSession(runtimeState(current), HISTORY_LIMITS);
         pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
@@ -793,7 +799,7 @@ export function createMatterStore(
     redo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const result = redoSession(runtimeState(current));
+        const result = redoSession(runtimeState(current), HISTORY_LIMITS);
         pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
@@ -1057,18 +1063,23 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        const recoveredHistory = recoverPersistedHistory(
+        const recovered = attachRecoveredHistory(
           normalizedTree,
           persistedHistory,
           HISTORY_LIMITS,
         );
         repairLeases.clear();
-        receipt = { operation: "hydrate", status: "hydrated", revision: normalizedTree.revision };
+        receipt = {
+          operation: "hydrate",
+          status: "hydrated",
+          revision: normalizedTree.revision,
+          historyReleased: recovered.released,
+        };
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
           tree: protectValue(normalizedTree),
-          history: protectValue(recoveredHistory),
+          history: protectValue(recovered.history),
           navigation: protectValue(createNavigationState()),
           lastError: null,
           lastReceipt: protectValue(receipt),

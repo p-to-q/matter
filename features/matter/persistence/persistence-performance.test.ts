@@ -1,8 +1,21 @@
 import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { createPerformanceThoughtTree } from "../material/seeded-document";
-import { createTreeHistory } from "../tree/history";
+import {
+  canReplayTreeHistory,
+  commitTreeCommand,
+  createTreeHistory,
+  MATTER_HISTORY_LIMITS,
+} from "../tree/history";
 import { validateThoughtTree } from "../tree/invariants";
+import {
+  assembleHistoryJournal,
+  emptyHistoryJournal,
+  FULL_HISTORY_RETENTION,
+  historyJournalManifest,
+  planHistoryJournalWrite,
+} from "./history-journal";
+import { attachRecoveredHistory } from "./history-recovery";
 import { bundleToTree, treeToBundle } from "./snapshot-codec";
 import { allocateSnapshotPaths } from "./snapshot-paths";
 
@@ -27,6 +40,66 @@ describe.skipIf(!enabled)("persistence performance receipt", () => {
 
     expect(receipt.realistic.nodeCount).toBe(2_000);
     expect(receipt.maximumText.nodeCount).toBe(2_000);
+    console.log(JSON.stringify(receipt));
+  });
+
+  it("measures bounded journal recovery against the whole-journal replay it replaced", {
+    timeout: 300_000,
+  }, () => {
+    let session = { tree: createPerformanceThoughtTree(), history: createTreeHistory() };
+    const ids = Object.keys(session.tree.nodes);
+    // 1,050 commits so the product bound has released the oldest 50.
+    for (let step = 0; step < 1_050; step += 1) {
+      const node = session.tree.nodes[ids[step % ids.length]!]!;
+      const committed = commitTreeCommand(session.tree, session.history, {
+        id: `bench_${step}`,
+        source: "human",
+        expectedTreeId: session.tree.id,
+        expectedRevision: session.tree.revision,
+        createdAt: node.updatedAt,
+        mutation: {
+          type: "replace-text",
+          nodeId: node.id,
+          expectedText: node.text,
+          expectedUpdatedAt: node.updatedAt,
+          text: `${node.text.slice(0, 200)} ${step}`,
+          updatedAt: node.updatedAt,
+        },
+      }, MATTER_HISTORY_LIMITS);
+      if (!committed.ok) throw new Error(committed.error.code);
+      session = committed;
+    }
+    const written = planHistoryJournalWrite(
+      session.tree.id,
+      emptyHistoryJournal(0),
+      session.history,
+      FULL_HISTORY_RETENTION,
+    );
+    const manifest = historyJournalManifest(written.journal, 1, session.tree.revision);
+    // IndexedDB returns structured clones, never the written objects.
+    const records = structuredClone([...written.records]);
+    const next = planHistoryJournalWrite(session.tree.id, written.journal, session.history, FULL_HISTORY_RETENTION);
+
+    const receipt = {
+      entries: session.history.entries.length,
+      retainedInverseBytes: session.history.retainedInverseBytes,
+      recover: measure(5, () => attachRecoveredHistory(
+        session.tree,
+        assembleHistoryJournal(session.tree.id, manifest, records, [], MATTER_HISTORY_LIMITS).recovered,
+        MATTER_HISTORY_LIMITS,
+      )),
+      unchangedSavePlan: measure(12, () => planHistoryJournalWrite(
+        session.tree.id,
+        written.journal,
+        session.history,
+        FULL_HISTORY_RETENTION,
+      )),
+      unchangedSaveRecords: next.records.length,
+      wholeJournalReplay: measure(1, () => canReplayTreeHistory(session.tree, session.history)),
+    };
+
+    expect(receipt.entries).toBe(MATTER_HISTORY_LIMITS.maxEntries);
+    expect(receipt.unchangedSaveRecords).toBe(0);
     console.log(JSON.stringify(receipt));
   });
 });

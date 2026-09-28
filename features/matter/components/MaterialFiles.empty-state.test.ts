@@ -37,6 +37,7 @@ function renderMaterialFiles(tree: ThoughtTree): string {
         persistedRevision: tree.revision,
         dirtyRevision: null,
         errorCode: null,
+        historyNotice: null,
       },
       retry: () => undefined,
       resolveConflict: () => undefined,

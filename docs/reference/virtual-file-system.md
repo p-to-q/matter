@@ -66,8 +66,8 @@ produce the same tree identity and sibling order.
 
 ## Runtime and export
 
-Automatic durability uses one record per tree, not one OPFS file per Markdown
-node:
+Automatic durability uses one row per tree, not one OPFS file per Markdown
+node, plus one record per retained undo step:
 
 ```ts
 type StoredSnapshot = {
@@ -76,7 +76,23 @@ type StoredSnapshot = {
   treeRevision: number;
   writeGeneration: number;
   bundle: SnapshotBundle;
-  history?: TreeHistory;
+  historyJournal: {          // manifest of this row's undo records
+    formatVersion: 1;
+    epoch: number;
+    writeGeneration: number;  // repeats the row's, so a copied manifest is stale
+    treeRevision: number;
+    undo: [first: number, end: number];
+    redo: [first: number, end: number];
+    count: number;
+    bytes: number;
+  };
+};
+// object store `historyEntries`, key [treeId, epoch, stack, position]
+type StoredHistoryEntry = {
+  formatVersion: 1; treeId: string; epoch: number;
+  stack: "undo" | "redo"; position: number;
+  commandId: string; source: TreeCommand["source"];
+  inverse: TreeCommand; retainedInverseBytes: number;
 };
 ```
 
@@ -123,16 +139,63 @@ were 1,282,656 and 13,063,261 bytes. Headless Chromium 151 measured a synthetic
 transaction completion. These receipts compare implementations on one machine;
 they are not device or quota promises.
 
-History remains complete until physical storage rejects the atomic row. It is
-therefore the residual memory and write-amplification risk for a very long
-editing session: every snapshot still carries the complete inverse journal.
-Dropping old inverses would violate recovery, while a worker, incremental
-journal, or checkpointed schema would change lifecycle and crash semantics.
-Those options remain frozen unless target-browser evidence shows a persistence
-long task over 50 ms or repeatable quota pressure before explicit export. Any
-reopened design must keep one transactional generation owner, validate the
-whole recovered history, preserve corrupt-row export, and specify how hidden-
-page flush reaches a worker; it cannot land as a scheduler patch.
+### Undo journal (schema v6)
+
+Undo is bounded at 1,000 steps and 32 MiB of exact inverses across both stacks
+(see [`history-and-undo.md`](history-and-undo.md)), so the journal is stored per
+step rather than inside the row. The v5 row rewrote the whole journal on every
+save and recovery replayed every step through the engine: 17.9 s of main thread
+for 2,000 nodes × 2,000 commits. `persistence/history-journal.ts` owns the
+layout; the repository executes it.
+
+- **One transaction.** Save opens `snapshots` and `historyEntries` together:
+  compare the row's generation, put the row with its manifest, put the steps
+  that reached a stack since the last save, and range-delete every record of the
+  tree outside the manifest (other epochs, positions below or above each stack).
+  Nothing else writes `historyEntries`. The controller keeps the returned
+  generation and journal layout as one basis; they change only together.
+- **Positions, not rewrites.** Each stack is a run `[first, end)`. Commit, undo,
+  redo, and eviction only push, pop, or release the oldest end, and entries are
+  matched by identity, so several commits between saves collapse to their net
+  change and an ordinary save writes one record.
+- **Constant-cost recovery.** Load reads the row and the newest `maxEntries`
+  positions of each stack in one readonly transaction. Material renders as soon
+  as the bundle is valid. History attaches after an O(entries) shape check
+  (known source and mutation kind, `expectedTreeId`, byte bound; manifest count
+  and bytes when stacks are read whole) and a dry-run of only the next Undo and
+  the next Redo. Every deeper step is validated by the engine at use, which
+  refuses any memento that no longer matches, so exactness holds.
+- **Truncate and say so.** A stack keeps the steps above its newest missing or
+  unreadable record, since exactly those remain reachable; a failed top or a
+  step that fails at use releases its whole stack. The next save persists the
+  release, and the footer carries one quiet notice. A manifest in another format
+  or one that no longer repeats its row's generation and revision is unusable:
+  material loads, history is released with the same notice, and the next save
+  reclaims the orphaned records.
+- **Migration.** The v6 upgrade only creates the store. A row that still has the
+  v5 inline `history` is parsed on load (newest steps above any unreadable one,
+  then the bound); its first save writes records plus manifest and drops the
+  inline field.
+- **Epochs.** Import and corrupt-row replacement write the next epoch in their
+  own transaction and never delete the replaced row's records, so a rolled-back
+  import restores the previous manifest and its records intact. A rollback
+  adopts the restored generation only when the replaced row is the one this
+  tab's basis described; otherwise the next save meets the newer row as a
+  conflict. Later saves compact every other epoch.
+- **Material before history.** When storage refuses a save, the controller
+  retries the same transaction with half the durable undo bytes, then none, then
+  no redo, and records the release; only a snapshot that cannot fit alone
+  reports `PERSISTENCE_STORAGE_FULL`. The shed retention holds for the document
+  epoch; Retry or a new document restores it. The tab keeps its whole in-memory
+  history, so the notice says older steps will not survive a reload.
+
+`npm run bench:persistence` records both sides. On 2026-09-29 (Node 26), a
+2,000-node tree with 1,050 commits (bounded to 1,000 steps) recovered in 8.87 ms
+median, against 8,648 ms to replay the same journal; planning an unchanged save
+took 0.05 ms and wrote no record. Headless Chromium 153 with a 31.2 MB,
+1,000-step journal beside a realistic row measured a per-step save at 2.9 ms
+median (row, one record, six range deletes), recovery at 40.4 ms median, and the
+v5 layout's inline 31 MB rewrite at 24.5 ms per save.
 
 The material-index footer is deliberately not that recovery control. It keeps
 only the localized non-account identity and local-device line, with a brief
@@ -189,10 +252,11 @@ manufacture an endpoint, or turn geometry into structure. In particular, a
 virtual window may expose only a vertical piece of a tail; it may draw the
 rightward close only when the structural last descendant is mounted.
 
-Automatic durability stores the bounded undo journal beside the validated
-bundle. Recovery validates that journal independently against the tree; an
-invalid journal is discarded as a local convenience without discarding valid
-material. The portable Markdown archive deliberately excludes runtime history.
+Automatic durability stores the bounded undo journal as per-step records beside
+the validated bundle. A history that cannot be recovered never withholds valid
+material; what is released is announced once rather than silently replaced by
+an empty journal. The portable Markdown archive deliberately excludes runtime
+history.
 
 A corrupt IndexedDB row is not retried against an unknown generation. Matter
 first produces a bounded recovery copy of that exact row, then replaces it only
@@ -234,8 +298,8 @@ Directory export, if offered, creates a new directory rather than overwriting an
 old one, so a renamed slug cannot leave stale node files behind.
 
 Portable snapshot round-trip covers the `ThoughtTree`, not runtime command or
-undo history. IndexedDB restoration separately carries the bounded history
-cache described above.
+undo history. IndexedDB restoration separately carries the bounded undo journal
+described above.
 
 Rejected for `0.2`: path identity, a flat heading outline as the canonical form,
 a duplicated `tree.json` containing structure, binary/database-native export,
@@ -245,7 +309,10 @@ exists.
 Required proofs: empty/rooted tree → bundle → tree identity; deterministic paths
 and bytes; manual slug rename → same tree; malformed frontmatter, duplicate
 ids/order/path, unreachable node, and version mismatch rejection; IndexedDB
-reload, coalescing, generation conflict, quota, and retry; ZIP export → import;
+reload, coalescing, generation conflict, quota, and retry; undo journal
+round-trip, per-step writes, corrupt and missing records, stale or foreign-format
+manifests, v5 migration, import epochs with rollback, and quota shedding;
+ZIP export → import;
 traversal, Unicode/case collision, compressed/expanded size, path depth, and
 entry count limits. Picker absence or cancellation never removes ZIP return.
 

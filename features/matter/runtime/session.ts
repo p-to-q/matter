@@ -32,6 +32,7 @@ export type RuntimeErrorCode =
   | "HISTORY_LIMIT_EXCEEDED"
   | "EMPTY_HISTORY"
   | "EMPTY_REDO"
+  | "HISTORY_UNAVAILABLE"
   | AdmissionError["code"]
   | AdmissionRepairError["code"];
 
@@ -184,10 +185,14 @@ export function commitHumanRemoval(
   return commitSessionCommand(state, translated.command, limits, estimateBytes);
 }
 
-export function undoSession(state: RuntimeState): RuntimeResult {
-  const undone = undoTreeHistory(state.tree, state.history);
+/**
+ * A rejected Undo or Redo may still publish a smaller history: an inverse that
+ * no longer applies releases the stack it heads, and the tree is unchanged.
+ */
+export function undoSession(state: RuntimeState, limits: TreeHistoryLimits): RuntimeResult {
+  const undone = undoTreeHistory(state.tree, state.history, limits);
   if (!undone.ok) {
-    return reject(state, "undo", undone.error);
+    return reject({ ...state, history: undone.history }, "undo", undone.error);
   }
 
   return publish(
@@ -199,9 +204,9 @@ export function undoSession(state: RuntimeState): RuntimeResult {
   );
 }
 
-export function redoSession(state: RuntimeState): RuntimeResult {
-  const redone = redoTreeHistory(state.tree, state.history);
-  if (!redone.ok) return reject(state, "redo", redone.error);
+export function redoSession(state: RuntimeState, limits: TreeHistoryLimits): RuntimeResult {
+  const redone = redoTreeHistory(state.tree, state.history, limits);
+  if (!redone.ok) return reject({ ...state, history: redone.history }, "redo", redone.error);
 
   return publish(
     state,

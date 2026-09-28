@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSeededDocument } from "../material/seeded-document";
-import { createTreeHistory } from "../tree/history";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
+import { emptyHistoryJournal } from "./history-journal";
 import { STORAGE_SCHEMA_VERSION, type ImportedSnapshotReservation } from "./document-repository";
 import type { ImportedDocumentPreparation, PersistenceController } from "./persistence-controller";
 import { treeToBundle } from "./snapshot-codec";
@@ -195,8 +195,8 @@ function reservation(
       treeRevision: tree.revision,
       writeGeneration,
       bundle: treeToBundle(tree),
-      history: createTreeHistory(),
     }),
     previous: null,
+    basis: Object.freeze({ writeGeneration, journal: emptyHistoryJournal(0) }),
   });
 }

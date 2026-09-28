@@ -6,8 +6,8 @@ import type {
 } from "idb";
 import { openDB } from "idb";
 import type { SnapshotBundle } from "./snapshot-codec";
-import type { TreeHistory } from "../tree/history";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
+import type { TreeCommand } from "../tree/model";
 import type { WikiState } from "../wiki/wiki-model";
 
 /**
@@ -19,9 +19,33 @@ import type { WikiState } from "../wiki/wiki-model";
  *
  * `snapshots` is durable material. Labels, inquiries, and Wiki authority stay
  * outside the snapshot, so the archive remains exactly what a person wrote.
+ * `historyEntries` holds one record per retained inverse; it is written only in
+ * the same transaction as the snapshot row whose manifest describes it.
  */
 
 export const STORAGE_SCHEMA_VERSION = 1 as const;
+export const HISTORY_JOURNAL_FORMAT_VERSION = 1 as const;
+
+export type HistoryStackName = "undo" | "redo";
+
+/** Half-open `[first, end)` positions of one stack inside the manifest epoch. */
+export type StoredHistoryRange = readonly [first: number, end: number];
+
+/**
+ * The snapshot row's description of its undo journal. It repeats the row's
+ * generation and revision so a row rewritten by a writer that copied the
+ * manifest without owning the records is recognized as stale.
+ */
+export type StoredHistoryJournal = Readonly<{
+  formatVersion: typeof HISTORY_JOURNAL_FORMAT_VERSION;
+  epoch: number;
+  writeGeneration: number;
+  treeRevision: number;
+  undo: StoredHistoryRange;
+  redo: StoredHistoryRange;
+  count: number;
+  bytes: number;
+}>;
 
 export type StoredSnapshot = Readonly<{
   storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
@@ -29,8 +53,27 @@ export type StoredSnapshot = Readonly<{
   treeRevision: number;
   writeGeneration: number;
   bundle: SnapshotBundle;
-  /** Absent only for snapshots written before durable undo history existed. */
-  history?: TreeHistory;
+  /** Present on every row this schema writes. */
+  historyJournal?: StoredHistoryJournal;
+  /**
+   * The pre-v6 inline journal. It is only read, once, to migrate; a row keeps
+   * it only while no save of this schema has replaced that row.
+   */
+  history?: unknown;
+}>;
+
+export type StoredHistoryKey = [treeId: string, epoch: number, stack: HistoryStackName, position: number];
+
+export type StoredHistoryEntry = Readonly<{
+  formatVersion: typeof HISTORY_JOURNAL_FORMAT_VERSION;
+  treeId: string;
+  epoch: number;
+  stack: HistoryStackName;
+  position: number;
+  commandId: string;
+  source: TreeCommand["source"];
+  inverse: TreeCommand;
+  retainedInverseBytes: number;
 }>;
 
 /** Origin of a stored label. A provisional label is never stored: it is a pure
@@ -114,6 +157,10 @@ export interface MatterDatabase extends DBSchema {
     key: string;
     value: StoredSnapshot;
   };
+  historyEntries: {
+    key: StoredHistoryKey;
+    value: StoredHistoryEntry;
+  };
   labels: {
     key: string;
     value: StoredLabel;
@@ -133,7 +180,7 @@ export interface MatterDatabase extends DBSchema {
 }
 
 const DATABASE_NAME = "ptoq-matter";
-export const MATTER_DATABASE_VERSION = 5;
+export const MATTER_DATABASE_VERSION = 6;
 /** Two maximum documents stay warm; manual names are not part of this cache. */
 export const MAX_CACHED_MODEL_LABELS = MAX_NODES_PER_TREE * 2;
 
@@ -196,6 +243,13 @@ export function createMatterDatabaseHandle(): {
           }
           if (!db.objectStoreNames.contains("wiki")) {
             db.createObjectStore("wiki", { keyPath: "key" });
+          }
+          // Legacy inline journals migrate lazily on the first save of each
+          // row, so the upgrade stays constant-time for any stored history.
+          if (!db.objectStoreNames.contains("historyEntries")) {
+            db.createObjectStore("historyEntries", {
+              keyPath: ["treeId", "epoch", "stack", "position"],
+            });
           }
         },
         blocked() {
