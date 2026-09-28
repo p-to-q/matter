@@ -842,7 +842,7 @@ test("the upper grip on the opening segment pushes every lower material row down
   }
 });
 
-test("Elastic Language cancels an unstarted gesture and a late turn without changing material", async ({ page }) => {
+test("Elastic Language cancels an unstarted gesture, and Escape after submit dismisses only the degree", async ({ page }) => {
   let turnRequests = 0;
   await page.route("**/api/turn", async (route) => {
     turnRequests += 1;
@@ -908,11 +908,11 @@ test("Elastic Language cancels an unstarted gesture and a late turn without chan
   await page.keyboard.press("Enter");
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
   await expect(page.locator(".stretch-status-marker")).toHaveCount(0);
+  // Dismissing a presentation is not cancellation after submit: Escape
+  // removes the committed degree, and the submitted turn still lands once.
   await page.keyboard.press("Escape");
   await expect(grip).toHaveAttribute("aria-valuenow", "0");
-  await page.waitForTimeout(550);
-  await expect(text).toContainText(SOURCE);
-  await expect(text).not.toContainText(EXPANDED);
+  await expect(text).toContainText(EXPANDED);
   expect(turnRequests).toBe(1);
 });
 

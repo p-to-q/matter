@@ -174,19 +174,13 @@ export function useStretch(input: {
     };
     const onScroll = () => rollbackDrag("scroll-invalidated");
     const onResize = () => rollbackDrag("resize-invalidated");
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || stateRef.current.mode !== "dragging") return;
-      event.preventDefault();
-      const next = send({ type: "key-down", key: event.key });
-      flushPreview(previewSignal(next));
-    };
+    // Escape during a drag reaches `cancelActiveDrag` through the composition's
+    // single Escape owner rather than a second document listener here.
     window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onResize);
-    window.addEventListener("keydown", onKeyDown);
     return () => {
       window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onResize);
-      window.removeEventListener("keydown", onKeyDown);
     };
   }, [flushPreview, send]);
 

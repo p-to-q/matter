@@ -60,6 +60,59 @@ test("Ask Matter and material-local AI surfaces own one transient slot", async (
   await expect(inquiry).toBeHidden();
 });
 
+test("an IME confirmation in either engine order never asks or closes", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/api/inquiry", async (route) => {
+    requests += 1;
+    await fulfillInquiry(route, inquiryRequest(route), "这是回答。");
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill("这份材料在怀念什么？");
+
+  // Chromium: the candidate Enter carries isComposing.
+  await field.dispatchEvent("keydown", { key: "Enter", keyCode: 229, isComposing: true });
+  // Pre-2026 WebKit: compositionend first, then keyCode 229 with the flag clear.
+  await field.dispatchEvent("compositionend", { data: "什么" });
+  await field.dispatchEvent("keydown", { key: "Enter", keyCode: 229 });
+  await field.dispatchEvent("keydown", { key: "Escape", keyCode: 229 });
+  await expect(inquiry).toBeVisible();
+  await expect(field).toHaveValue("这份材料在怀念什么？");
+  expect(requests).toBe(0);
+
+  await field.press("Enter");
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText("这是回答。");
+  expect(requests).toBe(1);
+});
+
+test("one Escape closes only the layer that owns it", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill("还没有问完的一句话");
+
+  // Keyboard-only entry into the docked index: no outside pointer-down closes
+  // Inquiry first, so only the key path is under test.
+  const sidebar = page.locator(".material-files");
+  const searchTrigger = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.searchThoughts });
+  await searchTrigger.focus();
+  await page.keyboard.press("Enter");
+  const search = sidebar.getByRole("searchbox", { name: fixtureUiCopy.materialFiles.filterMaterialFiles });
+  await expect(search).toBeFocused();
+  await search.press("Escape");
+  await expect(sidebar).toHaveAttribute("data-mode", "browse");
+  await expect(inquiry).toBeVisible();
+  await expect(field).toHaveValue("还没有问完的一句话");
+
+  await page.keyboard.press("Escape");
+  await expect(inquiry).toBeHidden();
+});
+
 test("closing Inquiry detaches UI while the submitted answer reaches its record", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();

@@ -48,7 +48,7 @@ import {
   type InquiryContextOwner,
 } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
-import { isCancelEscape } from "./composition-safe-keys";
+import { useEscapeLayer } from "./escape-layers";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
 import { subscribePageExit } from "../interaction/page-suspension";
 import { ApiSettingsForm } from "./ApiSettingsForm";
@@ -681,13 +681,6 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      // Closing the inquiry discards its draft and answers, so an Escape that
-      // is only dismissing an IME candidate window must not reach it.
-      if (isCancelEscape({ key: event.key, isComposing: event.isComposing })) {
-        event.preventDefault();
-        closeOverlay();
-        return;
-      }
       if (overlay === "settings") moveMenuFocus(event, settingsMenuRef.current);
       else if (overlay === "language") moveMenuFocus(event, languageMenuRef.current);
       else if (MODAL_OVERLAYS.has(overlay)) trapTabKey(event, dialogRef.current);
@@ -700,6 +693,19 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [closeOverlay, overlay]);
+
+  // A menu is a transient surface above the paper; Ask Matter and the dialogs
+  // are panels. Either way one Escape closes only this overlay, and an Escape a
+  // focused field, a gesture, or an IME candidate window already owns never
+  // reaches it.
+  useEscapeLayer(
+    overlay !== null,
+    overlay === "settings" || overlay === "language" ? "transient" : "panel",
+    () => {
+      closeOverlay();
+      return true;
+    },
+  );
 
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
@@ -1402,12 +1408,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           data-inquiry-field
           onChange={(event) => dispatch({ type: "type", value: event.currentTarget.value })}
           onKeyDown={(event) => {
-            if (!shouldSubmitInquiryOnEnter({
-              key: event.key,
-              shiftKey: event.shiftKey,
-              isComposing: event.nativeEvent.isComposing,
-              canSubmit: canAsk,
-            })) return;
+            if (!shouldSubmitInquiryOnEnter(event.nativeEvent, canAsk)) return;
             event.preventDefault();
             ask();
           }}

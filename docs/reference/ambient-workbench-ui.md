@@ -111,6 +111,37 @@ high-contrast `2px` perimeter around the visible control, calibrated against
 These measurements are component evidence, not a claim of product-wide WCAG
 conformance.
 
+## Keyboard ownership
+
+A keydown belongs to the IME iff `isComposing || keyCode === 229`
+(`components/composition-safe-keys.ts`). Chromium flags the confirming Enter;
+WebKit before its April 2026 event-order fix fired `compositionend` first and
+then a `229` keydown with the flag already clear; Android keyboards report `229`
+for nearly every key. Every caller therefore passes `keyCode`, React call sites
+pass `event.nativeEvent`, and Enter or Escape acts only on keydown. An Android
+Enter is accepted as IME-owned: every such field also has a visible action, and
+a rename still commits on blur.
+
+Document-level Escape has one owner, `components/escape-layers.ts`: a single
+bubble-phase `window` listener that runs after every React handler and ignores
+`defaultPrevented`, auto-repeat, and IME-owned keys. Registered layers are
+ordered by tier, then activation recency, and one keydown closes at most one:
+
+```text
+gesture 3    node drag, grip drag, a submitted Elastic degree
+transient 2  node action lens, Point and Talk, settings and language menus
+panel 1      Ask Matter, modal dialogs, the overlay material drawer
+mode 0       Lasso
+```
+
+A layer that had nothing left to cancel declines, and the next one tries.
+Focused fields (rename, canvas title, index search, a slider grip) keep their
+own `onKeyDown`, test `isCancelEscape`, and call `preventDefault()`; no handler
+captures keydown or stops its propagation. After a submit Escape only dismisses
+presentation: Elastic loses its visible degree and Point and Talk detaches, while
+the submitted request continues. `escape-ownership.test.ts` holds the boundary
+by scanning the source tree.
+
 ## Left field: separately frozen
 
 The left field is not governed by this composition reference. Its current

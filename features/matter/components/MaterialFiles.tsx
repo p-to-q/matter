@@ -32,7 +32,8 @@ import {
   projectMaterialFileWindow,
   scrollTopForMaterialFileIndex,
 } from "./material-file-window";
-import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
+import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-keys";
+import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
@@ -169,6 +170,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const renameCommitRef = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const pendingRowFocusRef = useRef<string | null>(null);
@@ -644,12 +646,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setMode("browse");
   };
 
-  const closeOverlay = () => {
-    if (docked || archiveBusy) return;
-    setOpen(false);
-    requestAnimationFrame(() => toggleRef.current?.focus());
-  };
-
   const focusRowAt = (index: number) => {
     const file = files[index];
     const body = bodyRef.current;
@@ -677,7 +673,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     heldAside: boolean,
   ) => {
     if (
-      event.target !== event.currentTarget || event.nativeEvent.isComposing ||
+      event.target !== event.currentTarget || isImeKeydown(event.nativeEvent) ||
       surface.rowInteractionDisabled
     ) return;
     if (event.key === "F2" && mode === "browse") {
@@ -744,6 +740,21 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // A document boundary must not race a live voice/lasso operation. The panel
   // stays visible, but replacement waits until the current interaction settles.
   const archiveBusy = archivePhase !== "idle" || props.interactionPending;
+
+  const closeOverlay = () => {
+    if (docked || archiveBusy) return false;
+    // Keyboard authority returns to the external handle only when the drawer
+    // held it; Escape from the paper must not pull focus into the corner.
+    const active = document.activeElement;
+    const drawerHeldFocus = active === null || active === document.body ||
+      asideRef.current?.contains(active) === true;
+    setOpen(false);
+    if (drawerHeldFocus) requestAnimationFrame(() => toggleRef.current?.focus());
+    return true;
+  };
+  // The overlay drawer is a panel above the paper; the docked index is not.
+  useEscapeLayer(!docked && open, "panel", closeOverlay);
+
   const closeArchive = () => {
     if (archiveBusy) return;
     setArchiveError(null);
@@ -883,15 +894,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
         data-query-projection-stale={surface.queryProjectionStale || undefined}
         id="material-files"
         inert={!open || surface.projectionStale}
-        onKeyDown={(event) => {
-          if (
-            event.defaultPrevented ||
-            !isCancelEscape({ key: event.key, isComposing: event.nativeEvent.isComposing })
-          ) return;
-          event.preventDefault();
-          closeOverlay();
-        }}
         onPointerDown={stopPointerPropagation}
+        ref={asideRef}
         onWheel={stopWheelPropagation}
       >
         <header className="material-files__context" data-node-id={rootId ?? undefined}>
@@ -909,12 +913,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
               onKeyDown={(event) => {
                 // The canvas title is durable material: blurring here commits
                 // it, so an IME composition must never reach either branch.
-                const composing = event.nativeEvent.isComposing;
-                if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                if (isCancelEscape(event.nativeEvent)) {
                   event.preventDefault();
                   setDocumentTitleDraft(documentTitle);
                   setRenamingDocument(false);
-                } else if (isCommitEnter({ key: event.key, isComposing: composing })) {
+                } else if (isCommitEnter(event.nativeEvent)) {
+                  event.preventDefault();
                   event.currentTarget.blur();
                 }
               }}
@@ -957,11 +961,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 autoFocus
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  const composing = event.nativeEvent.isComposing;
-                  if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                  if (isCancelEscape(event.nativeEvent)) {
                     event.preventDefault();
                     closeSearch();
-                  } else if (!composing && event.key === "ArrowDown" && files.length > 0) {
+                  } else if (
+                    !isImeKeydown(event.nativeEvent) && event.key === "ArrowDown" && files.length > 0
+                  ) {
                     event.preventDefault();
                     focusRowAt(0);
                   }
@@ -1256,11 +1261,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
                           renameFocusedRef.current = true;
                         }}
                         onKeyDown={(event) => {
-                          const composing = event.nativeEvent.isComposing;
-                          if (isCommitEnter({ key: event.key, isComposing: composing })) {
+                          if (isCommitEnter(event.nativeEvent)) {
                             event.preventDefault();
                             commitRename(file.nodeId, event.currentTarget.value, true);
-                          } else if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                          } else if (isCancelEscape(event.nativeEvent)) {
                             event.preventDefault();
                             setRenaming(null);
                             returnFocusToRow(file.nodeId);
@@ -1287,7 +1291,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         }}
                         onDoubleClick={() => beginRename(file.nodeId)}
                         onKeyDown={(event) => {
-                          if (event.key !== "F2" || event.nativeEvent.isComposing) return;
+                          if (event.key !== "F2" || isImeKeydown(event.nativeEvent)) return;
                           event.preventDefault();
                           beginRename(file.nodeId);
                         }}

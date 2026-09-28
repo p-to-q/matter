@@ -150,6 +150,12 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   const editor = row.locator(".material-file__rename");
   await expect(editor).toBeVisible();
   await editor.fill("过去的另一种生活");
+  // Pre-2026 WebKit order: compositionend, then the confirming keydown with
+  // the composition flag already cleared but keyCode 229. It must not commit.
+  await editor.dispatchEvent("compositionend", { data: "生活" });
+  await editor.dispatchEvent("keydown", { key: "Enter", keyCode: 229 });
+  await expect(editor).toBeFocused();
+  await expect(editor).toHaveValue("过去的另一种生活");
   await editor.press("Enter");
   await expect(row).toBeFocused();
   await expect(row.locator(".material-file__title")).toHaveText("过去的另一种生活");

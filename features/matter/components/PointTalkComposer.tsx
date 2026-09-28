@@ -21,6 +21,7 @@ import {
   type PointTalkPlacement,
 } from "./point-talk-placement";
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
+import { useEscapeLayer } from "./escape-layers";
 
 export function PointTalkComposer({
   boundaryRef,
@@ -185,17 +186,13 @@ export function PointTalkComposer({
     };
   }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
-  useEffect(() => {
-    if (!surfaceAvailable) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancelAndRestoreFocus();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [cancelAndRestoreFocus, surfaceAvailable]);
+  // Before submit Escape cancels the local turn; after submit it only detaches
+  // this presentation. An IME candidate dismissal never reaches it.
+  useEscapeLayer(surfaceAvailable, "transient", () => {
+    if (!pointTalkSurfaceVisible(controller.state.phase)) return false;
+    cancelAndRestoreFocus();
+    return true;
+  });
 
   useEffect(() => {
     if (!surfaceAvailable) return;
@@ -235,7 +232,7 @@ export function PointTalkComposer({
   }, [placementReady, recoveryAvailable, surfaceAvailable]);
 
   const activeState = controller.state;
-  if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
+  if (!pointTalkSurfaceVisible(activeState.phase)) return null;
   const recording = activeState.phase === "recording";
   const status = pointTalkStatus(activeState, locale);
 
@@ -284,6 +281,10 @@ export function PointTalkComposer({
       )}
     </div>
   );
+}
+
+function pointTalkSurfaceVisible(phase: TextSwapController["state"]["phase"]): boolean {
+  return phase !== "idle" && phase !== "success" && phase !== "stale";
 }
 
 export function pointTalkOutsidePointerDismisses({

@@ -178,6 +178,8 @@ import {
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
+import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
+import { useEscapeLayer } from "./escape-layers";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
@@ -932,28 +934,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     setCanvasMode("material");
   }, [clearLassoSelection, deactivateLasso, setCanvasMode]);
-  useEffect(() => {
-    const exitLassoFromKeyboard = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Escape" || event.defaultPrevented || event.isComposing ||
-        !lasso.active || isEditableEventTarget(event.target)
-      ) return;
-      event.preventDefault();
-      exitLasso();
-    };
-    window.addEventListener("keydown", exitLassoFromKeyboard);
-    return () => window.removeEventListener("keydown", exitLassoFromKeyboard);
-  }, [exitLasso, lasso.active]);
-  useEffect(() => {
-    const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
-      const gesture = nodeDragRef.current;
-      if (event.key !== "Escape" || gesture === null) return;
-      event.preventDefault();
-      cancelNodeDragOwnership();
-    };
-    window.addEventListener("keydown", cancelMoveFromKeyboard);
-    return () => window.removeEventListener("keydown", cancelMoveFromKeyboard);
-  }, [cancelNodeDragOwnership]);
+  // Lasso is a mode: every surface opened above it closes first.
+  useEscapeLayer(lasso.active, "mode", () => {
+    // A field with no Escape of its own is still the person's current text.
+    if (isEditableEventTarget(document.activeElement)) return false;
+    exitLasso();
+    return true;
+  });
+  // Node drag is armed from pointer-down, before any React state changes, so
+  // this gesture layer stays registered and reads the live gesture owner.
+  useEscapeLayer(true, "gesture", () => {
+    if (nodeDragRef.current === null) return false;
+    cancelNodeDragOwnership();
+    return true;
+  });
   useEffect(
     () => () => cancelNodeDragOwnership(),
     [cancelNodeDragOwnership, props.documentEpoch, navigation.mode, tree.revision],
@@ -1446,14 +1440,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
     visibleAddressMode === "expand" && paintableElasticPreviewSource !== null
       ? "expand"
       : "neutral";
-  useLayoutEffect(() => {
-    if (transformState.phase !== "requesting") return;
-    const clearCommittedDegree = (event: KeyboardEvent) => {
-      if (event.key === "Escape") stretchKeyDown("Escape");
-    };
-    window.addEventListener("keydown", clearCommittedDegree);
-    return () => window.removeEventListener("keydown", clearCommittedDegree);
-  }, [stretchKeyDown, transformState.phase]);
+  // An unfinished grip drag rolls back to its prior degree.
+  useEscapeLayer(true, "gesture", () => stretch.cancelActiveDrag() !== null);
+  // Escape after an Elastic submit only removes the committed degree from the
+  // paper. The submitted request keeps its immutable basis and may still
+  // deliver; dismissing a presentation is never cancellation after submit.
+  useEscapeLayer(transformState.phase === "requesting", "gesture", () => {
+    if (stretch.mode !== "committed") return false;
+    stretchKeyDown("Escape");
+    return true;
+  });
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
@@ -1785,7 +1781,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const removeSelected = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
-        event.isComposing ||
+        isImeKeydown(event) ||
         (event.key !== "Delete" && event.key !== "Backspace") ||
         interactionPending ||
         lasso.active ||
@@ -1807,7 +1803,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const undoFromKeyboard = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
-        event.isComposing ||
+        isImeKeydown(event) ||
         event.altKey ||
         event.shiftKey ||
         (!event.metaKey && !event.ctrlKey) ||
@@ -1827,7 +1823,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useEffect(() => {
     const redoFromKeyboard = (event: KeyboardEvent) => {
       if (
-        event.defaultPrevented || event.isComposing || event.altKey ||
+        event.defaultPrevented || isImeKeydown(event) || event.altKey ||
         (!event.metaKey && !event.ctrlKey) || !canRedo || interactionPending ||
         isEditableEventTarget(event.target) || hasNativeTextSelection()
       ) return;
@@ -4412,16 +4408,18 @@ function StretchHandleButton({
           onFocusRestored(handle);
           return;
         }
-        if (!isStretchInteractionKey(event.key)) return;
+        if (!isStretchInteractionKey(event.key) || isImeKeydown(event.nativeEvent)) return;
+        const cancel = isCancelEscape(event.nativeEvent);
+        // The focused grip owns this key; the document Escape stack honours it.
         event.preventDefault();
-        if (status === "requesting" && event.key !== "Escape") return;
+        if (status === "requesting" && !cancel) return;
         onBeginAdjustment();
-        if (event.key !== "Escape" && event.key !== "Enter" && event.key !== " ") {
-          onRequestFocusRestore(handle);
-        } else if (event.key === "Escape") {
+        if (cancel) {
           onFocusRestored(handle);
+        } else if (event.key !== "Enter" && event.key !== " ") {
+          onRequestFocusRestore(handle);
         }
-        if (status !== "idle" && event.key !== "Escape") stretch.reopen();
+        if (status !== "idle" && !cancel) stretch.reopen();
         stretch.keyDown(event.key, handle);
         onPreciseGesture();
       }}

@@ -117,16 +117,9 @@ export function useTextSwap<TCommitted>(
     return () => driver.release();
   }, [driver]);
 
+  // Escape reaches `detachPresentation` through the Point and Talk surface's
+  // layer in the composition's single Escape owner, never a listener here.
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !deliveryAvailableRef.current || event.key !== "Escape" ||
-        driver.getState().phase === "idle"
-      ) return;
-      event.preventDefault();
-      driver.detachPresentation();
-    };
-    window.addEventListener("keydown", onKeyDown);
     const openDeliveryIfUsable = () => driver.setDeliveryWindowOpen(
       deliveryAvailableRef.current && document.visibilityState === "visible" &&
         activePointersRef.current.size === 0,
@@ -152,7 +145,6 @@ export function useTextSwap<TCommitted>(
     const unsubscribePageExit = subscribePageExit(() => driver.cancel());
     openDeliveryIfUsable();
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("pointerup", onPointerDone, true);
       window.removeEventListener("pointercancel", onPointerDone, true);

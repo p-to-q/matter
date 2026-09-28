@@ -185,16 +185,9 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
     if (request !== null) deliver(request);
   }, [deliver, input.deliveryWindowAvailable]);
 
+  // Escape never reaches this owner: after submit it may only remove the
+  // committed degree from the paper, which the composition's Escape layer does.
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !deliveryAvailableRef.current || event.key !== "Escape" ||
-        requestRef.current === null
-      ) return;
-      event.preventDefault();
-      cancel();
-    };
-    window.addEventListener("keydown", onKeyDown);
     const openDeliveryIfUsable = () => {
       deliveryWindowOpenRef.current =
         deliveryAvailableRef.current && document.visibilityState === "visible" &&
@@ -223,7 +216,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
     const unsubscribePageExit = subscribePageExit(cancel);
     openDeliveryIfUsable();
     return () => {
-      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("pointerdown", onPointerDown, true);
       window.removeEventListener("pointerup", onPointerDone, true);
       window.removeEventListener("pointercancel", onPointerDone, true);

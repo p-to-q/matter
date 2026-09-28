@@ -17,6 +17,7 @@ import type { ThoughtTree } from "../tree/model";
 import type { MatterLocale } from "../config/locales";
 import { MatterAiIcon, MinusIcon, PlusIcon } from "./icons";
 import { nodeActionLensCopy } from "./node-action-lens-copy";
+import { useEscapeLayer } from "./escape-layers";
 import {
   projectNodeHandleMetrics,
   projectNodeHandlePosition,
@@ -375,21 +376,24 @@ export function NodeActionLens({
     focusPendingKeyboardEntry(activeTarget.nodeId);
   }, [activeTarget, currentPlacement, focusPendingKeyboardEntry]);
 
+  const lensVisible = activeTarget !== null && currentPlacement !== null && actionCount > 0;
+  useEscapeLayer(lensVisible, "transient", () => {
+    if (activeTarget === null) return false;
+    // Only a lens that holds keyboard focus hands it back to its passage.
+    const focusWasInside = lensRef.current?.contains(document.activeElement) === true;
+    dismissedFocusNodeIdRef.current = activeTarget.nodeId;
+    close();
+    if (focusWasInside) {
+      canvasRef.current?.querySelector<HTMLElement>(
+        `[data-thought-text-id="${CSS.escape(activeTarget.nodeId)}"]`,
+      )?.focus();
+    }
+    return true;
+  });
+
   if (activeTarget === null || currentPlacement === null || actionCount === 0) return null;
 
-  const restoreTargetFocus = () => {
-    canvasRef.current?.querySelector<HTMLElement>(
-      `[data-thought-text-id="${CSS.escape(activeTarget.nodeId)}"]`,
-    )?.focus();
-  };
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      dismissedFocusNodeIdRef.current = activeTarget.nodeId;
-      close();
-      restoreTargetFocus();
-      return;
-    }
     if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
     if (buttons.length === 0) return;
