@@ -93,7 +93,10 @@ import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
+  localizeExpansionOutcome,
+  localizeExpansionRelease,
   projectCanvasGuidance,
+  type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
@@ -158,6 +161,7 @@ import type { TransformEnvelope, TransformPlan } from "../protocol/transform-con
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
   isTransformPresentationCurrent,
@@ -221,7 +225,7 @@ export type RootedMaterialProps = {
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ) => TransformCommittedChange | null;
+  ) => MaterialTurnCommitResult<TransformCommittedChange>;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -1322,9 +1326,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
+    acknowledgeNotice: acknowledgeTransformNotice,
+    cancel: cancelTransform,
     start: startTransform,
     state: transformState,
   } = transform;
+  const transformNotice = transformState.notice;
+  useEffect(() => {
+    if (transformNotice === null) return;
+    // An outcome notice stays until the person acts again, so a slow reader
+    // never loses it to a timer; any new gesture or key means they moved on.
+    const acknowledge = () => acknowledgeTransformNotice();
+    window.addEventListener("pointerdown", acknowledge, true);
+    window.addEventListener("keydown", acknowledge, true);
+    return () => {
+      window.removeEventListener("pointerdown", acknowledge, true);
+      window.removeEventListener("keydown", acknowledge, true);
+    };
+  }, [acknowledgeTransformNotice, transformNotice]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1397,6 +1416,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     closePointTalk();
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk]);
+  const stretchReopen = stretch.reopen;
+  const discardParkedExpansion = useCallback(() => {
+    // An explicit release of a result whose passage is not shown. Only a
+    // degree still committed to it reopens; other material stays untouched.
+    cancelTransform();
+    stretchReopen();
+  }, [cancelTransform, stretchReopen]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
@@ -2200,12 +2226,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } else {
     languageGuidance = { kind: "none" };
   }
+  // Parking is shown only against a settled layout: a relayout briefly
+  // empties the laid-out set without the passage having left the paper.
+  const expansionGuidance: CanvasExpansionGuidanceState = transformState.phase === "requesting"
+    ? transformState.parked && activeLayout !== null ? { kind: "parked" } : { kind: "none" }
+    : transformState.notice === null
+      ? { kind: "none" }
+      : { kind: "unchanged", reason: transformState.notice.kind };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
       camera: !lasso.active && canvasMode === "pan"
         ? { kind: "pan", zoom: viewport.zoom }
         : { kind: "none" },
+      expansion: expansionGuidance,
       language: languageGuidance,
       material: materialGuidance,
     }),
@@ -2910,6 +2944,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     return () => shell.removeEventListener("wheel", handleWheel);
   }, [cancelKeyboardFocusReveal, canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
 
+  // One stable status object per pending turn keeps memoized rows from
+  // re-rendering on every paper render while a request is outstanding.
+  const transformStatusNodeId = transformState.phase === "idle"
+    ? null
+    : transformState.basis?.selection.nodeId ?? null;
+  const transformStatusPhase = transformState.phase;
+  const transformStatus = useMemo(
+    () => transformStatusNodeId === null || transformStatusPhase === "idle"
+      ? null
+      : Object.freeze({
+          nodeId: transformStatusNodeId,
+          phase: transformStatusPhase,
+          text: stretchStatusText(props.locale),
+          announce: !lassoHasSelectionGeometry,
+        }),
+    [lassoHasSelectionGeometry, props.locale, transformStatusNodeId, transformStatusPhase],
+  );
+
   return (
     <main
       className="matter-shell"
@@ -3323,6 +3375,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
+      {transformNotice === null ? null : (
+        <span className="visually-hidden" key={`expansion_${transformNotice.id}`} role="status">
+          {localizeExpansionOutcome(transformNotice.kind, props.locale)}
+        </span>
+      )}
+      {guidance.id === "expansion-parked" ? (
+        <span className="visually-hidden" role="status">{guidance.text}</span>
+      ) : null}
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
         <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
@@ -3548,14 +3608,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
               transformChange={currentTransformChange}
-              transformStatus={transformState.phase !== "idle" && transformState.basis !== null
-                ? {
-                    nodeId: transformState.basis.selection.nodeId,
-                    phase: transformState.phase,
-                    text: stretchStatusText(props.locale),
-                    announce: !lassoHasSelectionGeometry,
-                  }
-                : null}
+              transformStatus={transformStatus}
               tree={tree}
             />
             )}
@@ -3623,6 +3676,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           >
             {guidance.text}
           </p>
+          {guidance.id === "expansion-parked" ? (
+            <button
+              className="matter-guidance__action"
+              onClick={discardParkedExpansion}
+              type="button"
+            >
+              {localizeExpansionRelease(canvasPreferences.preferences.language)}
+            </button>
+          ) : null}
         </footer>
         </div>
         <CanvasChrome

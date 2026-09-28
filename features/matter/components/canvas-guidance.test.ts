@@ -7,7 +7,10 @@ import type {
 import {
   CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT,
   localizeCanvasGuidance,
+  localizeExpansionOutcome,
+  localizeExpansionRelease,
   projectCanvasGuidance,
+  type CanvasExpansionGuidanceState,
   type CanvasGuidanceInput,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
@@ -99,6 +102,35 @@ describe("canvas guidance projection", () => {
       percent,
       text: `${percent}%`,
     });
+  });
+
+  it.each([
+    [{ kind: "parked" }, "expansion-parked", "Expansion waits for its passage."],
+    [{ kind: "unchanged", reason: "unavailable" }, "expansion-unavailable", "Not expanded. Text unchanged."],
+    [{ kind: "unchanged", reason: "stale" }, "expansion-stale", "Passage changed. Not expanded."],
+  ] satisfies readonly [CanvasExpansionGuidanceState, string, string][])(
+    "keeps a submitted expansion's %o outcome ahead of lasso guidance",
+    (expansion, id, text) => {
+      expect(projectCanvasGuidance(input({
+        expansion,
+        language: { kind: "selected", stretch: { kind: "adjusted", amount: 0.4 } },
+      }))).toEqual({ id, kind: "recovery", text });
+      expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    },
+  );
+
+  it("keeps live voice guidance ahead of an expansion outcome", () => {
+    expect(projectCanvasGuidance(input({
+      admission: attempt({ phase: "recording", startedAtMs: 20 }),
+      expansion: { kind: "parked" },
+    })).id).toBe("speak-recording");
+  });
+
+  it("localizes the expansion announcement and its explicit release", () => {
+    expect(localizeExpansionOutcome("unavailable", "en-US")).toBe("Not expanded. Text unchanged.");
+    expect(localizeExpansionOutcome("stale", "zh-CN")).toBe("段落已变化，未展开。");
+    expect(localizeExpansionRelease("en-US")).toBe("Discard");
+    expect(localizeExpansionRelease("ja-JP")).toBe("破棄");
   });
 
   it("keeps urgent interaction guidance ahead of the Pan readout", () => {
@@ -244,6 +276,9 @@ describe("canvas guidance projection", () => {
       "set-degree": true,
       "apply-stretch": true,
       "wait-expansion": true,
+      "expansion-parked": true,
+      "expansion-unavailable": true,
+      "expansion-stale": true,
       "circle-selection": true,
       "unfold-thought": true,
       "speak-child": true,

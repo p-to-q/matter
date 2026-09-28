@@ -52,6 +52,26 @@ const BASIS: StretchCommitBasis = Object.freeze({
   amount: .5,
 });
 
+const IDLE_STATE = Object.freeze({ phase: "idle", basis: null, parked: false, notice: null });
+const REJECTED = Object.freeze({ status: "rejected" as const });
+const COMMITTED = Object.freeze({
+  status: "committed" as const,
+  change: Object.freeze({
+    id: "change-1",
+    treeId: "tree_fixed",
+    documentEpoch: BASIS.documentEpoch,
+    nodeId: "thought",
+    committedRevision: 6,
+    motionHint: "grow" as const,
+    before: Object.freeze({ text: TEXT, updatedAt: TIME }),
+    after: Object.freeze({ text: "source more. next", updatedAt: "2026-08-11T00:00:01.000Z" }),
+  }),
+});
+
+function unchanged(id: number, kind: "unavailable" | "stale") {
+  return { phase: "idle", basis: null, parked: false, notice: { id, kind } };
+}
+
 beforeEach(() => {
   hookSpies.requestTransform.mockReset();
   hookSpies.setState.mockReset();
@@ -121,7 +141,7 @@ describe("useFixedExpandTurn", () => {
   it("commits with the document epoch captured when the request started", async () => {
     hookSpies.requestTransform.mockImplementation(async (envelope) =>
       buildTransformPlan(envelope, "source more"));
-    const commit = vi.fn(() => null);
+    const commit = vi.fn(() => REJECTED);
     const onUnavailable = vi.fn();
     const turn = useFixedExpandTurn({
       tree: tree(),
@@ -141,9 +161,10 @@ describe("useFixedExpandTurn", () => {
       BASIS.documentEpoch,
     ));
     expect(onUnavailable).toHaveBeenCalledTimes(1);
+    expect(hookSpies.setState).toHaveBeenLastCalledWith(unchanged(1, "unavailable"));
   });
 
-  it("returns to idle without visible failure state when the provider request is unavailable", async () => {
+  it("returns to idle with one quiet unchanged notice when the provider is unavailable", async () => {
     hookSpies.requestTransform.mockRejectedValue(new Error("provider unavailable"));
     const onUnavailable = vi.fn();
     const turn = useFixedExpandTurn({
@@ -158,13 +179,14 @@ describe("useFixedExpandTurn", () => {
     });
 
     expect(turn.start(BASIS)).toBe(true);
-    await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith({
-      phase: "idle",
-      basis: null,
-    }));
-    expect(hookSpies.setState).not.toHaveBeenCalledWith({ phase: "error", basis: BASIS });
+    await vi.waitFor(() => expect(hookSpies.setState)
+      .toHaveBeenLastCalledWith(unchanged(1, "unavailable")));
     expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(hookSpies.setInvariantFailure).not.toHaveBeenCalled();
+
+    // The next gesture acknowledges it; the outcome is not a lasting state.
+    turn.acknowledgeNotice();
+    expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE);
   });
 
   it.each(["commit", "onCommitted"] as const)(
@@ -179,7 +201,7 @@ describe("useFixedExpandTurn", () => {
         : vi.fn();
       const commit = failureOwner === "commit"
         ? vi.fn(() => { throw failure; })
-        : vi.fn(() => ({ nodeId: "thought" }) as never);
+        : vi.fn(() => ({ status: "committed", change: { nodeId: "thought" } }) as never);
       const turn = useFixedExpandTurn({
         tree: tree(),
         documentEpoch: BASIS.documentEpoch,
@@ -194,7 +216,7 @@ describe("useFixedExpandTurn", () => {
       expect(turn.start(BASIS)).toBe(true);
       await vi.waitFor(() => expect(hookSpies.setInvariantFailure).toHaveBeenCalledWith({ error: failure }));
       expect(onUnavailable).not.toHaveBeenCalled();
-      expect(hookSpies.setState).toHaveBeenLastCalledWith({ phase: "idle", basis: null });
+      expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE);
     },
   );
 
@@ -206,7 +228,7 @@ describe("useFixedExpandTurn", () => {
     }> = [];
     hookSpies.requestTransform.mockImplementation((envelope, signal) =>
       new Promise<TransformPlan>((resolve) => pending.push({ envelope, signal, resolve })));
-    const commit = vi.fn(() => null);
+    const commit = vi.fn(() => REJECTED);
     const turn = useFixedExpandTurn({
       tree: tree(),
       documentEpoch: BASIS.documentEpoch,
@@ -237,7 +259,7 @@ describe("useFixedExpandTurn", () => {
         new Promise<TransformPlan>((resolve, reject) => {
           pending = { envelope, resolve, reject };
         }));
-      const commit = vi.fn();
+      const commit = vi.fn(() => COMMITTED);
       const onCommitted = vi.fn();
       const onUnavailable = vi.fn();
       const input = {
@@ -263,10 +285,9 @@ describe("useFixedExpandTurn", () => {
         pending.reject(new Error("provider unavailable"));
       }
 
-      await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith({
-        phase: "idle",
-        basis: null,
-      }));
+      await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith(
+        outcome === "plan" ? IDLE_STATE : unchanged(1, "unavailable"),
+      ));
       expect(input.tree.revision).toBe(BASIS.baseRevision);
       if (outcome === "plan") {
         expect(commit).toHaveBeenCalledTimes(1);
@@ -286,16 +307,7 @@ describe("useFixedExpandTurn", () => {
       new Promise<TransformPlan>((resolve) => {
         pending = { envelope, resolve };
       }));
-    const commit = vi.fn(() => ({
-      id: "change-1",
-      treeId: "tree_fixed",
-      documentEpoch: BASIS.documentEpoch,
-      nodeId: "thought",
-      committedRevision: 6,
-      motionHint: "grow" as const,
-      before: { text: TEXT, updatedAt: TIME },
-      after: { text: "source more. next", updatedAt: "2026-08-11T00:00:01.000Z" },
-    }));
+    const commit = vi.fn(() => COMMITTED);
     const input = {
       tree: tree(),
       documentEpoch: BASIS.documentEpoch,
@@ -319,7 +331,7 @@ describe("useFixedExpandTurn", () => {
     hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
       pending = { envelope, resolve };
     }));
-    const commit = vi.fn(() => null);
+    const commit = vi.fn(() => REJECTED);
     const turn = useFixedExpandTurn({
       tree: tree(),
       documentEpoch: BASIS.documentEpoch,
@@ -348,7 +360,7 @@ describe("useFixedExpandTurn", () => {
     hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
       pending = { envelope, resolve };
     }));
-    const commit = vi.fn(() => null);
+    const commit = vi.fn(() => REJECTED);
     const input = {
       tree: tree(),
       documentEpoch: BASIS.documentEpoch,
@@ -365,10 +377,102 @@ describe("useFixedExpandTurn", () => {
     pending.resolve(buildTransformPlan(pending.envelope, "source more"));
     await Promise.resolve();
     expect(commit).not.toHaveBeenCalled();
+    // Waiting for an unseen passage is a visible parked state, not a silent block.
+    expect(hookSpies.setState).toHaveBeenLastCalledWith({
+      phase: "requesting",
+      basis: BASIS,
+      parked: true,
+      notice: null,
+    });
 
     input.deliveryVisibleNodeIds.add("thought");
     window.dispatchEvent(Object.assign(new Event("pointerup"), { pointerId: 1 }));
     await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    expect(hookSpies.setState).toHaveBeenCalledWith({
+      phase: "requesting",
+      basis: BASIS,
+      parked: false,
+      notice: null,
+    });
+  });
+
+  it("lets the person release a parked expansion explicitly", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
+      pending = { envelope, resolve };
+    }));
+    const commit = vi.fn(() => COMMITTED);
+    const input = {
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US" as const,
+      enabled: true,
+      deliveryVisibleNodeIds: new Set<string>(),
+      commit,
+      onCommitted: vi.fn(),
+    };
+    const turn = useFixedExpandTurn(input);
+    expect(turn.start(BASIS)).toBe(true);
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ parked: true }),
+    ));
+
+    turn.cancel();
+    expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE);
+    // A released owner accepts the next stretch at once.
+    expect(turn.start(BASIS)).toBe(true);
+    input.deliveryVisibleNodeIds.add("thought");
+    window.dispatchEvent(Object.assign(new Event("pointerup"), { pointerId: 1 }));
+    await Promise.resolve();
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it("announces a stale store answer instead of reopening silently", async () => {
+    hookSpies.requestTransform.mockImplementation(async (envelope) =>
+      buildTransformPlan(envelope, "source more"));
+    const onUnavailable = vi.fn();
+    const turn = useFixedExpandTurn({
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US",
+      enabled: true,
+      commit: vi.fn(() => Object.freeze({ status: "stale" as const })),
+      onCommitted: vi.fn(),
+      onUnavailable,
+    });
+
+    expect(turn.start(BASIS)).toBe(true);
+    await vi.waitFor(() => expect(hookSpies.setState)
+      .toHaveBeenLastCalledWith(unchanged(1, "stale")));
+    expect(onUnavailable).toHaveBeenCalledTimes(1);
+  });
+
+  it("settles a request silently when its document is replaced", async () => {
+    let pending: { envelope: TransformEnvelope; resolve: (plan: TransformPlan) => void } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
+      pending = { envelope, resolve };
+    }));
+    const commit = vi.fn(() => COMMITTED);
+    const input = {
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US" as const,
+      enabled: true,
+      commit,
+      onCommitted: vi.fn(),
+    };
+    const turn = useFixedExpandTurn(input);
+    expect(turn.start(BASIS)).toBe(true);
+    input.documentEpoch = BASIS.documentEpoch + 1;
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE));
+    expect(commit).not.toHaveBeenCalled();
   });
 
   it("holds a resolved expansion while another pointer gesture is active", async () => {
@@ -376,7 +480,7 @@ describe("useFixedExpandTurn", () => {
     hookSpies.requestTransform.mockImplementation((envelope) => new Promise((resolve) => {
       pending = { envelope, resolve };
     }));
-    const commit = vi.fn(() => null);
+    const commit = vi.fn(() => REJECTED);
     const turn = useFixedExpandTurn({
       tree: tree(),
       documentEpoch: BASIS.documentEpoch,
@@ -430,10 +534,8 @@ describe("useFixedExpandTurn", () => {
     };
     if (pending === undefined) throw new Error("Transform request did not start.");
     pending.resolve(buildTransformPlan(pending.envelope, "source more"));
-    await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith({
-      phase: "idle",
-      basis: null,
-    }));
+    await vi.waitFor(() => expect(hookSpies.setState)
+      .toHaveBeenLastCalledWith(unchanged(1, "stale")));
     expect(commit).not.toHaveBeenCalled();
   });
 
@@ -485,7 +587,7 @@ describe("useFixedExpandTurn", () => {
     })).toMatchObject({ selection: whole });
   });
 
-  it("quietly reopens without a request or tree commit when local envelope construction fails", () => {
+  it("reopens with a quiet unchanged notice and no request when local envelope construction fails", () => {
     const commit = vi.fn();
     const onCommitted = vi.fn();
     const onUnavailable = vi.fn();
@@ -502,7 +604,7 @@ describe("useFixedExpandTurn", () => {
 
     expect(turn.start(BASIS)).toBe(false);
     expect(hookSpies.setState).toHaveBeenCalledTimes(1);
-    expect(hookSpies.setState).toHaveBeenCalledWith({ phase: "idle", basis: null });
+    expect(hookSpies.setState).toHaveBeenCalledWith(unchanged(1, "unavailable"));
     expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(hookSpies.requestTransform).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();

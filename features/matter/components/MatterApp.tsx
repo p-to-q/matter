@@ -15,7 +15,7 @@ import type {
   TextSwapCommittedChange,
   TransformCommittedChange,
 } from "../store/matter-store";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
   seededFallbackBranchTexts,
   type SeededBranchTextResolver,
@@ -199,22 +199,17 @@ export function MatterApp() {
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ): TransformCommittedChange | null => {
+  ): MaterialTurnCommitResult<TransformCommittedChange> => {
     const receipt = commitTransform(envelope, plan, expectedDocumentEpoch, Date.now());
-    return receipt.operation === "commit" && receipt.status === "committed" && "transformChange" in receipt
-      ? receipt.transformChange
-      : null;
+    return materialTurnResult(receipt, "transformChange" in receipt ? receipt.transformChange : null);
   }, [commitTransform]);
   const commitTextSwapTurn = useCallback((
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ): TextSwapCommitResult<TextSwapCommittedChange> => {
+  ): MaterialTurnCommitResult<TextSwapCommittedChange> => {
     const receipt = commitTextSwap(envelope, plan, expectedDocumentEpoch, Date.now());
-    if (receipt.operation !== "commit" || receipt.status !== "committed" || !("textSwapChange" in receipt)) {
-      return Object.freeze({ status: receipt.status === "stale" ? "stale" : "rejected" });
-    }
-    return Object.freeze({ status: "committed", change: receipt.textSwapChange });
+    return materialTurnResult(receipt, "textSwapChange" in receipt ? receipt.textSwapChange : null);
   }, [commitTextSwap]);
   return (
     <RootedMaterial
@@ -259,6 +254,16 @@ export function MatterApp() {
       tree={tree}
     />
   );
+}
+
+function materialTurnResult<Change>(
+  receipt: Readonly<{ status: string }>,
+  change: Change | null,
+): MaterialTurnCommitResult<Change> {
+  if (receipt.status === "committed" && change !== null) {
+    return Object.freeze({ status: "committed", change });
+  }
+  return Object.freeze({ status: receipt.status === "stale" ? "stale" : "rejected" });
 }
 
 function createOperationId(): string {

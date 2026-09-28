@@ -17,6 +17,7 @@ import {
   type VoicePort,
   type VoiceRecording,
 } from "./voice-port";
+import type { MaterialTurnCommitResult } from "./material-turn-result";
 import { TextSwapClientError } from "./text-swap-client";
 import { TranscriptionClientError, type requestTranscription } from "./transcription-client";
 import { normalizeSpokenTranscript } from "../runtime/spoken-transcript";
@@ -36,10 +37,7 @@ export type TextSwapScope = Readonly<{
   deliveryTargetVisible?: boolean;
 }>;
 
-export type TextSwapCommitResult<TCommitted> =
-  | Readonly<{ status: "committed"; change: TCommitted }>
-  | Readonly<{ status: "stale" }>
-  | Readonly<{ status: "rejected" }>;
+export type TextSwapCommitResult<TCommitted> = MaterialTurnCommitResult<TCommitted>;
 
 type Transcribe = typeof requestTranscription;
 
