@@ -164,6 +164,8 @@ describe("Matter transcription route", () => {
       ...process.env,
       NODE_ENV: "production",
       MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+      // Only a deployment that can transcribe reads, and therefore holds, a body.
+      MATTER_TRANSCRIPTION_ADAPTER: "fixture",
     };
     const controllers = Array.from({ length: 3 }, () => new AbortController());
     const held = controllers.map((controller, index) => POST(requestFromStream(
@@ -439,6 +441,48 @@ describe("Matter transcription route", () => {
     await expect(emptyResponse.json()).resolves.toMatchObject({ error: { code: "AUDIO_EMPTY" } });
     await expect(unsupportedResponse.json()).resolves.toMatchObject({ error: { code: "UNSUPPORTED_AUDIO" } });
     await expect(overlongResponse.json()).resolves.toMatchObject({ error: { code: "AUDIO_TOO_LONG" } });
+  });
+
+  it.each([
+    [
+      "a browser-native deployment",
+      { MATTER_TRANSCRIPTION_ADAPTER: "browser" },
+      "This deployment uses browser-native speech recognition.",
+    ],
+    [
+      "an unconfigured production deployment",
+      { NODE_ENV: "production" },
+      "Speech transcription is not configured.",
+    ],
+    [
+      "a deployment whose every voice purpose is closed",
+      {
+        MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+        NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: "false",
+        MATTER_TEXT_SWAP_SURFACE: "off",
+      },
+      "Speech transcription is not configured.",
+    ],
+  ] as const)("refuses %s before reading any recording byte", async (_name, environment, message) => {
+    process.env = { ...process.env, ...environment };
+    const pulled = vi.fn();
+    const cancelled = vi.fn();
+    // A stream that never closes: reading it would hold the route until its
+    // 30-second deadline instead of refusing at once.
+    const body = new ReadableStream<Uint8Array>({ pull: pulled, cancel: cancelled }, { highWaterMark: 0 });
+
+    const response = await POST(requestFromStream(body, {
+      origin: "http://localhost",
+      "sec-fetch-site": "same-origin",
+      "content-length": String(MAX_AUDIO_REQUEST_BYTES),
+    }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", message, retryable: true },
+    });
+    expect(pulled).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledOnce();
   });
 
   it("maps unsupported deployment configuration without exposing a provider", async () => {
