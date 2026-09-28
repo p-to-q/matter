@@ -171,6 +171,14 @@ as well as the material and its title.
 only those are labelled, so one commit in a 2,000-node document cannot become
 hundreds of requests.
 
+**Deferred work resumes on its own.** A hidden tab or a client cooldown defers
+model work; returning to the tab and the end of a cooldown each replan the last
+observed rows, so a label never waits for an unrelated scroll or edit. The
+interface language is observation input, not driver identity: changing it
+releases model work asked in the old language and rereads stored labels for
+the new one, while a typed name and its queued durable write continue on the
+same owner. Disposal closes label storage only after every queued write settles.
+
 ## Japanese
 
 Japanese shares the Han path but not its constants. Kana spend graphemes on

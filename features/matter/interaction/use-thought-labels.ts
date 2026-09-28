@@ -35,20 +35,21 @@ export function useThoughtLabels(input: Readonly<{
   const enabled = input.enabled ?? true;
   const driver = useMemo(
     () => new LabelDriver(
-      { tree: input.tree, documentEpoch: input.documentEpoch },
+      { tree: input.tree, documentEpoch: input.documentEpoch, locale },
       {
         request: requestLabel,
         createOperationId,
         locale,
         // LabelDriver closes its repository, so every driver must own a
-        // distinct instance across locale/enablement replacement.
+        // distinct instance across enablement replacement.
         repository: enabled ? createLazyLabelRepository() : undefined,
       },
     ),
-    // The driver owns the whole session; a new tree revision is scope, not
-    // identity, and is delivered through `observe`.
+    // The driver owns the whole session, including names still being written.
+    // A tree revision or a language change is scope, not identity, and is
+    // delivered through `observe`; rebuilding here would drop a typed name.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [enabled, locale],
+    [enabled],
   );
   const subscribe = useCallback((listener: () => void) => driver.subscribe(listener), [driver]);
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
@@ -68,12 +69,12 @@ export function useThoughtLabels(input: Readonly<{
     (nodeIds: readonly string[]) => {
       if (!enabled) return;
       driver.observe(
-        { tree: input.tree, documentEpoch: input.documentEpoch },
+        { tree: input.tree, documentEpoch: input.documentEpoch, locale },
         nodeIds,
         input.fixedLabels,
       );
     },
-    [driver, enabled, input.documentEpoch, input.fixedLabels, input.tree],
+    [driver, enabled, input.documentEpoch, input.fixedLabels, input.tree, locale],
   );
   const rename = useCallback(
     (nodeId: string, label: string) => driver.rename(nodeId, label),
