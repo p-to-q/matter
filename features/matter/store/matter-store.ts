@@ -52,7 +52,7 @@ import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
 import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
-import type { ThoughtTree } from "../tree/model";
+import type { ThoughtTree, TreeCommand } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
@@ -173,28 +173,21 @@ export type AdmissionRepairCommittedChange = Readonly<{
   after: Readonly<{ text: string; updatedAt: string }>;
 }>;
 
-export type TransformCommittedChange = Readonly<{
+type MaterialTextMotion = "grow" | "settle";
+
+type MaterialTextChange<Motion extends MaterialTextMotion> = Readonly<{
   id: string;
   treeId: string;
   documentEpoch: number;
   nodeId: string;
   committedRevision: number;
-  motionHint: "grow";
+  motionHint: Motion;
   before: Readonly<{ text: string; updatedAt: string }>;
   after: Readonly<{ text: string; updatedAt: string }>;
 }>;
 
-export type TextSwapCommittedChange = Readonly<{
-  id: string;
-  treeId: string;
-  documentEpoch: number;
-  nodeId: string;
-  committedRevision: number;
-  motionHint: "settle";
-  before: Readonly<{ text: string; updatedAt: string }>;
-  after: Readonly<{ text: string; updatedAt: string }>;
-}>;
-
+export type TransformCommittedChange = MaterialTextChange<"grow">;
+export type TextSwapCommittedChange = MaterialTextChange<"settle">;
 export type MaterialTextCommittedChange = TransformCommittedChange | TextSwapCommittedChange;
 
 /**
@@ -216,13 +209,15 @@ export type TransformCommitReceipt = Extract<RuntimeReceipt, { status: "committe
 export type TextSwapCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
   Readonly<{ textSwapChange: TextSwapCommittedChange }>;
 
-export type TextSwapStaleReceipt = Readonly<{
+/** A turn whose document or exact target changed first; nothing was published. */
+export type MaterialTurnStaleReceipt = Readonly<{
   operation: "commit";
   status: "stale";
   revision: number;
 }>;
 
-export type TransformStaleReceipt = TextSwapStaleReceipt;
+export type TextSwapStaleReceipt = MaterialTurnStaleReceipt;
+export type TransformStaleReceipt = MaterialTurnStaleReceipt;
 
 export type AdmissionRepairSettlement =
   | Readonly<{ repairLeaseId: string; outcome: "discarded" }>
@@ -808,161 +803,53 @@ export function createMatterStore(
     },
 
     commitTransform: (envelope, plan, expectedDocumentEpoch, nowMs) => {
-      let receipt: TransformStoreReceipt | undefined;
+      let outcome: MaterialTurnOutcome<"grow"> | undefined;
       set((current) => {
-        if (
-          !Number.isSafeInteger(expectedDocumentEpoch) ||
-          expectedDocumentEpoch < 0 ||
-          expectedDocumentEpoch !== current.documentEpoch
-        ) {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        const beforeNode = current.tree.nodes[envelope.selection.nodeId];
-        const lexicalSession = captureMaterialLexicalSession(materialLexical);
-        const translated = prepareTransformIngress({
-          tree: current.tree,
-          envelope,
-          rawPlan: plan,
-          lexicalSession,
-          source: "agent",
-          nowMs,
-        });
-        if (!translated.ok && translated.reason === "STALE") {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        if (!translated.ok) {
-          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
-          return freezeState({
-            ...current,
-            lastError: { code: "INVALID_COMMAND", message: "The material changed before this turn could commit." },
-            lastReceipt: receipt,
-          });
-        }
-        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
-        const baseReceipt = result.receipt;
-        if (!result.ok || beforeNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        const afterNode = result.state.tree.nodes[envelope.selection.nodeId];
-        if (afterNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        receipt = Object.freeze({
-          ...baseReceipt,
-          transformChange: Object.freeze({
-            id: translated.plan.action.id,
-            treeId: envelope.treeId,
-            documentEpoch: current.documentEpoch,
-            nodeId: envelope.selection.nodeId,
-            committedRevision: result.state.tree.revision,
-            motionHint: "grow" as const,
-            before: Object.freeze({
-              text: beforeNode.text,
-              updatedAt: beforeNode.updatedAt,
-            }),
-            after: Object.freeze({
-              text: afterNode.text,
-              updatedAt: afterNode.updatedAt,
-            }),
+        const settled = commitMaterialTurn(current, {
+          expectedDocumentEpoch,
+          nodeId: envelope.selection.nodeId,
+          motionHint: "grow",
+          prepare: (tree) => prepareTransformIngress({
+            tree,
+            envelope,
+            rawPlan: plan,
+            lexicalSession: captureMaterialLexicalSession(materialLexical),
+            source: "agent",
+            nowMs,
           }),
         });
-        const domain = protectDomain(result.state);
-        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        outcome = settled.outcome;
+        return settled.state;
       });
-      return requireSynchronousReceipt(receipt);
+      const settled = requireSynchronousOutcome(outcome);
+      return settled.status === "committed"
+        ? Object.freeze({ ...settled.receipt, transformChange: settled.change })
+        : settled.receipt;
     },
 
     commitTextSwap: (envelope, plan, expectedDocumentEpoch, nowMs) => {
-      let receipt: TextSwapStoreReceipt | undefined;
+      let outcome: MaterialTurnOutcome<"settle"> | undefined;
       set((current) => {
-        if (
-          !Number.isSafeInteger(expectedDocumentEpoch) ||
-          expectedDocumentEpoch < 0 ||
-          expectedDocumentEpoch !== current.documentEpoch
-        ) {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        const beforeNode = current.tree.nodes[envelope.selection.nodeId];
-        const lexicalSession = captureMaterialLexicalSession(materialLexical);
-        const translated = prepareTextSwapIngress({
-          tree: current.tree,
-          envelope,
-          rawPlan: plan,
-          lexicalSession,
-          source: "agent",
-          nowMs,
-        });
-        if (!translated.ok && translated.reason === "STALE") {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        if (!translated.ok) {
-          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
-          return freezeState({
-            ...current,
-            lastError: { code: "INVALID_COMMAND", message: "The material changed before this wording change could commit." },
-            lastReceipt: receipt,
-          });
-        }
-        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
-        const baseReceipt = result.receipt;
-        if (!result.ok || beforeNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        const afterNode = result.state.tree.nodes[envelope.selection.nodeId];
-        if (afterNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        receipt = Object.freeze({
-          ...baseReceipt,
-          textSwapChange: Object.freeze({
-            id: translated.plan.action.id,
-            treeId: envelope.treeId,
-            documentEpoch: current.documentEpoch,
-            nodeId: envelope.selection.nodeId,
-            committedRevision: result.state.tree.revision,
-            motionHint: "settle" as const,
-            before: Object.freeze({
-              text: beforeNode.text,
-              updatedAt: beforeNode.updatedAt,
-            }),
-            after: Object.freeze({
-              text: afterNode.text,
-              updatedAt: afterNode.updatedAt,
-            }),
+        const settled = commitMaterialTurn(current, {
+          expectedDocumentEpoch,
+          nodeId: envelope.selection.nodeId,
+          motionHint: "settle",
+          prepare: (tree) => prepareTextSwapIngress({
+            tree,
+            envelope,
+            rawPlan: plan,
+            lexicalSession: captureMaterialLexicalSession(materialLexical),
+            source: "agent",
+            nowMs,
           }),
         });
-        const domain = protectDomain(result.state);
-        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        outcome = settled.outcome;
+        return settled.state;
       });
-      return requireSynchronousReceipt(receipt);
+      const settled = requireSynchronousOutcome(outcome);
+      return settled.status === "committed"
+        ? Object.freeze({ ...settled.receipt, textSwapChange: settled.change })
+        : settled.receipt;
     },
 
     select: (nodeId) => {
@@ -1151,6 +1038,109 @@ function runtimeState(state: MatterStoreInternalState): RuntimeState {
     // is not part of the pure session boundary.
     lastError: null,
   };
+}
+
+type MaterialTurn<Motion extends MaterialTextMotion> = Readonly<{
+  expectedDocumentEpoch: number;
+  nodeId: string;
+  motionHint: Motion;
+  /** Strict ingress for this turn's contract; it prepares but never commits. */
+  prepare: (tree: ThoughtTree) =>
+    | Readonly<{ ok: true; command: TreeCommand; plan: Readonly<{ action: Readonly<{ id: string }> }> }>
+    | Readonly<{ ok: false; reason: "STALE" | "INVALID_PLAN" }>;
+}>;
+
+type MaterialTurnOutcome<Motion extends MaterialTextMotion> =
+  | Readonly<{
+      status: "committed";
+      receipt: Extract<RuntimeReceipt, { status: "committed" }>;
+      change: MaterialTextChange<Motion>;
+    }>
+  | Readonly<{ status: "stale"; receipt: MaterialTurnStaleReceipt }>
+  | Readonly<{ status: "rejected"; receipt: Extract<RuntimeReceipt, { status: "rejected" }> }>;
+
+/**
+ * The one commit path for a delivered Elastic or Text Swap result. A document
+ * change or target conflict is stale and publishes nothing; a result the
+ * contract rejects is a rejected commit with a protected diagnostic; a valid
+ * result is one command whose exact memento pair is the presented change.
+ */
+function commitMaterialTurn<Motion extends MaterialTextMotion>(
+  current: MatterStoreInternalState,
+  turn: MaterialTurn<Motion>,
+): Readonly<{ state: MatterStoreInternalState; outcome: MaterialTurnOutcome<Motion> }> {
+  const revision = current.tree.revision;
+  const stale = Object.freeze({
+    state: current,
+    outcome: Object.freeze({
+      status: "stale" as const,
+      receipt: Object.freeze({ operation: "commit" as const, status: "stale" as const, revision }),
+    }),
+  });
+  if (
+    !Number.isSafeInteger(turn.expectedDocumentEpoch) ||
+    turn.expectedDocumentEpoch < 0 ||
+    turn.expectedDocumentEpoch !== current.documentEpoch
+  ) return stale;
+  const prepared = turn.prepare(current.tree);
+  if (!prepared.ok && prepared.reason === "STALE") return stale;
+  const mutation = prepared.ok ? prepared.command.mutation : null;
+  if (!prepared.ok || mutation?.type !== "replace-text" || mutation.nodeId !== turn.nodeId) {
+    const error: MatterStoreError = protectValue({
+      code: "INVALID_COMMAND",
+      message: "The turn result does not satisfy its material contract.",
+    });
+    const receipt = protectValue({
+      operation: "commit" as const,
+      status: "rejected" as const,
+      revision,
+      errorCode: error.code,
+    });
+    return Object.freeze({
+      state: freezeState({ ...current, lastError: error, lastReceipt: receipt }),
+      outcome: Object.freeze({ status: "rejected" as const, receipt }),
+    });
+  }
+  const result = commitSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
+  const domain = protectDomain(result.state);
+  const receipt = protectValue(result.receipt);
+  const state = freezeState({
+    ...current,
+    ...domain,
+    lastError: domain.lastError,
+    lastReceipt: receipt,
+  });
+  if (!result.ok) {
+    return Object.freeze({
+      state,
+      outcome: Object.freeze({ status: "rejected" as const, receipt: result.receipt }),
+    });
+  }
+  return Object.freeze({
+    state,
+    outcome: Object.freeze({
+      status: "committed" as const,
+      receipt: result.receipt,
+      // The engine accepted exactly this memento pair, so it is the change.
+      change: Object.freeze({
+        id: prepared.plan.action.id,
+        treeId: current.tree.id,
+        documentEpoch: current.documentEpoch,
+        nodeId: turn.nodeId,
+        committedRevision: result.state.tree.revision,
+        motionHint: turn.motionHint,
+        before: Object.freeze({ text: mutation.expectedText, updatedAt: mutation.expectedUpdatedAt }),
+        after: Object.freeze({ text: mutation.text, updatedAt: mutation.updatedAt }),
+      }),
+    }),
+  });
+}
+
+function requireSynchronousOutcome<Outcome>(outcome: Outcome | undefined): Outcome {
+  if (outcome === undefined) {
+    throw new Error("The Zustand state updater did not execute synchronously.");
+  }
+  return outcome;
 }
 
 function normalizeForDocumentModel(tree: ThoughtTree, initialTitle?: string): ThoughtTree {
