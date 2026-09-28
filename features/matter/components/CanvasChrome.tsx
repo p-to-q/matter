@@ -36,8 +36,8 @@ import {
   inquiryText,
   pendingAnswerId,
   reduceInquiry,
+  type InquiryNotice,
   type InquiryTurnOutcome,
-  type InquiryVoiceNotice,
 } from "./inquiry-composer";
 import { useInquiryDictation } from "./use-inquiry-dictation";
 import { shouldSubmitInquiryOnEnter } from "./inquiry-submit-key";
@@ -95,6 +95,8 @@ type CanvasChromeCopy = Readonly<{
   about: string;
   api: string;
   ask: string;
+  /** Replaces Ask while a submitted question waits; explicit cancellation. */
+  askCancel: string;
   askPlaceholder: string;
   asking: string;
   appearance: Readonly<Record<CanvasAppearance, string>>;
@@ -335,6 +337,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "About",
     api: "Model API",
     ask: "Ask",
+    askCancel: "Cancel",
     askPlaceholder: "Ask about this material",
     asking: "Asking…",
     appearance: Object.freeze({ auto: "Auto", dark: "Dark", light: "Light" }),
@@ -376,6 +379,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "关于",
     api: "模型 API",
     ask: "询问",
+    askCancel: "取消",
     askPlaceholder: "问一句关于这份材料的话",
     asking: "正在询问…",
     appearance: Object.freeze({ auto: "自动", dark: "深色", light: "浅色" }),
@@ -417,6 +421,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "關於",
     api: "模型 API",
     ask: "詢問",
+    askCancel: "取消",
     askPlaceholder: "問一句關於這份材料的話",
     asking: "正在詢問…",
     appearance: Object.freeze({ auto: "自動", dark: "深色", light: "淺色" }),
@@ -458,6 +463,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "概要",
     api: "モデル API",
     ask: "尋ねる",
+    askCancel: "キャンセル",
     askPlaceholder: "この素材について尋ねる",
     asking: "問い合わせ中…",
     appearance: Object.freeze({ auto: "自動", dark: "ダーク", light: "ライト" }),
@@ -499,6 +505,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "Über",
     api: "Modell-API",
     ask: "Fragen",
+    askCancel: "Abbrechen",
     askPlaceholder: "Zu diesem Material fragen",
     asking: "Wird gefragt …",
     appearance: Object.freeze({ auto: "Automatisch", dark: "Dunkel", light: "Hell" }),
@@ -555,6 +562,22 @@ const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
 /** Modal chrome temporarily owns the surface without owning its material state. */
 export function canvasOverlayOwnsSurface(overlay: CanvasChromeOverlay): boolean {
   return MODAL_OVERLAYS.has(overlay);
+}
+
+/** Mirrors the compact-chrome handoff in `CanvasChrome.module.css`. */
+const COMPACT_CHROME_MAX_WIDTH_PX = 767;
+
+/**
+ * The desktop menus exist only above the compact breakpoint and the compact
+ * menu sheet only below it; Ask Matter and every dialog exist at both.
+ */
+export function overlayOutlivesBreakpoint(
+  overlay: CanvasChromeOverlay,
+  compact: boolean,
+): boolean {
+  if (overlay === "settings" || overlay === "language") return !compact;
+  if (overlay === "mobile") return compact;
+  return true;
 }
 
 // Inquiry stays over the material rather than making the material inert.
@@ -708,15 +731,30 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   );
 
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 767px)");
+    const query = window.matchMedia(`(max-width: ${COMPACT_CHROME_MAX_WIDTH_PX}px)`);
     const onBreakpointChange = () => {
-      inquiryBubbleRef.current?.detach();
-      returnFocusRef.current = null;
-      onOverlayChange(null);
+      const compact = query.matches;
+      // Every trigger outside the compact menu is hidden below the breakpoint,
+      // and the compact trigger is hidden above it: hand the return path to
+      // the control that still exists.
+      const returnTarget = returnFocusRef.current;
+      if (returnTarget !== null) {
+        if (compact && returnTarget !== mobileTriggerRef.current) {
+          returnFocusRef.current = mobileTriggerRef.current;
+        } else if (!compact && returnTarget === mobileTriggerRef.current) {
+          returnFocusRef.current = overlay === "inquiry"
+            ? askButtonRef.current
+            : settingsButtonRef.current;
+        }
+      }
+      // Only a surface that no longer exists at this width closes. Ask Matter
+      // keeps its turns and a dialog keeps its editor across the handoff.
+      if (overlayOutlivesBreakpoint(overlay, compact)) return;
+      closeOverlay();
     };
     query.addEventListener("change", onBreakpointChange);
     return () => query.removeEventListener("change", onBreakpointChange);
-  }, [onOverlayChange]);
+  }, [closeOverlay, overlay]);
 
   useLayoutEffect(() => {
     if (!modalOpen) return;
@@ -1215,7 +1253,16 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     cancelLabel: copy.dictateCancel,
   });
 
+  const presentedRef = useRef(presented);
+  useLayoutEffect(() => {
+    presentedRef.current = presented;
+  }, [presented]);
+
+  // Detaching dismisses presentation only. A submitted question keeps its
+  // request, its pending turn, and its answer; another surface closing an
+  // already-hidden bubble must not drop an answer the person has not yet seen.
   const detach = useCallback(() => {
+    if (!presentedRef.current) return;
     cancelDictation();
     dispatch({ type: "close" });
   }, [cancelDictation]);
@@ -1242,9 +1289,10 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     pendingSubmissionRef.current = null;
     if (pending !== null) {
       dispatch({
-        type: "withdraw-unavailable",
+        type: "withdraw",
         id: pending.answerId,
         question: pending.question,
+        reason: null,
       });
     }
   }), []);
@@ -1321,7 +1369,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           !sameInquiryContextOwner(requestOwner, ownerRef.current)
         ) return;
         if (outcome.status === "unavailable" && outcome.reason !== "NO_MATERIAL") {
-          dispatch({ type: "withdraw-unavailable", id: answerId, question });
+          dispatch({ type: "withdraw", id: answerId, question, reason: outcome.reason });
           pendingSubmissionRef.current = null;
           return;
         }
@@ -1331,7 +1379,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
       })
       .catch(() => {
         if (requestRef.current !== request) return;
-        dispatch({ type: "withdraw-unavailable", id: answerId, question });
+        dispatch({ type: "withdraw", id: answerId, question, reason: "UNREACHABLE" });
         pendingSubmissionRef.current = null;
       })
       .finally(() => {
@@ -1342,6 +1390,22 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         }
       });
   }, [canAsk, context, language, owner, record, state]);
+
+  // Explicit cancellation is the one person-owned way to revoke a submitted
+  // question. It returns the question to the field without a notice and gives
+  // a late answer no authority over either the bubble or the local record.
+  const cancelPendingAsk = useCallback(() => {
+    const pending = pendingSubmissionRef.current;
+    const request = requestRef.current;
+    if (pending === null || request === null) return;
+    requestRef.current = null;
+    pendingSubmissionRef.current = null;
+    submittingRef.current = false;
+    setSubmissionPending(false);
+    request.abort(new DOMException("Inquiry cancelled", "AbortError"));
+    dispatch({ type: "withdraw", id: pending.answerId, question: pending.question, reason: null });
+    requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
+  }, []);
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -1441,30 +1505,40 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         >
           <MicIcon />
         </button>
-        <button
-          className={styles.inquiryAsk}
-          data-inquiry-control="ask"
-          disabled={!canAsk}
-          onClick={ask}
-          type="button"
-        >
-          {copy.ask}
-        </button>
+        {hasPendingAnswer && submissionPending ? (
+          <button
+            className={styles.inquiryAsk}
+            data-inquiry-control="cancel"
+            onClick={cancelPendingAsk}
+            type="button"
+          >
+            {copy.askCancel}
+          </button>
+        ) : (
+          <button
+            className={styles.inquiryAsk}
+            data-inquiry-control="ask"
+            disabled={!canAsk}
+            onClick={ask}
+            type="button"
+          >
+            {copy.ask}
+          </button>
+        )}
       </div>
-      {voiceBusy || state.notice !== null || state.turns.length === 0 || record?.phase === "error" ? (
-        <p
-          aria-atomic="true"
-          aria-live="polite"
-          className={styles.inquiryStatus}
-          role="status"
-        >
-          {record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
-            ? voiceNoticeCopy(copy, state.notice)
-            : listening ? copy.listening
-              : transcribing ? copy.transcribing
-                : hint}
-        </p>
-      ) : null}
+      {/* Mounted before it speaks, so a later notice is announced. */}
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className={styles.inquiryStatus}
+        role="status"
+      >
+        {record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
+          ? noticeCopy(copy, state.notice)
+          : listening ? copy.listening
+            : transcribing ? copy.transcribing
+              : state.turns.length === 0 ? hint : null}
+      </p>
     </div>
   );
 });
@@ -1473,19 +1547,22 @@ function InquiryTurn({ copy, turn }: Readonly<{ copy: CanvasChromeCopy; turn: Re
   const [beganPending] = useState(
     () => turn.role === "matter" && turn.outcome.status === "pending",
   );
-  const accessibleAnswer = turn.role === "matter" ? answerCopy(copy, turn.outcome) : undefined;
 
   return (
     <p
       aria-atomic={turn.role === "matter" ? "true" : undefined}
-      aria-label={accessibleAnswer}
       aria-live={turn.role === "matter" && beganPending ? "polite" : "off"}
       className={styles.inquiryTurn}
       data-inquiry-role={turn.role}
       dir="auto"
     >
       {turn.role === "person" ? turn.text : (
-        <InquiryAnswer animate={beganPending} copy={copy} outcome={turn.outcome} />
+        <>
+          <InquiryAnswer animate={beganPending} copy={copy} outcome={turn.outcome} />
+          {/* The visible answer types itself in and stays hidden from
+              assistive technology; this node carries the final text once. */}
+          <span className="visually-hidden">{answerCopy(copy, turn.outcome)}</span>
+        </>
       )}
     </p>
   );
@@ -1504,7 +1581,7 @@ function InquiryAnswer({ animate, copy, outcome }: Readonly<{
     );
   }
   if (outcome.status !== "answered" || !animate) {
-    return <span aria-hidden="true">{answerCopy(copy, outcome)}</span>;
+    return <span aria-hidden="true" data-inquiry-answer-text>{answerCopy(copy, outcome)}</span>;
   }
   return <AnimatedInquiryAnswer answer={outcome.text} />;
 }
@@ -1540,7 +1617,7 @@ function AnimatedInquiryAnswer({ answer }: Readonly<{ answer: string }>) {
     };
   }, [presentation.terminal, steps]);
 
-  return <span aria-hidden="true">{text}</span>;
+  return <span aria-hidden="true" data-inquiry-answer-text>{text}</span>;
 }
 
 function appendInquiryRecord(
@@ -1579,8 +1656,11 @@ function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string
   }
 }
 
-function voiceNoticeCopy(copy: CanvasChromeCopy, notice: InquiryVoiceNotice): string {
-  switch (notice) {
+function noticeCopy(copy: CanvasChromeCopy, notice: InquiryNotice): string {
+  if (notice.kind === "answer") {
+    return answerCopy(copy, Object.freeze({ status: "unavailable", reason: notice.reason }));
+  }
+  switch (notice.reason) {
     case "voice-denied": return copy.noticeVoiceDenied;
     case "voice-unsupported": return copy.noticeVoiceUnsupported;
     case "voice-failed": return copy.noticeVoiceFailed;

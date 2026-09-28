@@ -920,6 +920,16 @@
   letter-spacing: 0;
 }
 
+/* The live region stays mounted so its next notice is announced; while it has
+   nothing to say it leaves the flex flow instead of adding an empty gap. */
+.inquiryStatus:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .inquiry[data-inquiry-phase="listening"] .inquiryStatus::before {
   display: inline-block;
   width: 4px;

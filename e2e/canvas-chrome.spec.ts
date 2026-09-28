@@ -310,7 +310,9 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   // rule instead of racing the canvas position.
   await rootThought.locator("[data-thought-text-id]").hover();
   await page.mouse.down();
-  await expect(matterTurn).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
+  // The visible answer node; a visually hidden twin carries it to screen readers.
+  await expect(matterTurn.locator("[data-inquiry-answer-text]")).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
+  await expect(matterTurn.locator(".visually-hidden")).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
   await page.mouse.up();
   // An ordinary text click leaves Lasso and selects material; the reply stays
   // stable through that context transition until the person closes inquiry.

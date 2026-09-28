@@ -14,6 +14,7 @@ import {
   isCanvasChromeInfoOverlay,
   nextDialogTabFocusIndex,
   nextMenuFocusIndex,
+  overlayOutlivesBreakpoint,
   projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
@@ -29,6 +30,30 @@ describe("CanvasChrome", () => {
     for (const overlay of [null, "settings", "language", "inquiry"] as const) {
       expect(canvasOverlayOwnsSurface(overlay)).toBe(false);
     }
+  });
+
+  it("closes only the overlay a breakpoint crossing removes", () => {
+    // Desktop menus do not exist on a phone; the compact sheet does not exist
+    // on a desk. Ask Matter's turns and an open dialog's editor survive both.
+    expect(overlayOutlivesBreakpoint("settings", true)).toBe(false);
+    expect(overlayOutlivesBreakpoint("language", true)).toBe(false);
+    expect(overlayOutlivesBreakpoint("settings", false)).toBe(true);
+    expect(overlayOutlivesBreakpoint("mobile", false)).toBe(false);
+    expect(overlayOutlivesBreakpoint("mobile", true)).toBe(true);
+    for (const overlay of [null, "inquiry", "about", "pricing", "privacy", "terms", "api", "wiki"] as const) {
+      expect(overlayOutlivesBreakpoint(overlay, true)).toBe(true);
+      expect(overlayOutlivesBreakpoint(overlay, false)).toBe(true);
+    }
+  });
+
+  it("offers explicit cancellation only in place of Ask while a question waits", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    const start = source.indexOf("const cancelPendingAsk = useCallback");
+    const cancel = source.slice(start, source.indexOf("}, []);", start));
+    expect(cancel).toContain("request.abort(");
+    expect(cancel).toContain('type: "withdraw"');
+    expect(cancel).toContain("reason: null");
+    expect(source).toContain('data-inquiry-control="cancel"');
   });
 
   it("renders the desktop corner system and one mobile menu trigger", () => {
