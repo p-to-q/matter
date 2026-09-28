@@ -187,6 +187,42 @@ describe("local transcription audio projection", () => {
     expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
   });
 
+  it("never lets a warm-up timeout discard a submitted recording", async () => {
+    vi.useFakeTimers();
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const preparation = prepareLocalTranscription();
+    const preparationTimedOut = expect(preparation).rejects.toEqual(
+      new LocalTranscriptionError("timeout"),
+    );
+    // The person stops before a slow network has delivered the worker graph.
+    const transcript = transcribeLocally(request(new AbortController().signal, "slow-graph"));
+    let settled = false;
+    void transcript.then(() => { settled = true; }, () => { settled = true; });
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+
+    await vi.advanceTimersByTimeAsync(LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS);
+
+    await preparationTimedOut;
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    expect(settled).toBe(false);
+    workers[0]?.emit({ status: "ready" });
+    workers[0]?.emit({ id: "slow-graph:1:1", status: "started" });
+    workers[0]?.emit({ id: "slow-graph:1:1", status: "complete", text: "慢网络也没有丢。" });
+    await expect(transcript).resolves.toBe("慢网络也没有丢。");
+    expect(workers).toHaveLength(1);
+  });
+
   it("downmixes channels and resamples without changing duration", () => {
     const result = resampleChannels([
       new Float32Array([0, 1, 0, -1]),

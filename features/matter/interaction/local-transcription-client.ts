@@ -48,6 +48,11 @@ export function resetLocalTranscriptionForTests(): void {
  * Starts only the isolated worker and its code graph. It never opens a
  * microphone, decodes audio, or downloads the Whisper model; model work stays
  * behind an actual recorded utterance.
+ *
+ * The warm-up deadline bounds only this speculative promise. A lease that is
+ * already carrying a submitted recording is governed by that request's own
+ * end-to-end deadline: retiring it here would reject the recording as a
+ * timeout while its worker may still be loading on a slow network.
  */
 export async function prepareLocalTranscription(): Promise<void> {
   if (typeof window === "undefined" || typeof Worker === "undefined") {
@@ -68,7 +73,9 @@ export async function prepareLocalTranscription(): Promise<void> {
       }),
     ]);
   } catch (error) {
-    if (worker === target) {
+    // An idle lease that never became ready is released so the next request
+    // starts a fresh one; a lease with pending work is left to that work.
+    if (worker === target && !workerCarriesRequest(target)) {
       retireWorker(
         target,
         error instanceof LocalTranscriptionError
@@ -80,6 +87,13 @@ export async function prepareLocalTranscription(): Promise<void> {
   } finally {
     if (timeout !== undefined) globalThis.clearTimeout(timeout);
   }
+}
+
+function workerCarriesRequest(target: Worker): boolean {
+  for (const request of pending.values()) {
+    if (request.worker === target) return true;
+  }
+  return false;
 }
 
 export async function transcribeLocally(input: Readonly<{
