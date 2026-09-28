@@ -1,3 +1,4 @@
+import { abortError, rejectOnAbort, type AbortBoundary } from "./abort-boundary";
 import {
   CandidateAttemptTimeoutError,
   CandidateRejectedError,
@@ -444,9 +445,9 @@ export async function runScenario<Input, Value>(
   // permanent fraction of its concurrency for the life of the process, and the
   // symptom is every later request answering MODEL_BUSY for no visible reason.
   const deadline = new AbortController();
-  const cancel = () => deadline.abort(new DOMException("Aborted", "AbortError"));
+  const cancel = () => deadline.abort(abortError());
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let boundary: { promise: Promise<never>; dispose: () => void } | undefined;
+  let boundary: AbortBoundary | undefined;
   let work: Promise<Readonly<{ text: string }>>;
   try {
     const budget = withCeiling(scenario.budget(input), options.deadlineCeilingMs);
@@ -557,18 +558,14 @@ export async function withRequestSignal<Value>(
   work: Promise<Value>,
   signal: AbortSignal,
 ): Promise<Value> {
-  if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-  let rejectInterruption!: (error: DOMException) => void;
-  const abort = () => rejectInterruption(new DOMException("Aborted", "AbortError"));
-  const interrupted = new Promise<never>((_resolve, reject) => {
-    rejectInterruption = reject;
-  });
-  interrupted.catch(() => undefined);
-  signal.addEventListener("abort", abort, { once: true });
+  // Checked before racing: an already-settled `work` would otherwise win a
+  // race against a caller who had already walked away.
+  if (signal.aborted) throw abortError();
+  const interrupted = rejectOnAbort(signal);
   try {
-    return await Promise.race([work, interrupted]);
+    return await Promise.race([work, interrupted.promise]);
   } finally {
-    signal.removeEventListener("abort", abort);
+    interrupted.dispose();
   }
 }
 
@@ -629,18 +626,4 @@ function safePerformanceOutcome(
     default:
       return "unknown";
   }
-}
-
-function rejectOnAbort(signal: AbortSignal): { promise: Promise<never>; dispose: () => void } {
-  let rejectPromise!: (error: DOMException) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  // An unobserved rejection would surface as an unhandled rejection when the
-  // provider wins the race, so the boundary is always consumed by `Promise.race`.
-  promise.catch(() => undefined);
-  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return { promise, dispose: () => signal.removeEventListener("abort", reject) };
 }

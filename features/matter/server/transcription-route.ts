@@ -11,6 +11,7 @@ import {
   type TranscriptionRequest,
 } from "../protocol/transcription-contract";
 import { isMatterLocale } from "../config/locales";
+import { rejectOnAbort } from "./abort-boundary";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import {
   assertTranscriptionPurposeAvailable,
@@ -175,7 +176,7 @@ async function readBoundedBody(
     cancelReader(reader);
     throw requestInterruptionError(signal);
   }
-  const interruption = rejectOnAbort(signal);
+  const interruption = rejectOnAbort(signal, () => requestInterruptionError(signal));
   const bytes = new BoundedByteAccumulator(MAX_AUDIO_REQUEST_BYTES);
   let completed = false;
   try {
@@ -222,23 +223,6 @@ function createRequestBoundary(requestSignal: AbortSignal): {
       clearTimeout(timeout);
       requestSignal.removeEventListener("abort", cancel);
     },
-  };
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: TranscriptionServerError) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const reject = () => rejectPromise(requestInterruptionError(signal));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return {
-    promise,
-    dispose: () => signal.removeEventListener("abort", reject),
   };
 }
 

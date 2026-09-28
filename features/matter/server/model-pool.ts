@@ -1,3 +1,4 @@
+import { rejectOnAbort } from "./abort-boundary";
 import {
   CandidateAttemptTimeoutError,
   CandidateRejectedError,
@@ -693,23 +694,6 @@ async function readBounded(
     reader.releaseLock();
   }
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes.snapshot());
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: DOMException) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  // The provider can win the race. Consume the later abort so it never becomes
-  // an unhandled rejection after a successful response.
-  promise.catch(() => undefined);
-  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return { promise, dispose: () => signal.removeEventListener("abort", reject) };
 }
 
 export type CandidateOutcome = "answered" | "failed" | "stalled" | "incomplete";

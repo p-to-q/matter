@@ -6,6 +6,7 @@ import {
   isValidUserProviderApiKey,
   normalizeUserProviderEndpoint,
 } from "../protocol/provider-session-contract";
+import { abortError, rejectOnAbort } from "./abort-boundary";
 import { classifyCompletionTerminators } from "./completion-outcome";
 import type {
   PoolCandidate,
@@ -1011,7 +1012,7 @@ async function fetchWithAbortBoundary(
   signal: AbortSignal,
 ): Promise<Response> {
   const request = fetchImpl(url, init);
-  const boundary = rejectOnAbort(signal);
+  const boundary = rejectOnAbort(signal, () => signal.reason ?? abortError());
   try {
     return await Promise.race([request, boundary.promise]);
   } finally {
@@ -1026,22 +1027,12 @@ async function readWithAbort(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal: AbortSignal,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  const boundary = rejectOnAbort(signal);
+  const boundary = rejectOnAbort(signal, () => signal.reason ?? abortError());
   try {
     return await Promise.race([reader.read(), boundary.promise]);
   } finally {
     boundary.dispose();
   }
-}
-
-function rejectOnAbort(signal: AbortSignal): Readonly<{ promise: Promise<never>; dispose: () => void }> {
-  let rejectPromise!: (reason: unknown) => void;
-  const promise = new Promise<never>((_resolve, reject) => { rejectPromise = reject; });
-  promise.catch(() => undefined);
-  const abort = () => rejectPromise(signal.reason ?? new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) abort();
-  else signal.addEventListener("abort", abort, { once: true });
-  return Object.freeze({ promise, dispose: () => signal.removeEventListener("abort", abort) });
 }
 
 function hasRefusal(value: unknown): boolean {

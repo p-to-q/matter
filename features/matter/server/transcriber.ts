@@ -10,6 +10,7 @@ import {
   maxTranscriptionOutputCodePoints,
   transcriptionTextFitsCapacity,
 } from "../protocol/transcription-contract";
+import { rejectOnAbort } from "./abort-boundary";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import {
@@ -227,22 +228,5 @@ function combineSignals(...signals: AbortSignal[]): {
     dispose: () => {
       for (const signal of signals) signal.removeEventListener("abort", abort);
     },
-  };
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: DOMException) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return {
-    promise,
-    dispose: () => signal.removeEventListener("abort", reject),
   };
 }
