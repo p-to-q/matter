@@ -168,8 +168,17 @@ describe("transform route", () => {
       for (let index = 0; index < 8; index += 1) {
         await post(body({ id: `turn_rate_${index}` }), fixtureTransformAdapter, SAME_ORIGIN, { observe: observations });
       }
-      expect((await post(body({ id: "turn_rate_blocked" }), fixtureTransformAdapter, SAME_ORIGIN, { observe: observations })).status)
-        .toBe(429);
+      const limited = await post(body({ id: "turn_rate_blocked" }), fixtureTransformAdapter, SAME_ORIGIN, { observe: observations });
+      expect(limited.status).toBe(429);
+      // Admission refused before any model work, so it carries no scenario
+      // fallback reason that could be mistaken for a busy model.
+      await expect(limited.json()).resolves.toEqual({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Please wait before changing this passage again.",
+          retryable: true,
+        },
+      });
     } finally {
       vi.unstubAllEnvs();
     }
