@@ -146,7 +146,11 @@ export class TextSwapDriver<TCommitted> {
   }
 
   updateScope(scope: TextSwapScope): void {
-    if (this.disposed || (this.scope !== null && sameScope(this.scope, scope))) return;
+    if (
+      this.disposed ||
+      (this.scope !== null && sameScopeIdentity(this.scope, scope) &&
+        this.scope.deliveryTargetVisible === scope.deliveryTargetVisible)
+    ) return;
     const previous = this.scope;
     this.scope = ownScope(scope);
     if (previous === null || this.state.phase === "idle") return;
@@ -162,6 +166,9 @@ export class TextSwapDriver<TCommitted> {
       }
       return;
     }
+    // Visibility gates delivery only. A relayout that briefly empties the
+    // visible set is not a new target and must not revoke a live draft.
+    if (sameScopeIdentity(previous, scope)) return;
     const reason = sameDocumentScope(previous, scope) ? "selection-change" : "scope-change";
     this.send({ type: "scope-invalidated", reason });
   }
@@ -731,15 +738,15 @@ function materialLineageOf(
   return scope.materialLineage === undefined ? scope.lineage : scope.materialLineage;
 }
 
-function sameScope(left: TextSwapScope, right: TextSwapScope): boolean {
+/** Everything that identifies the addressed target, excluding delivery visibility. */
+function sameScopeIdentity(left: TextSwapScope, right: TextSwapScope): boolean {
   return sameDocumentScope(left, right) &&
     left.enabled === right.enabled &&
     left.interactionScopeKey === right.interactionScopeKey &&
     sameSelection(left.selection, right.selection) &&
     sameLineage(left.lineage, right.lineage) &&
     sameSelection(materialSelectionOf(left), materialSelectionOf(right)) &&
-    sameLineage(materialLineageOf(left), materialLineageOf(right)) &&
-    left.deliveryTargetVisible === right.deliveryTargetVisible;
+    sameLineage(materialLineageOf(left), materialLineageOf(right));
 }
 
 function sameDocumentScope(left: TextSwapScope, right: TextSwapScope): boolean {
