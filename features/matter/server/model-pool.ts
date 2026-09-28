@@ -384,9 +384,12 @@ function orderedCandidates(
   const healthy: PoolCandidate[] = [];
   const cooling: PoolCandidate[] = [];
   for (const candidate of pool) {
-    // A person's selected provider remains first across completed failures.
-    // An actually draining attempt is still skipped by the caller loop so an
-    // advisory abort cannot multiply live third-party work.
+    // A person's selected provider leads while its own credential scope is
+    // healthy. Once repeated transport failure cools that scope, it yields to
+    // healthy managed candidates but still precedes cooling managed ones;
+    // cooling orders, it never vetoes. An actually draining attempt is still
+    // skipped by the caller loop so an advisory abort cannot multiply live
+    // third-party work.
     const entry = health.get(healthKey(scenario, candidate));
     const candidateCooling = entry !== undefined && nowMs < entry.cooldownUntilMs;
     if (candidate.credentialScopeId !== undefined) {

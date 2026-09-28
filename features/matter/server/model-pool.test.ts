@@ -655,6 +655,24 @@ describe("pool adapter", () => {
     ]);
   });
 
+  it("keeps a cooling request credential ahead of a cooling managed candidate", async () => {
+    const tried: string[] = [];
+    const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1 };
+    const adapter = createPoolAdapter([
+      candidate("managed", "managed"),
+      { ...candidate("selected", "user"), credentialScopeId: "both-cooling" },
+    ], limits, Date.now, async (_url, init) => {
+      tried.push((JSON.parse(String(init?.body)) as { model: string }).model);
+      return chatResponse("", 503);
+    });
+
+    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+    // Cooling orders candidates and never removes one, so both are retried,
+    // and the person's own provider still leads among cooling candidates.
+    expect(tried).toEqual(["selected", "managed", "selected", "managed"]);
+  });
+
   it("skips a request credential only while its exact scoped attempt is still draining", async () => {
     vi.useFakeTimers();
     let release!: (response: Response) => void;
