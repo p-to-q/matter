@@ -26,6 +26,7 @@ import {
 import {
   commitHumanAdmission,
   commitHumanAdmissionRepair,
+  commitDeliveredSessionCommand,
   commitHumanRemoval,
   commitSessionCommand,
   redoSession,
@@ -1063,7 +1064,7 @@ type MaterialTurnOutcome<Motion extends MaterialTextMotion> =
  * The one commit path for a delivered Elastic or Text Swap result. A document
  * change or target conflict is stale and publishes nothing; a result the
  * contract rejects is a rejected commit with a protected diagnostic; a valid
- * result is one command whose exact memento pair is the presented change.
+ * result is one delivered command, so it never ends a replayable redo future.
  */
 function commitMaterialTurn<Motion extends MaterialTextMotion>(
   current: MatterStoreInternalState,
@@ -1101,7 +1102,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
       outcome: Object.freeze({ status: "rejected" as const, receipt }),
     });
   }
-  const result = commitSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
+  const result = commitDeliveredSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
   const domain = protectDomain(result.state);
   const receipt = protectValue(result.receipt);
   const state = freezeState({

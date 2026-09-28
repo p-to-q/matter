@@ -74,7 +74,8 @@ type CommandResult =
   inverse's revision token. Mutation mementos still verify exact current
   material. A successful undo moves the engine-produced inverse to the redo
   stack; keyboard redo applies that inverse through the engine again. A new
-  command clears the alternate redo future. Failure preserves both tree and
+  human command clears the alternate redo future; a delivered result keeps the
+  part of it that still replays (see below). Failure preserves both tree and
   stacks. The paper rail exposes only Undo; `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`
   retain the platform convention without adding another visible tool.
   Opening, importing, or hydrating a foreign document clears history and
@@ -88,6 +89,39 @@ type CommandResult =
   memento may be close to the size of the document, so storage exhaustion is a
   recoverable durability failure rather than a reason to rewrite history.
   Folding, focus, and selection are view state and are not undoable.
+
+### Late results and the redo future
+
+Elastic, Text Swap, and admission repair are submitted at one moment and
+delivered later, when a visible pointer-idle window opens and the exact
+read/write set still validates. Between the two the person may press Undo. If
+the delivery then cleared redo as a human command does, the undone step would
+be destroyed by latency rather than by anything the person did: start Elastic
+on X, undo sibling Y's admission, and the arriving expansion would make Y
+impossible to redo.
+
+`commitDeliveredTreeCommand` therefore publishes the same undo stack as
+`commitTreeCommand` but keeps the redo future that still replays. It replays
+the redo stack nearest-first against the new tree, inside the same entry and
+byte limits counted across both stacks, and keeps the longest prefix that
+applies exactly. The first entry that no longer applies is released with every
+later step, because those steps were recorded on top of it. The kept stack is
+thus always one contiguous future that journal recovery, seed relocalization,
+and the keyboard shortcut can replay without a special case; nothing is ever
+applied against material its memento does not match. Human commands (admission,
+branch, move, removal, rename) still end the redo future, as every editor does.
+The rule does not ask whether the Undo came before or after submission: that
+would need a second history clock, and a kept step can only ever restore
+exactly what the person undid.
+
+Rejected alternative: record the redo head in the turn's basis and fail the
+delivery as stale when it moved. That keeps the textbook rule but discards a
+paid, requested result because of an unrelated keyboard gesture, and the
+person cannot tell why their change never arrived. Also rejected: delaying the
+delivery until redo is empty, which can block forever. Reopen this choice if
+collaboration or a second history owner makes "nearest replayable prefix"
+ambiguous, or if a delivered command can ever be something other than one
+exact replace-text.
 
 The public action vocabulary in [`../protocol.md`](../protocol.md) is smaller
 than `TreeMutation` on purpose: the agent can propose only a range replacement.

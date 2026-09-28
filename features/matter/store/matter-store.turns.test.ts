@@ -15,10 +15,101 @@ import { selectLineage } from "../tree/selectors";
 import { createMatterStore, type MatterStore } from "./matter-store";
 
 const TARGET = SEEDED_DOCUMENT_NODE_IDS.imaginedLives;
+const SIBLING_PARENT = SEEDED_DOCUMENT_NODE_IDS.bodilyMemory;
 const EXPANDED = "被允许沿着眼前松动的边界缓慢想象的、仍然保留清晰细节和余地的其他生活";
 const NOW_MS = Date.parse("2026-09-29T00:00:00.000Z");
 
 describe("Matter store material turns", () => {
+  it("lands a late Elastic turn without destroying an Undo made after submission", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    store.getState().extendMaterial(SIBLING_PARENT, {
+      nodeId: "thought_sibling_y",
+      createdAt: "2026-09-29T00:00:01.000Z",
+    });
+    const envelope = transformEnvelope(currentTree(store));
+
+    // The person submits Elastic on X, then undoes Y's admission before it lands.
+    expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.thought_sibling_y).toBeUndefined();
+
+    const landed = store.getState().commitTransform(
+      envelope,
+      buildTransformPlan(envelope, EXPANDED),
+      store.getState().documentEpoch,
+      NOW_MS,
+    );
+    expect(landed).toMatchObject({ status: "committed", transformChange: { nodeId: TARGET } });
+    expect(store.getState().history.redoEntries).toHaveLength(1);
+
+    expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
+    expect(store.getState().tree.nodes.thought_sibling_y).toBeDefined();
+    expect(store.getState().tree.nodes[TARGET]?.text).toBe(EXPANDED);
+
+    store.getState().undo();
+    const reverted = store.getState().undo();
+    expect(reverted).toMatchObject({ operation: "undo", status: "committed" });
+    expect(store.getState().tree.nodes[TARGET]?.text).toBe(envelope.selection.selectedText);
+    expect(store.getState().tree.nodes.thought_sibling_y).toBeUndefined();
+    store.getState().redo();
+    store.getState().redo();
+    expect(store.getState().tree.nodes[TARGET]?.text).toBe(EXPANDED);
+    expect(store.getState().tree.nodes.thought_sibling_y).toBeDefined();
+  });
+
+  it("settles an admission repair without destroying an Undo made meanwhile", () => {
+    let nowMs = 100;
+    const store = createMatterStore("expanded", { monotonicNow: () => nowMs });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("fixture root missing");
+    const admission = store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: "voice_repair_redo",
+      commandId: "human_admission_repair_redo",
+      nodeId: "voice_node_repair_redo",
+      createdAt: "2026-09-29T00:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+    store.getState().extendMaterial(SIBLING_PARENT, {
+      nodeId: "thought_sibling_y",
+      createdAt: "2026-09-29T00:00:00.050Z",
+    });
+    store.getState().undo();
+
+    nowMs = 200;
+    expect(store.getState().settleHumanTranscriptRepair({
+      repairLeaseId: admission.repairLeaseId,
+      outcome: "candidate",
+      text: "我觉得可以。",
+      source: "rules",
+      createdAt: "2026-09-29T00:00:00.100Z",
+    })).toMatchObject({ status: "committed" });
+    expect(store.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
+    expect(store.getState().tree.nodes.thought_sibling_y).toBeDefined();
+    expect(store.getState().tree.nodes.voice_node_repair_redo?.text).toBe("我觉得可以。");
+  });
+
+  it("keeps a human commit's convention of ending the redo future", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    store.getState().extendMaterial(SIBLING_PARENT, {
+      nodeId: "thought_sibling_y",
+      createdAt: "2026-09-29T00:00:01.000Z",
+    });
+    store.getState().undo();
+    store.getState().extendMaterial(SIBLING_PARENT, {
+      nodeId: "thought_sibling_z",
+      createdAt: "2026-09-29T00:00:02.000Z",
+    });
+    expect(store.getState().history.redoEntries).toEqual([]);
+  });
+
   it.each(["transform", "text-swap"] as const)(
     "rejects an invalid %s answer with a protected diagnostic and no material change",
     (kind) => {

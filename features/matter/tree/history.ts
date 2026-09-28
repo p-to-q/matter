@@ -158,6 +158,40 @@ export function commitTreeCommand(
 }
 
 /**
+ * Commits the result of work submitted earlier: a model turn or an admission
+ * repair. The undo stack is exactly what `commitTreeCommand` publishes, but
+ * the redo future is not ended. The delivery window, not the person, chose this
+ * moment, and the person's latest history gesture may be an Undo made after
+ * they submitted; clearing redo would let latency destroy it.
+ *
+ * Retained redo entries must still replay exactly, in stack order, against
+ * the new tree and within the same limits across both stacks. The first entry
+ * that does not is released together with everything after it, so the redo
+ * stack stays one contiguous future that recovery and Redo can trust.
+ */
+export function commitDeliveredTreeCommand(
+  tree: ThoughtTree,
+  history: TreeHistory,
+  command: TreeCommand,
+  limits: TreeHistoryLimits,
+  estimateBytes: EstimateInverseBytes = estimateSerializedInverseBytes,
+): CommitTreeCommandResult {
+  const committed = commitTreeCommand(tree, history, command, limits, estimateBytes);
+  const redoEntries = history.redoEntries ?? [];
+  if (!committed.ok || redoEntries.length === 0) return committed;
+  const retained = replayableRedoFuture(committed.tree, committed.history, redoEntries, limits);
+  if (retained.length === 0) return committed;
+  return {
+    ...committed,
+    history: {
+      entries: committed.history.entries,
+      redoEntries: retained,
+      retainedInverseBytes: committed.history.retainedInverseBytes + retainedBytes(retained),
+    },
+  };
+}
+
+/**
  * Applies the latest inverse as a new commit. Only its optimistic revision is
  * rebased; every text and structural memento remains exact and is revalidated
  * by the tree engine. Failure preserves both input objects unchanged.
@@ -283,6 +317,37 @@ export function canReplayTreeHistory(tree: ThoughtTree, history: TreeHistory): b
 
 function retainedBytes(entries: readonly TreeHistoryEntry[]): number {
   return entries.reduce((total, entry) => total + entry.retainedInverseBytes, 0);
+}
+
+/** Returns the longest nearest-first redo prefix that replays within limits. */
+function replayableRedoFuture(
+  tree: ThoughtTree,
+  undoHistory: TreeHistory,
+  redoEntries: readonly TreeHistoryEntry[],
+  limits: TreeHistoryLimits,
+): TreeHistoryEntry[] {
+  let cursor = tree;
+  let entryCount = undoHistory.entries.length;
+  let bytes = undoHistory.retainedInverseBytes;
+  let firstRetained = redoEntries.length;
+  for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
+    const entry = redoEntries[index];
+    if (
+      entry === undefined ||
+      entryCount + 1 > limits.maxEntries ||
+      bytes + entry.retainedInverseBytes > limits.maxRetainedInverseBytes
+    ) break;
+    const replayed = applyTreeCommand(cursor, {
+      ...entry.inverse,
+      expectedRevision: cursor.revision,
+    });
+    if (!replayed.ok) break;
+    cursor = replayed.tree;
+    entryCount += 1;
+    bytes += entry.retainedInverseBytes;
+    firstRetained = index;
+  }
+  return redoEntries.slice(firstRetained);
 }
 
 function assertHistoryLimits(limits: TreeHistoryLimits): void {
