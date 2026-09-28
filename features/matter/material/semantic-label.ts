@@ -377,17 +377,16 @@ export function decideModelRequest(
 }
 
 /**
- * A stable, non-cryptographic key over everything that can change a label.
- * Two 32-bit FNV-1a lanes plus the byte length give a 72-bit key without
- * pulling in WebCrypto, which is unavailable synchronously and on insecure
- * origins. It is a cache key, never an integrity or authentication value, and
- * it never carries node text into a shared namespace.
+ * The complete question one label answers, as one canonical serialization of
+ * everything that can change it: prompt version, locale, bound, material, and
+ * ordered reference context. The server hashes it into its shared label cache
+ * key; this layer stays free of platform crypto so the browser can share it.
  */
-export function labelFingerprint(
+export function labelQuestionIdentity(
   input: NormalizedLabelInput,
   promptVersion: string = SEMANTIC_LABEL_PROMPT_VERSION,
 ): string {
-  return fingerprint([
+  return JSON.stringify([
     promptVersion,
     input.locale,
     input.maxGraphemes,
@@ -415,6 +414,13 @@ export function materialFingerprint(
   return fingerprint([promptVersion, input.locale, input.maxGraphemes, input.text]);
 }
 
+/**
+ * A stable, non-cryptographic key for one browser's own label basis. Two
+ * 32-bit FNV-1a lanes plus the byte length give a 72-bit key without pulling
+ * in WebCrypto, which is unavailable synchronously and on insecure origins. It
+ * is never an integrity or authentication value, and it never keys the shared
+ * server cache, which hashes `labelQuestionIdentity` with SHA-256 instead.
+ */
 function fingerprint(parts: readonly unknown[]): string {
   const bytes = new TextEncoder().encode(JSON.stringify(parts));
   let forward = 0x811c9dc5;

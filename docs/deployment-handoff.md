@@ -247,7 +247,7 @@ These are hard ownership boundaries, not claimed production SLOs:
 
 | Surface | Scenario/provider | Route/browser | Safe floor | Shared answer cache |
 | --- | ---: | ---: | --- | --- |
-| thought label | 12 s | 14 s / 16 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
+| thought label | 12 s | 14 s / 16 s | deterministic label already visible | 256 accepted labels, 10 min, SHA-256 of credential scope + complete normalized input + prompt version |
 | transcript repair | 6–8 s | 9.5 s / 11 s | deterministic repair rules | none |
 | Ask Matter | 16 s | 18 s / 20 s | restore the submitted question | none |
 | Elastic | 12 s | 14 s / 16 s | exact passage unchanged | none |
@@ -269,11 +269,13 @@ for a candidate whose station explicitly declares `ENABLE_THINKING=true|false`.
 The scenario may narrow that declaration to `false`, but an undeclared relay
 receives no extra field and must not be assumed to have disabled thinking.
 
-The label cache stores only an adjudicated label behind two 32-bit FNV-style
-digests plus the exact serialized byte length; this is a non-cryptographic cache
-key, not an integrity boundary. It stores no node text, prompt, provider,
+The label cache stores only an adjudicated label behind a SHA-256 digest of the
+credential scope and the complete label question, so distinct questions do not
+share an entry in practice. Every hit is still judged by the label scenario's
+complete adjudicator before it is served, so even a colliding entry cannot show
+a label the fresh path would refuse. It stores no node text, prompt, provider,
 identity, or credential, and a browser repeats current-material validation. Its
-complete-input-fingerprint single flight is the only cross-request model
+complete-question single flight is the only cross-request model
 coalescing. Audio,
 transcript, repair, question, inquiry answer, lineage, Elastic output, and Text
 Swap output are never cached or coalesced. Every model/audio browser-to-Matter
