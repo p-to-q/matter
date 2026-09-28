@@ -14,7 +14,7 @@ import type { StretchCommitBasis } from "../runtime/stretch-interaction";
 import type { TransformCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
-import { subscribePageExit, subscribePageSuspension } from "../interaction/page-suspension";
+import { useDeliveryWindow } from "../interaction/use-delivery-window";
 
 export type FixedExpandTurnState = Readonly<{
   phase: "idle" | "requesting";
@@ -61,7 +61,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   const [invariantFailure, setInvariantFailure] = useState<Readonly<{ error: unknown }> | null>(null);
   const inputRef = useRef(input);
   const requestRef = useRef<OwnedFixedExpandRequest | null>(null);
-  const activePointersRef = useRef(new Set<number>());
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
   const deliveryWindowOpenRef = useRef(
     typeof document === "undefined" || document.visibilityState === "visible",
@@ -178,12 +177,19 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
     else deliver(request);
   }, [cancel, deliver, input]);
 
+  const refreshDeliveryWindow = useDeliveryWindow({
+    isAvailable: () => deliveryAvailableRef.current,
+    onChange: (open) => {
+      deliveryWindowOpenRef.current = open;
+      const request = requestRef.current;
+      if (open && request !== null) deliver(request);
+    },
+    onExit: cancel,
+  }, deliver);
+
   useEffect(() => {
-    deliveryWindowOpenRef.current = deliveryAvailableRef.current &&
-      document.visibilityState === "visible" && activePointersRef.current.size === 0;
-    const request = requestRef.current;
-    if (request !== null) deliver(request);
-  }, [deliver, input.deliveryWindowAvailable]);
+    refreshDeliveryWindow();
+  }, [input.deliveryWindowAvailable, refreshDeliveryWindow]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -195,43 +201,11 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       cancel();
     };
     window.addEventListener("keydown", onKeyDown);
-    const openDeliveryIfUsable = () => {
-      deliveryWindowOpenRef.current =
-        deliveryAvailableRef.current && document.visibilityState === "visible" &&
-          activePointersRef.current.size === 0;
-      const request = requestRef.current;
-      if (request !== null) deliver(request);
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      activePointersRef.current.add(event.pointerId);
-      deliveryWindowOpenRef.current = false;
-    };
-    const onPointerDone = (event: PointerEvent) => {
-      activePointersRef.current.delete(event.pointerId);
-      openDeliveryIfUsable();
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerDone, true);
-    window.addEventListener("pointercancel", onPointerDone, true);
-    const unsubscribePageSuspension = subscribePageSuspension(
-      () => {
-        activePointersRef.current.clear();
-        deliveryWindowOpenRef.current = false;
-      },
-      openDeliveryIfUsable,
-    );
-    const unsubscribePageExit = subscribePageExit(cancel);
-    openDeliveryIfUsable();
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerDone, true);
-      window.removeEventListener("pointercancel", onPointerDone, true);
-      unsubscribePageSuspension();
-      unsubscribePageExit();
       cancel();
     };
-  }, [cancel, deliver]);
+  }, [cancel]);
 
   return { state, start, cancel };
 }
