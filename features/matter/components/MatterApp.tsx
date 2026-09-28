@@ -17,6 +17,11 @@ import type {
 } from "../store/matter-store";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
+  materialTurnsHoldBasis,
+  SETTLED_PAPER_MATERIAL_TURNS,
+  type PaperMaterialTurnPhases,
+} from "./material-turn-activity";
+import {
   seededFallbackBranchTexts,
   type SeededBranchTextResolver,
 } from "../material/seeded-material-core";
@@ -138,25 +143,34 @@ export function MatterApp() {
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
     locale: canvasPreferences.preferences.language,
   });
+  const [paperTurnPhases, setPaperTurnPhases] =
+    useState<PaperMaterialTurnPhases>(SETTLED_PAPER_MATERIAL_TURNS);
+  const turnsHoldSeedBasis = materialTurnsHoldBasis({
+    admission: admission.state.phase,
+    paper: paperTurnPhases,
+  });
   useLayoutEffect(() => {
+    // Relocalization waits for every material turn that read current passages
+    // and reruns when the last one settles, so a locale change never revokes a
+    // submitted Point-and-Talk or Elastic request on seed copy.
     if (
       seededSessionRelocalizer === null ||
       !persistence.initialReconciliationComplete ||
       persistence.status.phase === "loading" ||
-      admission.state.phase !== "idle"
+      turnsHoldSeedBasis
     ) return;
     localizeSeededMaterial(
       canvasPreferences.preferences.language,
       seededSessionRelocalizer,
     );
   }, [
-    admission.state.phase,
     canvasPreferences.preferences.language,
     documentEpoch,
     localizeSeededMaterial,
     persistence.initialReconciliationComplete,
     persistence.status.phase,
     seededSessionRelocalizer,
+    turnsHoldSeedBasis,
   ]);
   const clearRepairPresentations = admission.clearRepairPresentations;
   const undoWithPresentationReset = useCallback(() => {
@@ -244,6 +258,7 @@ export function MatterApp() {
       onClearSelection={clearSelection}
       onTransformCommit={commitTransformTurn}
       onTextSwapCommit={commitTextSwapTurn}
+      onMaterialTurnPhasesChange={setPaperTurnPhases}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={extendChild}

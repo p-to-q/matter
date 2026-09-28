@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SEEDED_DOCUMENT_NODE_IDS } from "../material/seeded-document";
+import { relocalizeSeededSession } from "../material/seeded-session-localization";
 import {
   buildTransformPlan,
   parseTransformEnvelope,
@@ -108,6 +109,40 @@ describe("Matter store material turns", () => {
       createdAt: "2026-09-29T00:00:02.000Z",
     });
     expect(store.getState().history.redoEntries).toEqual([]);
+  });
+
+  it("lands a Point-and-Talk result on seed copy when relocalization waits for it", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const envelope = textSwapEnvelope(currentTree(store));
+    const replacement = "我们怀念的也许是另一种生活";
+    const siblingBefore = store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]?.text;
+
+    expect(store.getState().commitTextSwap(
+      envelope,
+      buildTextSwapPlan(envelope, replacement),
+      store.getState().documentEpoch,
+      NOW_MS,
+    )).toMatchObject({ status: "committed" });
+    expect(store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession))
+      .toMatchObject({ status: "localized" });
+
+    // The person's result is no longer seed copy; untouched passages follow the locale.
+    expect(store.getState().tree.nodes[TARGET]?.text).toBe(replacement);
+    expect(store.getState().tree.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]?.text)
+      .not.toBe(siblingBefore);
+  });
+
+  it("shows why relocalization must wait: it revokes a turn submitted on seed copy", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const envelope = textSwapEnvelope(currentTree(store));
+    store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+
+    expect(store.getState().commitTextSwap(
+      envelope,
+      buildTextSwapPlan(envelope, "我们怀念的也许是另一种生活"),
+      store.getState().documentEpoch,
+      NOW_MS,
+    )).toMatchObject({ status: "stale" });
   });
 
   it.each(["transform", "text-swap"] as const)(

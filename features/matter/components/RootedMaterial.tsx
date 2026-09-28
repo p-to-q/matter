@@ -164,6 +164,10 @@ import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
+  samePaperMaterialTurnPhases,
+  type PaperMaterialTurnPhases,
+} from "./material-turn-activity";
+import {
   isTransformPresentationCurrent,
   useTransformPresentation,
 } from "../interaction/use-transform-presentation";
@@ -226,6 +230,8 @@ export type RootedMaterialProps = {
     plan: TransformPlan,
     expectedDocumentEpoch: number,
   ) => MaterialTurnCommitResult<TransformCommittedChange>;
+  /** Reports the paper's Elastic and Point-and-Talk phases to the product root. */
+  onMaterialTurnPhasesChange?: (phases: PaperMaterialTurnPhases) => void;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -1331,6 +1337,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
     start: startTransform,
     state: transformState,
   } = transform;
+  const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
+  const reportedMaterialTurnPhasesRef = useRef<PaperMaterialTurnPhases | null>(null);
+  useLayoutEffect(() => {
+    const phases = Object.freeze({ elastic: transformState.phase, textSwap: pointTalkPhase });
+    const reported = reportedMaterialTurnPhasesRef.current;
+    if (reported !== null && samePaperMaterialTurnPhases(reported, phases)) return;
+    reportedMaterialTurnPhasesRef.current = phases;
+    reportMaterialTurnPhases?.(phases);
+  }, [pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
   const transformNotice = transformState.notice;
   useEffect(() => {
     if (transformNotice === null) return;
