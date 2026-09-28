@@ -138,7 +138,11 @@ session, never the basis or coordinator. A session may return only ordered,
 non-overlapping patches contained by the scenario's eligible ranges; the
 neutral port validates and applies them. `MaterialIngress` validates the source
 candidate, asks the session once, validates the changed candidate again, and
-returns the one command the existing tree engine may publish. The
+returns the one command the existing tree engine may publish. When the changed
+candidate fails that final validation, only the suggestion is withheld: the
+already validated source candidate becomes the command, and the content-free
+ingress receipt records `canonicalizationWithheld`. A spelling rule may refine
+spoken words or a valid model answer; it can never cost either. The
 port does not own storage, network requests, interaction state, history, tree
 mutation, or publication.
 
