@@ -22,6 +22,41 @@ describe("mobile canvas touch ownership", () => {
     expect(contactRegistration).toBeGreaterThan(interactiveGuard);
   });
 
+  it("arbitrates pen and touch before any canvas gesture can start", () => {
+    const downStart = rooted.indexOf("onPointerDown={(event) => {");
+    const interactiveGuard = rooted.indexOf('closest("[data-canvas-interactive], a")', downStart);
+    const claim = rooted.indexOf("pointerArbiter.claim(arbitratedPointer(event))", downStart);
+    const rejection = rooted.indexOf('if (claim?.kind === "reject")', downStart);
+    const contactRegistration = rooted.indexOf(
+      "canvasTouchContactsRef.current.set(event.pointerId, contact)",
+      downStart,
+    );
+    const lassoStart = rooted.indexOf("if (lasso.pointerDown(event))", downStart);
+    expect(interactiveGuard).toBeGreaterThan(downStart);
+    expect(claim).toBeGreaterThan(interactiveGuard);
+    expect(rejection).toBeGreaterThan(claim);
+    expect(contactRegistration).toBeGreaterThan(rejection);
+    expect(lassoStart).toBeGreaterThan(rejection);
+    // The per-type isPrimary gate is replaced by the one gesture owner.
+    expect(rooted.slice(downStart, rooted.indexOf("onPointerMove={(event) => {"))).not.toContain(
+      "!event.isPrimary",
+    );
+
+    // Every later event of a rejected pointer returns before any owner work.
+    for (const [handler, guard] of [
+      ["onPointerMove={(event) => {", "if (pointerArbiter.isRejected(event.pointerId)) return;"],
+      ["onPointerUp={(event) => {", "if (pointerArbiter.isRejected(event.pointerId)) return;"],
+      ["onLostPointerCapture={(event) => {", "if (pointerArbiter.isRejected(event.pointerId)) return;"],
+      ["onPointerCancel={(event) => {", "if (pointerArbiter.ignoresCancel(arbitratedPointer(event))) return;"],
+    ] as const) {
+      const start = rooted.indexOf(handler);
+      const body = rooted.slice(start, start + 260);
+      expect(body).toContain(guard);
+    }
+    expect(rooted).toContain('window.addEventListener("pointerup", noteEnd, true)');
+    expect(rooted).toContain('window.addEventListener("pointercancel", noteEnd, true)');
+  });
+
   it("cancels transient canvas ownership on browser lifecycle loss", () => {
     expect(rooted).toContain('window.addEventListener("pagehide", cancelCanvasPointerOwnership)');
     expect(rooted).toContain('window.addEventListener("blur", cancelCanvasPointerOwnership)');

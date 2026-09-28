@@ -142,6 +142,23 @@ presentation: Elastic loses its visible degree and Point and Talk detaches, whil
 the submitted request continues. `escape-ownership.test.ts` holds the boundary
 by scanning the source tree.
 
+## Canvas pointer ownership
+
+The canvas has one gesture owner (`runtime/canvas-pointer-arbitration.ts`),
+which replaces the per-type `isPrimary` gate: Pointer Events make a palm primary
+for its own type, so a palm during a pen stroke used to reach node drag, Pan, or
+a pinch. There is no persistent pen mode. While a pen is in contact, and for
+`PEN_PALM_GRACE_MS` (400 ms) after its last contact event, a touch pointer-down
+is rejected before the contact registry, capture, Lasso, drag, or camera; every
+later event of that pointer and its click are ignored, and so is an unowned
+touch's cancel. A pen that lands within `PEN_TAKEOVER_WINDOW_MS` (300 ms) of a
+single-finger touch takes the canvas over: the touch's Lasso stroke restores its
+prior selection and its Pan returns the camera to where it began. Otherwise the
+first pointer owns the gesture and only another touch may join it, so two
+fingers still pinch whenever no pen is touching. Pen hover is not activity, and
+a mouse alone behaves as before. Pen contact is noted in the window capture
+phase, so a control that stops propagation cannot strand it.
+
 ## Left field: separately frozen
 
 The left field is not governed by this composition reference. Its current

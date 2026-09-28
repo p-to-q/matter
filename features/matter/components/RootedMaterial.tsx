@@ -179,6 +179,10 @@ import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
 import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
+import {
+  createCanvasPointerArbiter,
+  type ArbitratedPointer,
+} from "../runtime/canvas-pointer-arbitration";
 import { useEscapeLayer } from "./escape-layers";
 
 const PointTalkTurn = dynamic(
@@ -605,6 +609,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const pointerOriginNodeRef = useRef<string | null>(null);
   const lassoClickOriginNodeRef = useRef<string | null>(null);
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
+  // One gesture owner and pen-active palm rejection; see the module contract.
+  const [pointerArbiter] = useState(createCanvasPointerArbiter);
   const clearNodeDrag = useCallback(() => {
     const gesture = nodeDragRef.current;
     if (gesture?.targetElement) delete gesture.targetElement.dataset.dragOver;
@@ -2807,6 +2813,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [interruptIndexCameraMotion, setViewport]);
 
   const cancelCanvasPointerOwnership = useCallback(() => {
+    pointerArbiter.reset();
     const touchPointerIds = Array.from(canvasTouchContactsRef.current.keys());
     canvasTouchContactsRef.current.clear();
     multiTouchNavigationRef.current = false;
@@ -2823,7 +2830,43 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointerOriginNodeRef.current = null;
     cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
+  }, [cancelNodeDragOwnership, lasso, pointerArbiter, updateViewport]);
+
+  // A pen that lands just after a palm owns the canvas: the palm's lasso
+  // stroke restores its prior selection, its pan returns the camera to where it
+  // began, and its node drag ends before anything settled.
+  const revokeTouchesForPen = useCallback((pointerIds: readonly number[]) => {
+    const shell = shellRef.current;
+    for (const pointerId of pointerIds) {
+      canvasTouchContactsRef.current.delete(pointerId);
+      if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
+      if (nodeDragRef.current?.pointerId === pointerId) cancelNodeDragOwnership();
+      updateViewport({ type: "pointer-revert", pointerId });
+      if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
+    }
+    multiTouchNavigationRef.current = false;
+    pointerOriginNodeRef.current = null;
   }, [cancelNodeDragOwnership, lasso, updateViewport]);
+
+  useEffect(() => {
+    // Capture phase: a control that stops propagation must not strand a pen
+    // "in contact" or a canvas owner. The arbiter keeps an ended pointer's
+    // disposition until the next contact, so the canvas handlers that run
+    // after this still recognise it.
+    const noteDown = (event: PointerEvent) => pointerArbiter.notePointerDown(arbitratedPointer(event));
+    const noteMove = (event: PointerEvent) => pointerArbiter.notePointerMove(arbitratedPointer(event));
+    const noteEnd = (event: PointerEvent) => pointerArbiter.notePointerEnd(arbitratedPointer(event));
+    window.addEventListener("pointerdown", noteDown, true);
+    window.addEventListener("pointermove", noteMove, true);
+    window.addEventListener("pointerup", noteEnd, true);
+    window.addEventListener("pointercancel", noteEnd, true);
+    return () => {
+      window.removeEventListener("pointerdown", noteDown, true);
+      window.removeEventListener("pointermove", noteMove, true);
+      window.removeEventListener("pointerup", noteEnd, true);
+      window.removeEventListener("pointercancel", noteEnd, true);
+    };
+  }, [pointerArbiter]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -2929,6 +2972,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-viewport-zoom={viewport.zoom}
       ref={shellRef}
       onClickCapture={(event) => {
+        const clickPointerId = (event.nativeEvent as Partial<PointerEvent>).pointerId;
+        if (
+          clickPointerId !== undefined &&
+          pointerArbiter.consumeRejectedClick(clickPointerId, event.timeStamp)
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (!suppressClickRef.current) return;
         suppressClickRef.current = false;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive]")) return;
@@ -2936,6 +2988,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         event.stopPropagation();
       }}
       onLostPointerCapture={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
         if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
         if (trackedTouch && multiTouchNavigationRef.current) {
@@ -2954,6 +3007,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "lost-pointer-capture", pointerId: event.pointerId });
       }}
       onPointerCancel={(event) => {
+        // A palm's cancel beside a pen would otherwise clear the pen's origin.
+        if (pointerArbiter.ignoresCancel(arbitratedPointer(event))) return;
         const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
         if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
         if (trackedTouch && multiTouchNavigationRef.current) {
@@ -2975,6 +3030,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
         cancelKeyboardFocusReveal();
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
+        // Only a primary-button contact can start a canvas gesture, so no other
+        // button may become the gesture owner or be refused by it.
+        const claim = event.pointerType === "touch" || event.button === 0
+          ? pointerArbiter.claim(arbitratedPointer(event))
+          : null;
+        if (claim?.kind === "reject") {
+          // Before the contact registry, capture, Lasso, drag, or camera.
+          event.preventDefault();
+          return;
+        }
+        if (claim?.kind === "takeover") revokeTouchesForPen(claim.cancelledTouchIds);
         const pointerViewport = interruptIndexCameraMotion();
         abortFixedExpansion();
         if (event.pointerType === "touch") {
@@ -3025,7 +3091,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
           return;
         }
-        if (!event.isPrimary || (event.pointerType !== "touch" && event.button !== 0)) return;
+        // One gesture owner replaces the per-type `isPrimary` test: a touch
+        // that joined an existing touch owner belongs to its pinch, never to a
+        // second drag or pan.
+        if (claim === null || (claim.kind === "accept" && !claim.founder)) return;
         const pointerCandidateId =
           (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]")?.dataset
             .thoughtId ?? null;
@@ -3100,6 +3169,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }
       }}
       onPointerMove={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         let touchContact: CanvasTouchContact | null = null;
         if (canvasTouchContactsRef.current.has(event.pointerId)) {
           touchContact = projectCanvasTouchContact(
@@ -3200,6 +3270,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         });
       }}
       onPointerUp={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         const trackedTouch = canvasTouchContactsRef.current.get(event.pointerId) ?? null;
         const finalTrackedTouch = trackedTouch === null
           ? null
@@ -4428,6 +4499,10 @@ function StretchHandleButton({
       type="button"
     />
   );
+}
+
+function arbitratedPointer(event: Pick<PointerEvent, "pointerId" | "pointerType" | "timeStamp">): ArbitratedPointer {
+  return { pointerId: event.pointerId, pointerType: event.pointerType, timeStamp: event.timeStamp };
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
