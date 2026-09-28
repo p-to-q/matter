@@ -291,7 +291,8 @@ ownership for those SLO measurements remains the external issue #34 boundary.
 ### Content-zero model performance receipt — current contract
 
 Preview.39 introduced this receipt; Preview.47 extends its closed schema with
-completion-settlement counters. This table is the complete current contract,
+completion-settlement counters, and the next release adds the declared
+`rejectionReason` code to rejected terminals. This table is the complete current contract,
 not a retroactive claim about older log lines. Health proves the
 deployed version and configured capability only; the deployment operator must
 inspect the retained server-log receipt before claiming that this event was
@@ -323,6 +324,7 @@ The event and field set is closed:
 | `candidateRejections` | integer `0..255` | Transport-complete answers rejected by explicit-action scenario policy before a later candidate was tried; never provider-health evidence. |
 | `candidateUnknownTerminators` | integer `0..255` | Modifier count for explicit stop vocabulary this build does not recognize; it accompanies a refused attempt. |
 | `candidateMissingTerminators` | integer `0..255` | Modifier count for accepted compatibility responses that omitted stop metadata; it accompanies an answered attempt. |
+| `rejectionReason` | present only when `outcome` is `rejected`: one code from that scenario's declared adjudication vocabulary, or `UNDECLARED` | Why adjudication refused the terminal answer, so inquiry, repair, and label can explain `MODEL_REJECTED` in production. The harness admits only declared codes and the logger re-checks a bare ASCII identifier of at most 48 characters; answer, material, and provider text cannot fit. |
 
 This table is the complete schema only for `matter.scenario-performance`.
 Elastic and provider-gated Text Swap retain the separate existing

@@ -130,9 +130,28 @@ export type ScenarioFallback =
   | "MODEL_REJECTED"
   | "MODEL_BUSY";
 
-export type ScenarioVerdict<Value> =
+export type ScenarioVerdict<Value, Rejection extends string = string> =
   | Readonly<{ ok: true; value: Value }>
-  | Readonly<{ ok: false; reason: string }>;
+  | Readonly<{ ok: false; reason: Rejection }>;
+
+/**
+ * The rejection code a receipt carries when an adjudicator returns a reason
+ * its scenario did not declare. It keeps the rejection countable without ever
+ * letting an undeclared string, which could be model or material text, reach
+ * an observer or a log line.
+ */
+export const UNDECLARED_REJECTION = "UNDECLARED";
+
+/**
+ * Builds a scenario's closed rejection vocabulary from an exhaustive record,
+ * so adding a code to the adjudicator's type without declaring it here is a
+ * compile error rather than a receipt that silently reads `UNDECLARED`.
+ */
+export function rejectionVocabulary<Code extends string>(
+  codes: Readonly<Record<Code, true>>,
+): readonly Code[] {
+  return Object.freeze(Object.keys(codes) as Code[]);
+}
 
 export type ScenarioOutcome<Value> =
   | Readonly<{ ok: true; value: Value }>
@@ -148,7 +167,7 @@ export type ScenarioBudget = Readonly<{
  * A scenario owns its prompt, its budget, and its judgement of an answer — and
  * nothing else. It never sees transport, credentials, caches, or React.
  */
-export type MatterScenario<Input, Value> = Readonly<{
+export type MatterScenario<Input, Value, Rejection extends string = string> = Readonly<{
   id: MatterScenarioId;
   /**
    * Bumping this invalidates every cached answer and every peer that declares
@@ -163,7 +182,12 @@ export type MatterScenario<Input, Value> = Readonly<{
    * guarantee lives: the prompt raises the share of answers that are what was
    * asked for, and adjudication makes the rest cost nothing.
    */
-  adjudicate: (answer: unknown, input: Input) => ScenarioVerdict<Value>;
+  adjudicate: (answer: unknown, input: Input) => ScenarioVerdict<Value, Rejection>;
+  /**
+   * Every code `adjudicate` may reject with. These are the only rejection
+   * strings an observer or production receipt can carry for this scenario.
+   */
+  rejectionCodes: readonly Rejection[];
   /** Explicit user actions may try a later provider after policy rejection. */
   rejectedCandidate?: "settle-floor" | "continue-if-budget";
 }>;
@@ -269,7 +293,10 @@ export type RunScenarioOptions = Readonly<{
 export type ScenarioObservation = Readonly<{
   scenario: MatterScenarioId;
   reason: ScenarioFallback;
-  /** Exact scenario-owned policy code; present only for an adjudicator rejection. */
+  /**
+   * The scenario's declared policy code, or `UNDECLARED`; present only for an
+   * adjudicator rejection.
+   */
   rejectionReason?: string;
   elapsedMs: number;
 }>;
@@ -300,6 +327,12 @@ export type ScenarioPerformanceObservation = Readonly<{
   candidateUnknownTerminators: number;
   /** Accepted compatibility responses whose relay omitted a stop reason. */
   candidateMissingTerminators: number;
+  /**
+   * Why adjudication refused the terminal answer: the scenario's declared
+   * code, or `UNDECLARED`. Present only when `outcome` is `rejected`; a code,
+   * never answer, material, or provider text.
+   */
+  rejectionReason?: string;
 }>;
 
 /**
@@ -318,13 +351,17 @@ export function recordScenarioFallback(observation: ScenarioObservation): void {
 /**
  * The production default is one structured scalar line per provider-backed
  * scenario invocation. Exact durations remain numeric measurements rather than
- * metric labels; every string field is a closed enum. Provider cold/warm is
- * intentionally absent because this process cannot prove provider cache state.
+ * metric labels; every string field is a closed enum. The rejection code's set
+ * is closed per scenario by `runScenario`; because this sink serializes a
+ * caller-owned object, it re-checks that the code is a bare ASCII identifier.
+ * Provider cold/warm is intentionally absent because this process cannot prove
+ * provider cache state.
  */
 export function recordScenarioPerformance(observation: ScenarioPerformanceObservation): void {
+  const outcome = safePerformanceOutcome(observation.outcome);
   const receipt = Object.freeze({
     scenario: safeScenarioId(observation.scenario),
-    outcome: safePerformanceOutcome(observation.outcome),
+    outcome,
     elapsedMs: boundedScalar(observation.elapsedMs, 120_000),
     candidateTelemetry: observation.candidateTelemetry === "pool" ? "pool" : "unreported",
     candidateAttempts: boundedScalar(observation.candidateAttempts, 255),
@@ -335,6 +372,9 @@ export function recordScenarioPerformance(observation: ScenarioPerformanceObserv
     candidateRejections: boundedScalar(observation.candidateRejections, 255),
     candidateUnknownTerminators: boundedScalar(observation.candidateUnknownTerminators, 255),
     candidateMissingTerminators: boundedScalar(observation.candidateMissingTerminators, 255),
+    ...(outcome === "rejected"
+      ? { rejectionReason: safeRejectionCode(observation.rejectionReason) }
+      : {}),
   });
   console.info(`matter.scenario-performance ${JSON.stringify(receipt)}`);
 }
@@ -385,7 +425,7 @@ export async function runScenario<Input, Value>(
     if (event === "refused") candidateRefusals = boundedIncrement(candidateRefusals);
     if (event === "rejected") candidateRejections = boundedIncrement(candidateRejections);
   };
-  const notePerformance = (outcome: ScenarioPerformanceOutcome): void => {
+  const notePerformance = (outcome: ScenarioPerformanceOutcome, rejectionReason?: string): void => {
     if (performanceSettled || observePerformance === undefined) return;
     performanceSettled = true;
     const observation = Object.freeze({
@@ -401,6 +441,9 @@ export async function runScenario<Input, Value>(
       candidateRejections,
       candidateUnknownTerminators,
       candidateMissingTerminators,
+      ...(outcome === "rejected"
+        ? { rejectionReason: rejectionReason ?? UNDECLARED_REJECTION }
+        : {}),
     });
     try {
       observePerformance(observation);
@@ -413,10 +456,16 @@ export async function runScenario<Input, Value>(
   // otherwise log once per request forever; a caller that walked away is a fact
   // about the caller. Logging either would bury the outage they surround.
   const settle = <T,>(reason: ScenarioFallback, rejectionReason?: string): ScenarioOutcome<T> => {
+    // Both observers receive the same code, and only a declared one: an
+    // adjudicator's reason is a string until the scenario's vocabulary says
+    // otherwise, and production must be able to say why without saying what.
+    const rejection = reason === "MODEL_REJECTED"
+      ? declaredRejection(scenario.rejectionCodes, rejectionReason)
+      : undefined;
     const observation = Object.freeze({
       scenario: scenario.id,
       reason,
-      ...(reason === "MODEL_REJECTED" && rejectionReason !== undefined ? { rejectionReason } : {}),
+      ...(rejection === undefined ? {} : { rejectionReason: rejection }),
       elapsedMs: safeElapsed(now() - startedAtMs),
     });
     if (observeFallback !== undefined) {
@@ -426,7 +475,7 @@ export async function runScenario<Input, Value>(
         // Policy observation is diagnostic and cannot own scenario settlement.
       }
     }
-    notePerformance(performanceOutcome(reason));
+    notePerformance(performanceOutcome(reason), rejection);
     return fallback(reason);
   };
   if (options.signal?.aborted) return fallback("MODEL_UNAVAILABLE");
@@ -585,6 +634,21 @@ function performanceOutcome(reason: ScenarioFallback): ScenarioPerformanceOutcom
     case "MODEL_REJECTED": return "rejected";
     case "MODEL_UNAVAILABLE": return "unavailable";
   }
+}
+
+function declaredRejection(codes: readonly string[], reason: string | undefined): string {
+  return reason !== undefined && codes.includes(reason) ? reason : UNDECLARED_REJECTION;
+}
+
+const REJECTION_CODE = /^[A-Za-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)*$/u;
+const MAX_REJECTION_CODE_LENGTH = 48;
+
+function safeRejectionCode(value: unknown): string {
+  return typeof value === "string" &&
+    value.length <= MAX_REJECTION_CODE_LENGTH &&
+    REJECTION_CODE.test(value)
+    ? value
+    : UNDECLARED_REJECTION;
 }
 
 function safeElapsed(value: number): number {

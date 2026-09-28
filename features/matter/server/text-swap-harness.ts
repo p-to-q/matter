@@ -4,7 +4,7 @@ import {
   type TextSwapLength,
   type TextSwapPolicyCode,
 } from "../protocol/text-swap-policy";
-import type { MatterScenario } from "./harness";
+import { rejectionVocabulary, type MatterScenario } from "./harness";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { KEEP_UNFINISHED, boundedIntent, composePrompt, fence, fenceJson } from "./prompt-spine";
 
@@ -23,7 +23,11 @@ export type TextSwapScenarioInput = Readonly<{
 
 export type TextSwapRejection = TextSwapPolicyCode;
 
-export const TEXT_SWAP_SCENARIO: MatterScenario<TextSwapScenarioInput, string> = Object.freeze({
+export const TEXT_SWAP_SCENARIO: MatterScenario<
+  TextSwapScenarioInput,
+  string,
+  TextSwapRejection
+> = Object.freeze({
   id: "matter-text-swap",
   promptVersion: TEXT_SWAP_PROMPT_VERSION,
   rejectedCandidate: "continue-if-budget",
@@ -35,6 +39,15 @@ export const TEXT_SWAP_SCENARIO: MatterScenario<TextSwapScenarioInput, string> =
     disableThinking: true,
   }),
   adjudicate: (answer, input) => adjudicateTextSwap(answer, input),
+  rejectionCodes: rejectionVocabulary<TextSwapRejection>({
+    EMPTY: true,
+    NO_CHANGE: true,
+    LENGTH_OUT_OF_RANGE: true,
+    BOUND_EXCEEDED: true,
+    INVALID_FORMAT: true,
+    PROTECTED_MEANING_CHANGED: true,
+    SCRIPT_DRIFT: true,
+  }),
 });
 
 export function adjudicateTextSwap(

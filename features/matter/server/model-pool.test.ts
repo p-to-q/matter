@@ -427,6 +427,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => answer === "good"
         ? { ok: true, value: answer }
         : { ok: false, reason: "invalid" },
+      rejectionCodes: ["invalid"],
     });
     const observations: ScenarioPerformanceObservation[] = [];
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -459,6 +460,7 @@ describe("pool adapter", () => {
       compile: () => "label",
       budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
       adjudicate: () => ({ ok: false as const, reason: "invalid" }),
+      rejectionCodes: ["invalid"],
     });
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
       .resolves.toEqual({ ok: false, fallback: "MODEL_REJECTED" });
@@ -480,6 +482,7 @@ describe("pool adapter", () => {
       compile: () => "answer",
       budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
       adjudicate: () => ({ ok: false as const, reason: "invalid" }),
+      rejectionCodes: ["invalid"],
     });
     const governor = new ScenarioGovernor();
     await expect(runScenario(scenario, null, adapter, governor))
@@ -513,6 +516,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => answer === "good"
         ? { ok: true as const, value: answer }
         : { ok: false as const, reason: "invalid" },
+      rejectionCodes: ["invalid"],
     });
 
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
@@ -545,6 +549,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => answer === "good"
         ? { ok: true as const, value: answer }
         : { ok: false as const, reason: "invalid" },
+      rejectionCodes: ["invalid"],
     });
     const observations: ScenarioPerformanceObservation[] = [];
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -585,6 +590,7 @@ describe("pool adapter", () => {
         adjudicate: (answer) => answer === "good"
           ? { ok: true as const, value: answer }
           : { ok: false as const, reason: "invalid" },
+        rejectionCodes: ["invalid"],
       });
       const observations: ScenarioPerformanceObservation[] = [];
       const outcome = runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -619,6 +625,7 @@ describe("pool adapter", () => {
       compile: () => "answer",
       budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
       adjudicate: () => { throw new Error("policy defect"); },
+      rejectionCodes: [],
     });
     const observations: ScenarioPerformanceObservation[] = [];
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -1403,6 +1410,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => typeof answer === "string"
         ? { ok: true, value: answer }
         : { ok: false, reason: "empty" },
+      rejectionCodes: ["empty"],
     });
     const outcome = await runScenario(scenario, null, adapter, new ScenarioGovernor(), {
       observePerformance: (observation) => observations.push(observation),

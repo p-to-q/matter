@@ -224,7 +224,10 @@ counted compatibility path for managed relays while they are measured; a
 reviewed user transport requires an explicit terminator. Production receipts keep
 only closed counts — attempt, timeout, failure, truncation, refusal, unknown,
 missing, and explicit-action scenario rejection — never the relay's raw
-vocabulary.
+vocabulary. A rejected terminal also carries one code from the scenario's
+declared `rejectionCodes`, or `UNDECLARED`, so a refused answer can be explained
+without its text; each scenario builds that vocabulary exhaustively from its
+adjudicator's own reason type.
 
 **One provider foundation, five execution lanes.** `model-pool.ts` owns the
 managed registry and execution machinery; `user-provider-registry.ts` owns the
