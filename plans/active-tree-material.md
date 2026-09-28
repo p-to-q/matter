@@ -7,6 +7,73 @@ Destination: the first usable public release at `ptoq.io/matter`
 This is the only roadmap. It ends at the first release; it is not a forecast of
 Matter as a platform.
 
+## Active campaign — nothing a person does is silently lost; Wiki becomes addressable
+
+State: frozen 2026-09-29 after a nine-part audit of `c6027c8` and five external
+research passes (bounded undo, local durability, exit motion, IME/Escape/pen
+input, implicit feedback). Target: Preview.64 on `main`.
+
+Owner decisions of 2026-09-29 that reopen earlier freezes:
+
+1. Wiki may disclose an applied change. The first perceivable arrival of a
+   Wiki-applied word receives one restrained heard-to-canonical settle, and an
+   unsettled occurrence carries a quiet mark the person may tap to take over.
+2. Informed implicit acceptance is approval. After a disclosure was
+   perceivable, continued use, dwell, copy or export, leaving the page, and the
+   occurrence surviving without correction settle that occurrence as accepted.
+   Each occurrence settles once. Wiki still never observes Material Undo.
+3. Undo is bounded: 1,000 steps and 32 MiB of exact inverses across both
+   stacks. The byte bound exceeds the largest legal single inverse, so no valid
+   change is refused. Older steps are released; long-term recovery is Archive.
+4. Transient voice and turn surfaces leave crisply instead of vanishing in one
+   frame.
+
+```text
+Outcome:    a person never loses spoken words, a submitted AI request, unsaved
+            material, or a typed direction without a visible, recoverable state;
+            Wiki corrections become perceivable, addressable at the word, and
+            learn from informed acceptance and explicit takeover
+Boundary:   admission and turn lifecycles, keyboard/IME dismissal, persistence
+            and history storage, transient presentation exits, the material
+            lexical port receipt, one Wiki occurrence owner, Wiki evidence
+            policy, and the documents that state these contracts
+Invariants: only the tree engine commits material; the model still returns only
+            text; Wiki never becomes model context, never observes Material
+            Undo, and never publishes a command; every correction the person
+            makes is an ordinary pointer-undoable material change; bounds reject
+            rather than truncate material; transient state never enters the
+            document or history
+Proof:      focused unit tests per slice, Chromium e2e for each changed journey
+            at laptop and narrow widths, npm run check, npm run test:e2e, one
+            verifier per slice, then three whole-diff verifier rounds
+Non-goals:  RootedMaterial decomposition and pan/fold render cost (next
+            campaign), nested-radius canvas audit, Ask Matter record surface,
+            issue/branch housekeeping, pronunciation producers without corpus
+            proof, managed provider promotion, and the #104 key ring
+```
+
+Slices, in dependency order. T-slices run in parallel; W-slices follow W1.
+
+| Slice | Owner boundary | Delivers |
+| --- | --- | --- |
+| T1 keyboard and chrome | `composition-safe-keys`, CanvasChrome, PointTalkComposer, Escape owners, MaterialFiles rename | IME-safe Enter/Escape across engines, one Escape per layer, Ask Matter survives detach and breakpoint changes, audible answers, quiet inquiry unavailability |
+| T2 voice and presence | admission driver/reducer, browser voice, local transcription, AdmissionFeedback, Point Talk presentation | no silent drop on retry, warm-up timeout, or vanished parent; a kept transcript on stale target; presence exits with minimum dwell; pointer-idle recovery |
+| T3 history and storage | tree history, history recovery, matter database v6, document repository, persistence controller | bounded undo, per-entry journal records, constant-cost recovery with use-time validation, material-before-history under quota |
+| T4 durability surface | persistence controller, MaterialFiles footer, MatterApp archive copy, generation channel | truthful docked save state, dirty-only `beforeunload`, cross-tab generation broadcast, superseded schema, storage-full import path, bounded `persist()` |
+| T5 AI turns | text-swap driver, fixed-expand turn, label driver, store turn commit, material ingress | no redo loss from late turns, no pre-submit invalidation by visibility, locale relocalization waits for turns, Elastic failure is announced and parked delivery is bounded, a valid AI answer survives lexical post-processing, pen-active palm rejection |
+| W1 Wiki evidence semantics | `features/matter/wiki` policy, evidence, runtime core | quarter-unit ledgers with V7 migration, comparable-opportunity aging, bounded admission queue, scanned-only partial batches, explicit producer precedence |
+| W2 occurrence attribution | material lexical port, material ingress receipt, Wiki occurrence owner | opaque per-edit occurrence tokens in committed coordinates, bounded in-memory occurrence lifecycle, one settlement per occurrence |
+| W3 disclosure and takeover | render edge, Custom Highlight, local takeover popover | heard-to-canonical settle, quiet unsettled mark, Keep / heard form / Wiki takeover, revert as a material command |
+| W4 informed acceptance | Wiki learning policy and runtime | perceived precondition, settlement triggers, integer weights, retention-only reinforcement, two-strike reversion |
+| W5 mixed-script routing | Wiki fitting locale routing | Latin-script spans inside CJK turns reach the English fitting producer under corpus qualification |
+| D documents | product, principles, material, architecture, protocol, surfaces, references, changes, this plan | one truthful contract set; historical plan sections archived |
+
+Release gate: every slice verified; three whole-diff verifier rounds pass with
+their findings fixed; `npm run check` and `npm run test:e2e` pass locally and in
+CI; the owner walks localhost; the pull request merges to `main`; Production
+reads back Preview.64. The prerelease tag stays withheld until #104 and the
+strict pool probe pass.
+
 ## Active delivery — Preview.58 material and mobile interaction correction
 
 State: implementation candidate assembled for review. Repository gates,
