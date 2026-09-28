@@ -18,13 +18,14 @@ import {
   AdmissionDriver,
   type AdmissionSettlement,
   type AdmissionScope,
+  type AdmissionTargetStatus,
 } from "./admission-driver";
 import { createBrowserVoicePort } from "./browser-voice";
 import { afterBaselineVisible } from "./repair-presentation-gate";
 import { createTranscriptRepairPort } from "./transcript-repair-port";
 import { requestTranscription } from "./transcription-client";
+import { useDeliveryWindow } from "./use-delivery-window";
 import { useRepairPresentation } from "./use-repair-presentation";
-import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
 
 export type UseAdmissionInput = {
   commit: (
@@ -36,7 +37,11 @@ export type UseAdmissionInput = {
   locale?: MatterLocale;
 };
 
-export type AdmissionController = {
+/**
+ * Stable between admission state changes, so rendering-edge effects that
+ * depend on it run once per lifecycle change rather than once per render.
+ */
+export type AdmissionController = Readonly<{
   state: AdmissionInteractionState;
   settlement: AdmissionSettlement | null;
   repairPresentations: ReadonlyMap<string, AdmissionRepairCommittedChange>;
@@ -44,13 +49,15 @@ export type AdmissionController = {
   stop: () => void;
   cancel: () => void;
   retry: () => void;
+  /** Commits held words at an explicit current admission target. */
+  place: (anchor: AdmissionAnchor) => void;
   dismiss: () => void;
   /** Gates canvas presentation without cancelling work submitted at Stop. */
   setPresentationAvailable: (available: boolean) => void;
-  setDeliveryTargetVisible: (visible: boolean) => void;
+  setDeliveryTarget: (anchor: AdmissionAnchor, status: AdmissionTargetStatus) => void;
   setDeliveryVisibleNodeIds: (nodeIds: ReadonlySet<string>) => void;
   clearRepairPresentations: () => void;
-};
+}>;
 
 export function useAdmission({
   commit,
@@ -87,19 +94,13 @@ export function useAdmission({
   );
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const setDeliveryVisibleNodeIds = useCallback(
-    (nodeIds: ReadonlySet<string>) => driver.setDeliveryVisibleNodeIds(nodeIds),
-    [driver],
-  );
-  const activePointersRef = useRef(new Set<number>());
   const presentationAvailableRef = useRef(true);
-  const syncDeliveryWindow = useCallback(() => {
-    driver.setDeliveryWindowOpen(
-      presentationAvailableRef.current &&
-        document.visibilityState === "visible" &&
-        activePointersRef.current.size === 0,
-    );
-  }, [driver]);
+  const refreshDeliveryWindow = useDeliveryWindow({
+    isAvailable: () => presentationAvailableRef.current,
+    onChange: (open) => driver.setDeliveryWindowOpen(open),
+    onSuspend: () => driver.suspendCapture(),
+    onExit: () => driver.exit(),
+  }, driver);
   const setPresentationAvailable = useCallback((available: boolean) => {
     presentationAvailableRef.current = available;
     if (!available) {
@@ -110,8 +111,8 @@ export function useAdmission({
       driver.cancelRawCapture();
       return;
     }
-    syncDeliveryWindow();
-  }, [driver, syncDeliveryWindow]);
+    refreshDeliveryWindow();
+  }, [driver, refreshDeliveryWindow]);
 
   useEffect(() => {
     driver.updateScope({
@@ -126,50 +127,43 @@ export function useAdmission({
     return () => driver.release();
   }, [driver]);
 
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      activePointersRef.current.add(event.pointerId);
-      driver.setDeliveryWindowOpen(false);
-    };
-    const onPointerDone = (event: PointerEvent) => {
-      activePointersRef.current.delete(event.pointerId);
-      syncDeliveryWindow();
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerDone, true);
-    window.addEventListener("pointercancel", onPointerDone, true);
-    const unsubscribeSuspension = subscribePageSuspension(
-      () => {
-        activePointersRef.current.clear();
-        driver.suspendCapture();
-      },
-      syncDeliveryWindow,
-    );
-    const unsubscribeExit = subscribePageExit(() => driver.exit());
-    syncDeliveryWindow();
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerDone, true);
-      window.removeEventListener("pointercancel", onPointerDone, true);
-      unsubscribeSuspension();
-      unsubscribeExit();
-    };
-  }, [driver, syncDeliveryWindow]);
-
-  return {
+  const setDeliveryTarget = useCallback(
+    (anchor: AdmissionAnchor, status: AdmissionTargetStatus) =>
+      driver.setDeliveryTarget(anchor, status),
+    [driver],
+  );
+  const setDeliveryVisibleNodeIds = useCallback(
+    (nodeIds: ReadonlySet<string>) => driver.setDeliveryVisibleNodeIds(nodeIds),
+    [driver],
+  );
+  const repairPresentations = repairPresentation.byNode;
+  const clearRepairPresentations = repairPresentation.clearAll;
+  // The settlement changes only in the same driver step as the state, so it
+  // is read once per state snapshot rather than on every render.
+  return useMemo((): AdmissionController => ({
     state,
     settlement: driver.getSettlement(),
-    repairPresentations: repairPresentation.byNode,
-    start: (anchor) => driver.start(anchor, locale),
+    repairPresentations,
+    start: (anchor: AdmissionAnchor) => driver.start(anchor, locale),
     stop: () => driver.stop(),
     cancel: () => driver.cancel(),
     retry: () => driver.retry(locale),
+    place: (anchor: AdmissionAnchor) => driver.place(anchor),
     dismiss: () => driver.dismiss(),
     setPresentationAvailable,
-    setDeliveryTargetVisible: (visible) => driver.setDeliveryTargetVisible(visible),
+    setDeliveryTarget,
     setDeliveryVisibleNodeIds,
-    clearRepairPresentations: repairPresentation.clearAll,
-  };
+    clearRepairPresentations,
+  }), [
+    clearRepairPresentations,
+    driver,
+    locale,
+    repairPresentations,
+    setDeliveryTarget,
+    setDeliveryVisibleNodeIds,
+    setPresentationAvailable,
+    state,
+  ]);
 }
 
 function createInteractionId(): string {

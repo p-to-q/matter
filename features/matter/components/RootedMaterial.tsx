@@ -6,6 +6,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
+import { admissionTargetExists } from "../runtime/admission";
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
@@ -34,6 +35,7 @@ import {
 import type { AdmissionController } from "../interaction/use-admission";
 import {
   admissionCaptureIsActive,
+  admissionHoldsTranscript,
   type AdmissionAnchor as InteractionAdmissionAnchor,
 } from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
@@ -174,6 +176,7 @@ import { TransformingMaterialText } from "./TransformingMaterialText";
 import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
+  admissionPlacementLabel,
 } from "./admission-feedback-copy";
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
@@ -1283,18 +1286,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
     publishMaterialTextChange,
     tree,
   ]);
+  const admissionLifecycleState = props.admission.state;
+  const setAdmissionDeliveryTarget = props.admission.setDeliveryTarget;
   useLayoutEffect(() => {
-    const state = props.admission.state;
-    if (state.phase === "idle" || state.phase === "error") {
-      props.admission.setDeliveryTargetVisible(true);
-      return;
-    }
-    const anchor = state.anchor;
-    const targetExists = anchor.kind === "root"
-      ? tree.rootId === null && Object.keys(tree.nodes).length === 0
-      : tree.nodes[anchor.parentNodeId] !== undefined;
-    if (!targetExists) {
-      props.admission.cancel();
+    if (admissionLifecycleState.phase === "idle") return;
+    // Undo and Delete stay live after Stop. A vanished parent is reported, not
+    // cancelled: the driver keeps submitted words as a visible conflict.
+    const anchor = admissionLifecycleState.anchor;
+    if (!admissionTargetExists(tree, anchor)) {
+      setAdmissionDeliveryTarget(anchor, "missing");
       return;
     }
     const targetVisible = navigation.mode === "full" && activeLayout !== null && (
@@ -1302,8 +1302,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       anchor.parentNodeId === tree.rootId ||
       visiblyLaidOutNodeIds.has(anchor.parentNodeId)
     );
-    props.admission.setDeliveryTargetVisible(targetVisible);
-  }, [activeLayout, navigation.mode, props.admission, tree, visiblyLaidOutNodeIds]);
+    setAdmissionDeliveryTarget(anchor, targetVisible ? "visible" : "hidden");
+  }, [
+    activeLayout,
+    admissionLifecycleState,
+    navigation.mode,
+    setAdmissionDeliveryTarget,
+    tree,
+    visiblyLaidOutNodeIds,
+  ]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
   const admissionCapturePending = admissionCaptureIsActive(props.admission.state);
   const elasticSelection = persistenceLoading || admissionCapturePending
@@ -3569,7 +3576,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
               }}
               onReturnFocus={restoreVoiceToolFocus}
               onHeightChange={setAdmissionFeedbackHeight}
+              placeAnchor={props.admissionAnchor}
               presented={outcomePresentationAvailable}
+              rootId={tree.rootId}
             />
           </div>
           </div>
@@ -4647,7 +4656,9 @@ function AdmissionFeedback({
   onDismiss,
   onReturnFocus,
   onHeightChange,
+  placeAnchor,
   presented,
+  rootId,
 }: {
   anchor: InteractionAdmissionAnchor | null;
   parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
@@ -4656,7 +4667,10 @@ function AdmissionFeedback({
   onDismiss: () => void;
   onReturnFocus: (basis: AdmissionFocusRestorationBasis | null) => void;
   onHeightChange: (height: number) => void;
+  /** Where a new admission would go now; held words may be placed only here. */
+  placeAnchor: InteractionAdmissionAnchor | null;
   presented: boolean;
+  rootId: string | null;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
   const retryFocusRef = useRef(false);
@@ -4715,19 +4729,30 @@ function AdmissionFeedback({
     >
       <span aria-hidden="true" className="admission-feedback__signal" />
       <span>{copy}</span>
-      {phase === "recording" &&
+      {(phase === "recording" || phase === "error") &&
       "transcript" in controller.state &&
       controller.state.transcript ? (
         <span className="admission-feedback__preview" dir="auto">{controller.state.transcript}</span>
       ) : null}
       {phase === "recording" ? (
         <button onClick={controller.stop} type="button">{actions.stop}</button>
+      ) : phase === "error" && admissionHoldsTranscript(controller.state) ? (
+        <>
+          {placeAnchor === null ? null : (
+            <button onClick={() => controller.place(placeAnchor)} type="button">
+              {admissionPlacementLabel(locale, placeAnchor, rootId)}
+            </button>
+          )}
+          <button onClick={onDismiss} type="button">{actions.discard}</button>
+        </>
       ) : phase === "error" ? (
         <>
-          <button onClick={() => {
-            retryFocusRef.current = true;
-            controller.retry();
-          }} type="button">{actions.retry}</button>
+          {controller.state.errorCode === "STALE_TARGET" ? null : (
+            <button onClick={() => {
+              retryFocusRef.current = true;
+              controller.retry();
+            }} type="button">{actions.retry}</button>
+          )}
           <button onClick={onDismiss} type="button">{actions.dismiss}</button>
         </>
       ) : (

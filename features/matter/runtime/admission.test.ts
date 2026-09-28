@@ -9,6 +9,7 @@ import {
   toggleFold,
 } from "./navigation";
 import {
+  admissionTargetExists,
   admissionToTreeCommand,
   createAdmissionAnchor,
   type AdmissionValues,
@@ -229,5 +230,16 @@ describe("human material admission", () => {
       ...values(),
       createdAt: "not-a-time",
     })).toMatchObject({ ok: false, error: { code: "INVALID_INTERACTION" } });
+  });
+
+  it("reports target existence with the same rule the command translator enforces", () => {
+    const empty = createEmptyTree("tree_1");
+    const rooted = rootedTree();
+    expect(admissionTargetExists(empty, { kind: "root" })).toBe(true);
+    expect(admissionTargetExists(rooted, { kind: "root" })).toBe(false);
+    expect(admissionTargetExists(rooted, { kind: "child", parentNodeId: "root" })).toBe(true);
+    expect(admissionTargetExists(rooted, { kind: "child", parentNodeId: "ghost" })).toBe(false);
+    // Inherited object keys are never material.
+    expect(admissionTargetExists(rooted, { kind: "child", parentNodeId: "toString" })).toBe(false);
   });
 });

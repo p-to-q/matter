@@ -13,6 +13,7 @@ import {
 } from "../runtime/navigation";
 import { RootedMaterial } from "./RootedMaterial";
 import { createAdmissionInteractionState } from "../runtime/admission-interaction";
+import type { AdmissionController } from "../interaction/use-admission";
 import type { AdmissionRepairCommittedChange } from "../store/matter-store";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 
@@ -26,7 +27,21 @@ const performanceTree = createPerformanceThoughtTree();
  * a cold-start cost the product does not have.
  */
 const NO_REPAIR_PRESENTATIONS: ReadonlyMap<string, AdmissionRepairCommittedChange> = new Map();
-const admissionState = createAdmissionInteractionState();
+const INERT_ADMISSION: AdmissionController = Object.freeze({
+  state: createAdmissionInteractionState(),
+  settlement: null,
+  repairPresentations: NO_REPAIR_PRESENTATIONS,
+  start: () => undefined,
+  stop: () => undefined,
+  cancel: () => undefined,
+  retry: () => undefined,
+  place: () => undefined,
+  dismiss: () => undefined,
+  setPresentationAvailable: () => undefined,
+  setDeliveryTarget: () => undefined,
+  setDeliveryVisibleNodeIds: () => undefined,
+  clearRepairPresentations: () => undefined,
+});
 const VIEWPORT_RESEARCH = Object.freeze({
   batchSize: 32 as const,
   source: "viewport-research" as const,
@@ -96,20 +111,7 @@ export function PerformanceMatterApp({
       locale="zh-CN"
       canUndo={false}
       canRedo={false}
-      admission={{
-        state: admissionState,
-        settlement: null,
-        repairPresentations: NO_REPAIR_PRESENTATIONS,
-        start: () => undefined,
-        stop: () => undefined,
-        cancel: () => undefined,
-        retry: () => undefined,
-        dismiss: () => undefined,
-        setPresentationAvailable: () => undefined,
-        setDeliveryTargetVisible: () => undefined,
-        setDeliveryVisibleNodeIds: () => undefined,
-        clearRepairPresentations: () => undefined,
-      }}
+      admission={INERT_ADMISSION}
       admissionAnchor={null}
       navigation={navigation}
       persistence={{

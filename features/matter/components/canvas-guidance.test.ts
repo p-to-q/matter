@@ -54,7 +54,7 @@ describe("canvas guidance projection", () => {
     [attempt({ phase: "recording", startedAtMs: 20 }), "speak-recording", "action", "Speak your thought."],
     [attempt({ phase: "stopping", reason: "person" }), "wait-recording", "progress", "Wait for recording to finish."],
     [attempt({ phase: "transcribing" }), "wait-transcription", "progress", "Wait while voice becomes material."],
-    [attempt({ phase: "committing" }), "wait-commit", "progress", "Wait while the thought is placed."],
+    [attempt({ phase: "committing", transcript: "thought" }), "wait-commit", "progress", "Wait while the thought is placed."],
   ] as const)("projects admission %s before every material handle", (admission, id, kind, text) => {
     expect(projectCanvasGuidance(input({
       admission,
@@ -85,6 +85,21 @@ describe("canvas guidance projection", () => {
       expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     },
   );
+
+  it("asks to place or discard held words instead of dismissing the recording", () => {
+    expect(projectCanvasGuidance(input({
+      admission: attempt({
+        phase: "error",
+        errorCode: "STALE_TARGET",
+        submitted: true,
+        transcript: "held words",
+      }),
+    }))).toEqual({
+      id: "place-held-words",
+      kind: "recovery",
+      text: "Place or discard these words.",
+    });
+  });
 
   it.each([
     [0.6, 60],
@@ -237,6 +252,7 @@ describe("canvas guidance projection", () => {
       "use-recording-browser": true,
       "record-again": true,
       "dismiss-stale-recording": true,
+      "place-held-words": true,
       "speak-root": true,
       "close-lasso": true,
       "begin-stretch": true,

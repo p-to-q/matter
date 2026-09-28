@@ -48,6 +48,7 @@ type CanvasActionGuidanceId =
   | "use-recording-browser"
   | "record-again"
   | "dismiss-stale-recording"
+  | "place-held-words"
   | "speak-root"
   | "close-lasso"
   | "begin-stretch"
@@ -75,6 +76,7 @@ const GUIDANCE_COPY = Object.freeze({
   "use-recording-browser": "Use a browser that can record.",
   "record-again": "Record your thought again.",
   "dismiss-stale-recording": "Dismiss this recording.",
+  "place-held-words": "Place or discard these words.",
   "speak-root": "Speak to place your first thought.",
   "close-lasso": "Close the loop around a phrase.",
   "begin-stretch": "Pull to begin.",
@@ -99,6 +101,7 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "use-recording-browser": "请使用支持录音的浏览器。",
   "record-again": "请重新录下这段想法。",
   "dismiss-stale-recording": "关闭这次录音。",
+  "place-held-words": "放下这段话，或把它丢弃。",
   "speak-root": "说出你的第一个想法。",
   "close-lasso": "闭合圈选这段文字。",
   "begin-stretch": "拉动握点开始展开。",
@@ -240,6 +243,7 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "use-recording-browser": "請使用支援錄音的瀏覽器。",
   "record-again": "請重新錄下這段想法。",
   "dismiss-stale-recording": "關閉這次錄音。",
+  "place-held-words": "放下這段話，或把它丟棄。",
   "speak-root": "說出你的第一個想法。",
   "close-lasso": "閉合圈選這段文字。",
   "begin-stretch": "拉動握點開始展開。",
@@ -264,6 +268,7 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "use-recording-browser": "録音に対応したブラウザを使ってください。",
   "record-again": "もう一度考えを録音してください。",
   "dismiss-stale-recording": "この録音を閉じてください。",
+  "place-held-words": "この言葉を置くか、破棄してください。",
   "speak-root": "最初の考えを話してください。",
   "close-lasso": "フレーズを囲んで輪を閉じてください。",
   "begin-stretch": "ハンドルを引いて展開します。",
@@ -288,6 +293,7 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "use-recording-browser": "Einen Browser mit Aufnahmefunktion verwenden.",
   "record-again": "Gedanken erneut aufnehmen.",
   "dismiss-stale-recording": "Diese Aufnahme schließen.",
+  "place-held-words": "Worte einfügen oder verwerfen.",
   "speak-root": "Sprich deinen ersten Gedanken aus.",
   "close-lasso": "Schließe den Kreis um eine Phrase.",
   "begin-stretch": "Zum Erweitern am Griff ziehen.",
@@ -316,7 +322,9 @@ function projectAdmissionGuidance(
     case "committing":
       return guidance("wait-commit", "progress");
     case "error":
-      return projectAdmissionError(admission.errorCode);
+      return admission.transcript === undefined
+        ? projectAdmissionError(admission.errorCode)
+        : guidance("place-held-words", "recovery");
     default:
       return assertNever(admission);
   }
