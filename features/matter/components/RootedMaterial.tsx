@@ -165,6 +165,7 @@ import type { MaterialTurnCommitResult } from "../interaction/material-turn-resu
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
   samePaperMaterialTurnPhases,
+  SETTLED_PAPER_MATERIAL_TURNS,
   type PaperMaterialTurnPhases,
 } from "./material-turn-activity";
 import {
@@ -1338,14 +1339,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
     state: transformState,
   } = transform;
   const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
-  const reportedMaterialTurnPhasesRef = useRef<PaperMaterialTurnPhases | null>(null);
+  const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
   useLayoutEffect(() => {
     const phases = Object.freeze({ elastic: transformState.phase, textSwap: pointTalkPhase });
-    const reported = reportedMaterialTurnPhasesRef.current;
-    if (reported !== null && samePaperMaterialTurnPhases(reported, phases)) return;
+    if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
     reportedMaterialTurnPhasesRef.current = phases;
     reportMaterialTurnPhases?.(phases);
   }, [pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+  useLayoutEffect(() => () => {
+    // Unmounting the paper releases its turns, so the root must not keep
+    // waiting on phases nobody will report again.
+    reportedMaterialTurnPhasesRef.current = SETTLED_PAPER_MATERIAL_TURNS;
+    reportMaterialTurnPhases?.(SETTLED_PAPER_MATERIAL_TURNS);
+  }, [reportMaterialTurnPhases]);
   const transformNotice = transformState.notice;
   useEffect(() => {
     if (transformNotice === null) return;
