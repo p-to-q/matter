@@ -17,11 +17,12 @@ management surface. A person should not need to know that Wiki exists in order
 to receive its benefit.
 
 The owner's decision of 2026-09-29 reopens one part of this posture: an applied
-change may be disclosed once, restrained and perceivable, and an unsettled
-occurrence may carry a quiet mark the person can tap to take over (campaign
-slice W3 owns that surface). Disclosure is what makes silence informed, and
-informed silence is approval; see [Occurrence outcomes](#occurrence-outcomes).
-Routine learning still never becomes a review or approval workload.
+change is disclosed once, restrained and perceivable, and an unsettled
+occurrence carries a quiet mark the person can tap to take over (see
+[Exceptional correction surface](#exceptional-correction-surface)). Disclosure
+is what makes silence informed, and informed silence is approval; see
+[Occurrence outcomes](#occurrence-outcomes). Routine learning still never
+becomes a review or approval workload.
 
 A person enters the loop only after noticing that the automatic result is
 wrong. The error site may then disclose one quiet correction affordance; a
@@ -450,14 +451,25 @@ after provider output returns and every model payload remains Wiki-free.
 
 ## Exceptional correction surface
 
-The current release has no mark revealing that a rule was applied; the
-2026-09-29 decision adds one restrained disclosure and a quiet takeover mark
-(slice W3). Only after a
-person invokes correction from an erroneous word may the surface reveal what is
-necessary to repair that visible occurrence and, if requested, add the corrected
-relation as local authority. It must also permit rejecting the responsible
-automatic mapping. A deeper Wiki configuration surface opens from Matter
-settings for people who choose it. It presents one canonical term per tile and
+A word Wiki changed in admitted, repaired, or generated text settles once from
+the heard form into the canonical one at its first perceivable arrival (about
+half a second: a hold, a blurred crossfade, one sub-pixel shiver), then keeps a
+dotted 1 px underline at 35% ink while its occurrence is unsettled. The render
+contract lives in [`text-material.md`](text-material.md): Custom Highlights and
+an inert world-space overlay, never a wrapped word. A tap on the marked word
+opens one small popover at the word, in Point Talk's restrained field, offering
+**Keep**, the literal heard form, and **Wiki…**. Its accessible name states the
+change (“Wiki changed ‘P to Q’ to ‘[p → q]’”); it never starts Point and Talk or
+a passage selection, and it respects the pen-and-palm touch commitment. Keep
+confirms the alias; the heard form restores exactly that range as an ordinary,
+pointer-undoable human text change, failing closed with a quiet “the passage
+changed” line when the memento no longer matches; Wiki… opens the settings
+dialog filtered to and focused on that canonical term and settles nothing;
+Escape or an outside tap is an inspection. Only after a person invokes
+correction from an erroneous word does the surface reveal what is necessary to
+repair that visible occurrence. Rejecting the responsible automatic mapping
+from the word remains reserved. A deeper Wiki configuration surface opens from
+Matter settings for people who choose it. It presents one canonical term per tile and
 may add, edit, remove, search, progressively load, and export lexemes. Export
 starts a browser download of the strict snapshot; its short control-local
 receipt may say that the download started, but must not claim that a browser,

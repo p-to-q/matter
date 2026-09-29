@@ -71,7 +71,14 @@ export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
 export type CanvasChromeHandle = Readonly<{
   /** Synchronously revokes Ask Matter before another material AI surface opens. */
   closeInquiry: () => void;
+  /**
+   * Opens the Wiki settings dialog on one canonical term. This is a narrow
+   * request channel for an error-local takeover; it decides nothing.
+   */
+  openWiki: (term: WikiSettingsFocusTerm, trigger: HTMLElement | null) => void;
 }>;
+
+export type WikiSettingsFocusTerm = Readonly<{ canonical: string; locale: CanvasLanguage }>;
 
 export type CanvasChromeOverlay =
   | "inquiry"
@@ -644,6 +651,9 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   const inquiryBubbleRef = useRef<InquiryBubbleHandle>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const [wikiFocus, setWikiFocus] = useState<Readonly<WikiSettingsFocusTerm & {
+    requestId: number;
+  }> | null>(null);
   const copy = CANVAS_CHROME_COPY[preferences.language];
   const info = CANVAS_CHROME_INFO[preferences.language];
   const languageLabel = CANVAS_LANGUAGE_OPTIONS.find(
@@ -658,7 +668,6 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     if (overlay === "inquiry") onOverlayChange(null);
   }, [onOverlayChange, overlay]);
 
-  useImperativeHandle(forwardedRef, () => ({ closeInquiry: dismissInquiry }), [dismissInquiry]);
 
   const closeOverlay = useCallback((restoreFocus = true) => {
     if (overlay === "inquiry") inquiryBubbleRef.current?.detach();
@@ -850,8 +859,24 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   const openWiki = useCallback((trigger: HTMLElement | null) => {
     if (overlay === "mobile") trigger = mobileTriggerRef.current;
     else if (overlay === "settings") trigger = settingsButtonRef.current;
+    setWikiFocus(null);
     openOverlay("wiki", trigger);
   }, [openOverlay, overlay]);
+
+  const openWikiTerm = useCallback((term: WikiSettingsFocusTerm, trigger: HTMLElement | null) => {
+    setWikiFocus((current) => Object.freeze({
+      canonical: term.canonical,
+      locale: term.locale,
+      requestId: (current?.requestId ?? 0) + 1,
+    }));
+    openOverlay("wiki", trigger);
+  }, [openOverlay]);
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({ closeInquiry: dismissInquiry, openWiki: openWikiTerm }),
+    [dismissInquiry, openWikiTerm],
+  );
 
   const openMenuFromKeyboard = useCallback((
     event: ReactKeyboardEvent<HTMLButtonElement>,
@@ -1210,6 +1235,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
             <div className={styles.wikiDialogBody}>
               <WikiSettingsSection
                 active
+                focusTerm={wikiFocus}
                 language={preferences.language}
               />
             </div>

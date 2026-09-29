@@ -87,6 +87,8 @@ export type WikiOccurrenceDriver = Readonly<{
   openTakeover(occurrenceId: string): boolean;
   /** Dismissal is an inspection; Keep is an explicit confirmation. */
   closeTakeover(occurrenceId: string, outcome: "inspected-kept" | "explicit-confirm"): void;
+  /** Leaves the takeover for the Wiki surface; the occurrence stays unsettled. */
+  leaveTakeover(occurrenceId: string): void;
   /** Restores the heard form as an ordinary human material command. */
   revert(occurrenceId: string): "reverted" | "stale";
   subscribe(listener: () => void): () => void;
@@ -414,6 +416,11 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       settle(occurrenceId, outcome);
       publish();
       syncResources();
+    },
+    leaveTakeover(occurrenceId) {
+      if (takeoverId !== occurrenceId) return;
+      takeoverId = null;
+      publish();
     },
     revert(occurrenceId) {
       const record = live.get(occurrenceId);

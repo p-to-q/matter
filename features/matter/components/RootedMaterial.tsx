@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -212,6 +212,8 @@ import {
 import { deferUntilTouchCommits } from "./touch-commitment";
 import { useEscapeLayer } from "./escape-layers";
 import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
+import { hitTestWikiOccurrence } from "./wiki-occurrence-disclosure";
+import { WikiOccurrenceLayer } from "./WikiOccurrenceLayer";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
@@ -463,6 +465,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(true),
   ), []);
   const wikiOccurrences = props.wikiOccurrences;
+  // The word's takeover owns the passage while open; its lens would compete.
+  const wikiTakeoverOpen = useSyncExternalStore(
+    wikiOccurrences?.subscribe ?? subscribeNothing,
+    () => wikiOccurrences?.getSnapshot().some((view) => view.takeover) ?? false,
+    () => false,
+  );
   useEffect(() => {
     // A modal that owns the paper hides every word from perception.
     wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
@@ -1910,6 +1918,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
     indexCenterRequestRef.current = null;
     onSelectNode(nodeId);
   }, [abortFixedExpansion, interruptIndexCameraMotion, onSelectNode]);
+  /**
+   * A settled tap on a marked Wiki word opens its takeover instead of selecting
+   * the passage; it never starts Point and Talk or a passage selection.
+   */
+  const openWikiTakeoverAt = (nodeId: string | null, clientX: number, clientY: number): boolean => {
+    if (wikiOccurrences === undefined || nodeId === null || lasso.active) return false;
+    const text = tree.nodes[nodeId]?.text;
+    if (text === undefined) return false;
+    const occurrenceId = hitTestWikiOccurrence(
+      wikiOccurrences.getSnapshot(),
+      nodeId,
+      text,
+      clientX,
+      clientY,
+    );
+    if (occurrenceId === null || !wikiOccurrences.openTakeover(occurrenceId)) return false;
+    abortFixedExpansion();
+    return true;
+  };
   const focusIndexNodeAfterAbort = useCallback((nodeId: string) => {
     abortFixedExpansion();
     interruptIndexCameraMotion();
@@ -3010,6 +3037,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretch.amount === 0 &&
     transformState.phase === "idle" &&
     pointTalkHostNodeId === null &&
+    !wikiTakeoverOpen &&
     !wheelMotionActive &&
     viewport.gesture?.dragging !== true;
 
@@ -3604,6 +3632,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
           }
           else if (!nodeDrag.dragging) {
+            if (openWikiTakeoverAt(nodeDrag.originNodeId, event.clientX, event.clientY)) return;
             if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeAfterAbort(nodeDrag.originNodeId);
             else {
               abortFixedExpansion();
@@ -3625,7 +3654,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         pointerOriginNodeRef.current = null;
         // Pointer capture keeps dragging reliable over text, but retargets the
         // browser click. Resolve a sub-threshold gesture here as node selection.
-        if (!dragged) {
+        if (!dragged && !openWikiTakeoverAt(originNodeId, releaseX, releaseY)) {
           setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
             selectNodeAfterAbort(originNodeId);
@@ -4031,6 +4060,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
             deliveryVisibleNodeIds={visiblyLaidOutNodeIds}
             voiceCommand={pointTalkVoiceCommand}
             voiceAvailable={voiceReadiness.status === "ready"}
+          />
+        )}
+        {wikiOccurrences === undefined ? null : (
+          <WikiOccurrenceLayer
+            blocked={lasso.active || stretch.dragging || interactionPending ||
+              activePointTalkNodeId !== null || indexOverlayOpen || !outcomePresentationAvailable}
+            boundaryRef={documentRef}
+            driver={wikiOccurrences}
+            geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
+            locale={props.locale}
+            onOpenWiki={(term, trigger) => canvasChromeRef.current?.openWiki(term, trigger)}
+            penActive={pointerArbiter.penActive}
+            positioningRef={materialPlaneRef}
+            surfaceAvailable={outcomePresentationAvailable}
+            tree={tree}
           />
         )}
         {pointTalkOpeningId === 0 ? null : (
@@ -5323,6 +5367,10 @@ export function voiceToolLabel(input: Readonly<{
   if (input.isVoiceChecking) return copy.preparingVoiceInput;
   if (!input.isPreviewReady) return copy.unavailableInPreview;
   return copy.unavailableOutsideFullView;
+}
+
+function subscribeNothing(): () => void {
+  return () => undefined;
 }
 
 function voiceAdmissionIsEnabled(): boolean {

@@ -170,6 +170,19 @@ describe("Wiki occurrence driver", () => {
     ]);
   });
 
+  it("leaves the takeover for the Wiki surface without settling", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.openTakeover("occ_a");
+    harness.driver.leaveTakeover("occ_a");
+    expect(harness.settled).toEqual([]);
+    expect(harness.driver.getSnapshot()).toMatchObject([{ id: "occ_a", takeover: false }]);
+    // Silence resumes: the opened takeover already counted as disclosure.
+    harness.advance(1_500);
+    harness.driver.noteExported();
+    expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
+  });
+
   it("reverts through an ordinary material command and keeps its sibling", () => {
     const harness = createHarness();
     harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));
