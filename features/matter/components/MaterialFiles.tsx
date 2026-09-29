@@ -525,7 +525,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
     // document may have been replaced while the write was settling.
     const reopenWithDraft = () => {
       if (liveDocumentEpochRef.current !== epochAtCommit) return;
-      setRenaming({ epoch: epochAtCommit, nodeId, draft: trimmed });
+      // Never replace a name the person has since started typing elsewhere.
+      setRenaming((current) => current === null
+        ? { epoch: epochAtCommit, nodeId, draft: trimmed }
+        : current);
     };
     void Promise.resolve(mutation).then(
       (receipt) => {

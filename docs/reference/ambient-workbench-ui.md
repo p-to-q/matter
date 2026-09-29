@@ -182,8 +182,10 @@ phase, so a control that stops propagation cannot strand it.
   inert, including a handle mounted after the dialog opened.
 - Live regions are mounted before they speak; a silent region leaves the flow
   but stays in the accessibility tree.
-- Every visible or accessible chrome string comes from a complete per-locale
-  table; no table spreads another language to hide a missing key.
+- Chrome, guidance, Wiki, Point and Talk, and paper-region copy tables are
+  typed per locale (`Record<CanvasLanguage, …>` or `satisfies` the full key
+  set); none spreads another language, so a missing key fails the type check
+  instead of falling back to English or Simplified Chinese.
 
 ## Left field: separately frozen
 

@@ -228,8 +228,9 @@ export function localizeCanvasGuidance(
   });
 }
 
+// Each table is complete on its own: a spread would let a missing key fall
+// back to another language instead of failing the type check.
 const GUIDANCE_COPY_ZH_TW = Object.freeze({
-  ...GUIDANCE_COPY_ZH,
   "allow-microphone": "允許使用麥克風。",
   "speak-recording": "說出你的想法。",
   "wait-recording": "請等待錄音結束。",
@@ -251,9 +252,8 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
   "select-thought": "選擇一段想法。",
-});
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const GUIDANCE_COPY_JA = Object.freeze({
-  ...GUIDANCE_COPY,
   "allow-microphone": "マイクの使用を許可してください。",
   "speak-recording": "考えを話してください。",
   "wait-recording": "録音が終わるまで待ってください。",
@@ -275,9 +275,8 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
   "select-thought": "考えを一つ選んでください。",
-});
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const GUIDANCE_COPY_DE = Object.freeze({
-  ...GUIDANCE_COPY,
   "allow-microphone": "Mikrofonzugriff erlauben.",
   "speak-recording": "Sprich deinen Gedanken aus.",
   "wait-recording": "Warte, bis die Aufnahme beendet ist.",
@@ -299,7 +298,7 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
   "select-thought": "Einen Gedanken auswählen.",
-});
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 function projectAdmissionGuidance(
   admission: Exclude<AdmissionInteractionState, { readonly phase: "idle" }>,

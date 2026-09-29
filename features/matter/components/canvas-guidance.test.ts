@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type {
   AdmissionAnchor,
@@ -49,6 +50,12 @@ function attempt(state: AdmissionAttemptPayload): AdmissionAttempt {
 }
 
 describe("canvas guidance projection", () => {
+  it("keeps every locale's guidance table complete instead of spreading another language", () => {
+    const source = readFileSync(new URL("./canvas-guidance.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/Object\.freeze\(\{\s*\.\.\.GUIDANCE_COPY/u);
+    expect(source.match(/\} satisfies Readonly<Record<CanvasActionGuidanceId, string>>\);/gu)).toHaveLength(5);
+  });
+
   it.each([
     [attempt({ phase: "requesting" }), "allow-microphone", "action", "Allow microphone access."],
     [attempt({ phase: "recording", startedAtMs: 20 }), "speak-recording", "action", "Speak your thought."],
