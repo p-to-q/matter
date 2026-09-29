@@ -1,4 +1,4 @@
-import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
+import type { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import type { WikiBasis } from "../wiki/wiki-basis";
 import type { WikiOccurrenceAttribution } from "../wiki/wiki-occurrence-registry";
 import type {
@@ -19,16 +19,26 @@ export type WikiConsumptionPolicy = Readonly<{
   mintOccurrence?: (attribution: WikiOccurrenceAttribution) => string | null;
 }>;
 
+/** The code that interprets a compiled basis's rules. */
+export type WikiTextCanonicalizer = typeof canonicalizeWikiText;
+
 export type WikiCommittedObservationSink = (
   observation: MaterialLexicalObservation,
 ) => void;
 
 /**
  * Adapts Wiki's compiled basis to the only lexical capability Matter consumes.
- * Capturing closes over one immutable basis for the complete material turn.
+ * Capturing closes over one immutable basis, and the interpreter of its rules,
+ * for the complete material turn.
+ *
+ * The interpreter may arrive later than the basis reader: the product loads it
+ * with the lazy Wiki runtime, which binds it before publishing any rule. A
+ * basis with no rules changes no text, so a turn captured before then is
+ * unchanged without the interpreter's code ever loading.
  */
 export function createWikiMaterialLexicalPort(
   readBasis: () => WikiBasis,
+  readInterpreter: () => WikiTextCanonicalizer | null,
   policy: WikiConsumptionPolicy = Object.freeze({}),
 ): MaterialLexicalPort {
   return Object.freeze({
@@ -37,12 +47,16 @@ export function createWikiMaterialLexicalPort(
       const snapshot = policy.phoneticFittingEnabled?.() === false
         ? basis.confirmedSnapshot
         : basis.snapshot;
+      const canonicalizeWikiText = snapshot.rules.length === 0 ? null : readInterpreter();
       return Object.freeze({
         snapshot: Object.freeze({
           generation: snapshot.generation,
           sourceRevision: basis.stateRevision,
         }),
         canonicalize: (request): MaterialLexicalSuggestion => {
+          // No rule, or (unreachable in the product) rules published without
+          // their interpreter: nothing can be applied, and material never waits.
+          if (canonicalizeWikiText === null) return Object.freeze({ status: "unchanged" });
           const result = canonicalizeWikiText(
             snapshot,
             request.locale,

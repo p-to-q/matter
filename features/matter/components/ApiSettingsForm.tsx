@@ -338,6 +338,13 @@ export function ApiSettingsForm({
     }).finally(() => finishOperation(operation));
   }, [beginOperation, finishOperation]);
 
+  // An unmounted form is not presented. The form now mounts on its first
+  // opening, so a remount while open (Strict Mode rehearses one) must read the
+  // status again like any opening, not inherit a read its unmount aborted.
+  useLayoutEffect(() => () => {
+    presentedRef.current = false;
+  }, []);
+
   useLayoutEffect(() => {
     const opening = presented && !presentedRef.current;
     presentedRef.current = presented;

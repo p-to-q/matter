@@ -86,6 +86,14 @@ export async function importSnapshotArchive(input: ArchiveInput): Promise<Archiv
   return Object.freeze({ ok: true, bundle: expanded.bundle, tree: decoded.tree });
 }
 
+/**
+ * Starts the zip codec for an archive gesture the person is about to make.
+ * Export and import await the same import, so a failure surfaces there.
+ */
+export function preloadArchiveCodec(): Promise<unknown> {
+  return import("fflate");
+}
+
 async function loadFflate(): Promise<Readonly<{ ok: true; value: Fflate }> | Extract<ArchiveExportResult, { ok: false }>> {
   try {
     return Object.freeze({ ok: true, value: await import("fflate") });

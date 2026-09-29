@@ -9,7 +9,14 @@ import {
 } from "./MaterialAddressLayer";
 import type { MaterialAddressProjection } from "../interaction/projected-layout-receipt";
 
-const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+// Global styles, then the stylesheets that load with their lazy components.
+const css = [
+  "../../../app/globals.css",
+  "./MaterialFiles.css",
+  "./PointTalkComposer.css",
+  "./NodeActionLens.css",
+  "./WikiOccurrenceLayer.css",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 const rooted = readFileSync(new URL("./RootedMaterial.tsx", import.meta.url), "utf8");
 const layer = readFileSync(new URL("./MaterialAddressLayer.tsx", import.meta.url), "utf8");
 const structuralSelection = readFileSync(

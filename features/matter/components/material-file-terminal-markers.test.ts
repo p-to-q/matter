@@ -32,7 +32,7 @@ describe("material file terminal markers", () => {
   });
 
   it("uses one restrained 2.5px leaf point and no guide pseudo endpoint", () => {
-    const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+    const css = readFileSync(new URL("./MaterialFiles.css", import.meta.url), "utf8");
     expect(css).toMatch(/\.material-file__terminal-marker::before\s*\{[^}]*(?:width:\s*2\.5px[^}]*height:\s*2\.5px|height:\s*2\.5px[^}]*width:\s*2\.5px)[^}]*opacity:\s*\.48/s);
     expect(css).not.toMatch(/\.material-files__tree-guide[^{}]*::after/u);
   });

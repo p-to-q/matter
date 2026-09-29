@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
   SEEDED_EMPTY_TREE_ID,
@@ -32,6 +33,10 @@ import {
   type MaterialLexicalPort,
 } from "../application/material-lexical-port";
 import type { MaterialLexicalObservationPort } from "../application/material-lexical-observation-port";
+import { adjudicateAdmissionRepair } from "../runtime/admission-repair-adjudication";
+
+// The repair runtime supplies this adjudicator; the product loads it lazily.
+const judgeRepair = () => adjudicateAdmissionRepair;
 
 describe("Matter store", () => {
   it("opens the pre-admission document with quiet identity and no sample material", () => {
@@ -128,7 +133,7 @@ describe("Matter store", () => {
 
   it("publishes late transcript repair as its own undoable command", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -191,10 +196,58 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("我觉得可以。");
   });
 
+  it("refuses a repair candidate it has no adjudicator to judge, keeping the admitted words", () => {
+    let judge: ReturnType<typeof judgeRepair> | null = null;
+    const store = createMatterStore("root", {
+      admissionRepair: () => judge,
+      monotonicNow: () => 100,
+    });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admit = (suffix: string) => store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: `voice_unjudged_${suffix}`,
+      commandId: `human_admission_unjudged_${suffix}`,
+      nodeId: `voice_node_unjudged_${suffix}`,
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    const candidate = (repairLeaseId: string) => ({
+      repairLeaseId,
+      outcome: "candidate" as const,
+      text: "我觉得可以。",
+      source: "rules" as const,
+      createdAt: "2026-08-11T10:00:00.100Z",
+    });
+
+    const unjudged = admit("1");
+    if (!("repairLeaseId" in unjudged)) throw new Error("repair lease missing");
+    const revision = store.getState().tree.revision;
+    expect(store.getState().settleHumanTranscriptRepair(candidate(unjudged.repairLeaseId)))
+      .toMatchObject({ status: "rejected", errorCode: "INVALID_REPAIR" });
+    expect(store.getState().tree.revision).toBe(revision);
+    expect(store.getState().tree.nodes.voice_node_unjudged_1.text).toBe("呃，我觉得可以。");
+
+    // Once the repair runtime has supplied it, the same candidate is judged.
+    judge = adjudicateAdmissionRepair;
+    const judged = admit("2");
+    if (!("repairLeaseId" in judged)) throw new Error("repair lease missing");
+    expect(store.getState().settleHumanTranscriptRepair(candidate(judged.repairLeaseId)))
+      .toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_unjudged_2.text).toBe("我觉得可以。");
+  });
+
   it("applies one captured spoken Wiki basis before admission", () => {
     const basis = confirmedWikiBasis("spoken", "code x", "Codex", 1);
     const store = createMatterStore("root", {
-      materialLexical: createWikiMaterialLexicalPort(() => basis),
+      materialLexical: createWikiMaterialLexicalPort(() => basis, () => canonicalizeWikiText),
     });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
@@ -257,6 +310,7 @@ describe("Matter store", () => {
     });
     let nowMs = 100;
     const store = createMatterStore("root", {
+      admissionRepair: judgeRepair,
       materialLexical,
       monotonicNow: () => nowMs,
     });
@@ -398,7 +452,7 @@ describe("Matter store", () => {
 
   it("keeps repair capabilities distinct when admission command ids repeat", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
 
@@ -450,7 +504,7 @@ describe("Matter store", () => {
 
   it("revalidates a model delta from the recomputed rule floor", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -484,7 +538,7 @@ describe("Matter store", () => {
 
   it("commits the store-adjudicated model text instead of its transport wrapper", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -517,7 +571,7 @@ describe("Matter store", () => {
   });
 
   it("keeps a stale repair silent and leaves store diagnostics unchanged", () => {
-    const store = createMatterStore("root");
+    const store = createMatterStore("root", { admissionRepair: judgeRepair });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const before = store.getState();
@@ -530,7 +584,7 @@ describe("Matter store", () => {
 
   it("does not revive repair authority when undo and redo restore the same node", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -565,7 +619,7 @@ describe("Matter store", () => {
 
   it("preserves repair authority when an unrelated structural drag commits", () => {
     let nowMs = 100;
-    const store = createMatterStore("expanded", { monotonicNow: () => nowMs });
+    const store = createMatterStore("expanded", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -605,7 +659,7 @@ describe("Matter store", () => {
 
   it("uses the store clock to expire a repair capability", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -638,7 +692,7 @@ describe("Matter store", () => {
 
   it("does not let a caller timestamp extend the store-owned repair lease", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -671,6 +725,7 @@ describe("Matter store", () => {
   it("restores the admission and repair as two undo steps after hydration", () => {
     let nowMs = 100;
     const source = createMatterStore("root", {
+      admissionRepair: judgeRepair,
       documentRoot: true,
       monotonicNow: () => nowMs,
     });
@@ -703,7 +758,7 @@ describe("Matter store", () => {
 
     const tree = structuredClone(source.getState().tree) as ThoughtTree;
     const history = structuredClone(source.getState().history);
-    const restored = createMatterStore("root", { documentRoot: true });
+    const restored = createMatterStore("root", { admissionRepair: judgeRepair, documentRoot: true });
     expect(restored.getState().hydrateSnapshot(tree, recovered(history))).toMatchObject({ status: "hydrated" });
     expect(restored.getState().undo()).toMatchObject({ status: "committed" });
     expect(restored.getState().tree.nodes.voice_node_reload.text).toBe("呃，我觉得可以。");

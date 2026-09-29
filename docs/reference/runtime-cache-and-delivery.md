@@ -104,6 +104,65 @@ The ambient video is similarly deferred until an idle opportunity, declares
 its weak-network floor. The hashed primary font uses `display: swap`; the
 secondary Plantin face is not preloaded.
 
+### Lazy boundaries and gesture code
+
+The initial graph holds the paper, its layout, and every gesture's own path:
+pointer arbitration, Escape layers, presence and the delivery window, canvas
+guidance, voice capture, and admission normalization (the store's admission
+commit and the voice clients call it synchronously). Code a gesture only
+*mounts*, or that runs only after a network answer, loads behind a lazy
+boundary:
+
+| Boundary | What loads there | Started |
+| --- | --- | --- |
+| Files panel | panel, its copy (including archive-error copy) and `MaterialFiles.css` | at hydration: the panel renders at once |
+| archive transport | ZIP transport and snapshot encoder; the zip codec | after first paint; the codec when Archive opens |
+| persistence engine | controller, IndexedDB repository, snapshot codec, undo journal | when the main chunk evaluates (below) |
+| Ask Matter record store | record repository, database handle, `idb` | on the record's first load after hydration |
+| Wiki runtime | coordinator, release table and learning policy, fitting mode, canonicalizer | at hydration, by the Wiki authority |
+| late repair | repair floor, expression decorator, repair client, store adjudicator | after first paint; again when recording starts |
+| Model API form | form and provider-session client | after first paint; when a settings menu opens |
+| Wiki settings | dictionary editor and its stylesheet | when a settings menu opens; when a takeover opens |
+| Point and Talk, node action lens, Wiki occurrence layer | components and their stylesheets | after first paint; at the first pointer or focus on the paper |
+
+A pointer gesture never waits on a code fetch at the moment it lands. Chunks a
+gesture mounts start in the next idle period after first paint (bounded at
+1.5 s, or a short timer where the browser has no idle callback) and earlier
+when an intent signal names them. Those components use `preloadableComponent`
+rather than `next/dynamic`: a lazy boundary suspends on its first mount even
+with a cached chunk and React throttles that reveal by about 300 ms, whereas a
+preloaded component renders in the gesture's own commit. A preload failure is
+ignored; the mounting gesture or the awaiting operation repeats the same import
+and owns the error. `e2e/gesture-preload.spec.ts` holds this for Point and Talk
+and the Model API dialog.
+
+Components' styles load with them. A rule moves out of `app/globals.css` only
+when every selector, outside `:has()`/`:not()`, names a class that only that
+component renders; a rule that styles the shell on a lazy element's presence
+stays global. Webpack resolves a chunk only after its stylesheet has loaded, so
+no unstyled frame appears.
+
+Two lazy boundaries carry authority and so state their ordering:
+
+- The Wiki basis publication hands out a publishing port only together with
+  the canonicalizer that interprets its rules (`bindInterpreter`). The lexical
+  adapter reads the interpreter only for a basis with rules, so a turn captured
+  before the Wiki runtime loads is unchanged text, never an uninterpreted rule.
+- The store judges a late repair candidate with an adjudicator that loads with
+  the repair port and is published before any repair can return. A settlement
+  it cannot judge is refused and the admitted words stand.
+
+The persistence engine sits behind a synchronous facade whose import starts
+when the main chunk evaluates, earlier than the effect that asks for the first
+stored row. Until it arrives the facade reports the controller's own loading
+status, replays earlier calls in order, and lets `start` wait; the paper keeps
+durable gestures inert while loading, as it already does while IndexedDB
+reads. An engine that cannot load reports `PERSISTENCE_UNAVAILABLE`, Retry
+fetches it again, and material made meanwhile meets any stored row through the
+load-window rule. `e2e/persistence-engine.spec.ts` holds a cold repeat visit
+(stored material appears one round trip later and is never written over) and
+the failure path.
+
 ## Server cold starts
 
 All request routes stay on the Node runtime in `hkg1`, close to the configured
@@ -155,6 +214,12 @@ regression contract, not a claim that this release invented a new cache hit.
   local transcription owns the browser worker and browser WASM path only;
 - a production source map, document, E2E file, archive trace, temporary file,
   environment file, or test enters a runtime trace.
+
+The initial-asset measure counts every hashed file the root HTML references,
+including the `noModule` polyfills file (112,594 bytes raw, 39,373 gzip) that
+browsers with module support never download. The ceilings were set on that
+basis. Excluding it would be a measurement correction, and it must lower both
+ceilings by the same amount in the same change.
 
 These are ceilings, not targets. A change that crosses one must first explain
 the measured user benefit and update the budget in the same reviewed change;

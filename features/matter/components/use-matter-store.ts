@@ -17,10 +17,12 @@ import {
   mintMatterWikiOccurrence,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
+  readMatterWikiInterpreter,
   settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
 import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
 import { createLazyWikiOccurrenceDriver } from "../interaction/wiki-occurrence-handle";
+import { readAdmissionRepairAdjudicator } from "../interaction/transcript-repair-runtime";
 import type { MaterialView } from "../interaction/wiki-occurrence-lifecycle";
 import {
   createMatterStore,
@@ -54,10 +56,14 @@ const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
 
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
-  materialLexical: createWikiMaterialLexicalPort(readMatterWikiBasis, {
-    phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
-    mintOccurrence: mintMatterWikiOccurrence,
-  }),
+  materialLexical: createWikiMaterialLexicalPort(
+    readMatterWikiBasis,
+    readMatterWikiInterpreter,
+    {
+      phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
+      mintOccurrence: mintMatterWikiOccurrence,
+    },
+  ),
   humanAdmissionObservation: createWikiMaterialLexicalObservationPort((observation) => {
     wikiOccurrences.noteHumanAdmission();
     observeMatterWikiEvidence(observation);
@@ -68,6 +74,8 @@ const matterStore = createMatterStore(singletonInitialDocument, {
       wikiOccurrences.admit(publication);
     },
   }),
+  // Loaded with the repair port, before any repair candidate can exist.
+  admissionRepair: readAdmissionRepairAdjudicator,
   initialTitle: singletonInitialDocument === "empty"
     ? EMPTY_MATTER_DOCUMENT_TITLE
     : DEFAULT_MATTER_DOCUMENT_TITLE,

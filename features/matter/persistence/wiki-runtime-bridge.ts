@@ -9,14 +9,13 @@ import {
   mintMatterWikiOccurrence,
   takeMatterWikiOccurrence,
 } from "./wiki-occurrence-owner";
-import {
-  matterWikiBasisPublication,
-  matterWikiFittingMode,
-} from "./wiki-runtime-publication";
+import { matterWikiBasisPublication } from "./wiki-runtime-publication";
 
-export { matterWikiBasisPublication, matterWikiFittingMode };
+export { matterWikiBasisPublication };
 
 export const readMatterWikiBasis = matterWikiBasisPublication.read;
+/** Null until the lazy runtime binds it, which happens before any rule is published. */
+export const readMatterWikiInterpreter = matterWikiBasisPublication.readInterpreter;
 
 export {
   claimMatterWikiOccurrences,

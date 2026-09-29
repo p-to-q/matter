@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  createIndexedDbInquiryRecordRepository,
-  type InquiryRecordRepository,
-  type StoredInquiryExchange,
-  type StoredInquiryRecord,
+import type {
+  InquiryRecordRepository,
+  StoredInquiryExchange,
+  StoredInquiryRecord,
 } from "../persistence/inquiry-record-repository";
+import { createLazyInquiryRecordRepository } from "../persistence/lazy-inquiry-record-repository";
 import {
   appendInquiryExchange,
   mergeInquiryExchanges,
@@ -49,7 +49,7 @@ export function useInquiryRecord(
 ): InquiryRecordBinding {
   const [ownership] = useState(() => Object.freeze({
     provided: providedRepository,
-    repository: providedRepository ?? createIndexedDbInquiryRecordRepository(),
+    repository: providedRepository ?? createLazyInquiryRecordRepository(),
   }));
   if (ownership.provided !== providedRepository) {
     throw new Error("Ask Matter repository ownership cannot change during a record session.");

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import { compileWikiBasis } from "../wiki/wiki-basis";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
 import {
@@ -6,8 +7,8 @@ import {
   serializeWikiCapabilityPreferences,
 } from "./wiki-capability-preferences";
 
-const LEGACY_BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v3");
-const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v5");
+const LEGACY_BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v5");
+const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v6");
 const bridgeHost = globalThis as unknown as { [key: symbol]: unknown };
 
 afterEach(() => {
@@ -61,18 +62,32 @@ describe("Wiki runtime bridge", () => {
     const compiled = compileWikiBasis(created.state, 1);
     if (!compiled.ok) throw new Error(compiled.error.message);
 
-    expect(first.matterWikiBasisPublication.publishCompiled(compiled.basis)).toMatchObject({
-      ok: true,
-    });
+    expect(first.matterWikiBasisPublication.bindInterpreter(canonicalizeWikiText)
+      .publishCompiled(compiled.basis)).toMatchObject({ ok: true });
     const captured = first.readMatterWikiBasis();
 
     vi.resetModules();
     const second = await import("./wiki-runtime-bridge");
     expect(second.readMatterWikiBasis()).toBe(captured);
-    expect(second.matterWikiBasisPublication.publishCompiled(compiled.basis)).toMatchObject({
+    expect(second.readMatterWikiInterpreter()).toBe(canonicalizeWikiText);
+    expect(second.matterWikiBasisPublication.bindInterpreter(canonicalizeWikiText)
+      .publishCompiled(compiled.basis)).toMatchObject({
       ok: false,
       error: { code: "STALE_GENERATION" },
     });
+  });
+
+  it("offers a publishing port only together with the interpreter of its rules", async () => {
+    delete bridgeHost[BRIDGE_KEY];
+    vi.resetModules();
+    const bridge = await import("./wiki-runtime-bridge");
+
+    expect(bridge.readMatterWikiInterpreter()).toBeNull();
+    expect("publishCompiled" in bridge.matterWikiBasisPublication).toBe(false);
+
+    const publisher = bridge.matterWikiBasisPublication.bindInterpreter(canonicalizeWikiText);
+    expect(bridge.readMatterWikiInterpreter()).toBe(canonicalizeWikiText);
+    expect(publisher.read()).toBe(bridge.readMatterWikiBasis());
   });
 
   it("does not load the runtime when both permissions are already disabled", async () => {

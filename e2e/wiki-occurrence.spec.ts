@@ -442,7 +442,8 @@ async function panIntoView(page: Page, passage: Locator): Promise<void> {
 }
 
 async function routeFixtureSpeech(page: Page): Promise<void> {
-  await page.route("**/api/transcribe", async (route) => {
+  // Match by path: the client names the transcription purpose in the query.
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     const body = route.request().postDataBuffer()?.toString("utf8") ?? "";
     await route.fulfill({
       status: 200,

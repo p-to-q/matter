@@ -119,9 +119,12 @@ import {
 import {
   CanvasChrome,
   canvasOverlayOwnsSurface,
+  preloadWikiSettings,
   type CanvasChromeHandle,
   type CanvasChromeOverlay,
 } from "./CanvasChrome";
+import { preloadableComponent } from "./preloadable-component";
+import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { CanvasRuling } from "./CanvasRuling";
 import {
   MaterialAddressLayer,
@@ -221,27 +224,33 @@ import type {
 import type { NodeActionWikiReview } from "./NodeActionLens";
 import { wikiOccurrenceDescription } from "./wiki-occurrence-description-copy";
 
-const PointTalkTurn = dynamic(
+// Point and Talk, the node action lens, and the Wiki occurrence layer mount
+// on a gesture. Their chunks load after first paint, or at the first pointer
+// or focus on the paper if sooner, and a loaded one renders in the gesture's
+// own commit, so the gesture never waits on a fetch.
+const PointTalkTurn = preloadableComponent(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
-  { ssr: false },
 );
-const PointTalkExit = dynamic(
+const PointTalkExit = preloadableComponent(
   () => import("./PointTalkComposer").then((module) => module.PointTalkExit),
-  { ssr: false },
 );
-const NodeActionLens = dynamic(
+const NodeActionLens = preloadableComponent(
   () => import("./NodeActionLens").then((module) => module.NodeActionLens),
-  { ssr: false },
 );
 const MaterialFilesWithLabels = dynamic(
   () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
   { ssr: false },
 );
-// The settle, the mark, and the takeover load with the first live occurrence.
-const WikiOccurrenceLayer = dynamic(
+// The settle, the mark, and the takeover mount with the first live occurrence.
+const WikiOccurrenceLayer = preloadableComponent(
   () => import("./WikiOccurrenceLayer").then((module) => module.WikiOccurrenceLayer),
-  { ssr: false },
 );
+const PAPER_GESTURE_CHUNKS = Object.freeze([
+  PointTalkTurn.preload,
+  PointTalkExit.preload,
+  NodeActionLens.preload,
+  WikiOccurrenceLayer.preload,
+]);
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
 // cheap bound admits every ordinary passage the exact policy can safely size;
 // the turn still owns the authoritative validation before it exposes input.
@@ -472,6 +481,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   // The word's takeover owns the passage while open; its lens would compete.
   const wikiTakeoverOpen = wikiViews.some((view) => view.takeover);
+  // A takeover can open the Wiki dialog on its word; that is its intent signal.
+  useEffect(() => {
+    if (wikiTakeoverOpen) preloadWikiSettings();
+  }, [wikiTakeoverOpen]);
   // Once loaded for a live occurrence, the layer stays for the session.
   const [wikiLayerMounted, setWikiLayerMounted] = useState(false);
   if (!wikiLayerMounted && wikiViews.length > 0) setWikiLayerMounted(true);
@@ -607,6 +620,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onSelectNode(nodeId);
   }, [documentEpoch, onSelectNode, tree]);
   const shellRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const cancelIdle = preloadWhenIdle(PAPER_GESTURE_CHUNKS);
+    const shell = shellRef.current;
+    const onIntent = () => {
+      for (const load of PAPER_GESTURE_CHUNKS) preloadNow(load);
+    };
+    shell?.addEventListener("pointerover", onIntent, { capture: true, once: true });
+    shell?.addEventListener("focusin", onIntent, { capture: true, once: true });
+    return () => {
+      cancelIdle();
+      shell?.removeEventListener("pointerover", onIntent, { capture: true });
+      shell?.removeEventListener("focusin", onIntent, { capture: true });
+    };
+  }, []);
   const documentRef = useRef<HTMLElement>(null);
   const materialPlaneRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);

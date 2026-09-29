@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import {
   canonicalizeMaterialText,
 } from "./material-lexical-port";
@@ -113,6 +114,7 @@ describe("Wiki automation baseline", () => {
     let fittingEnabled = true;
     const lexical = createWikiMaterialLexicalPort(
       () => basis,
+      () => canonicalizeWikiText,
       { phoneticFittingEnabled: () => fittingEnabled },
     );
     expect(canonicalizeMaterialText(lexical.capture(), request).text)
@@ -152,7 +154,7 @@ describe("Wiki automation baseline", () => {
       channel: "spoken" as const,
       text: "我读了Englebart的论文",
     });
-    const lexical = createWikiMaterialLexicalPort(() => basis);
+    const lexical = createWikiMaterialLexicalPort(() => basis, () => canonicalizeWikiText);
 
     for (let turn = 0; turn < 3; turn += 1) {
       observeCommittedMaterialText(observer, request);

@@ -230,7 +230,9 @@ describe("CanvasChrome", () => {
       new URL("./CanvasChrome.module.css", import.meta.url),
       "utf8",
     );
-    const globalCss = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+    // The index toggle's geometry loads with the Files panel's stylesheet.
+    const globalCss = ["../../../app/globals.css", "./MaterialFiles.css"]
+      .map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);

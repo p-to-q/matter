@@ -38,6 +38,11 @@ const stubs = vi.hoisted(() => {
   return {
     coordinator,
     generationChannel,
+    // What the coordinator is constructed with, and what the lexical adapter
+    // could read at that moment.
+    coordinatorPublisher: undefined as unknown,
+    interpreterAtConstruction: undefined as unknown,
+    readInterpreter: undefined as undefined | (() => unknown),
     refresh: undefined as undefined | (() => Promise<unknown>),
     fit: vi.fn<FitStub>().mockReturnValue({
       status: "ok",
@@ -55,7 +60,11 @@ const stubs = vi.hoisted(() => {
 });
 
 vi.mock("./wiki-coordinator", () => ({
-  createWikiCoordinator: () => stubs.coordinator,
+  createWikiCoordinator: (_repository: unknown, publisher: unknown) => {
+    stubs.coordinatorPublisher = publisher;
+    stubs.interpreterAtConstruction = stubs.readInterpreter?.();
+    return stubs.coordinator;
+  },
 }));
 vi.mock("./wiki-generation-channel", () => ({
   createWikiGenerationChannel: () => stubs.generationChannel,
@@ -87,6 +96,7 @@ vi.mock("./wiki-capability-preferences-reader", () => ({
 }));
 
 const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
+const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v6");
 const ENGLISH_OPPORTUNITY = Object.freeze({
   locale: "en-US",
   channel: "spoken",
@@ -127,6 +137,10 @@ afterEach(() => {
     scannedScripts: Object.freeze(["latin" as const]),
   });
   stubs.refresh = undefined;
+  stubs.coordinatorPublisher = undefined;
+  stubs.interpreterAtConstruction = undefined;
+  stubs.readInterpreter = undefined;
+  delete host[PUBLICATION_KEY];
   stubs.automaticCollection = true;
   stubs.phoneticFitting = true;
   vi.resetModules();
@@ -144,6 +158,24 @@ describe("Wiki runtime ownership", () => {
     ]);
   });
 
+  it("binds the canonicalizer before its coordinator can publish any rule", async () => {
+    delete host[PUBLICATION_KEY];
+    const bridge = await import("./wiki-runtime-bridge");
+    stubs.readInterpreter = bridge.readMatterWikiInterpreter;
+    expect(bridge.readMatterWikiInterpreter()).toBeNull();
+
+    await import("./wiki-runtime-core");
+    const { canonicalizeWikiText } = await import("../wiki/canonicalize-wiki-text");
+
+    // The coordinator is the runtime's only publisher, and it receives a port
+    // whose creation already made the interpreter readable.
+    expect(stubs.interpreterAtConstruction).toBe(canonicalizeWikiText);
+    expect(stubs.coordinatorPublisher).toMatchObject({
+      read: bridge.readMatterWikiBasis,
+      publishCompiled: expect.any(Function),
+    });
+  });
+
   it.each(LEGACY_RUNTIME_KEYS)(
     "closes legacy runtime %s before installing the stable ABI slot",
     async (legacyRuntimeKey) => {
@@ -159,18 +191,18 @@ describe("Wiki runtime ownership", () => {
       expect(close).toHaveBeenCalledOnce();
       expect(dispose).toHaveBeenCalledOnce();
       expect(host[legacyRuntimeKey]).toBeUndefined();
-      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 14 });
+      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 15 });
     },
   );
 
   it("disposes a mismatched stable ABI before replacement", async () => {
     const dispose = vi.fn();
-    host[RUNTIME_KEY] = { abi: 13, runtime: { dispose } };
+    host[RUNTIME_KEY] = { abi: 14, runtime: { dispose } };
 
     await import("./wiki-runtime-core");
 
     expect(dispose).toHaveBeenCalledOnce();
-    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 14 });
+    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 15 });
   });
 
   it("announces each successfully hydrated generation only once", async () => {

@@ -5,13 +5,7 @@ import {
   WIKI_FITTING_VERSION,
   type WikiChannel,
 } from "../wiki/wiki-model";
-import { MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS } from
-  "../wiki/wiki-runtime-producer-releases";
-
-export const matterWikiFittingMode =
-  MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS.includes("latin-internal-edit-v2")
-    ? "latin-conservative" as const
-    : "off" as const;
+import type { WikiTextCanonicalizer } from "../application/wiki-material-lexical-adapter";
 
 const EMPTY_VIEW: CompiledWikiView = Object.freeze({
   nodes: Object.freeze([Object.freeze({
@@ -55,30 +49,62 @@ const EMPTY_WIKI_BASIS: WikiBasis = Object.freeze({
   }),
 });
 
-type MatterWikiBasisPublication = { current: WikiBasis };
+type MatterWikiBasisPublication = {
+  current: WikiBasis;
+  /** The code that interprets a published basis; absent until the lazy runtime binds it. */
+  canonicalize?: WikiTextCanonicalizer;
+};
 // The key versions the in-memory basis ABI across Fast Refresh. A stale cell
 // must never survive a required snapshot-shape change.
-const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v5");
+// v6: the cell also carries the interpreter bound before any rule is published.
+const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v6");
 const publicationHost = globalThis as unknown as {
   [key: symbol]: MatterWikiBasisPublication | undefined;
 };
 const publication = publicationHost[PUBLICATION_KEY] ?? { current: EMPTY_WIKI_BASIS };
 publicationHost[PUBLICATION_KEY] = publication;
 
-/** The initial material graph reads one tiny cell while the durable runtime stays lazy. */
+type PublishCompiledResult =
+  | Readonly<{ ok: true; basis: WikiBasis }>
+  | Readonly<{
+    ok: false;
+    error: Readonly<{ code: "STALE_GENERATION"; message: string }>;
+  }>;
+
+/** A port that may publish rules, obtainable only together with their interpreter. */
+export type MatterWikiBasisPublisher = Readonly<{
+  read(): WikiBasis;
+  publishCompiled(basis: WikiBasis): PublishCompiledResult;
+}>;
+
+const readPublishedBasis = (): WikiBasis => publication.current;
+
+function publishCompiled(basis: WikiBasis): PublishCompiledResult {
+  if (basis.snapshot.generation <= publication.current.snapshot.generation) {
+    return Object.freeze({
+      ok: false as const,
+      error: Object.freeze({
+        code: "STALE_GENERATION" as const,
+        message: "A Wiki basis generation must advance monotonically.",
+      }),
+    });
+  }
+  publication.current = basis;
+  return Object.freeze({ ok: true as const, basis });
+}
+
+/**
+ * The initial material graph reads one tiny cell while the durable runtime and
+ * the canonicalizer that interprets its rules stay lazy. Nothing outside
+ * `bindInterpreter` can publish a basis, so every non-empty basis a reader sees
+ * was published after its interpreter: a reader that finds no interpreter can
+ * only be looking at the empty basis, which changes no text.
+ */
 export const matterWikiBasisPublication = Object.freeze({
-  read: (): WikiBasis => publication.current,
-  publishCompiled(basis: WikiBasis) {
-    if (basis.snapshot.generation <= publication.current.snapshot.generation) {
-      return Object.freeze({
-        ok: false as const,
-        error: Object.freeze({
-          code: "STALE_GENERATION" as const,
-          message: "A Wiki basis generation must advance monotonically.",
-        }),
-      });
-    }
-    publication.current = basis;
-    return Object.freeze({ ok: true as const, basis });
+  read: readPublishedBasis,
+  readInterpreter: (): WikiTextCanonicalizer | null => publication.canonicalize ?? null,
+  bindInterpreter(canonicalize: WikiTextCanonicalizer): MatterWikiBasisPublisher {
+    publication.canonicalize = canonicalize;
+    return Object.freeze({ read: readPublishedBasis, publishCompiled });
   },
 });

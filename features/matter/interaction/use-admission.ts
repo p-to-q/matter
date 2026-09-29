@@ -22,7 +22,11 @@ import {
 } from "./admission-driver";
 import { createBrowserVoicePort } from "./browser-voice";
 import { afterBaselineVisible } from "./repair-presentation-gate";
-import { createTranscriptRepairPort } from "./transcript-repair-port";
+import { preloadNow, preloadWhenIdle } from "./idle-preload";
+import {
+  createLazyTranscriptRepairPort,
+  loadTranscriptRepairRuntime,
+} from "./transcript-repair-runtime";
 import { requestTranscription } from "./transcription-client";
 import { useDeliveryWindow } from "./use-delivery-window";
 import { useRepairPresentation } from "./use-repair-presentation";
@@ -76,7 +80,7 @@ export function useAdmission({
       onRepairCommitted: repairPresentation.publish,
       createVoice: createBrowserVoicePort,
       transcribe: requestTranscription,
-      repair: createTranscriptRepairPort(),
+      repair: createLazyTranscriptRepairPort(),
       afterBaselineVisible,
       createInteractionId,
       createMaterialId,
@@ -127,6 +131,10 @@ export function useAdmission({
     return () => driver.release();
   }, [driver]);
 
+  // The late repair runs only after a transcript returns from the network;
+  // its runtime loads after first paint, and again when recording starts.
+  useEffect(() => preloadWhenIdle([loadTranscriptRepairRuntime]), []);
+
   const setDeliveryTarget = useCallback(
     (anchor: AdmissionAnchor, status: AdmissionTargetStatus) =>
       driver.setDeliveryTarget(anchor, status),
@@ -144,10 +152,16 @@ export function useAdmission({
     state,
     settlement: driver.getSettlement(),
     repairPresentations,
-    start: (anchor: AdmissionAnchor) => driver.start(anchor, locale),
+    start: (anchor: AdmissionAnchor) => {
+      preloadNow(loadTranscriptRepairRuntime);
+      driver.start(anchor, locale);
+    },
     stop: () => driver.stop(),
     cancel: () => driver.cancel(),
-    retry: () => driver.retry(locale),
+    retry: () => {
+      preloadNow(loadTranscriptRepairRuntime);
+      driver.retry(locale);
+    },
     place: (anchor: AdmissionAnchor) => driver.place(anchor),
     dismiss: () => driver.dismiss(),
     setPresentationAvailable,

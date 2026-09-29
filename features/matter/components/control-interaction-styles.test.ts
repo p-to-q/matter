@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+// Global styles, then the stylesheets that load with their lazy components.
+const css = [
+  "../../../app/globals.css",
+  "./MaterialFiles.css",
+  "./PointTalkComposer.css",
+  "./NodeActionLens.css",
+  "./WikiOccurrenceLayer.css",
+].map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 
 describe("canvas control interaction styles", () => {
   it("keeps search focus to the caret without drawing a box or underline", () => {
@@ -96,6 +103,10 @@ describe("canvas control interaction styles", () => {
       "../../../app/globals.css",
       "./CanvasChrome.module.css",
       "./WikiSettingsSection.module.css",
+      "./MaterialFiles.css",
+      "./PointTalkComposer.css",
+      "./NodeActionLens.css",
+      "./WikiOccurrenceLayer.css",
     ]) {
       const source = readFileSync(new URL(url, import.meta.url), "utf8");
       const ungated = stripHoverMedia(source).match(/[^{}]*:hover[^{}]*\{/gu) ?? [];

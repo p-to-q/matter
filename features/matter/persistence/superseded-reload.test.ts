@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createIndexedDbDocumentRepository } from "./document-repository";
-import { createPersistenceController, holdsUnsavedPersonMaterial } from "./persistence-controller";
+import { createPersistenceController } from "./persistence-controller";
+import { holdsUnsavedPersonMaterial } from "./persistence-status";
 import {
   createSupersededReload,
   SUPERSEDED_RELOAD_LOOP_MS,
