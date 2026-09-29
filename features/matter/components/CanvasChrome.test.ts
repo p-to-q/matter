@@ -10,7 +10,9 @@ import {
 import {
   CANVAS_CHROME_INFO,
   CanvasChrome,
+  INQUIRY_CANCEL_ARM_MS,
   canvasOverlayOwnsSurface,
+  inquiryCancelAccepted,
   isCanvasChromeInfoOverlay,
   nextDialogTabFocusIndex,
   nextMenuFocusIndex,
@@ -83,10 +85,26 @@ describe("CanvasChrome", () => {
     const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
     const start = source.indexOf("const cancelPendingAsk = useCallback");
     const cancel = source.slice(start, source.indexOf("}, []);", start));
+    expect(cancel).toContain("if (!inquiryCancelAccepted(event.detail)) return;");
     expect(cancel).toContain("request.abort(");
     expect(cancel).toContain('type: "withdraw"');
     expect(cancel).toContain("reason: null");
     expect(source).toContain('data-inquiry-control="cancel"');
+    // Ask and Cancel are distinct elements; Cancel arms only after a beat and
+    // Ask hands focus back to the field, so a double-click cannot revoke.
+    expect(source).toMatch(/data-inquiry-control="cancel"\s*disabled=\{!cancelArmed\}\s*key="cancel"/u);
+    expect(source).toMatch(/data-inquiry-control="ask"\s*disabled=\{!canAsk\}\s*key="ask"/u);
+    expect(source).toMatch(/ask\(\);\s*focusWithoutScroll\(fieldRef\.current \?\? undefined\);/u);
+    expect(INQUIRY_CANCEL_ARM_MS).toBeGreaterThanOrEqual(300);
+    expect(inquiryCancelAccepted(0)).toBe(true);
+    expect(inquiryCancelAccepted(1)).toBe(true);
+    expect(inquiryCancelAccepted(2)).toBe(false);
+  });
+
+  it("announces a notice that arrived while the bubble was closed when it reopens", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    expect(source).toContain("requestAnimationFrame(() => setStatusLive(true))");
+    expect(source).toContain("{!statusLive ? null : record?.phase");
   });
 
   it("renders the desktop corner system and one mobile menu trigger", () => {

@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
@@ -1241,6 +1242,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
   const [threadScrollable, setThreadScrollable] = useState(false);
   const [submissionPending, setSubmissionPending] = useState(false);
+  // Cancel takes Ask's place the moment a question is sent. It stays inert for
+  // a beat so the second click of a double-click, or a click already on its
+  // way, cannot revoke the question it just sent.
+  const [cancelArmed, setCancelArmed] = useState(true);
+  const cancelArmTimerRef = useRef<number | null>(null);
+  const [statusLive, setStatusLive] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -1291,6 +1298,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   useImperativeHandle(forwardedRef, () => ({ detach }), [detach]);
 
   useEffect(() => () => {
+    if (cancelArmTimerRef.current !== null) window.clearTimeout(cancelArmTimerRef.current);
     authorityRef.current += 1;
     const request = requestRef.current;
     requestRef.current = null;
@@ -1348,6 +1356,18 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     return () => cancelAnimationFrame(frame);
   }, [presented]);
 
+  // The status region mounts empty with each opening and speaks one frame
+  // later, so a refusal that arrived while the bubble was closed is announced
+  // when it is reopened rather than read silently as initial content.
+  useLayoutEffect(() => {
+    if (!presented) return;
+    const frame = requestAnimationFrame(() => setStatusLive(true));
+    return () => {
+      cancelAnimationFrame(frame);
+      setStatusLive(false);
+    };
+  }, [presented]);
+
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
     const question = inquiryText(state).trim();
@@ -1374,6 +1394,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     requestRef.current?.abort();
     const request = new AbortController();
     requestRef.current = request;
+    setCancelArmed(false);
+    if (cancelArmTimerRef.current !== null) window.clearTimeout(cancelArmTimerRef.current);
+    cancelArmTimerRef.current = window.setTimeout(() => {
+      cancelArmTimerRef.current = null;
+      setCancelArmed(true);
+    }, INQUIRY_CANCEL_ARM_MS);
     const authority = authorityRef.current;
     const requestOwner = owner;
     void askInquiry({
@@ -1415,7 +1441,8 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   // Explicit cancellation is the one person-owned way to revoke a submitted
   // question. It returns the question to the field without a notice and gives
   // a late answer no authority over either the bubble or the local record.
-  const cancelPendingAsk = useCallback(() => {
+  const cancelPendingAsk = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (!inquiryCancelAccepted(event.detail)) return;
     const pending = pendingSubmissionRef.current;
     const request = requestRef.current;
     if (pending === null || request === null) return;
@@ -1526,10 +1553,14 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         >
           <MicIcon />
         </button>
+        {/* Distinct keys: the control that replaces Ask is a new element, and
+            focus goes back to the field rather than landing on Cancel. */}
         {hasPendingAnswer && submissionPending ? (
           <button
             className={styles.inquiryAsk}
             data-inquiry-control="cancel"
+            disabled={!cancelArmed}
+            key="cancel"
             onClick={cancelPendingAsk}
             type="button"
           >
@@ -1540,7 +1571,11 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
             className={styles.inquiryAsk}
             data-inquiry-control="ask"
             disabled={!canAsk}
-            onClick={ask}
+            key="ask"
+            onClick={() => {
+              ask();
+              focusWithoutScroll(fieldRef.current ?? undefined);
+            }}
             type="button"
           >
             {copy.ask}
@@ -1554,7 +1589,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         className={styles.inquiryStatus}
         role="status"
       >
-        {record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
+        {!statusLive ? null : record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
           ? noticeCopy(copy, state.notice)
           : listening ? copy.listening
             : transcribing ? copy.transcribing
@@ -1660,6 +1695,17 @@ function appendInquiryRecord(
 }
 
 const INQUIRY_FIELD_MAX_HEIGHT = 95;
+/** How long Cancel stays inert after the question it would revoke was sent. */
+export const INQUIRY_CANCEL_ARM_MS = 400;
+
+/**
+ * Only a deliberate single activation cancels: the second click of a
+ * double-click on Ask reports `detail` 2 and must not revoke the question the
+ * first click sent. Keyboard activation reports 0.
+ */
+export function inquiryCancelAccepted(clickDetail: number): boolean {
+  return clickDetail <= 1;
+}
 type TerminalInquiryOutcome = Exclude<InquiryTurnOutcome, Readonly<{ status: "pending" }>>;
 const NO_MATERIAL: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
 

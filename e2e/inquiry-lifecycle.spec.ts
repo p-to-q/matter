@@ -207,6 +207,30 @@ test("reopening during a pending answer shows that turn, then its answer", async
   await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 });
 
+test("a double-click on Ask sends once and never cancels what it sent", async ({ page }) => {
+  let requests = 0;
+  const gate = deferred<void>();
+  await page.route("**/api/inquiry", async (route) => {
+    requests += 1;
+    const request = inquiryRequest(route);
+    await gate.promise;
+    await fulfillInquiry(route, request, "双击只问了一次。").catch(() => undefined);
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill("双击会发生什么？");
+  await inquiry.getByRole("button", { name: "询问", exact: true }).dblclick();
+
+  await expect(inquiry.locator('[data-inquiry-role="person"]')).toHaveText(["双击会发生什么？"]);
+  await expect(field).toBeFocused();
+  await expect(field).toHaveValue("");
+  gate.resolve();
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText("双击只问了一次。");
+  expect(requests).toBe(1);
+});
+
 test("explicit cancellation returns a waiting question to the field", async ({ page }) => {
   const received = deferred<void>();
   await page.route("**/api/inquiry", async (route) => {
