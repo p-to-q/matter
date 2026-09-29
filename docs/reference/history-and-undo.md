@@ -103,17 +103,21 @@ maxRetainedInverseBytes: 32 MiB }` across both stacks.
   a six-byte JSON escape: about 24 MiB (`history.test.ts` builds it). CJK text
   at the bound is about 12 MiB and ASCII about 4 MiB. `HISTORY_LIMIT_EXCEEDED`
   therefore stays a guard for other limits, not a refusal a person can meet.
-- Commit evicts whole oldest undo entries, never the newest, until count and
-  bytes fit; redo is already empty. Undo and Redo keep the count but may grow
-  bytes slightly (each move re-inverts the command and extends its id), so they
-  also evict the oldest undo entries; an overage that remains once undo is empty
-  is tolerated until the next commit.
-- Each inverse is serialized once when it enters a stack. For human commits,
-  Undo, and Redo the byte total is amortized constant-cost: the redo total is
-  summed only when a commit discards redo, which each entry reaches at most
-  once. A delivered commit keeps a redo prefix instead, so it recomputes both
-  totals from the kept entries: linear in the bounded 1,000 entries, not in
-  their bytes.
+- One retention policy (`boundHistory` in `tree/history.ts`) bounds every
+  operation: whole oldest undo steps are released first, then the farthest redo
+  steps, until count and bytes fit across both stacks. An operation keeps the
+  undo step it just produced (a commit, a delivery, a Redo); the byte bound
+  exceeds every legal inverse, so that step always fits. Undo and Redo keep the
+  count but may grow bytes slightly (each move re-inverts the command and
+  extends its id), so they are bounded like any other operation. A history
+  therefore never exceeds the bound in memory, and journal recovery applies the
+  same policy: it releases nothing a current build kept and only trims a
+  journal written under another policy, such as an unbounded v5 inline one.
+- Each inverse is serialized once when it enters a stack, and its byte count
+  travels with it. Totals are not carried between operations: every operation
+  recomputes them from the entries while it bounds the stacks. That is linear in
+  the at most 1,000 entries, not in their bytes, and the same order as the stack
+  copy each operation already makes.
 - Reaching the bound is ordinary editing and is not announced. Only an abnormal
   release is: a stored step that could not be read, a step that no longer
   applies, or durable steps shed under storage pressure.
@@ -148,12 +152,11 @@ on X, undo sibling Y's admission, and the arriving expansion would make Y
 impossible to redo.
 
 `commitDeliveredTreeCommand` therefore commits like `commitTreeCommand` but
-keeps the redo future that still replays. The entry and byte limits then count
-both stacks. At capacity, the oldest undo steps are released first, never the
+keeps the redo future that still replays. The same retention policy then counts
+both stacks: at capacity, the oldest undo steps are released first, never the
 delivered step itself, and only then the farthest redo steps. The kept redo
 prefix is the person's most recently undone intent and is fresher than the
-oldest undo step. Totals are recomputed from the entries, so the policy does
-not assume that a commit clears redo. A delivery is one exact
+oldest undo step. A delivery is one exact
 text replacement of one node, and the engine reads node content only through
 the node mementos a mutation carries. Every redo step nearer than the first one
 carrying that node's memento replays unchanged; that first carrier holds the
@@ -161,7 +164,7 @@ replaced content and can never replay, so it is released with every later
 step, which was recorded on top of it. The rule finds the exact replayable
 prefix without replaying the tree: replay costs one full validation per step,
 measured at 7.7 s for 1,000 redo steps over about 1,940 nodes. Tests check the
-rule against full engine replay. Any other delivered mutation ends the redo
+rule against full engine replay (the test oracle in `history-replay-oracle.ts`). Any other delivered mutation ends the redo
 future as a human command does. The kept stack is
 thus always one contiguous future that journal recovery, seed relocalization,
 and the keyboard shortcut can replay without a special case; nothing is ever

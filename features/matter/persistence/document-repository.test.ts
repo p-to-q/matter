@@ -987,11 +987,7 @@ function lifecycleOf(call: number) {
 /** A history as storage hands it back: every step's byte count is still unmeasured. */
 function restored(history: TreeHistory): TreeHistory {
   const mark = (entry: TreeHistory["entries"][number]) => ({ ...entry, bytesUnverified: true as const });
-  return {
-    entries: history.entries.map(mark),
-    redoEntries: history.redoEntries.map(mark),
-    retainedInverseBytes: history.retainedInverseBytes,
-  };
+  return { entries: history.entries.map(mark), redoEntries: history.redoEntries.map(mark) };
 }
 
 function seeded(): ThoughtTree {

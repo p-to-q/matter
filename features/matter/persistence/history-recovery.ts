@@ -117,11 +117,7 @@ export function parseLegacyHistory(
   const undo = readableTop(value.entries, treeId, limits);
   const redo = readableTop((value.redoEntries as unknown[] | undefined) ?? [], treeId, limits);
   return Object.freeze({
-    history: {
-      entries: undo.entries,
-      redoEntries: redo.entries,
-      retainedInverseBytes: sumBytes(undo.entries) + sumBytes(redo.entries),
-    },
+    history: { entries: undo.entries, redoEntries: redo.entries },
     released: undo.released || redo.released,
   });
 }
@@ -141,12 +137,6 @@ function readableTop(
     entries.push(entry);
   }
   return Object.freeze({ entries: entries.reverse(), released: false });
-}
-
-export function sumBytes(entries: readonly TreeHistoryEntry[]): number {
-  let total = 0;
-  for (const entry of entries) total += entry.retainedInverseBytes;
-  return total;
 }
 
 function isNonNegativeSafeInteger(value: unknown): value is number {

@@ -12,6 +12,7 @@ export type TreeHistoryEntry = {
   commandId: string;
   source: TreeCommand["source"];
   inverse: TreeCommand;
+  /** The inverse's serialized UTF-8 size, measured once when it entered a stack. */
   retainedInverseBytes: number;
   /**
    * Restored from storage: the byte count was read, not measured. It is
@@ -26,8 +27,6 @@ export type TreeHistory = {
   entries: TreeHistoryEntry[];
   /** Commands reachable only through the platform Redo keyboard convention; the last is next. */
   redoEntries: TreeHistoryEntry[];
-  /** Exact inverse bytes retained across both reversible stacks. */
-  retainedInverseBytes: number;
 };
 
 export type TreeHistoryLimits = {
@@ -47,8 +46,6 @@ export const MATTER_HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze(
   maxEntries: 1_000,
   maxRetainedInverseBytes: 32 * 1_024 * 1_024,
 });
-
-export type EstimateInverseBytes = (inverse: TreeCommand) => number;
 
 export type CommitTreeCommandResult =
   | {
@@ -103,67 +100,42 @@ export type RedoTreeHistoryResult =
         | { code: "HISTORY_UNAVAILABLE"; message: string };
     };
 
+const UTF8 = new TextEncoder();
+
 export function createTreeHistory(): TreeHistory {
-  return { entries: [], redoEntries: [], retainedInverseBytes: 0 };
+  return { entries: [], redoEntries: [] };
 }
 
+/** The one measure of an inverse, used on entry, at the bound, and at use. */
 export function estimateSerializedInverseBytes(inverse: TreeCommand): number {
-  return new TextEncoder().encode(JSON.stringify(inverse)).byteLength;
+  return UTF8.encode(JSON.stringify(inverse)).byteLength;
+}
+
+/** The exact inverse bytes a run of entries retains. */
+export function retainedInverseBytes(entries: readonly TreeHistoryEntry[]): number {
+  let total = 0;
+  for (const entry of entries) total += entry.retainedInverseBytes;
+  return total;
 }
 
 /**
  * The material commit boundary. A command is published only when its exact
  * inverse can enter history; capacity failure preserves both input objects.
+ * A new human command creates a new timeline, so the undone future ends.
  */
 export function commitTreeCommand(
   tree: ThoughtTree,
   history: TreeHistory,
   command: TreeCommand,
   limits: TreeHistoryLimits,
-  estimateBytes: EstimateInverseBytes = estimateSerializedInverseBytes,
 ): CommitTreeCommandResult {
-  assertHistoryLimits(limits);
-  const result = applyTreeCommand(tree, command);
-  if (!result.ok) {
-    return { ok: false, tree, history, error: result.error };
-  }
-
-  // The engine may construct an inverse from references in the command. The
-  // history owns its memento, so later caller mutation cannot weaken undo.
-  const inverse = cloneTreeCommand(result.inverse);
-  const retainedInverseBytes = estimateBytes(inverse);
-  if (!isNonNegativeSafeInteger(retainedInverseBytes)) {
-    throw new RangeError("The inverse byte estimator must return a non-negative safe integer.");
-  }
-
-  if (retainedInverseBytes > limits.maxRetainedInverseBytes) {
-    return {
-      ok: false,
-      tree,
-      history,
-      error: {
-        code: "HISTORY_LIMIT_EXCEEDED",
-        message: "The material change cannot retain an exact inverse within the history limit.",
-      },
-    };
-  }
-
-  // A new durable change creates a new timeline. Its exact inverse remains
-  // available, but any alternate future that had been undone is no longer a
-  // valid redo target. Each redo entry is summed here at most once before it is
-  // discarded, so the retained total stays amortized constant-cost.
-  const undoBytes = history.retainedInverseBytes - sumRetainedBytes(history.redoEntries);
+  const committed = commitWithInverse(tree, history, command, limits);
+  if (!committed.ok) return committed;
   return {
     ok: true,
-    tree: result.tree,
-    history: releaseOldestUndo(
-      [...history.entries, { commandId: command.id, source: command.source, inverse, retainedInverseBytes }],
-      [],
-      undoBytes + retainedInverseBytes,
-      limits,
-      true,
-    ),
-    affectedNodeIds: result.affectedNodeIds,
+    tree: committed.tree,
+    history: boundHistory([...history.entries, committed.entry], [], limits, { keepNewestUndo: true }),
+    affectedNodeIds: committed.affectedNodeIds,
   };
 }
 
@@ -177,8 +149,7 @@ export function commitTreeCommand(
  * Retained redo entries must still replay exactly, in stack order, against
  * the new tree. The first entry that does not is released together with
  * everything after it, so the redo stack stays one contiguous future that
- * recovery and Redo can trust. At capacity the oldest undo steps go first,
- * then the farthest redo steps. Only an exact text replacement is known to
+ * recovery and Redo can trust. Only an exact text replacement is known to
  * commute with that future; any other delivered mutation ends it as a human
  * command does.
  */
@@ -187,20 +158,17 @@ export function commitDeliveredTreeCommand(
   history: TreeHistory,
   command: TreeCommand,
   limits: TreeHistoryLimits,
-  estimateBytes: EstimateInverseBytes = estimateSerializedInverseBytes,
 ): CommitTreeCommandResult {
-  const committed = commitTreeCommand(tree, history, command, limits, estimateBytes);
-  const redoEntries = history.redoEntries;
-  if (
-    !committed.ok ||
-    redoEntries.length === 0 ||
-    command.mutation.type !== "replace-text"
-  ) return committed;
-  const future = redoFutureIndependentOf(command.mutation.nodeId, redoEntries);
-  if (future.length === 0) return committed;
+  const committed = commitWithInverse(tree, history, command, limits);
+  if (!committed.ok) return committed;
+  const future = command.mutation.type === "replace-text"
+    ? redoFutureIndependentOf(command.mutation.nodeId, history.redoEntries)
+    : [];
   return {
-    ...committed,
-    history: boundBothStacks(committed.history.entries, future, limits),
+    ok: true,
+    tree: committed.tree,
+    history: boundHistory([...history.entries, committed.entry], future, limits, { keepNewestUndo: true }),
+    affectedNodeIds: committed.affectedNodeIds,
   };
 }
 
@@ -234,16 +202,14 @@ export function undoTreeHistory(
     return { ok: false, tree, history: releaseUndoStack(history), error: unavailableEntry() };
   }
 
-  const redoEntry = moveEntry(entry, result.inverse);
   return {
     ok: true,
     tree: result.tree,
-    history: releaseOldestUndo(
+    history: boundHistory(
       history.entries.slice(0, -1),
-      [...history.redoEntries, redoEntry],
-      history.retainedInverseBytes - entry.retainedInverseBytes + redoEntry.retainedInverseBytes,
+      [...history.redoEntries, moveEntry(entry, result.inverse)],
       limits,
-      false,
+      { keepNewestUndo: false },
     ),
     affectedNodeIds: result.affectedNodeIds,
   };
@@ -279,54 +245,31 @@ export function redoTreeHistory(
     return { ok: false, tree, history: releaseRedoStack(history), error: unavailableEntry() };
   }
 
-  const undoEntry = moveEntry(entry, result.inverse);
   return {
     ok: true,
     tree: result.tree,
-    history: releaseOldestUndo(
-      [...history.entries, undoEntry],
+    history: boundHistory(
+      [...history.entries, moveEntry(entry, result.inverse)],
       history.redoEntries.slice(0, -1),
-      history.retainedInverseBytes - entry.retainedInverseBytes + undoEntry.retainedInverseBytes,
       limits,
-      true,
+      { keepNewestUndo: true },
     ),
     affectedNodeIds: result.affectedNodeIds,
   };
 }
 
 /**
- * Brings a journal written under another policy within the limits: oldest
- * undo first, then the furthest redo. Returns the same object when it fits.
+ * Applies the retention policy to a journal that may have been written under
+ * another one (a pre-v6 inline journal). Nothing is produced here, so no step
+ * is protected. Returns the same object when it already fits: a history this
+ * build kept always does.
  */
 export function boundTreeHistory(history: TreeHistory, limits: TreeHistoryLimits): TreeHistory {
   assertHistoryLimits(limits);
-  if (fitsLimits(
-    history.entries.length + history.redoEntries.length,
-    history.retainedInverseBytes,
-    limits,
-  )) return history;
-  const undoBounded = releaseOldestUndo(
-    history.entries,
-    history.redoEntries,
-    history.retainedInverseBytes,
-    limits,
-    false,
-  );
-  const redo = undoBounded.redoEntries;
-  let first = 0;
-  let total = undoBounded.retainedInverseBytes;
-  while (
-    first < redo.length &&
-    !fitsLimits(undoBounded.entries.length + redo.length - first, total, limits)
-  ) {
-    total -= redo[first]!.retainedInverseBytes;
-    first += 1;
-  }
-  return {
-    entries: undoBounded.entries,
-    redoEntries: first === 0 ? redo : redo.slice(first),
-    retainedInverseBytes: total,
-  };
+  const bounded = boundHistory(history.entries, history.redoEntries, limits, { keepNewestUndo: false });
+  return bounded.entries === history.entries && bounded.redoEntries === history.redoEntries
+    ? history
+    : bounded;
 }
 
 /**
@@ -354,6 +297,89 @@ export function verifyHistoryTops(
   return { history: verified, released };
 }
 
+/**
+ * The one retention policy (owner decision 2026-09-29). Both stacks together
+ * keep at most `maxEntries` steps within `maxRetainedInverseBytes` of exact
+ * inverses. Whole oldest undo steps are released first, then the farthest redo
+ * steps: the kept redo prefix is the person's most recently undone intent,
+ * fresher than the oldest undo steps. `keepNewestUndo` protects the step the
+ * operation just produced (a commit, a delivery, a Redo); the byte bound
+ * exceeds every legal inverse, so that step always fits. Every operation is
+ * bounded here, so a history never exceeds the bound, and a reload that applies
+ * the same policy releases nothing a current build kept.
+ *
+ * Totals are recomputed from the entries rather than carried between
+ * operations, so no operation depends on how another accounted for its stacks.
+ * The cost is linear in the entries, at most 1,000 plus the one being added,
+ * which is the same order as the stack copy every operation makes anyway.
+ */
+function boundHistory(
+  undo: TreeHistoryEntry[],
+  redo: TreeHistoryEntry[],
+  limits: TreeHistoryLimits,
+  { keepNewestUndo }: Readonly<{ keepNewestUndo: boolean }>,
+): TreeHistory {
+  let count = undo.length + redo.length;
+  let bytes = retainedInverseBytes(undo) + retainedInverseBytes(redo);
+  const fits = () => count <= limits.maxEntries && bytes <= limits.maxRetainedInverseBytes;
+  const releasableUndo = keepNewestUndo ? Math.max(0, undo.length - 1) : undo.length;
+  let undoFirst = 0;
+  while (undoFirst < releasableUndo && !fits()) {
+    bytes -= undo[undoFirst]!.retainedInverseBytes;
+    count -= 1;
+    undoFirst += 1;
+  }
+  let redoFirst = 0;
+  while (redoFirst < redo.length && !fits()) {
+    bytes -= redo[redoFirst]!.retainedInverseBytes;
+    count -= 1;
+    redoFirst += 1;
+  }
+  return {
+    entries: undoFirst === 0 ? undo : undo.slice(undoFirst),
+    redoEntries: redoFirst === 0 ? redo : redo.slice(redoFirst),
+  };
+}
+
+type CommittedWithInverse =
+  | Readonly<{ ok: true; tree: ThoughtTree; entry: TreeHistoryEntry; affectedNodeIds: string[] }>
+  | Extract<CommitTreeCommandResult, { ok: false }>;
+
+/** Applies a command and measures the exact inverse it will retain. */
+function commitWithInverse(
+  tree: ThoughtTree,
+  history: TreeHistory,
+  command: TreeCommand,
+  limits: TreeHistoryLimits,
+): CommittedWithInverse {
+  assertHistoryLimits(limits);
+  const result = applyTreeCommand(tree, command);
+  if (!result.ok) {
+    return { ok: false, tree, history, error: result.error };
+  }
+  // The engine may construct an inverse from references in the command. The
+  // history owns its memento, so later caller mutation cannot weaken undo.
+  const inverse = cloneTreeCommand(result.inverse);
+  const bytes = estimateSerializedInverseBytes(inverse);
+  if (bytes > limits.maxRetainedInverseBytes) {
+    return {
+      ok: false,
+      tree,
+      history,
+      error: {
+        code: "HISTORY_LIMIT_EXCEEDED",
+        message: "The material change cannot retain an exact inverse within the history limit.",
+      },
+    };
+  }
+  return {
+    ok: true,
+    tree: result.tree,
+    entry: { commandId: command.id, source: command.source, inverse, retainedInverseBytes: bytes },
+    affectedNodeIds: result.affectedNodeIds,
+  };
+}
+
 function appliesTo(tree: ThoughtTree, entry: TreeHistoryEntry): boolean {
   return measuredAsStored(entry) &&
     applyTreeCommand(tree, { ...entry.inverse, expectedRevision: tree.revision }).ok;
@@ -365,73 +391,12 @@ function measuredAsStored(entry: TreeHistoryEntry): boolean {
     estimateSerializedInverseBytes(entry.inverse) === entry.retainedInverseBytes;
 }
 
-/**
- * Proves that both reversible stacks still agree with one current tree by
- * applying every inverse in stack order. Callers that migrate a journal use
- * this before publishing the migrated tree and history together; it never
- * repairs or drops a person's inverses.
- */
-export function canReplayTreeHistory(tree: ThoughtTree, history: TreeHistory): boolean {
-  return canReplayStack(tree, history.entries) && canReplayStack(tree, history.redoEntries);
-}
-
-function canReplayStack(tree: ThoughtTree, stack: readonly TreeHistoryEntry[]): boolean {
-  let cursor = tree;
-  for (let index = stack.length - 1; index >= 0; index -= 1) {
-    const applied = applyTreeCommand(cursor, {
-      ...stack[index]!.inverse,
-      expectedRevision: cursor.revision,
-    });
-    if (!applied.ok) return false;
-    cursor = applied.tree;
-  }
-  return true;
-}
-
-/**
- * Releases whole oldest undo entries until both stacks fit. Redo entries are
- * never evicted here, and the newest undo entry survives when `keepNewest` is
- * set; an overage that remains once nothing else may go is tolerated until the
- * next commit clears redo.
- */
-function releaseOldestUndo(
-  undo: TreeHistoryEntry[],
-  redo: TreeHistoryEntry[],
-  totalBytes: number,
-  limits: TreeHistoryLimits,
-  keepNewest: boolean,
-): TreeHistory {
-  const releasable = keepNewest ? undo.length - 1 : undo.length;
-  let first = 0;
-  let total = totalBytes;
-  while (
-    first < releasable &&
-    !fitsLimits(undo.length - first + redo.length, total, limits)
-  ) {
-    total -= undo[first]!.retainedInverseBytes;
-    first += 1;
-  }
-  return {
-    entries: first === 0 ? undo : undo.slice(first),
-    redoEntries: redo,
-    retainedInverseBytes: total,
-  };
-}
-
 function releaseUndoStack(history: TreeHistory): TreeHistory {
-  return {
-    entries: [],
-    redoEntries: history.redoEntries,
-    retainedInverseBytes: history.retainedInverseBytes - sumRetainedBytes(history.entries),
-  };
+  return { entries: [], redoEntries: history.redoEntries };
 }
 
 function releaseRedoStack(history: TreeHistory): TreeHistory {
-  return {
-    entries: history.entries,
-    redoEntries: [],
-    retainedInverseBytes: history.retainedInverseBytes - sumRetainedBytes(history.redoEntries),
-  };
+  return { entries: history.entries, redoEntries: [] };
 }
 
 function unavailableEntry(): { code: "HISTORY_UNAVAILABLE"; message: string } {
@@ -452,20 +417,6 @@ function moveEntry(entry: TreeHistoryEntry, inverse: TreeCommand): TreeHistoryEn
   };
 }
 
-function fitsLimits(count: number, bytes: number, limits: TreeHistoryLimits): boolean {
-  return count <= limits.maxEntries && bytes <= limits.maxRetainedInverseBytes;
-}
-
-function sumRetainedBytes(entries: readonly TreeHistoryEntry[]): number {
-  let total = 0;
-  for (const entry of entries) total += entry.retainedInverseBytes;
-  return total;
-}
-
-function isNonNegativeSafeInteger(value: number): boolean {
-  return Number.isSafeInteger(value) && value >= 0;
-}
-
 /**
  * Returns the longest nearest-first redo prefix that still replays after one
  * delivered replacement of `nodeId`'s text. Capacity is applied separately.
@@ -480,7 +431,7 @@ function isNonNegativeSafeInteger(value: number): boolean {
  */
 function redoFutureIndependentOf(
   nodeId: string,
-  redoEntries: readonly TreeHistoryEntry[],
+  redoEntries: TreeHistoryEntry[],
 ): TreeHistoryEntry[] {
   let firstRetained = redoEntries.length;
   for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
@@ -488,44 +439,7 @@ function redoFutureIndependentOf(
     if (entry === undefined || carriesNodeMemento(entry.inverse.mutation, nodeId)) break;
     firstRetained = index;
   }
-  return redoEntries.slice(firstRetained);
-}
-
-/**
- * Applies the entry and byte limits across both stacks after a delivery.
- * The kept redo prefix is the person's most recently undone intent, fresher
- * than the oldest undo steps, so the oldest undo steps are released first
- * (never the delivered step itself) and only then the farthest redo steps.
- * Totals are recomputed from the entries, so this does not depend on how a
- * plain commit accounts for the stack it clears.
- */
-function boundBothStacks(
-  entries: readonly TreeHistoryEntry[],
-  redoEntries: readonly TreeHistoryEntry[],
-  limits: TreeHistoryLimits,
-): TreeHistory {
-  const undo = [...entries];
-  let redoStart = 0;
-  let count = undo.length + redoEntries.length;
-  let bytes = sumRetainedBytes(undo) + sumRetainedBytes(redoEntries);
-  const overLimit = () =>
-    count > limits.maxEntries || bytes > limits.maxRetainedInverseBytes;
-  while (overLimit() && undo.length > 1) {
-    const released = undo.shift();
-    if (released === undefined) break;
-    count -= 1;
-    bytes -= released.retainedInverseBytes;
-  }
-  while (overLimit() && redoStart < redoEntries.length) {
-    bytes -= redoEntries[redoStart]?.retainedInverseBytes ?? 0;
-    count -= 1;
-    redoStart += 1;
-  }
-  return {
-    entries: undo,
-    redoEntries: redoEntries.slice(redoStart),
-    retainedInverseBytes: bytes,
-  };
+  return firstRetained === 0 ? redoEntries : redoEntries.slice(firstRetained);
 }
 
 /** Whether the engine will compare this node's current content to a memento. */
@@ -552,7 +466,7 @@ function assertHistoryLimits(limits: TreeHistoryLimits): void {
   if (!Number.isSafeInteger(limits.maxEntries) || limits.maxEntries < 1) {
     throw new RangeError("History maxEntries must be a positive safe integer.");
   }
-  if (!isNonNegativeSafeInteger(limits.maxRetainedInverseBytes)) {
+  if (!Number.isSafeInteger(limits.maxRetainedInverseBytes) || limits.maxRetainedInverseBytes < 0) {
     throw new RangeError(
       "History maxRetainedInverseBytes must be a non-negative safe integer.",
     );

@@ -194,16 +194,9 @@ function localizeSeededHistory(
   if (entries === null || redoEntries === null) return null;
   const changed = entries.changed || redoEntries.changed;
   if (!changed) return Object.freeze({ changed: false, history });
-  const retainedInverseBytes = [...entries.entries, ...redoEntries.entries]
-    .reduce((total, entry) => total + entry.retainedInverseBytes, 0);
-  if (!Number.isSafeInteger(retainedInverseBytes)) return null;
   return Object.freeze({
     changed: true,
-    history: {
-      entries: entries.entries,
-      redoEntries: redoEntries.entries,
-      retainedInverseBytes,
-    },
+    history: { entries: entries.entries, redoEntries: redoEntries.entries },
   });
 }
 

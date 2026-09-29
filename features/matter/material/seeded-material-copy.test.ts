@@ -2,11 +2,8 @@ import { describe, expect, it } from "vitest";
 import { MATTER_LOCALES } from "../config/locales";
 import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
-import {
-  canReplayTreeHistory,
-  commitTreeCommand,
-  undoTreeHistory,
-} from "../tree/history";
+import { commitTreeCommand, undoTreeHistory } from "../tree/history";
+import { canReplayTreeHistory } from "../tree/history-replay-oracle";
 import { validateThoughtTree } from "../tree/invariants";
 import {
   SEEDED_DOCUMENT_NODE_IDS,

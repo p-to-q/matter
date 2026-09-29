@@ -843,7 +843,7 @@ describe("persistence controller", () => {
     controller.publish(tree, loadedHistory);
     await Promise.resolve();
     expect(repository.pending).toHaveLength(0);
-    const released: TreeHistory = { entries: [], redoEntries: [], retainedInverseBytes: 0 };
+    const released: TreeHistory = createTreeHistory();
     controller.publish(tree, released);
     await waitFor(() => repository.pending.length === 1);
     expect(repository.pending[0]?.history).toBe(released);
@@ -1188,11 +1188,7 @@ function historyOfBytes(bytes: readonly number[]): TreeHistory {
     inverse: {} as TreeHistory["entries"][number]["inverse"],
     retainedInverseBytes,
   }));
-  return {
-    entries,
-    redoEntries: [],
-    retainedInverseBytes: bytes.reduce((total, value) => total + value, 0),
-  };
+  return { entries, redoEntries: [] };
 }
 
 function storageFull(): RepositoryResult<number> {

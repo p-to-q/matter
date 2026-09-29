@@ -1,18 +1,19 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { applyTreeCommand } from "./engine";
 import {
   boundTreeHistory,
-  canReplayTreeHistory,
   commitTreeCommand,
   createTreeHistory,
   estimateSerializedInverseBytes,
   MATTER_HISTORY_LIMITS,
   redoTreeHistory,
+  retainedInverseBytes,
   undoTreeHistory,
   verifyHistoryTops,
   type TreeHistory,
   type TreeHistoryEntry,
 } from "./history";
+import { canReplayTreeHistory } from "./history-replay-oracle";
 import {
   createEmptyTree,
   MAX_CHILDREN_PER_NODE,
@@ -99,16 +100,24 @@ function textHistory(count: number, limits = LIMITS) {
   return result;
 }
 
+/** Measured independently of the counts the history carries. */
 function exactBytes(history: TreeHistory): number {
   return [...history.entries, ...history.redoEntries]
     .reduce((total, entry) => total + estimateSerializedInverseBytes(entry.inverse), 0);
 }
 
-describe("tree history", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+/** Every retained step carries its exact measured size. */
+function expectExactSizes(history: TreeHistory): void {
+  for (const entry of [...history.entries, ...history.redoEntries]) {
+    expect(entry.retainedInverseBytes).toBe(estimateSerializedInverseBytes(entry.inverse));
+  }
+}
 
+function commandIds(entries: readonly TreeHistoryEntry[]): string[] {
+  return entries.map(({ commandId }) => commandId);
+}
+
+describe("tree history", () => {
   it("rebases only expectedRevision for sequential exact undo", () => {
     const initialized = commitTreeCommand(
       createEmptyTree("tree_1"),
@@ -146,7 +155,7 @@ describe("tree history", () => {
     expect(secondUndo.tree).toMatchObject({ rootId: null, nodes: {}, revision: 4 });
     expect(secondUndo.history.entries).toEqual([]);
     expect(secondUndo.history.redoEntries).toHaveLength(2);
-    expect(secondUndo.history.retainedInverseBytes).toBe(exactBytes(secondUndo.history));
+    expectExactSizes(secondUndo.history);
 
     const firstRedo = redoTreeHistory(secondUndo.tree, secondUndo.history, LIMITS);
     expect(firstRedo.ok).toBe(true);
@@ -156,7 +165,7 @@ describe("tree history", () => {
     if (!secondRedo.ok) return;
     expect(secondRedo.tree.nodes.child?.text).toBe("Child");
     expect(secondRedo.history.redoEntries).toEqual([]);
-    expect(secondRedo.history.retainedInverseBytes).toBe(exactBytes(secondRedo.history));
+    expectExactSizes(secondRedo.history);
   });
 
   it("releases the undo stack when its top inverse no longer applies, leaving material unchanged", () => {
@@ -223,7 +232,6 @@ describe("tree history", () => {
     expect(failed.tree).toBe(moved.tree);
     expect(failed.history.redoEntries).toEqual([]);
     expect(failed.history.entries).toBe(undone.history.entries);
-    expect(failed.history.retainedInverseBytes).toBe(exactBytes(failed.history));
   });
 
   it("rejects an oversized inverse atomically", () => {
@@ -237,7 +245,6 @@ describe("tree history", () => {
         root: node("root", "Root", null),
       }),
       { maxEntries: 8, maxRetainedInverseBytes: 10 },
-      () => 11,
     );
 
     expect(result).toMatchObject({
@@ -273,7 +280,7 @@ describe("tree history", () => {
     const committed = commitTreeCommand(tree, createTreeHistory(), removal, MATTER_HISTORY_LIMITS);
     expect(committed.ok).toBe(true);
     if (!committed.ok) return;
-    const bytes = committed.history.retainedInverseBytes;
+    const bytes = retainedInverseBytes(committed.history.entries);
     // The profile must actually approach the bound for the proof to mean anything.
     expect(bytes).toBeGreaterThan(20 * 1_024 * 1_024);
     expect(bytes).toBeLessThan(MATTER_HISTORY_LIMITS.maxRetainedInverseBytes);
@@ -308,39 +315,15 @@ describe("tree history", () => {
     expect(undone.tree).toMatchObject({ rootId: null, nodes: {} });
   });
 
-  it("evicts oldest entries by count and retained inverse bytes", () => {
-    let result = commitTreeCommand(
-      createEmptyTree("tree_1"),
-      createTreeHistory(),
-      command("init", 0, { type: "initialize-root", root: node("root", "0", null) }),
-      { maxEntries: 2, maxRetainedInverseBytes: 20 },
-      () => 9,
-    );
-    if (!result.ok) throw new Error(result.error.code);
+  it("releases whole oldest steps by count and by retained inverse bytes", () => {
+    const full = textHistory(3);
+    const byCount = textHistory(3, { ...LIMITS, maxEntries: 2 });
+    expect(commandIds(byCount.history.entries)).toEqual(["step_2", "step_3"]);
 
-    for (const [id, before, after, time] of [
-      ["one", "0", "1", T1],
-      ["two", "1", "2", T2],
-    ] as const) {
-      result = commitTreeCommand(
-        result.tree,
-        result.history,
-        command(id, result.tree.revision, {
-          type: "replace-text",
-          nodeId: "root",
-          expectedText: before,
-          expectedUpdatedAt: before === "0" ? T0 : T1,
-          text: after,
-          updatedAt: time,
-        }),
-        { maxEntries: 2, maxRetainedInverseBytes: 20 },
-        () => 9,
-      );
-      if (!result.ok) throw new Error(result.error.code);
-    }
-
-    expect(result.history.entries.map(({ commandId }) => commandId)).toEqual(["one", "two"]);
-    expect(result.history.retainedInverseBytes).toBe(18);
+    const newestTwo = retainedInverseBytes(full.history.entries.slice(-2));
+    const byBytes = textHistory(3, { ...LIMITS, maxRetainedInverseBytes: newestTwo });
+    expect(commandIds(byBytes.history.entries)).toEqual(["step_2", "step_3"]);
+    expect(exactBytes(byBytes.history)).toBe(newestTwo);
   });
 
   it("keeps the newest 1,000 steps and releases the oldest one per commit beyond it", () => {
@@ -350,10 +333,10 @@ describe("tree history", () => {
     expect(result.history.entries).toHaveLength(1_000);
     expect(result.history.entries[0]?.commandId).toBe("step_51");
     expect(result.history.entries.at(-1)?.commandId).toBe("step_1050");
-    expect(result.history.retainedInverseBytes).toBe(exactBytes(result.history));
+    expectExactSizes(result.history);
   });
 
-  it("clears redo bytes when a new commit branches the timeline", () => {
+  it("ends the undone future when a new commit branches the timeline", () => {
     const history = textHistory(3);
     let undone = undoTreeHistory(history.tree, history.history, LIMITS);
     if (!undone.ok) throw new Error(undone.error.code);
@@ -376,50 +359,58 @@ describe("tree history", () => {
     );
     if (!branched.ok) throw new Error(branched.error.code);
     expect(branched.history.redoEntries).toEqual([]);
-    expect(branched.history.retainedInverseBytes).toBe(exactBytes(branched.history));
+    expect(exactBytes(branched.history)).toBe(retainedInverseBytes(branched.history.entries));
   });
 
-  it("serializes a moved inverse once per Undo and Redo", () => {
-    const history = textHistory(1);
-    const stringify = vi.spyOn(JSON, "stringify");
-
+  it("carries each moved step's exact size, so a stored copy of it verifies at use", () => {
+    const history = textHistory(2);
     const undone = undoTreeHistory(history.tree, history.history, LIMITS);
-    expect(undone.ok).toBe(true);
-    expect(stringify).toHaveBeenCalledTimes(1);
-    if (!undone.ok) return;
-    redoTreeHistory(undone.tree, undone.history, LIMITS);
-    expect(stringify).toHaveBeenCalledTimes(2);
+    if (!undone.ok) throw new Error(undone.error.code);
+    const redone = redoTreeHistory(undone.tree, undone.history, LIMITS);
+    if (!redone.ok) throw new Error(redone.error.code);
+    expectExactSizes(undone.history);
+    expectExactSizes(redone.history);
+
+    // Storage hands every step back unmeasured; the moved step still applies.
+    const stored = {
+      entries: redone.history.entries.map((entry) => ({ ...entry, bytesUnverified: true as const })),
+      redoEntries: [],
+    };
+    expect(undoTreeHistory(redone.tree, stored, LIMITS)).toMatchObject({ ok: true });
   });
 
-  it("releases oldest undo when Undo grows the total, but tolerates overage once undo is empty", () => {
+  it("bounds Undo like every other operation: oldest undo first, then the farthest redo", () => {
     const history = textHistory(3);
-    const entryBytes = history.history.entries.map(({ retainedInverseBytes }) => retainedInverseBytes);
-    const tight = {
-      maxEntries: 8,
-      maxRetainedInverseBytes: history.history.retainedInverseBytes,
-    };
-
-    // Each undo appends ":inverse" to the moved command id, so it grows.
+    // Each move re-inverts its command and extends the id, so the total grows
+    // and a bound at the current size must release something.
+    const tight = { maxEntries: 8, maxRetainedInverseBytes: exactBytes(history.history) };
     const undone = undoTreeHistory(history.tree, history.history, tight);
     if (!undone.ok) throw new Error(undone.error.code);
-    expect(undone.history.retainedInverseBytes).toBeLessThanOrEqual(tight.maxRetainedInverseBytes);
-    expect(undone.history.entries.length).toBeLessThan(history.history.entries.length - 1);
-    expect(undone.history.redoEntries).toHaveLength(1);
-    expect(undone.history.retainedInverseBytes).toBe(exactBytes(undone.history));
+    expect(commandIds(undone.history.entries)).toEqual(["step_1", "step_2"]);
+    expect(commandIds(undone.history.redoEntries)).toEqual(["step_3"]);
+    expect(exactBytes(undone.history)).toBeLessThanOrEqual(tight.maxRetainedInverseBytes);
 
-    const redoOnly = {
-      maxEntries: 8,
-      maxRetainedInverseBytes: Math.min(...entryBytes),
-    };
-    let cursor = { tree: history.tree, history: history.history };
-    for (let step = 0; step < history.history.entries.length; step += 1) {
-      const next = undoTreeHistory(cursor.tree, cursor.history, redoOnly);
-      if (!next.ok) break;
-      cursor = next;
-    }
-    expect(cursor.history.entries).toEqual([]);
-    expect(cursor.history.redoEntries.length).toBeGreaterThan(0);
-    expect(cursor.history.retainedInverseBytes).toBe(exactBytes(cursor.history));
+    // With every older undo step gone, the farthest redo step is released,
+    // never the one just undone.
+    const oldest = undone.history.entries[0]!.retainedInverseBytes;
+    const tighter = { ...tight, maxRetainedInverseBytes: exactBytes(undone.history) - oldest };
+    const again = undoTreeHistory(undone.tree, undone.history, tighter);
+    if (!again.ok) throw new Error(again.error.code);
+    expect(again.history.entries).toEqual([]);
+    expect(commandIds(again.history.redoEntries)).toEqual(["step_2"]);
+    expect(exactBytes(again.history)).toBeLessThanOrEqual(tighter.maxRetainedInverseBytes);
+  });
+
+  it("bounds Redo while keeping the step it just redid", () => {
+    const history = textHistory(3);
+    const undone = undoTreeHistory(history.tree, history.history, LIMITS);
+    if (!undone.ok) throw new Error(undone.error.code);
+    const tight = { maxEntries: 8, maxRetainedInverseBytes: exactBytes(undone.history) };
+    const redone = redoTreeHistory(undone.tree, undone.history, tight);
+    if (!redone.ok) throw new Error(redone.error.code);
+    expect(commandIds(redone.history.entries)).toEqual(["step_1", "step_2", "step_3"]);
+    expect(redone.history.redoEntries).toEqual([]);
+    expect(exactBytes(redone.history)).toBeLessThanOrEqual(tight.maxRetainedInverseBytes);
   });
 
   it("reports empty undo without changing either input", () => {
@@ -468,7 +459,6 @@ describe("tree history", () => {
     const redoOnly = boundTreeHistory(undone.history, { ...LIMITS, maxEntries: 1 });
     expect(redoOnly.entries).toEqual([]);
     expect(redoOnly.redoEntries).toEqual(redoEntries.slice(-1));
-    expect(redoOnly.retainedInverseBytes).toBe(exactBytes(redoOnly));
   });
 
   it("dry-runs only the next Undo and Redo, releasing a stack whose top no longer applies", () => {
@@ -491,7 +481,7 @@ describe("tree history", () => {
     expect(verified.history.redoEntries).toBe(undone.history.redoEntries);
   });
 
-  it("replays both stacks for callers that migrate a whole journal", () => {
+  it("has a replay oracle that refuses a journal with any broken step", () => {
     const history = textHistory(3);
     const undone = undoTreeHistory(history.tree, history.history, LIMITS);
     if (!undone.ok) throw new Error(undone.error.code);
