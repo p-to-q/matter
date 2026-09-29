@@ -4,6 +4,7 @@ import type {
 } from "../runtime/admission-interaction";
 import { projectCanvasZoomPercent } from "../interaction/canvas-viewport";
 import type { CanvasLanguage } from "./canvas-preferences";
+import type { MaterialOutcome } from "./outcome-line";
 
 export type CanvasMaterialGuidanceState =
   | Readonly<{ kind: "empty" }>
@@ -31,39 +32,21 @@ export type CanvasCameraGuidanceState =
   | Readonly<{ kind: "pan"; zoom: number }>;
 
 /**
- * A submitted Elastic turn that the lasso may no longer show: a resolved
- * result waiting for its passage, or an outcome that changed nothing.
+ * A submitted Elastic or Point-and-Talk turn whose resolved result waits for
+ * its passage to be laid out. It keeps its owner busy, so the line says why
+ * and offers the explicit release.
  */
-export type CanvasExpansionGuidanceState =
+export type CanvasTurnGuidanceState =
   | Readonly<{ kind: "none" }>
-  | Readonly<{ kind: "parked" }>
-  | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
-
-/**
- * A submitted Point-and-Talk turn the field may no longer show: a result
- * waiting for its passage to be laid out, or a rewrite that ended without a
- * field to report it because the provider left the text unchanged or the
- * passage changed first. An outcome stays until the person's next action.
- */
-export type CanvasRewriteGuidanceState =
-  | Readonly<{ kind: "none" }>
-  | Readonly<{ kind: "parked" }>
-  | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
-
-/**
- * An explicit Keep or restore of a Wiki change that Wiki could not record.
- * The material change stands; only the learning was lost, said once.
- */
-export type CanvasWikiGuidanceState =
-  | Readonly<{ kind: "none" }>
-  | Readonly<{ kind: "unsaved" }>;
+  | Readonly<{ kind: "parked" }>;
 
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
-  expansion?: CanvasExpansionGuidanceState;
-  rewrite?: CanvasRewriteGuidanceState;
-  wiki?: CanvasWikiGuidanceState;
+  expansion?: CanvasTurnGuidanceState;
+  rewrite?: CanvasTurnGuidanceState;
+  /** The head of the outcome line, shown until the person's next action. */
+  outcome?: MaterialOutcome | null;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
 }>;
@@ -97,16 +80,15 @@ type CanvasActionGuidanceId =
   | "select-thought"
   | "text-swap-unavailable"
   | "text-swap-stale"
-  | "wiki-unsaved";
+  | "wiki-unsaved"
+  | "wiki-passage-changed";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
 export const CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT = 34;
-const NO_EXPANSION: CanvasExpansionGuidanceState = Object.freeze({ kind: "none" });
-const NO_REWRITE: CanvasRewriteGuidanceState = Object.freeze({ kind: "none" });
-const NO_WIKI: CanvasWikiGuidanceState = Object.freeze({ kind: "none" });
+const NOT_PARKED: CanvasTurnGuidanceState = Object.freeze({ kind: "none" });
 
-const GUIDANCE_COPY = Object.freeze({
+const EN_US_LINES = Object.freeze({
   "allow-microphone": "Allow microphone access.",
   "speak-recording": "Speak your thought.",
   "wait-recording": "Wait for recording to finish.",
@@ -136,9 +118,10 @@ const GUIDANCE_COPY = Object.freeze({
   "text-swap-unavailable": "Not rewritten. Text unchanged.",
   "text-swap-stale": "Passage changed. Not rewritten.",
   "wiki-unsaved": "Wiki could not save that.",
+  "wiki-passage-changed": "Passage changed. Not restored.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
-const GUIDANCE_COPY_ZH = Object.freeze({
+const ZH_CN_LINES = Object.freeze({
   "allow-microphone": "允许使用麦克风。",
   "speak-recording": "说出你的想法。",
   "wait-recording": "请等待录音结束。",
@@ -168,6 +151,7 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "text-swap-unavailable": "未改写，原文未变。",
   "text-swap-stale": "段落已变化，未改写。",
   "wiki-unsaved": "词典 WIKI 未能记下这次选择。",
+  "wiki-passage-changed": "段落已变化，未恢复。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -198,44 +182,18 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     return projectAdmissionGuidance(input.admission);
   }
 
-  // A submitted expansion outranks lasso guidance: while it waits off-screen
-  // it also blocks new stretches, so the line must say why and offer release.
-  const expansion = input.expansion ?? NO_EXPANSION;
-  switch (expansion.kind) {
-    case "parked":
-      return guidance("expansion-parked", "recovery");
-    case "unchanged":
-      return expansion.reason === "stale"
-        ? guidance("expansion-stale", "recovery")
-        : guidance("expansion-unavailable", "recovery");
-    case "none":
-      break;
-    default:
-      return assertNever(expansion);
+  // An outcome is said once and holds the line until the person's next
+  // action; the outcome line queues any other, so none hides another.
+  if (input.outcome !== undefined && input.outcome !== null) {
+    return guidance(outcomeGuidanceId(input.outcome), "recovery");
   }
-  // A parked Point-and-Talk result keeps its owner busy the same way, and a
-  // rewrite that ended without its field says so once.
-  const rewrite = input.rewrite ?? NO_REWRITE;
-  switch (rewrite.kind) {
-    case "parked":
-      return guidance("text-swap-parked", "recovery");
-    case "unchanged":
-      return rewrite.reason === "stale"
-        ? guidance("text-swap-stale", "recovery")
-        : guidance("text-swap-unavailable", "recovery");
-    case "none":
-      break;
-    default:
-      return assertNever(rewrite);
+  // A parked result outranks lasso guidance: while it waits off-screen it also
+  // blocks its owner, so the line must say why and offer the release.
+  if ((input.expansion ?? NOT_PARKED).kind === "parked") {
+    return guidance("expansion-parked", "recovery");
   }
-  const wiki = input.wiki ?? NO_WIKI;
-  switch (wiki.kind) {
-    case "unsaved":
-      return guidance("wiki-unsaved", "recovery");
-    case "none":
-      break;
-    default:
-      return assertNever(wiki);
+  if ((input.rewrite ?? NOT_PARKED).kind === "parked") {
+    return guidance("text-swap-parked", "recovery");
   }
 
   if (input.material.kind === "empty") {
@@ -302,47 +260,28 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
   }
 }
 
-/** The polite announcement for an expansion that ended without a change. */
-export function localizeExpansionOutcome(
-  reason: "unavailable" | "stale",
-  language: CanvasLanguage,
-): string {
-  return localizeCanvasGuidance(
-    guidance(reason === "stale" ? "expansion-stale" : "expansion-unavailable", "recovery"),
-    language,
-  ).text;
+/** The guidance line that says one outcome. */
+export function outcomeGuidanceId(outcome: MaterialOutcome): CanvasActionGuidanceId {
+  switch (outcome.owner) {
+    case "expansion":
+      return outcome.reason === "stale" ? "expansion-stale" : "expansion-unavailable";
+    case "rewrite":
+      return outcome.reason === "stale" ? "text-swap-stale" : "text-swap-unavailable";
+    case "wiki":
+      return outcome.reason === "passage-changed" ? "wiki-passage-changed" : "wiki-unsaved";
+    default:
+      return assertNever(outcome);
+  }
 }
 
-/** The polite announcement for a rewrite that ended without a change. */
-export function localizeRewriteOutcome(
-  reason: "unavailable" | "stale",
-  language: CanvasLanguage,
-): string {
-  return localizeCanvasGuidance(
-    guidance(reason === "stale" ? "text-swap-stale" : "text-swap-unavailable", "recovery"),
-    language,
-  ).text;
-}
-
-/** The polite announcement for a Wiki choice that could not be recorded. */
-export function localizeWikiUnsaved(language: CanvasLanguage): string {
-  return localizeCanvasGuidance(guidance("wiki-unsaved", "recovery"), language).text;
+/** The polite announcement of one outcome, in the line's own words. */
+export function localizeOutcome(outcome: MaterialOutcome, language: CanvasLanguage): string {
+  return GUIDANCE_COPY[language].lines[outcomeGuidanceId(outcome)];
 }
 
 /** The explicit release beside a parked Elastic or Point-and-Talk result. */
 export function localizeParkedRelease(language: CanvasLanguage): string {
-  switch (language) {
-    case "zh-CN":
-      return "放弃";
-    case "zh-TW":
-      return "放棄";
-    case "ja-JP":
-      return "破棄";
-    case "de-DE":
-      return "Verwerfen";
-    default:
-      return "Discard";
-  }
+  return GUIDANCE_COPY[language].discard;
 }
 
 /** Localization changes copy only; the interaction state machine remains authoritative. */
@@ -354,24 +293,10 @@ export function localizeCanvasGuidance(
   // form also makes server and browser rendering identical across ICU builds.
   if (guidanceState.id === "canvas-zoom") return guidanceState;
   if (language === "en-US") return guidanceState;
-  if (language === "zh-TW") {
-    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_ZH_TW[guidanceState.id] });
-  }
-  if (language === "ja-JP") {
-    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_JA[guidanceState.id] });
-  }
-  if (language === "de-DE") {
-    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_DE[guidanceState.id] });
-  }
-  return Object.freeze({
-    ...guidanceState,
-    text: GUIDANCE_COPY_ZH[guidanceState.id],
-  });
+  return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY[language].lines[guidanceState.id] });
 }
 
-// Each table is complete on its own: a spread would let a missing key fall
-// back to another language instead of failing the type check.
-const GUIDANCE_COPY_ZH_TW = Object.freeze({
+const ZH_TW_LINES = Object.freeze({
   "allow-microphone": "允許使用麥克風。",
   "speak-recording": "說出你的想法。",
   "wait-recording": "請等待錄音結束。",
@@ -401,8 +326,9 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "text-swap-unavailable": "未改寫，原文未變。",
   "text-swap-stale": "段落已變更，未改寫。",
   "wiki-unsaved": "詞典 WIKI 未能記下這次選擇。",
+  "wiki-passage-changed": "段落已變更，未恢復。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
-const GUIDANCE_COPY_JA = Object.freeze({
+const JA_JP_LINES = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
   "speak-recording": "考えを話してください。",
   "wait-recording": "録音が終わるまで待ってください。",
@@ -432,8 +358,9 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "text-swap-unavailable": "書き換えませんでした。原文はそのままです。",
   "text-swap-stale": "段落が変わったため書き換えませんでした。",
   "wiki-unsaved": "辞書 WIKI はこの選択を保存できませんでした。",
+  "wiki-passage-changed": "段落が変わったため戻しませんでした。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
-const GUIDANCE_COPY_DE = Object.freeze({
+const DE_DE_LINES = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
   "speak-recording": "Sprich deinen Gedanken aus.",
   "wait-recording": "Warte, bis die Aufnahme beendet ist.",
@@ -463,7 +390,28 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "text-swap-unavailable": "Nicht umgeschrieben. Text unverändert.",
   "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
   "wiki-unsaved": "Wiki konnte das nicht speichern.",
+  "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
+
+type GuidanceLocaleCopy = Readonly<{
+  lines: Readonly<Record<CanvasActionGuidanceId, string>>;
+  /**
+   * The one word for releasing work held for the person; the admission box's
+   * Discard for held words says the same.
+   */
+  discard: string;
+}>;
+
+// One entry per locale, each naming its own complete lines table: a spread
+// would let a missing key fall back to another language instead of failing
+// the type check.
+const GUIDANCE_COPY: Readonly<Record<CanvasLanguage, GuidanceLocaleCopy>> = Object.freeze({
+  "en-US": Object.freeze({ lines: EN_US_LINES, discard: "Discard" }),
+  "zh-CN": Object.freeze({ lines: ZH_CN_LINES, discard: "丢弃" }),
+  "zh-TW": Object.freeze({ lines: ZH_TW_LINES, discard: "丟棄" }),
+  "ja-JP": Object.freeze({ lines: JA_JP_LINES, discard: "破棄" }),
+  "de-DE": Object.freeze({ lines: DE_DE_LINES, discard: "Verwerfen" }),
+});
 
 function projectAdmissionGuidance(
   admission: Exclude<AdmissionInteractionState, { readonly phase: "idle" }>,
@@ -515,7 +463,7 @@ function guidance(
   id: CanvasActionGuidanceId,
   kind: "action" | "progress" | "recovery",
 ): Extract<CanvasGuidance, { id: CanvasActionGuidanceId }> {
-  const text = GUIDANCE_COPY[id];
+  const text = EN_US_LINES[id];
   if (text.length > CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT) {
     throw new Error(`Canvas guidance exceeds narrow line budget: ${id}`);
   }

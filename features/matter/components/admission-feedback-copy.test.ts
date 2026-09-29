@@ -3,6 +3,7 @@ import type { AdmissionErrorCode } from "../runtime/admission-interaction";
 import { CANVAS_LANGUAGE_OPTIONS } from "./canvas-preferences";
 import {
   admissionFeedbackActions,
+  admissionWithdrawLabel,
   admissionFeedbackMessage,
   admissionPlacementLabel,
 } from "./admission-feedback-copy";
@@ -64,6 +65,20 @@ describe("admission feedback copy", () => {
         expect(admissionPlacementLabel(language, anchor, "document").length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it("says Discard once transcribed words wait to be placed", () => {
+    for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
+      const actions = admissionFeedbackActions(language);
+      // Withdrawing now gives up the person's words, exactly as held words do.
+      expect(admissionWithdrawLabel(language, "committing")).toBe(actions.discard);
+      expect(admissionWithdrawLabel(language, "committing")).not.toBe(actions.cancel);
+      expect(admissionWithdrawLabel(language, "transcribing")).toBe(actions.cancelTranscription);
+      expect(admissionWithdrawLabel(language, "requesting")).toBe(actions.cancel);
+      expect(admissionWithdrawLabel(language, "stopping")).toBe(actions.cancel);
+    }
+    expect(admissionWithdrawLabel("zh-CN", "committing")).toBe("丢弃");
+    expect(admissionWithdrawLabel("zh-TW", "committing")).toBe("丟棄");
   });
 
   it("covers every phase, error, action, and supported language", () => {

@@ -6,7 +6,7 @@ describe("Wiki takeover copy", () => {
   it("names the change and every action in all five locales", () => {
     for (const locale of MATTER_LOCALES) {
       const copy = wikiTakeoverCopy(locale);
-      for (const value of [copy.keep, copy.wiki, copy.passageChanged]) {
+      for (const value of [copy.keep, copy.wiki]) {
         expect(value.trim().length).toBeGreaterThan(0);
       }
       const changed = copy.changed("P to Q", "[p → q]");
@@ -22,7 +22,7 @@ describe("Wiki takeover copy", () => {
   });
 
   it("keeps each locale distinct rather than inheriting another", () => {
-    const keeps = new Set(MATTER_LOCALES.map((locale) => wikiTakeoverCopy(locale).passageChanged));
+    const keeps = new Set(MATTER_LOCALES.map((locale) => wikiTakeoverCopy(locale).restoreLabel("P to Q")));
     expect(keeps.size).toBe(MATTER_LOCALES.length);
   });
 });

@@ -323,6 +323,69 @@ test("an unavailable answer restores the exact draft and can be asked again", as
   await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 });
 
+test("a notice that arrived while the bubble was closed is announced when it reopens", async ({ page }) => {
+  const question = "关上以后才回来的这句话怎么样了？";
+  const notice = "Matter 收到了这句话，但现在有点忙，稍后再试。";
+  const gate = deferred<void>();
+  const received = deferred<void>();
+  const answered = deferred<void>();
+  await page.route("**/api/inquiry", async (route) => {
+    received.resolve();
+    await gate.promise;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      headers: { "Cache-Control": "no-store" },
+      body: JSON.stringify({
+        error: {
+          code: "INQUIRY_FAILED",
+          message: "Synthetic provider busy.",
+          retryable: true,
+          fallbackReason: "MODEL_BUSY",
+        },
+      }),
+    }).catch(() => undefined);
+    answered.resolve();
+  });
+  await page.goto("/matter");
+  const ask = page.getByRole("button", { name: "询问 Matter", exact: true });
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+
+  await ask.click();
+  await field.fill(question);
+  await field.press("Enter");
+  await received.promise;
+  await page.keyboard.press("Escape");
+  await expect(inquiry).toBeHidden();
+  gate.resolve();
+  await answered.promise;
+  // Records what each Ask Matter status region holds the moment it mounts.
+  await page.evaluate(() => {
+    const runtime = window as Window & { __inquiryStatusAtMount?: string[] };
+    runtime.__inquiryStatusAtMount = [];
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue;
+          for (const region of [node, ...Array.from(node.querySelectorAll("[role=status]"))]) {
+            if (region.getAttribute("role") !== "status") continue;
+            if (region.closest("[role=dialog]")?.getAttribute("aria-label") !== "询问 Matter") continue;
+            runtime.__inquiryStatusAtMount?.push(region.textContent ?? "");
+          }
+        }
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+
+  await ask.click();
+  await expect(inquiry.getByRole("status")).toHaveText(notice);
+  await expect(field).toHaveValue(question);
+  // The region mounted silent and then spoke, so the notice is announced.
+  expect(await page.evaluate(() =>
+    (window as Window & { __inquiryStatusAtMount?: string[] }).__inquiryStatusAtMount)).toEqual([""]);
+});
+
 test("a hidden tab still accepts the bounded answer it already requested", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();

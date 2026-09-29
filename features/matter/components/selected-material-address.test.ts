@@ -111,7 +111,7 @@ describe("selected material address", () => {
   it("keeps one submitted Point Talk host after its presentation detaches", () => {
     expect(rooted).toContain("const pointTalkHostNodeId = currentPointTalkNodeId");
     expect(rooted).toContain("const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null");
-    expect(rooted).toContain("{pointTalkHostNodeId === null ? null : (");
+    expect(rooted).toContain("{pointTalkHostNodeId === null || pointTalkPresenceIdentity === null ? null : (");
     expect(rooted).toContain("presented={pointTalkPresented}");
     expect(rooted).toMatch(
       /onVoice=\{\(\) => \{\s*if \(pointTalkHostNodeId !== null && activePointTalkNodeId === null\) return;/,

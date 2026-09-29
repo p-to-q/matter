@@ -14,11 +14,13 @@ import { isCancelEscape, type KeyLike } from "./composition-safe-keys";
  * every React handler and can honour their `defaultPrevented`.
  *
  * Tier orders what a person perceives as "on top": an in-flight gesture, then a
- * transient surface, then a panel, then a mode. Within a tier the most recently
- * activated layer wins. A layer returns false when it had nothing left to
- * cancel, and the next one tries.
+ * transient chrome menu, then a panel, then a surface on the paper itself,
+ * then a mode. Chrome and panels cover the paper, so a paper surface never
+ * needs to ask whether something covers it: anything that does outranks it.
+ * Within a tier the most recently activated layer wins. A layer returns false
+ * when it had nothing left to cancel, and the next one tries.
  */
-export type EscapeTier = "mode" | "panel" | "transient" | "gesture";
+export type EscapeTier = "mode" | "paper" | "panel" | "transient" | "gesture";
 
 export type EscapeLayer = Readonly<{
   tier: EscapeTier;
@@ -36,9 +38,10 @@ export type EscapeStack = Readonly<{
 
 const TIER_RANK: Readonly<Record<EscapeTier, number>> = Object.freeze({
   mode: 0,
-  panel: 1,
-  transient: 2,
-  gesture: 3,
+  paper: 1,
+  panel: 2,
+  transient: 3,
+  gesture: 4,
 });
 
 export function createEscapeStack(): EscapeStack {

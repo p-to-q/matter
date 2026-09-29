@@ -95,16 +95,15 @@ import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
-  localizeExpansionOutcome,
+  localizeOutcome,
   localizeParkedRelease,
+  outcomeGuidanceId,
   projectCanvasGuidance,
-  localizeRewriteOutcome,
-  localizeWikiUnsaved,
-  type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
-  type CanvasRewriteGuidanceState,
+  type CanvasTurnGuidanceState,
 } from "./canvas-guidance";
+import { useOutcomeAcknowledgement, useOutcomeLine } from "./use-outcome-line";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import {
   createLayoutProjectionInput,
@@ -165,13 +164,12 @@ import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
-  samePaperMaterialTurnPhases,
-  SETTLED_PAPER_MATERIAL_TURNS,
-  type PaperMaterialTurnPhases,
+  IDLE_PAPER_ACTIVITY,
+  samePaperActivity,
+  type PaperActivity,
 } from "./material-turn-activity";
 import {
   isTransformPresentationCurrent,
@@ -190,9 +188,11 @@ import {
   admissionFeedbackMessage,
   admissionPhaseMessage,
   admissionPlacementLabel,
+  admissionWithdrawLabel,
 } from "./admission-feedback-copy";
 import {
   createPresenceHandoff,
+  PRESENCE_TIMING,
   presenceReservesSpace,
   type PresenceClose,
   type PresenceFrame,
@@ -207,7 +207,9 @@ import type { TypographyHeightAuthority } from "./typography-height-authority";
 import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
 import { canvasRegionCopy } from "./canvas-region-copy";
 import {
+  canvasPressDismissal,
   createCanvasPointerArbiter,
+  isPalmPress,
   type ArbitratedPointer,
 } from "../runtime/canvas-pointer-arbitration";
 import { deferUntilTouchCommits } from "./touch-commitment";
@@ -245,24 +247,11 @@ const WikiOccurrenceLayer = dynamic(
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
-const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
-  "Alt",
-  "AltGraph",
-  "CapsLock",
-  "Control",
-  "Fn",
-  "FnLock",
-  "Hyper",
-  "Meta",
-  "NumLock",
-  "OS",
-  "ScrollLock",
-  "Shift",
-  "Super",
-  "Symbol",
-  "SymbolLock",
-]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
+// The CSS fade of every leaving surface lasts exactly as long as its unmount.
+const PRESENCE_EXIT_STYLE = Object.freeze({
+  "--presence-exit-duration": `${PRESENCE_TIMING.exitMs}ms`,
+}) as CSSProperties;
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -288,13 +277,13 @@ export type RootedMaterialProps = {
     plan: TransformPlan,
     expectedDocumentEpoch: number,
   ) => MaterialTurnCommitResult<TransformCommittedChange>;
-  /** Reports the paper's Elastic and Point-and-Talk phases to the product root. */
-  onMaterialTurnPhasesChange?: (phases: PaperMaterialTurnPhases) => void;
+  /** Reports what the paper holds (its turns, Ask Matter, a name editor) to the product root. */
+  onPaperActivityChange?: (activity: PaperActivity) => void;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ) => TextSwapCommitResult<TextSwapCommittedChange>;
+  ) => MaterialTurnCommitResult<TextSwapCommittedChange>;
   onUndo: () => void;
   onRedo: () => void;
   tree: ThoughtTree;
@@ -495,27 +484,23 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   // The press that dismissed a takeover, so its release never reopens that word.
   const wikiDismissingPressRef = useRef<Readonly<{ pointerId: number; occurrenceId: string }> | null>(null);
-  const [wikiUnsaved, setWikiUnsaved] = useState<number | null>(null);
-  const wikiUnsavedSequenceRef = useRef(0);
+  const outcomeLine = useOutcomeLine(props.documentEpoch);
+  const reportOutcome = outcomeLine.report;
   useEffect(() => wikiOccurrences?.subscribeUnsaved(() => {
-    wikiUnsavedSequenceRef.current += 1;
-    setWikiUnsaved(wikiUnsavedSequenceRef.current);
-  }), [wikiOccurrences]);
+    reportOutcome({ owner: "wiki", reason: "unsaved" });
+  }), [reportOutcome, wikiOccurrences]);
   useEffect(() => {
     // A modal that owns the paper hides every word from perception.
     wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
   }, [materialPresentationAvailable, wikiOccurrences]);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
   const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
-  const [pointTalkOutcome, setPointTalkOutcome] = useState<Readonly<{
-    id: number;
-    reason: PointTalkReleasedOutcome;
-  }> | null>(null);
-  const pointTalkOutcomeSequenceRef = useRef(0);
   const reportPointTalkOutcome = useCallback((reason: PointTalkReleasedOutcome) => {
-    pointTalkOutcomeSequenceRef.current += 1;
-    setPointTalkOutcome(Object.freeze({ id: pointTalkOutcomeSequenceRef.current, reason }));
-  }, []);
+    reportOutcome({ owner: "rewrite", reason });
+  }, [reportOutcome]);
+  const reportWikiRestoreRefused = useCallback(() => {
+    reportOutcome({ owner: "wiki", reason: "passage-changed" });
+  }, [reportOutcome]);
   const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
   const reportPointTalkParked = useCallback((release: (() => void) | null) => {
     setReleaseParkedPointTalk(() => release);
@@ -1467,57 +1452,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
     deliveryVisibleNodeIds: visiblyLaidOutNodeIds,
     commit: props.onTransformCommit,
     onCommitted: publishMaterialTextChange,
+    onOutcome: (reason) => reportOutcome({ owner: "expansion", reason }),
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
-    acknowledgeNotice: acknowledgeTransformNotice,
     cancel: cancelTransform,
     start: startTransform,
     state: transformState,
   } = transform;
-  const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
-  const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
+  const reportPaperActivity = props.onPaperActivityChange;
+  const reportedPaperActivityRef = useRef(IDLE_PAPER_ACTIVITY);
   // Ask Matter and the index's name editors report what they hold so the root
   // never replaces the document instance underneath them.
   const [inquiryHeld, setInquiryHeld] = useState(false);
   const [editingHeld, setEditingHeld] = useState(false);
   useLayoutEffect(() => {
-    const phases = Object.freeze({
+    const activity: PaperActivity = Object.freeze({
       elastic: transformState.phase,
       textSwap: pointTalkPhase,
       inquiryHeld,
       editingHeld,
     });
-    if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
-    reportedMaterialTurnPhasesRef.current = phases;
-    reportMaterialTurnPhases?.(phases);
-  }, [editingHeld, inquiryHeld, pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+    if (samePaperActivity(reportedPaperActivityRef.current, activity)) return;
+    reportedPaperActivityRef.current = activity;
+    reportPaperActivity?.(activity);
+  }, [editingHeld, inquiryHeld, pointTalkPhase, reportPaperActivity, transformState.phase]);
   useLayoutEffect(() => () => {
-    // Unmounting the paper releases its turns, so the root must not keep
-    // waiting on phases nobody will report again.
-    reportedMaterialTurnPhasesRef.current = SETTLED_PAPER_MATERIAL_TURNS;
-    reportMaterialTurnPhases?.(SETTLED_PAPER_MATERIAL_TURNS);
-  }, [reportMaterialTurnPhases]);
-  const transformNotice = transformState.notice;
-  useEffect(() => {
-    if (transformNotice === null) return;
-    // An outcome notice stays until the person acts again, so a slow reader
-    // never loses it to a timer. A held key's auto-repeat or a lone modifier
-    // is not a new action.
-    const acknowledge = () => acknowledgeTransformNotice();
-    const acknowledgeKey = (event: KeyboardEvent) => {
-      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
-      acknowledgeTransformNotice();
-    };
-    // Keydown only observes, so it listens in the bubble phase like every
-    // other window key owner; the Escape stack forbids capture-phase keydown.
-    window.addEventListener("pointerdown", acknowledge, true);
-    window.addEventListener("keydown", acknowledgeKey);
-    return () => {
-      window.removeEventListener("pointerdown", acknowledge, true);
-      window.removeEventListener("keydown", acknowledgeKey);
-    };
-  }, [acknowledgeTransformNotice, transformNotice]);
+    // Unmounting the paper releases what it held, so the root must not keep
+    // waiting on activity nobody will report again.
+    reportedPaperActivityRef.current = IDLE_PAPER_ACTIVITY;
+    reportPaperActivity?.(IDLE_PAPER_ACTIVITY);
+  }, [reportPaperActivity]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1582,55 +1547,49 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // armed shape with both grips at zero instead of an expand projection that
   // no longer has a degree or grip to project from.
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0;
-  const beginStretchAdjustment = useCallback(() => {
-    canvasChromeRef.current?.closeInquiry();
-  }, []);
   const abortElasticExpansion = useCallback(() => {
     // Presentation can close while an immutable submitted turn keeps owning
     // its exact material basis. Conflict/page-exit handling lives in the turn.
     stretchKeyDown("Escape");
   }, [stretchKeyDown]);
-  const abortFixedExpansion = useCallback(() => {
-    // Another owner takes the slot: a leaving Point Talk copy is cut, not faded.
+  const pointTalkPresenceIdentity = pointTalkHostNodeId === null
+    ? null
+    : `${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`;
+  // Dismissing a presentation and yielding the paper's one presentation slot
+  // are different closes. Submitted work continues through either; only the
+  // way a leaving Point Talk field is painted differs.
+  /** The person acted elsewhere: presentations leave as the person's close. */
+  const dismissPaperPresentations = useCallback(() => {
+    if (pointTalkPresented && pointTalkPresenceIdentity !== null) {
+      pointTalkExitHandoff.intend(pointTalkPresenceIdentity, "person");
+    }
+    closePointTalk();
+    abortElasticExpansion();
+  }, [
+    abortElasticExpansion,
+    closePointTalk,
+    pointTalkExitHandoff,
+    pointTalkPresenceIdentity,
+    pointTalkPresented,
+  ]);
+  /** Another owner takes the slot: a leaving Point Talk copy is cut, not faded. */
+  const preemptPaperPresentations = useCallback(() => {
     pointTalkExitHandoff.preempt();
     closePointTalk();
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk, pointTalkExitHandoff]);
-  useEffect(() => {
-    if (wikiUnsaved === null) return;
-    // Like a rewrite outcome, the line stays until the person acts again.
-    const clear = () => setWikiUnsaved(null);
-    const clearOnKey = (event: KeyboardEvent) => {
-      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
-      clear();
-    };
-    const capture = { capture: true } as const;
-    window.addEventListener("pointerdown", clear, capture);
-    window.addEventListener("keydown", clearOnKey);
-    return () => {
-      window.removeEventListener("pointerdown", clear, capture);
-      window.removeEventListener("keydown", clearOnKey);
-    };
-  }, [wikiUnsaved]);
-  useEffect(() => {
-    if (pointTalkOutcome === null) return;
-    // The outcome stays until the person acts again, so a slow reader never
-    // loses it to a timer. A held key's auto-repeat or a lone modifier, such
-    // as a screen reader's, is not a new action. Keydown only observes, so it
-    // listens in the bubble phase like every other window key owner.
-    const clear = () => setPointTalkOutcome(null);
-    const clearOnKey = (event: KeyboardEvent) => {
-      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
-      clear();
-    };
-    const capture = { capture: true } as const;
-    window.addEventListener("pointerdown", clear, capture);
-    window.addEventListener("keydown", clearOnKey);
-    return () => {
-      window.removeEventListener("pointerdown", clear, capture);
-      window.removeEventListener("keydown", clearOnKey);
-    };
-  }, [pointTalkOutcome]);
+  // A document switch owns the paper outright, so nothing of the old one fades.
+  useLayoutEffect(() => () => pointTalkExitHandoff.preempt(), [
+    pointTalkExitHandoff,
+    props.documentEpoch,
+  ]);
+  const beginStretchAdjustment = useCallback(() => {
+    // A grip adjustment takes the slot from Inquiry and any Point Talk field;
+    // the adjustment itself is what now owns Elastic presentation.
+    canvasChromeRef.current?.closeInquiry();
+    pointTalkExitHandoff.preempt();
+    closePointTalk();
+  }, [closePointTalk, pointTalkExitHandoff]);
   const stretchReopen = stretch.reopen;
   const discardParkedExpansion = useCallback(() => {
     // An explicit release of a result whose passage is not shown. Only a
@@ -1691,17 +1650,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // Escape after an Elastic submit only removes the committed degree from the
   // paper. The submitted request keeps its immutable basis and may still
   // deliver; dismissing a presentation is never cancellation after submit.
-  // It is a transient surface, and only while nothing covers the paper: a
-  // menu, dialog, Ask Matter, or the overlay index above it closes first.
-  useEscapeLayer(
-    transformState.phase === "requesting" && canvasOverlay === null && !indexOverlayOpen,
-    "transient",
-    () => {
-      if (stretch.mode !== "committed") return false;
-      stretchKeyDown("Escape");
-      return true;
-    },
-  );
+  // The degree is a paper surface: a menu, dialog, Ask Matter, or the overlay
+  // index above it outranks it and closes first.
+  useEscapeLayer(transformState.phase === "requesting", "paper", () => {
+    if (stretch.mode !== "committed") return false;
+    stretchKeyDown("Escape");
+    return true;
+  });
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
@@ -1970,12 +1925,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     tree.id,
     viewportRenderer,
   ]);
-  const selectNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  const selectNodeDismissingPresentations = useCallback((nodeId: string) => {
+    dismissPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = null;
     onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, onSelectNode]);
+  }, [dismissPaperPresentations, interruptIndexCameraMotion, onSelectNode]);
   /**
    * A settled tap on a marked Wiki word opens its takeover instead of selecting
    * the passage; it never starts Point and Talk or a passage selection.
@@ -1997,11 +1952,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
       (dismissing?.pointerId === pointerId && dismissing.occurrenceId === occurrenceId) ||
       !wikiOccurrences.openTakeover(occurrenceId)
     ) return false;
-    abortFixedExpansion();
+    preemptPaperPresentations();
     return true;
   };
-  const focusIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  const focusIndexNode = useCallback((nodeId: string) => {
+    preemptPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2011,9 +1966,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     focusWorkingNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, focusWorkingNode, interruptIndexCameraMotion]);
-  const restoreIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [documentEpoch, focusWorkingNode, interruptIndexCameraMotion, preemptPaperPresentations]);
+  const restoreIndexNode = useCallback((nodeId: string) => {
+    preemptPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2023,9 +1978,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     restoreWorkingNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, restoreWorkingNode]);
-  const selectIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [documentEpoch, interruptIndexCameraMotion, preemptPaperPresentations, restoreWorkingNode]);
+  const selectIndexNode = useCallback((nodeId: string) => {
+    preemptPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2035,24 +1990,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     onSelectNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, onSelectNode]);
-  const archiveAfterAbort = useMemo<MaterialArchiveActions | undefined>(() => {
+  }, [documentEpoch, interruptIndexCameraMotion, onSelectNode, preemptPaperPresentations]);
+  const indexArchive = useMemo<MaterialArchiveActions | undefined>(() => {
     if (props.archive === undefined) return undefined;
     return Object.freeze({
       exportCopy: () => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.exportCopy();
       },
       validateImport: (file: File) => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.validateImport(file);
       },
       replaceImport: (file: File, options: Readonly<{ replaceUnsaved: boolean }>) => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.replaceImport(file, options);
       },
     });
-  }, [abortFixedExpansion, props.archive]);
+  }, [dismissPaperPresentations, props.archive]);
   useEffect(() => {
     const removeSelected = (event: KeyboardEvent) => {
       if (
@@ -2069,12 +2024,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onRemoveSelected();
     };
     window.addEventListener("keydown", removeSelected);
     return () => window.removeEventListener("keydown", removeSelected);
-  }, [abortFixedExpansion, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
+  }, [dismissPaperPresentations, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
   useEffect(() => {
     const undoFromKeyboard = (event: KeyboardEvent) => {
       if (
@@ -2090,12 +2045,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onUndo();
     };
     window.addEventListener("keydown", undoFromKeyboard);
     return () => window.removeEventListener("keydown", undoFromKeyboard);
-  }, [abortFixedExpansion, canUndo, interactionPending, onUndo]);
+  }, [dismissPaperPresentations, canUndo, interactionPending, onUndo]);
   useEffect(() => {
     const redoFromKeyboard = (event: KeyboardEvent) => {
       if (
@@ -2106,12 +2061,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       const key = event.key.toLowerCase();
       if ((key !== "z" || !event.shiftKey) && key !== "y") return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onRedo();
     };
     window.addEventListener("keydown", redoFromKeyboard);
     return () => window.removeEventListener("keydown", redoFromKeyboard);
-  }, [abortFixedExpansion, canRedo, interactionPending, onRedo]);
+  }, [dismissPaperPresentations, canRedo, interactionPending, onRedo]);
   useLayoutEffect(() => {
     stretchInvalidationRef.current = stretch.layoutInvalidated;
   }, [stretch.layoutInvalidated]);
@@ -2484,17 +2439,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }
   // Parking is shown only against a settled layout: a relayout briefly
   // empties the laid-out set without the passage having left the paper.
-  const expansionGuidance: CanvasExpansionGuidanceState = transformState.phase === "requesting"
-    ? transformState.parked && activeLayout !== null ? { kind: "parked" } : { kind: "none" }
-    : transformState.notice === null
-      ? { kind: "none" }
-      : { kind: "unchanged", reason: transformState.notice.kind };
-  const rewriteGuidance: CanvasRewriteGuidanceState =
+  const expansionGuidance: CanvasTurnGuidanceState =
+    transformState.phase === "requesting" && transformState.parked && activeLayout !== null
+      ? { kind: "parked" }
+      : { kind: "none" };
+  const rewriteGuidance: CanvasTurnGuidanceState =
     releaseParkedPointTalk !== null && activeLayout !== null
       ? { kind: "parked" }
-      : pointTalkOutcome === null
-        ? { kind: "none" }
-        : { kind: "unchanged", reason: pointTalkOutcome.reason };
+      : { kind: "none" };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
@@ -2503,12 +2455,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
         : { kind: "none" },
       expansion: expansionGuidance,
       rewrite: rewriteGuidance,
-      wiki: wikiUnsaved === null ? { kind: "none" } : { kind: "unsaved" },
+      outcome: outcomeLine.current,
       language: languageGuidance,
       material: materialGuidance,
     }),
     canvasPreferences.preferences.language,
   );
+  // An outcome counts as shown only while the line says it on a paper the
+  // person can see; only then may their next action retire it.
+  const shownOutcome = outcomeLine.current !== null && outcomePresentationAvailable &&
+      guidance.id === outcomeGuidanceId(outcomeLine.current)
+    ? outcomeLine.current
+    : null;
+  useOutcomeAcknowledgement(shownOutcome, outcomeLine.acknowledge);
   const parkedRelease = guidance.id === "expansion-parked"
     ? discardParkedExpansion
     : guidance.id === "text-swap-parked"
@@ -3114,6 +3073,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
   }, [interruptIndexCameraMotion, setViewport]);
 
+  const cancelLassoPointer = lasso.pointerCancel;
+  const cancelLassoStroke = lasso.cancelActiveStroke;
   const cancelCanvasPointerOwnership = useCallback(() => {
     pointerArbiter.reset();
     settleTouchFounderEffects(false);
@@ -3122,10 +3083,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     multiTouchNavigationRef.current = false;
     const shell = shellRef.current;
     for (const pointerId of touchPointerIds) {
-      lasso.pointerCancel(pointerId);
+      cancelLassoPointer(pointerId);
       if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
     }
-    const lassoPointerId = lasso.cancelActiveStroke();
+    const lassoPointerId = cancelLassoStroke();
     if (lassoPointerId !== null && shell?.hasPointerCapture(lassoPointerId)) {
       shell.releasePointerCapture(lassoPointerId);
     }
@@ -3133,7 +3094,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointerOriginNodeRef.current = null;
     cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
-  }, [cancelNodeDragOwnership, lasso, pointerArbiter, settleTouchFounderEffects, updateViewport]);
+  }, [
+    cancelLassoPointer,
+    cancelLassoStroke,
+    cancelNodeDragOwnership,
+    pointerArbiter,
+    settleTouchFounderEffects,
+    updateViewport,
+  ]);
 
   // A pen that lands anywhere just after a palm revokes it: the palm's lasso
   // stroke restores its prior selection, its pan returns the camera to where it
@@ -3144,14 +3112,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const shell = shellRef.current;
     for (const pointerId of pointerIds) {
       canvasTouchContactsRef.current.delete(pointerId);
-      if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
+      if (cancelLassoPointer(pointerId)) lassoClickOriginNodeRef.current = null;
       if (nodeDragRef.current?.pointerId === pointerId) cancelNodeDragOwnership();
       updateViewport({ type: "pointer-revert", pointerId });
       if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
     }
     multiTouchNavigationRef.current = false;
     pointerOriginNodeRef.current = null;
-  }, [cancelNodeDragOwnership, lasso, settleTouchFounderEffects, updateViewport]);
+  }, [cancelLassoPointer, cancelNodeDragOwnership, settleTouchFounderEffects, updateViewport]);
+
+  // The window listeners below live as long as the paper. They reach the
+  // current owners through refs, so a render or a camera change never
+  // detaches and re-attaches them mid-gesture.
+  const revokeTouchesForPenRef = useRef(revokeTouchesForPen);
+  const cancelCanvasPointerOwnershipRef = useRef(cancelCanvasPointerOwnership);
+  useLayoutEffect(() => {
+    revokeTouchesForPenRef.current = revokeTouchesForPen;
+    cancelCanvasPointerOwnershipRef.current = cancelCanvasPointerOwnership;
+  });
 
   useEffect(() => {
     // Capture phase: a control that stops propagation must not strand a pen
@@ -3165,7 +3143,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         ? null
         : Object.freeze({ pointerId: event.pointerId, occurrenceId: takeover.id });
       const revoked = pointerArbiter.notePointerDown(arbitratedPointer(event));
-      if (revoked.length > 0) revokeTouchesForPen(revoked);
+      if (revoked.length > 0) revokeTouchesForPenRef.current(revoked);
     };
     const noteMove = (event: PointerEvent) => pointerArbiter.notePointerMove(arbitratedPointer(event));
     const noteEnd = (event: PointerEvent) => pointerArbiter.notePointerEnd(arbitratedPointer(event));
@@ -3179,25 +3157,26 @@ export function RootedMaterial(props: RootedMaterialProps) {
       window.removeEventListener("pointerup", noteEnd, true);
       window.removeEventListener("pointercancel", noteEnd, true);
     };
-  }, [pointerArbiter, revokeTouchesForPen, wikiOccurrences]);
+  }, [pointerArbiter, wikiOccurrences]);
 
   useEffect(() => {
+    const cancelOwnership = () => cancelCanvasPointerOwnershipRef.current();
     const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") cancelCanvasPointerOwnership();
+      if (document.visibilityState !== "visible") cancelOwnership();
     };
-    window.addEventListener("blur", cancelCanvasPointerOwnership);
-    window.addEventListener("pagehide", cancelCanvasPointerOwnership);
-    window.addEventListener("orientationchange", cancelCanvasPointerOwnership);
+    window.addEventListener("blur", cancelOwnership);
+    window.addEventListener("pagehide", cancelOwnership);
+    window.addEventListener("orientationchange", cancelOwnership);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.screen.orientation?.addEventListener?.("change", cancelCanvasPointerOwnership);
+    window.screen.orientation?.addEventListener?.("change", cancelOwnership);
     return () => {
-      window.removeEventListener("blur", cancelCanvasPointerOwnership);
-      window.removeEventListener("pagehide", cancelCanvasPointerOwnership);
-      window.removeEventListener("orientationchange", cancelCanvasPointerOwnership);
+      window.removeEventListener("blur", cancelOwnership);
+      window.removeEventListener("pagehide", cancelOwnership);
+      window.removeEventListener("orientationchange", cancelOwnership);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.screen.orientation?.removeEventListener?.("change", cancelCanvasPointerOwnership);
+      window.screen.orientation?.removeEventListener?.("change", cancelOwnership);
     };
-  }, [cancelCanvasPointerOwnership]);
+  }, []);
 
   const cancelViewportGesture = () => {
     // A tool transfer ends the old camera owner and its browser capture as one
@@ -3302,6 +3281,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-viewport-y={viewport.y}
       data-viewport-zoom={viewport.zoom}
       ref={shellRef}
+      style={PRESENCE_EXIT_STYLE}
       onClickCapture={(event) => {
         const clickPointerId = (event.nativeEvent as Partial<PointerEvent>).pointerId;
         if (
@@ -3373,11 +3353,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }
         // Interrupting camera motion loses nothing and stays immediate.
         const pointerViewport = interruptIndexCameraMotion();
-        if (event.pointerType === "touch" && claim?.kind === "accept" && claim.founder) {
+        if (canvasPressDismissal(event.pointerType, claim) === "when-touch-commits") {
           // A resting palm must not close Point and Talk or drop a committed
           // degree before the pen that follows it can take over.
           settleTouchFounderEffects(false);
-          const effects: (() => void)[] = [abortFixedExpansion];
+          const effects: (() => void)[] = [dismissPaperPresentations];
           const pointerId = event.pointerId;
           pendingTouchEffectsRef.current = {
             pointerId,
@@ -3390,7 +3370,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             ),
           };
         } else {
-          abortFixedExpansion();
+          dismissPaperPresentations();
         }
         if (event.pointerType === "touch") {
           const contact = projectCanvasTouchContact(
@@ -3674,9 +3654,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
             const nodeId = lassoClickOriginNodeRef.current;
             exitLasso();
             if (nodeId !== null && workingContext.activeNodeIds.has(nodeId)) {
-              selectNodeAfterAbort(nodeId);
+              selectNodeDismissingPresentations(nodeId);
             } else {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               props.onClearSelection();
             }
           }
@@ -3697,14 +3677,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           if (shouldMove && nodeDrag.sourceId !== null) {
-            abortFixedExpansion();
+            dismissPaperPresentations();
             props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
           }
           else if (!nodeDrag.dragging) {
             if (openWikiTakeoverAt(nodeDrag.originNodeId, event.clientX, event.clientY, event.pointerId)) return;
-            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeAfterAbort(nodeDrag.originNodeId);
+            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeDismissingPresentations(nodeDrag.originNodeId);
             else {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               props.onClearSelection();
             }
           }
@@ -3726,9 +3706,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (!dragged && !openWikiTakeoverAt(originNodeId, releaseX, releaseY, event.pointerId)) {
           setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
-            selectNodeAfterAbort(originNodeId);
+            selectNodeDismissingPresentations(originNodeId);
           } else {
-            abortFixedExpansion();
+            dismissPaperPresentations();
             props.onClearSelection();
           }
         }
@@ -3751,16 +3731,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           The explicit politeness matches every other outcome region, since not
           every screen reader derives it from the status role alone. */}
       <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
-        {transformNotice !== null ? (
-          <span key={`expansion_${transformNotice.id}`}>
-            {localizeExpansionOutcome(transformNotice.kind, props.locale)}
-          </span>
-        ) : pointTalkOutcome !== null ? (
-          <span key={`rewrite_${pointTalkOutcome.id}`}>
-            {localizeRewriteOutcome(pointTalkOutcome.reason, props.locale)}
-          </span>
-        ) : wikiUnsaved !== null ? (
-          <span key={`wiki_${wikiUnsaved}`}>{localizeWikiUnsaved(props.locale)}</span>
+        {shownOutcome !== null ? (
+          <span key={`outcome_${shownOutcome.id}`}>{localizeOutcome(shownOutcome, props.locale)}</span>
         ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
           <span key={guidance.id}>{guidance.text}</span>
         ) : null}
@@ -3781,7 +3753,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFilesWithLabels
-        archive={archiveAfterAbort}
+        archive={indexArchive}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
         lassoSelectedNodeIds={lassoSelectedNodeIds}
@@ -3791,11 +3763,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         heldAsideNodeIds={workingContext.heldAsideNodeIds}
         heldAsideRootIds={heldAsideRootIds}
         onFocusNode={(nodeId) => {
-          focusIndexNodeAfterAbort(nodeId);
+          focusIndexNode(nodeId);
         }}
         onMaterialCopied={props.wikiOccurrences?.noteMaterialCopied}
         onOpenOverlay={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           indexCenterRequestRef.current = null;
           interruptIndexCameraMotion();
           if (lasso.active) exitLasso();
@@ -3803,15 +3775,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onEditingChange={setEditingHeld}
         onOverlayChange={setIndexOverlayOpen}
         onRenameDocument={(title) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           props.onRenameDocument(title);
         }}
         onRestoreNode={(nodeId) => {
-          restoreIndexNodeAfterAbort(nodeId);
+          restoreIndexNode(nodeId);
         }}
-        onSelectNode={selectIndexNodeAfterAbort}
+        onSelectNode={selectIndexNode}
         onToggleHeldAside={(nodeId) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           toggleHeldAside(nodeId);
         }}
         persistence={props.persistence}
@@ -3823,7 +3795,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoAvailable={lassoEligibleNodeIds.size > 0 && (lasso.active || activeLayout !== null)}
         locale={props.locale}
         onLasso={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           cancelNodeDragOwnership();
           if (lasso.active) {
             exitLasso();
@@ -3843,7 +3815,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
         }}
         onMove={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           cancelNodeDragOwnership();
           if (canvasMode === "pan" && !lasso.active) {
             cancelViewportGesture();
@@ -3854,7 +3826,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           setCanvasMode("pan");
         }}
         onIntent={(intent) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
@@ -3880,7 +3852,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             issuePointTalkVoiceCommand("start");
             return;
           }
-          abortFixedExpansion();
+          dismissPaperPresentations();
           if (props.admission.state.phase === "recording") {
             props.admission.stop();
           } else if (props.admissionAnchor !== null) {
@@ -3983,7 +3955,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               selectionPreviewMode={visibleSplitPreviewMode}
               navigation={navigation}
               onKeyboardFocus={revealKeyboardFocusedMaterial}
-              onSelectNode={selectNodeAfterAbort}
+              onSelectNode={selectNodeDismissingPresentations}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
               heldAsideRootIds={heldAsideRootIds}
@@ -4037,10 +4009,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
               setPointTalkPresented(true);
             }}
             onOpenWikiReview={wikiOccurrences === undefined ? undefined : (occurrenceId) => {
-              if (wikiOccurrences.openTakeover(occurrenceId)) abortFixedExpansion();
+              if (wikiOccurrences.openTakeover(occurrenceId)) preemptPaperPresentations();
             }}
             onToggleHeldAside={(nodeId) => {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               toggleHeldAside(nodeId);
             }}
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
@@ -4083,7 +4055,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryContext={projectInquiryPayload}
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
-          onInquiryOpen={abortFixedExpansion}
+          onInquiryOpen={preemptPaperPresentations}
           onInquiryHoldChange={setInquiryHeld}
           onOverlayChange={changeCanvasOverlay}
           overlay={canvasOverlay}
@@ -4110,7 +4082,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             variant="actionable"
           />
         )}
-        {pointTalkHostNodeId === null ? null : (
+        {pointTalkHostNodeId === null || pointTalkPresenceIdentity === null ? null : (
           <PointTalkTurn
             boundaryRef={documentRef}
             canvasRef={canvasRef}
@@ -4131,7 +4103,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onReleased={releasePointTalkJob}
             onReleasedOutcome={reportPointTalkOutcome}
             penActive={pointerArbiter.penActive}
-            presenceIdentity={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
+            presenceIdentity={pointTalkPresenceIdentity}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}
@@ -4151,6 +4123,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
             locale={props.locale}
             onOpenWiki={(term, trigger) => canvasChromeRef.current?.openWiki(term, trigger)}
+            onRestoreRefused={reportWikiRestoreRefused}
             penActive={pointerArbiter.penActive}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}
@@ -4893,7 +4866,7 @@ function StretchHandleButton({
         if (status === "requesting") return;
         // The grips sit outside the canvas owner, so they apply the same palm
         // rule themselves: a touch while a pen writes is not a stretch.
-        if (event.pointerType === "touch" && penActive(event.timeStamp)) return;
+        if (isPalmPress(event.pointerType, penActive(event.timeStamp))) return;
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           onBeginAdjustment();
@@ -4942,8 +4915,15 @@ function StretchHandleButton({
   );
 }
 
-function arbitratedPointer(event: Pick<PointerEvent, "pointerId" | "pointerType" | "timeStamp">): ArbitratedPointer {
-  return { pointerId: event.pointerId, pointerType: event.pointerType, timeStamp: event.timeStamp };
+function arbitratedPointer(
+  event: Pick<PointerEvent, "buttons" | "pointerId" | "pointerType" | "timeStamp">,
+): ArbitratedPointer {
+  return {
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    buttons: event.buttons,
+    timeStamp: event.timeStamp,
+  };
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -5328,7 +5308,7 @@ function AdmissionFeedback({
         </>
       ) : (
         <button onClick={present ? controller.cancel : undefined} type="button">
-          {view.phase === "transcribing" ? actions.cancelTranscription : actions.cancel}
+          {admissionWithdrawLabel(locale, view.phase)}
         </button>
       )}
     </div>

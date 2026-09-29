@@ -34,19 +34,6 @@ describe("CanvasChrome", () => {
     }
   });
 
-  it("makes shell chrome outside the paper inert behind a modal dialog", () => {
-    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
-    const inert = source.slice(
-      source.indexOf("const MODAL_INERT_SHELL_CHROME"),
-      source.indexOf('].join(", ");', source.indexOf("const MODAL_INERT_SHELL_CHROME")),
-    );
-    for (const selector of [".tool-rail", ".material-files", ".material-files-toggle", ".matter-header"]) {
-      expect(inert).toContain(`"${selector}"`);
-    }
-    // A handle mounted after the dialog opened (a breakpoint crossing) is caught too.
-    expect(source).toContain("if (shell !== null) observer.observe(shell, { childList: true });");
-  });
-
   it("names the compact menu in every locale", () => {
     for (const [language, label] of [
       ["en-US", "Matter menu"],
@@ -81,34 +68,16 @@ describe("CanvasChrome", () => {
     }
   });
 
-  it("offers explicit cancellation only in place of Ask while a question waits", () => {
-    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
-    const start = source.indexOf("const cancelPendingAsk = useCallback");
-    const cancel = source.slice(start, source.indexOf("}, [cancelArmed]);", start));
-    expect(cancel).toContain("if (!cancelArmed || !inquiryCancelAccepted(event.detail)) return;");
-    expect(cancel).toContain("request.abort(");
-    expect(cancel).toContain('type: "withdraw"');
-    expect(cancel).toContain("reason: null");
-    expect(source).toContain('data-inquiry-control="cancel"');
-    // Ask and Cancel are distinct elements; Cancel arms only after a beat and
-    // Ask hands focus back to the field, so a double-click cannot revoke. The
-    // arming Cancel is inert without `disabled`, whose press blurs the field,
-    // and a press on either control keeps focus in the field.
-    expect(source).toMatch(
-      /aria-disabled=\{!cancelArmed \|\| undefined\}\s*className=\{styles\.inquiryAsk\}\s*data-inquiry-control="cancel"\s*key="cancel"\s*onClick=\{cancelPendingAsk\}\s*onMouseDown=\{keepInquiryFieldFocus\}/u,
-    );
-    expect(source).toMatch(/data-inquiry-control="ask"\s*disabled=\{!canAsk\}\s*key="ask"/u);
-    expect(source).toMatch(/ask\(\);\s*focusWithoutScroll\(fieldRef\.current \?\? undefined\);\s*\}\}\s*onMouseDown=\{keepInquiryFieldFocus\}/u);
+  it("lets only a deliberate press cancel a waiting question", () => {
+    // Cancel takes Ask's place and arms only after a beat, so the second click
+    // of a double-click on Ask, or a click already on its way, cannot revoke
+    // what it sent; the inquiry-lifecycle journey proves the double-click.
     expect(INQUIRY_CANCEL_ARM_MS).toBeGreaterThanOrEqual(300);
+    // Keyboard activation (detail 0) and a single click cancel; the second
+    // click of a double-click does not.
     expect(inquiryCancelAccepted(0)).toBe(true);
     expect(inquiryCancelAccepted(1)).toBe(true);
     expect(inquiryCancelAccepted(2)).toBe(false);
-  });
-
-  it("announces a notice that arrived while the bubble was closed when it reopens", () => {
-    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
-    expect(source).toContain("requestAnimationFrame(() => setStatusLive(true))");
-    expect(source).toContain("{!statusLive ? null : record?.phase");
   });
 
   it("renders the desktop corner system and one mobile menu trigger", () => {
@@ -181,18 +150,6 @@ describe("CanvasChrome", () => {
     expect(markup).toContain('aria-controls="matter-inquiry"');
     expect(markup).not.toContain("data-inquiry-thread");
     expect(markup).not.toMatch(/chat|assistant|history/i);
-  });
-
-  it("detaches inquiry presentation without aborting an already submitted request", () => {
-    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
-    expect(source).toContain('presented={overlay === "inquiry"}');
-    const detachStart = source.indexOf("const detach = useCallback");
-    const detachEnd = source.indexOf("useImperativeHandle", detachStart);
-    const detach = source.slice(detachStart, detachEnd);
-    expect(detach).toContain('dispatch({ type: "close" })');
-    expect(detach).not.toContain("abort(");
-    expect(detach).not.toContain("authorityRef.current += 1");
-    expect(source).toContain("setSubmissionPending(true)");
   });
 
   it("projects the bounded API-key contract into the browser form", () => {

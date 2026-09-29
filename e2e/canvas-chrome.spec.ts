@@ -650,6 +650,37 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
+test("a modal dialog makes shell chrome inert, including a drawer handle mounted after it opened", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const inert = (selector: string) => page.locator(selector).first().evaluate((element) =>
+    (element as HTMLElement).inert);
+  const shellChrome = [".tool-rail", ".material-files", ".matter-header"];
+  for (const selector of shellChrome) expect(await inert(selector)).toBe(false);
+
+  const about = page.getByRole("button", { name: "关于", exact: true });
+  await about.focus();
+  await about.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "关于 Matter" });
+  await expect(dialog).toBeVisible();
+  for (const selector of shellChrome) await expect.poll(() => inert(selector)).toBe(true);
+
+  // The narrow drawer handle exists only below the breakpoint, so it mounts
+  // after the dialog opened; it must not stay reachable behind the dialog.
+  await expect(page.locator(".material-files-toggle")).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator(".material-files-toggle")).toHaveCount(1);
+  await expect.poll(() => inert(".material-files-toggle")).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  for (const selector of [...shellChrome, ".material-files-toggle"]) {
+    await expect.poll(() => inert(selector)).toBe(false);
+  }
+});
+
 test("compact corner controls keep one tokenized geometry through the former 721px seam", async ({ page }) => {
   await page.setViewportSize({ width: 740, height: 844 });
   await page.goto("/matter");

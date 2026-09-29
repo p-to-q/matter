@@ -219,6 +219,27 @@ export function admissionFeedbackActions(
 }
 
 /**
+ * Names what withdrawing a live attempt gives up. Once transcribed words wait
+ * to be placed, withdrawing discards them, so the action says Discard, as it
+ * does for held words, rather than cancelling a recording that already ended.
+ */
+export function admissionWithdrawLabel(
+  language: CanvasLanguage,
+  phase: Exclude<AdmissionProgressPhase, "recording">,
+): string {
+  const copy = COPY[language];
+  switch (phase) {
+    case "requesting":
+    case "stopping":
+      return copy.cancel;
+    case "transcribing":
+      return copy.cancelTranscription;
+    case "committing":
+      return copy.discard;
+  }
+}
+
+/**
  * Names where held words would go, using the same distinctions as the Voice
  * tool, so placement is never a hidden guess.
  */

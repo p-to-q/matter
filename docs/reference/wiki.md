@@ -197,7 +197,9 @@ answers every question with the empty set.
   selects the passage as any press would. Keep is `explicit-confirm`, leaving
   the page while it is open is `inspected-kept`, and the heard form commits an
   ordinary human text restoration and then settles `reverted`. A restoration
-  that fails closes the takeover and leaves every live occurrence where it was.
+  that fails closes the takeover and leaves every live occurrence where it was;
+  when the passage no longer holds the word, the guidance line says so once,
+  “Passage changed. Not restored.”, until the person's next action.
   Undoing that restoration is Material Undo and settles nothing.
 - Wiki… hands the takeover to the settings dialog and keeps the occurrence
   suspended until that dialog has covered the paper and let it go again (or,
@@ -206,7 +208,8 @@ answers every question with the empty set.
 - A Keep or revert that Wiki cannot record (a failed write or an attribution
   that already expired) is said once in the guidance line and announced
   politely: “Wiki could not save that.” The material change stands; the line
-  clears at the person's next action.
+  clears at the person's next action. Both lines are outcomes on the paper's
+  one outcome line: one that ends while another is shown waits its turn.
 - A live occurrence expires 15 s before its registry attribution would, and at
   most 64 stay live; both censor. So does `pagehide` before perception, which
   covers a tab that stayed hidden the whole time.
