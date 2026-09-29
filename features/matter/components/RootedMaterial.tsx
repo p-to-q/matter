@@ -1521,8 +1521,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       type,
     }));
   }, []);
-  const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
-    transformState.phase !== "idle";
+  // Elastic presentation follows the degree on the paper, not the request. A
+  // submitted turn may lose its presented degree to Escape or another slot
+  // owner and still deliver; its address then stays painted in the neutral
+  // armed shape with both grips at zero instead of an expand projection that
+  // no longer has a degree or grip to project from.
+  const elasticLanguageActive = stretch.dragging || stretch.amount > 0;
   const beginStretchAdjustment = useCallback(() => {
     canvasChromeRef.current?.closeInquiry();
   }, []);
@@ -1566,8 +1570,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
-  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0 ||
-    transformState.phase !== "idle"
+  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0
     ? "expand"
     : "neutral";
   const renderedElasticPreviewSource = useMemo(() => {

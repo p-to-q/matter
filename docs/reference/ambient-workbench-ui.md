@@ -141,8 +141,9 @@ own `onKeyDown`, test `isCancelEscape`, and call `preventDefault()`. No keydown
 handler runs in the capture phase or stops a keydown's propagation (the canvas's
 capture-phase click suppression for a rejected palm is a click, not a key).
 After a submit Escape only dismisses
-presentation: Elastic loses its visible degree and Point and Talk detaches, while
-the submitted request continues. `escape-ownership.test.ts` holds the boundary
+presentation: Elastic loses its visible degree, its range staying addressed with
+both grips at zero, and Point and Talk detaches, while the submitted request
+continues. `escape-ownership.test.ts` holds the boundary
 by scanning the source tree.
 
 ## Canvas pointer ownership
