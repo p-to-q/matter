@@ -10,17 +10,19 @@ index, user profile, prompt supplement, or second document model.
 
 ## Product posture
 
-The successful interaction is no interaction. Wiki infers, learns, and applies
-a safe decision behind the paper. It does not announce a hit, ask the person to
-approve routine learning, place a badge on material, or expose a permanent
-management surface. A person should not need to know that Wiki exists in order
-to receive its benefit.
+The successful interaction asks nothing of the person. Wiki infers, learns,
+and applies a safe decision behind the paper. It does not ask the person to
+approve routine learning, place a badge or success notice on material, or
+expose a permanent management surface. A person should not need to know that
+Wiki exists in order to receive its benefit.
 
-The owner's decision of 2026-09-29 reopens one part of this posture: an applied
-change is disclosed once, restrained and perceivable, and an unsettled
+It does not hide what it changed. Since the owner's decision of 2026-09-29 an
+applied change is disclosed once, restrained and perceivable, and an unsettled
 occurrence carries a quiet mark the person can tap to take over (see
-[Exceptional correction surface](#exceptional-correction-surface)). Disclosure
-is what makes silence informed, and informed silence is approval; see
+[Exceptional correction surface](#exceptional-correction-surface)). This
+reverses the earlier rule that an applied rule adds no mark, icon, or hover
+action. Disclosure is what
+makes silence informed, and informed silence is approval; see
 [Occurrence outcomes](#occurrence-outcomes). Routine learning still never
 becomes a review or approval workload.
 
@@ -69,7 +71,9 @@ holds the opaque identities of recently settled occurrences. One successful
 human admission is one logical clock tick; a candidate ages only on a tick that
 was a comparable opportunity for it, and after a bounded number of such quiet
 ticks its support halves. It stores no passage, node id, tree id, timestamp,
-transcript, prompt, model answer, embedding, occurrence list, or source address.
+transcript, prompt, model answer, embedding, or source address; the settled
+window holds only opaque random identities, never an occurrence's text or
+address.
 Existing trees are not rescanned because persisted nodes do not prove whether
 their text was human- or model-authored. Model-generated material contributes
 zero admission evidence: it can be corrected by Wiki, but its text can never
@@ -450,7 +454,8 @@ generation, but can never mix generations inside one material command.
 The adapter is fail-open but not authoritative. If capture throws or a session
 returns a malformed result, the port becomes an identity suggestion and Matter
 continues. If a coherent changed suggestion violates the final material
-contract, Matter rejects that changed candidate. Wiki can neither rescue an
+contract, Matter drops that changed candidate and keeps the validated source,
+as above. Wiki can neither rescue an
 invalid source nor veto otherwise valid unchanged material.
 
 Elastic expansion is stricter than whole-text replacement. Source-carried
@@ -609,8 +614,12 @@ after provider output returns and every model payload remains Wiki-free.
 ## Failure posture
 
 - An invalid or ambiguous provisional rule does not compile or apply.
-- A Wiki result that fails the scenario's final policy rejects that candidate;
-  it never falls back to publishing the uncorrected generated answer.
+- A Wiki suggestion that makes an otherwise valid result fail the scenario's
+  final policy is withheld: the validated source commits unchanged and the
+  receipt records `canonicalizationWithheld` (see
+  [Commit boundary](#commit-boundary)). Wiki never publishes an invalid
+  candidate and never costs a valid one; a canonical candidate identical to
+  current material keeps its ordinary no-op rejection.
 - A failed Wiki persistence operation leaves material interaction available on
   the last valid basis and exposes recovery only in the exceptional settings
   surface.
