@@ -56,7 +56,10 @@ actual transcription call owns the same lazy factory if speculative warming did
 not finish or failed. That bound rejects only the speculative warm-up: an idle
 lease that never became ready is released, but a lease already carrying a
 submitted recording is left to that request's own deadline, so a slow network
-cannot turn a finished utterance into a timeout. Browser-native recognition also has a bounded start
+cannot turn a finished utterance into a timeout. Such a lease is marked
+overdue; if its request then ends by timeout or cancellation before the lease
+ever became ready, the lease is retired, so the next recording starts a fresh
+worker instead of queueing behind the same stall. Browser-native recognition also has a bounded start
 watchdog, so a browser that neither starts nor errors returns a recoverable
 failure instead of leaving the first turn indefinitely in "waiting for
 microphone".
