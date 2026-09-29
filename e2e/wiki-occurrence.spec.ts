@@ -345,6 +345,33 @@ test("reduced motion discloses with the static mark only", async ({ page }) => {
   await expectPlainText(passage, ADMITTED);
 });
 
+test("a settle cut off early twice discloses with the static mark instead", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  // A web font finishing mid-settle ends it before the change is readable. Two
+  // such cuts exhaust the retry; the word must still become reviewable.
+  await page.addInitScript(() => {
+    let cuts = 0;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement) || !node.classList.contains("wiki-lexeme-morph")) continue;
+          if (cuts >= 2) continue;
+          cuts += 1;
+          queueMicrotask(() => document.fonts.dispatchEvent(new Event("loadingdone")));
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectMarkCount(page, 1);
+  expect(await readMorphs(page)).toHaveLength(2);
+  await expect(page.locator(".wiki-lexeme-morph")).toHaveCount(0);
+  await tapWord(page, passage, CANONICAL);
+  await expect(page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) })).toBeVisible();
+  await expectPlainText(passage, ADMITTED);
+  expect(errors).toEqual([]);
+});
+
 test("without Custom Highlight the word discloses with an underline sweep", async ({ page }) => {
   await page.addInitScript(() => {
     delete (window as Window & { Highlight?: unknown }).Highlight;
