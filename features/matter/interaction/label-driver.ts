@@ -124,7 +124,7 @@ export class LabelDriver {
     this.canonicalNow = dependencies.canonicalNow ?? (() => new Date().toISOString());
     this.schedule = dependencies.schedule ?? scheduleWithTimer;
     this.locale = scope.locale ?? dependencies.locale;
-    this.state =createLabelSessionState(scope.tree.id, scope.documentEpoch);
+    this.state = createLabelSessionState(scope.tree.id, scope.documentEpoch);
     // Keep the constructor document as the cleanup baseline even if an archive
     // replacement arrives before the first projection observation.
     this.lastScope = scope;
