@@ -297,13 +297,15 @@ layout; the repository executes it.
   epoch; Retry or a new document restores it. The tab keeps its whole in-memory
   history, so the notice says older steps will not survive a reload.
 
-`npm run bench:persistence` records both sides. On 2026-09-29 (Node 26), a
-2,000-node tree with 1,050 commits (bounded to 1,000 steps) recovered in 8.87 ms
-median, against 8,648 ms to replay the same journal; planning an unchanged save
+`npm run bench:persistence` records both sides. On 2026-09-29 (Node 22.20), a
+2,000-node tree with 1,050 commits (bounded to 1,000 steps) recovered in 9.35 ms
+median, against 8,786 ms to replay the same journal; planning an unchanged save
 took 0.05 ms and wrote no record. Headless Chromium 153 with a 31.2 MB,
 1,000-step journal beside a realistic row measured a per-step save at 2.9 ms
-median (row, one record, six range deletes), recovery at 40.4 ms median, and the
-v5 layout's inline 31 MB rewrite at 24.5 ms per save.
+median (row, one record, six range deletes), recovery at 43.8 ms median, and the
+v5 layout's inline 31 MB rewrite at 25.9 ms per save. A run on the same machine
+under concurrent load measured about twice each figure; these receipts compare
+layouts, not devices.
 
 The Vitest suites run the repository over an in-memory IndexedDB double for
 fault injection. `npm run proof:persistence` (also the last step of
