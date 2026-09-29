@@ -3,7 +3,7 @@ import canaries from "../../../scripts/probe-model-pool-canaries.json";
 import {
   decideModelRequest,
   deriveProvisionalLabel,
-  labelFingerprint,
+  labelQuestionIdentity,
   normalizeLabelInput,
 } from "./semantic-label";
 
@@ -16,11 +16,13 @@ describe("model-pool label canaries", () => {
       context: { siblingLabels: [`Canary ${runId}`] },
     }));
     const inputs = inputsFor("runa");
-    const fingerprints = inputs.map((input) => labelFingerprint(input));
-    const nextRunFingerprints = inputsFor("runb").map((input) => labelFingerprint(input));
+    // The server cache keys on a digest of exactly this identity, so distinct
+    // identities are distinct cache entries and every round reaches the model.
+    const identities = inputs.map((input) => labelQuestionIdentity(input));
+    const nextRunIdentities = inputsFor("runb").map((input) => labelQuestionIdentity(input));
 
-    expect(new Set(fingerprints).size).toBe(canaries.length);
-    expect(new Set([...fingerprints, ...nextRunFingerprints]).size).toBe(canaries.length * 2);
+    expect(new Set(identities).size).toBe(canaries.length);
+    expect(new Set([...identities, ...nextRunIdentities]).size).toBe(canaries.length * 2);
     for (const input of inputs) {
       expect(decideModelRequest(input, deriveProvisionalLabel(input))).toEqual({
         request: true,

@@ -8,6 +8,7 @@ import type { RequestOptions } from "node:https";
 import { isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 import { isCanonicalUserProviderBaseUrl } from "../protocol/provider-session-contract";
+import { rejectOnAbort } from "./abort-boundary";
 
 type LookupAll = (
   hostname: string,
@@ -316,17 +317,4 @@ function isCanonicalIpv4(value: string): boolean {
   return parts.length === 4 && parts.every((part) => (
     /^(?:0|[1-9]\d{0,2})$/u.test(part) && Number(part) <= 255
   ));
-}
-
-function rejectOnAbort(signal: AbortSignal): Readonly<{
-  promise: Promise<never>;
-  dispose: () => void;
-}> {
-  let rejectPromise!: (reason: DOMException) => void;
-  const promise = new Promise<never>((_resolve, reject) => { rejectPromise = reject; });
-  promise.catch(() => undefined);
-  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return Object.freeze({ promise, dispose: () => signal.removeEventListener("abort", reject) });
 }

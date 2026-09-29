@@ -17,6 +17,10 @@ const TIME = "2026-08-20T00:00:00.000Z";
 const TEXT = "我听见，房间慢慢安静下来。";
 const PASSAGE = "房间慢慢安静下来";
 const DIRECTION = "换一种更清楚但保留安静感的说法";
+const SAME_ORIGIN = Object.freeze({
+  origin: "https://matter.test",
+  "sec-fetch-site": "same-origin",
+});
 
 beforeEach(() => {
   resetTransformAdmissionForTests();
@@ -116,6 +120,64 @@ describe("text swap route", () => {
     ]);
     expect(fallbackLog).not.toHaveBeenCalled();
     fallbackLog.mockRestore();
+  });
+
+  it("refuses admission with its own code rather than a model outcome", async () => {
+    const observe = vi.fn();
+    const quiet = { observe: () => undefined };
+    const controllers = Array.from({ length: 3 }, () => new AbortController());
+    // The perimeter meters production only; drive the deployed path.
+    vi.stubEnv("NODE_ENV", "production");
+    try {
+      // Three requests still reading their bodies hold every concurrency slot.
+      const held = controllers.map((controller) => handleTextSwapRequest(new Request(
+        "https://matter.test/api/text-swap",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", ...SAME_ORIGIN },
+          body: new ReadableStream<Uint8Array>(),
+          signal: controller.signal,
+          duplex: "half",
+        } as RequestInit & { duplex: "half" },
+      ), fixtureTextSwapAdapter, quiet).catch(textSwapErrorResponse));
+
+      const busy = await post(body({ id: "swap_busy" }), fixtureTextSwapAdapter, SAME_ORIGIN, { observe });
+      expect(busy.status).toBe(503);
+      await expect(busy.json()).resolves.toEqual({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Matter is busy. Please try again shortly.",
+          retryable: true,
+        },
+      });
+      expect(observe).toHaveBeenLastCalledWith(expect.objectContaining({
+        outcome: "admission",
+        reason: "ADMISSION_BUSY",
+      }));
+      controllers.forEach((controller) => controller.abort());
+      await Promise.all(held);
+
+      // The three held requests were charged; a busy refusal was not.
+      for (let index = 0; index < 5; index += 1) {
+        await post(body({ id: `swap_rate_${index}` }), fixtureTextSwapAdapter, SAME_ORIGIN, quiet);
+      }
+      const limited = await post(body({ id: "swap_rate_blocked" }), fixtureTextSwapAdapter, SAME_ORIGIN, { observe });
+      expect(limited.status).toBe(429);
+      await expect(limited.json()).resolves.toEqual({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Please wait before swapping this passage again.",
+          retryable: true,
+        },
+      });
+      expect(observe).toHaveBeenLastCalledWith(expect.objectContaining({
+        outcome: "admission",
+        reason: "RATE",
+      }));
+    } finally {
+      controllers.forEach((controller) => controller.abort());
+      vi.unstubAllEnvs();
+    }
   });
 
   it("uses the 12s scenario deadline inside the 14s route boundary", async () => {

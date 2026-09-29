@@ -64,7 +64,17 @@ export type TransformPlan = Readonly<{
   presentation: Readonly<{ motionHint: "grow" }>;
 }>;
 
-export type TransformErrorCode = "INVALID_REQUEST" | "TURN_UNAVAILABLE" | "TURN_REJECTED" | "TURN_FAILED";
+/**
+ * `RATE_LIMITED` is the public admission perimeter refusing before any model
+ * work: 429 for a source's request window, 503 for instance concurrency. It
+ * never carries a `fallbackReason`, which names only a scenario outcome.
+ */
+export type TransformErrorCode =
+  | "INVALID_REQUEST"
+  | "RATE_LIMITED"
+  | "TURN_UNAVAILABLE"
+  | "TURN_REJECTED"
+  | "TURN_FAILED";
 export type TransformFallbackReason = "MODEL_UNAVAILABLE" | "MODEL_TIMEOUT" | "MODEL_REJECTED" | "MODEL_BUSY";
 export type TransformErrorEnvelope = Readonly<{
   error: Readonly<{
@@ -155,6 +165,7 @@ export function parseTransformError(value: unknown): TransformErrorReceipt | nul
     return null;
   }
   if (error.code === "INVALID_REQUEST" && error.retryable) return null;
+  if (error.code === "RATE_LIMITED" && !error.retryable) return null;
   return Object.freeze({
     code: error.code,
     message: error.message,
@@ -359,7 +370,7 @@ function isGrowPresentation(value: unknown): boolean {
   return isRecord(value) && hasExactKeys(value, ["motionHint"]) && value.motionHint === "grow";
 }
 function isTransformErrorCode(value: unknown): value is TransformErrorCode {
-  return value === "INVALID_REQUEST" || value === "TURN_UNAVAILABLE" ||
+  return value === "INVALID_REQUEST" || value === "RATE_LIMITED" || value === "TURN_UNAVAILABLE" ||
     value === "TURN_REJECTED" || value === "TURN_FAILED";
 }
 function parseTransformFallbackReason(value: unknown): TransformFallbackReason | undefined {

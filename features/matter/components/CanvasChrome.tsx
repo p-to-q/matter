@@ -11,6 +11,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
@@ -36,8 +37,8 @@ import {
   inquiryText,
   pendingAnswerId,
   reduceInquiry,
+  type InquiryNotice,
   type InquiryTurnOutcome,
-  type InquiryVoiceNotice,
 } from "./inquiry-composer";
 import { useInquiryDictation } from "./use-inquiry-dictation";
 import { shouldSubmitInquiryOnEnter } from "./inquiry-submit-key";
@@ -48,7 +49,7 @@ import {
   type InquiryContextOwner,
 } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
-import { isCancelEscape } from "./composition-safe-keys";
+import { useEscapeLayer } from "./escape-layers";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
 import { subscribePageExit } from "../interaction/page-suspension";
 import { ApiSettingsForm } from "./ApiSettingsForm";
@@ -95,6 +96,8 @@ type CanvasChromeCopy = Readonly<{
   about: string;
   api: string;
   ask: string;
+  /** Replaces Ask while a submitted question waits; explicit cancellation. */
+  askCancel: string;
   askPlaceholder: string;
   asking: string;
   appearance: Readonly<Record<CanvasAppearance, string>>;
@@ -111,6 +114,7 @@ type CanvasChromeCopy = Readonly<{
   listening: string;
   transcribing: string;
   menu: string;
+  menuNavigation: string;
   noticeModelUnavailable: string;
   noticeNoMaterial: string;
   noticeRateLimited: string;
@@ -293,7 +297,7 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
     "これはチャットで答えを待つのではなく、素材の中で AI と考える方法です。未完成な考えにも、迷いを残し、触れ、育てる余白があります。",
     "AI は言葉に知性を与え、Matter は思考に身体を与えます。",
     "初期プレビューです。リアルタイム音声入力、音声の整形、Matter への質問は利用できます。公開環境での素材生成変換は引き続き制限され、そのインタラクション言語を検証しています。",
-    <PToQAttribution after=" の project です。" before="Matter は " key="attribution" />,
+    <PToQAttribution after=" のプロジェクトです。" before="Matter は " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
     "この画面に含まれている素材について短く尋ねます。尋ねても素材は変わりません。",
@@ -311,7 +315,7 @@ const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
     "Es ist eine Art, mit KI im Material zu denken, nicht in einem Chat auf Antworten zu warten. Unfertige Gedanken dürfen unsicher bleiben, berührt werden und weiterwachsen.",
     "KI gibt Sprache Intelligenz. Matter gibt Gedanken einen Körper.",
     "Dies ist eine frühe Vorschau. Live-Spracheingabe, Transkriptreparatur und Matter fragen sind verfügbar. Die öffentliche generative Materialtransformation bleibt gesperrt, während ihre Interaktionssprache erprobt wird.",
-    <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
+    <PToQAttribution after="." before="Matter ist ein Projekt von " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
     "Stelle eine kurze Frage zu dem Material, das auf dieser Fläche einbezogen ist. Eine Frage verändert es nicht.",
@@ -335,6 +339,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "About",
     api: "Model API",
     ask: "Ask",
+    askCancel: "Cancel",
     askPlaceholder: "Ask about this material",
     asking: "Asking…",
     appearance: Object.freeze({ auto: "Auto", dark: "Dark", light: "Light" }),
@@ -351,6 +356,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "Listening",
     transcribing: "Finishing the dictation…",
     menu: "Matter",
+    menuNavigation: "Matter menu",
     noticeModelUnavailable: "Matter received this, but no answer model is connected yet.",
     noticeNoMaterial: "There is no material to answer about yet.",
     noticeRateLimited: "Matter has this question. Give it a moment before asking again.",
@@ -376,6 +382,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "关于",
     api: "模型 API",
     ask: "询问",
+    askCancel: "取消",
     askPlaceholder: "问一句关于这份材料的话",
     asking: "正在询问…",
     appearance: Object.freeze({ auto: "自动", dark: "深色", light: "浅色" }),
@@ -392,6 +399,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "正在听",
     transcribing: "正在整理口述…",
     menu: "Matter",
+    menuNavigation: "Matter 菜单",
     noticeModelUnavailable: "Matter 收到了，但还没有连接可以回答的模型。",
     noticeNoMaterial: "还没有材料可以回答。",
     noticeRateLimited: "Matter 收到了这句话，先等一下再问。",
@@ -417,6 +425,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "關於",
     api: "模型 API",
     ask: "詢問",
+    askCancel: "取消",
     askPlaceholder: "問一句關於這份材料的話",
     asking: "正在詢問…",
     appearance: Object.freeze({ auto: "自動", dark: "深色", light: "淺色" }),
@@ -433,6 +442,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "正在聽",
     transcribing: "正在整理口述…",
     menu: "Matter",
+    menuNavigation: "Matter 選單",
     noticeModelUnavailable: "Matter 收到了，但還沒有連接可以回答的模型。",
     noticeNoMaterial: "還沒有材料可以回答。",
     noticeRateLimited: "Matter 收到了這句話，先等一下再問。",
@@ -458,6 +468,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "概要",
     api: "モデル API",
     ask: "尋ねる",
+    askCancel: "キャンセル",
     askPlaceholder: "この素材について尋ねる",
     asking: "問い合わせ中…",
     appearance: Object.freeze({ auto: "自動", dark: "ダーク", light: "ライト" }),
@@ -474,6 +485,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "聞いています",
     transcribing: "音声入力を整えています…",
     menu: "Matter",
+    menuNavigation: "Matter メニュー",
     noticeModelUnavailable: "Matter は受け取りましたが、答えるモデルがまだ接続されていません。",
     noticeNoMaterial: "まだ答える材料がありません。",
     noticeRateLimited: "Matter はこの問いを受け取りました。少し待ってからもう一度どうぞ。",
@@ -499,6 +511,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     about: "Über",
     api: "Modell-API",
     ask: "Fragen",
+    askCancel: "Abbrechen",
     askPlaceholder: "Zu diesem Material fragen",
     asking: "Wird gefragt …",
     appearance: Object.freeze({ auto: "Automatisch", dark: "Dunkel", light: "Hell" }),
@@ -515,6 +528,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "Hört zu",
     transcribing: "Diktat wird verarbeitet …",
     menu: "Matter",
+    menuNavigation: "Matter-Menü",
     noticeModelUnavailable: "Matter hat die Frage erhalten, aber noch ist kein Antwortmodell verbunden.",
     noticeNoMaterial: "Es gibt noch kein Material für eine Antwort.",
     noticeRateLimited: "Matter hat die Frage. Warte einen Moment, bevor du erneut fragst.",
@@ -556,6 +570,30 @@ const MODAL_OVERLAYS = new Set<CanvasChromeOverlay>([
 export function canvasOverlayOwnsSurface(overlay: CanvasChromeOverlay): boolean {
   return MODAL_OVERLAYS.has(overlay);
 }
+
+/** Mirrors the compact-chrome handoff in `CanvasChrome.module.css`. */
+const COMPACT_CHROME_MAX_WIDTH_PX = 767;
+
+/**
+ * The desktop menus exist only above the compact breakpoint and the compact
+ * menu sheet only below it; Ask Matter and every dialog exist at both.
+ */
+export function overlayOutlivesBreakpoint(
+  overlay: CanvasChromeOverlay,
+  compact: boolean,
+): boolean {
+  if (overlay === "settings" || overlay === "language") return !compact;
+  if (overlay === "mobile") return compact;
+  return true;
+}
+
+/** Shell-level chrome that an open modal dialog makes inert with the paper. */
+const MODAL_INERT_SHELL_CHROME = [
+  ".tool-rail",
+  ".material-files",
+  ".material-files-toggle",
+  ".matter-header",
+].join(", ");
 
 // Inquiry stays over the material rather than making the material inert.
 const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language", "inquiry"]);
@@ -681,13 +719,6 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
-      // Closing the inquiry discards its draft and answers, so an Escape that
-      // is only dismissing an IME candidate window must not reach it.
-      if (isCancelEscape({ key: event.key, isComposing: event.isComposing })) {
-        event.preventDefault();
-        closeOverlay();
-        return;
-      }
       if (overlay === "settings") moveMenuFocus(event, settingsMenuRef.current);
       else if (overlay === "language") moveMenuFocus(event, languageMenuRef.current);
       else if (MODAL_OVERLAYS.has(overlay)) trapTabKey(event, dialogRef.current);
@@ -701,16 +732,44 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     };
   }, [closeOverlay, overlay]);
 
+  // A menu is a transient surface above the paper; Ask Matter and the dialogs
+  // are panels. Either way one Escape closes only this overlay, and an Escape a
+  // focused field, a gesture, or an IME candidate window already owns never
+  // reaches it.
+  useEscapeLayer(
+    overlay !== null,
+    overlay === "settings" || overlay === "language" ? "transient" : "panel",
+    () => {
+      closeOverlay();
+      return true;
+    },
+  );
+
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 767px)");
+    const query = window.matchMedia(`(max-width: ${COMPACT_CHROME_MAX_WIDTH_PX}px)`);
     const onBreakpointChange = () => {
-      inquiryBubbleRef.current?.detach();
-      returnFocusRef.current = null;
-      onOverlayChange(null);
+      const compact = query.matches;
+      // Every trigger outside the compact menu is hidden below the breakpoint,
+      // and the compact trigger is hidden above it: hand the return path to
+      // the control that still exists.
+      const returnTarget = returnFocusRef.current;
+      if (returnTarget !== null) {
+        if (compact && returnTarget !== mobileTriggerRef.current) {
+          returnFocusRef.current = mobileTriggerRef.current;
+        } else if (!compact && returnTarget === mobileTriggerRef.current) {
+          returnFocusRef.current = overlay === "inquiry"
+            ? askButtonRef.current
+            : settingsButtonRef.current;
+        }
+      }
+      // Only a surface that no longer exists at this width closes. Ask Matter
+      // keeps its turns and a dialog keeps its editor across the handoff.
+      if (overlayOutlivesBreakpoint(overlay, compact)) return;
+      closeOverlay();
     };
     query.addEventListener("change", onBreakpointChange);
     return () => query.removeEventListener("change", onBreakpointChange);
-  }, [onOverlayChange]);
+  }, [closeOverlay, overlay]);
 
   useLayoutEffect(() => {
     if (!modalOpen) return;
@@ -727,14 +786,6 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     if (root == null || canvas == null) return;
 
     const shell = canvas.closest<HTMLElement>(".matter-shell");
-    // The docked material index is a sibling of the paper, not a child of it,
-    // so inerting the canvas alone left it clickable behind an aria-modal
-    // dialog at desk widths, where it is always visible.
-    const siblings = [
-      shell?.querySelector<HTMLElement>(".tool-rail") ?? null,
-      shell?.querySelector<HTMLElement>(".material-files") ?? null,
-    ].filter((element): element is HTMLElement => element !== null);
-
     const records = new Map<HTMLElement, Readonly<{ ariaHidden: string | null; inert: boolean }>>();
     const hide = (element: HTMLElement) => {
       if (element === root || records.has(element)) return;
@@ -748,14 +799,29 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
       }
     };
 
-    hideCanvasChildren();
-    for (const sibling of siblings) hide(sibling);
+    // Shell chrome outside the paper stays live above an aria-modal dialog
+    // unless it is named here: the index and its drawer handle (which sits
+    // above the paper and can slide over a phone dialog), the rail, and the
+    // brand header.
+    const hideShellChrome = () => {
+      for (const element of shell?.querySelectorAll<HTMLElement>(MODAL_INERT_SHELL_CHROME) ?? []) {
+        hide(element);
+      }
+    };
+    const hideEverythingBehind = () => {
+      hideCanvasChildren();
+      hideShellChrome();
+    };
+
+    hideEverythingBehind();
     canvas.setAttribute("data-canvas-modal-open", "true");
 
     // A snapshot taken once leaves anything React mounts later — the empty-state
-    // swap, a lasso count — tabbable behind the dialog.
-    const observer = new MutationObserver(hideCanvasChildren);
+    // swap, a lasso count, a drawer handle after a breakpoint — tabbable behind
+    // the dialog.
+    const observer = new MutationObserver(hideEverythingBehind);
     observer.observe(canvas, { childList: true });
+    if (shell !== null) observer.observe(shell, { childList: true });
 
     return () => {
       observer.disconnect();
@@ -1006,7 +1072,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
                 <CloseIcon />
               </button>
             </header>
-            <nav aria-label="Matter menu" className={styles.mobileNav}>
+            <nav aria-label={copy.menuNavigation} className={styles.mobileNav}>
               <section className={styles.mobileSection}>
                 <button
                   className={styles.mobilePrimary}
@@ -1176,6 +1242,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   const [state, dispatch] = useReducer(reduceInquiry, undefined, createInquiryState);
   const [threadScrollable, setThreadScrollable] = useState(false);
   const [submissionPending, setSubmissionPending] = useState(false);
+  // Cancel takes Ask's place the moment a question is sent. It stays inert for
+  // a beat so the second click of a double-click, or a click already on its
+  // way, cannot revoke the question it just sent.
+  const [cancelArmed, setCancelArmed] = useState(true);
+  const cancelArmTimerRef = useRef<number | null>(null);
+  const [statusLive, setStatusLive] = useState(false);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const threadRef = useRef<HTMLDivElement>(null);
   const requestRef = useRef<AbortController | null>(null);
@@ -1209,7 +1281,16 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     cancelLabel: copy.dictateCancel,
   });
 
+  const presentedRef = useRef(presented);
+  useLayoutEffect(() => {
+    presentedRef.current = presented;
+  }, [presented]);
+
+  // Detaching dismisses presentation only. A submitted question keeps its
+  // request, its pending turn, and its answer; another surface closing an
+  // already-hidden bubble must not drop an answer the person has not yet seen.
   const detach = useCallback(() => {
+    if (!presentedRef.current) return;
     cancelDictation();
     dispatch({ type: "close" });
   }, [cancelDictation]);
@@ -1217,6 +1298,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   useImperativeHandle(forwardedRef, () => ({ detach }), [detach]);
 
   useEffect(() => () => {
+    if (cancelArmTimerRef.current !== null) window.clearTimeout(cancelArmTimerRef.current);
     authorityRef.current += 1;
     const request = requestRef.current;
     requestRef.current = null;
@@ -1236,9 +1318,10 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     pendingSubmissionRef.current = null;
     if (pending !== null) {
       dispatch({
-        type: "withdraw-unavailable",
+        type: "withdraw",
         id: pending.answerId,
         question: pending.question,
+        reason: null,
       });
     }
   }), []);
@@ -1273,6 +1356,18 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     return () => cancelAnimationFrame(frame);
   }, [presented]);
 
+  // The status region mounts empty with each opening and speaks one frame
+  // later, so a refusal that arrived while the bubble was closed is announced
+  // when it is reopened rather than read silently as initial content.
+  useLayoutEffect(() => {
+    if (!presented) return;
+    const frame = requestAnimationFrame(() => setStatusLive(true));
+    return () => {
+      cancelAnimationFrame(frame);
+      setStatusLive(false);
+    };
+  }, [presented]);
+
   const ask = useCallback(() => {
     if (!canAsk || submittingRef.current) return;
     const question = inquiryText(state).trim();
@@ -1299,6 +1394,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     requestRef.current?.abort();
     const request = new AbortController();
     requestRef.current = request;
+    setCancelArmed(false);
+    if (cancelArmTimerRef.current !== null) window.clearTimeout(cancelArmTimerRef.current);
+    cancelArmTimerRef.current = window.setTimeout(() => {
+      cancelArmTimerRef.current = null;
+      setCancelArmed(true);
+    }, INQUIRY_CANCEL_ARM_MS);
     const authority = authorityRef.current;
     const requestOwner = owner;
     void askInquiry({
@@ -1315,7 +1416,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           !sameInquiryContextOwner(requestOwner, ownerRef.current)
         ) return;
         if (outcome.status === "unavailable" && outcome.reason !== "NO_MATERIAL") {
-          dispatch({ type: "withdraw-unavailable", id: answerId, question });
+          dispatch({ type: "withdraw", id: answerId, question, reason: outcome.reason });
           pendingSubmissionRef.current = null;
           return;
         }
@@ -1325,7 +1426,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
       })
       .catch(() => {
         if (requestRef.current !== request) return;
-        dispatch({ type: "withdraw-unavailable", id: answerId, question });
+        dispatch({ type: "withdraw", id: answerId, question, reason: "UNREACHABLE" });
         pendingSubmissionRef.current = null;
       })
       .finally(() => {
@@ -1336,6 +1437,23 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         }
       });
   }, [canAsk, context, language, owner, record, state]);
+
+  // Explicit cancellation is the one person-owned way to revoke a submitted
+  // question. It returns the question to the field without a notice and gives
+  // a late answer no authority over either the bubble or the local record.
+  const cancelPendingAsk = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (!inquiryCancelAccepted(event.detail)) return;
+    const pending = pendingSubmissionRef.current;
+    const request = requestRef.current;
+    if (pending === null || request === null) return;
+    requestRef.current = null;
+    pendingSubmissionRef.current = null;
+    submittingRef.current = false;
+    setSubmissionPending(false);
+    request.abort(new DOMException("Inquiry cancelled", "AbortError"));
+    dispatch({ type: "withdraw", id: pending.answerId, question: pending.question, reason: null });
+    requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
+  }, []);
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -1402,12 +1520,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           data-inquiry-field
           onChange={(event) => dispatch({ type: "type", value: event.currentTarget.value })}
           onKeyDown={(event) => {
-            if (!shouldSubmitInquiryOnEnter({
-              key: event.key,
-              shiftKey: event.shiftKey,
-              isComposing: event.nativeEvent.isComposing,
-              canSubmit: canAsk,
-            })) return;
+            if (!shouldSubmitInquiryOnEnter(event.nativeEvent, canAsk)) return;
             event.preventDefault();
             ask();
           }}
@@ -1440,30 +1553,48 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
         >
           <MicIcon />
         </button>
-        <button
-          className={styles.inquiryAsk}
-          data-inquiry-control="ask"
-          disabled={!canAsk}
-          onClick={ask}
-          type="button"
-        >
-          {copy.ask}
-        </button>
+        {/* Distinct keys: the control that replaces Ask is a new element, and
+            focus goes back to the field rather than landing on Cancel. */}
+        {hasPendingAnswer && submissionPending ? (
+          <button
+            className={styles.inquiryAsk}
+            data-inquiry-control="cancel"
+            disabled={!cancelArmed}
+            key="cancel"
+            onClick={cancelPendingAsk}
+            type="button"
+          >
+            {copy.askCancel}
+          </button>
+        ) : (
+          <button
+            className={styles.inquiryAsk}
+            data-inquiry-control="ask"
+            disabled={!canAsk}
+            key="ask"
+            onClick={() => {
+              ask();
+              focusWithoutScroll(fieldRef.current ?? undefined);
+            }}
+            type="button"
+          >
+            {copy.ask}
+          </button>
+        )}
       </div>
-      {voiceBusy || state.notice !== null || state.turns.length === 0 || record?.phase === "error" ? (
-        <p
-          aria-atomic="true"
-          aria-live="polite"
-          className={styles.inquiryStatus}
-          role="status"
-        >
-          {record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
-            ? voiceNoticeCopy(copy, state.notice)
-            : listening ? copy.listening
-              : transcribing ? copy.transcribing
-                : hint}
-        </p>
-      ) : null}
+      {/* Mounted before it speaks, so a later notice is announced. */}
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className={styles.inquiryStatus}
+        role="status"
+      >
+        {!statusLive ? null : record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
+          ? noticeCopy(copy, state.notice)
+          : listening ? copy.listening
+            : transcribing ? copy.transcribing
+              : state.turns.length === 0 ? hint : null}
+      </p>
     </div>
   );
 });
@@ -1472,19 +1603,22 @@ function InquiryTurn({ copy, turn }: Readonly<{ copy: CanvasChromeCopy; turn: Re
   const [beganPending] = useState(
     () => turn.role === "matter" && turn.outcome.status === "pending",
   );
-  const accessibleAnswer = turn.role === "matter" ? answerCopy(copy, turn.outcome) : undefined;
 
   return (
     <p
       aria-atomic={turn.role === "matter" ? "true" : undefined}
-      aria-label={accessibleAnswer}
       aria-live={turn.role === "matter" && beganPending ? "polite" : "off"}
       className={styles.inquiryTurn}
       data-inquiry-role={turn.role}
       dir="auto"
     >
       {turn.role === "person" ? turn.text : (
-        <InquiryAnswer animate={beganPending} copy={copy} outcome={turn.outcome} />
+        <>
+          <InquiryAnswer animate={beganPending} copy={copy} outcome={turn.outcome} />
+          {/* The visible answer types itself in and stays hidden from
+              assistive technology; this node carries the final text once. */}
+          <span className="visually-hidden">{answerCopy(copy, turn.outcome)}</span>
+        </>
       )}
     </p>
   );
@@ -1503,7 +1637,7 @@ function InquiryAnswer({ animate, copy, outcome }: Readonly<{
     );
   }
   if (outcome.status !== "answered" || !animate) {
-    return <span aria-hidden="true">{answerCopy(copy, outcome)}</span>;
+    return <span aria-hidden="true" data-inquiry-answer-text>{answerCopy(copy, outcome)}</span>;
   }
   return <AnimatedInquiryAnswer answer={outcome.text} />;
 }
@@ -1539,7 +1673,7 @@ function AnimatedInquiryAnswer({ answer }: Readonly<{ answer: string }>) {
     };
   }, [presentation.terminal, steps]);
 
-  return <span aria-hidden="true">{text}</span>;
+  return <span aria-hidden="true" data-inquiry-answer-text>{text}</span>;
 }
 
 function appendInquiryRecord(
@@ -1561,6 +1695,17 @@ function appendInquiryRecord(
 }
 
 const INQUIRY_FIELD_MAX_HEIGHT = 95;
+/** How long Cancel stays inert after the question it would revoke was sent. */
+export const INQUIRY_CANCEL_ARM_MS = 400;
+
+/**
+ * Only a deliberate single activation cancels: the second click of a
+ * double-click on Ask reports `detail` 2 and must not revoke the question the
+ * first click sent. Keyboard activation reports 0.
+ */
+export function inquiryCancelAccepted(clickDetail: number): boolean {
+  return clickDetail <= 1;
+}
 type TerminalInquiryOutcome = Exclude<InquiryTurnOutcome, Readonly<{ status: "pending" }>>;
 const NO_MATERIAL: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
 
@@ -1578,8 +1723,11 @@ function answerCopy(copy: CanvasChromeCopy, outcome: InquiryTurnOutcome): string
   }
 }
 
-function voiceNoticeCopy(copy: CanvasChromeCopy, notice: InquiryVoiceNotice): string {
-  switch (notice) {
+function noticeCopy(copy: CanvasChromeCopy, notice: InquiryNotice): string {
+  if (notice.kind === "answer") {
+    return answerCopy(copy, Object.freeze({ status: "unavailable", reason: notice.reason }));
+  }
+  switch (notice.reason) {
     case "voice-denied": return copy.noticeVoiceDenied;
     case "voice-unsupported": return copy.noticeVoiceUnsupported;
     case "voice-failed": return copy.noticeVoiceFailed;

@@ -831,9 +831,8 @@ async function classifyMaterialResponse(
     error.fallbackReason === "MODEL_REJECTED"
   ) return "model-rejected";
   if (
-    response.status === 429 &&
-    error.code === "TURN_UNAVAILABLE" &&
-    error.fallbackReason === "MODEL_BUSY"
+    (response.status === 429 || response.status === 503) &&
+    error.code === "RATE_LIMITED"
   ) return "admission-failed";
   if (response.status === 403 && error.code === "INVALID_REQUEST") return "admission-failed";
   if (response.status === 503 && error.code === "TURN_UNAVAILABLE") {

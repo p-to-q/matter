@@ -31,20 +31,32 @@ export type CanvasCameraGuidanceState =
   | Readonly<{ kind: "pan"; zoom: number }>;
 
 /**
- * A submitted Point-and-Talk rewrite that ended without a field to show it:
- * the provider left the text unchanged, or the passage changed first. It is
- * shown in place of the next hint until the person's next action.
+ * A submitted Elastic turn that the lasso may no longer show: a resolved
+ * result waiting for its passage, or an outcome that changed nothing.
+ */
+export type CanvasExpansionGuidanceState =
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "parked" }>
+  | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
+
+/**
+ * A submitted Point-and-Talk turn the field may no longer show: a result
+ * waiting for its passage to be laid out, or a rewrite that ended without a
+ * field to report it because the provider left the text unchanged or the
+ * passage changed first. An outcome stays until the person's next action.
  */
 export type CanvasRewriteGuidanceState =
   | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "parked" }>
   | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
 
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
+  expansion?: CanvasExpansionGuidanceState;
+  rewrite?: CanvasRewriteGuidanceState;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
-  rewrite?: CanvasRewriteGuidanceState;
 }>;
 
 type CanvasActionGuidanceId =
@@ -66,6 +78,10 @@ type CanvasActionGuidanceId =
   | "set-degree"
   | "apply-stretch"
   | "wait-expansion"
+  | "expansion-parked"
+  | "text-swap-parked"
+  | "expansion-unavailable"
+  | "expansion-stale"
   | "circle-selection"
   | "unfold-thought"
   | "speak-child"
@@ -76,6 +92,8 @@ type CanvasActionGuidanceId =
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
 export const CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT = 34;
+const NO_EXPANSION: CanvasExpansionGuidanceState = Object.freeze({ kind: "none" });
+const NO_REWRITE: CanvasRewriteGuidanceState = Object.freeze({ kind: "none" });
 
 const GUIDANCE_COPY = Object.freeze({
   "allow-microphone": "Allow microphone access.",
@@ -96,6 +114,10 @@ const GUIDANCE_COPY = Object.freeze({
   "set-degree": "Pull either handle outward.",
   "apply-stretch": "Tap the selection to confirm.",
   "wait-expansion": "Confirmed. Expanding.",
+  "expansion-parked": "Expansion waits for its passage.",
+  "text-swap-parked": "Rewording waits for its passage.",
+  "expansion-unavailable": "Not expanded. Text unchanged.",
+  "expansion-stale": "Passage changed. Not expanded.",
   "circle-selection": "Circle text between punctuation.",
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
@@ -123,6 +145,10 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "set-degree": "向外拉动任一握点展开。",
   "apply-stretch": "轻点选中框内确认展开。",
   "wait-expansion": "已确认，正在展开。",
+  "expansion-parked": "展开结果正在等待原段落出现。",
+  "text-swap-parked": "改写结果正在等待原段落出现。",
+  "expansion-unavailable": "未展开，原文未变。",
+  "expansion-stale": "段落已变化，未展开。",
   "circle-selection": "圈住一段连续文字，边界停在标点处。",
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
@@ -159,11 +185,35 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     return projectAdmissionGuidance(input.admission);
   }
 
-  if (input.rewrite?.kind === "unchanged") {
-    return guidance(
-      input.rewrite.reason === "stale" ? "text-swap-stale" : "text-swap-unavailable",
-      "recovery",
-    );
+  // A submitted expansion outranks lasso guidance: while it waits off-screen
+  // it also blocks new stretches, so the line must say why and offer release.
+  const expansion = input.expansion ?? NO_EXPANSION;
+  switch (expansion.kind) {
+    case "parked":
+      return guidance("expansion-parked", "recovery");
+    case "unchanged":
+      return expansion.reason === "stale"
+        ? guidance("expansion-stale", "recovery")
+        : guidance("expansion-unavailable", "recovery");
+    case "none":
+      break;
+    default:
+      return assertNever(expansion);
+  }
+  // A parked Point-and-Talk result keeps its owner busy the same way, and a
+  // rewrite that ended without its field says so once.
+  const rewrite = input.rewrite ?? NO_REWRITE;
+  switch (rewrite.kind) {
+    case "parked":
+      return guidance("text-swap-parked", "recovery");
+    case "unchanged":
+      return rewrite.reason === "stale"
+        ? guidance("text-swap-stale", "recovery")
+        : guidance("text-swap-unavailable", "recovery");
+    case "none":
+      break;
+    default:
+      return assertNever(rewrite);
   }
 
   if (input.material.kind === "empty") {
@@ -230,6 +280,17 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
   }
 }
 
+/** The polite announcement for an expansion that ended without a change. */
+export function localizeExpansionOutcome(
+  reason: "unavailable" | "stale",
+  language: CanvasLanguage,
+): string {
+  return localizeCanvasGuidance(
+    guidance(reason === "stale" ? "expansion-stale" : "expansion-unavailable", "recovery"),
+    language,
+  ).text;
+}
+
 /** The polite announcement for a rewrite that ended without a change. */
 export function localizeRewriteOutcome(
   reason: "unavailable" | "stale",
@@ -239,6 +300,22 @@ export function localizeRewriteOutcome(
     guidance(reason === "stale" ? "text-swap-stale" : "text-swap-unavailable", "recovery"),
     language,
   ).text;
+}
+
+/** The explicit release beside a parked Elastic or Point-and-Talk result. */
+export function localizeParkedRelease(language: CanvasLanguage): string {
+  switch (language) {
+    case "zh-CN":
+      return "放弃";
+    case "zh-TW":
+      return "放棄";
+    case "ja-JP":
+      return "破棄";
+    case "de-DE":
+      return "Verwerfen";
+    default:
+      return "Discard";
+  }
 }
 
 /** Localization changes copy only; the interaction state machine remains authoritative. */
@@ -265,8 +342,9 @@ export function localizeCanvasGuidance(
   });
 }
 
+// Each table is complete on its own: a spread would let a missing key fall
+// back to another language instead of failing the type check.
 const GUIDANCE_COPY_ZH_TW = Object.freeze({
-  ...GUIDANCE_COPY_ZH,
   "allow-microphone": "允許使用麥克風。",
   "speak-recording": "說出你的想法。",
   "wait-recording": "請等待錄音結束。",
@@ -285,15 +363,18 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "set-degree": "向外拉動任一握點展開。",
   "apply-stretch": "輕點選取框內確認展開。",
   "wait-expansion": "已確認，正在展開。",
+  "expansion-parked": "展開結果正在等待原段落出現。",
+  "text-swap-parked": "改寫結果正在等待原段落出現。",
+  "expansion-unavailable": "未展開，原文未變。",
+  "expansion-stale": "段落已變更，未展開。",
   "circle-selection": "圈住一段連續文字，邊界停在標點處。",
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
   "select-thought": "選擇一段想法。",
   "text-swap-unavailable": "未改寫，原文未變。",
   "text-swap-stale": "段落已變更，未改寫。",
-});
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const GUIDANCE_COPY_JA = Object.freeze({
-  ...GUIDANCE_COPY,
   "allow-microphone": "マイクの使用を許可してください。",
   "speak-recording": "考えを話してください。",
   "wait-recording": "録音が終わるまで待ってください。",
@@ -312,15 +393,18 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "set-degree": "どちらかのハンドルを外向きに引いて展開。",
   "apply-stretch": "選択枠内をタップして確定。",
   "wait-expansion": "確定しました。展開中。",
+  "expansion-parked": "展開結果は元の段落の表示を待っています。",
+  "text-swap-parked": "言い換え結果は元の段落の表示を待っています。",
+  "expansion-unavailable": "展開されませんでした。原文はそのままです。",
+  "expansion-stale": "段落が変わったため展開しませんでした。",
   "circle-selection": "連続した一節を囲み、句読点で境界を止めます。",
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
   "select-thought": "考えを一つ選んでください。",
   "text-swap-unavailable": "書き換えませんでした。原文はそのままです。",
   "text-swap-stale": "段落が変わったため書き換えませんでした。",
-});
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const GUIDANCE_COPY_DE = Object.freeze({
-  ...GUIDANCE_COPY,
   "allow-microphone": "Mikrofonzugriff erlauben.",
   "speak-recording": "Sprich deinen Gedanken aus.",
   "wait-recording": "Warte, bis die Aufnahme beendet ist.",
@@ -339,13 +423,17 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "set-degree": "Einen Griff nach außen ziehen, um zu erweitern.",
   "apply-stretch": "Zum Bestätigen in die Auswahl tippen.",
   "wait-expansion": "Bestätigt. Wird erweitert.",
+  "expansion-parked": "Die Erweiterung wartet auf ihre Passage.",
+  "text-swap-parked": "Die Umformulierung wartet auf ihre Passage.",
+  "expansion-unavailable": "Nicht erweitert. Text unverändert.",
+  "expansion-stale": "Passage geändert. Nicht erweitert.",
   "circle-selection": "Eine zusammenhängende Passage einkreisen; an Satzzeichen enden.",
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
   "select-thought": "Einen Gedanken auswählen.",
   "text-swap-unavailable": "Nicht umgeschrieben. Text unverändert.",
   "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
-});
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 function projectAdmissionGuidance(
   admission: Exclude<AdmissionInteractionState, { readonly phase: "idle" }>,

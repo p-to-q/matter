@@ -41,9 +41,11 @@ export function PointTalkTurn({
   nodeId,
   onClose,
   onCommitted,
-  onReleasedOutcome,
+  onDeliveryParkedChange,
   onPhaseChange,
   onReleased,
+  onReleasedOutcome,
+  penActive,
   presenceIdentity,
   presented,
   surfaceAvailable,
@@ -71,9 +73,12 @@ export function PointTalkTurn({
   nodeId: string;
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
-  onReleasedOutcome?: (outcome: PointTalkReleasedOutcome) => void;
+  /** Receives an explicit release while a resolved result is parked, else null. */
+  onDeliveryParkedChange?: (release: (() => void) | null) => void;
   onPhaseChange?: (phase: TextSwapInteractionState["phase"]) => void;
   onReleased: () => void;
+  onReleasedOutcome?: (outcome: PointTalkReleasedOutcome) => void;
+  penActive: (timeStamp: number) => boolean;
   presenceIdentity: string;
   presented: boolean;
   surfaceAvailable: boolean;
@@ -121,6 +126,16 @@ export function PointTalkTurn({
   useEffect(() => {
     onPhaseChange?.(phase);
   }, [onPhaseChange, phase]);
+  const controllerRef = useRef(controller);
+  useEffect(() => {
+    controllerRef.current = controller;
+  });
+  const deliveryParked = controller.deliveryParked;
+  useEffect(() => {
+    // Discarding a parked result is an explicit person cancellation.
+    onDeliveryParkedChange?.(deliveryParked ? () => controllerRef.current.cancel() : null);
+  }, [deliveryParked, onDeliveryParkedChange]);
+  useEffect(() => () => onDeliveryParkedChange?.(null), [onDeliveryParkedChange]);
   useEffect(() => {
     if (!presented || voiceCommand === null || voiceCommand === undefined) return;
     if (appliedVoiceCommandIdRef.current === voiceCommand.id) return;
@@ -184,6 +199,7 @@ export function PointTalkTurn({
       onRetry={controller.retry}
       onStartVoice={controller.startRecording}
       onStopVoice={controller.stopRecording}
+      penActive={penActive}
       onSubmit={(direction) => {
         if (!controller.acceptDirection(direction)) return;
         controller.submit();

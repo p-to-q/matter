@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -54,6 +53,8 @@ export type UseTextSwapInput<TCommitted> = Readonly<{
 
 export type TextSwapController = Readonly<{
   state: TextSwapInteractionState;
+  /** A resolved result is held only because its passage is not laid out. */
+  deliveryParked: boolean;
   enter: () => boolean;
   startRecording: () => boolean;
   stopRecording: () => void;
@@ -88,6 +89,8 @@ export function useTextSwap<TCommitted>(
   );
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const getParked = useCallback(() => driver.isDeliveryParked(), [driver]);
+  const deliveryParked = useSyncExternalStore(subscribe, getParked, getParked);
 
   useLayoutEffect(() => {
     driver.updateBindings(toDriverBindings(input));
@@ -121,21 +124,12 @@ export function useTextSwap<TCommitted>(
     return () => driver.release();
   }, [driver]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !deliveryAvailableRef.current || event.key !== "Escape" ||
-        driver.getState().phase === "idle"
-      ) return;
-      event.preventDefault();
-      driver.detachPresentation();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [driver]);
+  // Escape reaches `detachPresentation` through the Point and Talk surface's
+  // layer in the composition's single Escape owner, never a listener here.
 
   return {
     state,
+    deliveryParked,
     enter: () => {
       if (!input.enabled) return false;
       const basis = createTextSwapBasis({

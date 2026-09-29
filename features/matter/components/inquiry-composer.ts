@@ -6,6 +6,13 @@ export const INQUIRY_MAX_TURNS = 40;
 
 export type InquiryPhase = "idle" | "listening" | "transcribing";
 export type InquiryVoiceNotice = "voice-unsupported" | "voice-denied" | "voice-failed";
+/**
+ * One quiet line in the bubble's status slot. An answer that could not arrive
+ * is said here, never drawn into the record as an error turn.
+ */
+export type InquiryNotice =
+  | Readonly<{ kind: "voice"; reason: InquiryVoiceNotice }>
+  | Readonly<{ kind: "answer"; reason: InquiryUnavailableReason }>;
 export type InquiryTurnOutcome =
   | Readonly<{ status: "pending" }>
   | Readonly<{ status: "answered"; text: string }>
@@ -23,7 +30,7 @@ export type InquiryState = Readonly<{
   phase: InquiryPhase;
   draft: string;
   interim: string;
-  notice: InquiryVoiceNotice | null;
+  notice: InquiryNotice | null;
   turns: readonly InquiryTurn[];
   nextTurnId: number;
 }>;
@@ -36,7 +43,17 @@ export type InquiryEvent =
   | Readonly<{ type: "listen-failed"; notice: InquiryVoiceNotice }>
   | Readonly<{ type: "ask" }>
   | Readonly<{ type: "answer"; id: number; outcome: InquiryTurnOutcome }>
-  | Readonly<{ type: "withdraw-unavailable"; id: number; question: string }>
+  /**
+   * Returns a question that received no answer to the composer. `reason` names
+   * a provider refusal to say quietly; null is explicit cancellation or page
+   * exit, which need no notice.
+   */
+  | Readonly<{
+      type: "withdraw";
+      id: number;
+      question: string;
+      reason: InquiryUnavailableReason | null;
+    }>
   | Readonly<{ type: "settle-pending"; outcome: InquiryTurnOutcome }>
   | Readonly<{ type: "scope-changed" }>
   | Readonly<{ type: "close" }>;
@@ -90,7 +107,7 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
     case "listened":
       return settle(state, null);
     case "listen-failed":
-      return settle(state, event.notice);
+      return settle(state, Object.freeze({ kind: "voice", reason: event.notice }));
     case "ask": {
       const question = inquiryText(state).trim();
       if (question.length === 0) return state;
@@ -122,7 +139,7 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
             : turn,
         )),
       });
-    case "withdraw-unavailable": {
+    case "withdraw": {
       const ownsPendingAnswer = state.turns.some((turn) =>
         turn.id === event.id && turn.role === "matter" && turn.outcome.status === "pending"
       );
@@ -132,6 +149,9 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
         ...state,
         draft: visibleDraft.length === 0 ? clamp(event.question) : state.draft,
         interim: visibleDraft.length === 0 ? "" : state.interim,
+        notice: event.reason === null
+          ? state.notice
+          : Object.freeze({ kind: "answer", reason: event.reason }),
         turns: Object.freeze(state.turns.filter((turn) =>
           turn.id !== event.id && turn.id !== event.id - 1
         )),
@@ -153,11 +173,29 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
     case "scope-changed":
       return createInquiryState();
     case "close":
-      return createInquiryState();
+      // Closing dismisses presentation, not a submitted question. The opening
+      // after this one begins clean except for an exchange still in flight,
+      // which keeps its turn ids so its answer can still find it. Once that
+      // exchange has been seen settled, the next close lets it go.
+      return freeze({
+        ...createInquiryState(),
+        turns: Object.freeze(state.turns.filter((turn) => inFlight(state.turns, turn))),
+        nextTurnId: state.nextTurnId,
+      });
   }
 }
 
-function settle(state: InquiryState, notice: InquiryVoiceNotice | null): InquiryState {
+/** A pending answer and the question it answers. */
+function inFlight(turns: readonly InquiryTurn[], turn: InquiryTurn): boolean {
+  const answerId = turn.role === "matter" ? turn.id : turn.id + 1;
+  return turns.some((candidate) =>
+    candidate.id === answerId &&
+    candidate.role === "matter" &&
+    candidate.outcome.status === "pending"
+  );
+}
+
+function settle(state: InquiryState, notice: InquiryNotice | null): InquiryState {
   return freeze({
     ...state,
     phase: "idle",

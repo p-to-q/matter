@@ -38,13 +38,18 @@ import type { MatterLocale } from "../config/locales";
 
 export type MaterialIngressStage = "admission" | "repair" | "transform" | "text-swap";
 
-/** Content-free evidence that one immutable lexical session was used. */
+/**
+ * Content-free evidence that one immutable lexical session was used.
+ * `canonicalizationWithheld` records that proposed edits made an otherwise
+ * valid result invalid, so the raw validated result was kept instead.
+ */
 export type MaterialIngressReceipt = Readonly<{
   stage: MaterialIngressStage;
   lexicalGeneration: number;
   lexicalSourceRevision: number;
   canonicalized: boolean;
   editCount: number;
+  canonicalizationWithheld: boolean;
 }>;
 
 export type PrepareAdmissionInput = Readonly<{
@@ -164,11 +169,15 @@ export function prepareAdmissionIngress(
     input.anchor,
     { ...input.values, transcript: canonical.text },
   );
-  if (!translated.ok) return translated;
-
-  const admittedText = readAdmissionText(translated);
-  if (admittedText === null) {
-    return unsupportedAdmission();
+  const admittedText = translated.ok ? readAdmissionText(translated) : null;
+  if (!translated.ok || admittedText === null) {
+    // A spelling rule never costs the person their spoken words.
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      admittedText: rawAdmittedText,
+      receipt: withheldReceipt("admission", input.lexicalSession),
+    });
   }
 
   return Object.freeze({
@@ -198,7 +207,17 @@ export function prepareRepairIngress(input: PrepareRepairInput): PrepareRepairRe
   }
   const values = Object.freeze({ ...input.values, text: canonical.text });
   const final = admissionRepairToTreeCommand(input.tree, values);
-  if (!final.ok) return final;
+  // A canonical repair equal to the admitted text changes nothing the Wiki
+  // allows; committing the raw form would reintroduce the forbidden spelling.
+  if (!final.ok && canonical.text === input.values.expectedText) return final;
+  if (!final.ok) {
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      values: input.values,
+      receipt: withheldReceipt("repair", input.lexicalSession),
+    });
+  }
   return Object.freeze({
     ok: true,
     command: final.command,
@@ -233,16 +252,35 @@ export function prepareTransformIngress(
     text: parsedPlan.action.text,
     eligibleRanges,
   });
-  const finalPlan = canonical.changed
-    ? replaceTransformPlanText(parsedPlan, canonical.text)
-    : parsedPlan;
+  if (!canonical.changed) {
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      plan: parsedPlan,
+      receipt: createReceipt("transform", input.lexicalSession, canonical),
+    });
+  }
+  const finalPlan = replaceTransformPlanText(parsedPlan, canonical.text);
   const final = planToTreeCommand(
     input.tree,
     parsedEnvelope.envelope,
     finalPlan,
     options,
   );
-  if (!final.ok) return final;
+  if (!final.ok && canonical.text === parsedEnvelope.envelope.selection.selectedText) {
+    return final;
+  }
+  if (!final.ok) {
+    // Local spelling authority may refine a valid answer, never cost it. Only
+    // a real change that a canonical form pushes past a bound or policy keeps
+    // its validated raw form.
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      plan: parsedPlan,
+      receipt: withheldReceipt("transform", input.lexicalSession),
+    });
+  }
   return Object.freeze({
     ok: true,
     command: final.command,
@@ -293,17 +331,35 @@ export function prepareTextSwapIngress(
     channel: "written",
     text: parsedPlan.action.text,
   });
-  const finalPlan = canonical.changed
-    ? replaceTextSwapPlanText(parsedPlan, canonical.text)
-    : parsedPlan;
-
+  if (!canonical.changed) {
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      plan: parsedPlan,
+      receipt: createReceipt("text-swap", input.lexicalSession, canonical),
+    });
+  }
+  const finalPlan = replaceTextSwapPlanText(parsedPlan, canonical.text);
   const final = planToTextSwapCommand(
     input.tree,
     parsedEnvelope.envelope,
     finalPlan,
     options,
   );
-  if (!final.ok) return final;
+  // An answer that differs only by spellings the person's Wiki forbids is no
+  // change at all; withholding would commit exactly the forbidden form.
+  if (!final.ok && canonical.text === parsedEnvelope.envelope.selection.selectedText) {
+    return final;
+  }
+  if (!final.ok) {
+    // Local spelling authority may refine a valid answer, never cost it.
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      plan: parsedPlan,
+      receipt: withheldReceipt("text-swap", input.lexicalSession),
+    });
+  }
 
   return Object.freeze({
     ok: true,
@@ -345,6 +401,21 @@ function createReceipt(
     lexicalSourceRevision: session.snapshot.sourceRevision,
     canonicalized: canonical.changed,
     editCount: canonical.editCount,
+    canonicalizationWithheld: false,
+  });
+}
+
+function withheldReceipt(
+  stage: MaterialIngressStage,
+  session: MaterialLexicalSession,
+): MaterialIngressReceipt {
+  return Object.freeze({
+    stage,
+    lexicalGeneration: session.snapshot.generation,
+    lexicalSourceRevision: session.snapshot.sourceRevision,
+    canonicalized: false,
+    editCount: 0,
+    canonicalizationWithheld: true,
   });
 }
 

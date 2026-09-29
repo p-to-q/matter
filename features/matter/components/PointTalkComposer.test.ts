@@ -10,6 +10,7 @@ import {
   syncSettledStatus,
 } from "./presence";
 import {
+  pointTalkCopy,
   pointTalkOutsidePointerDismisses,
   pointTalkPhaseLabel,
   pointTalkRecoveryAction,
@@ -133,5 +134,19 @@ describe("Point Talk recovery", () => {
     expect(pointTalkStatusInput(scope, "pending")).toMatchObject({ urgent: true, lingers: true });
     expect(pointTalkStatusInput(scope, "permission")).toMatchObject({ urgent: false, lingers: true });
     expect(pointTalkStatusInput(scope, "error")).toMatchObject({ urgent: true, lingers: false });
+  });
+});
+
+describe("Point and Talk copy", () => {
+  it("speaks each locale's own status lines", () => {
+    const english = pointTalkCopy("en-US");
+    for (const locale of ["ja-JP", "de-DE"] as const) {
+      const copy = pointTalkCopy(locale);
+      expect(copy.listening).not.toBe(english.listening);
+      expect(copy.rewording).not.toBe(english.rewording);
+      expect(copy.originalKept).not.toBe(english.originalKept);
+    }
+    expect(pointTalkCopy("zh-TW").originalKept).toBe("原文沒有改變。");
+    expect(pointTalkCopy("zh-CN").originalKept).toBe("原文没有改变。");
   });
 });

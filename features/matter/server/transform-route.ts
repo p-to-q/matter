@@ -197,7 +197,7 @@ function transformOutcomeError(reason: "MODEL_UNAVAILABLE" | "MODEL_TIMEOUT" | "
     "TURN_UNAVAILABLE",
     "Matter could not change this passage just now.",
     true,
-    reason === "MODEL_BUSY" ? 503 : 503,
+    503,
     reason,
   );
 }
@@ -233,11 +233,12 @@ function transformAdmissionError(reason: "ORIGIN" | "RATE" | "BUSY"): TransformS
   if (reason === "ORIGIN") {
     return new TransformServerError("INVALID_REQUEST", "This transform origin is not allowed.", false, 403);
   }
+  // The perimeter refused before any model work, so no scenario outcome exists
+  // to report; a fallback reason here would read as the model being busy.
   return new TransformServerError(
-    "TURN_UNAVAILABLE",
+    "RATE_LIMITED",
     reason === "RATE" ? "Please wait before changing this passage again." : "Matter is busy. Please try again shortly.",
     true,
     reason === "RATE" ? 429 : 503,
-    reason === "RATE" ? "MODEL_BUSY" : "MODEL_BUSY",
   );
 }

@@ -6,7 +6,7 @@ import {
   decideModelRequest,
   deriveProvisionalLabel,
   graphemeCount,
-  labelFingerprint,
+  labelQuestionIdentity,
   labelSimilarity,
   normalizeLabelInput,
   validateSemanticLabel,
@@ -263,26 +263,30 @@ describe("remote decision", () => {
   });
 });
 
-describe("fingerprint", () => {
+describe("label question identity", () => {
   const base = normalizeLabelInput({ text: "重新思考首页结构" });
 
   it("is stable for identical input", () => {
-    expect(labelFingerprint(base)).toBe(labelFingerprint(normalizeLabelInput({ text: "重新思考首页结构" })));
+    expect(labelQuestionIdentity(base))
+      .toBe(labelQuestionIdentity(normalizeLabelInput({ text: "重新思考首页结构" })));
   });
 
   it("changes with text, context, bound, and prompt version", () => {
-    const key = labelFingerprint(base);
-    expect(labelFingerprint(normalizeLabelInput({ text: "重新思考首页结构。" }))).not.toBe(key);
+    const key = labelQuestionIdentity(base);
+    expect(labelQuestionIdentity(normalizeLabelInput({ text: "重新思考首页结构。" }))).not.toBe(key);
     expect(
-      labelFingerprint(normalizeLabelInput({ text: "重新思考首页结构", context: { siblingLabels: ["其他"] } })),
+      labelQuestionIdentity(normalizeLabelInput({ text: "重新思考首页结构", context: { siblingLabels: ["其他"] } })),
     ).not.toBe(key);
-    expect(labelFingerprint(normalizeLabelInput({ text: "重新思考首页结构", maxGraphemes: 6 }))).not.toBe(key);
-    expect(labelFingerprint(base, "thought-label/next")).not.toBe(key);
+    expect(labelQuestionIdentity(normalizeLabelInput({ text: "重新思考首页结构", maxGraphemes: 6 }))).not.toBe(key);
+    expect(labelQuestionIdentity(base, "thought-label/next")).not.toBe(key);
   });
 
-  it("separates transpositions that a single hash lane would collide", () => {
-    expect(labelFingerprint(normalizeLabelInput({ text: "ab" })))
-      .not.toBe(labelFingerprint(normalizeLabelInput({ text: "ba" })));
+  it("keeps field boundaries unambiguous and sibling order significant", () => {
+    const joined = normalizeLabelInput({ text: "ab", context: { parentLabel: "c" } });
+    const moved = normalizeLabelInput({ text: "a", context: { parentLabel: "bc" } });
+    expect(labelQuestionIdentity(joined)).not.toBe(labelQuestionIdentity(moved));
+    expect(labelQuestionIdentity(normalizeLabelInput({ text: "x", context: { siblingLabels: ["p", "q"] } })))
+      .not.toBe(labelQuestionIdentity(normalizeLabelInput({ text: "x", context: { siblingLabels: ["q", "p"] } })));
   });
 });
 
