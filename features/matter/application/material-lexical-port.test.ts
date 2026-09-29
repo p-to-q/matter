@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   canonicalizeMaterialText,
   captureMaterialLexicalSession,
+  gateMaterialLexicalPort,
   IDENTITY_MATERIAL_LEXICAL_SESSION,
   type MaterialLexicalPort,
   type MaterialLexicalSession,
@@ -14,6 +15,27 @@ const REQUEST = Object.freeze({
 });
 
 describe("Material lexical port", () => {
+  it("withholds every suggestion while its gate is closed, reading the gate per capture", () => {
+    const session: MaterialLexicalSession = Object.freeze({
+      snapshot: Object.freeze({ generation: 3, sourceRevision: 1 }),
+      canonicalize: () => Object.freeze({
+        status: "changed" as const,
+        patches: [{ start: 0, end: 4, replacement: "Code" }],
+      }),
+    });
+    const open = { current: false };
+    const gated = gateMaterialLexicalPort({ capture: () => session }, () => open.current);
+
+    const withheld = captureMaterialLexicalSession(gated);
+    expect(withheld.snapshot).toEqual(IDENTITY_MATERIAL_LEXICAL_SESSION.snapshot);
+    expect(canonicalizeMaterialText(withheld, REQUEST)).toMatchObject({ changed: false, text: "code x" });
+
+    open.current = true;
+    const captured = captureMaterialLexicalSession(gated);
+    expect(captured.snapshot).toEqual({ generation: 3, sourceRevision: 1 });
+    expect(canonicalizeMaterialText(captured, REQUEST)).toMatchObject({ changed: true, text: "Code x" });
+  });
+
   it("fails open when capture is unavailable or malformed", () => {
     const throwing: MaterialLexicalPort = {
       capture: () => {

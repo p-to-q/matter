@@ -125,6 +125,7 @@ import {
   type CanvasChromeOverlay,
 } from "./CanvasChrome";
 import { preloadableComponent } from "./preloadable-component";
+import { WikiOccurrenceLayer } from "./wiki-occurrence-layer-chunk";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { CanvasRuling } from "./CanvasRuling";
 import {
@@ -242,10 +243,8 @@ const MaterialFilesWithLabels = dynamic(
   () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
   { ssr: false },
 );
-// The settle, the mark, and the takeover mount with the first live occurrence.
-const WikiOccurrenceLayer = preloadableComponent(
-  () => import("./WikiOccurrenceLayer").then((module) => module.WikiOccurrenceLayer),
-);
+// The settle, the mark, and the takeover mount with the first live occurrence;
+// the occurrence driver loads the same cell as part of one disclosure.
 const PAPER_GESTURE_CHUNKS = Object.freeze([
   PointTalkTurn.preload,
   PointTalkExit.preload,

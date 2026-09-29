@@ -319,6 +319,27 @@ test("another word arriving leaves the open takeover and its focus alone", async
   expect(errors).toEqual([]);
 });
 
+test("while its disclosure cannot load, Wiki applies nothing and speech is admitted as heard", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  // Every request for the disclosure layer fails, as offline or after a
+  // deployment moved on. (Recovery once it loads again is proven against the
+  // retry owner; the development runtime keeps a failed chunk failed.)
+  await page.route(/WikiOccurrenceLayer/u, (route) => route.abort("internetdisconnected"));
+  // The first correction lands before anything could know disclosure fails.
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectPlainText(passage, ADMITTED);
+
+  // From then on nothing Wiki changes could be disclosed, so it changes nothing.
+  await admitVoice(page, (await page.locator("[data-thought-id]").count()) + 1);
+  const heard = page.locator("[data-thought-id]").filter({ hasText: REVERTED });
+  await expect(heard).toHaveCount(1);
+  await admitVoice(page, (await page.locator("[data-thought-id]").count()) + 1);
+  await expect(heard).toHaveCount(2);
+  await expect(page.locator("[data-thought-id]").filter({ hasText: ADMITTED })).toHaveCount(1);
+  expect(errors.filter((error) => !/WikiOccurrenceLayer|Failed to load|CSS chunk|ChunkLoad/u.test(error)))
+    .toEqual([]);
+});
+
 test("informed silence settles after two further admissions", async ({ page }) => {
   const errors = collectBrowserErrors(page);
   const passage = await admitWikiPassage(page, VIEWPORTS[0]);

@@ -113,6 +113,21 @@ export const IDENTITY_MATERIAL_LEXICAL_PORT: MaterialLexicalPort = Object.freeze
   capture: () => IDENTITY_MATERIAL_LEXICAL_SESSION,
 });
 
+/**
+ * Lets the composition withhold every suggestion while a condition it owns is
+ * false: the captured session is then the identity, so material commits
+ * exactly as validated without the adapter. The check is one synchronous read
+ * per capture and never waits.
+ */
+export function gateMaterialLexicalPort(
+  port: MaterialLexicalPort,
+  open: () => boolean,
+): MaterialLexicalPort {
+  return Object.freeze({
+    capture: () => open() ? port.capture() : IDENTITY_MATERIAL_LEXICAL_SESSION,
+  });
+}
+
 /** A missing or broken local authority never makes human material unavailable. */
 export function captureMaterialLexicalSession(
   port: MaterialLexicalPort,
