@@ -60,6 +60,16 @@ plan ends with an index of these sections and the open item each still carries.
 Superseded by:
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
 
+### `release-readiness-history.md`
+
+The per-preview candidate, release, and promotion receipts for Preview.8
+through Preview.57, moved verbatim and in their original order on 2026-09-29,
+plus the two hard-gate bullets corrected in place that day.
+
+Superseded by:
+[`../docs/release-readiness.md`](../docs/release-readiness.md), which keeps the
+current slice, the latest receipts, publication state, and gates.
+
 ### `canvas-foreground-2026-08-24/`
 
 A short recovery index for the superseded Canvas foreground experiment. The
