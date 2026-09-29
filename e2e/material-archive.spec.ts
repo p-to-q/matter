@@ -89,7 +89,8 @@ for (const viewport of [
       mimeType: "application/zip",
       buffer: Buffer.from("This is not a ZIP archive."),
     });
-    await expect(archive).toContainText("archive");
+    // The refusal is stated in the page's language, like every archive error.
+    await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveErrorInvalid);
     await expect(archive).not.toContainText(fixtureUiCopy.materialFiles.archiveConfirmReplace);
     expect(await readMaterialSession(page)).toEqual(before);
     expect(browserErrors).toEqual([]);
