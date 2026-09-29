@@ -1,6 +1,5 @@
 "use client";
 
-import dynamic from "next/dynamic";
 import {
   forwardRef,
   useCallback,
@@ -52,11 +51,19 @@ import styles from "./CanvasChrome.module.css";
 import { useEscapeLayer } from "./escape-layers";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
 import { subscribePageExit } from "../interaction/page-suspension";
-import { ApiSettingsForm } from "./ApiSettingsForm";
+import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
+import { preloadableComponent } from "./preloadable-component";
+
+// The provider form renders nothing until the API dialog opens. It mounts on
+// first open and then stays mounted, so an accepted save outlives closing the
+// dialog. Its chunk loads after first paint and when a menu offering it opens.
+const ApiSettingsForm = preloadableComponent(() =>
+  import("./ApiSettingsForm").then((module) => module.ApiSettingsForm));
 
 // Wiki is a low-frequency settings capability; its persistence and editor code
-// must not tax the paper's initial interaction bundle.
-const WikiSettingsSection = dynamic(() =>
+// must not tax the paper's initial interaction bundle. It loads when a menu
+// offering it opens.
+const WikiSettingsSection = preloadableComponent(() =>
   import("./WikiSettingsSection").then((module) => module.WikiSettingsSection));
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
@@ -664,6 +671,15 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   )?.label ?? preferences.language;
   const appearanceLabel = copy.appearance[preferences.appearance];
   const modalOpen = canvasOverlayOwnsSurface(overlay);
+  const [apiFormMounted, setApiFormMounted] = useState(false);
+  if (overlay === "api" && !apiFormMounted) setApiFormMounted(true);
+  useEffect(() => preloadWhenIdle([ApiSettingsForm.preload]), []);
+  useEffect(() => {
+    // Opening a menu is the intent signal for the dialogs it offers.
+    if (overlay !== "settings" && overlay !== "mobile") return;
+    preloadNow(ApiSettingsForm.preload);
+    preloadNow(WikiSettingsSection.preload);
+  }, [overlay]);
 
   const dismissInquiry = useCallback(() => {
     inquiryBubbleRef.current?.detach();
@@ -1208,10 +1224,12 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
             <CloseIcon />
           </button>
         </header>
-        <ApiSettingsForm
-          language={preferences.language}
-          presented={overlay === "api"}
-        />
+        {apiFormMounted ? (
+          <ApiSettingsForm
+            language={preferences.language}
+            presented={overlay === "api"}
+          />
+        ) : null}
       </section>
 
       {overlay === "wiki" ? (
