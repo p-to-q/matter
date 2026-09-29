@@ -275,8 +275,10 @@ share an entry in practice. Every hit is still judged by the label scenario's
 complete adjudicator before it is served, so even a colliding entry cannot show
 a label the fresh path would refuse. It stores no node text, prompt, provider,
 identity, or credential, and a browser repeats current-material validation. Its
-complete-question single flight is the only cross-request model
-coalescing. Audio,
+single flight is the only cross-request model coalescing, and it joins only a
+byte-identical scoped question, never a matching digest, because a joiner
+receives the answer without adjudicating it again; that exact key lives only
+while its one provider call is pending. Audio,
 transcript, repair, question, inquiry answer, lineage, Elastic output, and Text
 Swap output are never cached or coalesced. Every model/audio browser-to-Matter
 POST and the Matter-to-provider POST explicitly uses no-store transport and

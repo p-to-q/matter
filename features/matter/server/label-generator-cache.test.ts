@@ -59,4 +59,51 @@ describe("label cache", () => {
     expect(calls).toBe(2);
     expect(second).toMatchObject({ source: "model", label: "季度营收预测" });
   });
+
+  it("never lets a different question join another question's flight", async () => {
+    const releases: Array<() => void> = [];
+    const adapter: ScenarioAdapter = async (call) => {
+      await new Promise<void>((resolve) => releases.push(resolve));
+      const text = (call.input as { text: string }).text;
+      return { text: text.includes("季度营收预测") ? "季度营收预测" : "想象的生活" };
+    };
+
+    const first = generateLabel(
+      labelRequest("first", "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。"),
+      new AbortController().signal,
+      adapter,
+    );
+    const second = generateLabel(
+      labelRequest("second", "呃，我觉得季度营收预测需要重新检查一下数据来源。"),
+      new AbortController().signal,
+      adapter,
+    );
+    // Both questions share a (forced) digest, yet each needs its own call.
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    releases.forEach((release) => release());
+
+    await expect(first).resolves.toMatchObject({ source: "model", label: "想象的生活" });
+    await expect(second).resolves.toMatchObject({ source: "model", label: "季度营收预测" });
+  });
+
+  it("still coalesces an identical question into one flight", async () => {
+    const releases: Array<() => void> = [];
+    let calls = 0;
+    const adapter: ScenarioAdapter = async () => {
+      calls += 1;
+      await new Promise<void>((resolve) => releases.push(resolve));
+      return { text: "想象的生活" };
+    };
+    const text = "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。";
+    const first = generateLabel(labelRequest("first", text), new AbortController().signal, adapter);
+    const second = generateLabel(labelRequest("second", text), new AbortController().signal, adapter);
+    await vi.waitFor(() => expect(releases).toHaveLength(1));
+    releases.forEach((release) => release());
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.objectContaining({ operationId: "first", label: "想象的生活" }),
+      expect.objectContaining({ operationId: "second", label: "想象的生活" }),
+    ]);
+    expect(calls).toBe(1);
+  });
 });

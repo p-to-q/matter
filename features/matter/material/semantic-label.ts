@@ -381,6 +381,8 @@ export function decideModelRequest(
  * everything that can change it: prompt version, locale, bound, material, and
  * ordered reference context. The server hashes it into its shared label cache
  * key; this layer stays free of platform crypto so the browser can share it.
+ * The value contains the material itself: hash it, or hold it only for the
+ * life of one request, and never log, persist, or send it.
  */
 export function labelQuestionIdentity(
   input: NormalizedLabelInput,

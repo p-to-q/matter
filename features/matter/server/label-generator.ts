@@ -66,8 +66,7 @@ type CacheEntry = Readonly<{ label: string; expiresAtMs: number }>;
  *   index label, never material and never a person's own name;
  * - key: a SHA-256 digest of the credential scope and the complete label
  *   question (`labelQuestionIdentity`), so one scope's answer cannot serve
- *   another and distinct questions cannot share an entry in practice. The same
- *   key coalesces identical in-flight questions;
+ *   another and distinct questions cannot share an entry in practice;
  * - value: only the adjudicated label, never node text, prompt, or provider;
  * - bound: `cacheEntries` entries, least recently used evicted first, each for
  *   `cacheTtlMs`;
@@ -77,6 +76,12 @@ type CacheEntry = Readonly<{ label: string; expiresAtMs: number }>;
  *   against the current question, exactly as a fresh answer is;
  * - failure fallback: a miss asks the model, and the deterministic label is
  *   always the floor.
+ *
+ * In-flight coalescing is keyed differently on purpose. A joined flight hands
+ * its answer over without adjudicating it again, so it keys on the exact
+ * scoped question rather than its digest: only a byte-identical question can
+ * join. That key holds material only while its one provider call is pending,
+ * like the request itself, and is never logged or retained afterwards.
  */
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<ModelAttempt>>();
@@ -113,12 +118,13 @@ export async function generateLabel(
     return settle(request, provisional.text, undefined, "provisional");
   }
 
-  const key = labelCacheKey(cacheScope, input, request.promptVersion);
+  const question = scopedLabelQuestion(cacheScope, input, request.promptVersion);
+  const key = labelCacheKey(question);
   const cached = readCache(key, input, now());
   if (cached !== null) return settle(request, cached, undefined, "model");
 
   const attempt = await withRequestSignal(
-    shareModelCall(key, async () => {
+    shareModelCall(question, async () => {
       const outcome = await runScenario(LABEL_SCENARIO, input, adapter, governor, {
         now,
         limits,
@@ -175,24 +181,29 @@ export function resolveLabelAdapter(
 }
 
 function shareModelCall(
-  key: string,
+  scopedQuestion: string,
   run: () => Promise<ModelAttempt>,
 ): Promise<ModelAttempt> {
   // Two nodes with identical material and context are the same question. One
   // provider call answers both; neither caller can cancel the other's work.
-  const existing = inFlight.get(key);
+  // Exact equality, never a digest, decides who may join: the joiner receives
+  // the answer without its own adjudication.
+  const existing = inFlight.get(scopedQuestion);
   if (existing !== undefined) return existing;
   const flight = run().finally(() => {
-    inFlight.delete(key);
+    inFlight.delete(scopedQuestion);
   });
-  inFlight.set(key, flight);
+  inFlight.set(scopedQuestion, flight);
   return flight;
 }
 
-function labelCacheKey(scope: string, input: NormalizedLabelInput, promptVersion: string): string {
-  return createHash("sha256")
-    .update(JSON.stringify([scope, labelQuestionIdentity(input, promptVersion)]))
-    .digest("hex");
+/** The exact question within one credential scope; it carries material. */
+function scopedLabelQuestion(scope: string, input: NormalizedLabelInput, promptVersion: string): string {
+  return JSON.stringify([scope, labelQuestionIdentity(input, promptVersion)]);
+}
+
+function labelCacheKey(scopedQuestion: string): string {
+  return createHash("sha256").update(scopedQuestion).digest("hex");
 }
 
 /**
