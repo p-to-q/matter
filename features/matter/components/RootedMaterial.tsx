@@ -498,6 +498,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const reportPointTalkOutcome = useCallback((reason: PointTalkReleasedOutcome) => {
     reportOutcome({ owner: "rewrite", reason });
   }, [reportOutcome]);
+  const reportWikiRestoreRefused = useCallback(() => {
+    reportOutcome({ owner: "wiki", reason: "passage-changed" });
+  }, [reportOutcome]);
   const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
   const reportPointTalkParked = useCallback((release: (() => void) | null) => {
     setReleaseParkedPointTalk(() => release);
@@ -4120,6 +4123,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
             locale={props.locale}
             onOpenWiki={(term, trigger) => canvasChromeRef.current?.openWiki(term, trigger)}
+            onRestoreRefused={reportWikiRestoreRefused}
             penActive={pointerArbiter.penActive}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}

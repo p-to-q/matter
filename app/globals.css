@@ -469,7 +469,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .wiki-takeover .wiki-takeover__heard { color: var(--ink); }
 @media (hover: hover) { .wiki-takeover button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); } }
 .wiki-takeover button:focus-visible { outline: none; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
-.wiki-takeover__notice { margin: 0; padding: 0 9px; color: var(--muted); font-family: var(--mono); font-size: 11px; line-height: 30px; white-space: nowrap; }
 .point-talk__feedback { justify-content: flex-end; padding-left: calc(7px * var(--point-talk-scale)); }
 .point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); text-overflow: ellipsis; white-space: nowrap; }
 .point-talk[data-phase="recording"] .point-talk__feedback { border-color: color-mix(in srgb, var(--ink) 25%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 7%, transparent), 0 8px 22px rgba(22,29,39,.08); }
@@ -724,7 +723,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .point-talk__composer input { font-size: 16px; line-height: 20px; }
   .point-talk button { min-width: 48px; min-height: 48px; }
   .wiki-takeover button { min-width: 48px; min-height: 44px; }
-  .wiki-takeover__notice { line-height: 44px; }
   .point-talk__voice { width: 48px; }
   .admission-feedback button { min-width: 48px; min-height: 48px; }
   .material-files__context-title { min-height: 48px; }

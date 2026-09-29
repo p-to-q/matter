@@ -18,8 +18,11 @@ export type MaterialOutcome =
   | Readonly<{ owner: "expansion"; reason: "unavailable" | "stale" }>
   /** A submitted Point-and-Talk rewrite ended with no field left to say so. */
   | Readonly<{ owner: "rewrite"; reason: "unavailable" | "stale" }>
-  /** Wiki could not record an explicit Keep or restore of its change. */
-  | Readonly<{ owner: "wiki"; reason: "unsaved" }>;
+  /**
+   * An explicit Keep or restore of a Wiki change: Wiki could not record it, or
+   * the passage no longer held the word to restore.
+   */
+  | Readonly<{ owner: "wiki"; reason: "unsaved" | "passage-changed" }>;
 
 export type OutcomeOwner = MaterialOutcome["owner"];
 

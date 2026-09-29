@@ -145,6 +145,19 @@ describe("canvas guidance projection", () => {
     expect(localizeOutcome(outcome, "en-US")).toBe(text);
   });
 
+  it("says a refused Wiki restore on the line instead of a timed notice at the word", () => {
+    const outcome: MaterialOutcome = { owner: "wiki", reason: "passage-changed" };
+    expect(projectCanvasGuidance(input({ outcome }))).toEqual({
+      id: "wiki-passage-changed",
+      kind: "recovery",
+      text: "Passage changed. Not restored.",
+    });
+    expect(localizeOutcome(outcome, "zh-CN")).toBe("段落已变化，未恢复。");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeOutcome(outcome, language)).not.toBe(localizeOutcome(outcome, "en-US"));
+    }
+  });
+
   it("says the shown outcome ahead of a parked result, then the parked result", () => {
     const outcome: MaterialOutcome = { owner: "wiki", reason: "unsaved" };
     expect(projectCanvasGuidance(input({
@@ -400,6 +413,7 @@ describe("canvas guidance projection", () => {
       "text-swap-unavailable": true,
       "text-swap-stale": true,
       "wiki-unsaved": true,
+      "wiki-passage-changed": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {

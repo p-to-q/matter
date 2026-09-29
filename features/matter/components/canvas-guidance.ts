@@ -80,7 +80,8 @@ type CanvasActionGuidanceId =
   | "select-thought"
   | "text-swap-unavailable"
   | "text-swap-stale"
-  | "wiki-unsaved";
+  | "wiki-unsaved"
+  | "wiki-passage-changed";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
@@ -117,6 +118,7 @@ const EN_US_LINES = Object.freeze({
   "text-swap-unavailable": "Not rewritten. Text unchanged.",
   "text-swap-stale": "Passage changed. Not rewritten.",
   "wiki-unsaved": "Wiki could not save that.",
+  "wiki-passage-changed": "Passage changed. Not restored.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const ZH_CN_LINES = Object.freeze({
@@ -149,6 +151,7 @@ const ZH_CN_LINES = Object.freeze({
   "text-swap-unavailable": "未改写，原文未变。",
   "text-swap-stale": "段落已变化，未改写。",
   "wiki-unsaved": "词典 WIKI 未能记下这次选择。",
+  "wiki-passage-changed": "段落已变化，未恢复。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -265,7 +268,7 @@ export function outcomeGuidanceId(outcome: MaterialOutcome): CanvasActionGuidanc
     case "rewrite":
       return outcome.reason === "stale" ? "text-swap-stale" : "text-swap-unavailable";
     case "wiki":
-      return "wiki-unsaved";
+      return outcome.reason === "passage-changed" ? "wiki-passage-changed" : "wiki-unsaved";
     default:
       return assertNever(outcome);
   }
@@ -323,6 +326,7 @@ const ZH_TW_LINES = Object.freeze({
   "text-swap-unavailable": "未改寫，原文未變。",
   "text-swap-stale": "段落已變更，未改寫。",
   "wiki-unsaved": "詞典 WIKI 未能記下這次選擇。",
+  "wiki-passage-changed": "段落已變更，未恢復。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const JA_JP_LINES = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
@@ -354,6 +358,7 @@ const JA_JP_LINES = Object.freeze({
   "text-swap-unavailable": "書き換えませんでした。原文はそのままです。",
   "text-swap-stale": "段落が変わったため書き換えませんでした。",
   "wiki-unsaved": "辞書 WIKI はこの選択を保存できませんでした。",
+  "wiki-passage-changed": "段落が変わったため戻しませんでした。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const DE_DE_LINES = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
@@ -385,6 +390,7 @@ const DE_DE_LINES = Object.freeze({
   "text-swap-unavailable": "Nicht umgeschrieben. Text unverändert.",
   "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
   "wiki-unsaved": "Wiki konnte das nicht speichern.",
+  "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 type GuidanceLocaleCopy = Readonly<{
