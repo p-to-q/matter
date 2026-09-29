@@ -48,6 +48,52 @@ describe("escape stack", () => {
     expect(event.prevented).toBe(true);
   });
 
+  it("keeps paper surfaces below everything that covers the paper and above a mode", () => {
+    const stack = createEscapeStack();
+    const log: string[] = [];
+    const unregister = new Map<string, () => void>();
+    // Registered in the order that recency alone would reverse.
+    for (const [name, tier] of [
+      ["settings menu", "transient"],
+      ["overlay index", "panel"],
+      ["Ask Matter", "panel"],
+      ["lasso", "mode"],
+      ["submitted Elastic degree", "paper"],
+      ["Point Talk", "paper"],
+      ["Wiki takeover", "paper"],
+      ["grip drag", "gesture"],
+    ] as const) {
+      unregister.set(name, stack.register(layer(log, name, tier)));
+    }
+    for (let press = 0; press < 8; press += 1) {
+      const before = log.length;
+      expect(stack.handleKeydown(escape())).toBe(true);
+      // Each press closes exactly one layer, which then leaves the stack.
+      expect(log.length).toBe(before + 1);
+      unregister.get(log[log.length - 1]!)?.();
+    }
+    expect(stack.size()).toBe(0);
+    expect(log).toEqual([
+      "grip drag",
+      "settings menu",
+      "Ask Matter",
+      "overlay index",
+      "Wiki takeover",
+      "Point Talk",
+      "submitted Elastic degree",
+      "lasso",
+    ]);
+  });
+
+  it("lets a paper surface opened after a panel still wait below it", () => {
+    const stack = createEscapeStack();
+    const log: string[] = [];
+    stack.register(layer(log, "overlay index", "panel"));
+    stack.register(layer(log, "node action lens", "paper"));
+    stack.handleKeydown(escape());
+    expect(log).toEqual(["overlay index"]);
+  });
+
   it("orders a tier by activation recency", () => {
     const stack = createEscapeStack();
     const log: string[] = [];

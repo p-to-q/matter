@@ -408,7 +408,8 @@ export function NodeActionLens({
   }, [activeTarget, currentPlacement, focusPendingKeyboardEntry, keyboardNodeId]);
 
   const lensVisible = activeTarget !== null && currentPlacement !== null && actionCount > 0;
-  useEscapeLayer(lensVisible, "transient", () => {
+  // A paper surface: chrome or a panel that covers the paper outranks it.
+  useEscapeLayer(lensVisible, "paper", () => {
     if (activeTarget === null) return false;
     // Only a lens that holds keyboard focus hands it back to its passage.
     const focusWasInside = lensRef.current?.contains(document.activeElement) === true;

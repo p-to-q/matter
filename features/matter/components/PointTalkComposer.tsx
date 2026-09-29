@@ -245,9 +245,9 @@ export function PointTalkComposer({
   }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
   // Before submit Escape cancels the local turn; after submit it only detaches
-  // this presentation. An IME candidate dismissal never reaches it.
-  useEscapeLayer(surfaceAvailable, "transient", () => {
-    if (!pointTalkSurfaceVisible(controller.state.phase)) return false;
+  // this presentation. An IME candidate dismissal never reaches it. The field
+  // is a paper surface, so chrome or a panel that covers it closes first.
+  useEscapeLayer(pointTalkSurfaceVisible(controller.state.phase), "paper", () => {
     cancelAndRestoreFocus();
     return true;
   });

@@ -205,13 +205,6 @@ describe("one Escape owner", () => {
   it("finds no other Escape listener, capture, stopped keydown, or raw Escape comparison", () => {
     expect(offenders(tree)).toEqual([]);
   });
-
-  it("keeps the submitted Elastic degree below any surface that covers the paper", () => {
-    const rooted = tree.get("features/matter/components/RootedMaterial.tsx")!.text;
-    expect(rooted).toMatch(
-      /useEscapeLayer\(\s*transformState\.phase === "requesting" && canvasOverlay === null && !indexOverlayOpen,\s*"transient",/u,
-    );
-  });
 });
 
 describe("the ownership scan catches regressions", () => {

@@ -1640,17 +1640,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // Escape after an Elastic submit only removes the committed degree from the
   // paper. The submitted request keeps its immutable basis and may still
   // deliver; dismissing a presentation is never cancellation after submit.
-  // It is a transient surface, and only while nothing covers the paper: a
-  // menu, dialog, Ask Matter, or the overlay index above it closes first.
-  useEscapeLayer(
-    transformState.phase === "requesting" && canvasOverlay === null && !indexOverlayOpen,
-    "transient",
-    () => {
-      if (stretch.mode !== "committed") return false;
-      stretchKeyDown("Escape");
-      return true;
-    },
-  );
+  // The degree is a paper surface: a menu, dialog, Ask Matter, or the overlay
+  // index above it outranks it and closes first.
+  useEscapeLayer(transformState.phase === "requesting", "paper", () => {
+    if (stretch.mode !== "committed") return false;
+    stretchKeyDown("Escape");
+    return true;
+  });
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },

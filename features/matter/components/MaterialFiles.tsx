@@ -779,8 +779,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // stays visible, but replacement waits until the current interaction settles.
   const archiveBusy = archivePhase !== "idle" || props.interactionPending;
 
-  const closeOverlay = () => {
-    if (docked || archiveBusy) return false;
+  // The overlay drawer is a panel above the paper; the docked index is not.
+  // While busy it stays open, and it still owns the key: Escape must not fall
+  // through to a paper surface beneath the drawer the person sees on top.
+  useEscapeLayer(!docked && open, "panel", () => {
+    if (archiveBusy) return true;
     // Keyboard authority returns to the external handle only when the drawer
     // held it; Escape from the paper must not pull focus into the corner.
     const active = document.activeElement;
@@ -789,9 +792,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setOpen(false);
     if (drawerHeldFocus) requestAnimationFrame(() => toggleRef.current?.focus());
     return true;
-  };
-  // The overlay drawer is a panel above the paper; the docked index is not.
-  useEscapeLayer(!docked && open, "panel", closeOverlay);
+  });
 
   const closeArchive = () => {
     if (archiveBusy) return;

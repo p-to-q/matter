@@ -288,7 +288,8 @@ function WikiOccurrenceTakeover({
     else driver.closeTakeover(content.occurrenceId, "inspected-kept");
   }, [content, driver, returnFocus]);
 
-  useEscapeLayer(present && content !== null && notice === null, "transient", () => {
+  // A paper surface at its word: chrome or a panel that covers it closes first.
+  useEscapeLayer(present && content !== null && notice === null, "paper", () => {
     dismiss(true, false);
     return true;
   });

@@ -128,14 +128,18 @@ bubble-phase `window` listener that runs after every React handler and ignores
 ordered by tier, then activation recency, and one keydown closes at most one:
 
 ```text
-gesture 3    node drag, grip drag
-transient 2  node action lens, Point and Talk, settings and language menus,
-             a submitted Elastic degree while nothing covers the paper
-panel 1      Ask Matter, modal dialogs, the overlay material drawer
+gesture 4    node drag, grip drag
+transient 3  settings and language menus
+panel 2      Ask Matter, modal dialogs, the overlay material drawer
+paper 1      node action lens, Point and Talk, the Wiki takeover,
+             a submitted Elastic degree
 mode 0       Lasso
 ```
 
-A layer that had nothing left to cancel declines, and the next one tries.
+Everything that covers the paper outranks every paper surface, so no paper
+surface asks whether something covers it. A layer that had nothing left to
+cancel declines, and the next one tries. The overlay drawer keeps the key while
+its archive or the canvas is busy: it stays open and nothing beneath it acts.
 Focused fields (rename, canvas title, index search, a slider grip) keep their
 own `onKeyDown`, test `isCancelEscape`, and call `preventDefault()`. No keydown
 handler runs in the capture phase or stops a keydown's propagation (the canvas's

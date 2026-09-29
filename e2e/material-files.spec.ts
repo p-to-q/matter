@@ -1178,6 +1178,57 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   await expect(sidebar.locator(`[data-node-id="${leafId}"]`).getByRole("checkbox")).not.toBeChecked();
 });
 
+test("a busy overlay index keeps Escape rather than passing it to the paper beneath", async ({ page }) => {
+  // Holds an archive read open until the test releases it.
+  await page.addInitScript(() => {
+    const runtime = window as Window & { __releaseArchiveRead?: () => void };
+    const read = Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer = function (this: Blob) {
+      return new Promise<void>((resolve) => {
+        runtime.__releaseArchiveRead = resolve;
+      }).then(() => read.call(this));
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const sidebar = page.locator("aside.material-files");
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles, exact: true }).click();
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await archive.getByLabel(fixtureUiCopy.materialFiles.archiveChooseMaterialArchive).setInputFiles({
+    name: "held.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from("This is not a ZIP archive."),
+  });
+  await expect.poll(() => page.evaluate(() =>
+    typeof (window as Window & { __releaseArchiveRead?: () => void }).__releaseArchiveRead)).toBe("function");
+  // Observes, after the one Escape owner, whether any layer claimed the key.
+  await page.evaluate(() => {
+    const runtime = window as Window & { __escapeClaims?: boolean[] };
+    runtime.__escapeClaims = [];
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") runtime.__escapeClaims?.push(event.defaultPrevented);
+    });
+  });
+  const claims = () => page.evaluate(() =>
+    (window as Window & { __escapeClaims?: boolean[] }).__escapeClaims ?? []);
+
+  // While its archive work runs the drawer stays open, and it still owns the
+  // key: Escape must not fall through to anything beneath it.
+  await page.keyboard.press("Escape");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  expect(await claims()).toEqual([true]);
+
+  await page.evaluate(() =>
+    (window as Window & { __releaseArchiveRead?: () => void }).__releaseArchiveRead?.());
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveErrorInvalid);
+  await page.keyboard.press("Escape");
+  await expect(sidebar).not.toHaveAttribute("data-open", "true");
+  expect(await claims()).toEqual([true, true]);
+});
+
 test("storage exhaustion stays discoverable with the narrow material drawer closed", async ({ page }) => {
   await page.addInitScript(() => {
     const originalPut = IDBObjectStore.prototype.put;
