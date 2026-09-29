@@ -282,6 +282,13 @@ export type MatterStoreReceipt =
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
+  /**
+   * The material this document instance began as (the seed, a hydrated row,
+   * or an imported archive), carried forward by seed relocalization only while
+   * nothing else changed it. `tree !== untouchedTree` exactly when the person,
+   * or a turn they submitted, changed this document instance.
+   */
+  untouchedTree: ThoughtTree;
   lastError: MatterStoreError | null;
   lastReceipt: ObservableMatterStoreReceipt | null;
   extendMaterial: (
@@ -396,6 +403,7 @@ export function createMatterStore(
   const internalStore = createStore<MatterStoreInternalState>()((set) => freezeState({
     tree: initialDomain.tree,
     documentEpoch: 0,
+    untouchedTree: initialDomain.tree,
     history: initialDomain.history,
     navigation: initialDomain.navigation,
     lastError: null,
@@ -470,10 +478,13 @@ export function createMatterStore(
           revision: localized.tree.revision,
           historyReleased: localized.historyReleased,
         });
+        const tree = protectValue(localized.tree);
         return freezeState({
           ...current,
-          tree: protectValue(localized.tree),
+          tree,
           history: protectValue(localized.history),
+          // Relocalizing untouched seed copy is not a change the person made.
+          untouchedTree: current.tree === current.untouchedTree ? tree : current.untouchedTree,
         });
       });
       if (receipt === undefined) {
@@ -990,10 +1001,12 @@ export function createMatterStore(
           revision: normalizedTree.revision,
           historyReleased: recovered.released,
         };
+        const hydratedTree = protectValue(normalizedTree);
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(normalizedTree),
+          tree: hydratedTree,
+          untouchedTree: hydratedTree,
           history: protectValue(recovered.history),
           navigation: protectValue(createNavigationState()),
           lastError: null,
@@ -1034,10 +1047,12 @@ export function createMatterStore(
           treeId: normalizedTree.id,
           revision: normalizedTree.revision,
         };
+        const switchedTree = protectValue(normalizedTree);
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(normalizedTree),
+          tree: switchedTree,
+          untouchedTree: switchedTree,
           history: protectValue(createTreeHistory()),
           navigation: protectValue(createNavigationState()),
           lastError: null,

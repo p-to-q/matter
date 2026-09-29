@@ -131,9 +131,10 @@ same terminal state when a generation read, refresh, or reload finds the row it
 last saved missing. Before this tab has saved, a missing row is a first run.
 
 Runtime persistence state tracks base generation, persisted revision, queued
-revision, dirty revision, error, whether the tab holds unsaved material (a
-pending or in-flight write, or an import), a blocked upgrade, and the history
-notice, and where a conflict came from: another tab's row, or material that
+revision, dirty revision, error, whether the tab holds unsaved material the
+person made (a pending or in-flight write of it, or an import), whether an
+archive may replace material storage refused, a blocked upgrade, and the
+history notice, and where a conflict came from: another tab's row, or material that
 changed while the first load was in flight (the line then says the page and
 stored material differ, never that another tab exists). Write failure does not
 roll back material; pointer retry saves the
@@ -146,8 +147,8 @@ cannot be promised away.
 Every committed save, activated import, rollback, and repair is announced on the
 `matter.document-generation.v1` BroadcastChannel as `{ version: 1, treeId,
 generation, schema }`, never material. A receiver ignores a generation it
-already holds. With no unsaved material it applies the newer row only while the
-material is idle — no admission, no submitted or composed Point-and-Talk
+already holds. With no write or import outstanding it applies the newer row only
+while the material is idle — no admission, no submitted or composed Point-and-Talk
 request, no Elastic request or parked result, nothing typed or awaited in Ask
 Matter, and no open name editor — the same material-turn reporting that gates
 seed relocalization, extended to the two holders bound to the document
@@ -155,8 +156,8 @@ instance. Hidden and visible tabs wait for the same idleness; a visible tab
 also waits for a released pointer, and a pointer whose release never arrives is
 ended by window blur, a lost capture with no button held, or a move with no
 button held. Idleness is asked again after the read, before hydration. A
-broadcast that arrives during a refresh is applied after it. With unsaved
-material the newer row is a conflict immediately. A frozen or
+broadcast that arrives during a refresh is applied after it. With a write
+waiting the newer row is a conflict immediately. A frozen or
 back-forward-cached page misses broadcasts, so `visibilitychange` to visible
 and `pageshow` with `persisted` perform one read-only generation lookup treated
 the same way. Web Locks are not used: the generation compare already lives
@@ -166,12 +167,17 @@ unload rule in `unload-guard.ts`, and the superseded reload in
 `superseded-reload.ts`, each with an injectable window and document.
 
 A hidden page no longer requests a flush: publication already starts the one
-write immediately. `beforeunload` is attached only while material the person
-changed from the seed this page started with is at risk — changed while stored
-material is still loading or an upgrade waits, unsaved and refused by storage,
-or unsaved and still writing after one second — and removed as soon as that
-ends. An untouched seed never arms it, so a browser that refuses storage does
-not prompt on every exit.
+write immediately. Authorship belongs to the store: its untouched tree is the
+material this document instance began as (the seed, a hydrated row, or an
+imported archive), carried forward by seed relocalization only while nothing
+else changed it. The controller counts only material that differs from it as
+unsaved, and before the first load is reconciled authorship alone answers
+(`holdsUnsavedPersonMaterial`); both exit guards use that one answer.
+`beforeunload` is attached only while such material is at risk — changed while
+stored material is still loading, refused by storage, or still writing after one
+second — and removed as soon as that ends. An untouched seed, a stored row, or
+their relocalization never arms it, so a browser that refuses storage does not
+prompt on every exit.
 
 A newer schema is terminal for an older tab. `blocking` closes its connection
 and every later operation reports `PERSISTENCE_SUPERSEDED` without reopening;
@@ -180,7 +186,7 @@ is newer is superseded, never corrupt, so Repair cannot let an older build
 overwrite it. A deletion from another tab (`blocking` with no new version) is
 `PERSISTENCE_CLEARED`, equally terminal. Such a tab offers only an export from
 memory and a page reload. A superseded tab reloads by itself only while it is
-hidden, nothing is unsaved, and the material is idle, and at most once per
+hidden, nothing the person made is unsaved, and the material is idle, and at most once per
 minute: the time of the last automatic reload is kept in session storage so a
 reload that serves the same older build cannot loop, and without session
 storage it never reloads by itself. A visible tab keeps the line and Archive's
@@ -444,7 +450,7 @@ cross-tab generation refresh and conflict, two-phase adoption refused by the
 store, the material-idle gate (including a hidden tab holding a submitted AI
 turn), pointer-release recovery, returning-page check, superseded and cleared
 storage (including a missing row), the one-shot superseded reload, the unload
-guard's divergence rule, same-revision adoption, and replacing refused material
+guard's authorship rule, same-revision adoption, and replacing refused material
 by import; ZIP export → import;
 traversal, Unicode/case collision, compressed/expanded size, path depth, and
 entry count limits. Picker absence or cancellation never removes ZIP return.

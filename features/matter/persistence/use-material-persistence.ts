@@ -10,6 +10,7 @@ import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
 import {
   createPersistenceController,
+  holdsUnsavedPersonMaterial,
   type ConflictOrigin,
   type StoredCandidate,
 } from "./persistence-controller";
@@ -31,6 +32,8 @@ type HydrateSnapshot = (
 export function useMaterialPersistence(
   tree: ThoughtTree,
   history: TreeHistory,
+  /** The store's untouched material for this document instance. */
+  untouchedTree: ThoughtTree,
   documentEpoch: number,
   hydrateSnapshot: HydrateSnapshot,
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
@@ -52,6 +55,9 @@ export function useMaterialPersistence(
   const { controller } = owner;
   const latestTreeRef = useRef(tree);
   const latestHistoryRef = useRef(history);
+  const latestUntouchedTreeRef = useRef(untouchedTree);
+  // Store authorship: only material the person changed can be unsaved.
+  const authoredLatest = () => latestTreeRef.current !== latestUntouchedTreeRef.current;
   // The tree the controller last received. A newer row may replace only this
   // exact tree: a commit the store holds but has not yet published (effects run
   // after layout) would otherwise be overwritten before it is ever saved.
@@ -90,7 +96,7 @@ export function useMaterialPersistence(
         : null;
     });
     if (outcome === "refused") {
-      controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, conflictOrigin);
+      controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, conflictOrigin, authoredLatest());
     }
     return outcome === "adopted";
   }, [controller, hydrateSnapshot]);
@@ -98,8 +104,9 @@ export function useMaterialPersistence(
   useLayoutEffect(() => {
     latestTreeRef.current = tree;
     latestHistoryRef.current = history;
+    latestUntouchedTreeRef.current = untouchedTree;
     documentBasisOwner.publish(tree, documentEpoch);
-  }, [documentBasisOwner, documentEpoch, history, tree]);
+  }, [documentBasisOwner, documentEpoch, history, tree, untouchedTree]);
 
   useEffect(() => {
     let active = true;
@@ -113,13 +120,13 @@ export function useMaterialPersistence(
       if (decision.action === "hydrate" && candidate !== null) {
         applyCandidate(candidate, initialTree, "load-window");
       } else if (decision.action === "publish") {
-        controller.publish(decision.tree, latestHistoryRef.current);
+        controller.publish(decision.tree, latestHistoryRef.current, authoredLatest());
         publishedTreeRef.current = decision.tree;
       } else if (decision.action === "conflict") {
         // Material committed during the load window does not descend from the
         // stored session. Neither is written over the other; Archive offers
         // the explicit reload.
-        controller.declareConflict(decision.tree, latestHistoryRef.current, "load-window");
+        controller.declareConflict(decision.tree, latestHistoryRef.current, "load-window", authoredLatest());
       }
       setInitialReconciliationComplete(true);
     });
@@ -138,9 +145,9 @@ export function useMaterialPersistence(
 
   useEffect(() => {
     if (!reconciledRef.current) return;
-    controller.publish(tree, history);
+    controller.publish(tree, history, tree !== untouchedTree);
     publishedTreeRef.current = tree;
-  }, [controller, history, tree]);
+  }, [controller, history, tree, untouchedTree]);
 
   const applyCandidateRef = useRef(applyCandidate);
   const materialIdleRef = useRef(materialIdle);
@@ -175,7 +182,11 @@ export function useMaterialPersistence(
   }, [controller, owner]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
-  const materialDiverged = tree !== initialTree;
+  const unsavedPersonMaterial = holdsUnsavedPersonMaterial(
+    status,
+    initialReconciliationComplete,
+    tree !== untouchedTree,
+  );
   const unloadGuardRef = useRef<UnloadGuard | null>(null);
   useEffect(() => {
     const guard = createUnloadGuard({
@@ -191,8 +202,8 @@ export function useMaterialPersistence(
     };
   }, []);
   useEffect(() => {
-    unloadGuardRef.current?.update({ status, materialDiverged });
-  }, [materialDiverged, status]);
+    unloadGuardRef.current?.update({ phase: status.phase, unsavedPersonMaterial });
+  }, [status.phase, unsavedPersonMaterial]);
 
   const supersededReloadRef = useRef<SupersededReload | null>(null);
   useEffect(() => {
@@ -211,10 +222,10 @@ export function useMaterialPersistence(
   useEffect(() => {
     supersededReloadRef.current?.update({
       superseded: status.errorCode === "PERSISTENCE_SUPERSEDED",
-      unsaved: status.unsaved,
+      unsavedPersonMaterial,
       materialIdle,
     });
-  }, [materialIdle, status.errorCode, status.unsaved]);
+  }, [materialIdle, status.errorCode, unsavedPersonMaterial]);
 
   const resolveConflict = useCallback(async () => {
     const candidate = await controller.resolveConflict();

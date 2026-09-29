@@ -37,6 +37,7 @@ export function MatterApp() {
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
+  const untouchedTree = useMatterStore((state) => state.untouchedTree);
   const navigation = useMatterStore((state) => state.navigation);
   const extendMaterial = useMatterStore((state) => state.extendMaterial);
   const localizeSeededMaterial = useMatterStore((state) => state.localizeSeededMaterial);
@@ -70,6 +71,7 @@ export function MatterApp() {
   const persistence = useMaterialPersistence(
     tree,
     history,
+    untouchedTree,
     documentEpoch,
     hydrateSnapshot,
     switchDocument,

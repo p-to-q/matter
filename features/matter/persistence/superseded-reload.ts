@@ -12,7 +12,8 @@ export type SupersededReloadEnvironment = Readonly<{
 
 export type SupersededReloadInput = Readonly<{
   superseded: boolean;
-  unsaved: boolean;
+  /** `holdsUnsavedPersonMaterial`: material the person made that no row holds. */
+  unsavedPersonMaterial: boolean;
   /** No admission, AI turn, draft, name editor, or question is in progress. */
   materialIdle: boolean;
 }>;
@@ -28,7 +29,9 @@ export const SUPERSEDED_RELOAD_LOOP_MS = 60_000;
 
 /**
  * Moves a tab onto the newer Matter only when nothing can be lost and nobody
- * is looking: nothing unsaved, no work in progress, and the page hidden. A
+ * is looking: nothing the person made is unsaved, no work is in progress, and
+ * the page is hidden. An untouched seed the older build could not save is not
+ * a reason to stay on it. A
  * visible tab keeps the durability line and the Archive's Reload. One reload
  * per loop window, remembered across the reload itself, so an older build
  * served again cannot reload forever; without session storage it never reloads
@@ -38,7 +41,7 @@ export function createSupersededReload(
   environment: SupersededReloadEnvironment,
   loopWindowMs = SUPERSEDED_RELOAD_LOOP_MS,
 ): SupersededReload {
-  let input: SupersededReloadInput = { superseded: false, unsaved: true, materialIdle: false };
+  let input: SupersededReloadInput = { superseded: false, unsavedPersonMaterial: true, materialIdle: false };
   let reloading = false;
   const recentlyReloaded = (): boolean => {
     if (environment.session === null) return true;
@@ -53,7 +56,7 @@ export function createSupersededReload(
     if (
       reloading ||
       !input.superseded ||
-      input.unsaved ||
+      input.unsavedPersonMaterial ||
       !input.materialIdle ||
       environment.document.visibilityState !== "hidden" ||
       recentlyReloaded()

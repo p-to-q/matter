@@ -1,11 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
+import { openDB } from "idb";
+import { createIndexedDbDocumentRepository } from "./document-repository";
+import { createPersistenceController, holdsUnsavedPersonMaterial } from "./persistence-controller";
 import {
   createSupersededReload,
   SUPERSEDED_RELOAD_LOOP_MS,
   type SupersededReloadEnvironment,
 } from "./superseded-reload";
+import { createMatterStore } from "../store/matter-store";
+import type { TreeHistory } from "../tree/history";
+import type { ThoughtTree } from "../tree/model";
 
-const SUPERSEDED_IDLE = Object.freeze({ superseded: true, unsaved: false, materialIdle: true });
+vi.mock("idb", () => ({ openDB: vi.fn() }));
+
+const SUPERSEDED_IDLE = Object.freeze({ superseded: true, unsavedPersonMaterial: false, materialIdle: true });
 
 function page(visibilityState: DocumentVisibilityState = "visible") {
   const listeners = new Set<() => void>();
@@ -61,7 +69,7 @@ describe("superseded reload", () => {
     const document = page("hidden");
     const { reload, handle } = reloader(document, session());
 
-    handle.update({ ...SUPERSEDED_IDLE, unsaved: true });
+    handle.update({ ...SUPERSEDED_IDLE, unsavedPersonMaterial: true });
     handle.update({ ...SUPERSEDED_IDLE, materialIdle: false });
     handle.update({ ...SUPERSEDED_IDLE, superseded: false });
     expect(reload).not.toHaveBeenCalled();
@@ -100,6 +108,41 @@ describe("superseded reload", () => {
     const refusing = reloader(page("hidden"), { getItem: () => null, setItem: throwing });
     refusing.handle.update(SUPERSEDED_IDLE);
     expect(refusing.reload).not.toHaveBeenCalled();
+  });
+
+  it("moves an older build past an untouched seed it could not save, never past the person's change", async () => {
+    // A newer build already upgraded the database: this build's open fails.
+    vi.mocked(openDB).mockImplementation(async () => {
+      throw new DOMException("The requested version is older", "VersionError");
+    });
+    const olderTab = async (edit: (store: ReturnType<typeof createMatterStore>) => void) => {
+      const store = createMatterStore();
+      const controller = createPersistenceController(createIndexedDbDocumentRepository());
+      const begun = store.getState();
+      await expect(controller.start(begun.tree as ThoughtTree, begun.history as TreeHistory)).resolves.toBeNull();
+      edit(store);
+      // As the persistence hook does once the first load is reconciled.
+      const state = store.getState();
+      const authored = state.tree !== state.untouchedTree;
+      controller.publish(state.tree as ThoughtTree, state.history as TreeHistory, authored);
+      const status = controller.getStatus();
+      expect(status.errorCode).toBe("PERSISTENCE_SUPERSEDED");
+      const { reload, handle } = reloader(page("hidden"), session());
+      handle.update({
+        superseded: true,
+        unsavedPersonMaterial: holdsUnsavedPersonMaterial(status, true, authored),
+        materialIdle: true,
+      });
+      controller.dispose();
+      return reload;
+    };
+
+    expect(await olderTab(() => undefined)).toHaveBeenCalledOnce();
+    const edited = await olderTab((store) => {
+      const rootId = store.getState().tree.rootId!;
+      store.getState().extendMaterial(rootId, { nodeId: "thought_mine", createdAt: "2026-09-29T00:00:00.000Z" });
+    });
+    expect(edited).not.toHaveBeenCalled();
   });
 
   it("stops listening when disposed", () => {

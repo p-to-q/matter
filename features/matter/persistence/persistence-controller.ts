@@ -33,8 +33,17 @@ export type PersistenceStatus = Readonly<{
   dirtyRevision: number | null;
   errorCode: RepositoryErrorCode | null;
   historyNotice: HistoryNotice | null;
-  /** This tab holds material, or an import, that no stored row holds yet. */
+  /**
+   * This tab holds material the person made, or an import, that no stored row
+   * holds yet. Material nobody touched (the seed, a stored row, their seed
+   * relocalization) is never unsaved, even while its write waits or fails.
+   */
   unsaved: boolean;
+  /**
+   * Storage refused this tab's pending material and no write is in flight, so
+   * a same-document archive may replace it once the person confirms.
+   */
+  replaceableByImport: boolean;
   /** This newer build waits for an older Matter tab to close its database. */
   upgradeBlocked: boolean;
   /**
@@ -109,6 +118,19 @@ export type ImportOptions = Readonly<{
   replaceUnsaved?: boolean;
 }>;
 
+/**
+ * The one answer both exit guards use: this tab holds material the person
+ * made that no stored row holds. Until the first load is reconciled the
+ * controller has not received that material, so authorship alone answers.
+ */
+export function holdsUnsavedPersonMaterial(
+  status: PersistenceStatus,
+  reconciled: boolean,
+  authored: boolean,
+): boolean {
+  return reconciled ? status.unsaved : authored;
+}
+
 export type PersistenceController = Readonly<{
   /**
    * Reads the stored row for the material this document instance began with.
@@ -117,7 +139,12 @@ export type PersistenceController = Readonly<{
    * one) or storage failed (the status says why).
    */
   start(tree: ThoughtTree, history?: TreeHistory): Promise<StoredCandidate | null>;
-  publish(tree: ThoughtTree, history?: TreeHistory): void;
+  /**
+   * Hands over the latest material. `authored`: the person changed this
+   * document instance since it began (store authorship); only such material
+   * counts as unsaved.
+   */
+  publish(tree: ThoughtTree, history?: TreeHistory, authored?: boolean): void;
   prepareImportedTree(
     tree: ThoughtTree,
     options?: ImportOptions,
@@ -137,7 +164,7 @@ export type PersistenceController = Readonly<{
    * The live tree is held unsaved rather than written over the stored one, and
    * the person is given the same explicit choice a second tab raises.
    */
-  declareConflict(tree: ThoughtTree, history?: TreeHistory, origin?: ConflictOrigin): void;
+  declareConflict(tree: ThoughtTree, history?: TreeHistory, origin?: ConflictOrigin, authored?: boolean): void;
   retry(): void;
   /** Reads the stored row the person chose to reload over unsaved material. */
   resolveConflict(): Promise<StoredCandidate | null>;
@@ -175,8 +202,8 @@ export type PersistenceControllerOptions = Readonly<{
   announceGeneration?: (generation: DocumentGeneration) => void;
 }>;
 
-type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
-type StatusFields = Omit<PersistenceStatus, "unsaved">;
+type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory; authored: boolean }>;
+type StatusFields = Omit<PersistenceStatus, "unsaved" | "replaceableByImport">;
 type TerminalCode = "PERSISTENCE_SUPERSEDED" | "PERSISTENCE_CLEARED";
 
 /** No row is known: the first save creates one, or meets another tab's as a conflict. */
@@ -222,6 +249,7 @@ export function createPersistenceController(
     errorCode: null,
     historyNotice: null,
     unsaved: false,
+    replaceableByImport: false,
     upgradeBlocked: false,
     conflictOrigin: null,
   });
@@ -229,7 +257,18 @@ export function createPersistenceController(
   // Async repository writes may overlap a publish() call; reading through this
   // seam prevents compile-time narrowing from erasing that runtime transition.
   const currentPending = (): PendingDocument | null => pending;
+  // Whether any write or import is outstanding, touched or not. Control flow
+  // (refresh, adoption, conflicts) depends on this; the reported `unsaved`
+  // counts only material the person made.
   const hasUnsaved = () => pending !== null || writing || activeImportAttempt !== null;
+  const holdsUnsavedMaterial = () =>
+    pending?.authored === true ||
+    (writing && writingDocument?.authored === true) ||
+    activeImportAttempt !== null;
+  // Storage refused the pending material and nothing is writing it: the one
+  // state in which an archive may replace unsaved material.
+  const importMayReplace = (errorCode: RepositoryErrorCode | null) =>
+    pending !== null && !writing && activeImportAttempt === null && REPLACEABLE_ERRORS.has(errorCode);
 
   const update = (next: StatusFields) => {
     const errorCode = terminal ?? next.errorCode;
@@ -238,12 +277,16 @@ export function createPersistenceController(
       phase: terminal === null ? next.phase : "error",
       errorCode,
       conflictOrigin: errorCode === "PERSISTENCE_CONFLICT" ? next.conflictOrigin ?? "another-tab" : null,
-      unsaved: hasUnsaved(),
+      unsaved: holdsUnsavedMaterial(),
+      replaceableByImport: importMayReplace(errorCode),
     });
     for (const listener of listeners) listener();
   };
   const syncUnsaved = () => {
-    if (active && status.unsaved !== hasUnsaved()) update(status);
+    if (
+      active &&
+      (status.unsaved !== holdsUnsavedMaterial() || status.replaceableByImport !== importMayReplace(status.errorCode))
+    ) update(status);
   };
 
   const enterTerminal = (code: RepositoryErrorCode): boolean => {
@@ -452,8 +495,9 @@ export function createPersistenceController(
       const loaded = await repository.load(tree.id);
       if (!active || startEpoch !== documentEpoch) return null;
       ready = true;
+      // The material a document instance begins with is nobody's change yet.
       if (!loaded.ok) {
-        pending = Object.freeze({ tree, history });
+        pending = Object.freeze({ tree, history, authored: false });
         enterTerminal(loaded.error.code);
         update({
           ...status,
@@ -466,7 +510,7 @@ export function createPersistenceController(
         return null;
       }
       if (loaded.value === null) {
-        pending = Object.freeze({ tree, history });
+        pending = Object.freeze({ tree, history, authored: false });
         void drain();
         return null;
       }
@@ -474,7 +518,7 @@ export function createPersistenceController(
       return candidateFrom(loaded.value, null);
     },
 
-    publish(tree, history = createTreeHistory()) {
+    publish(tree, history = createTreeHistory(), authored = true) {
       if (tree.id !== activeTreeId) return;
       if (pending?.tree === tree && pending.history === history) return;
       if (writingDocument?.tree === tree && writingDocument.history === history) {
@@ -496,7 +540,7 @@ export function createPersistenceController(
         status.persistedRevision === tree.revision &&
         sameDurableHistory(history, persistedHistory)
       ) return;
-      pending = Object.freeze({ tree, history });
+      pending = Object.freeze({ tree, history, authored });
       if (ready && status.phase !== "error") void drain();
       else if (ready) update({ ...status, dirtyRevision: tree.revision });
       syncUnsaved();
@@ -526,8 +570,7 @@ export function createPersistenceController(
       const dirty = sameDocument && (writing || pending !== null);
       const replacingUnsaved = dirty &&
         importOptions.replaceUnsaved === true &&
-        !writing &&
-        REPLACEABLE_ERRORS.has(status.errorCode);
+        importMayReplace(status.errorCode);
       if (dirty && !replacingUnsaved) {
         return Object.freeze({ ok: false, errorCode: dirtyImportError() });
       }
@@ -730,9 +773,9 @@ export function createPersistenceController(
       return Object.freeze({ ok: true });
     },
 
-    declareConflict(tree, history = createTreeHistory(), origin = "another-tab") {
+    declareConflict(tree, history = createTreeHistory(), origin = "another-tab", authored = true) {
       if (!active || !ready || tree.id !== activeTreeId) return;
-      pending = Object.freeze({ tree, history });
+      pending = Object.freeze({ tree, history, authored });
       holdConflict(origin);
     },
 
