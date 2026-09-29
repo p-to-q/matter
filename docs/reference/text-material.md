@@ -70,13 +70,16 @@ host.offsetWidth`), so pan and zoom need no remeasurement. It copies the
 passage's computed font, feature, variation, kerning, variant, spacing,
 rendering, synthesis, smoothing, colour, and `lang`, sets `white-space: pre`
 and a line height equal to the word's rect, and trusts itself only when the
-canonical copy lands within 1 px of the Range; the heard ghost appears only
+canonical copy lands within 1 px of the Range on every edge (left, top, width,
+and height); the heard ghost appears only
 when its width is 0.8–1.25 of the canonical width. The 580 ms timeline holds
 the heard form for 160 ms, crossfades with a 2 px blur until 380 ms, shivers
 the canonical copy by `0 → .75 → −.5 → 0` px until 500 ms, then removes the
 veil beneath an identical copy that fades out. Any text mutation, resize, font
 load, touch on the passage, selection reaching the word, lasso, covering
-surface, or hidden page ends it within one frame. A wrapped range, a joining or
+surface, or hidden page ends it within one frame; an interruption before the
+crossfade ends (or, for the sweep, before the bar is drawn) does not count as
+disclosure and is retried once. A wrapped range, a joining or
 conjunct script, or a missing Custom Highlight or `user-select: none` uses an
 underline sweep instead: one 1 px bar per line fragment drawn from the line
 start in the passage's direction over 220 ms, staggered 80 ms, fading over
@@ -89,7 +92,14 @@ the list mutates, because a passage becoming selected replaces its text node.
 Nothing wraps a word or character; the source text node remains the only DOM,
 selection, find, and accessibility owner. A tap inside a marked word, resolved
 by `caretPositionFromPoint` (or `caretRangeFromPoint`) or by the word's rects
-widened to a 24 px target, opens its takeover instead of selecting the passage.
+widened to a 24 px target, opens its takeover instead of selecting the passage;
+the release of a press that dismissed that same word's takeover selects the
+passage instead, so a double-click behaves as it does on any passage. The
+passage never gains per-word elements for assistive technology: while it holds
+live changes its text button is described by one visually hidden, count-aware
+sentence shared by every passage with that count, and its passage actions offer
+the takeover to the keyboard and to touch. The settle, mark, and takeover code
+loads with the first live occurrence.
 
 **Segmentation.** `Intl.Segmenter("en", { granularity: "grapheme" })` first
 produces the only legal UTF-16 boundaries. A forward scan over those graphemes
@@ -321,7 +331,9 @@ text and Range rectangles while separately proving visual displacement.
   visual viewport changes; Custom Highlight and forced fallback paths;
 - a Wiki settle that overlays its word within 1 px under canvas zoom, leaves one
   text node, falls back to the sweep without Custom Highlight, and shows only
-  the mark under reduced motion.
+  the mark under reduced motion; a keyboard path from the passage's actions to
+  Keep, and a double-click on a marked word that selects its passage and
+  settles nothing, at laptop and narrow widths.
 
 Geometry assertions use relative/topological relationships, not pixel snapshots.
 The platform contracts are [ECMA-402 `Intl.Segmenter`](https://tc39.es/ecma402/#segmenter-objects),

@@ -144,8 +144,8 @@ the occurrence settles. The outcomes are:
   dwell, and leaving only settle the occurrence; they never stack.
   `settleWikiImplicitOccurrence` owns that classification from content-free
   facts.
-- `inspected-kept`: the person opened the takeover and dismissed it without
-  reverting.
+- `inspected-kept`: the person opened the takeover, could read it for at least
+  500 ms, and dismissed it without reverting.
 - `explicit-confirm`: Keep; the existing confirm path makes the alias human
   authority.
 - `explicit-reject` and `explicit-replace`: the existing reject and replace
@@ -168,23 +168,43 @@ commit to that node, including repair, swap, Elastic, removal, or an Undo that
 restores older text, censors it. The only change it follows is the person's
 own revert of a sibling word in the same node. The driver attaches its page
 listeners, 250 ms perception clock, and IntersectionObserver only while an
-occurrence is live, and releases them idempotently.
+occurrence is live, and releases them idempotently. The driver, its lifecycle,
+and the Wiki policy it consults load as one lazy chunk with the first committed
+occurrence; until then an eager stand-in buffers at most 16 publications and
+answers every question with the empty set.
 
 - Perceived means the disclosure was shown (the settle, or the static mark
   where motion is off or unavailable) and then at least 50% of the word's
   painted area sat inside the visual viewport, with the page visible and the
   paper not covered by a modal, for 1.5 s cumulative. These are the named
-  constants in `WIKI_OCCURRENCE_PERCEPTION`.
+  constants in `WIKI_OCCURRENCE_PERCEPTION`. A settle cut off before the
+  change was readable (before its crossfade ends, or before an underline
+  finished drawing) is not disclosure; it is retried once, and a word whose
+  settle keeps being cut off waits unperceived until it is censored.
 - Only after perception do informed facts accumulate: further successful human
   admissions (the one that carried the occurrence never counts), foreground
-  visible time, a Material Files copy of the passage or a native copy whose
-  selection covers the word, an archive export, and `pagehide`. Any one closes
-  the wait through `settleWikiImplicitOccurrence`; they never stack.
-- An open takeover suspends silence. Dismissing it is `inspected-kept`, Keep is
-  `explicit-confirm`, leaving the page while it is open is `inspected-kept`,
-  and the heard form commits an ordinary human text restoration and then
-  settles `reverted`. Undoing that restoration is Material Undo and settles
-  nothing.
+  time on the uncovered paper, a Material Files copy of the passage or a native
+  copy whose selection covers the word, an archive export, and `pagehide`. Any
+  one closes the wait through `settleWikiImplicitOccurrence`; they never stack.
+  Dwell never accrues while a dialog, including the Wiki settings, covers the
+  paper.
+- An open takeover suspends silence. Dismissing it is `inspected-kept` only
+  once it could be read for 500 ms and when the dismissing press is not on the
+  word itself; a quicker dismissal, or the second press of a double-click, is
+  not an inspection and returns the word to silence unsettled, while that press
+  selects the passage as any press would. Keep is `explicit-confirm`, leaving
+  the page while it is open is `inspected-kept`, and the heard form commits an
+  ordinary human text restoration and then settles `reverted`. A restoration
+  that fails closes the takeover and leaves every live occurrence where it was.
+  Undoing that restoration is Material Undo and settles nothing.
+- Wiki… hands the takeover to the settings dialog and keeps the occurrence
+  suspended until that dialog has covered the paper and let it go again (or,
+  if it never covers the paper, for 3 s of visible time). Nothing settles it
+  meanwhile except losing the word or leaving the page.
+- A Keep or revert that Wiki cannot record (a failed write or an attribution
+  that already expired) is said once in the guidance line and announced
+  politely: “Wiki could not save that.” The material change stands; the line
+  clears at the person's next action.
 - A live occurrence expires 15 s before its registry attribution would, and at
   most 64 stay live; both censor. So does `pagehide` before perception, which
   covers a tab that stayed hidden the whole time.
@@ -192,7 +212,9 @@ occurrence is live, and releases them idempotently.
   15 s, typically its late repair, is a new occurrence that inherits the
   earlier disclosure instead of settling on screen a second time. That memory
   is presentation continuity only; perception, evidence, and settlement start
-  afresh.
+  afresh. It holds heard forms, so it keeps at most 16 entries, prunes expired
+  ones on every write and lookup, and is cleared when the document or its epoch
+  changes.
 
 Informed acceptance adds `kept` evidence to the relation that was applied: +4
 quarter-units for informed silence and +8 for an inspection, saturating at 24,
@@ -433,8 +455,11 @@ into the committed node text for every stage: admission (only when the second
 admission normalization leaves the canonical text untouched), repair (the whole
 repaired node), Elastic (the final node text), and Text Swap (the swapped
 segment or whole node at its start offset). Each mapped edit must land exactly
-on its canonical form, or all attribution for that commit is dropped. A
-withheld canonicalization carries no edits. The content-free ingress receipt
+on its canonical form, or all attribution for that commit is dropped; an edit
+whose heard form equals its committed word is not attributed, since nothing
+visibly changed. A withheld canonicalization carries no edits, and an Elastic
+answer whose generated gaps cannot be proven keeps its valid raw form with
+canonicalization withheld rather than being refused. The content-free ingress receipt
 lists `lexicalEdits: { start, end, occurrence }[]`; the heard form travels
 only in the transient prepared value.
 
@@ -581,7 +606,15 @@ confirms the alias; the heard form restores exactly that range as an ordinary,
 pointer-undoable human text change, failing closed with a quiet “the passage
 changed” line when the memento no longer matches; Wiki… opens the settings
 dialog filtered to and focused on that canonical term and settles nothing;
-Escape or an outside tap is an inspection. Only after a person invokes
+Escape or an outside tap, once the takeover could be read, is an inspection.
+The keyboard and touch reach the same takeover without aiming at the word: a
+focused (entered by keyboard) or selected (on touch) passage adds one **Review
+Wiki change** action per live, disclosed word to its passage actions, at most
+three, each naming both forms and opening the takeover at its word with Keep
+focused. While such changes are live the passage carries a count-aware
+accessible description (“Wiki changed 1 word. Review it in this passage's
+actions.”); no word is wrapped to say so. A fine pointer's hover actions never
+grow over the word, which it taps directly. Only after a person invokes
 correction from an erroneous word does the surface reveal what is necessary to
 repair that visible occurrence. Rejecting the responsible automatic mapping
 from the word remains reserved. A deeper Wiki configuration surface opens from
