@@ -495,6 +495,10 @@ test.describe("passage-local Point and Talk", () => {
     await page.locator("[data-node-action=point-talk]").click();
     const field = page.locator(".point-talk");
     await expect(field).toBeVisible();
+    // The enter moves the field by a few pixels; measure where it settles.
+    await field.evaluate((element) => Promise.all(
+      element.getAnimations().map((animation) => animation.finished),
+    ));
     expect(await page.evaluate(() => {
       const paperElement = document.querySelector<HTMLElement>(".matter-document");
       const fieldElement = document.querySelector<HTMLElement>(".point-talk");
@@ -705,6 +709,123 @@ test.describe("passage-local Point and Talk", () => {
     await expect(recovery.getByRole("button", { name: "重试", exact: true })).toBeFocused();
     await expect(passage).toContainText(SOURCE_TEXT);
     await expect(shell).toHaveAttribute("data-tree-revision", revision ?? "");
+  });
+
+  test("a detached rewrite that fails reports the kept passage once without reopening its field", async ({ page }) => {
+    let releaseFailure!: () => void;
+    const failureBarrier = new Promise<void>((resolve) => {
+      releaseFailure = resolve;
+    });
+    await page.route("**/api/text-swap", async (route) => {
+      await failureBarrier;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: { "Cache-Control": "no-store" },
+        body: JSON.stringify({
+          error: {
+            code: "TURN_UNAVAILABLE",
+            message: "Synthetic model unavailable.",
+            retryable: true,
+            fallbackReason: "MODEL_UNAVAILABLE",
+          },
+        }),
+      }).catch(() => undefined);
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const guidance = page.locator(".matter-guidance");
+    const announcement = page.locator(".visually-hidden[role=status][aria-live=polite]")
+      .filter({ hasText: "原文没有改变。" });
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill(DIRECTION);
+    await page.getByRole("button", { name: "改写", exact: true }).click();
+    await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
+
+    await passage.click();
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    releaseFailure();
+
+    await expect(guidance).toHaveAttribute("data-guidance-state", "rewrite-unchanged");
+    await expect(guidance).toHaveText("原文没有改变。");
+    await expect(announcement).toHaveCount(1);
+    // The quiet outcome never reopens the closed field or names the provider.
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    await expect(page.getByText("Synthetic model unavailable.")).toHaveCount(0);
+    await expect(passage).toContainText(SOURCE_TEXT);
+
+    const paper = await page.locator(".matter-document").boundingBox();
+    if (paper === null) throw new Error("Matter paper missing");
+    await page.mouse.click(paper.x + 24, paper.y + 24);
+    await expect(guidance).not.toHaveAttribute("data-guidance-state", "rewrite-unchanged");
+    await expect(announcement).toHaveCount(0);
+  });
+
+  test("the field fades with its typed words on Escape and is cut when a modal takes the paper", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await page.evaluate(() => {
+      const runtime = window as Window & { __matterPointTalkStages?: string[] };
+      const stages: string[] = [];
+      runtime.__matterPointTalkStages = stages;
+      const record = () => {
+        const fields = Array.from(document.querySelectorAll<HTMLElement>(".point-talk"));
+        const entry = fields.length === 0
+          ? "absent"
+          : fields.map((field) => {
+              const typed = field.querySelector<HTMLInputElement>("input")?.value ?? "";
+              return `${field.dataset.presence ?? ""}:${field.dataset.presenceClose ?? ""}:${typed}`;
+            }).join("+");
+        if (stages[stages.length - 1] !== entry) stages.push(entry);
+      };
+      new MutationObserver(record).observe(document.body, {
+        attributeFilter: ["data-presence", "data-presence-close", "data-placed"],
+        attributes: true,
+        childList: true,
+        subtree: true,
+      });
+    });
+    const readStages = () => page.evaluate(() => {
+      const runtime = window as Window & { __matterPointTalkStages?: string[] };
+      const stages = [...(runtime.__matterPointTalkStages ?? [])];
+      runtime.__matterPointTalkStages?.splice(0);
+      return stages;
+    });
+    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
+
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await expect(direction).toBeFocused();
+    await direction.fill("尚未提交的方向");
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    await expect(passage).toBeFocused();
+    const escaped = await readStages();
+    // One field at a time; the person's close fades the frozen copy of what
+    // they typed rather than a blank field.
+    expect(escaped.every((entry) => !entry.includes("+"))).toBe(true);
+    expect(escaped).toContain("exiting:person:尚未提交的方向");
+    expect(escaped[escaped.length - 1]).toBe("absent");
+
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    await expect(direction).toBeFocused();
+    await readStages();
+    const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
+    await settings.focus();
+    await settings.press("Enter");
+    await expect(page.getByRole("menu", { name: "Matter 设置" })).toBeVisible();
+    await expect(page.locator(".point-talk")).toHaveCount(0);
+    const preempted = await readStages();
+    // A modal preempts: the field is cut without a leaving stage.
+    expect(preempted.some((entry) => entry.startsWith("holding") || entry.startsWith("exiting")))
+      .toBe(false);
+    expect(preempted[preempted.length - 1]).toBe("absent");
   });
 
   test.describe("coarse pointer", () => {
