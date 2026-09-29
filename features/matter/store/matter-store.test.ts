@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
   SEEDED_EMPTY_TREE_ID,
@@ -194,7 +195,7 @@ describe("Matter store", () => {
   it("applies one captured spoken Wiki basis before admission", () => {
     const basis = confirmedWikiBasis("spoken", "code x", "Codex", 1);
     const store = createMatterStore("root", {
-      materialLexical: createWikiMaterialLexicalPort(() => basis),
+      materialLexical: createWikiMaterialLexicalPort(() => basis, () => canonicalizeWikiText),
     });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");

@@ -34,14 +34,19 @@ import type {
   WikiAliasEvidenceProducer,
   WikiTermEvidenceProducer,
 } from "../wiki/wiki-learning-policy";
-import {
-  matterWikiBasisPublication,
-  matterWikiFittingMode,
-} from "./wiki-runtime-publication";
+import { matterWikiBasisPublication } from "./wiki-runtime-publication";
 import {
   isMatterWikiAutomaticCollectionEnabled,
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
+
+// The release table and its learning policy load with this lazy runtime; the
+// initial material graph never reads them.
+const matterWikiFittingMode =
+  MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS.includes("latin-internal-edit-v2")
+    ? "latin-conservative" as const
+    : "off" as const;
 
 export const matterWikiProjectionPolicy = createWikiProjectionPolicy(
   matterWikiFittingMode === "latin-conservative"
@@ -60,11 +65,12 @@ type MatterWikiRuntime = Readonly<{
 }>;
 
 type MatterWikiRuntimeSlot = Readonly<{
-  abi: 14;
+  abi: 15;
   runtime: MatterWikiRuntime;
 }>;
 
-const RUNTIME_ABI = 14 as const;
+// 15: the runtime publishes through a port bound to the canonicalizer.
+const RUNTIME_ABI = 15 as const;
 const MAX_ADMISSION_CAS_ATTEMPTS = 4;
 const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
 const LEGACY_RUNTIME_KEYS = Object.freeze([
@@ -77,9 +83,11 @@ const runtimeHost = globalThis as unknown as {
 
 /** One origin-local authority survives client Fast Refresh as one ownership unit. */
 function createMatterWikiRuntime(): MatterWikiRuntime {
+  // The only publishing port is bound to the canonicalizer, so the material
+  // lexical adapter can interpret every rule this runtime ever publishes.
   const coordinator = createWikiCoordinator(
     createIndexedDbWikiRepository(),
-    matterWikiBasisPublication,
+    matterWikiBasisPublication.bindInterpreter(canonicalizeWikiText),
     matterWikiProjectionPolicy,
   );
   const generationChannel = createWikiGenerationChannel();

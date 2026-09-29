@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import { createMatterStore } from "./matter-store";
 import { createWikiMaterialLexicalPort } from "../application/wiki-material-lexical-adapter";
 import type { MaterialLexicalPort } from "../application/material-lexical-port";
@@ -298,7 +299,7 @@ function attributedPort(
   const compiled = compileWikiBasis(state.state, 5);
   if (!compiled.ok) throw new Error(compiled.error.code);
   let minted = 0;
-  return createWikiMaterialLexicalPort(() => compiled.basis, attributed
+  return createWikiMaterialLexicalPort(() => compiled.basis, () => canonicalizeWikiText, attributed
     ? { mintOccurrence: () => `occ_${++minted}` }
     : {});
 }

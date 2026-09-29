@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import type { MatterLocale } from "../config/locales";
 import {
   admissionToTreeCommand,
@@ -687,7 +688,7 @@ function attributedSession(
   const compiled = compileWikiBasis(state, 21);
   if (!compiled.ok) throw new Error(compiled.error.code);
   let minted = 0;
-  return createWikiMaterialLexicalPort((): WikiBasis => compiled.basis, {
+  return createWikiMaterialLexicalPort((): WikiBasis => compiled.basis, () => canonicalizeWikiText, {
     mintOccurrence: () => `occ_${++minted}`,
   }).capture();
 }
@@ -820,7 +821,7 @@ function confirmedSession(
   if (!state.ok) throw new Error(state.error.code);
   const compiled = compileWikiBasis(state.state, generation);
   if (!compiled.ok) throw new Error(compiled.error.code);
-  return createWikiMaterialLexicalPort((): WikiBasis => compiled.basis).capture();
+  return createWikiMaterialLexicalPort((): WikiBasis => compiled.basis, () => canonicalizeWikiText).capture();
 }
 
 function textSwapEnvelope(): TextSwapEnvelope {

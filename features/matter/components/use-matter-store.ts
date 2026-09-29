@@ -17,6 +17,7 @@ import {
   mintMatterWikiOccurrence,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
+  readMatterWikiInterpreter,
   settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
 import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
@@ -54,10 +55,14 @@ const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
 
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
-  materialLexical: createWikiMaterialLexicalPort(readMatterWikiBasis, {
-    phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
-    mintOccurrence: mintMatterWikiOccurrence,
-  }),
+  materialLexical: createWikiMaterialLexicalPort(
+    readMatterWikiBasis,
+    readMatterWikiInterpreter,
+    {
+      phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
+      mintOccurrence: mintMatterWikiOccurrence,
+    },
+  ),
   humanAdmissionObservation: createWikiMaterialLexicalObservationPort((observation) => {
     wikiOccurrences.noteHumanAdmission();
     observeMatterWikiEvidence(observation);

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import { createWikiMaterialLexicalPort } from "../application/wiki-material-lexical-adapter";
 import { createWikiCoordinator } from "../persistence/wiki-coordinator";
 import type { WikiRepository } from "../persistence/wiki-repository";
@@ -123,7 +124,7 @@ async function composedSession() {
   };
   let sequence = 0;
   const store = createMatterStore("root", {
-    materialLexical: createWikiMaterialLexicalPort(coordinator.readBasis, {
+    materialLexical: createWikiMaterialLexicalPort(coordinator.readBasis, () => canonicalizeWikiText, {
       mintOccurrence: (attribution) => {
         const occurrenceId = `occurrence_${++sequence}`;
         return registry.register(occurrenceId, attribution, now) ? occurrenceId : null;

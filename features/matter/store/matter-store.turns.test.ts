@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import { SEEDED_DOCUMENT_NODE_IDS } from "../material/seeded-document";
 import { relocalizeSeededSession } from "../material/seeded-session-localization";
 import {
@@ -119,7 +120,7 @@ describe("Matter store material turns", () => {
       if (!compiled.ok) throw new Error(compiled.error.code);
       let nowMs = 100;
       const store = createMatterStore("root", {
-        materialLexical: createWikiMaterialLexicalPort(() => compiled.basis),
+        materialLexical: createWikiMaterialLexicalPort(() => compiled.basis, () => canonicalizeWikiText),
         monotonicNow: () => nowMs,
       });
       const rootId = store.getState().tree.rootId;
