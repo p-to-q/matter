@@ -20,10 +20,10 @@ import type { PresenceHandoff } from "./presence";
 import { PointTalkComposer, type PointTalkSurfaceView } from "./PointTalkComposer";
 
 /**
- * How submitted work ended after its field had been closed. The field never
+ * How submitted work ended when no field was left to show it. The field never
  * reopens for it; the host reports it once, quietly, outside the material.
  */
-export type PointTalkDetachedOutcome = "unchanged" | "passage-changed";
+export type PointTalkReleasedOutcome = "unchanged" | "passage-changed";
 
 /** The complete generative turn stays out of the initial canvas bundle. */
 export function PointTalkTurn({
@@ -41,7 +41,7 @@ export function PointTalkTurn({
   nodeId,
   onClose,
   onCommitted,
-  onDetachedOutcome,
+  onReleasedOutcome,
   onPhaseChange,
   onReleased,
   presenceIdentity,
@@ -71,7 +71,7 @@ export function PointTalkTurn({
   nodeId: string;
   onClose: () => void;
   onCommitted: (change: TextSwapCommittedChange) => void;
-  onDetachedOutcome?: (outcome: PointTalkDetachedOutcome) => void;
+  onReleasedOutcome?: (outcome: PointTalkReleasedOutcome) => void;
   onPhaseChange?: (phase: TextSwapInteractionState["phase"]) => void;
   onReleased: () => void;
   presenceIdentity: string;
@@ -142,14 +142,14 @@ export function PointTalkTurn({
     onClose();
     if (!retained) onReleased();
   }, [controller, onClose, onReleased, presented, surfaceAvailable]);
-  const detachedPhaseRef = useRef(phase);
+  const releasedPhaseRef = useRef(phase);
   useEffect(() => {
     // Runs before the release below, which unmounts this turn.
-    const previous = detachedPhaseRef.current;
-    detachedPhaseRef.current = phase;
-    const outcome = pointTalkDetachedOutcome(presented, previous, phase);
-    if (outcome !== null) onDetachedOutcome?.(outcome);
-  }, [onDetachedOutcome, phase, presented]);
+    const previous = releasedPhaseRef.current;
+    releasedPhaseRef.current = phase;
+    const outcome = pointTalkReleasedOutcome(presented, previous, phase);
+    if (outcome !== null) onReleasedOutcome?.(outcome);
+  }, [onReleasedOutcome, phase, presented]);
   useEffect(() => {
     if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
   }, [onReleased, phase, presented]);
@@ -198,19 +198,21 @@ export function PointTalkTurn({
 }
 
 /**
- * A submitted turn whose field was closed ends silently unless reported: a
- * failure leaves the passage unchanged, and staleness means the passage itself
- * changed first. Only a transition observed while detached counts, so a
- * failure the person already saw and dismissed is never reported twice.
+ * Submitted work that ends without a field to show it would otherwise end
+ * silently. A failure is shown by a visible field itself, so it is reported
+ * only when the field had been closed; staleness always closes the field, so
+ * it is reported whenever submitted work went stale. Only a transition out of
+ * submitted work counts, so a failure the person already saw and dismissed is
+ * never reported twice.
  */
-export function pointTalkDetachedOutcome(
+export function pointTalkReleasedOutcome(
   presented: boolean,
   previous: TextSwapController["state"]["phase"],
   phase: TextSwapController["state"]["phase"],
-): PointTalkDetachedOutcome | null {
-  if (presented || (previous !== "pending" && previous !== "transcribing")) return null;
-  if (phase === "error") return "unchanged";
-  return phase === "stale" ? "passage-changed" : null;
+): PointTalkReleasedOutcome | null {
+  if (previous !== "pending" && previous !== "transcribing") return null;
+  if (phase === "stale") return "passage-changed";
+  return phase === "error" && !presented ? "unchanged" : null;
 }
 
 export function pointTalkTurnReleasesOwner(

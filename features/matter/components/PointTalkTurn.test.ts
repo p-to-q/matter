@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pointTalkDetachedOutcome, pointTalkTurnReleasesOwner } from "./PointTalkTurn";
+import { pointTalkReleasedOutcome, pointTalkTurnReleasesOwner } from "./PointTalkTurn";
 
 describe("Point Talk host ownership", () => {
   it("releases a visible turn whose material scope became terminal", () => {
@@ -18,16 +18,19 @@ describe("Point Talk host ownership", () => {
     expect(pointTalkTurnReleasesOwner(false, "success")).toBe(true);
   });
 
-  it("reports how detached submitted work ended, once, without reopening the field", () => {
-    expect(pointTalkDetachedOutcome(false, "pending", "error")).toBe("unchanged");
-    expect(pointTalkDetachedOutcome(false, "transcribing", "error")).toBe("unchanged");
-    expect(pointTalkDetachedOutcome(false, "pending", "stale")).toBe("passage-changed");
+  it("reports submitted work that ends without a field to show it, once", () => {
+    expect(pointTalkReleasedOutcome(false, "pending", "error")).toBe("unchanged");
+    expect(pointTalkReleasedOutcome(false, "transcribing", "error")).toBe("unchanged");
+    expect(pointTalkReleasedOutcome(false, "pending", "stale")).toBe("passage-changed");
     // The rewritten passage is its own outcome.
-    expect(pointTalkDetachedOutcome(false, "pending", "success")).toBeNull();
-    // A visible field shows its own failure.
-    expect(pointTalkDetachedOutcome(true, "pending", "error")).toBeNull();
+    expect(pointTalkReleasedOutcome(false, "pending", "success")).toBeNull();
+    // A visible field shows its own failure, but staleness always closes it.
+    expect(pointTalkReleasedOutcome(true, "pending", "error")).toBeNull();
+    expect(pointTalkReleasedOutcome(true, "pending", "stale")).toBe("passage-changed");
+    // A draft that went stale was never submitted.
+    expect(pointTalkReleasedOutcome(true, "ready", "stale")).toBeNull();
     // A failure already seen and then dismissed is not reported again.
-    expect(pointTalkDetachedOutcome(false, "error", "error")).toBeNull();
-    expect(pointTalkDetachedOutcome(false, "ready", "idle")).toBeNull();
+    expect(pointTalkReleasedOutcome(false, "error", "error")).toBeNull();
+    expect(pointTalkReleasedOutcome(false, "ready", "idle")).toBeNull();
   });
 });

@@ -31,8 +31,9 @@ export type CanvasCameraGuidanceState =
   | Readonly<{ kind: "pan"; zoom: number }>;
 
 /**
- * How a Point Talk rewrite ended after its field had been closed. It is shown
- * once in place of the next hint and cleared by the person's next gesture.
+ * How a submitted Point Talk rewrite ended when no field was left to show it.
+ * It is shown once in place of the next hint and cleared by the person's next
+ * gesture.
  */
 export type CanvasRewriteOutcomeGuidanceState = "unchanged" | "passage-changed";
 

@@ -188,7 +188,7 @@ import {
   type PresenceLive,
 } from "./presence";
 import type { PointTalkSurfaceView } from "./PointTalkComposer";
-import type { PointTalkDetachedOutcome } from "./PointTalkTurn";
+import type { PointTalkReleasedOutcome } from "./PointTalkTurn";
 import { usePresence, useSettledStatus } from "./use-presence";
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
@@ -424,7 +424,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   ), []);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
   const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
-  const [pointTalkOutcome, setPointTalkOutcome] = useState<PointTalkDetachedOutcome | null>(null);
+  const [pointTalkOutcome, setPointTalkOutcome] = useState<PointTalkReleasedOutcome | null>(null);
   const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
     id: number;
     type: "start" | "stop";
@@ -890,34 +890,34 @@ export function RootedMaterial(props: RootedMaterialProps) {
       layout,
     );
   }, []);
-  const admissionLiveState = outcomePresentationAvailable && props.admission.state.phase !== "idle"
-    ? props.admission.state
-    : null;
-  const admissionLiveAnchor = admissionLiveState?.anchor ?? null;
-  const admissionLiveBox = useMemo(
+  const admissionActiveState = props.admission.state.phase === "idle" ? null : props.admission.state;
+  const admissionActiveAnchor = admissionActiveState?.anchor ?? null;
+  const admissionActiveBox = useMemo(
     () => findAdmissionFeedbackParentBox(
-      admissionLiveAnchor,
+      admissionActiveAnchor,
       activeLayout?.boxes ?? null,
       navigation.selectedNodeId,
     ),
-    [activeLayout?.boxes, admissionLiveAnchor, navigation.selectedNodeId],
+    [activeLayout?.boxes, admissionActiveAnchor, navigation.selectedNodeId],
   );
   const admissionLive = useMemo<PresenceLive<AdmissionFeedbackView>>(
-    () => admissionLiveState === null
+    () => admissionActiveState === null || !outcomePresentationAvailable
       ? null
       : {
-          identity: admissionLiveState.token,
-          view: { state: admissionLiveState, box: admissionLiveBox },
+          identity: admissionActiveState.token,
+          view: { state: admissionActiveState, box: admissionActiveBox },
         },
-    [admissionLiveBox, admissionLiveState],
+    [admissionActiveBox, admissionActiveState, outcomePresentationAvailable],
   );
   const admissionFrame = usePresence(
     admissionLive,
     admissionPresenceClose(outcomePresentationAvailable, props.admission.settlement),
   );
+  // A leaving box owns its lane only as the presence rules allow; work still in
+  // flight behind modal chrome keeps its lane so nothing reflows underneath.
   const admissionReservedNodeId = presenceReservesSpace(admissionFrame)
     ? admissionFrame?.view.box?.nodeId ?? null
-    : null;
+    : admissionActiveBox?.nodeId ?? null;
   const admissionPresentationDamage = useMemo<PresentationDamage | null>(
     () => projectAdmissionFeedbackPresentation(
       admissionReservedNodeId,
@@ -3749,7 +3749,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
-            onDetachedOutcome={setPointTalkOutcome}
+            onReleasedOutcome={setPointTalkOutcome}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
             presenceIdentity={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
