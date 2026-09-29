@@ -44,7 +44,7 @@ for (const viewport of [
         : page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).getByRole("button", { name, exact: true });
 
     await expect(page.getByRole("link", { name: "p to q — Matter" })).toBeVisible();
-    const guidance = page.locator(".matter-guidance[aria-label='Matter guidance']");
+    const guidance = page.locator(`.matter-guidance[aria-label="${fixtureUiCopy.canvasRegion.guidance}"]`);
     await expect(guidance.locator(".matter-guidance__next"))
       .toHaveText("选择一段想法。");
     await expect(guidance.locator("p")).toHaveCount(1);

@@ -71,4 +71,24 @@ describe("material files copy", () => {
 
     expect(labels.every((label) => label.trim().length > 0)).toBe(true);
   });
+
+  it("chooses a count's noun by the locale's plural rule", () => {
+    const english = materialFilesCopy("en-US");
+    expect(english.revisionCount(1)).toBe("1 committed revision");
+    expect(english.revisionCount(2)).toBe("2 committed revisions");
+    expect(english.copySelectedThoughts(1)).toBe("Copy 1 selected thought");
+    expect(english.copySelectedThoughts(3)).toBe("Copy 3 selected thoughts");
+    expect(english.materialTree(1)).toBe("Markdown material tree, 1 entry");
+    expect(english.resultCount(0)).toBe("0 material results");
+    expect(english.resultCount(1)).toBe("1 material result");
+
+    const german = materialFilesCopy("de-DE");
+    expect(german.revisionCount(1)).toBe("1 Änderung gespeichert");
+    expect(german.revisionCount(4)).toBe("4 Änderungen gespeichert");
+    expect(german.copySelectedThoughts(1)).toBe("1 ausgewählten Gedanken kopieren");
+    expect(german.copySelectedThoughts(2)).toBe("2 ausgewählte Gedanken kopieren");
+    expect(german.materialTree(1)).toBe("Markdown-Materialbaum, 1 Eintrag");
+    expect(german.resultCount(1)).toBe("1 Materialtreffer");
+    expect(german.resultCount(5)).toBe("5 Materialtreffer");
+  });
 });

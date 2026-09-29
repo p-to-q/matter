@@ -111,6 +111,8 @@ export type CanvasViewportEvent =
     }>
   | Readonly<{ type: "pointer-cancel"; pointerId: number }>
   | Readonly<{ type: "lost-pointer-capture"; pointerId: number }>
+  /** Undoes a pan that turned out to be a palm: the camera returns to its origin. */
+  | Readonly<{ type: "pointer-revert"; pointerId: number }>
   | Readonly<{ type: "gesture-cancel" }>
   | Readonly<{
       type: "wheel";
@@ -553,6 +555,17 @@ export function reduceCanvasViewport(
         return unchanged(state);
       }
       return success({ ...state, gesture: null });
+    }
+
+    case "pointer-revert": {
+      if (!validPointerId(event.pointerId)) {
+        return failure("INVALID_POINTER");
+      }
+      const gesture = state.gesture;
+      if (gesture?.kind !== "pan" || gesture.pointerId !== event.pointerId) {
+        return unchanged(state);
+      }
+      return success({ ...state, x: gesture.originX, y: gesture.originY, gesture: null });
     }
 
     case "gesture-cancel":

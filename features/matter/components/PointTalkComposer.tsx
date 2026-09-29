@@ -21,6 +21,8 @@ import {
   type PointTalkPlacement,
 } from "./point-talk-placement";
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
+import { useEscapeLayer } from "./escape-layers";
+import { deferUntilTouchCommits } from "./touch-commitment";
 
 export function PointTalkComposer({
   boundaryRef,
@@ -35,6 +37,7 @@ export function PointTalkComposer({
   onStartVoice,
   onStopVoice,
   onSubmit,
+  penActive,
   positioningRef,
   surfaceAvailable,
   targetBounds,
@@ -52,6 +55,7 @@ export function PointTalkComposer({
   onStartVoice: () => void;
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
+  penActive: (timeStamp: number) => boolean;
   positioningRef: RefObject<HTMLElement | null>;
   surfaceAvailable: boolean;
   targetBounds: PointTalkBounds | null;
@@ -166,7 +170,9 @@ export function PointTalkComposer({
       attributes: true,
       attributeFilter: ["data-canvas-modal-open"],
     });
-    if (shell !== null) chromeObserver?.observe(shell, { childList: true, subtree: true });
+    // The lazily loaded index mounts its drawer as a direct child of the shell;
+    // watching the whole subtree remeasured on every material text mutation.
+    if (shell !== null) chromeObserver?.observe(shell, { childList: true });
     observeFiles();
     const visual = window.visualViewport;
     window.addEventListener("resize", scheduleMeasure);
@@ -185,20 +191,17 @@ export function PointTalkComposer({
     };
   }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
-  useEffect(() => {
-    if (!surfaceAvailable) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancelAndRestoreFocus();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [cancelAndRestoreFocus, surfaceAvailable]);
+  // Before submit Escape cancels the local turn; after submit it only detaches
+  // this presentation. An IME candidate dismissal never reaches it.
+  useEscapeLayer(surfaceAvailable, "transient", () => {
+    if (!pointTalkSurfaceVisible(controller.state.phase)) return false;
+    cancelAndRestoreFocus();
+    return true;
+  });
 
   useEffect(() => {
     if (!surfaceAvailable) return;
+    let pendingTouchDismissal: (() => void) | null = null;
     const cancelFromOutsidePointer = (event: PointerEvent) => {
       const target = event.target;
       const targetElement = target instanceof Element
@@ -206,16 +209,32 @@ export function PointTalkComposer({
         : target instanceof Node
           ? target.parentElement
           : null;
-      if (pointTalkOutsidePointerDismisses({
+      if (!pointTalkOutsidePointerDismisses({
         insideBubble: target instanceof Node && bubbleRef.current?.contains(target) === true,
         insideCanvasChrome: targetElement?.closest("[data-canvas-chrome]") != null,
         insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
-      })) onCancel();
+      })) return;
+      if (event.pointerType !== "touch") {
+        onCancel();
+        return;
+      }
+      // A palm while a pen writes (perhaps into this very field) is not a tap.
+      if (penActive(event.timeStamp)) return;
+      // A palm resting beside the pen must not discard a typed direction: a
+      // touch dismisses only once it commits to a real tap or gesture.
+      pendingTouchDismissal?.();
+      pendingTouchDismissal = deferUntilTouchCommits(
+        { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+        onCancel,
+      );
     };
     document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
-    return () => document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
-  }, [onCancel, submitted, surfaceAvailable]);
+    return () => {
+      document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
+      pendingTouchDismissal?.();
+    };
+  }, [onCancel, penActive, submitted, surfaceAvailable]);
 
   useEffect(() => {
     if (
@@ -235,7 +254,7 @@ export function PointTalkComposer({
   }, [placementReady, recoveryAvailable, surfaceAvailable]);
 
   const activeState = controller.state;
-  if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
+  if (!pointTalkSurfaceVisible(activeState.phase)) return null;
   const recording = activeState.phase === "recording";
   const status = pointTalkStatus(activeState, locale);
 
@@ -284,6 +303,10 @@ export function PointTalkComposer({
       )}
     </div>
   );
+}
+
+function pointTalkSurfaceVisible(phase: TextSwapController["state"]["phase"]): boolean {
+  return phase !== "idle" && phase !== "success" && phase !== "stale";
 }
 
 export function pointTalkOutsidePointerDismisses({
@@ -394,12 +417,12 @@ function pointTalkStatus(
   state: TextSwapController["state"],
   locale: CanvasLanguage,
 ): string {
-  const zh = locale === "zh-CN" || locale === "zh-TW";
-  if (state.phase === "permission") return zh ? "正在等待麦克风…" : "Waiting for microphone…";
-  if (state.phase === "recording") return state.partialDirection?.trim() || (zh ? "正在听…" : "Listening…");
-  if (state.phase === "transcribing") return zh ? "正在听清…" : "Transcribing…";
-  if (state.phase === "pending") return zh ? "正在换一种说法…" : "Rewording…";
-  if (state.phase === "error") return zh ? "原文没有改变。" : "The original language was kept.";
+  const copy = pointTalkCopy(locale);
+  if (state.phase === "permission") return copy.waitingForMicrophone;
+  if (state.phase === "recording") return state.partialDirection?.trim() || copy.listening;
+  if (state.phase === "transcribing") return copy.transcribing;
+  if (state.phase === "pending") return copy.rewording;
+  if (state.phase === "error") return copy.originalKept;
   return "";
 }
 
@@ -422,8 +445,25 @@ export function pointTalkRecoveryAction(
   }
 }
 
-function pointTalkCopy(locale: CanvasLanguage) {
-  if (locale === "zh-CN") return {
+type PointTalkCopy = Readonly<{
+  label: string;
+  placeholder: string;
+  voice: string;
+  apply: string;
+  stop: string;
+  retry: string;
+  recordAgain: string;
+  waitingForMicrophone: string;
+  listening: string;
+  transcribing: string;
+  rewording: string;
+  originalKept: string;
+}>;
+
+// Complete per locale: status lines once fell back to English for Japanese and
+// German and to Simplified Chinese for Traditional Chinese.
+const POINT_TALK_COPY: Readonly<Record<CanvasLanguage, PointTalkCopy>> = Object.freeze({
+  "zh-CN": Object.freeze({
     label: "告诉 AI 这段文字应该怎样改变",
     placeholder: "例如：更凝练一些",
     voice: "说出改写方向",
@@ -431,8 +471,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "完成",
     retry: "重试",
     recordAgain: "重新录音",
-  };
-  if (locale === "zh-TW") return {
+    waitingForMicrophone: "正在等待麦克风…",
+    listening: "正在听…",
+    transcribing: "正在听清…",
+    rewording: "正在换一种说法…",
+    originalKept: "原文没有改变。",
+  }),
+  "zh-TW": Object.freeze({
     label: "告訴 AI 這段文字應該怎樣改變",
     placeholder: "例如：更精煉一些",
     voice: "說出改寫方向",
@@ -440,8 +485,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "完成",
     retry: "重試",
     recordAgain: "重新錄音",
-  };
-  if (locale === "ja-JP") return {
+    waitingForMicrophone: "正在等待麥克風…",
+    listening: "正在聽…",
+    transcribing: "正在聽清…",
+    rewording: "正在換一種說法…",
+    originalKept: "原文沒有改變。",
+  }),
+  "ja-JP": Object.freeze({
     label: "この文章をどう変えるか AI に伝える",
     placeholder: "例：もう少し簡潔に",
     voice: "書き換え方を話す",
@@ -449,8 +499,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "完了",
     retry: "再試行",
     recordAgain: "もう一度録音",
-  };
-  if (locale === "de-DE") return {
+    waitingForMicrophone: "マイクを待っています…",
+    listening: "聞いています…",
+    transcribing: "文字に起こしています…",
+    rewording: "言い換えています…",
+    originalKept: "元の文章はそのままです。",
+  }),
+  "de-DE": Object.freeze({
     label: "AI eine Richtung für diesen Text geben",
     placeholder: "Zum Beispiel: etwas prägnanter",
     voice: "Richtung einsprechen",
@@ -458,8 +513,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "Fertig",
     retry: "Erneut",
     recordAgain: "Erneut aufnehmen",
-  };
-  return {
+    waitingForMicrophone: "Warte auf das Mikrofon …",
+    listening: "Hört zu …",
+    transcribing: "Wird transkribiert …",
+    rewording: "Wird umformuliert …",
+    originalKept: "Der ursprüngliche Text bleibt erhalten.",
+  }),
+  "en-US": Object.freeze({
     label: "Tell AI how this passage should change",
     placeholder: "For example: make it more concise",
     voice: "Speak a rewrite direction",
@@ -467,5 +527,14 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "Done",
     retry: "Retry",
     recordAgain: "Record again",
-  };
+    waitingForMicrophone: "Waiting for microphone…",
+    listening: "Listening…",
+    transcribing: "Transcribing…",
+    rewording: "Rewording…",
+    originalKept: "The original language was kept.",
+  }),
+});
+
+export function pointTalkCopy(locale: CanvasLanguage): PointTalkCopy {
+  return POINT_TALK_COPY[locale];
 }

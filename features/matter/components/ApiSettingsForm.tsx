@@ -642,14 +642,17 @@ export function ApiSettingsForm({
         )}
       </div>
 
-      {visibleNotice === null ? null : (
-        <div className={styles.apiStateRow}>
-          <div aria-live="polite" className={styles.apiState}>
-            <p role={visibleNotice.kind === "error" ? "alert" : "status"}>
-              {copy[visibleNotice.code]}
-            </p>
-          </div>
-          {status?.credentialPresent !== true && status?.resetRequired !== true ? null : (
+      {/* The live region is mounted before it speaks, so its first notice is
+          announced; while silent it leaves the form's flow. One polite region
+          carries both outcomes rather than nesting an alert inside it. */}
+      <div className={styles.apiStateRow} data-silent={visibleNotice === null || undefined}>
+        <div aria-atomic="true" className={styles.apiState} role="status">
+          {visibleNotice === null ? null : (
+            <p data-notice-kind={visibleNotice.kind}>{copy[visibleNotice.code]}</p>
+          )}
+        </div>
+        {visibleNotice === null ? null : (
+          status?.credentialPresent !== true && status?.resetRequired !== true ? null : (
             <div className={styles.apiRemoveActions}>
               {status?.credentialPresent === true && removeArmed ? (
                 <button
@@ -676,9 +679,9 @@ export function ApiSettingsForm({
                     : removeArmed ? copy.confirmRemove : copy.remove}
               </button>
             </div>
-          )}
-        </div>
-      )}
+          )
+        )}
+      </div>
 
       <div className={styles.apiFooter}>
         <p className={styles.apiPrivacy} id={descriptionId}>{copy.privacy}</p>

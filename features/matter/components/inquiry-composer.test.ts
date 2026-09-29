@@ -49,13 +49,31 @@ describe("inquiry composer", () => {
     const answerId = pendingAnswerId(state);
     state = reduceInquiry(state, { type: "ask" });
     state = reduceInquiry(state, {
-      type: "withdraw-unavailable",
+      type: "withdraw",
       id: answerId,
       question: "这是什么？",
+      reason: "BUSY",
     });
     expect(state.turns).toEqual([]);
     expect(state.draft).toBe("这是什么？");
+    // The refusal is said once, quietly, in the status slot.
+    expect(state.notice).toEqual({ kind: "answer", reason: "BUSY" });
     expect(canSubmitInquiry(state)).toBe(true);
+    expect(reduceInquiry(state, { type: "type", value: "这是什么" }).notice).toBeNull();
+  });
+
+  it("withdraws an explicitly cancelled question without a notice", () => {
+    let state = reduceInquiry(createInquiryState(), { type: "type", value: "先不问了" });
+    const answerId = pendingAnswerId(state);
+    state = reduceInquiry(state, { type: "ask" });
+    state = reduceInquiry(state, { type: "withdraw", id: answerId, question: "先不问了", reason: null });
+    expect(state).toMatchObject({ draft: "先不问了", notice: null, turns: [] });
+  });
+
+  it("keeps a voice notice distinct from an answer notice", () => {
+    let state = reduceInquiry(createInquiryState(), { type: "listen" });
+    state = reduceInquiry(state, { type: "listen-failed", notice: "voice-denied" });
+    expect(state.notice).toEqual({ kind: "voice", reason: "voice-denied" });
   });
 
   it("only enables a settled non-blank question with no pending answer", () => {
@@ -100,9 +118,65 @@ describe("inquiry composer", () => {
     expect(canSubmitInquiry(reduceInquiry(settled, { type: "type", value: "第三个问题" }))).toBe(true);
   });
 
-  it("clears a closed inquiry rather than retaining a transient exchange", () => {
+  it("clears settled exchanges and the draft when the bubble closes", () => {
     let state = reduceInquiry(createInquiryState(), { type: "type", value: "旧问题" });
+    const answerId = pendingAnswerId(state);
     state = reduceInquiry(state, { type: "ask" });
-    expect(reduceInquiry(state, { type: "close" })).toEqual(createInquiryState());
+    state = reduceInquiry(state, { type: "answer", id: answerId, outcome: { status: "answered", text: "旧回答" } });
+    state = reduceInquiry(state, { type: "type", value: "没问出口的话" });
+    const closed = reduceInquiry(state, { type: "close" });
+    expect(closed).toMatchObject({ draft: "", turns: [], notice: null, phase: "idle" });
+  });
+
+  it("keeps a submitted question in flight through close and reopen", () => {
+    let state = reduceInquiry(createInquiryState(), { type: "type", value: "第一个问题" });
+    const firstAnswerId = pendingAnswerId(state);
+    state = reduceInquiry(state, { type: "ask" });
+    state = reduceInquiry(state, {
+      type: "answer",
+      id: firstAnswerId,
+      outcome: { status: "answered", text: "第一个回答" },
+    });
+    state = reduceInquiry(state, { type: "type", value: "第二个问题" });
+    const pendingId = pendingAnswerId(state);
+    state = reduceInquiry(state, { type: "ask" });
+
+    // Dismissing presentation is not cancellation after submit.
+    const closed = reduceInquiry(state, { type: "close" });
+    expect(closed.turns).toEqual([
+      { id: pendingId - 1, role: "person", text: "第二个问题" },
+      { id: pendingId, role: "matter", outcome: { status: "pending" } },
+    ]);
+    expect(canSubmitInquiry(reduceInquiry(closed, { type: "type", value: "第三个" }))).toBe(false);
+
+    // A second close while still pending keeps it; its late answer lands.
+    const answered = reduceInquiry(reduceInquiry(closed, { type: "close" }), {
+      type: "answer",
+      id: pendingId,
+      outcome: { status: "answered", text: "第二个回答" },
+    });
+    expect(answered.turns.at(-1)).toMatchObject({ outcome: { status: "answered", text: "第二个回答" } });
+    expect(pendingAnswerId(answered)).toBeGreaterThan(pendingId);
+
+    // Seen settled, the next close lets it go.
+    expect(reduceInquiry(answered, { type: "close" }).turns).toEqual([]);
+  });
+
+  it("returns a question refused while closed to the next opening", () => {
+    let state = reduceInquiry(createInquiryState(), { type: "type", value: "关着的时候问的" });
+    const answerId = pendingAnswerId(state);
+    state = reduceInquiry(state, { type: "ask" });
+    state = reduceInquiry(state, { type: "close" });
+    state = reduceInquiry(state, {
+      type: "withdraw",
+      id: answerId,
+      question: "关着的时候问的",
+      reason: "TIMED_OUT",
+    });
+    expect(state).toMatchObject({
+      draft: "关着的时候问的",
+      turns: [],
+      notice: { kind: "answer", reason: "TIMED_OUT" },
+    });
   });
 });
