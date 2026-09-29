@@ -130,15 +130,16 @@ export async function generateLabel(
         limits,
         deadlineCeilingMs: limits.timeoutMs,
       });
-      return outcome.ok
-        ? { label: outcome.value }
-        : { label: null, reason: outcome.fallback };
+      if (!outcome.ok) return { label: null, reason: outcome.fallback };
+      // The flight owns its adjudicated answer, not any one caller. A paid call
+      // that finishes after every caller has left still serves the next one.
+      writeCache(key, outcome.value, now(), limits);
+      return { label: outcome.value };
     }),
     requestSignal,
   );
 
   if (attempt.label === null) return settle(request, provisional.text, attempt.reason);
-  writeCache(key, attempt.label, now(), limits);
   return settle(request, attempt.label, undefined, "model");
 }
 
