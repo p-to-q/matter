@@ -673,6 +673,69 @@ describe("IndexedDB document repository", () => {
     second.controller.dispose();
   });
 
+  it.each([
+    ["an unreadable record", (treeId: string) => {
+      memory.mutateRecord(treeId, "undo", 0, (record) => ({ ...record, inverse: "damaged" }));
+    }],
+    ["a missing record", (treeId: string) => memory.deleteRecord(treeId, "undo", 1)],
+    ["a manifest in another format", (treeId: string) => memory.mutateRow(treeId, (row) => ({
+      ...row,
+      historyJournal: { ...(row.historyJournal as object), formatVersion: 2 },
+    }))],
+    ["a manifest whose byte total disagrees with its records", (treeId: string) => memory.mutateRow(treeId, (row) => {
+      const journal = row.historyJournal as { bytes: number };
+      return { ...row, historyJournal: { ...journal, bytes: journal.bytes + 1 } };
+    })],
+  ])("writes back steps released while reading %s, so the next reload is quiet", async (_damage, damage) => {
+    const session = steps(seeded(), 3);
+    const seededSave = await save(createIndexedDbDocumentRepository(), session, UNKNOWN);
+    if (!seededSave.ok) throw new Error(seededSave.error.code);
+    damage(session.tree.id);
+
+    const first = await reloadAsTab(session.tree);
+    expect(first.released).toBe(true);
+    expect(first.controller.getStatus().historyNotice).toBe("unavailable");
+    await vi.waitFor(() => expect(memory.row(session.tree.id)).toMatchObject({ writeGeneration: 2 }));
+    // The row names only records that exist and read back.
+    expect(recordKeys(memory)).toEqual(manifestKeys(memory, session.tree.id));
+    first.controller.dispose();
+
+    const second = await reloadAsTab(session.tree);
+    expect(second.released).toBe(false);
+    expect(second.controller.getStatus().historyNotice).toBeNull();
+    expect(second.history.entries.map(({ commandId }) => commandId))
+      .toEqual(first.history.entries.map(({ commandId }) => commandId));
+    second.controller.dispose();
+  });
+
+  it("writes back a pre-v6 journal whose unreadable step was released while reading", async () => {
+    const session = steps(seeded(), 3);
+    const legacy = structuredClone(session.history) as unknown as { entries: Record<string, unknown>[] };
+    legacy.entries[1] = { ...legacy.entries[1], inverse: "damaged" };
+    memory.putRow({
+      storageSchemaVersion: 1,
+      treeId: session.tree.id,
+      treeRevision: session.tree.revision,
+      writeGeneration: 3,
+      bundle: treeToBundle(session.tree),
+      history: legacy,
+    });
+
+    const first = await reloadAsTab(session.tree);
+    expect(first.released).toBe(true);
+    expect(first.history.entries.map(({ commandId }) => commandId)).toEqual(["step_3"]);
+    await vi.waitFor(() => expect(memory.row(session.tree.id)).toMatchObject({ writeGeneration: 4 }));
+    expect(memory.row(session.tree.id)).not.toHaveProperty("history");
+    expect(recordKeys(memory)).toEqual(manifestKeys(memory, session.tree.id));
+    first.controller.dispose();
+
+    const second = await reloadAsTab(session.tree);
+    expect(second.released).toBe(false);
+    expect(second.controller.getStatus().historyNotice).toBeNull();
+    expect(second.history.entries.map(({ commandId }) => commandId)).toEqual(["step_3"]);
+    second.controller.dispose();
+  });
+
   it("persists a stack released at use, so its stale step is not offered again", async () => {
     const session = steps(seeded(), 3);
     const seededSave = await save(createIndexedDbDocumentRepository(), session, UNKNOWN);
@@ -1111,6 +1174,13 @@ class MemoryDatabase {
     if (record === undefined) throw new Error("record missing");
     const key = [treeId, record.epoch as number, stack, position];
     store.set(JSON.stringify(key), { key, value: change(record) });
+  }
+
+  deleteRecord(treeId: string, stack: string, position: number) {
+    const store = this.stores.get("historyEntries")!;
+    for (const [serialized, { value }] of store) {
+      if (value.treeId === treeId && value.stack === stack && value.position === position) store.delete(serialized);
+    }
   }
 
   snapshot() {

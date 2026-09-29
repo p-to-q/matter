@@ -255,9 +255,11 @@ layout; the repository executes it.
   step that fails at use releases its whole stack. A restored step's stored byte
   count is compared with its memento when it is first applied, so a damaged
   count fails closed instead of escaping the byte bound. The next save persists
-  the release even when the material revision is unchanged (the controller skips
-  a publication only with the history last saved or loaded), so the notice does
-  not return on the next reload; the footer carries it once. A "released" notice
+  the release even when the material revision is unchanged: the controller
+  skips a publication only with the history last saved or loaded whole, and a
+  read that released steps never counts as loaded whole. The row then names
+  only records that exist, so the notice does not return on the next reload;
+  the footer carries it once. A "released" notice
   ends when a save keeps the whole history again, and a shed never hides an
   unread "unavailable" one. A manifest in another format
   or one that no longer repeats its row's generation and revision is unusable:

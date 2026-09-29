@@ -348,7 +348,11 @@ export function createPersistenceController(
     loaded: Readonly<{ tree: ThoughtTree; history: RecoveredHistory; basis: SnapshotBasis }>,
   ): StoredDocument => {
     basis = loaded.basis;
-    persistedHistory = loaded.history.history;
+    // Steps released while reading (an unreadable or missing record, an
+    // unusable manifest) are still named by the row. Until a save writes the
+    // smaller journal, every reload would find the same damage and announce it
+    // again, so a released read never counts as the history storage holds.
+    persistedHistory = loaded.history.released ? null : loaded.history.history;
     update({
       ...status,
       phase: "saved",
@@ -453,8 +457,9 @@ export function createPersistenceController(
         return;
       }
       // An unchanged revision is skipped only with the history last saved or
-      // loaded: a step released at load or at use changes history alone, and
-      // storage must stop offering it (and its notice) on the next reload.
+      // loaded whole: a step released at read, at attach, or at use changes
+      // history alone, and storage must stop offering it (and its notice) on
+      // the next reload.
       if (
         pending === null &&
         status.phase === "saved" &&
