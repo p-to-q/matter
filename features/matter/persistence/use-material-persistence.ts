@@ -4,7 +4,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
 import { createIndexedDbDocumentRepository } from "./document-repository";
-import { createDocumentGenerationChannel } from "./document-generation-channel";
+import {
+  createDocumentGenerationChannel,
+  type DocumentGeneration,
+  type DocumentGenerationChannel,
+} from "./document-generation-channel";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
 import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
@@ -43,16 +47,18 @@ export function useMaterialPersistence(
    */
   materialIdle: boolean,
 ) {
-  // The channel and controller share one lifetime: every committed row is
-  // announced, and disposal closes both.
+  // The generation channel is an external resource, so the effect that listens
+  // on it creates and closes it; the controller announces every committed row
+  // through it while it is open. Constructing the controller opens nothing, so
+  // a Strict Mode rehearsal of this initializer leaks no channel or database.
   const [owner] = useState(() => {
-    const channel = createDocumentGenerationChannel();
+    const announcer = new GenerationAnnouncer();
     const controller = createPersistenceController(createIndexedDbDocumentRepository(), {
-      announceGeneration: channel.publish,
+      announceGeneration: (generation) => announcer.publish(generation),
     });
-    return Object.freeze({ channel, controller });
+    return Object.freeze({ announcer, controller });
   });
-  const { controller } = owner;
+  const { announcer, controller } = owner;
   const latestTreeRef = useRef(tree);
   const latestHistoryRef = useRef(history);
   const latestUntouchedTreeRef = useRef(untouchedTree);
@@ -135,13 +141,10 @@ export function useMaterialPersistence(
       queueMicrotask(() => {
         // React development mode rehearses setup/cleanup synchronously. Close
         // IndexedDB only when no replacement lifecycle claimed this controller.
-        if (lifecycleRef.current === lifecycle) {
-          controller.dispose();
-          owner.channel.close();
-        }
+        if (lifecycleRef.current === lifecycle) controller.dispose();
       });
     };
-  }, [applyCandidate, controller, initialHistory, initialTree, owner]);
+  }, [applyCandidate, controller, initialHistory, initialTree]);
 
   useEffect(() => {
     if (!reconciledRef.current) return;
@@ -160,6 +163,8 @@ export function useMaterialPersistence(
     watchRef.current?.setMaterialIdle(materialIdle);
   }, [materialIdle]);
   useEffect(() => {
+    const channel = createDocumentGenerationChannel();
+    announcer.attach(channel);
     const watch = createStoredGenerationWatch({ window, document }, {
       ready: () => reconciledRef.current,
       observe: (generation) => controller.observeStoredGeneration(generation),
@@ -173,13 +178,15 @@ export function useMaterialPersistence(
     });
     watchRef.current = watch;
     watch.setMaterialIdle(materialIdleRef.current);
-    const unsubscribe = owner.channel.subscribe((generation) => watch.receive(generation));
+    const unsubscribe = channel.subscribe((generation) => watch.receive(generation));
     return () => {
       unsubscribe();
       watch.dispose();
       if (watchRef.current === watch) watchRef.current = null;
+      announcer.detach(channel);
+      channel.close();
     };
-  }, [controller, owner]);
+  }, [announcer, controller]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
   const unsavedPersonMaterial = holdsUnsavedPersonMaterial(
@@ -256,6 +263,23 @@ function readSessionStorage(): Storage | null {
   } catch {
     // Some privacy modes throw on access to session storage itself.
     return null;
+  }
+}
+
+/** Render-independent route from the controller to whichever channel is open. */
+class GenerationAnnouncer {
+  #channel: DocumentGenerationChannel | null = null;
+
+  attach(channel: DocumentGenerationChannel): void {
+    this.#channel = channel;
+  }
+
+  detach(channel: DocumentGenerationChannel): void {
+    if (this.#channel === channel) this.#channel = null;
+  }
+
+  publish(generation: DocumentGeneration): void {
+    this.#channel?.publish(generation);
   }
 }
 
