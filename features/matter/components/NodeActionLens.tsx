@@ -108,12 +108,17 @@ export function NodeActionLens({
   // Wiki reviews are the keyboard's and touch's path to a changed word. A fine
   // pointer taps the word itself, so its lens never grows over that word.
   const [keyboardNodeId, setKeyboardNodeId] = useState<string | null>(null);
+  const keyboardNodeIdRef = useRef<string | null>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const targetElementRef = useRef<HTMLElement | null>(null);
   const pendingKeyboardEntryRef = useRef<string | null>(null);
   const dismissedFocusNodeIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
 
+  const noteKeyboardEntry = useCallback((nodeId: string | null) => {
+    keyboardNodeIdRef.current = nodeId;
+    setKeyboardNodeId(nodeId);
+  }, []);
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current === null) return;
     window.clearTimeout(closeTimerRef.current);
@@ -125,8 +130,8 @@ export function NodeActionLens({
     pendingKeyboardEntryRef.current = null;
     setTarget(null);
     setPlacement(null);
-    setKeyboardNodeId(null);
-  }, [clearCloseTimer]);
+    noteKeyboardEntry(null);
+  }, [clearCloseTimer, noteKeyboardEntry]);
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
     closeTimerRef.current = window.setTimeout(close, CLOSE_DELAY_MS);
@@ -204,7 +209,7 @@ export function NodeActionLens({
       if (candidate?.nodeId === dismissedFocusNodeIdRef.current) return;
       if (candidate === null) return;
       reveal(candidate, "focus");
-      setKeyboardNodeId(isFocusVisible(candidate.element) ? candidate.nodeId : null);
+      noteKeyboardEntry(isFocusVisible(candidate.element) ? candidate.nodeId : null);
     };
     const focusOut = (event: FocusEvent) => {
       const from = materialTarget(event.target);
@@ -220,9 +225,12 @@ export function NodeActionLens({
       event.preventDefault();
       dismissedFocusNodeIdRef.current = null;
       pendingKeyboardEntryRef.current = candidate.nodeId;
-      setKeyboardNodeId(candidate.nodeId);
+      // A first keyboard entry may add Wiki reviews and re-place the lens;
+      // focus then waits for that placement instead of a button about to go.
+      const entered = keyboardNodeIdRef.current === candidate.nodeId;
+      noteKeyboardEntry(candidate.nodeId);
       reveal(candidate, "focus");
-      focusPendingKeyboardEntry(candidate.nodeId);
+      if (entered) focusPendingKeyboardEntry(candidate.nodeId);
     };
     const pointerDown = () => close();
     const reconcileCurrentTarget = () => {
@@ -263,7 +271,7 @@ export function NodeActionLens({
       canvas.removeEventListener("pointerdown", pointerDown);
       chromeObserver.disconnect();
     };
-  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, heldAsideRootIds, scheduleClose]);
+  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, heldAsideRootIds, noteKeyboardEntry, scheduleClose]);
 
   const selectedTarget = useMemo<LensTarget | null>(
     () => coarse && navigation.selectedNodeId !== null && activeNodeIds.has(navigation.selectedNodeId)
@@ -397,7 +405,7 @@ export function NodeActionLens({
   useLayoutEffect(() => {
     if (currentPlacement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
     focusPendingKeyboardEntry(activeTarget.nodeId);
-  }, [activeTarget, currentPlacement, focusPendingKeyboardEntry]);
+  }, [activeTarget, currentPlacement, focusPendingKeyboardEntry, keyboardNodeId]);
 
   const lensVisible = activeTarget !== null && currentPlacement !== null && actionCount > 0;
   useEscapeLayer(lensVisible, "transient", () => {

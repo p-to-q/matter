@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { localizeWikiUnsaved } from "../features/matter/components/canvas-guidance";
 import { nodeActionLensCopy } from "../features/matter/components/node-action-lens-copy";
 import { wikiOccurrenceDescription } from "../features/matter/components/wiki-occurrence-description-copy";
 import { wikiTakeoverCopy } from "../features/matter/components/wiki-takeover-copy";
@@ -13,6 +14,7 @@ const TAKEOVER = wikiTakeoverCopy("zh-CN");
 const LENS = nodeActionLensCopy("zh-CN");
 // A takeover dismissed sooner than this after it appears was not read.
 const TAKEOVER_READABLE_MS = 500;
+const WIKI_UNSAVED = localizeWikiUnsaved("zh-CN");
 const WIKI_TITLE = "词典 WIKI";
 // MediaRecorder emits 250 ms chunks; one interval plus headroom proves audio.
 const MIN_SYNTHETIC_CAPTURE_MS = 350;
@@ -117,6 +119,9 @@ for (const viewport of VIEWPORTS) {
     await page.keyboard.press("ArrowRight");
     const lens = page.getByRole("toolbar", { name: LENS.actions });
     await expect(lens).toBeVisible();
+    // ArrowRight enters the passage's actions, which now include the review.
+    await expect.poll(() => lens.evaluate((element) => element.contains(document.activeElement)))
+      .toBe(true);
     await page.keyboard.press("End");
     const review = lens.getByRole("button", { name: LENS.wikiReview(HEARD, CANONICAL) });
     await expect(review).toBeFocused();
@@ -157,6 +162,36 @@ for (const viewport of VIEWPORTS) {
     expect(errors).toEqual([]);
   });
 }
+
+test("a Keep Wiki could not record is said once and clears on the next action", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectMarkCount(page, 1);
+  // The attribution is gone, as after its registry window lapsed.
+  await page.evaluate(() => {
+    const slot = (globalThis as unknown as Record<symbol, { registry: { clear(): void } } | undefined>)[
+      Symbol.for("ptoq.matter.wiki-occurrence-registry")
+    ];
+    slot?.registry.clear();
+  });
+
+  await tapWord(page, passage, CANONICAL);
+  const takeover = page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) });
+  await takeover.getByRole("button", { name: TAKEOVER.keepLabel(CANONICAL) }).click();
+  await expect(page.locator(".wiki-takeover")).toHaveCount(0);
+  // The word stays as it is; only the learning was lost, and that is said.
+  await expectMarkCount(page, 0);
+  await expectPlainText(passage, ADMITTED);
+  const line = page.locator(".matter-guidance");
+  await expect(line).toHaveAttribute("data-guidance-state", "wiki-unsaved");
+  await expect(line).toHaveText(WIKI_UNSAVED);
+  await expect(page.getByRole("status").filter({ hasText: WIKI_UNSAVED })).toHaveCount(1);
+  await page.keyboard.press("Shift");
+  await expect(line).toHaveAttribute("data-guidance-state", "wiki-unsaved");
+  await page.keyboard.press("Tab");
+  await expect(line).not.toHaveAttribute("data-guidance-state", "wiki-unsaved");
+  expect(errors).toEqual([]);
+});
 
 test("informed silence settles after two further admissions", async ({ page }) => {
   const errors = collectBrowserErrors(page);
