@@ -120,7 +120,13 @@ export function useTextSwap<TCommitted>(
       pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingRef.current, monotonicNow()) === 0,
     onChange: (open) => driver.setDeliveryWindowOpen(open),
     onSuspend: () => driver.suspendCapture(),
-    onExit: () => driver.cancel(),
+    // A back-forward-cache hide only suspends: the page may be shown again
+    // with its memory intact, so submitted work keeps its immutable basis and
+    // delivers through the visible, pointer-idle window on return. Only a real
+    // unload ends it. Raw capture already stopped with the suspension.
+    onExit: (exit) => {
+      if (!exit.persisted) driver.cancel();
+    },
   }, driver);
 
   useLayoutEffect(() => {

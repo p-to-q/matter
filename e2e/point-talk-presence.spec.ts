@@ -198,6 +198,44 @@ test.describe("Point and Talk presence", () => {
     expect(exiting?.fade).toContain(`${POINT_TALK_TIMING.exitMs.invalidated / 1_000}s`);
   });
 
+  for (const persisted of [true, false]) {
+    test(`a ${persisted ? "back-forward-cache" : "real unload"} page hide ${persisted ? "suspends" : "ends"} a submitted rewrite`, async ({ page }) => {
+      let releaseRewrite!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        releaseRewrite = resolve;
+      });
+      await page.route("**/api/text-swap", async (route) => {
+        await gate;
+        await route.fallback();
+      });
+      await routeRewrite(page, 0);
+      await openSettled(page, DESKTOP);
+      await openField(page);
+      await page.getByRole("textbox", { name: DIRECTION_LABEL }).fill("更凝练一些");
+      await page.getByRole("button", { name: "改写", exact: true }).click();
+      await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
+
+      await page.evaluate((keep) => {
+        window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: keep }));
+      }, persisted);
+      releaseRewrite();
+      await page.waitForTimeout(POINT_TALK_TIMING.pendingMinMs + 200);
+      const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+      // Nothing reaches the material while the page is away.
+      await expect(passage).not.toContainText(REWRITTEN);
+      await page.evaluate((keep) => {
+        window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: keep }));
+      }, persisted);
+      if (persisted) {
+        await expect(passage).toContainText(REWRITTEN);
+      } else {
+        await page.waitForTimeout(POINT_TALK_TIMING.pendingMinMs);
+        await expect(passage).not.toContainText(REWRITTEN);
+        await expect(page.locator(".point-talk")).toHaveCount(0);
+      }
+    });
+  }
+
   test("relayout, resize, scrolling, and font loading never close the field", async ({ page }) => {
     await openSettled(page, DESKTOP);
     await openField(page);
