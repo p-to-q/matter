@@ -303,11 +303,12 @@ export function prepareTransformIngress(
   const rawText = replacedText(raw.command);
   const actionStart = parsedPlan.action.start;
   const actionEnd = actionStart + parsedPlan.action.text.length;
+  // A valid answer whose generated gaps cannot be proven keeps its raw form.
   if (
     generatedRanges === null ||
     rawText === null ||
     rawText.slice(actionStart, actionEnd) !== parsedPlan.action.text
-  ) return rejectedTransform();
+  ) return withheldTransform(raw.command, parsedPlan, input.lexicalSession);
   const canonical = canonicalizeMaterialText(input.lexicalSession, {
     locale: parsedEnvelope.envelope.locale,
     channel: "written",
@@ -494,6 +495,8 @@ function attributeOccurrences(
       end > nodeText.length ||
       nodeText.slice(start, end) !== canonical.text.slice(edit.start, edit.end)
     ) return null;
+    // Nothing visibly changed, so there is nothing to disclose or to settle.
+    if (edit.sourceText === nodeText.slice(start, end)) continue;
     edits.push(Object.freeze({
       start,
       end,
