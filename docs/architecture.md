@@ -813,7 +813,8 @@ to proven generated gaps, and withholds rather than refuses when those gaps
 cannot be proven.
 
 Each applied edit may carry one opaque occurrence token held in a bounded
-in-memory Wiki registry (64 entries; 10 s before commit, 5 min after). After a
+in-memory Wiki registry (64 claimed occurrences plus 64 uncommitted
+candidates; 10 s before commit, 5 min after). After a
 successful commit the store calls one neutral port,
 `publishCommittedLexicalOccurrences`, and composition hands the publication to
 the lazy browser occurrence driver (`interaction/wiki-occurrence-driver.ts`),

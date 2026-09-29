@@ -90,8 +90,9 @@ and reusing an older completion-policy receipt for this behavior.
 ## 2026-09-29 — a transcription request declares its purpose in the URL
 
 Changed: the browser sends `?purpose=admission|direction|swap-direction` on
-`POST /api/transcribe`. A closed purpose is refused with retryable
-`TRANSCRIPTION_UNAVAILABLE` (503) before a recording byte is read. The
+`POST /api/transcribe`. A closed purpose is refused with non-retryable
+`TRANSCRIPTION_UNAVAILABLE` (503) before admission accounting and before a
+recording byte is read. The
 multipart `purpose` field stays authoritative: a repeated, invalid, or
 mismatched URL value is `INVALID_REQUEST` (400), and a request without it is
 gated as soon as the field is parsed.
