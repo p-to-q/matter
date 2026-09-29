@@ -186,7 +186,7 @@ answers every question with the empty set.
   constants in `WIKI_OCCURRENCE_PERCEPTION`. A settle cut off before the
   change was readable (before its crossfade ends, or before an underline
   finished drawing) is not disclosure; it is retried once, and a word whose
-  settle keeps being cut off waits unperceived until it is censored.
+  settle keeps being cut off then discloses with the static mark alone.
 - Only after perception do informed facts accumulate: further successful human
   admissions (the one that carried the occurrence never counts), foreground
   time on the uncovered paper, a Material Files copy of the passage or a native
