@@ -415,6 +415,122 @@ test("a hidden tab still accepts the bounded answer it already requested", async
   await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
 });
 
+test("a back-forward-cache hide keeps the waiting question and answers it on return", async ({ page }) => {
+  const gate = deferred<void>();
+  const received = deferred<void>();
+  const earlier = "先问一句：它在想什么？";
+  const earlierAnswer = "它在想另一种生活。";
+  const question = "离开又回来之后它还在吗？";
+  const answer = "它一直在等这一页回来。";
+  let requests = 0;
+  await page.route("**/api/inquiry", async (route) => {
+    requests += 1;
+    const request = inquiryRequest(route);
+    if (requests === 1) {
+      await fulfillInquiry(route, request, earlierAnswer);
+      return;
+    }
+    received.resolve();
+    await gate.promise;
+    await fulfillInquiry(route, request, answer);
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill(earlier);
+  await field.press("Enter");
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(earlierAnswer);
+  await field.fill(question);
+  await field.press("Enter");
+  await received.promise;
+
+  await dispatchPageTransition(page, "pagehide", true);
+  await dispatchPageTransition(page, "pageshow", true);
+  // The page came back with its memory: the opening's record is whole and
+  // the submitted question is still waiting.
+  await expect(inquiry.locator('[data-inquiry-role="person"]')).toHaveText([earlier, question]);
+  await expect(inquiry.locator("[data-inquiry-loading]")).toBeVisible();
+  await expect(field).toHaveValue("");
+
+  gate.resolve();
+  await expect(inquiry.locator('[data-inquiry-role="matter"]').last()).toContainText(answer);
+  await expect(inquiry.locator('[data-inquiry-role="matter"]').first()).toContainText(earlierAnswer);
+  await expect(inquiry.getByRole("status")).toHaveText("");
+  await expect.poll(() => inquiryExchangeCount(page)).toBe(2);
+  expect(requests).toBe(2);
+});
+
+test("a request the browser dropped across a back-forward-cache hide returns with a quiet notice", async ({ page }) => {
+  const gate = deferred<void>();
+  const received = deferred<void>();
+  const question = "缓存丢了请求会怎样？";
+  const answer = "再问一次就能回答。";
+  let requests = 0;
+  await page.route("**/api/inquiry", async (route) => {
+    requests += 1;
+    const request = inquiryRequest(route);
+    if (requests > 1) {
+      await fulfillInquiry(route, request, answer);
+      return;
+    }
+    received.resolve();
+    await gate.promise;
+    await route.abort("connectionaborted");
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill(question);
+  await field.press("Enter");
+  await received.promise;
+
+  await dispatchPageTransition(page, "pagehide", true);
+  gate.resolve();
+  await dispatchPageTransition(page, "pageshow", true);
+  // Not a silent drop: the question returns with one quiet, retryable line.
+  await expect(field).toHaveValue(question);
+  await expect(inquiry.getByRole("status")).toHaveText("没能连上 Matter，这句话没有继续发送。");
+  await expect(inquiry.locator("[data-inquiry-role]")).toHaveCount(0);
+
+  await field.press("Enter");
+  await expect(inquiry.locator('[data-inquiry-role="matter"]')).toContainText(answer);
+  await expect.poll(() => inquiryExchangeCount(page)).toBe(1);
+  expect(requests).toBe(2);
+});
+
+test("a real unload revokes the waiting question and makes its answer inert", async ({ page }) => {
+  const gate = deferred<void>();
+  const received = deferred<void>();
+  const routeSettled = deferred<void>();
+  const question = "真正离开时会怎样？";
+  await page.route("**/api/inquiry", async (route) => {
+    const request = inquiryRequest(route);
+    received.resolve();
+    await gate.promise;
+    await fulfillInquiry(route, request, "这条回答不应出现。").catch(() => undefined);
+    routeSettled.resolve();
+  });
+  await page.goto("/matter");
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  await field.fill(question);
+  await field.press("Enter");
+  await received.promise;
+
+  await dispatchPageTransition(page, "pagehide", false);
+  await expect(field).toHaveValue(question);
+  await expect(inquiry.locator("[data-inquiry-role]")).toHaveCount(0);
+  // A real unload needs no notice.
+  await expect(inquiry.getByRole("status")).not.toHaveText("没能连上 Matter，这句话没有继续发送。");
+  gate.resolve();
+  await routeSettled.promise;
+  await expect(inquiry.locator("[data-inquiry-role]")).toHaveCount(0);
+  expect(await inquiryExchangeCount(page)).toBe(0);
+});
+
 test("a material-context change keeps the answer tied to its captured question", async ({ page }) => {
   const gate = deferred<void>();
   const received = deferred<void>();
@@ -627,6 +743,16 @@ async function setDocumentVisibility(page: Page, state: "hidden" | "visible"): P
     });
     document.dispatchEvent(new Event("visibilitychange"));
   }, state);
+}
+
+async function dispatchPageTransition(
+  page: Page,
+  type: "pagehide" | "pageshow",
+  persisted: boolean,
+): Promise<void> {
+  await page.evaluate(({ type, persisted }) => {
+    window.dispatchEvent(new PageTransitionEvent(type, { persisted }));
+  }, { type, persisted });
 }
 
 async function segmentProbeRect(

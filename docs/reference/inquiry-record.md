@@ -81,8 +81,11 @@ they never infer a record from a current transient composer.
   ordinary material, scope, lineage, selection, and tab-visibility changes do
   not erase that captured read-only answer; explicit close, AI-surface switch,
   and a compact-breakpoint crossing detach only the transient presentation,
-  while explicit Cancel, a different local document owner, page exit, or
-  unmount revokes the submitted operation;
+  while explicit Cancel, a different local document owner, a real unload
+  (non-persisted `pagehide`), or unmount revokes the submitted operation; a
+  back-forward-cache hide keeps the opening's turns, the pending question, and
+  its bounded snapshot for the page's return, and a request the browser drops
+  meanwhile returns the question with the ordinary quiet transport notice;
 - internal clear, quota, malformed data, and cross-tab generation conflict
   cannot modify material or command history;
 - only bounded, terminal outcomes are encoded; provider content and material

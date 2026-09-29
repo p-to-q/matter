@@ -527,9 +527,11 @@ transcription or a submitted model request. Returning visible reopens delivery
 after global pointer-idle and exact target checks. `pagehide`, unmount, document
 owner replacement, explicit cancellation, or exact-basis conflict are terminal
 operation boundaries, except that a back-forward-cache `pagehide` only suspends
-Voice admission, a submitted Point-and-Talk or Elastic turn, and on-device
-transcription: their submitted or held work waits for the page's return. Read-only Inquiry follows the same submitted-owner rule
-without a material commit.
+Voice admission, a submitted Point-and-Talk, Elastic, or Ask Matter turn, and
+on-device transcription: their submitted or held work waits for the page's
+return. Read-only Inquiry follows the same submitted-owner rule without a
+material commit; a request the browser drops across that hide settles as an
+ordinary transport failure.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.
 
