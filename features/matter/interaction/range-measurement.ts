@@ -80,6 +80,40 @@ export function measureTextRange(
   }
 }
 
+/**
+ * Builds a live DOM Range over one logical address for a caller that owns its
+ * lifetime, such as a Custom Highlight. Returns null unless the rendered text
+ * is exactly the material text and both ends are grapheme boundaries.
+ */
+export function createMaterialTextRange(
+  root: Element,
+  materialText: string,
+  start: number,
+  end: number,
+): Range | null {
+  if (!root.isConnected) return null;
+  const textNodes = collectDescendantTextNodes(root);
+  if (textNodes.map((node) => node.data).join("") !== materialText) return null;
+  if (
+    !isValidRange({ start, end, selectedText: materialText.slice(start, end) }, materialText.length) ||
+    !hasGraphemeBoundaries(materialText, start, end)
+  ) return null;
+  const startPosition = locatePosition(textNodes, start, "start");
+  const endPosition = locatePosition(textNodes, end, "end");
+  const ownerDocument = root.ownerDocument;
+  if (!startPosition || !endPosition || typeof ownerDocument?.createRange !== "function") {
+    return null;
+  }
+  try {
+    const range = ownerDocument.createRange();
+    range.setStart(startPosition.node, startPosition.offset);
+    range.setEnd(endPosition.node, endPosition.offset);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
 /** Converts live CSSOM rectangles into immutable client-pixel values. */
 export function normalizeClientRects(
   rects: Iterable<Pick<DOMRect, "left" | "top" | "right" | "bottom">>,

@@ -9,6 +9,7 @@ import { wikiStateStorageBytes } from "../wiki/wiki-codec";
 import {
   applyWikiObservationBatch,
   applyWikiEvent,
+  applyWikiOccurrenceSettlement,
   clearWikiState,
   createEmptyWikiState,
   WIKI_CONFIRMED_ONLY,
@@ -19,6 +20,7 @@ import {
   type WikiEvent,
   type WikiObserveEvidenceEvent,
   type WikiObservationTick,
+  type WikiOccurrenceSettlement,
   type WikiState,
   type WikiTransitionResult,
 } from "../wiki/wiki-model";
@@ -69,6 +71,14 @@ export type WikiCoordinator = Readonly<{
     tick: WikiObservationTick,
     expectedView?: WikiObservationView,
   ): Promise<WikiCoordinatorResult>;
+  /**
+   * Records the one settlement of one applied occurrence. Informed acceptance
+   * and inspection are soft evidence: they rebase over a concurrent write and
+   * pause silently under the byte bound. A person's explicit decision or
+   * revert also rebases, because it addresses a rule rather than a view, but
+   * reports every failure.
+   */
+  settle(settlement: WikiOccurrenceSettlement): Promise<WikiCoordinatorResult>;
   clear(expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
   resetCorrupt(): Promise<WikiCoordinatorResult>;
   dispose(): void;
@@ -430,6 +440,18 @@ export function createWikiCoordinator(
         false,
         true,
         expectedView?.generation,
+      );
+    },
+    async settle(settlement) {
+      await start();
+      const soft = settlement.outcome === "accepted-implicit" ||
+        settlement.outcome === "inspected-kept" ||
+        settlement.outcome === "censored";
+      return enqueue(
+        (state) => applyWikiOccurrenceSettlement(state, settlement, qualifiedAliasProducers),
+        undefined,
+        true,
+        soft,
       );
     },
     clear: (expectedStateRevision) => enqueue(clearWikiState, expectedStateRevision),

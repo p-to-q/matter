@@ -71,6 +71,7 @@ describe("MaterialIngress admission preparation", () => {
       canonicalized: false,
       editCount: 0,
       canonicalizationWithheld: false,
+      lexicalEdits: [],
     });
   });
 
@@ -205,7 +206,9 @@ describe("MaterialIngress admission preparation", () => {
         canonicalized: false,
         editCount: 0,
         canonicalizationWithheld: true,
+        lexicalEdits: [],
       },
+      lexicalOccurrences: null,
     });
   });
 });
@@ -354,7 +357,9 @@ describe("MaterialIngress transform fallback", () => {
         canonicalized: false,
         editCount: 0,
         canonicalizationWithheld: true,
+        lexicalEdits: [],
       },
+      lexicalOccurrences: null,
     });
   });
 });
@@ -390,6 +395,7 @@ describe("MaterialIngress text-swap preparation", () => {
       canonicalized: false,
       editCount: 0,
       canonicalizationWithheld: false,
+      lexicalEdits: [],
     });
   });
 
@@ -465,7 +471,9 @@ describe("MaterialIngress text-swap preparation", () => {
         canonicalized: false,
         editCount: 0,
         canonicalizationWithheld: true,
+        lexicalEdits: [],
       },
+      lexicalOccurrences: null,
     });
   });
 
@@ -495,6 +503,293 @@ describe("MaterialIngress text-swap preparation", () => {
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
 });
+
+describe("MaterialIngress lexical attribution", () => {
+  it("addresses an admission edit in the admitted node text, content-free in the receipt", () => {
+    const tree = createEmptyTree("tree_ingress");
+    const navigation = createNavigationState();
+    const anchored = createAdmissionAnchor(tree, navigation);
+    if (!anchored.ok) throw new Error(anchored.error.code);
+
+    const prepared = prepareAdmissionIngress({
+      tree,
+      navigation,
+      anchor: anchored.anchor,
+      values: admissionValues("  we saw code x twice, code x  "),
+      locale: "en-US",
+      lexicalSession: attributedSession("spoken", "code x", "Codex"),
+    });
+
+    if (!prepared.ok) throw new Error(prepared.error.code);
+    expect(prepared.admittedText).toBe("we saw Codex twice, Codex.");
+    expect(prepared.receipt.lexicalEdits).toEqual([
+      { start: 7, end: 12, occurrence: "occ_1" },
+      { start: 20, end: 25, occurrence: "occ_2" },
+    ]);
+    expect(JSON.stringify(prepared.receipt)).not.toContain("code x");
+    expect(prepared.lexicalOccurrences).toEqual({
+      channel: "spoken",
+      locale: "en-US",
+      nodeText: "we saw Codex twice, Codex.",
+      edits: [
+        { start: 7, end: 12, occurrence: "occ_1", sourceText: "code x" },
+        { start: 20, end: 25, occurrence: "occ_2", sourceText: "code x" },
+      ],
+    });
+    expectCommittedEdits(readCommandText(prepared.command), prepared.receipt.lexicalEdits, "Codex");
+  });
+
+  it("carries no lexical edits when canonicalization is withheld or unattributed", () => {
+    const tree = createEmptyTree("tree_ingress");
+    const navigation = createNavigationState();
+    const anchored = createAdmissionAnchor(tree, navigation);
+    if (!anchored.ok) throw new Error(anchored.error.code);
+
+    const withheld = prepareAdmissionIngress({
+      tree,
+      navigation,
+      anchor: anchored.anchor,
+      values: admissionValues("a ".repeat(16)),
+      locale: "en-US",
+      lexicalSession: attributedSession("spoken", "a", "x".repeat(128)),
+    });
+    expect(withheld).toMatchObject({
+      ok: true,
+      receipt: { canonicalizationWithheld: true, lexicalEdits: [] },
+      lexicalOccurrences: null,
+    });
+
+    const unattributed = prepareAdmissionIngress({
+      tree,
+      navigation,
+      anchor: anchored.anchor,
+      values: admissionValues("code x helps"),
+      locale: "en-US",
+      lexicalSession: confirmedSession("spoken", "code x", "Codex", 7),
+    });
+    expect(unattributed).toMatchObject({
+      ok: true,
+      admittedText: "Codex helps.",
+      receipt: { canonicalized: true, editCount: 1, lexicalEdits: [] },
+      lexicalOccurrences: null,
+    });
+  });
+
+  it("addresses a repair edit in the whole repaired node", () => {
+    const prepared = prepareRepairIngress({
+      tree: textSwapTree(),
+      locale: "en-US",
+      lexicalSession: attributedSession("spoken", "code x", "Codex"),
+      values: {
+        interactionId: "voice_repair_attribution",
+        commandId: "repair_attribution",
+        treeId: "tree_ingress",
+        nodeId: "thought",
+        expectedText: TEXT,
+        expectedUpdatedAt: TIME,
+        text: "Now code x helps",
+        createdAt: "2026-09-24T00:00:02.000Z",
+        admittedAtMs: 100,
+        settledAtMs: 200,
+      },
+    });
+
+    if (!prepared.ok) throw new Error(prepared.error.code);
+    expect(prepared.receipt.lexicalEdits).toEqual([{ start: 4, end: 9, occurrence: "occ_1" }]);
+    expect(prepared.lexicalOccurrences?.nodeText).toBe("Now Codex helps");
+    expectCommittedEdits(readCommandText(prepared.command), prepared.receipt.lexicalEdits, "Codex");
+  });
+
+  it("canonicalizes the final node text only inside generated gaps", () => {
+    const tree = transformTree("Opening words. ");
+    const envelope = transformEnvelope(tree, 0.3);
+    const prepared = prepareTransformIngress({
+      tree,
+      envelope,
+      rawPlan: buildTransformPlan(envelope, `${PASSAGE} and code x`),
+      lexicalSession: attributedSession("written", ["touched", "code x"], ["brushed", "Codex"]),
+      source: "fixture",
+      nowMs: NOW_MS,
+    });
+
+    if (!prepared.ok) throw new Error(prepared.reason);
+    // The carried source "touched" stays; only the generated gap changes.
+    const nodeText = "Opening words. Rain touched the window and Codex";
+    expect(readCommandText(prepared.command)).toBe(nodeText);
+    expect(prepared.plan.action.text).toBe(`${PASSAGE} and Codex`);
+    expect(prepared.receipt.lexicalEdits).toEqual([{ start: 43, end: 48, occurrence: "occ_1" }]);
+    expect(prepared.lexicalOccurrences?.edits.map((edit) => edit.sourceText)).toEqual(["code x"]);
+    expect(prepared.lexicalOccurrences?.nodeText).toBe(nodeText);
+    expectCommittedEdits(nodeText, prepared.receipt.lexicalEdits, "Codex");
+  });
+
+  it("addresses a text-swap segment answer at its node offset", () => {
+    const tree = transformTree("Opening words. ");
+    const envelope = segmentTextSwapEnvelope(tree);
+    const prepared = prepareTextSwapIngress({
+      tree,
+      envelope,
+      rawPlan: buildTextSwapPlan(envelope, "Drops tapped against glass"),
+      lexicalSession: attributedSession("written", "glass", "the pane"),
+      source: "fixture",
+      nowMs: NOW_MS,
+    });
+
+    if (!prepared.ok) throw new Error(prepared.reason);
+    expect(readCommandText(prepared.command)).toBe("Opening words. Drops tapped against the pane");
+    expect(prepared.receipt.lexicalEdits).toEqual([{ start: 36, end: 44, occurrence: "occ_1" }]);
+    expect(prepared.lexicalOccurrences).toMatchObject({
+      channel: "written",
+      locale: "en-US",
+      edits: [{ start: 36, end: 44, sourceText: "glass" }],
+    });
+    expectCommittedEdits(readCommandText(prepared.command), prepared.receipt.lexicalEdits, "the pane");
+  });
+
+  it("addresses a whole-node text-swap answer from offset zero", () => {
+    const tree = textSwapTree();
+    const envelope = textSwapEnvelope();
+    const prepared = prepareTextSwapIngress({
+      tree,
+      envelope,
+      rawPlan: buildTextSwapPlan(envelope, "Drops tapped against glass"),
+      lexicalSession: attributedSession("written", "glass", "the pane"),
+      source: "fixture",
+      nowMs: NOW_MS,
+    });
+
+    if (!prepared.ok) throw new Error(prepared.reason);
+    expect(prepared.receipt.lexicalEdits).toEqual([{ start: 21, end: 29, occurrence: "occ_1" }]);
+    expectCommittedEdits(readCommandText(prepared.command), prepared.receipt.lexicalEdits, "the pane");
+  });
+});
+
+function attributedSession(
+  channel: WikiChannel,
+  form: string | readonly string[],
+  canonical: string | readonly string[],
+): MaterialLexicalSession {
+  const forms = typeof form === "string" ? [form] : form;
+  const canonicals = typeof canonical === "string" ? [canonical] : canonical;
+  let state = createEmptyWikiState();
+  forms.forEach((entry, index) => {
+    const next = applyWikiEvent(state, {
+      type: "confirm-rule",
+      locale: "en-US",
+      channel,
+      boundary: "word",
+      form: entry,
+      canonical: canonicals[index]!,
+    });
+    if (!next.ok) throw new Error(next.error.code);
+    state = next.state;
+  });
+  const compiled = compileWikiBasis(state, 21);
+  if (!compiled.ok) throw new Error(compiled.error.code);
+  let minted = 0;
+  return createWikiMaterialLexicalPort((): WikiBasis => compiled.basis, {
+    mintOccurrence: () => `occ_${++minted}`,
+  }).capture();
+}
+
+function readCommandText(command: { mutation: { type: string } }): string {
+  const mutation = command.mutation as {
+    type: string;
+    text?: string;
+    root?: { text: string };
+    node?: { text: string };
+  };
+  const text = mutation.text ?? mutation.root?.text ?? mutation.node?.text;
+  if (text === undefined) throw new Error(`unexpected ${mutation.type}`);
+  return text;
+}
+
+function expectCommittedEdits(
+  nodeText: string,
+  edits: readonly { start: number; end: number }[],
+  canonical: string,
+): void {
+  for (const edit of edits) expect(nodeText.slice(edit.start, edit.end)).toBe(canonical);
+}
+
+function transformTree(prefix: string): ThoughtTree {
+  const tree = textSwapTree();
+  return {
+    ...tree,
+    nodes: {
+      ...tree.nodes,
+      thought: { ...tree.nodes.thought!, text: `${prefix}${PASSAGE}` },
+    },
+  };
+}
+
+function transformEnvelope(tree?: ThoughtTree, amount = 0.1): TransformEnvelope {
+  const text = tree?.nodes.thought?.text ?? TEXT;
+  const start = text.indexOf(PASSAGE);
+  const parsed = parseTransformEnvelope({
+    protocolVersion: PROTOCOL_VERSION,
+    requestVersion: TRANSFORM_REQUEST_VERSION,
+    id: "transform_ingress",
+    treeId: "tree_ingress",
+    mode: "transform",
+    operation: "expand-in-place",
+    treeRevision: 4,
+    selection: {
+      type: "segment-range",
+      nodeId: "thought",
+      start,
+      end: start + PASSAGE.length,
+      selectedText: PASSAGE,
+    },
+    gesture: { type: "stretch", axis: "vertical", amount },
+    locale: "en-US",
+    context: {
+      lineage: [{
+        id: "thought",
+        text,
+        parentId: null,
+        createdAt: TIME,
+        updatedAt: TIME,
+      }],
+    },
+  });
+  if (!parsed.ok) throw new Error(parsed.message);
+  return parsed.envelope;
+}
+
+function segmentTextSwapEnvelope(tree: ThoughtTree): TextSwapEnvelope {
+  const text = tree.nodes.thought!.text;
+  const start = text.indexOf(PASSAGE);
+  const parsed = parseTextSwapEnvelope({
+    protocolVersion: PROTOCOL_VERSION,
+    requestVersion: TEXT_SWAP_REQUEST_VERSION,
+    id: "swap_ingress_segment",
+    treeId: "tree_ingress",
+    mode: "transform",
+    operation: "paraphrase-in-place",
+    treeRevision: 4,
+    selection: {
+      type: "segment-range",
+      nodeId: "thought",
+      start,
+      end: start + PASSAGE.length,
+      selectedText: PASSAGE,
+    },
+    direction: { text: "make it more tactile" },
+    locale: "en-US",
+    context: {
+      lineage: [{
+        id: "thought",
+        text,
+        parentId: null,
+        createdAt: TIME,
+        updatedAt: TIME,
+      }],
+    },
+  });
+  if (!parsed.ok) throw new Error(parsed.message);
+  return parsed.envelope;
+}
 
 function admissionValues(transcript: string): AdmissionValues {
   return {
@@ -560,37 +855,6 @@ function textSwapEnvelope(): TextSwapEnvelope {
   return parsed.envelope;
 }
 
-function transformEnvelope(): TransformEnvelope {
-  const parsed = parseTransformEnvelope({
-    protocolVersion: PROTOCOL_VERSION,
-    requestVersion: TRANSFORM_REQUEST_VERSION,
-    id: "transform_ingress",
-    treeId: "tree_ingress",
-    mode: "transform",
-    operation: "expand-in-place",
-    treeRevision: 4,
-    selection: {
-      type: "segment-range",
-      nodeId: "thought",
-      start: 0,
-      end: PASSAGE.length,
-      selectedText: PASSAGE,
-    },
-    gesture: { type: "stretch", axis: "vertical", amount: 0.1 },
-    locale: "en-US",
-    context: {
-      lineage: [{
-        id: "thought",
-        text: TEXT,
-        parentId: null,
-        createdAt: TIME,
-        updatedAt: TIME,
-      }],
-    },
-  });
-  if (!parsed.ok) throw new Error(parsed.message);
-  return parsed.envelope;
-}
 
 function textSwapTree(): ThoughtTree {
   return {

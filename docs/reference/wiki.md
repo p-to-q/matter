@@ -17,11 +17,12 @@ management surface. A person should not need to know that Wiki exists in order
 to receive its benefit.
 
 The owner's decision of 2026-09-29 reopens one part of this posture: an applied
-change may be disclosed once, restrained and perceivable, and an unsettled
-occurrence may carry a quiet mark the person can tap to take over (campaign
-slice W3 owns that surface). Disclosure is what makes silence informed, and
-informed silence is approval; see [Occurrence outcomes](#occurrence-outcomes).
-Routine learning still never becomes a review or approval workload.
+change is disclosed once, restrained and perceivable, and an unsettled
+occurrence carries a quiet mark the person can tap to take over (see
+[Exceptional correction surface](#exceptional-correction-surface)). Disclosure
+is what makes silence informed, and informed silence is approval; see
+[Occurrence outcomes](#occurrence-outcomes). Routine learning still never
+becomes a review or approval workload.
 
 A person enters the loop only after noticing that the automatic result is
 wrong. The error site may then disclose one quiet correction affordance; a
@@ -112,14 +113,14 @@ proposal abstains.
 Two deterministic human decision representations are defined. Settings may create, rename,
 scope, or remove one canonical lexeme as an explicit local configuration
 decision. Domain events can confirm, reject, or replace one exact alias, and
-the occurrence settlement below routes explicit outcomes through them, but no
-production surface emits either yet. They remain reserved for the error-local
-correction path, which must land together with the occurrence owner that holds
-one short-lived, one-shot attribution token captured when the rule was
-applied. That token binds the applied basis and rule to the exact visible
-occurrence and current document/interaction epoch; it contains no surrounding
-passage and expires instead of reconstructing intent from a later whole-text
-diff. Until that complete path exists, Matter does not create an empty generic
+the occurrence settlement below routes explicit outcomes through them. The
+error-local takeover emits confirm (Keep) and revert (the heard form); reject
+and replace remain reserved. Each applied edit carries a short-lived, one-shot
+attribution token captured when the rule was applied (see
+[Occurrence attribution](#occurrence-attribution)). That token binds the
+applied basis and rule to the exact committed occurrence and document epoch;
+it contains no surrounding passage and expires instead of reconstructing intent
+from a later whole-text diff. Matter still does not create an empty generic
 decision port or claim that a canonical settings entry corrects future text by
 itself.
 
@@ -143,8 +144,8 @@ the occurrence settles. The outcomes are:
   dwell, and leaving only settle the occurrence; they never stack.
   `settleWikiImplicitOccurrence` owns that classification from content-free
   facts.
-- `inspected-kept`: the person opened the takeover and dismissed it without
-  reverting.
+- `inspected-kept`: the person opened the takeover, could read it for at least
+  500 ms, and dismissed it without reverting.
 - `explicit-confirm`: Keep; the existing confirm path makes the alias human
   authority.
 - `explicit-reject` and `explicit-replace`: the existing reject and replace
@@ -158,6 +159,62 @@ the occurrence settles. The outcomes are:
 Wiki still never observes Material Undo or Redo. "Not undone" is expressed only
 as the occurrence's address still holding the unchanged word; an address that
 disappears censors the occurrence without a Wiki event.
+
+One browser occurrence driver (`interaction/wiki-occurrence-driver.ts`, pure
+lifecycle in `wiki-occurrence-lifecycle.ts`) owns every live occurrence from
+its committed publication to its one settlement. Its address is the tree,
+document epoch, node, node timestamp, range, and canonical word; any other
+commit to that node, including repair, swap, Elastic, removal, or an Undo that
+restores older text, censors it. The only change it follows is the person's
+own revert of a sibling word in the same node. The driver attaches its page
+listeners, 250 ms perception clock, and IntersectionObserver only while an
+occurrence is live, and releases them idempotently. The driver, its lifecycle,
+and the Wiki policy it consults load as one lazy chunk with the first committed
+occurrence; until then an eager stand-in buffers at most 16 publications and
+answers every question with the empty set.
+
+- Perceived means the disclosure was shown (the settle, or the static mark
+  where motion is off or unavailable) and then at least 50% of the word's
+  painted area sat inside the visual viewport, with the page visible and the
+  paper not covered by a modal, for 1.5 s cumulative. These are the named
+  constants in `WIKI_OCCURRENCE_PERCEPTION`. A settle cut off before the
+  change was readable (before its crossfade ends, or before an underline
+  finished drawing) is not disclosure; it is retried once, and a word whose
+  settle keeps being cut off waits unperceived until it is censored.
+- Only after perception do informed facts accumulate: further successful human
+  admissions (the one that carried the occurrence never counts), foreground
+  time on the uncovered paper, a Material Files copy of the passage or a native
+  copy whose selection covers the word, an archive export, and `pagehide`. Any
+  one closes the wait through `settleWikiImplicitOccurrence`; they never stack.
+  Dwell never accrues while a dialog, including the Wiki settings, covers the
+  paper.
+- An open takeover suspends silence. Dismissing it is `inspected-kept` only
+  once it could be read for 500 ms and when the dismissing press is not on the
+  word itself; a quicker dismissal, or the second press of a double-click, is
+  not an inspection and returns the word to silence unsettled, while that press
+  selects the passage as any press would. Keep is `explicit-confirm`, leaving
+  the page while it is open is `inspected-kept`, and the heard form commits an
+  ordinary human text restoration and then settles `reverted`. A restoration
+  that fails closes the takeover and leaves every live occurrence where it was.
+  Undoing that restoration is Material Undo and settles nothing.
+- Wiki… hands the takeover to the settings dialog and keeps the occurrence
+  suspended until that dialog has covered the paper and let it go again (or,
+  if it never covers the paper, for 3 s of visible time). Nothing settles it
+  meanwhile except losing the word or leaving the page.
+- A Keep or revert that Wiki cannot record (a failed write or an attribution
+  that already expired) is said once in the guidance line and announced
+  politely: “Wiki could not save that.” The material change stands; the line
+  clears at the person's next action.
+- A live occurrence expires 15 s before its registry attribution would, and at
+  most 64 stay live; both censor. So does `pagehide` before perception, which
+  covers a tab that stayed hidden the whole time.
+- A rewrite that re-applies the same correction to the same passage within
+  15 s, typically its late repair, is a new occurrence that inherits the
+  earlier disclosure instead of settling on screen a second time. That memory
+  is presentation continuity only; perception, evidence, and settlement start
+  afresh. It holds heard forms, so it keeps at most 16 entries, prunes expired
+  ones on every write and lookup, and is cleared when the document or its epoch
+  changes.
 
 Informed acceptance adds `kept` evidence to the relation that was applied: +4
 quarter-units for informed silence and +8 for an inspection, saturating at 24,
@@ -370,7 +427,57 @@ invalid source nor veto otherwise valid unchanged material.
 Elastic expansion is stricter than whole-text replacement. Source-carried
 spans remain protected; only ranges proven to be newly generated are eligible
 for Wiki. If that projection is ambiguous, it protects more text rather than
-guessing.
+guessing. Matching runs over the complete final node text restricted to those
+generated gaps, so word boundaries and protected literals see the real
+neighbouring language rather than the edge of the answer.
+
+### Occurrence attribution
+
+Each applied edit may carry one opaque occurrence token. The Wiki session mints
+it per edit from a secure random source (never from text or position) and
+registers `occurrence → { rule, appliedAtRevision, origin }` in a bounded
+in-memory registry owned by the Wiki runtime: at most 64 entries, a 10 s window
+for a token whose candidate never committed, and 5 min for a committed one.
+The rule is the exact `locale, channel, boundary, form, canonical` identity of
+the compiled rule that matched, so a Latin span routed out of a Chinese or
+Japanese turn settles against its `en-US` ledger, never the turn's locale;
+`appliedAtRevision` is the session's `sourceRevision`; the spoken channel is
+`human-admission` origin and the written channel is `generated`. The heard form
+is always the text the edit actually replaced (a full-width match keeps its
+full-width form), never a reconstruction from the rule. The neutral
+lexical port checks only the token's shape (`[A-Za-z0-9_-]{1,64}`) and
+uniqueness within one suggestion; a malformed or repeated token loses its
+attribution, never its edit.
+
+`canonicalizeMaterialText` returns its applied edits in output coordinates with
+the form it replaced (`sourceText`). `MaterialIngress` maps attributed edits
+into the committed node text for every stage: admission (only when the second
+admission normalization leaves the canonical text untouched), repair (the whole
+repaired node), Elastic (the final node text), and Text Swap (the swapped
+segment or whole node at its start offset). Each mapped edit must land exactly
+on its canonical form, or all attribution for that commit is dropped; an edit
+whose heard form equals its committed word is not attributed, since nothing
+visibly changed. A withheld canonicalization carries no edits, and an Elastic
+answer whose generated gaps cannot be proven keeps its valid raw form with
+canonicalization withheld rather than being refused. The content-free ingress receipt
+lists `lexicalEdits: { start, end, occurrence }[]`; the heard form travels
+only in the transient prepared value.
+
+After a successful commit whose committed node still equals the text those
+edits measured, the store calls one narrow port,
+`publishCommittedLexicalOccurrences({ treeId, documentEpoch, nodeId,
+nodeUpdatedAt, stage, channel, locale, edits })`, after its state update and
+after the committed-observation call. Composition claims the tokens in the
+registry and hands the publication to the browser occurrence driver. The store
+never learns that Wiki exists, and no heard form reaches store state, history,
+a receipt, persistence, the archive, a model request, or a log.
+
+Settlement consumes the registry entry before any write, so a repeated,
+late, or expired id settles to nothing. A censored occurrence releases its
+memory without loading durable storage. `coordinator.settle` records the rest:
+informed acceptance and inspection take the soft byte-bound path; Keep and
+revert report every failure; both rebase over a concurrent write because a
+settlement addresses a rule, not a configuration view.
 
 ## Persistence and cache
 
@@ -485,14 +592,33 @@ after provider output returns and every model payload remains Wiki-free.
 
 ## Exceptional correction surface
 
-The current release has no mark revealing that a rule was applied; the
-2026-09-29 decision adds one restrained disclosure and a quiet takeover mark
-(slice W3). Only after a
-person invokes correction from an erroneous word may the surface reveal what is
-necessary to repair that visible occurrence and, if requested, add the corrected
-relation as local authority. It must also permit rejecting the responsible
-automatic mapping. A deeper Wiki configuration surface opens from Matter
-settings for people who choose it. It presents one canonical term per tile and
+A word Wiki changed in admitted, repaired, or generated text settles once from
+the heard form into the canonical one at its first perceivable arrival (about
+half a second: a hold, a blurred crossfade, one sub-pixel shiver), then keeps a
+dotted 1 px underline at 35% ink while its occurrence is unsettled. The render
+contract lives in [`text-material.md`](text-material.md): Custom Highlights and
+an inert world-space overlay, never a wrapped word. A tap on the marked word
+opens one small popover at the word, in Point Talk's restrained field, offering
+**Keep**, the literal heard form, and **Wiki…**. Its accessible name states the
+change (“Wiki changed ‘P to Q’ to ‘[p → q]’”); it never starts Point and Talk or
+a passage selection, and it respects the pen-and-palm touch commitment. Keep
+confirms the alias; the heard form restores exactly that range as an ordinary,
+pointer-undoable human text change, failing closed with a quiet “the passage
+changed” line when the memento no longer matches; Wiki… opens the settings
+dialog filtered to and focused on that canonical term and settles nothing;
+Escape or an outside tap, once the takeover could be read, is an inspection.
+The keyboard and touch reach the same takeover without aiming at the word: a
+focused (entered by keyboard) or selected (on touch) passage adds one **Review
+Wiki change** action per live, disclosed word to its passage actions, at most
+three, each naming both forms and opening the takeover at its word with Keep
+focused. While such changes are live the passage carries a count-aware
+accessible description (“Wiki changed 1 word. Review it in this passage's
+actions.”); no word is wrapped to say so. A fine pointer's hover actions never
+grow over the word, which it taps directly. Only after a person invokes
+correction from an erroneous word does the surface reveal what is necessary to
+repair that visible occurrence. Rejecting the responsible automatic mapping
+from the word remains reserved. A deeper Wiki configuration surface opens from
+Matter settings for people who choose it. It presents one canonical term per tile and
 may add, edit, remove, search, progressively load, and export lexemes. Export
 starts a browser download of the strict snapshot; its short control-local
 receipt may say that the download started, but must not claim that a browser,
@@ -839,10 +965,9 @@ zero-weight producer and therefore cannot acquire authority during migration.
 Runtime-allowlisted fitting producers may project provisional rules only after
 their own relation evidence clears the calibrated gate; closing `近音`
 immediately selects the confirmed-only snapshot without deleting evidence. The
-occurrence-outcome policy is implemented as pure domain policy; its production
-emitter (the occurrence owner, the disclosure, and the informed-acceptance
-wiring) and the one-shot attribution token are not yet wired, so the running
-product records no occurrence outcome until those slices land.
+occurrence-outcome policy is pure domain policy; the running product emits it
+through the attribution token, the browser occurrence driver, and the
+render-edge disclosure described above. Occurrences do not survive a reload.
 
 ## Research translated into the boundary
 

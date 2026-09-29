@@ -102,9 +102,12 @@ type Copy = Readonly<{
 
 export function WikiSettingsSection({
   active,
+  focusTerm = null,
   language,
 }: Readonly<{
   active: boolean;
+  /** One canonical term an error-local takeover asked to show; each request once. */
+  focusTerm?: Readonly<{ canonical: string; locale: CanvasLanguage; requestId: number }> | null;
   language: CanvasLanguage;
 }>) {
   const copy = COPY[language];
@@ -132,10 +135,47 @@ export function WikiSettingsSection({
   const noticeTimerRef = useRef<number | null>(null);
   const restoreFocusRuleRef = useRef<string | null>(null);
   const ruleButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const handledFocusRequestRef = useRef<number | null>(null);
+  const focusTargetRef = useRef<Readonly<{ requestId: number; ruleId: string }> | null>(null);
 
   useEffect(() => {
     if (active) void matterWikiConfiguration.start();
   }, [active]);
+
+  useEffect(() => {
+    if (!active || focusTerm === null || snapshot.stateRevision === null) return;
+    if (handledFocusRequestRef.current !== focusTerm.requestId) {
+      handledFocusRequestRef.current = focusTerm.requestId;
+      const matches = snapshot.rules.filter((rule) => rule.canonical === focusTerm.canonical);
+      const rule = matches.find((entry) => entry.locale === focusTerm.locale) ?? matches[0];
+      setEditor(null);
+      setRemoveRule(null);
+      setFilter("all");
+      setVisibleCount(LOAD_STEP);
+      setQuery(focusTerm.canonical);
+      focusTargetRef.current = rule === undefined
+        ? null
+        : Object.freeze({ requestId: focusTerm.requestId, ruleId: rule.id });
+    }
+    const target = focusTargetRef.current;
+    if (target === null || target.requestId !== focusTerm.requestId) return;
+    // The dialog focuses its first control on open; the term takes focus once
+    // the filtered list has rendered it. A cancelled attempt is retried by the
+    // next run until it lands.
+    let attempts = 0;
+    let frame = window.requestAnimationFrame(function focusRule() {
+      const button = ruleButtonRefs.current.get(target.ruleId);
+      if (button !== undefined) {
+        focusTargetRef.current = null;
+        button.focus({ preventScroll: true });
+        button.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 12) frame = window.requestAnimationFrame(focusRule);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, focusTerm, snapshot.rules, snapshot.stateRevision]);
 
   useEffect(() => {
     if (removeRule !== null) removeConfirmRef.current?.focus();

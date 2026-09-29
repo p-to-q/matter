@@ -58,12 +58,14 @@ describe("Material lexical port", () => {
       text: "code x",
       changed: false,
       editCount: 0,
+      edits: [],
     });
     expect(canonicalizeMaterialText(malformed, REQUEST)).toEqual({
       status: "unchanged",
       text: "code x",
       changed: false,
       editCount: 0,
+      edits: [],
     });
   });
 
@@ -84,6 +86,7 @@ describe("Material lexical port", () => {
       text: "Codex",
       changed: true,
       editCount: 1,
+      edits: [{ start: 0, end: 5, sourceText: "code x" }],
     });
     expect(Object.isFrozen(result)).toBe(true);
   });
@@ -114,6 +117,37 @@ describe("Material lexical port", () => {
       { start: 14, end: 19, replacement: "term" },
       { start: 10, end: 13, replacement: "new" },
     ]), request).changed).toBe(false);
+  });
+
+  it("returns applied edits in output coordinates with their opaque attribution", () => {
+    const session: MaterialLexicalSession = Object.freeze({
+      snapshot: Object.freeze({ generation: 1, sourceRevision: 1 }),
+      canonicalize: () => Object.freeze({
+        status: "changed",
+        patches: Object.freeze([
+          Object.freeze({ start: 0, end: 6, replacement: "Codex", occurrence: "occ_a" }),
+          Object.freeze({ start: 7, end: 8, replacement: "and", occurrence: "occ-b" }),
+          Object.freeze({ start: 9, end: 17, replacement: "Q", occurrence: "occ_a" }),
+          Object.freeze({ start: 18, end: 19, replacement: "zz", occurrence: "bad token" }),
+        ]),
+      }),
+    });
+
+    const result = canonicalizeMaterialText(session, {
+      ...REQUEST,
+      text: "code x & long one y z",
+    });
+    expect(result.text).toBe("Codex and Q zz z");
+    expect(result.edits).toEqual([
+      { start: 0, end: 5, sourceText: "code x", occurrence: "occ_a" },
+      { start: 6, end: 9, sourceText: "&", occurrence: "occ-b" },
+      // A repeated or malformed token keeps the edit and loses attribution.
+      { start: 10, end: 11, sourceText: "long one" },
+      { start: 12, end: 14, sourceText: "y" },
+    ]);
+    for (const edit of result.edits) {
+      expect(result.text.slice(edit.start, edit.end)).not.toBe(edit.sourceText);
+    }
   });
 
   it("owns the request before calling an adapter", () => {

@@ -70,6 +70,8 @@ export type MaterialFilesProps = Readonly<{
   locale: MatterLocale;
   navigation: NavigationState;
   onFocusNode: (nodeId: string) => void;
+  /** Reports which passages reached the clipboard; ids only, never text. */
+  onMaterialCopied?: (nodeIds: ReadonlySet<string>) => void;
   /** Reports only the transient narrow disclosure; docked presentation is false. */
   onOverlayChange?: (open: boolean) => void;
   /** A thought name or the canvas title is being typed; a document switch would drop it. */
@@ -767,6 +769,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     try {
       await navigator.clipboard.writeText(result.text);
       settleCopyState("copied", copyResetRef, setCopyState);
+      props.onMaterialCopied?.(new Set(currentSelectedIds));
     } catch {
       settleCopyState("failed", copyResetRef, setCopyState);
     }

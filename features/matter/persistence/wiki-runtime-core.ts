@@ -18,7 +18,7 @@ import {
   MATTER_WIKI_RUNTIME_TERM_PRODUCERS,
 } from
   "../wiki/wiki-runtime-producer-releases";
-import type { WikiState } from "../wiki/wiki-model";
+import type { WikiOccurrenceSettlement, WikiState } from "../wiki/wiki-model";
 import {
   planWikiAdmissionBatch,
   type WikiAdmissionTurn,
@@ -60,11 +60,11 @@ type MatterWikiRuntime = Readonly<{
 }>;
 
 type MatterWikiRuntimeSlot = Readonly<{
-  abi: 13;
+  abi: 14;
   runtime: MatterWikiRuntime;
 }>;
 
-const RUNTIME_ABI = 13 as const;
+const RUNTIME_ABI = 14 as const;
 const MAX_ADMISSION_CAS_ATTEMPTS = 4;
 const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
 const LEGACY_RUNTIME_KEYS = Object.freeze([
@@ -220,6 +220,13 @@ export function decideMatterWiki(
   expectedStateRevision: number,
 ): Promise<WikiCoordinatorResult> {
   return publishChanged(matterWikiCoordinator.decide(event, expectedStateRevision));
+}
+
+/** Records one occurrence settlement against the hydrated origin authority. */
+export function settleHydratedMatterWikiOccurrence(
+  settlement: WikiOccurrenceSettlement,
+): Promise<WikiCoordinatorResult> {
+  return publishChanged(matterWikiCoordinator.settle(settlement));
 }
 
 export function resetCorruptMatterWiki(): Promise<WikiCoordinatorResult> {

@@ -54,6 +54,16 @@ export function PlusIcon({ className, ...props }: IconProps) {
   );
 }
 
+/** A word over the dotted mark Wiki leaves on a changed word. */
+export function WikiChangeIcon({ className, ...props }: IconProps) {
+  return (
+    <svg {...sharedProps} className={className} {...props}>
+      <path d="M4 6.5h8" stroke="currentColor" strokeLinecap="round" />
+      <path d="M3.5 11h9" stroke="currentColor" strokeDasharray="0 2.25" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** The selected material-local inquiry mark. */
 export function MatterAiIcon({ className, ...props }: IconProps) {
   return (

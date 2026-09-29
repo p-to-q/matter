@@ -159,18 +159,18 @@ describe("Wiki runtime ownership", () => {
       expect(close).toHaveBeenCalledOnce();
       expect(dispose).toHaveBeenCalledOnce();
       expect(host[legacyRuntimeKey]).toBeUndefined();
-      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 13 });
+      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 14 });
     },
   );
 
   it("disposes a mismatched stable ABI before replacement", async () => {
     const dispose = vi.fn();
-    host[RUNTIME_KEY] = { abi: 12, runtime: { dispose } };
+    host[RUNTIME_KEY] = { abi: 13, runtime: { dispose } };
 
     await import("./wiki-runtime-core");
 
     expect(dispose).toHaveBeenCalledOnce();
-    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 13 });
+    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 14 });
   });
 
   it("announces each successfully hydrated generation only once", async () => {
