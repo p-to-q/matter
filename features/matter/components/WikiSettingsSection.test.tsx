@@ -5,6 +5,21 @@ import { describe, expect, it } from "vitest";
 import { WikiSettingsSection } from "./WikiSettingsSection";
 
 describe("WikiSettingsSection", () => {
+  it("keeps every locale's copy complete instead of spreading another language", () => {
+    const source = readFileSync(new URL("./WikiSettingsSection.tsx", import.meta.url), "utf8");
+    // A spread lets a missing key fall back to English or Simplified Chinese
+    // without failing the type check.
+    expect(source).not.toMatch(/Object\.freeze\(\{\s*\.\.\.[A-Z_]+,/u);
+    for (const [language, filterLabel] of [
+      ["zh-TW", "詞條來源"],
+      ["ja-JP", "追加元"],
+      ["de-DE", "Herkunft der Wörter"],
+    ] as const) {
+      const markup = renderToStaticMarkup(createElement(WikiSettingsSection, { active: false, language }));
+      expect(markup).toContain(filterLabel);
+    }
+  });
+
   it("presents a natural canonical-word dictionary without rule plumbing", () => {
     const markup = renderToStaticMarkup(createElement(WikiSettingsSection, {
       active: false,
@@ -51,8 +66,10 @@ describe("WikiSettingsSection", () => {
 
     expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*min-height: 44px;/s);
     expect(css).toContain(".editorRemove");
-    expect(css).toMatch(/\.rules li:hover,[\s\S]*background:\s*transparent/s);
-    expect(css).toMatch(/\.tileActions button:hover,[\s\S]*background:\s*var\(--chrome-primary\)/s);
+    // Hover affordances exist only where a pointer can hover; touch keeps no
+    // sticky hover state after a tap.
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.rules li:hover \{[^}]*background:\s*transparent/s);
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.tileActions button:hover \{[^}]*background:\s*var\(--chrome-primary\)/s);
     expect(css).toMatch(/first-child\[aria-pressed="true"\]::after[\s\S]*transform:\s*scale\(1\)/s);
     expect(css).toMatch(/\.editor input,[\s\S]*\.search input\s*\{\s*font-size:\s*16px;/s);
     expect(css).toMatch(/@media \(hover: none\), \(pointer: coarse\)[\s\S]*\.tileActions\s*\{\s*display:\s*none;/s);
@@ -60,7 +77,7 @@ describe("WikiSettingsSection", () => {
     expect(css).toMatch(/\.exportButton\s*\{[\s\S]*display:\s*grid;/s);
     expect(css).toContain('.exportLabel[data-active="false"]');
     expect(css).toMatch(/\.capabilityActions button\s*{[^}]*text-decoration:\s*underline/s);
-    expect(css).toMatch(/\.capabilityActions button:hover,[\s\S]*background:\s*transparent/s);
+    expect(css).toMatch(/@media \(hover: hover\) \{\s*\.capabilityActions button:hover \{[^}]*background:\s*transparent/s);
     expect(css).toMatch(/\.section\s*\{[^}]*min-height:\s*287px;/s);
     expect(css).toMatch(/\.browser\s*\{[^}]*min-height:\s*263px;/s);
   });

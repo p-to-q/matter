@@ -113,6 +113,7 @@ type CanvasChromeCopy = Readonly<{
   listening: string;
   transcribing: string;
   menu: string;
+  menuNavigation: string;
   noticeModelUnavailable: string;
   noticeNoMaterial: string;
   noticeRateLimited: string;
@@ -295,7 +296,7 @@ const JAPANESE_INFO: CanvasChromeInfo = Object.freeze({
     "これはチャットで答えを待つのではなく、素材の中で AI と考える方法です。未完成な考えにも、迷いを残し、触れ、育てる余白があります。",
     "AI は言葉に知性を与え、Matter は思考に身体を与えます。",
     "初期プレビューです。リアルタイム音声入力、音声の整形、Matter への質問は利用できます。公開環境での素材生成変換は引き続き制限され、そのインタラクション言語を検証しています。",
-    <PToQAttribution after=" の project です。" before="Matter は " key="attribution" />,
+    <PToQAttribution after=" のプロジェクトです。" before="Matter は " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter に尋ねる", body: Object.freeze([
     "この画面に含まれている素材について短く尋ねます。尋ねても素材は変わりません。",
@@ -313,7 +314,7 @@ const GERMAN_INFO: CanvasChromeInfo = Object.freeze({
     "Es ist eine Art, mit KI im Material zu denken, nicht in einem Chat auf Antworten zu warten. Unfertige Gedanken dürfen unsicher bleiben, berührt werden und weiterwachsen.",
     "KI gibt Sprache Intelligenz. Matter gibt Gedanken einen Körper.",
     "Dies ist eine frühe Vorschau. Live-Spracheingabe, Transkriptreparatur und Matter fragen sind verfügbar. Die öffentliche generative Materialtransformation bleibt gesperrt, während ihre Interaktionssprache erprobt wird.",
-    <PToQAttribution after="." before="Matter ist ein project von " key="attribution" />,
+    <PToQAttribution after="." before="Matter ist ein Projekt von " key="attribution" />,
   ]) }),
   inquiry: Object.freeze({ title: "Matter fragen", body: Object.freeze([
     "Stelle eine kurze Frage zu dem Material, das auf dieser Fläche einbezogen ist. Eine Frage verändert es nicht.",
@@ -354,6 +355,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "Listening",
     transcribing: "Finishing the dictation…",
     menu: "Matter",
+    menuNavigation: "Matter menu",
     noticeModelUnavailable: "Matter received this, but no answer model is connected yet.",
     noticeNoMaterial: "There is no material to answer about yet.",
     noticeRateLimited: "Matter has this question. Give it a moment before asking again.",
@@ -396,6 +398,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "正在听",
     transcribing: "正在整理口述…",
     menu: "Matter",
+    menuNavigation: "Matter 菜单",
     noticeModelUnavailable: "Matter 收到了，但还没有连接可以回答的模型。",
     noticeNoMaterial: "还没有材料可以回答。",
     noticeRateLimited: "Matter 收到了这句话，先等一下再问。",
@@ -438,6 +441,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "正在聽",
     transcribing: "正在整理口述…",
     menu: "Matter",
+    menuNavigation: "Matter 選單",
     noticeModelUnavailable: "Matter 收到了，但還沒有連接可以回答的模型。",
     noticeNoMaterial: "還沒有材料可以回答。",
     noticeRateLimited: "Matter 收到了這句話，先等一下再問。",
@@ -480,6 +484,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "聞いています",
     transcribing: "音声入力を整えています…",
     menu: "Matter",
+    menuNavigation: "Matter メニュー",
     noticeModelUnavailable: "Matter は受け取りましたが、答えるモデルがまだ接続されていません。",
     noticeNoMaterial: "まだ答える材料がありません。",
     noticeRateLimited: "Matter はこの問いを受け取りました。少し待ってからもう一度どうぞ。",
@@ -522,6 +527,7 @@ const CANVAS_CHROME_COPY: Readonly<Record<CanvasLanguage, CanvasChromeCopy>> = O
     listening: "Hört zu",
     transcribing: "Diktat wird verarbeitet …",
     menu: "Matter",
+    menuNavigation: "Matter-Menü",
     noticeModelUnavailable: "Matter hat die Frage erhalten, aber noch ist kein Antwortmodell verbunden.",
     noticeNoMaterial: "Es gibt noch kein Material für eine Antwort.",
     noticeRateLimited: "Matter hat die Frage. Warte einen Moment, bevor du erneut fragst.",
@@ -579,6 +585,14 @@ export function overlayOutlivesBreakpoint(
   if (overlay === "mobile") return compact;
   return true;
 }
+
+/** Shell-level chrome that an open modal dialog makes inert with the paper. */
+const MODAL_INERT_SHELL_CHROME = [
+  ".tool-rail",
+  ".material-files",
+  ".material-files-toggle",
+  ".matter-header",
+].join(", ");
 
 // Inquiry stays over the material rather than making the material inert.
 const MENU_OVERLAYS = new Set<CanvasChromeOverlay>(["settings", "language", "inquiry"]);
@@ -771,14 +785,6 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
     if (root == null || canvas == null) return;
 
     const shell = canvas.closest<HTMLElement>(".matter-shell");
-    // The docked material index is a sibling of the paper, not a child of it,
-    // so inerting the canvas alone left it clickable behind an aria-modal
-    // dialog at desk widths, where it is always visible.
-    const siblings = [
-      shell?.querySelector<HTMLElement>(".tool-rail") ?? null,
-      shell?.querySelector<HTMLElement>(".material-files") ?? null,
-    ].filter((element): element is HTMLElement => element !== null);
-
     const records = new Map<HTMLElement, Readonly<{ ariaHidden: string | null; inert: boolean }>>();
     const hide = (element: HTMLElement) => {
       if (element === root || records.has(element)) return;
@@ -792,14 +798,29 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
       }
     };
 
-    hideCanvasChildren();
-    for (const sibling of siblings) hide(sibling);
+    // Shell chrome outside the paper stays live above an aria-modal dialog
+    // unless it is named here: the index and its drawer handle (which sits
+    // above the paper and can slide over a phone dialog), the rail, and the
+    // brand header.
+    const hideShellChrome = () => {
+      for (const element of shell?.querySelectorAll<HTMLElement>(MODAL_INERT_SHELL_CHROME) ?? []) {
+        hide(element);
+      }
+    };
+    const hideEverythingBehind = () => {
+      hideCanvasChildren();
+      hideShellChrome();
+    };
+
+    hideEverythingBehind();
     canvas.setAttribute("data-canvas-modal-open", "true");
 
     // A snapshot taken once leaves anything React mounts later — the empty-state
-    // swap, a lasso count — tabbable behind the dialog.
-    const observer = new MutationObserver(hideCanvasChildren);
+    // swap, a lasso count, a drawer handle after a breakpoint — tabbable behind
+    // the dialog.
+    const observer = new MutationObserver(hideEverythingBehind);
     observer.observe(canvas, { childList: true });
+    if (shell !== null) observer.observe(shell, { childList: true });
 
     return () => {
       observer.disconnect();
@@ -1050,7 +1071,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
                 <CloseIcon />
               </button>
             </header>
-            <nav aria-label="Matter menu" className={styles.mobileNav}>
+            <nav aria-label={copy.menuNavigation} className={styles.mobileNav}>
               <section className={styles.mobileSection}>
                 <button
                   className={styles.mobilePrimary}

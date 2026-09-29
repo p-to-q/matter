@@ -518,20 +518,20 @@ export function MaterialFiles(props: MaterialFilesProps) {
     const mutation = trimmed.length === 0
       ? props.onResetNodeName?.(nodeId)
       : props.onRenameNode?.(nodeId, trimmed);
+    // A name that did not reach disk is not a name they have. Returning the row
+    // to its editor, with what they typed still in it and a described reason,
+    // says what an empty field after a reload used to say silently, while
+    // there is still something to do about it. The epoch is read live: the
+    // document may have been replaced while the write was settling.
+    const reopenWithDraft = () => {
+      if (liveDocumentEpochRef.current !== epochAtCommit) return;
+      setRenaming({ epoch: epochAtCommit, nodeId, draft: trimmed });
+    };
     void Promise.resolve(mutation).then(
       (receipt) => {
-        // A name that did not reach disk is not a name they have. Returning the
-        // row to its editor, with what they typed still in it, is the whole
-        // signal: it says the same thing an empty field after a reload used to
-        // say silently, while there is still something to do about it.
-        if (
-          receipt !== undefined && receipt !== null && receipt.ok === false &&
-          props.documentEpoch === epochAtCommit
-        ) {
-          setRenaming({ epoch: epochAtCommit, nodeId, draft: trimmed });
-        }
+        if (receipt !== undefined && receipt !== null && receipt.ok === false) reopenWithDraft();
       },
-      () => undefined,
+      reopenWithDraft,
     ).finally(() => {
       if (renameCommitRef.current === mutationKey) renameCommitRef.current = null;
     });
@@ -1243,36 +1243,45 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         <span className="material-file__title" dir="auto">{title}</span>
                       </label>
                     ) : activeRename === file.nodeId ? (
-                      <input
-                        aria-label={copy.nameFor(title)}
-                        autoFocus
-                        className="material-file__rename"
-                        defaultValue={activeRenameDraft ?? title}
-                        dir="auto"
-                        maxLength={MAX_ROW_NAME_CODE_UNITS}
-                        onBlur={(event) => {
-                          // The pointer sequence that opened this editor can
-                          // still be delivering events; a blur before the field
-                          // has ever held focus is that, not a person leaving.
-                          if (!renameFocusedRef.current) return;
-                          commitRename(file.nodeId, event.currentTarget.value);
-                        }}
-                        onFocus={() => {
-                          renameFocusedRef.current = true;
-                        }}
-                        onKeyDown={(event) => {
-                          if (isCommitEnter(event.nativeEvent)) {
-                            event.preventDefault();
-                            commitRename(file.nodeId, event.currentTarget.value, true);
-                          } else if (isCancelEscape(event.nativeEvent)) {
-                            event.preventDefault();
-                            setRenaming(null);
-                            returnFocusToRow(file.nodeId);
-                          }
-                        }}
-                        spellCheck={false}
-                        type="text"
-                      />
+                      <>
+                        <input
+                          aria-describedby={activeRenameDraft === undefined ? undefined : `${file.nodeId}-name-not-saved`}
+                          aria-invalid={activeRenameDraft === undefined ? undefined : true}
+                          aria-label={copy.nameFor(title)}
+                          autoFocus
+                          className="material-file__rename"
+                          defaultValue={activeRenameDraft ?? title}
+                          dir="auto"
+                          maxLength={MAX_ROW_NAME_CODE_UNITS}
+                          onBlur={(event) => {
+                            // The pointer sequence that opened this editor can
+                            // still be delivering events; a blur before the field
+                            // has ever held focus is that, not a person leaving.
+                            if (!renameFocusedRef.current) return;
+                            commitRename(file.nodeId, event.currentTarget.value);
+                          }}
+                          onFocus={() => {
+                            renameFocusedRef.current = true;
+                          }}
+                          onKeyDown={(event) => {
+                            if (isCommitEnter(event.nativeEvent)) {
+                              event.preventDefault();
+                              commitRename(file.nodeId, event.currentTarget.value, true);
+                            } else if (isCancelEscape(event.nativeEvent)) {
+                              event.preventDefault();
+                              setRenaming(null);
+                              returnFocusToRow(file.nodeId);
+                            }
+                          }}
+                          spellCheck={false}
+                          type="text"
+                        />
+                        {activeRenameDraft === undefined ? null : (
+                          <span className="visually-hidden" id={`${file.nodeId}-name-not-saved`}>
+                            {copy.nameNotSaved}
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <button
                         aria-current={active ? "page" : undefined}
@@ -1607,12 +1616,9 @@ function ArchivePanel({
         ref={inputRef}
         type="file"
       />
-      {phaseLabel !== null ? (
-        <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
-      ) : null}
-      {error !== null ? (
-        <p aria-live="polite" className="material-files__archive-error">{error}</p>
-      ) : null}
+      {/* Live regions mount before they speak, or their first line may be silent. */}
+      <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
+      <p aria-live="polite" className="material-files__archive-error">{error}</p>
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
           <p>

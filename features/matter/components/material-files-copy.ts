@@ -1,5 +1,13 @@
 import { MATTER_LOCALE, type MatterLocale } from "../config/locales";
 
+const ENGLISH_PLURAL = new Intl.PluralRules(MATTER_LOCALE.english);
+const GERMAN_PLURAL = new Intl.PluralRules(MATTER_LOCALE.german);
+
+/** Chooses a count's noun form by the locale's own plural category. */
+function counted(rules: Intl.PluralRules, count: number, one: string, other: string): string {
+  return rules.select(count) === "one" ? one : other;
+}
+
 /**
  * The material index's own copy. It was the one surface left hard-coded in
  * Simplified Chinese. Persistence recovery copy belongs to the explicit
@@ -48,6 +56,7 @@ export type MaterialFilesCopy = Readonly<{
   materialFiles: string;
   materialTree: (count: number) => string;
   nameFor: (title: string) => string;
+  nameNotSaved: string;
   renameCanvas: (title: string) => string;
   renameCanvasTitle: string;
   revisionCount: (count: number) => string;
@@ -95,7 +104,8 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   closeSearch: "Close search",
   copied: "Copied",
   copy: "Copy",
-  copySelectedThoughts: (count) => `Copy ${count} selected thoughts`,
+  copySelectedThoughts: (count) =>
+    `Copy ${count} selected ${counted(ENGLISH_PLURAL, count, "thought", "thoughts")}`,
   copyUnavailable: "Copy unavailable",
   done: "Done",
   emptyFirstThought: "Speak the first thought to begin.",
@@ -110,12 +120,15 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   identityName: "Quarrier",
   localOnly: "Kept only on this device",
   materialFiles: "Material files",
-  materialTree: (count) => `Markdown material tree, ${count} entries`,
+  materialTree: (count) =>
+    `Markdown material tree, ${count} ${counted(ENGLISH_PLURAL, count, "entry", "entries")}`,
   nameFor: (title) => `Name for ${title}`,
+  nameNotSaved: "This name was not saved. Press Enter to try again.",
   renameCanvas: (title) => `Rename canvas: ${title}`,
   renameCanvasTitle: "Rename canvas",
-  revisionCount: (count) => `${count} committed revisions`,
-  resultCount: (count) => `${count} material ${count === 1 ? "result" : "results"}`,
+  revisionCount: (count) =>
+    `${count} committed ${counted(ENGLISH_PLURAL, count, "revision", "revisions")}`,
+  resultCount: (count) => `${count} material ${counted(ENGLISH_PLURAL, count, "result", "results")}`,
   saving: "Saving to this device",
   search: "Search",
   searchThoughts: "Search thoughts",
@@ -176,6 +189,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   materialFiles: "材料文件",
   materialTree: (count) => `Markdown 材料树，共 ${count} 项`,
   nameFor: (title) => `为此想法命名：${title}`,
+  nameNotSaved: "这个名字还没有保存。按回车再试一次。",
   renameCanvas: (title) => `重命名画布：${title}`,
   renameCanvasTitle: "重命名画布",
   revisionCount: (count) => `已提交 ${count} 次修改`,
@@ -240,6 +254,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   materialFiles: "材料檔案",
   materialTree: (count) => `Markdown 材料樹，共 ${count} 項`,
   nameFor: (title) => `為此想法命名：${title}`,
+  nameNotSaved: "這個名稱尚未儲存。按 Enter 再試一次。",
   renameCanvas: (title) => `重新命名畫布：${title}`,
   renameCanvasTitle: "重新命名畫布",
   revisionCount: (count) => `已提交 ${count} 次變更`,
@@ -304,6 +319,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   materialFiles: "素材ファイル",
   materialTree: (count) => `Markdown 素材ツリー、${count}件`,
   nameFor: (title) => `${title}の名前`,
+  nameNotSaved: "この名前は保存されていません。Enter でもう一度試せます。",
   renameCanvas: (title) => `キャンバス名を変更：${title}`,
   renameCanvasTitle: "キャンバス名を変更",
   revisionCount: (count) => `${count}件の変更を保存済み`,
@@ -351,7 +367,8 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   closeSearch: "Suche schließen",
   copied: "Kopiert",
   copy: "Kopieren",
-  copySelectedThoughts: (count) => `${count} ausgewählte Gedanken kopieren`,
+  copySelectedThoughts: (count) =>
+    `${count} ${counted(GERMAN_PLURAL, count, "ausgewählten Gedanken", "ausgewählte Gedanken")} kopieren`,
   copyUnavailable: "Kopieren nicht verfügbar",
   done: "Fertig",
   emptyFirstThought: "Sprechen Sie den ersten Gedanken, um zu beginnen.",
@@ -366,12 +383,16 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   identityName: "Steinbrecher",
   localOnly: "Nur auf diesem Gerät",
   materialFiles: "Materialdateien",
-  materialTree: (count) => `Markdown-Materialbaum, ${count} Einträge`,
+  materialTree: (count) =>
+    `Markdown-Materialbaum, ${count} ${counted(GERMAN_PLURAL, count, "Eintrag", "Einträge")}`,
   nameFor: (title) => `Name für ${title}`,
+  nameNotSaved: "Dieser Name wurde nicht gespeichert. Mit der Eingabetaste erneut versuchen.",
   renameCanvas: (title) => `Canvas umbenennen: ${title}`,
   renameCanvasTitle: "Canvas umbenennen",
-  revisionCount: (count) => `${count} Änderungen gespeichert`,
-  resultCount: (count) => `${count} Material${count === 1 ? "treffer" : "treffer"}`,
+  revisionCount: (count) =>
+    `${count} ${counted(GERMAN_PLURAL, count, "Änderung", "Änderungen")} gespeichert`,
+  // "Treffer" is the same word in the singular and the plural.
+  resultCount: (count) => `${count} Materialtreffer`,
   saving: "Wird auf diesem Gerät gespeichert",
   search: "Suchen",
   searchThoughts: "Gedanken suchen",

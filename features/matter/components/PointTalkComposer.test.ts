@@ -4,6 +4,7 @@ import type {
   TextSwapInteractionState,
 } from "../runtime/text-swap-interaction";
 import {
+  pointTalkCopy,
   pointTalkOutsidePointerDismisses,
   pointTalkRecoveryAction,
 } from "./PointTalkComposer";
@@ -96,5 +97,19 @@ describe("Point Talk recovery", () => {
       failure("MICROPHONE_DENIED", { retryable: false }),
       true,
     )).toBeNull();
+  });
+});
+
+describe("Point and Talk copy", () => {
+  it("speaks each locale's own status lines", () => {
+    const english = pointTalkCopy("en-US");
+    for (const locale of ["ja-JP", "de-DE"] as const) {
+      const copy = pointTalkCopy(locale);
+      expect(copy.listening).not.toBe(english.listening);
+      expect(copy.rewording).not.toBe(english.rewording);
+      expect(copy.originalKept).not.toBe(english.originalKept);
+    }
+    expect(pointTalkCopy("zh-TW").originalKept).toBe("原文沒有改變。");
+    expect(pointTalkCopy("zh-CN").originalKept).toBe("原文没有改变。");
   });
 });

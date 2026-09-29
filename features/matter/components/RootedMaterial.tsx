@@ -179,6 +179,7 @@ import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
 import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
+import { canvasRegionCopy } from "./canvas-region-copy";
 import {
   createCanvasPointerArbiter,
   type ArbitratedPointer,
@@ -3537,7 +3538,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         })}
       />
       <section
-        aria-label="Thought material"
+        aria-label={canvasRegionCopy(props.locale).material}
         className="matter-document"
         data-canvas-theme={canvasPreferences.resolvedAppearance}
         data-canvas-theme-preference={canvasPreferences.preferences.appearance}
@@ -3569,7 +3570,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         />
         {projection.length === 0 ? (
           navigation.mode === "focus" ? (
-            <p className="matter-document__empty">This focus is no longer available.</p>
+            <p className="matter-document__empty">{canvasRegionCopy(props.locale).focusUnavailable}</p>
           ) : null
         ) : (
           <div
@@ -3674,7 +3675,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           />
         ) : null}
         <footer
-          aria-label="Matter guidance"
+          aria-label={canvasRegionCopy(props.locale).guidance}
           className="matter-guidance"
           data-canvas-interactive
           data-guidance-kind={guidance.kind}

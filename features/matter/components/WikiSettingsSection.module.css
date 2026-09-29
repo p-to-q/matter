@@ -66,7 +66,16 @@
   opacity: 0;
 }
 
-.exportButton:hover:not(:disabled),
+@media (hover: hover) {
+  .exportButton:hover:not(:disabled) {
+    background: transparent;
+    color: var(--chrome-text);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+  }
+}
+
 .exportButton:focus-visible {
   background: transparent;
   color: var(--chrome-text);
@@ -87,7 +96,14 @@
   font: 400 20px/1 var(--matter-face) !important;
 }
 
-.addButton:hover:not(:disabled),
+@media (hover: hover) {
+  .addButton:hover:not(:disabled) {
+    border-color: var(--chrome-primary) !important;
+    background: var(--chrome-primary) !important;
+    color: var(--chrome-primary-fg) !important;
+  }
+}
+
 .addButton:focus-visible {
   border-color: var(--chrome-primary) !important;
   background: var(--chrome-primary) !important;
@@ -240,19 +256,35 @@
   pointer-events: none;
 }
 
-.filters button:hover,
+@media (hover: hover) {
+  .filters button:hover {
+    background: color-mix(in srgb, var(--chrome-text) 3%, transparent);
+    color: var(--chrome-text);
+  }
+}
+
 .filters button:focus-visible {
   background: color-mix(in srgb, var(--chrome-text) 3%, transparent);
   color: var(--chrome-text);
 }
 
-.filters button:first-child:hover,
+@media (hover: hover) {
+  .filters button:first-child:hover {
+    background: transparent;
+  }
+}
+
 .filters button:first-child:focus-visible,
 .filters button:first-child[aria-pressed="true"] {
   background: transparent;
 }
 
-.filters button:first-child:hover::after,
+@media (hover: hover) {
+  .filters button:first-child:hover::after {
+    background: color-mix(in srgb, var(--chrome-text) 3%, transparent);
+  }
+}
+
 .filters button:first-child:focus-visible::after {
   background: color-mix(in srgb, var(--chrome-text) 3%, transparent);
 }
@@ -324,7 +356,13 @@
   transition: background-color 120ms ease, border-color 120ms ease;
 }
 
-.rules li:hover,
+@media (hover: hover) {
+  .rules li:hover {
+    border-color: color-mix(in srgb, var(--chrome-text) 22%, transparent);
+    background: transparent;
+  }
+}
+
 .rules li:focus-within {
   border-color: color-mix(in srgb, var(--chrome-text) 22%, transparent);
   background: transparent;
@@ -370,7 +408,13 @@
   transition: opacity 110ms ease;
 }
 
-.rules li:hover .tileActions,
+@media (hover: hover) {
+  .rules li:hover .tileActions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .rules li:focus-within .tileActions {
   opacity: 1;
   pointer-events: auto;
@@ -387,7 +431,13 @@
   color: var(--chrome-muted);
 }
 
-.tileActions button:hover,
+@media (hover: hover) {
+  .tileActions button:hover {
+    background: var(--chrome-primary);
+    color: var(--chrome-primary-fg);
+  }
+}
+
 .tileActions button:focus-visible {
   background: var(--chrome-primary);
   color: var(--chrome-primary-fg);
@@ -525,14 +575,28 @@
   color: var(--chrome-text);
 }
 
-.editorActions button:not([type="submit"]):hover,
+@media (hover: hover) {
+  .editorActions button:not([type="submit"]):hover {
+    border-color: var(--chrome-text);
+    background: transparent;
+    color: var(--chrome-text);
+  }
+}
+
 .editorActions button:not([type="submit"]):focus-visible {
   border-color: var(--chrome-text);
   background: transparent;
   color: var(--chrome-text);
 }
 
-.editorActions button[type="submit"]:hover:not(:disabled),
+@media (hover: hover) {
+  .editorActions button[type="submit"]:hover:not(:disabled) {
+    border-color: var(--chrome-primary);
+    background: var(--chrome-primary);
+    color: var(--chrome-primary-fg);
+  }
+}
+
 .editorActions button[type="submit"]:focus-visible {
   border-color: var(--chrome-primary);
   background: var(--chrome-primary);
@@ -574,7 +638,13 @@
   text-underline-offset: 4px;
 }
 
-.capabilityActions button:hover,
+@media (hover: hover) {
+  .capabilityActions button:hover {
+    background: transparent;
+    color: var(--chrome-text);
+  }
+}
+
 .capabilityActions button:focus-visible {
   background: transparent;
   color: var(--chrome-text);
@@ -596,7 +666,13 @@
   text-underline-offset: 4px;
 }
 
-.editorRemove:hover,
+@media (hover: hover) {
+  .editorRemove:hover {
+    background: transparent !important;
+    color: var(--chrome-text) !important;
+  }
+}
+
 .editorRemove:focus-visible {
   background: transparent !important;
   color: var(--chrome-text) !important;

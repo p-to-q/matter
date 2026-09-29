@@ -3,8 +3,8 @@ import type {
   ReactNode,
   WheelEvent as ReactWheelEvent,
 } from "react";
-import { useState } from "react";
-import type { ToolIntent } from "../tools/model";
+import { useId, useState } from "react";
+import type { ProjectedTool, ToolIntent } from "../tools/model";
 import type { ProjectedToolSurface } from "../tools/project-tool-surface";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
@@ -53,6 +53,7 @@ export function ToolRail({
 }: ToolRailProps) {
   const { branch, undo } = surface.main;
   const copy = toolRailCopy(locale);
+  const pendingReason = interactionPending ? copy.unavailableWhilePending : undefined;
 
   return (
     <nav
@@ -65,6 +66,7 @@ export function ToolRail({
       <ToolButton
         active={voiceActive}
         disabled={!voiceAvailable || (interactionPending && !voiceActive)}
+        disabledReason={voiceAvailable ? pendingReason : undefined}
         group="admission"
         icon={<VoiceIcon />}
         label={voiceLabel}
@@ -76,6 +78,7 @@ export function ToolRail({
       <ToolButton
         active={lassoActive}
         disabled={!lassoAvailable || interactionPending}
+        disabledReason={pendingReason}
         group="material"
         icon={<LassoIcon />}
         label={lassoActive ? copy.exitLanguageSelection : copy.circleSelectLanguage}
@@ -86,6 +89,7 @@ export function ToolRail({
       />
       <ToolButton
         disabled={interactionPending || branch?.availability !== "available"}
+        disabledReason={pendingReason ?? projectedToolReason(branch, copy.unavailableWithoutSelection, copy)}
         group="material"
         icon={<BranchIcon />}
         label={copy.extendRelatedThought}
@@ -100,6 +104,7 @@ export function ToolRail({
       <ToolButton
         active={panActive}
         disabled={interactionPending}
+        disabledReason={pendingReason}
         group="material"
         icon={<MoveIcon />}
         label={lassoActive ? copy.returnToCanvasPan : panActive ? copy.exitCanvasPan : copy.canvasPan}
@@ -111,6 +116,7 @@ export function ToolRail({
       <ToolSeparator between="material-history" />
       <ToolButton
         disabled={interactionPending || undo?.availability !== "available"}
+        disabledReason={pendingReason ?? projectedToolReason(undo, copy.unavailableWithoutHistory, copy)}
         group="history"
         icon={<UndoIcon />}
         label={copy.undoLastChange}
@@ -126,9 +132,21 @@ export function ToolRail({
   );
 }
 
+/** The projected capability says why a slot is unavailable; absence is its own reason. */
+function projectedToolReason(
+  tool: ProjectedTool | null,
+  whenAbsent: string,
+  copy: ReturnType<typeof toolRailCopy>,
+): string | undefined {
+  if (tool === null) return whenAbsent;
+  if (tool.availability === "available") return undefined;
+  return tool.reason === "history-empty" ? copy.unavailableWithoutHistory : copy.unavailableWhilePending;
+}
+
 type ToolButtonProps = {
   active?: boolean;
   disabled?: boolean;
+  disabledReason?: string;
   group: ToolRailGroup;
   icon: ReactNode;
   label: string;
@@ -141,6 +159,7 @@ type ToolButtonProps = {
 function ToolButton({
   active,
   disabled,
+  disabledReason,
   group,
   icon,
   label,
@@ -150,9 +169,11 @@ function ToolButton({
   toolId,
 }: ToolButtonProps) {
   const [clickMotion, setClickMotion] = useState<"a" | "b">();
+  const reasonId = useId();
+  const reason = disabled ? disabledReason : undefined;
 
   function handleClick() {
-    if (!onClick) {
+    if (disabled || !onClick) {
       return;
     }
 
@@ -162,8 +183,13 @@ function ToolButton({
     onClick();
   }
 
+  // `aria-disabled` rather than `disabled`: an unavailable tool stays
+  // focusable, so focus is not dropped when a pending operation flips it, and
+  // it can say why it cannot act yet.
   return (
     <button
+      aria-describedby={reason === undefined ? undefined : reasonId}
+      aria-disabled={disabled || undefined}
       aria-label={label}
       aria-pressed={pressed}
       className="tool-rail__button"
@@ -173,13 +199,15 @@ function ToolButton({
       data-tool-group={group}
       data-tool-id={toolId}
       data-tool-state={disabled ? "disabled" : active ? "active" : "idle"}
-      disabled={disabled}
-      onClick={onClick ? handleClick : undefined}
-      title={label}
+      onClick={onClick && !disabled ? handleClick : undefined}
+      title={reason === undefined ? label : label + " — " + reason}
       type="button"
     >
       {icon}
       <span className="tool-rail__label">{shortLabel}</span>
+      {reason === undefined ? null : (
+        <span className="tool-rail__label" id={reasonId}>{reason}</span>
+      )}
     </button>
   );
 }

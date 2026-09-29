@@ -32,6 +32,39 @@ describe("CanvasChrome", () => {
     }
   });
 
+  it("makes shell chrome outside the paper inert behind a modal dialog", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    const inert = source.slice(
+      source.indexOf("const MODAL_INERT_SHELL_CHROME"),
+      source.indexOf('].join(", ");', source.indexOf("const MODAL_INERT_SHELL_CHROME")),
+    );
+    for (const selector of [".tool-rail", ".material-files", ".material-files-toggle", ".matter-header"]) {
+      expect(inert).toContain(`"${selector}"`);
+    }
+    // A handle mounted after the dialog opened (a breakpoint crossing) is caught too.
+    expect(source).toContain("if (shell !== null) observer.observe(shell, { childList: true });");
+  });
+
+  it("names the compact menu in every locale", () => {
+    for (const [language, label] of [
+      ["en-US", "Matter menu"],
+      ["zh-CN", "Matter 菜单"],
+      ["zh-TW", "Matter 選單"],
+      ["ja-JP", "Matter メニュー"],
+      ["de-DE", "Matter-Menü"],
+    ] as const) {
+      const markup = renderChrome({
+        overlay: "mobile",
+        preferences: { ...DEFAULT_CANVAS_PREFERENCES, language },
+      });
+      expect(markup).toContain(`<nav aria-label="${label}"`);
+    }
+    for (const language of ["ja-JP", "de-DE"] as const) {
+      const about = CANVAS_CHROME_INFO[language].about.body.at(-1);
+      expect(JSON.stringify(about)).not.toContain(" project");
+    }
+  });
+
   it("closes only the overlay a breakpoint crossing removes", () => {
     // Desktop menus do not exist on a phone; the compact sheet does not exist
     // on a desk. Ask Matter's turns and an open dialog's editor survive both.
@@ -145,6 +178,10 @@ describe("CanvasChrome", () => {
       language: "en-US",
       presented: true,
     }));
+    // The notice region exists before its first notice, and no alert nests
+    // inside a polite region.
+    expect(markup).toMatch(/data-silent="true"[^>]*><div aria-atomic="true"[^>]*role="status"><\/div>/u);
+    expect(markup).not.toContain('role="alert"');
     expect(markup).toContain(`minLength="${MIN_USER_PROVIDER_API_KEY_CODE_UNITS}"`);
     expect(markup).toContain('maxLength="512"');
     expect(markup).toMatch(/<input[^>]*required=""[^>]*type="password"|<input[^>]*type="password"[^>]*required=""/u);

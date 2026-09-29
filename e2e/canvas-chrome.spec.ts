@@ -51,7 +51,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.goto("/matter");
   await page.evaluate(async () => document.fonts.ready);
 
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const rootThought = page.locator('[data-thought-id="thought_fixture_root"]');
   const about = page.getByRole("button", { name: "关于", exact: true });
   const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
@@ -376,7 +376,7 @@ test("native leaf media crosses quiet corners while active chrome rises above it
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
 
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
   const media = ambient.locator(".matter-ambient__poster, .matter-ambient__video");
   const wash = ambient.locator(".matter-ambient__wash");
@@ -456,7 +456,7 @@ test("reduced motion keeps the native poster without loading leaf video", async 
   await expect(poster).toHaveCSS("opacity", "0.32");
 
   await page.locator('[data-chrome-control="appearance"]').click();
-  await expect(page.getByRole("region", { name: "Thought material" }))
+  await expect(page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material }))
     .toHaveAttribute("data-canvas-theme", "dark");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(poster).toHaveCSS("mix-blend-mode", "normal");
@@ -552,7 +552,7 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/matter");
 
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const trigger = page.getByRole("button", { name: "打开 Matter 菜单" });
   const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
   const mobileMedia = page.locator(

@@ -159,6 +159,23 @@ fingers still pinch whenever no pen is touching. Pen hover is not activity, and
 a mouse alone behaves as before. Pen contact is noted in the window capture
 phase, so a control that stops propagation cannot strand it.
 
+## Chrome accessibility
+
+- Hover affordances exist only under `@media (hover: hover)`, so a tap never
+  leaves a sticky hover state; focus, press, and selection states stay ungated,
+  and a hovering desktop sees the same cascade as before.
+- An unavailable rail tool is `aria-disabled`, not `disabled`: it keeps focus
+  when a pending operation flips it and describes why it cannot act (pending
+  work, no selection, or no history).
+- Under forced colors every focus and selection that was a background plate or
+  box-shadow also draws a system-color outline or bar.
+- An open modal dialog makes the rail, index, drawer handle, and brand header
+  inert, including a handle mounted after the dialog opened.
+- Live regions are mounted before they speak; a silent region leaves the flow
+  but stays in the accessibility tree.
+- Every visible or accessible chrome string comes from a complete per-locale
+  table; no table spreads another language to hide a missing key.
+
 ## Left field: separately frozen
 
 The left field is not governed by this composition reference. Its current

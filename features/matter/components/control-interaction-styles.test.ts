@@ -23,17 +23,22 @@ describe("canvas control interaction styles", () => {
     expect(css).toMatch(
       /\.tool-rail__button::before\s*\{[^}]*inset:\s*0 14px;[^}]*border-radius:\s*13px;[^}]*transform:\s*scale\(1\);/s,
     );
+    // Hover lives only where a pointer can hover; focus and press stay
+    // ungated. An unavailable tool is aria-disabled so it keeps focus.
     expect(css).toMatch(
-      /\.tool-rail__button:hover:not\(:disabled\)::before,[\s\S]*?\.tool-rail__button:focus-visible::before\s*\{[^}]*background:\s*var\(--rail-hover\);/s,
+      /@media \(hover: hover\) \{ \.tool-rail__button:hover:not\(\[aria-disabled="true"\]\)::before \{[^}]*background:\s*var\(--rail-hover\);/s,
     );
     expect(css).toMatch(
-      /\.tool-rail__button:hover:not\(:disabled\)\s*\{[^}]*--tool-icon-rest-scale:\s*\.92;/s,
+      /\n\.tool-rail__button:focus-visible::before\s*\{[^}]*background:\s*var\(--rail-hover\);/s,
     );
     expect(css).toMatch(
-      /\.tool-rail__button:active:not\(:disabled\)::before\s*\{[^}]*transform:\s*scale\(\.82\);/s,
+      /@media \(hover: hover\) \{ \.tool-rail__button:hover:not\(\[aria-disabled="true"\]\) \{[^}]*--tool-icon-rest-scale:\s*\.92;/s,
     );
     expect(css).toMatch(
-      /\.tool-rail__button:active:not\(:disabled\) svg\s*\{[^}]*transform:\s*scale\(\.8\);/s,
+      /\n\.tool-rail__button:active:not\(\[aria-disabled="true"\]\)::before\s*\{[^}]*transform:\s*scale\(\.82\);/s,
+    );
+    expect(css).toMatch(
+      /\n\.tool-rail__button:active:not\(\[aria-disabled="true"\]\) svg\s*\{[^}]*transform:\s*scale\(\.8\);/s,
     );
     expect(css).toMatch(
       /\.tool-rail__button\s*\{[^}]*width:\s*72px;[^}]*height:\s*44px;/s,
@@ -63,4 +68,57 @@ describe("canvas control interaction styles", () => {
       /\*, \*::before, \*::after\s*\{[^}]*transition-duration:\s*1ms !important;/s,
     );
   });
+
+  it("keeps focus and selection visible when the system forces colors", () => {
+    const forcedColors = css.slice(css.indexOf("@media (forced-colors: active)"));
+    expect(forcedColors).toMatch(/\.node-action-lens__button:focus-visible\s*\{[^}]*outline:\s*2px solid Highlight;/s);
+    expect(forcedColors).toMatch(
+      /\.tool-rail__button\[data-tool-emphasis="primary"\]::before\s*\{[^}]*outline:\s*2px solid Highlight;/s,
+    );
+    expect(forcedColors).toMatch(/\.stretch-handle::after\s*\{[^}]*forced-color-adjust:\s*none;[^}]*background:\s*ButtonText;/s);
+    const chrome = readFileSync(new URL("./CanvasChrome.module.css", import.meta.url), "utf8");
+    const chromeForced = chrome.slice(chrome.indexOf("@media (forced-colors: active)"));
+    expect(chromeForced).toMatch(
+      /\.settingsMenu button:focus-visible,\s*\.languageMenu button:focus-visible,\s*\.segmentedControl button\[aria-pressed="true"\]\s*\{[^}]*outline:\s*2px solid Highlight;/s,
+    );
+  });
+
+  it("gates every hover affordance to devices that can hover", () => {
+    // A tap on a touch screen leaves :hover stuck until the next tap elsewhere.
+    for (const url of [
+      "../../../app/globals.css",
+      "./CanvasChrome.module.css",
+      "./WikiSettingsSection.module.css",
+    ]) {
+      const source = readFileSync(new URL(url, import.meta.url), "utf8");
+      const ungated = stripHoverMedia(source).match(/[^{}]*:hover[^{}]*\{/gu) ?? [];
+      expect(ungated, url).toEqual([]);
+    }
+  });
 });
+
+/** Removes every `@media (hover: hover) { ... }` block, however it is nested. */
+function stripHoverMedia(source: string): string {
+  let result = "";
+  let index = 0;
+  const marker = "@media (hover: hover)";
+  while (index < source.length) {
+    const start = source.indexOf(marker, index);
+    if (start === -1) {
+      result += source.slice(index);
+      break;
+    }
+    result += source.slice(index, start);
+    let depth = 0;
+    let cursor = source.indexOf("{", start);
+    for (; cursor < source.length; cursor += 1) {
+      if (source[cursor] === "{") depth += 1;
+      if (source[cursor] === "}") {
+        depth -= 1;
+        if (depth === 0) break;
+      }
+    }
+    index = cursor + 1;
+  }
+  return result;
+}
