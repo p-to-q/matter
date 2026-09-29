@@ -3644,8 +3644,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
-      {/* Mounted empty first, so assistive technology observes each insertion. */}
-      <span aria-atomic="true" className="visually-hidden" role="status">
+      {/* Mounted empty first, so assistive technology observes each insertion.
+          The explicit politeness matches every other outcome region, since not
+          every screen reader derives it from the status role alone. */}
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
         {transformNotice !== null ? (
           <span key={`expansion_${transformNotice.id}`}>
             {localizeExpansionOutcome(transformNotice.kind, props.locale)}
