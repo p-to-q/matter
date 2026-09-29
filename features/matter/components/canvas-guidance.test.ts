@@ -8,7 +8,7 @@ import {
   CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT,
   localizeCanvasGuidance,
   projectCanvasGuidance,
-  rewriteOutcomeAnnouncement,
+  localizeRewriteOutcome,
   type CanvasGuidanceInput,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
@@ -88,26 +88,26 @@ describe("canvas guidance projection", () => {
   );
 
   it.each([
-    ["unchanged", "rewrite-unchanged", "The original language was kept."],
-    ["passage-changed", "rewrite-passage-changed", "Passage changed; rewrite skipped."],
-  ] as const)("reports a detached %s rewrite once in place of the next hint", (outcome, id, text) => {
+    ["unavailable", "text-swap-unavailable", "Not rewritten. Text unchanged."],
+    ["stale", "text-swap-stale", "Passage changed. Not rewritten."],
+  ] as const)("reports a released %s rewrite in place of the next hint", (reason, id, text) => {
     expect(projectCanvasGuidance(input({
-      rewriteOutcome: outcome,
+      rewrite: { kind: "unchanged", reason },
       language: { kind: "lasso-ready" },
-    }))).toEqual({ id, kind: "outcome", text });
+    }))).toEqual({ id, kind: "recovery", text });
     expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     // Live voice still owns the line.
     expect(projectCanvasGuidance(input({
-      rewriteOutcome: outcome,
+      rewrite: { kind: "unchanged", reason },
       admission: attempt({ phase: "recording", startedAtMs: 1 }),
     })).id).toBe("speak-recording");
     for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
-      expect(localizeCanvasGuidance({ id, kind: "outcome", text }, language).text)
+      expect(localizeCanvasGuidance({ id, kind: "recovery", text }, language).text)
         .not.toBe(text);
     }
-    expect(rewriteOutcomeAnnouncement(outcome, "en-US")).toBe(text);
-    expect(rewriteOutcomeAnnouncement(outcome, "zh-CN"))
-      .toBe(localizeCanvasGuidance({ id, kind: "outcome", text }, "zh-CN").text);
+    expect(localizeRewriteOutcome(reason, "en-US")).toBe(text);
+    expect(localizeRewriteOutcome(reason, "zh-CN"))
+      .toBe(localizeCanvasGuidance({ id, kind: "recovery", text }, "zh-CN").text);
   });
 
   it("asks to place or discard held words instead of dismissing the recording", () => {
@@ -288,8 +288,8 @@ describe("canvas guidance projection", () => {
       "unfold-thought": true,
       "speak-child": true,
       "select-thought": true,
-      "rewrite-unchanged": true,
-      "rewrite-passage-changed": true,
+      "text-swap-unavailable": true,
+      "text-swap-stale": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {

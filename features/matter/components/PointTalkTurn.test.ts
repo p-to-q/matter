@@ -19,14 +19,14 @@ describe("Point Talk host ownership", () => {
   });
 
   it("reports submitted work that ends without a field to show it, once", () => {
-    expect(pointTalkReleasedOutcome(false, "pending", "error")).toBe("unchanged");
-    expect(pointTalkReleasedOutcome(false, "transcribing", "error")).toBe("unchanged");
-    expect(pointTalkReleasedOutcome(false, "pending", "stale")).toBe("passage-changed");
+    expect(pointTalkReleasedOutcome(false, "pending", "error")).toBe("unavailable");
+    expect(pointTalkReleasedOutcome(false, "transcribing", "error")).toBe("unavailable");
+    expect(pointTalkReleasedOutcome(false, "pending", "stale")).toBe("stale");
     // The rewritten passage is its own outcome.
     expect(pointTalkReleasedOutcome(false, "pending", "success")).toBeNull();
     // A visible field shows its own failure, but staleness always closes it.
     expect(pointTalkReleasedOutcome(true, "pending", "error")).toBeNull();
-    expect(pointTalkReleasedOutcome(true, "pending", "stale")).toBe("passage-changed");
+    expect(pointTalkReleasedOutcome(true, "pending", "stale")).toBe("stale");
     // A draft that went stale was never submitted.
     expect(pointTalkReleasedOutcome(true, "ready", "stale")).toBeNull();
     // A failure already seen and then dismissed is not reported again.

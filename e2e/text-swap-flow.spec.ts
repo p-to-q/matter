@@ -738,7 +738,7 @@ test.describe("passage-local Point and Talk", () => {
     const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
     const guidance = page.locator(".matter-guidance");
     const announcement = page.locator(".visually-hidden[role=status][aria-live=polite]")
-      .filter({ hasText: "原文没有改变。" });
+      .filter({ hasText: "未改写，原文未变。" });
     await passage.hover();
     await page.locator("[data-node-action=point-talk]").click();
     await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill(DIRECTION);
@@ -749,18 +749,21 @@ test.describe("passage-local Point and Talk", () => {
     await expect(page.locator(".point-talk")).toHaveCount(0);
     releaseFailure();
 
-    await expect(guidance).toHaveAttribute("data-guidance-state", "rewrite-unchanged");
-    await expect(guidance).toHaveText("原文没有改变。");
+    await expect(guidance).toHaveAttribute("data-guidance-state", "text-swap-unavailable");
+    await expect(guidance).toHaveText("未改写，原文未变。");
     await expect(announcement).toHaveCount(1);
     // The quiet outcome never reopens the closed field or names the provider.
     await expect(page.locator(".point-talk")).toHaveCount(0);
     await expect(page.getByText("Synthetic model unavailable.")).toHaveCount(0);
     await expect(passage).toContainText(SOURCE_TEXT);
+    // A lone modifier, such as a screen reader's, is not the next action.
+    await page.keyboard.press("Shift");
+    await expect(guidance).toHaveAttribute("data-guidance-state", "text-swap-unavailable");
 
     const paper = await page.locator(".matter-document").boundingBox();
     if (paper === null) throw new Error("Matter paper missing");
     await page.mouse.click(paper.x + 24, paper.y + 24);
-    await expect(guidance).not.toHaveAttribute("data-guidance-state", "rewrite-unchanged");
+    await expect(guidance).not.toHaveAttribute("data-guidance-state", "text-swap-unavailable");
     await expect(announcement).toHaveCount(0);
   });
 

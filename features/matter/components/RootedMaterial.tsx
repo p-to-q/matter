@@ -96,7 +96,7 @@ import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
   projectCanvasGuidance,
-  rewriteOutcomeAnnouncement,
+  localizeRewriteOutcome,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
@@ -215,6 +215,23 @@ const MaterialFilesWithLabels = dynamic(
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
+  "Alt",
+  "AltGraph",
+  "CapsLock",
+  "Control",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Meta",
+  "NumLock",
+  "OS",
+  "ScrollLock",
+  "Shift",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 
 export type RootedMaterialProps = {
@@ -1445,16 +1462,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [abortElasticExpansion, closePointTalk, pointTalkExitHandoff]);
   useEffect(() => {
     if (pointTalkOutcome === null) return;
-    // The outcome line is quiet and transient: the next gesture clears it.
+    // The outcome stays until the person acts again, so a slow reader never
+    // loses it to a timer. A held key's auto-repeat or a lone modifier, such
+    // as a screen reader's, is not a new action. Keydown only observes, so it
+    // listens in the bubble phase like every other window key owner.
     const clear = () => setPointTalkOutcome(null);
+    const clearOnKey = (event: KeyboardEvent) => {
+      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
+      clear();
+    };
     const capture = { capture: true } as const;
     window.addEventListener("pointerdown", clear, capture);
-    window.addEventListener("keydown", clear, capture);
-    window.addEventListener("wheel", clear, { capture: true, passive: true });
+    window.addEventListener("keydown", clearOnKey);
     return () => {
       window.removeEventListener("pointerdown", clear, capture);
-      window.removeEventListener("keydown", clear, capture);
-      window.removeEventListener("wheel", clear, capture);
+      window.removeEventListener("keydown", clearOnKey);
     };
   }, [pointTalkOutcome]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
@@ -2278,7 +2300,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         : { kind: "none" },
       language: languageGuidance,
       material: materialGuidance,
-      rewriteOutcome: pointTalkOutcome,
+      rewrite: pointTalkOutcome === null
+        ? { kind: "none" }
+        : { kind: "unchanged", reason: pointTalkOutcome },
     }),
     canvasPreferences.preferences.language,
   );
@@ -3699,7 +3723,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <p aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
           {pointTalkOutcome === null
             ? ""
-            : rewriteOutcomeAnnouncement(pointTalkOutcome, canvasPreferences.preferences.language)}
+            : localizeRewriteOutcome(pointTalkOutcome, canvasPreferences.preferences.language)}
         </p>
         </div>
         <CanvasChrome

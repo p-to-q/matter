@@ -23,7 +23,7 @@ import { PointTalkComposer, type PointTalkSurfaceView } from "./PointTalkCompose
  * How submitted work ended when no field was left to show it. The field never
  * reopens for it; the host reports it once, quietly, outside the material.
  */
-export type PointTalkReleasedOutcome = "unchanged" | "passage-changed";
+export type PointTalkReleasedOutcome = "unavailable" | "stale";
 
 /** The complete generative turn stays out of the initial canvas bundle. */
 export function PointTalkTurn({
@@ -211,8 +211,8 @@ export function pointTalkReleasedOutcome(
   phase: TextSwapController["state"]["phase"],
 ): PointTalkReleasedOutcome | null {
   if (previous !== "pending" && previous !== "transcribing") return null;
-  if (phase === "stale") return "passage-changed";
-  return phase === "error" && !presented ? "unchanged" : null;
+  if (phase === "stale") return "stale";
+  return phase === "error" && !presented ? "unavailable" : null;
 }
 
 export function pointTalkTurnReleasesOwner(

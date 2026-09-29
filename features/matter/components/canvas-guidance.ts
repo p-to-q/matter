@@ -31,18 +31,20 @@ export type CanvasCameraGuidanceState =
   | Readonly<{ kind: "pan"; zoom: number }>;
 
 /**
- * How a submitted Point Talk rewrite ended when no field was left to show it.
- * It is shown once in place of the next hint and cleared by the person's next
- * gesture.
+ * A submitted Point-and-Talk rewrite that ended without a field to show it:
+ * the provider left the text unchanged, or the passage changed first. It is
+ * shown in place of the next hint until the person's next action.
  */
-export type CanvasRewriteOutcomeGuidanceState = "unchanged" | "passage-changed";
+export type CanvasRewriteGuidanceState =
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
 
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
-  rewriteOutcome?: CanvasRewriteOutcomeGuidanceState | null;
+  rewrite?: CanvasRewriteGuidanceState;
 }>;
 
 type CanvasActionGuidanceId =
@@ -68,8 +70,8 @@ type CanvasActionGuidanceId =
   | "unfold-thought"
   | "speak-child"
   | "select-thought"
-  | "rewrite-unchanged"
-  | "rewrite-passage-changed";
+  | "text-swap-unavailable"
+  | "text-swap-stale";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
@@ -98,8 +100,8 @@ const GUIDANCE_COPY = Object.freeze({
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
   "select-thought": "Select one thought.",
-  "rewrite-unchanged": "The original language was kept.",
-  "rewrite-passage-changed": "Passage changed; rewrite skipped.",
+  "text-swap-unavailable": "Not rewritten. Text unchanged.",
+  "text-swap-stale": "Passage changed. Not rewritten.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const GUIDANCE_COPY_ZH = Object.freeze({
@@ -125,14 +127,14 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
   "select-thought": "选择一段想法。",
-  "rewrite-unchanged": "原文没有改变。",
-  "rewrite-passage-changed": "原文已先变化，未改写。",
+  "text-swap-unavailable": "未改写，原文未变。",
+  "text-swap-stale": "段落已变化，未改写。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
   | Readonly<{
       id: CanvasActionGuidanceId;
-      kind: "action" | "progress" | "recovery" | "outcome";
+      kind: "action" | "progress" | "recovery";
       text: string;
     }>
   | Readonly<{
@@ -157,11 +159,11 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     return projectAdmissionGuidance(input.admission);
   }
 
-  if (input.rewriteOutcome === "unchanged") {
-    return guidance("rewrite-unchanged", "outcome");
-  }
-  if (input.rewriteOutcome === "passage-changed") {
-    return guidance("rewrite-passage-changed", "outcome");
+  if (input.rewrite?.kind === "unchanged") {
+    return guidance(
+      input.rewrite.reason === "stale" ? "text-swap-stale" : "text-swap-unavailable",
+      "recovery",
+    );
   }
 
   if (input.material.kind === "empty") {
@@ -228,13 +230,13 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
   }
 }
 
-/** The one polite announcement for a detached rewrite outcome. */
-export function rewriteOutcomeAnnouncement(
-  outcome: CanvasRewriteOutcomeGuidanceState,
+/** The polite announcement for a rewrite that ended without a change. */
+export function localizeRewriteOutcome(
+  reason: "unavailable" | "stale",
   language: CanvasLanguage,
 ): string {
   return localizeCanvasGuidance(
-    guidance(outcome === "unchanged" ? "rewrite-unchanged" : "rewrite-passage-changed", "outcome"),
+    guidance(reason === "stale" ? "text-swap-stale" : "text-swap-unavailable", "recovery"),
     language,
   ).text;
 }
@@ -287,8 +289,8 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
   "select-thought": "選擇一段想法。",
-  "rewrite-unchanged": "原文沒有改變。",
-  "rewrite-passage-changed": "原文已先變化，未改寫。",
+  "text-swap-unavailable": "未改寫，原文未變。",
+  "text-swap-stale": "段落已變更，未改寫。",
 });
 const GUIDANCE_COPY_JA = Object.freeze({
   ...GUIDANCE_COPY,
@@ -314,8 +316,8 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
   "select-thought": "考えを一つ選んでください。",
-  "rewrite-unchanged": "元の文章はそのままです。",
-  "rewrite-passage-changed": "文章が先に変わったため、書き換えていません。",
+  "text-swap-unavailable": "書き換えませんでした。原文はそのままです。",
+  "text-swap-stale": "段落が変わったため書き換えませんでした。",
 });
 const GUIDANCE_COPY_DE = Object.freeze({
   ...GUIDANCE_COPY,
@@ -341,8 +343,8 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
   "select-thought": "Einen Gedanken auswählen.",
-  "rewrite-unchanged": "Der ursprüngliche Text bleibt erhalten.",
-  "rewrite-passage-changed": "Passage geändert; nicht umgeschrieben.",
+  "text-swap-unavailable": "Nicht umgeschrieben. Text unverändert.",
+  "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
 });
 
 function projectAdmissionGuidance(
@@ -393,7 +395,7 @@ function projectAdmissionError(errorCode: AdmissionErrorCode): CanvasGuidance {
 
 function guidance(
   id: CanvasActionGuidanceId,
-  kind: "action" | "progress" | "recovery" | "outcome",
+  kind: "action" | "progress" | "recovery",
 ): Extract<CanvasGuidance, { id: CanvasActionGuidanceId }> {
   const text = GUIDANCE_COPY[id];
   if (text.length > CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT) {
