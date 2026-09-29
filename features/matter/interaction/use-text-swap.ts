@@ -2,7 +2,6 @@
 
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -32,7 +31,7 @@ import {
 } from "./text-swap-driver";
 import { requestTextSwap } from "./text-swap-client";
 import { requestTranscription } from "./transcription-client";
-import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
+import { useDeliveryWindow } from "./use-delivery-window";
 
 export type UseTextSwapInput<TCommitted> = Readonly<{
   tree: ThoughtTree;
@@ -82,7 +81,6 @@ export function useTextSwap<TCommitted>(
     createRequestId: () => createTextSwapId("request"),
     monotonicNow,
   }));
-  const activePointersRef = useRef(new Set<number>());
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
 
   const subscribe = useCallback(
@@ -99,6 +97,13 @@ export function useTextSwap<TCommitted>(
     driver.updateScope(toScope(input, state.phase === "idle" ? null : state.basis));
   }, [driver, input, state]);
 
+  const refreshDeliveryWindow = useDeliveryWindow({
+    isAvailable: () => deliveryAvailableRef.current,
+    onChange: (open) => driver.setDeliveryWindowOpen(open),
+    onSuspend: () => driver.suspendCapture(),
+    onExit: () => driver.cancel(),
+  }, driver);
+
   useLayoutEffect(() => {
     deliveryAvailableRef.current = input.deliveryWindowAvailable !== false;
     if (!deliveryAvailableRef.current) {
@@ -107,10 +112,8 @@ export function useTextSwap<TCommitted>(
       driver.suspendCapture();
       return;
     }
-    driver.setDeliveryWindowOpen(
-      document.visibilityState === "visible" && activePointersRef.current.size === 0,
-    );
-  }, [driver, input.deliveryWindowAvailable]);
+    refreshDeliveryWindow();
+  }, [driver, input.deliveryWindowAvailable, refreshDeliveryWindow]);
 
   useLayoutEffect(() => {
     // Retain in the commit phase. React's development replay performs the
@@ -123,39 +126,6 @@ export function useTextSwap<TCommitted>(
 
   // Escape reaches `detachPresentation` through the Point and Talk surface's
   // layer in the composition's single Escape owner, never a listener here.
-  useEffect(() => {
-    const openDeliveryIfUsable = () => driver.setDeliveryWindowOpen(
-      deliveryAvailableRef.current && document.visibilityState === "visible" &&
-        activePointersRef.current.size === 0,
-    );
-    const onPointerDown = (event: PointerEvent) => {
-      activePointersRef.current.add(event.pointerId);
-      driver.setDeliveryWindowOpen(false);
-    };
-    const onPointerDone = (event: PointerEvent) => {
-      activePointersRef.current.delete(event.pointerId);
-      openDeliveryIfUsable();
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerDone, true);
-    window.addEventListener("pointercancel", onPointerDone, true);
-    const unsubscribePageSuspension = subscribePageSuspension(
-      () => {
-        activePointersRef.current.clear();
-        driver.suspendCapture();
-      },
-      openDeliveryIfUsable,
-    );
-    const unsubscribePageExit = subscribePageExit(() => driver.cancel());
-    openDeliveryIfUsable();
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerDone, true);
-      window.removeEventListener("pointercancel", onPointerDone, true);
-      unsubscribePageSuspension();
-      unsubscribePageExit();
-    };
-  }, [driver]);
 
   return {
     state,

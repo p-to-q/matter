@@ -81,6 +81,19 @@ export function createAdmissionAnchor(
 }
 
 /**
+ * The existence half of the rule `admissionToTreeCommand` enforces, for
+ * lifecycle owners that must learn of a lost target before commit time.
+ */
+export function admissionTargetExists(
+  tree: ThoughtTree,
+  target: Readonly<{ kind: "root" }> | Readonly<{ kind: "child"; parentNodeId: string }>,
+): boolean {
+  return target.kind === "root"
+    ? tree.rootId === null && Object.keys(tree.nodes).length === 0
+    : Object.hasOwn(tree.nodes, target.parentNodeId);
+}
+
+/**
  * Translation revalidates the transient handle immediately before constructing
  * the only durable admission command. Fold state is intentionally irrelevant.
  */

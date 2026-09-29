@@ -37,6 +37,10 @@ const readiness = new WeakMap<Worker, Readonly<{
   reject: (error: LocalTranscriptionError) => void;
 }>>();
 const pageExitCleanup = new WeakMap<Worker, () => void>();
+/** Leases whose module graph reported ready. */
+const readyWorkers = new WeakSet<Worker>();
+/** Never-ready leases whose warm-up deadline passed while carrying work. */
+const overdueWorkers = new WeakSet<Worker>();
 
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
@@ -48,6 +52,13 @@ export function resetLocalTranscriptionForTests(): void {
  * Starts only the isolated worker and its code graph. It never opens a
  * microphone, decodes audio, or downloads the Whisper model; model work stays
  * behind an actual recorded utterance.
+ *
+ * The warm-up deadline bounds only this speculative promise. A lease that is
+ * already carrying a submitted recording is governed by that request's own
+ * end-to-end deadline: retiring it here would reject the recording as a
+ * timeout while its worker may still be loading on a slow network. Such a
+ * lease is marked overdue instead, and is retired once that request ends
+ * without it ever becoming ready, so the next recording starts a fresh one.
  */
 export async function prepareLocalTranscription(): Promise<void> {
   if (typeof window === "undefined" || typeof Worker === "undefined") {
@@ -68,18 +79,31 @@ export async function prepareLocalTranscription(): Promise<void> {
       }),
     ]);
   } catch (error) {
-    if (worker === target) {
-      retireWorker(
-        target,
-        error instanceof LocalTranscriptionError
-          ? error
-          : new LocalTranscriptionError("failed"),
-      );
+    // An idle lease that never became ready is released so the next request
+    // starts a fresh one; a lease with pending work is left to that work.
+    if (worker === target && !readyWorkers.has(target)) {
+      if (workerCarriesRequest(target)) {
+        overdueWorkers.add(target);
+      } else {
+        retireWorker(
+          target,
+          error instanceof LocalTranscriptionError
+            ? error
+            : new LocalTranscriptionError("failed"),
+        );
+      }
     }
     throw error;
   } finally {
     if (timeout !== undefined) globalThis.clearTimeout(timeout);
   }
+}
+
+function workerCarriesRequest(target: Worker): boolean {
+  for (const request of pending.values()) {
+    if (request.worker === target) return true;
+  }
+  return false;
 }
 
 export async function transcribeLocally(input: Readonly<{
@@ -212,6 +236,8 @@ function localTranscriptionWorker(): Worker {
   worker.addEventListener("message", (event: MessageEvent<unknown>) => {
     if (!isWorkerResponse(event.data)) return;
     if (event.data.status === "ready") {
+      readyWorkers.add(target);
+      overdueWorkers.delete(target);
       readiness.get(target)?.resolve();
       return;
     }
@@ -369,6 +395,15 @@ function settle(id: string, error: LocalTranscriptionError): void {
 function cancelRequest(id: string, target: Worker, error: LocalTranscriptionError): void {
   const request = pending.get(id);
   if (request === undefined || request.worker !== target) return;
+  if (
+    !readyWorkers.has(target) &&
+    (overdueWorkers.has(target) || error.reason === "timeout")
+  ) {
+    // Nothing can have started on a lease that never became ready; waiting on
+    // it again would only repeat the same stall for the next recording.
+    retireWorker(target, error);
+    return;
+  }
   let ids = cancelled.get(target);
   if (ids === undefined) {
     ids = new Set<string>();
@@ -392,6 +427,7 @@ function retireWorker(target: Worker, error: LocalTranscriptionError): void {
   pageExitCleanup.get(target)?.();
   pageExitCleanup.delete(target);
   cancelled.delete(target);
+  overdueWorkers.delete(target);
   readiness.get(target)?.reject(error);
   readiness.delete(target);
   target.terminate();

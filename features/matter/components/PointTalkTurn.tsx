@@ -16,7 +16,14 @@ import {
 import type { TextSwapCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import type { PointTalkBounds } from "./point-talk-placement";
-import { PointTalkComposer } from "./PointTalkComposer";
+import type { PresenceHandoff } from "./presence";
+import { PointTalkComposer, type PointTalkSurfaceView } from "./PointTalkComposer";
+
+/**
+ * How submitted work ended when no field was left to show it. The field never
+ * reopens for it; the host reports it once, quietly, outside the material.
+ */
+export type PointTalkReleasedOutcome = "unavailable" | "stale";
 
 /** The complete generative turn stays out of the initial canvas bundle. */
 export function PointTalkTurn({
@@ -27,6 +34,7 @@ export function PointTalkTurn({
   documentEpoch,
   deliveryVisibleNodeIds,
   enabled,
+  exitHandoff,
   geometryKey,
   interactionScopeKey,
   locale,
@@ -36,7 +44,9 @@ export function PointTalkTurn({
   onDeliveryParkedChange,
   onPhaseChange,
   onReleased,
+  onReleasedOutcome,
   penActive,
+  presenceIdentity,
   presented,
   surfaceAvailable,
   positioningRef,
@@ -56,6 +66,7 @@ export function PointTalkTurn({
   documentEpoch: number;
   deliveryVisibleNodeIds?: ReadonlySet<string>;
   enabled: boolean;
+  exitHandoff?: PresenceHandoff<PointTalkSurfaceView>;
   geometryKey: string;
   interactionScopeKey: string;
   locale: MatterLocale;
@@ -66,7 +77,9 @@ export function PointTalkTurn({
   onDeliveryParkedChange?: (release: (() => void) | null) => void;
   onPhaseChange?: (phase: TextSwapInteractionState["phase"]) => void;
   onReleased: () => void;
+  onReleasedOutcome?: (outcome: PointTalkReleasedOutcome) => void;
   penActive: (timeStamp: number) => boolean;
+  presenceIdentity: string;
   presented: boolean;
   surfaceAvailable: boolean;
   positioningRef: RefObject<HTMLElement | null>;
@@ -88,6 +101,11 @@ export function PointTalkTurn({
       selectedText: node.text,
     });
   }, [enabled, nodeId, tree]);
+  const committed = useCallback((change: TextSwapCommittedChange) => {
+    // The rewritten passage is the result; the field leaves as finished work.
+    exitHandoff?.intend(presenceIdentity, "finished");
+    onCommitted(change);
+  }, [exitHandoff, onCommitted, presenceIdentity]);
   const controller = useTextSwap<TextSwapCommittedChange>({
     tree,
     documentEpoch,
@@ -97,7 +115,7 @@ export function PointTalkTurn({
     interactionScopeKey,
     deliveryVisibleNodeIds,
     commit,
-    onCommitted,
+    onCommitted: committed,
     deliveryWindowAvailable: surfaceAvailable,
   });
   const appliedVoiceCommandIdRef = useRef<number | null>(null);
@@ -139,16 +157,27 @@ export function PointTalkTurn({
     onClose();
     if (!retained) onReleased();
   }, [controller, onClose, onReleased, presented, surfaceAvailable]);
+  const releasedPhaseRef = useRef(phase);
+  useEffect(() => {
+    // Runs before the release below, which unmounts this turn.
+    const previous = releasedPhaseRef.current;
+    releasedPhaseRef.current = phase;
+    const outcome = pointTalkReleasedOutcome(presented, previous, phase);
+    if (outcome !== null) onReleasedOutcome?.(outcome);
+  }, [onReleasedOutcome, phase, presented]);
   useEffect(() => {
     if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
   }, [onReleased, phase, presented]);
-  const close = useCallback(() => {
+  const closeFor = useCallback((reason: "person" | "placement") => {
+    if (reason === "person") exitHandoff?.intend(presenceIdentity, "person");
     const retained = controller.detachPresentation();
     onClose();
     // Geometry failure or dismissal before submit owns no durable job. Release
     // the host synchronously so a stale idle effect cannot reopen the surface.
     if (!retained) onReleased();
-  }, [controller, onClose, onReleased]);
+  }, [controller, exitHandoff, onClose, onReleased, presenceIdentity]);
+  const close = useCallback(() => closeFor("person"), [closeFor]);
+  const closeForPlacement = useCallback(() => closeFor("placement"), [closeFor]);
 
   // Keep the controller alive while submitted work settles, but mount its
   // status/recovery surface only when it can actually be perceived. A failure
@@ -161,10 +190,12 @@ export function PointTalkTurn({
       canvasRef={canvasRef}
       canvasZoom={canvasZoom}
       controller={controller}
+      exitHandoff={exitHandoff}
       geometryKey={geometryKey}
       locale={locale}
       nodeId={nodeId}
       onCancel={close}
+      onPlacementLost={closeForPlacement}
       onRetry={controller.retry}
       onStartVoice={controller.startRecording}
       onStopVoice={controller.stopRecording}
@@ -174,11 +205,30 @@ export function PointTalkTurn({
         controller.submit();
       }}
       positioningRef={positioningRef}
+      presenceIdentity={presenceIdentity}
       surfaceAvailable={surfaceAvailable}
       targetBounds={targetBounds}
       voiceAvailable={voiceAvailable}
     />
   );
+}
+
+/**
+ * Submitted work that ends without a field to show it would otherwise end
+ * silently. A failure is shown by a visible field itself, so it is reported
+ * only when the field had been closed; staleness always closes the field, so
+ * it is reported whenever submitted work went stale. Only a transition out of
+ * submitted work counts, so a failure the person already saw and dismissed is
+ * never reported twice.
+ */
+export function pointTalkReleasedOutcome(
+  presented: boolean,
+  previous: TextSwapController["state"]["phase"],
+  phase: TextSwapController["state"]["phase"],
+): PointTalkReleasedOutcome | null {
+  if (previous !== "pending" && previous !== "transcribing") return null;
+  if (phase === "stale") return "stale";
+  return phase === "error" && !presented ? "unavailable" : null;
 }
 
 export function pointTalkTurnReleasesOwner(

@@ -4,9 +4,17 @@ import type {
   TextSwapInteractionState,
 } from "../runtime/text-swap-interaction";
 import {
+  emptySettledStatus,
+  projectSettledStatus,
+  settledStatusDeadline,
+  syncSettledStatus,
+} from "./presence";
+import {
   pointTalkCopy,
   pointTalkOutsidePointerDismisses,
+  pointTalkPhaseLabel,
   pointTalkRecoveryAction,
+  pointTalkStatusInput,
 } from "./PointTalkComposer";
 
 const BASIS = Object.freeze({
@@ -97,6 +105,35 @@ describe("Point Talk recovery", () => {
       failure("MICROPHONE_DENIED", { retryable: false }),
       true,
     )).toBeNull();
+  });
+
+  it("names each status phase without the transient partial it may paint", () => {
+    for (const locale of ["en-US", "zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      for (const phase of ["permission", "recording", "transcribing", "pending", "error"] as const) {
+        expect(pointTalkPhaseLabel(phase, locale).length).toBeGreaterThan(0);
+      }
+    }
+    expect(pointTalkPhaseLabel("recording", "en-US")).toBe("Listening…");
+    expect(pointTalkPhaseLabel("error", "zh-CN")).toBe("原文没有改变。");
+  });
+
+  it("stops claiming to listen the moment the person taps Stop", () => {
+    const scope = "0:thought_1:1";
+    const listening = syncSettledStatus(
+      emptySettledStatus(),
+      pointTalkStatusInput(scope, "recording"),
+      1_000,
+    );
+    expect(listening.shown).toBe("recording");
+    // Stop 3 s later: recording becomes transcribing, a settling system phase.
+    const stopped = syncSettledStatus(listening, pointTalkStatusInput(scope, "transcribing"), 4_000);
+    expect(projectSettledStatus(stopped, pointTalkStatusInput(scope, "transcribing"))).toBeNull();
+    expect(stopped.shown).toBeNull();
+    expect(settledStatusDeadline(stopped)).toBe(4_150);
+    // A submit shows at once; waiting for the microphone settles first.
+    expect(pointTalkStatusInput(scope, "pending")).toMatchObject({ urgent: true, lingers: true });
+    expect(pointTalkStatusInput(scope, "permission")).toMatchObject({ urgent: false, lingers: true });
+    expect(pointTalkStatusInput(scope, "error")).toMatchObject({ urgent: true, lingers: false });
   });
 });
 

@@ -15,7 +15,7 @@ import type { MaterialTurnCommitResult } from "../interaction/material-turn-resu
 import type { TransformCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
-import { subscribePageExit, subscribePageSuspension } from "../interaction/page-suspension";
+import { useDeliveryWindow } from "../interaction/use-delivery-window";
 
 /**
  * The last submitted turn ended without changing material. `unavailable`
@@ -86,7 +86,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   const requestRef = useRef<OwnedFixedExpandRequest | null>(null);
   const noticeRef = useRef<FixedExpandTurnNotice | null>(null);
   const noticeSequenceRef = useRef(0);
-  const activePointersRef = useRef(new Set<number>());
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
   const deliveryWindowOpenRef = useRef(
     typeof document === "undefined" || document.visibilityState === "visible",
@@ -250,52 +249,25 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
     } else deliver(request);
   }, [deliver, input, settleConflict]);
 
+  const refreshDeliveryWindow = useDeliveryWindow({
+    isAvailable: () => deliveryAvailableRef.current,
+    onChange: (open) => {
+      deliveryWindowOpenRef.current = open;
+      // Delivery also reflects whether a resolved plan is parked, so it runs
+      // on every evaluation and commits only when the window is open.
+      const request = requestRef.current;
+      if (request !== null) deliver(request);
+    },
+    onExit: cancel,
+  }, deliver);
+
   useEffect(() => {
-    deliveryWindowOpenRef.current = deliveryAvailableRef.current &&
-      document.visibilityState === "visible" && activePointersRef.current.size === 0;
-    const request = requestRef.current;
-    if (request !== null) deliver(request);
-  }, [deliver, input.deliveryWindowAvailable]);
+    refreshDeliveryWindow();
+  }, [input.deliveryWindowAvailable, refreshDeliveryWindow]);
 
   // Escape never reaches this owner: after submit it may only remove the
   // committed degree from the paper, which the composition's Escape layer does.
-  useEffect(() => {
-    const openDeliveryIfUsable = () => {
-      deliveryWindowOpenRef.current =
-        deliveryAvailableRef.current && document.visibilityState === "visible" &&
-          activePointersRef.current.size === 0;
-      const request = requestRef.current;
-      if (request !== null) deliver(request);
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      activePointersRef.current.add(event.pointerId);
-      deliveryWindowOpenRef.current = false;
-    };
-    const onPointerDone = (event: PointerEvent) => {
-      activePointersRef.current.delete(event.pointerId);
-      openDeliveryIfUsable();
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerDone, true);
-    window.addEventListener("pointercancel", onPointerDone, true);
-    const unsubscribePageSuspension = subscribePageSuspension(
-      () => {
-        activePointersRef.current.clear();
-        deliveryWindowOpenRef.current = false;
-      },
-      openDeliveryIfUsable,
-    );
-    const unsubscribePageExit = subscribePageExit(cancel);
-    openDeliveryIfUsable();
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerDone, true);
-      window.removeEventListener("pointercancel", onPointerDone, true);
-      unsubscribePageSuspension();
-      unsubscribePageExit();
-      cancel();
-    };
-  }, [cancel, deliver]);
+  useEffect(() => () => cancel(), [cancel]);
 
   return { state, start, cancel, acknowledgeNotice };
 }

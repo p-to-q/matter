@@ -10,6 +10,7 @@ import {
   localizeCanvasGuidance,
   localizeExpansionOutcome,
   localizeParkedRelease,
+  localizeRewriteOutcome,
   projectCanvasGuidance,
   type CanvasExpansionGuidanceState,
   type CanvasGuidanceInput,
@@ -64,7 +65,7 @@ describe("canvas guidance projection", () => {
     [attempt({ phase: "recording", startedAtMs: 20 }), "speak-recording", "action", "Speak your thought."],
     [attempt({ phase: "stopping", reason: "person" }), "wait-recording", "progress", "Wait for recording to finish."],
     [attempt({ phase: "transcribing" }), "wait-transcription", "progress", "Wait while voice becomes material."],
-    [attempt({ phase: "committing" }), "wait-commit", "progress", "Wait while the thought is placed."],
+    [attempt({ phase: "committing", transcript: "thought" }), "wait-commit", "progress", "Wait while the thought is placed."],
   ] as const)("projects admission %s before every material handle", (admission, id, kind, text) => {
     expect(projectCanvasGuidance(input({
       admission,
@@ -95,6 +96,44 @@ describe("canvas guidance projection", () => {
       expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     },
   );
+
+  it.each([
+    ["unavailable", "text-swap-unavailable", "Not rewritten. Text unchanged."],
+    ["stale", "text-swap-stale", "Passage changed. Not rewritten."],
+  ] as const)("reports a released %s rewrite in place of the next hint", (reason, id, text) => {
+    expect(projectCanvasGuidance(input({
+      rewrite: { kind: "unchanged", reason },
+      language: { kind: "lasso-ready" },
+    }))).toEqual({ id, kind: "recovery", text });
+    expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    // Live voice still owns the line.
+    expect(projectCanvasGuidance(input({
+      rewrite: { kind: "unchanged", reason },
+      admission: attempt({ phase: "recording", startedAtMs: 1 }),
+    })).id).toBe("speak-recording");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeCanvasGuidance({ id, kind: "recovery", text }, language).text)
+        .not.toBe(text);
+    }
+    expect(localizeRewriteOutcome(reason, "en-US")).toBe(text);
+    expect(localizeRewriteOutcome(reason, "zh-CN"))
+      .toBe(localizeCanvasGuidance({ id, kind: "recovery", text }, "zh-CN").text);
+  });
+
+  it("asks to place or discard held words instead of dismissing the recording", () => {
+    expect(projectCanvasGuidance(input({
+      admission: attempt({
+        phase: "error",
+        errorCode: "STALE_TARGET",
+        submitted: true,
+        transcript: "held words",
+      }),
+    }))).toEqual({
+      id: "place-held-words",
+      kind: "recovery",
+      text: "Place or discard these words.",
+    });
+  });
 
   it.each([
     [0.6, 60],
@@ -291,6 +330,7 @@ describe("canvas guidance projection", () => {
       "use-recording-browser": true,
       "record-again": true,
       "dismiss-stale-recording": true,
+      "place-held-words": true,
       "speak-root": true,
       "close-lasso": true,
       "begin-stretch": true,
@@ -306,6 +346,8 @@ describe("canvas guidance projection", () => {
       "unfold-thought": true,
       "speak-child": true,
       "select-thought": true,
+      "text-swap-unavailable": true,
+      "text-swap-stale": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {
