@@ -16,6 +16,7 @@ import {
   ageWikiAliasCandidate,
   ageWikiTermEvidence,
   compareWikiAliasProducerPrecedence,
+  compareWikiEvictionOrder,
   compareWikiLearningCorpusEvaluations,
   compareWikiTermProducerPrecedence,
   decideWikiOccurrenceEffect,
@@ -372,8 +373,9 @@ describe("Wiki learning policy", () => {
   it("bounds capacity and makes zero-support candidates evictable", () => {
     expect(decideWikiSoftCandidateAdmission(false, 4, 5)).toBe("insert");
     expect(decideWikiSoftCandidateAdmission(true, 5, 5)).toBe("update");
-    expect(decideWikiSoftCandidateAdmission(false, 5, 5)).toBe("drop");
-    expect(decideWikiSoftCandidateAdmission(true, 6, 5)).toBe("drop");
+    expect(decideWikiSoftCandidateAdmission(false, 5, 5)).toBe("evict");
+    expect(decideWikiSoftCandidateAdmission(true, 6, 5)).toBe("update");
+    expect(decideWikiSoftCandidateAdmission(false, 6, 5)).toBe("evict");
     expect(() => decideWikiSoftCandidateAdmission(
       false,
       0,
@@ -547,6 +549,40 @@ describe("Wiki learning policy", () => {
       ? { ...candidate, ...settleWikiKeptEvidence(candidate, 16) }
       : candidate);
     expect(activeIds(resolveWikiAliasCompetition(settled, qualification))).toEqual([]);
+  });
+
+  it("evicts the weakest independent row first and never an observed one", () => {
+    const order = (
+      identity: string,
+      support: number,
+      quietTurns = 0,
+      established = false,
+    ) => ({ identity, support, quietTurns, established });
+    const rows = [
+      order("collected", 1, 99, true),
+      order("strong", 12),
+      order("quiet", 4, 20),
+      order("fresh", 4, 0),
+      order("b-tie", 2, 5),
+      order("a-tie", 2, 5),
+    ];
+    expect([...rows].sort(compareWikiEvictionOrder).map((row) => row.identity))
+      .toEqual(["a-tie", "b-tie", "quiet", "fresh", "strong", "collected"]);
+
+    const replay = replayWikiTermLearning(
+      [
+        { canonicalId: "old", phase: "candidate", support: 4, quietTurns: 12 },
+        { canonicalId: "kept", phase: "candidate", support: 4, quietTurns: 0 },
+      ],
+      [{ environment: "human-admission", observedCanonicalIds: ["kept", "new"] }],
+      2,
+    );
+    expect(replay.candidates.map((candidate) => candidate.canonicalId))
+      .toEqual(["kept", "new"]);
+    expect(replay.receipts[0]).toMatchObject({
+      admittedObservationCount: 2,
+      ignoredObservationCount: 0,
+    });
   });
 
   it("settles implicit acceptance only when the change was informed", () => {

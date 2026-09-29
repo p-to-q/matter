@@ -286,7 +286,16 @@ export type WikiTermLearningReplay = Readonly<{
   receipts: readonly WikiTermLearningReplayReceipt[];
 }>;
 
-export type WikiSoftCandidateAdmission = "insert" | "update" | "drop";
+export type WikiSoftCandidateAdmission = "insert" | "update" | "evict";
+
+/** Soft evidence that nothing else depends on, as the eviction order sees it. */
+export type WikiEvictionCandidate = Readonly<{
+  /** Collected terms and relations that carry kept evidence leave last. */
+  established: boolean;
+  support: number;
+  quietTurns: number;
+  identity: string;
+}>;
 
 export type WikiLearningCorpusCase = Readonly<{
   caseId: string;
@@ -741,6 +750,13 @@ export function isWikiAliasCandidateEvictable(
   return candidate.phase === "candidate" && candidate.support === 0;
 }
 
+/**
+ * A full reservoir never refuses a newcomer while an independent row can
+ * leave: learning must stay live after a person changes locale, script, or
+ * vocabulary, even though absent rows in another context never age. The
+ * caller evicts the weakest independent row first; with none it drops the
+ * newcomer.
+ */
 export function decideWikiSoftCandidateAdmission(
   candidateExists: boolean,
   currentCandidateCount: number,
@@ -752,9 +768,22 @@ export function decideWikiSoftCandidateAdmission(
     MAX_WIKI_LEARNING_CANDIDATES,
   );
   assertCandidateCapacity(capacity);
-  if (currentCandidateCount > capacity) return "drop";
   if (candidateExists) return "update";
-  return currentCandidateCount < capacity ? "insert" : "drop";
+  return currentCandidateCount < capacity ? "insert" : "evict";
+}
+
+/**
+ * Orders independent soft evidence weakest first: candidates before
+ * established rows, lower support, longer quiet, then code-unit identity.
+ */
+export function compareWikiEvictionOrder(
+  left: WikiEvictionCandidate,
+  right: WikiEvictionCandidate,
+): number {
+  return Number(left.established) - Number(right.established) ||
+    left.support - right.support ||
+    right.quietTurns - left.quietTurns ||
+    compareCodeUnits(left.identity, right.identity);
 }
 
 /**
@@ -770,16 +799,13 @@ export function applyWikiTermLearningTick(
   assertReplayObservations(observedCanonicalIds, "observedCanonicalIds");
   assertCandidateCapacity(capacity);
 
+  const observedIds = new Set(observedCanonicalIds);
   const pendingIds = new Set(observedCanonicalIds);
   let admittedObservationCount = 0;
   let candidates = initialCandidates.map((candidate) => {
     const observed = pendingIds.has(candidate.canonicalId);
     pendingIds.delete(candidate.canonicalId);
-    if (observed && decideWikiSoftCandidateAdmission(
-      true,
-      initialCandidates.length,
-      capacity,
-    ) === "update") {
+    if (observed) {
       admittedObservationCount += 1;
       return freezeTermCandidate({
         ...candidate,
@@ -793,11 +819,22 @@ export function applyWikiTermLearningTick(
   });
 
   for (const canonicalId of pendingIds) {
-    if (decideWikiSoftCandidateAdmission(
+    const admission = decideWikiSoftCandidateAdmission(
       false,
       candidates.length,
       capacity,
-    ) !== "insert") continue;
+    );
+    if (admission === "evict") {
+      // Rows observed in this turn are never the victims of its own newcomers.
+      const victim = candidates
+        .filter((candidate) => !observedIds.has(candidate.canonicalId))
+        .sort((left, right) => compareWikiEvictionOrder(
+          termEvictionCandidate(left),
+          termEvictionCandidate(right),
+        ))[0];
+      if (victim === undefined) continue;
+      candidates = candidates.filter((candidate) => candidate !== victim);
+    }
     candidates.push(freezeTermCandidate({
       canonicalId,
       ...observeWikiTermEvidence({ phase: "candidate", support: 0, quietTurns: 0 }),
@@ -1142,6 +1179,15 @@ function halvingsToZero(value: number): number {
     halvings += 1;
   }
   return halvings;
+}
+
+function termEvictionCandidate(candidate: WikiTermCandidate): WikiEvictionCandidate {
+  return {
+    established: candidate.phase === "collected",
+    support: candidate.support,
+    quietTurns: candidate.quietTurns,
+    identity: candidate.canonicalId,
+  };
 }
 
 function activeCandidateId(

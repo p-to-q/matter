@@ -54,6 +54,7 @@ import {
   advanceWikiRevertStrikeTurn,
   advanceWikiTermQuietTurn,
   compareWikiAliasProducerPrecedence,
+  compareWikiEvictionOrder,
   compareWikiTermProducerPrecedence,
   decideWikiOccurrenceEffect,
   hasWikiKeptSettlementSinceTurn,
@@ -71,6 +72,7 @@ import {
   type WikiAliasCandidate,
   type WikiAliasEvidenceProducer,
   type WikiAliasReleaseQualification,
+  type WikiEvictionCandidate,
   type WikiOccurrenceEffect,
 } from "./wiki-learning-policy";
 import {
@@ -357,8 +359,12 @@ export function applyWikiObservationBatch(
     }
   }
   let working = advanceUnobservedEvidence(state, [...unique.values()], tick);
+  // Rows observed in this turn are never evicted to make room for its newcomers.
+  const observedThisTurn: ReadonlySet<string> = new Set(unique.keys());
   for (const event of [...unique.values()].sort(compareObservation)) {
-    const result = applyWikiEvent(working, event);
+    const result = isWikiEvent(event)
+      ? observeEvidence(working, event, observedThisTurn)
+      : failure("INVALID_EVENT", "The Wiki event is invalid.");
     if (!result.ok) return result;
     working = result.state;
   }
@@ -753,10 +759,11 @@ function ruleCodePoints(rule: WikiRuleDescriptor): number {
 function observeEvidence(
   state: WikiState,
   event: Extract<WikiEvent, { type: "observe-evidence" }>,
+  observedThisTurn: ReadonlySet<string> = EMPTY_IDENTITIES,
 ): WikiTransitionResult {
   if (state.automaticLearningSaturated) return success(state, false);
   if (hasLexemeTombstone(state, event)) return success(state, false);
-  const working = state;
+  let working = state;
   const revision = state.revision + 1;
   if (event.source === "recent-material") {
     const existingLexeme = findLexeme(working, event);
@@ -769,9 +776,11 @@ function observeEvidence(
     }
     if (index === -1 &&
         working.termEvidence.length >= MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS) {
-      // Soft evidence is lossy by design. Dropping an unseen candidate keeps
-      // existing candidates able to update, age, and eventually free space.
-      return success(state, false);
+      // A full reservoir makes room by evicting its weakest independent row,
+      // so learning stays live after the person changes locale or script.
+      const evicted = evictWeakestTermEvidence(working, observedThisTurn);
+      if (evicted === null) return success(state, false);
+      working = evicted;
     }
     const previous = index === -1 ||
       working.termEvidence[index]?.producer !== event.producer
@@ -795,7 +804,15 @@ function observeEvidence(
     if (index === -1) termEvidence.push(aggregate);
     else termEvidence[index] = aggregate;
     if (aggregate.phase === "candidate") {
-      return commitAtRevision(working, revision, { termEvidence });
+      // A producer release change can return a collected term to candidate; its
+      // automatic lexeme leaves with it unless another relation depends on it.
+      const lexemes = existingLexeme !== undefined &&
+          existingLexeme.provenance === "aggregate-evidence" &&
+          !isWikiStarterLexemeIdentity(existingLexeme) &&
+          !dependentLexemeIds(working).has(existingLexeme.id)
+        ? working.lexemes.filter((entry) => entry.id !== existingLexeme.id)
+        : working.lexemes;
+      return commitAtRevision(working, revision, { termEvidence, lexemes });
     }
     const ensured = ensureLexeme(working, event, "aggregate-evidence", revision);
     if (!ensured.ok) return ensured.result;
@@ -813,19 +830,24 @@ function observeEvidence(
   const descriptor = aliasDescriptor(event, lexeme.id);
   const producer = event.producer;
   const key = storedAliasEvidenceKey({ ...descriptor, producer });
-  const relationIndexes = working.aliasEvidence.flatMap((entry, index) =>
-    entry.lexemeId === descriptor.lexemeId &&
-    entry.channel === descriptor.channel &&
-    entry.boundary === descriptor.boundary &&
-    entry.form === descriptor.form
-      ? [index]
-      : []);
-  const index = relationIndexes.find((candidate) =>
-    storedAliasEvidenceKey(working.aliasEvidence[candidate]!) === key) ?? -1;
+  const relationIndexesOf = (candidate: WikiState) =>
+    candidate.aliasEvidence.flatMap((entry, index) =>
+      entry.lexemeId === descriptor.lexemeId &&
+      entry.channel === descriptor.channel &&
+      entry.boundary === descriptor.boundary &&
+      entry.form === descriptor.form
+        ? [index]
+        : []);
+  let relationIndexes = relationIndexesOf(working);
   if (relationIndexes.length === 0 &&
       working.aliasEvidence.length >= MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS) {
-    return success(state, false);
+    const evicted = evictWeakestAliasEvidence(working, observedThisTurn);
+    if (evicted === null) return success(state, false);
+    working = evicted;
+    relationIndexes = relationIndexesOf(working);
   }
+  const index = relationIndexes.find((candidate) =>
+    storedAliasEvidenceKey(working.aliasEvidence[candidate]!) === key) ?? -1;
   const previous: WikiAliasEvidenceAggregate = index === -1
     ? Object.freeze({
         ...descriptor,
@@ -861,6 +883,105 @@ function observeEvidence(
   aliasEvidence.push(aggregate);
   return commitAtRevision(working, revision, {
     aliasEvidence,
+  });
+}
+
+const EMPTY_IDENTITIES: ReadonlySet<string> = new Set();
+
+/** Lexeme ids that a relation, human decision, or strike still depends on. */
+function dependentLexemeIds(state: WikiState): ReadonlySet<number> {
+  return new Set([
+    ...state.aliasEvidence.map((entry) => entry.lexemeId),
+    ...state.authorities.map((entry) => entry.lexemeId),
+    ...state.aliasTombstones.map((entry) => entry.lexemeId),
+    ...state.revertStrikes.map((entry) => entry.lexemeId),
+  ]);
+}
+
+/**
+ * Removes the weakest term row that nothing depends on, together with its
+ * automatic lexeme. Human-owned terms, product starters, rows observed in this
+ * turn, and any identity a relation, decision, or strike depends on stay.
+ */
+function evictWeakestTermEvidence(
+  state: WikiState,
+  observedThisTurn: ReadonlySet<string>,
+): WikiState | null {
+  const dependents = dependentLexemeIds(state);
+  const lexemesByKey = new Map(state.lexemes.map((lexeme) => [lexemeKey(lexeme), lexeme]));
+  let victim: WikiState["termEvidence"][number] | undefined;
+  let victimOrder: WikiEvictionCandidate | undefined;
+  for (const entry of state.termEvidence) {
+    const lexeme = lexemesByKey.get(lexemeKey(entry));
+    const identity = JSON.stringify(["recent-material", entry.locale, entry.canonical]);
+    if (observedThisTurn.has(identity) || (lexeme !== undefined && (
+      lexeme.provenance !== "aggregate-evidence" ||
+      isWikiStarterLexemeIdentity(lexeme) ||
+      dependents.has(lexeme.id)
+    ))) continue;
+    const order: WikiEvictionCandidate = {
+      established: entry.phase === "collected",
+      support: entry.support,
+      quietTurns: entry.quietTurns,
+      identity,
+    };
+    if (victimOrder === undefined || compareWikiEvictionOrder(order, victimOrder) < 0) {
+      victim = entry;
+      victimOrder = order;
+    }
+  }
+  if (victim === undefined) return null;
+  const removed = victim;
+  const victimLexeme = lexemesByKey.get(lexemeKey(removed));
+  return freezeWikiState({
+    ...state,
+    termEvidence: state.termEvidence.filter((entry) => entry !== removed),
+    lexemes: victimLexeme === undefined
+      ? state.lexemes
+      : state.lexemes.filter((entry) => entry !== victimLexeme),
+  });
+}
+
+/**
+ * Removes the weakest relation row that holds no authority: never an active
+ * relation, never one observed in this turn. Rows with kept evidence leave
+ * after rows without it.
+ */
+function evictWeakestAliasEvidence(
+  state: WikiState,
+  observedThisTurn: ReadonlySet<string>,
+): WikiState | null {
+  const lexemesById = new Map(state.lexemes.map((lexeme) => [lexeme.id, lexeme]));
+  let victim: WikiAliasEvidenceAggregate | undefined;
+  let victimOrder: WikiEvictionCandidate | undefined;
+  for (const entry of state.aliasEvidence) {
+    if (entry.phase === "active") continue;
+    const lexeme = lexemesById.get(entry.lexemeId);
+    const identity = JSON.stringify([
+      "machine-inference",
+      lexeme?.locale ?? "",
+      entry.channel,
+      entry.boundary,
+      entry.form,
+      lexeme?.canonical ?? "",
+    ]);
+    if (observedThisTurn.has(identity)) continue;
+    const order: WikiEvictionCandidate = {
+      established: entry.kept > 0,
+      support: entry.support,
+      quietTurns: entry.quietTurns,
+      identity: storedAliasEvidenceKey(entry),
+    };
+    if (victimOrder === undefined || compareWikiEvictionOrder(order, victimOrder) < 0) {
+      victim = entry;
+      victimOrder = order;
+    }
+  }
+  if (victim === undefined) return null;
+  const removed = victim;
+  return freezeWikiState({
+    ...state,
+    aliasEvidence: state.aliasEvidence.filter((entry) => entry !== removed),
   });
 }
 
@@ -962,11 +1083,16 @@ function advanceUnobservedEvidence(
   const termEvidence = agedTermEvidence.filter((entry) =>
     entry.support > 0 || dependentTermKeys.has(lexemeKey(entry))
   );
-  const retainedTermKeys = new Set(termEvidence.map(lexemeKey));
+  // An automatic lexeme is visible only while its term stays collected or a
+  // relation or decision depends on it; a demoted candidate keeps its fading
+  // support in the ledger but no longer lists or blocks a canonical form.
+  const collectedTermKeys = new Set(termEvidence
+    .filter((entry) => entry.phase === "collected")
+    .map(lexemeKey));
   const lexemes = state.lexemes.filter((lexeme) => {
     if (lexeme.provenance !== "aggregate-evidence" ||
         isWikiStarterLexemeIdentity(lexeme)) return true;
-    return retainedTermKeys.has(lexemeKey(lexeme)) ||
+    return collectedTermKeys.has(lexemeKey(lexeme)) ||
       dependentLexemeIds.has(lexeme.id);
   });
   // A strike is soft memory. It never keeps an automatic lexeme alive and

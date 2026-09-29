@@ -180,7 +180,7 @@ describe("Wiki evidence and authority", () => {
     }
   });
 
-  it("drops unseen soft candidates at capacity while existing evidence keeps moving", () => {
+  it("evicts the weakest unseen candidate at capacity while existing evidence keeps moving", () => {
     const termEvidence = Object.freeze(Array.from(
       { length: MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS },
       (_, index) => Object.freeze({
@@ -218,7 +218,10 @@ describe("Wiki evidence and authority", () => {
     if (!result.ok) return;
     expect(result.state.termEvidence).toHaveLength(MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS);
     expect(result.state.termEvidence.find((entry) => entry.canonical === "UnseenTerm"))
-      .toBeUndefined();
+      .toMatchObject({ phase: "candidate", support: 4 });
+    // Every unobserved row aged equally; the tie falls to code-unit identity.
+    expect(result.state.termEvidence.map((entry) => entry.canonical))
+      .not.toContain("Term0001");
     expect(result.state.termEvidence[0]).toMatchObject({ phase: "collected", support: 8 });
     expect(result.state.lexemes).toEqual([
       expect.objectContaining({ canonical: "Term0000" }),
@@ -1643,23 +1646,186 @@ describe("Wiki evidence and authority", () => {
         .toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
     }
   });
+  it("keeps learning live after a locale switch fills the term reservoir", () => {
+    let state = createEmptyWikiState();
+    let word = 0;
+    while (state.termEvidence.length < MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS) {
+      const events = Array.from({ length: MAX_WIKI_OBSERVATIONS_PER_LEDGER }, () =>
+        observe("recent-material", hanWord(word++), "zh-CN"));
+      state = applyObservationBatch(state, events, tick("observed", "paused", HAN_TURN));
+    }
+    expect(state.termEvidence.every((entry) => entry.locale === "zh-CN")).toBe(true);
+
+    const english = observe("recent-material", "morphogenesis");
+    state = applyObservationBatch(state, [english], tick("observed", "paused"));
+    expect(state.termEvidence).toHaveLength(MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS);
+    expect(state.termEvidence.find((entry) => entry.locale === "en-US"))
+      .toMatchObject({ canonical: "morphogenesis", phase: "candidate", support: 4 });
+    state = applyObservationBatch(state, [english], tick("observed", "paused"));
+    expect(state.termEvidence.find((entry) => entry.locale === "en-US"))
+      .toMatchObject({ phase: "collected", support: 8 });
+    expect(state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "morphogenesis", provenance: "aggregate-evidence" }),
+    ]);
+  });
+
+  it("evicts the weakest independent term and never one a relation depends on", () => {
+    const zh = (canonical: string, support: number, quietTurns: number) => Object.freeze({
+      locale: "zh-CN" as const,
+      canonical,
+      producer: "locale-segment-v1" as const,
+      phase: support >= 8 ? "collected" as const : "candidate" as const,
+      support,
+      quietTurns,
+    });
+    const filler = Array.from({ length: MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS - 3 }, (_, index) =>
+      zh(hanWord(index), 6, 0));
+    const lexeme = Object.freeze({
+      id: 1,
+      locale: "zh-CN" as const,
+      canonical: "材料",
+      scope: "both" as const,
+      provenance: "aggregate-evidence" as const,
+      confirmedAtRevision: null,
+    });
+    const state: WikiState = Object.freeze({
+      ...createEmptyWikiState(),
+      revision: 1,
+      nextLexemeId: 2,
+      lexemes: Object.freeze([lexeme]),
+      termEvidence: Object.freeze([
+        ...filler,
+        zh("材料", 0, 0),
+        zh("甲乙", 4, 3),
+        zh("丙丁", 4, 9),
+      ]),
+      aliasEvidence: Object.freeze([Object.freeze({
+        lexemeId: 1,
+        channel: "spoken" as const,
+        boundary: "word" as const,
+        form: "才料",
+        producer: "zh-exact-homophone-v1" as const,
+        phase: "candidate" as const,
+        support: 4,
+        quietTurns: 0,
+        kept: 0,
+        keptQuietTurns: 0,
+      })]),
+    });
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
+
+    const next = applyObservationBatch(
+      state,
+      [observe("recent-material", "morphogenesis")],
+      tick("observed", "paused"),
+    );
+    expect(next.termEvidence.map((entry) => entry.canonical)).not.toContain("丙丁");
+    expect(next.termEvidence.map((entry) => entry.canonical)).toContain("甲乙");
+    expect(next.termEvidence.map((entry) => entry.canonical)).toContain("材料");
+    expect(next.lexemes).toEqual([expect.objectContaining({ canonical: "材料" })]);
+  });
+
+  it("keeps learning live after a locale switch fills the relation reservoir", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "zh-CN", canonical: "材料", scope: "both",
+    });
+    state = apply(state, {
+      type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
+    });
+    let form = 0;
+    while (state.aliasEvidence.length < MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS) {
+      const events = Array.from({ length: MAX_WIKI_OBSERVATIONS_PER_LEDGER }, () => ({
+        type: "observe-evidence" as const,
+        source: "machine-inference" as const,
+        locale: "zh-CN" as const,
+        channel: "spoken" as const,
+        boundary: "word" as const,
+        form: `才${hanWord(form++)}`,
+        canonical: "材料",
+        producer: "zh-exact-homophone-v1" as const,
+      }));
+      state = applyObservationBatch(state, events, tick("paused", "observed", HAN_TURN));
+    }
+
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [metaphone("Engelbart")]);
+    }
+    expect(state.aliasEvidence).toHaveLength(MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS);
+    expect(projectApplicableWikiRules(state, QUALIFIED)).toEqual([
+      expect.objectContaining({ form: "code x", canonical: "Engelbart" }),
+    ]);
+  });
+
+  it("never evicts an active relation or one observed in the same turn", () => {
+    let state = activeMetaphoneAlias();
+    const lexemeId = lexemeIdOf(state, "Engelbart");
+    const quiet = Array.from({ length: MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS - 1 }, (_, index) =>
+      Object.freeze({
+        lexemeId,
+        channel: "spoken" as const,
+        boundary: "literal" as const,
+        form: `old-${index.toString().padStart(3, "0")}`,
+        producer: "en-metaphone-v1" as const,
+        phase: "candidate" as const,
+        support: 1,
+        quietTurns: 0,
+        kept: 0,
+        keptQuietTurns: 0,
+      }));
+    state = Object.freeze({
+      ...state,
+      aliasEvidence: Object.freeze([...state.aliasEvidence, ...quiet]),
+    });
+    expect(parseWikiState(state)).toMatchObject({ ok: true });
+
+    const newcomers = Array.from({ length: MAX_WIKI_OBSERVATIONS_PER_LEDGER }, (_, index) => ({
+      ...metaphone("Engelbart"),
+      form: `new-${index.toString().padStart(2, "0")}`,
+    }));
+    const next = applyObservationBatch(state, newcomers);
+    expect(next.aliasEvidence).toHaveLength(MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS);
+    expect(next.aliasEvidence.filter((entry) => entry.form.startsWith("new-")))
+      .toHaveLength(MAX_WIKI_OBSERVATIONS_PER_LEDGER);
+    expect(next.aliasEvidence.find((entry) => entry.form === "code x"))
+      .toMatchObject({ phase: "active" });
+  });
+
+  it("stops listing an automatic lexeme once its term is no longer collected", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+    expect(state.lexemes).toHaveLength(1);
+    for (let turn = 0; turn < 64; turn += 1) state = applyObservationBatch(state, []);
+    expect(state.termEvidence[0]).toMatchObject({ phase: "candidate", support: 2 });
+    expect(state.lexemes).toEqual([]);
+
+    state = applyObservationBatch(state, [observe("recent-material")]);
+    expect(state.termEvidence[0]).toMatchObject({ phase: "candidate", support: 6 });
+    state = applyObservationBatch(state, [observe("recent-material")]);
+    expect(state.termEvidence[0]).toMatchObject({ phase: "collected", support: 10 });
+    expect(state.lexemes).toEqual([
+      expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
+    ]);
+  });
 });
 
 function observe(
   source: "recent-material",
   canonical?: string,
+  locale?: WikiState["lexemes"][number]["locale"],
 ): WikiObserveTermEvidenceEvent;
 function observe(
   source: "machine-inference",
   canonical?: string,
+  locale?: WikiState["lexemes"][number]["locale"],
 ): WikiObserveAliasEvidenceEvent;
 function observe(
   source: WikiObserveEvidenceEvent["source"],
   canonical?: string,
+  locale?: WikiState["lexemes"][number]["locale"],
 ): WikiObserveEvidenceEvent;
 function observe(
   source: WikiObserveEvidenceEvent["source"],
   canonical = "Codex",
+  locale: WikiState["lexemes"][number]["locale"] = "en-US",
 ): WikiObserveEvidenceEvent {
   const base = {
     type: "observe-evidence" as const,
@@ -1673,11 +1839,27 @@ function observe(
     ? {
         type: "observe-evidence",
         source,
-        locale: base.locale,
+        locale,
         canonical,
         producer: "locale-segment-v1",
       }
     : { ...base, source, producer: "legacy-v1" as const };
+}
+
+const HAN_TURN = Object.freeze({
+  locale: "zh-CN" as const,
+  channel: "spoken" as const,
+  scripts: Object.freeze(["han" as const]),
+});
+const HAN_CHARACTERS = [...new Set(
+  "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果",
+)];
+
+/** A distinct three-character Han word for reservoir fixtures. */
+function hanWord(index: number): string {
+  return HAN_CHARACTERS[index % HAN_CHARACTERS.length]! +
+    HAN_CHARACTERS[Math.floor(index / HAN_CHARACTERS.length) % HAN_CHARACTERS.length]! +
+    "词";
 }
 
 function descriptor(form: string, canonical: string) {
