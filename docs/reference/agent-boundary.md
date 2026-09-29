@@ -87,17 +87,25 @@ band instead. The model is told how much to write; it does not decide.
 judgement are one scenario on the common spine in
 [`prompt-harness.md`](prompt-harness.md), compiled and tested as
 `transform-harness.ts` and `text-swap-harness.ts`. Both routes are built and
-proved against frozen fixtures, while their live provider gates stay
-independently off until each promotion receipt exists; freezing the prompt
+proved against frozen fixtures. Their managed provider gates
+(`MATTER_TRANSFORM_ADAPTER`, `MATTER_TEXT_SWAP_ADAPTER`) stay off until each
+promotion receipt exists; a person's own Model API key can supply the provider
+once the independent `MATTER_*_SURFACE=public` gate is open, which is how
+production currently serves live output on both surfaces. Freezing the prompt
 early is deliberate, because it decides what a person's material becomes.
 
 **Document context is labeled.** Lineage text is passed as reference material
 with an explicit statement that it is never instruction, and it is bounded by
 the limits in [`../protocol.md`](../protocol.md).
 
-**Providers live in one file.** `server/` is the only place a provider name
-appears. Adapters are selected by environment variable, and mock, fixture, and
-live adapters return the same validated shape through the same path.
+**Provider code stays in `server/`.** It is the only place a provider name,
+endpoint, or wire shape appears: the managed pool (`model-pool.ts`), reviewed
+user transports (`user-provider-registry.ts`), their pinned public fetch
+(`public-provider-fetch.ts`), and completion settlement
+(`completion-outcome.ts`). The adapter is chosen per request by server
+configuration and, where the product surface allows it, by a person's own
+sealed Model API key lease; the browser never names one. Fixture, managed, and
+user-key adapters return the same validated shape through the same path.
 
 **Failures are stated.** A fallback to fixture output is never silent. The error
 codes are stable and the messages are written for the person holding the mouse,
