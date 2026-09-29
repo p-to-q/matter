@@ -57,7 +57,7 @@ import {
 } from "../runtime/text-range-restoration";
 import { createTreeHistory } from "../tree/history";
 import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
-import type { ThoughtNode, ThoughtTree, TreeCommand } from "../tree/model";
+import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
@@ -80,6 +80,7 @@ import {
   prepareTextSwapIngress,
   type MaterialIngressStage,
   type MaterialLexicalOccurrences,
+  type TextReplacementCommand,
 } from "../application/material-ingress";
 import {
   IDENTITY_MATERIAL_LEXICAL_OCCURRENCE_PORT,
@@ -179,7 +180,7 @@ export type SeedLocalizationReceipt = Readonly<{
   operation: "localize-seed";
   status: "localized" | "unchanged" | "rejected";
   revision: number;
-  errorCode?: "SEED_LOCALIZATION_INVALID_TREE" | "SEED_LOCALIZATION_INVALID_HISTORY";
+  errorCode?: "SEED_LOCALIZATION_INVALID_TREE";
   /** A stack whose next step no longer matched the localized seed was released. */
   historyReleased?: boolean;
 }>;
@@ -294,6 +295,13 @@ export type MatterStoreReceipt =
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
+  /**
+   * The material this document instance began as (the seed, a hydrated row,
+   * or an imported archive), carried forward by seed relocalization only while
+   * nothing else changed it. `tree !== untouchedTree` exactly when the person,
+   * or a turn they submitted, changed this document instance.
+   */
+  untouchedTree: ThoughtTree;
   lastError: MatterStoreError | null;
   lastReceipt: ObservableMatterStoreReceipt | null;
   extendMaterial: (
@@ -420,6 +428,7 @@ export function createMatterStore(
   const internalStore = createStore<MatterStoreInternalState>()((set) => freezeState({
     tree: initialDomain.tree,
     documentEpoch: 0,
+    untouchedTree: initialDomain.tree,
     history: initialDomain.history,
     navigation: initialDomain.navigation,
     lastError: null,
@@ -494,10 +503,13 @@ export function createMatterStore(
           revision: localized.tree.revision,
           historyReleased: localized.historyReleased,
         });
+        const tree = protectValue(localized.tree);
         return freezeState({
           ...current,
-          tree: protectValue(localized.tree),
+          tree,
           history: protectValue(localized.history),
+          // Relocalizing untouched seed copy is not a change the person made.
+          untouchedTree: current.tree === current.untouchedTree ? tree : current.untouchedTree,
         });
       });
       if (receipt === undefined) {
@@ -916,7 +928,6 @@ export function createMatterStore(
       set((current) => {
         const settled = commitMaterialTurn(current, {
           expectedDocumentEpoch,
-          nodeId: envelope.selection.nodeId,
           motionHint: "grow",
           stage: "transform",
           prepare: (tree) => prepareTransformIngress({
@@ -942,7 +953,6 @@ export function createMatterStore(
       set((current) => {
         const settled = commitMaterialTurn(current, {
           expectedDocumentEpoch,
-          nodeId: envelope.selection.nodeId,
           motionHint: "settle",
           stage: "text-swap",
           prepare: (tree) => prepareTextSwapIngress({
@@ -1078,10 +1088,12 @@ export function createMatterStore(
           revision: normalizedTree.revision,
           historyReleased: recovered.released,
         };
+        const hydratedTree = protectValue(normalizedTree);
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(normalizedTree),
+          tree: hydratedTree,
+          untouchedTree: hydratedTree,
           history: protectValue(recovered.history),
           navigation: protectValue(createNavigationState()),
           lastError: null,
@@ -1122,10 +1134,12 @@ export function createMatterStore(
           treeId: normalizedTree.id,
           revision: normalizedTree.revision,
         };
+        const switchedTree = protectValue(normalizedTree);
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(normalizedTree),
+          tree: switchedTree,
+          untouchedTree: switchedTree,
           history: protectValue(createTreeHistory()),
           navigation: protectValue(createNavigationState()),
           lastError: null,
@@ -1169,14 +1183,16 @@ function runtimeState(state: MatterStoreInternalState): RuntimeState {
 
 type MaterialTurn<Motion extends MaterialTextMotion> = Readonly<{
   expectedDocumentEpoch: number;
-  nodeId: string;
   motionHint: Motion;
   stage: Extract<MaterialIngressStage, "transform" | "text-swap">;
-  /** Strict ingress for this turn's contract; it prepares but never commits. */
+  /**
+   * Strict ingress for this turn's contract; it prepares but never commits,
+   * and it admits only a replacement of the passage the turn addressed.
+   */
   prepare: (tree: ThoughtTree) =>
     | Readonly<{
         ok: true;
-        command: TreeCommand;
+        command: TextReplacementCommand;
         plan: Readonly<{ action: Readonly<{ id: string }> }>;
         lexicalOccurrences: MaterialLexicalOccurrences | null;
       }>
@@ -1219,8 +1235,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
   ) return stale;
   const prepared = turn.prepare(current.tree);
   if (!prepared.ok && prepared.reason === "STALE") return stale;
-  const mutation = prepared.ok ? prepared.command.mutation : null;
-  if (!prepared.ok || mutation?.type !== "replace-text" || mutation.nodeId !== turn.nodeId) {
+  if (!prepared.ok) {
     const error: MatterStoreError = protectValue({
       code: "INVALID_COMMAND",
       message: "The turn result does not satisfy its material contract.",
@@ -1236,6 +1251,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
       outcome: Object.freeze({ status: "rejected" as const, receipt }),
     });
   }
+  const { mutation } = prepared.command;
   const result = commitDeliveredSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
   const domain = protectDomain(result.state);
   const receipt = protectValue(result.receipt);
@@ -1261,7 +1277,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
         id: prepared.plan.action.id,
         treeId: current.tree.id,
         documentEpoch: current.documentEpoch,
-        nodeId: turn.nodeId,
+        nodeId: mutation.nodeId,
         committedRevision: result.state.tree.revision,
         motionHint: turn.motionHint,
         before: Object.freeze({ text: mutation.expectedText, updatedAt: mutation.expectedUpdatedAt }),
@@ -1271,7 +1287,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
         turn.stage,
         current.tree.id,
         current.documentEpoch,
-        result.state.tree.nodes[turn.nodeId],
+        result.state.tree.nodes[mutation.nodeId],
         prepared.lexicalOccurrences,
       ),
     }),

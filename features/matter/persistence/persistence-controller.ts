@@ -33,8 +33,17 @@ export type PersistenceStatus = Readonly<{
   dirtyRevision: number | null;
   errorCode: RepositoryErrorCode | null;
   historyNotice: HistoryNotice | null;
-  /** This tab holds material, or an import, that no stored row holds yet. */
+  /**
+   * This tab holds material the person made, or an import, that no stored row
+   * holds yet. Material nobody touched (the seed, a stored row, their seed
+   * relocalization) is never unsaved, even while its write waits or fails.
+   */
   unsaved: boolean;
+  /**
+   * Storage refused this tab's pending material and no write is in flight, so
+   * a same-document archive may replace it once the person confirms.
+   */
+  replaceableByImport: boolean;
   /** This newer build waits for an older Matter tab to close its database. */
   upgradeBlocked: boolean;
   /**
@@ -46,11 +55,6 @@ export type PersistenceStatus = Readonly<{
 
 export type ConflictOrigin = "another-tab" | "load-window";
 
-export type StoredDocument = Readonly<{
-  storedTree: ThoughtTree | null;
-  storedHistory: RecoveredHistory | null;
-}>;
-
 /**
  * What a newer stored generation means for this tab: nothing, a silent
  * refresh (no unsaved work), a conflict (unsaved work), or a terminal newer
@@ -59,9 +63,10 @@ export type StoredDocument = Readonly<{
 export type StoredGenerationDecision = "ignored" | "refresh" | "conflict" | "superseded" | "cleared";
 
 /**
- * A newer stored row that has been read but not adopted. The runtime store must
- * accept it first; only then does its generation become the save basis, so a
- * refused hydration can never let a later save overwrite that newer row.
+ * A stored row that has been read but not adopted: the first load's row,
+ * another tab's newer row, or the row an explicit reload chose. The runtime
+ * store must accept it first; only then does its generation become the save
+ * basis, so a refused hydration can never let a later save overwrite that row.
  */
 export type StoredCandidate = Readonly<{
   tree: ThoughtTree;
@@ -71,6 +76,19 @@ export type StoredCandidate = Readonly<{
   /** The unsaved material an explicit conflict resolution replaces. */
   replaces: Readonly<{ tree: ThoughtTree; history: TreeHistory }> | null;
 }>;
+
+/**
+ * `adopted`: the store took the row and it is the save basis. `stale`: the
+ * candidate no longer describes what this tab holds, and nothing was hydrated.
+ * `refused`: the store kept newer material; the caller holds it as a conflict.
+ */
+export type StoredAdoption = "adopted" | "stale" | "refused";
+
+/**
+ * What the store did with a candidate it accepted: whether any stored undo
+ * step could not be restored with the row's material.
+ */
+export type StoreHydration = Readonly<{ historyReleased: boolean }>;
 
 export type ImportedDocumentPreparation = Readonly<{
   ok: true;
@@ -100,9 +118,33 @@ export type ImportOptions = Readonly<{
   replaceUnsaved?: boolean;
 }>;
 
+/**
+ * The one answer both exit guards use: this tab holds material the person
+ * made that no stored row holds. Until the first load is reconciled the
+ * controller has not received that material, so authorship alone answers.
+ */
+export function holdsUnsavedPersonMaterial(
+  status: PersistenceStatus,
+  reconciled: boolean,
+  authored: boolean,
+): boolean {
+  return reconciled ? status.unsaved : authored;
+}
+
 export type PersistenceController = Readonly<{
-  start(tree: ThoughtTree, history?: TreeHistory): Promise<StoredDocument>;
-  publish(tree: ThoughtTree, history?: TreeHistory): void;
+  /**
+   * Reads the stored row for the material this document instance began with.
+   * Returns it as a candidate the store must accept before `adoptStored`
+   * makes it the basis; `null` when there is no row (the first save creates
+   * one) or storage failed (the status says why).
+   */
+  start(tree: ThoughtTree, history?: TreeHistory): Promise<StoredCandidate | null>;
+  /**
+   * Hands over the latest material. `authored`: the person changed this
+   * document instance since it began (store authorship); only such material
+   * counts as unsaved.
+   */
+  publish(tree: ThoughtTree, history?: TreeHistory, authored?: boolean): void;
   prepareImportedTree(
     tree: ThoughtTree,
     options?: ImportOptions,
@@ -122,7 +164,7 @@ export type PersistenceController = Readonly<{
    * The live tree is held unsaved rather than written over the stored one, and
    * the person is given the same explicit choice a second tab raises.
    */
-  declareConflict(tree: ThoughtTree, history?: TreeHistory, origin?: ConflictOrigin): void;
+  declareConflict(tree: ThoughtTree, history?: TreeHistory, origin?: ConflictOrigin, authored?: boolean): void;
   retry(): void;
   /** Reads the stored row the person chose to reload over unsaved material. */
   resolveConflict(): Promise<StoredCandidate | null>;
@@ -136,10 +178,16 @@ export type PersistenceController = Readonly<{
    */
   prepareRefresh(): Promise<StoredCandidate | null>;
   /**
-   * Makes a candidate the save basis after the store accepted it. Refused when
-   * anything changed since it was read.
+   * Replaces this tab's document by a candidate in one synchronous step.
+   * `hydrate` is the store's compare-and-swap; it runs only while nothing has
+   * changed since the candidate was read (`null`: the store refused), and the
+   * row becomes the save basis only once the store accepted it. Steps the
+   * store could not restore start the adopted row's history notice.
    */
-  adoptStored(candidate: StoredCandidate): boolean;
+  adoptStored(
+    candidate: StoredCandidate,
+    hydrate: (candidate: StoredCandidate) => StoreHydration | null,
+  ): StoredAdoption;
   /** Undo steps were released because they could not be restored or applied. */
   reportHistoryUnavailable(): void;
   /** The person has seen the history notice where recovery lives. */
@@ -154,11 +202,10 @@ export type PersistenceControllerOptions = Readonly<{
   announceGeneration?: (generation: DocumentGeneration) => void;
 }>;
 
-type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
-type StatusFields = Omit<PersistenceStatus, "unsaved">;
+type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory; authored: boolean }>;
+type StatusFields = Omit<PersistenceStatus, "unsaved" | "replaceableByImport">;
 type TerminalCode = "PERSISTENCE_SUPERSEDED" | "PERSISTENCE_CLEARED";
 
-const NO_STORED_DOCUMENT: StoredDocument = Object.freeze({ storedTree: null, storedHistory: null });
 /** No row is known: the first save creates one, or meets another tab's as a conflict. */
 const UNKNOWN_BASIS: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
 /** Storage refused material, not the row's basis: an archive may replace it. */
@@ -202,6 +249,7 @@ export function createPersistenceController(
     errorCode: null,
     historyNotice: null,
     unsaved: false,
+    replaceableByImport: false,
     upgradeBlocked: false,
     conflictOrigin: null,
   });
@@ -209,7 +257,18 @@ export function createPersistenceController(
   // Async repository writes may overlap a publish() call; reading through this
   // seam prevents compile-time narrowing from erasing that runtime transition.
   const currentPending = (): PendingDocument | null => pending;
-  const hasUnsaved = () => pending !== null || writing || activeImportAttempt !== null;
+  // Whether any write or import is outstanding, touched or not. Control flow
+  // (refresh, adoption, conflicts) depends on this; the reported `unsaved`
+  // counts only material the person made.
+  const hasOutstandingWrite = () => pending !== null || writing || activeImportAttempt !== null;
+  const holdsUnsavedMaterial = () =>
+    pending?.authored === true ||
+    (writing && writingDocument?.authored === true) ||
+    activeImportAttempt !== null;
+  // Storage refused the pending material and nothing is writing it: the one
+  // state in which an archive may replace unsaved material.
+  const importMayReplace = (errorCode: RepositoryErrorCode | null) =>
+    pending !== null && !writing && activeImportAttempt === null && REPLACEABLE_ERRORS.has(errorCode);
 
   const update = (next: StatusFields) => {
     const errorCode = terminal ?? next.errorCode;
@@ -218,12 +277,16 @@ export function createPersistenceController(
       phase: terminal === null ? next.phase : "error",
       errorCode,
       conflictOrigin: errorCode === "PERSISTENCE_CONFLICT" ? next.conflictOrigin ?? "another-tab" : null,
-      unsaved: hasUnsaved(),
+      unsaved: holdsUnsavedMaterial(),
+      replaceableByImport: importMayReplace(errorCode),
     });
     for (const listener of listeners) listener();
   };
-  const syncUnsaved = () => {
-    if (active && status.unsaved !== hasUnsaved()) update(status);
+  const syncDerivedStatus = () => {
+    if (
+      active &&
+      (status.unsaved !== holdsUnsavedMaterial() || status.replaceableByImport !== importMayReplace(status.errorCode))
+    ) update(status);
   };
 
   const enterTerminal = (code: RepositoryErrorCode): boolean => {
@@ -340,24 +403,38 @@ export function createPersistenceController(
     }
     writingDocument = null;
     writing = false;
-    syncUnsaved();
+    syncDerivedStatus();
     if (active && pending !== null && status.phase !== "error") void drain();
   };
 
   const adoptLoaded = (
     loaded: Readonly<{ tree: ThoughtTree; history: RecoveredHistory; basis: SnapshotBasis }>,
-  ): StoredDocument => {
+    historyReleased: boolean,
+  ): void => {
     basis = loaded.basis;
-    persistedHistory = loaded.history.history;
+    // Steps released while reading (an unreadable or missing record, an
+    // unusable manifest) are still named by the row. Until a save writes the
+    // smaller journal, every reload would find the same damage and announce it
+    // again, so a released read never counts as the history storage holds.
+    persistedHistory = loaded.history.released ? null : loaded.history.history;
     update({
       ...status,
       phase: "saved",
       persistedRevision: loaded.tree.revision,
       dirtyRevision: null,
       errorCode: null,
-      historyNotice: null,
+      historyNotice: historyReleased ? "unavailable" : null,
     });
-    return Object.freeze({ storedTree: loaded.tree, storedHistory: loaded.history });
+  };
+
+  // Nothing that could make a read row stale has happened since it was read:
+  // same document, no terminal storage, and no local material or conflict
+  // beyond the one an explicit reload replaces.
+  const candidateCurrent = (candidate: StoredCandidate): boolean => {
+    if (!active || candidate.documentEpoch !== documentEpoch || terminal !== null) return false;
+    return candidate.replaces === null
+      ? !hasOutstandingWrite() && status.errorCode === null
+      : pending === candidate.replaces && !writing && status.errorCode === "PERSISTENCE_CONFLICT";
   };
 
   const holdConflict = (origin: ConflictOrigin) => {
@@ -416,10 +493,11 @@ export function createPersistenceController(
       beginDocument(tree.id);
       const startEpoch = documentEpoch;
       const loaded = await repository.load(tree.id);
-      if (!active || startEpoch !== documentEpoch) return NO_STORED_DOCUMENT;
+      if (!active || startEpoch !== documentEpoch) return null;
+      ready = true;
+      // The material a document instance begins with is nobody's change yet.
       if (!loaded.ok) {
-        ready = true;
-        pending = Object.freeze({ tree, history });
+        pending = Object.freeze({ tree, history, authored: false });
         enterTerminal(loaded.error.code);
         update({
           ...status,
@@ -429,18 +507,18 @@ export function createPersistenceController(
           errorCode: loaded.error.code,
           historyNotice: null,
         });
-        return NO_STORED_DOCUMENT;
+        return null;
       }
-      ready = true;
       if (loaded.value === null) {
-        pending = Object.freeze({ tree, history });
+        pending = Object.freeze({ tree, history, authored: false });
         void drain();
-        return NO_STORED_DOCUMENT;
+        return null;
       }
-      return adoptLoaded(loaded.value);
+      // Read, not adopted: the phase stays loading until the store takes it.
+      return candidateFrom(loaded.value, null);
     },
 
-    publish(tree, history = createTreeHistory()) {
+    publish(tree, history = createTreeHistory(), authored = true) {
       if (tree.id !== activeTreeId) return;
       if (pending?.tree === tree && pending.history === history) return;
       if (writingDocument?.tree === tree && writingDocument.history === history) {
@@ -449,22 +527,23 @@ export function createPersistenceController(
         // merely because it arrived between the two identical publications.
         // If this write fails, drain's failure path requeues writingDocument.
         pending = null;
-        syncUnsaved();
+        syncDerivedStatus();
         return;
       }
       // An unchanged revision is skipped only with the history last saved or
-      // loaded: a step released at load or at use changes history alone, and
-      // storage must stop offering it (and its notice) on the next reload.
+      // loaded whole: a step released at read, at attach, or at use changes
+      // history alone, and storage must stop offering it (and its notice) on
+      // the next reload.
       if (
         pending === null &&
         status.phase === "saved" &&
         status.persistedRevision === tree.revision &&
         sameDurableHistory(history, persistedHistory)
       ) return;
-      pending = Object.freeze({ tree, history });
+      pending = Object.freeze({ tree, history, authored });
       if (ready && status.phase !== "error") void drain();
       else if (ready) update({ ...status, dirtyRevision: tree.revision });
-      syncUnsaved();
+      syncDerivedStatus();
     },
 
     async prepareImportedTree(tree, importOptions = {}) {
@@ -491,18 +570,17 @@ export function createPersistenceController(
       const dirty = sameDocument && (writing || pending !== null);
       const replacingUnsaved = dirty &&
         importOptions.replaceUnsaved === true &&
-        !writing &&
-        REPLACEABLE_ERRORS.has(status.errorCode);
+        importMayReplace(status.errorCode);
       if (dirty && !replacingUnsaved) {
         return Object.freeze({ ok: false, errorCode: dirtyImportError() });
       }
       const attemptId = ++importAttemptSequence;
       activeImportAttempt = attemptId;
-      syncUnsaved();
+      syncDerivedStatus();
       const rejectAttempt = (errorCode: ImportedDocumentRejection["errorCode"]): ImportedDocumentRejection => {
         if (activeImportAttempt === attemptId) {
           activeImportAttempt = null;
-          syncUnsaved();
+          syncDerivedStatus();
           if (active && pending !== null && status.phase !== "error") void drain();
         }
         return Object.freeze({ ok: false, errorCode });
@@ -592,7 +670,7 @@ export function createPersistenceController(
             errorCode,
           });
         }
-        syncUnsaved();
+        syncDerivedStatus();
         return errorCode;
       }
       // Rollback restores the exact row the import replaced, journal included.
@@ -604,7 +682,7 @@ export function createPersistenceController(
         basis = Object.freeze({ writeGeneration: rolledBack.value.writeGeneration, journal: basis.journal });
       }
       announce(prepared.tree.id, rolledBack.value.writeGeneration);
-      syncUnsaved();
+      syncDerivedStatus();
       if (active && pending !== null && status.phase !== "error") void drain();
       return null;
     },
@@ -695,9 +773,9 @@ export function createPersistenceController(
       return Object.freeze({ ok: true });
     },
 
-    declareConflict(tree, history = createTreeHistory(), origin = "another-tab") {
+    declareConflict(tree, history = createTreeHistory(), origin = "another-tab", authored = true) {
       if (!active || !ready || tree.id !== activeTreeId) return;
-      pending = Object.freeze({ tree, history });
+      pending = Object.freeze({ tree, history, authored });
       holdConflict(origin);
     },
 
@@ -757,7 +835,7 @@ export function createPersistenceController(
         activeTreeId === null ||
         terminal !== null ||
         status.errorCode !== null ||
-        hasUnsaved()
+        hasOutstandingWrite()
       ) return null;
       const refreshEpoch = documentEpoch;
       const loaded = await repository.load(activeTreeId);
@@ -773,24 +851,21 @@ export function createPersistenceController(
       if (basis.writeGeneration !== null && loaded.value.basis.writeGeneration <= basis.writeGeneration) {
         return null;
       }
-      if (hasUnsaved()) {
+      if (hasOutstandingWrite()) {
         if (!writing) holdConflict("another-tab");
         return null;
       }
       return candidateFrom(loaded.value, null);
     },
 
-    adoptStored(candidate) {
-      if (!active || candidate.documentEpoch !== documentEpoch || terminal !== null) return false;
-      if (candidate.replaces === null) {
-        if (hasUnsaved() || status.errorCode !== null) return false;
-      } else {
-        if (pending !== candidate.replaces || writing || status.errorCode !== "PERSISTENCE_CONFLICT") return false;
-        pending = null;
-      }
+    adoptStored(candidate, hydrate) {
+      if (!candidateCurrent(candidate)) return "stale";
+      const hydrated = hydrate(candidate);
+      if (hydrated === null) return "refused";
+      if (candidate.replaces !== null) pending = null;
       retention = FULL_HISTORY_RETENTION;
-      adoptLoaded(candidate);
-      return true;
+      adoptLoaded(candidate, hydrated.historyReleased);
+      return "adopted";
     },
 
     reportHistoryUnavailable() {

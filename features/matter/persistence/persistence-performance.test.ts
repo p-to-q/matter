@@ -2,11 +2,12 @@ import { performance } from "node:perf_hooks";
 import { describe, expect, it } from "vitest";
 import { createPerformanceThoughtTree } from "../material/seeded-document";
 import {
-  canReplayTreeHistory,
   commitTreeCommand,
   createTreeHistory,
   MATTER_HISTORY_LIMITS,
+  retainedInverseBytes,
 } from "../tree/history";
+import { canReplayTreeHistory } from "../tree/history-replay-oracle";
 import { validateThoughtTree } from "../tree/invariants";
 import {
   assembleHistoryJournal,
@@ -82,7 +83,7 @@ describe.skipIf(!enabled)("persistence performance receipt", () => {
 
     const receipt = {
       entries: session.history.entries.length,
-      retainedInverseBytes: session.history.retainedInverseBytes,
+      retainedInverseBytes: retainedInverseBytes(session.history.entries),
       recover: measure(5, () => attachRecoveredHistory(
         session.tree,
         assembleHistoryJournal(session.tree.id, manifest, records, [], MATTER_HISTORY_LIMITS).recovered,

@@ -36,7 +36,6 @@ import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-
 import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
 import {
-  isReplaceableUnsaved,
   isTerminalDurability,
   projectArchiveNote,
   projectDurabilityLine,
@@ -889,7 +888,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setArchivePhase("replacing");
     try {
       const result = await props.archive.replaceImport(preparedImport.file, {
-        replaceUnsaved: isReplaceableUnsaved(persistenceStatus),
+        replaceUnsaved: persistenceStatus.replaceableByImport,
       });
       if (liveDocumentEpochRef.current !== documentEpoch) return;
       if (result.ok) {
@@ -1093,7 +1092,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
-            replacesUnsaved={isReplaceableUnsaved(persistenceStatus)}
+            replacesUnsaved={persistenceStatus.replaceableByImport && persistenceStatus.unsaved}
             note={projectArchiveNote(
               persistenceStatus,
               archiveHistoryNotice,

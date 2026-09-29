@@ -19,7 +19,7 @@ import {
   type TextSwapEnvelope,
   type TextSwapPlan,
 } from "../protocol/text-swap-contract";
-import type { ThoughtTree, TreeCommand } from "../tree/model";
+import type { ThoughtTree, TreeCommand, TreeMutation } from "../tree/model";
 import {
   canonicalizeMaterialText,
   type MaterialLexicalChannel,
@@ -118,6 +118,14 @@ export type PrepareRepairResult =
   | PreparedRepair
   | Readonly<{ ok: false; error: AdmissionRepairError }>;
 
+/**
+ * The only material a delivered turn may commit: one exact text replacement
+ * of the passage its envelope addressed.
+ */
+export type TextReplacementCommand = TreeCommand & Readonly<{
+  mutation: Extract<TreeMutation, { type: "replace-text" }>;
+}>;
+
 export type PrepareTextSwapInput = Readonly<{
   tree: ThoughtTree;
   envelope: TextSwapEnvelope;
@@ -130,7 +138,7 @@ export type PrepareTextSwapInput = Readonly<{
 
 export type PreparedTextSwap = Readonly<{
   ok: true;
-  command: TreeCommand;
+  command: TextReplacementCommand;
   plan: TextSwapPlan;
   receipt: MaterialIngressReceipt;
   /** Transient content for the committed-occurrence publication; never stored. */
@@ -152,7 +160,7 @@ export type PrepareTransformInput = Readonly<{
 
 export type PreparedTransform = Readonly<{
   ok: true;
-  command: TreeCommand;
+  command: TextReplacementCommand;
   plan: TransformPlan;
   receipt: MaterialIngressReceipt;
   /** Transient content for the committed-occurrence publication; never stored. */
@@ -294,6 +302,9 @@ export function prepareTransformIngress(
   if (!raw.ok) return raw;
   const parsedEnvelope = parseTransformEnvelope(input.envelope);
   if (!parsedEnvelope.ok) return rejectedTransform();
+  const nodeId = parsedEnvelope.envelope.selection.nodeId;
+  const rawCommand = raw.command;
+  if (!isAddressedReplacement(rawCommand, nodeId)) return rejectedTransform();
   const parsedPlan = parseTransformPlan(input.rawPlan, parsedEnvelope.envelope);
   if (parsedPlan === null) return rejectedTransform();
   const generatedRanges = projectExpandGeneratedRanges(
@@ -308,7 +319,7 @@ export function prepareTransformIngress(
     generatedRanges === null ||
     rawText === null ||
     rawText.slice(actionStart, actionEnd) !== parsedPlan.action.text
-  ) return withheldTransform(raw.command, parsedPlan, input.lexicalSession);
+  ) return withheldTransform(rawCommand, parsedPlan, input.lexicalSession);
   const canonical = canonicalizeMaterialText(input.lexicalSession, {
     locale: parsedEnvelope.envelope.locale,
     channel: "written",
@@ -321,7 +332,7 @@ export function prepareTransformIngress(
   if (!canonical.changed) {
     return Object.freeze({
       ok: true,
-      command: raw.command,
+      command: rawCommand,
       plan: parsedPlan,
       receipt: createReceipt("transform", input.lexicalSession, canonical, null),
       lexicalOccurrences: null,
@@ -336,7 +347,7 @@ export function prepareTransformIngress(
   ) {
     // Eligible ranges sit inside the answer, so this cannot happen for a
     // coherent suggestion; an incoherent one is only withheld.
-    return withheldTransform(raw.command, parsedPlan, input.lexicalSession);
+    return withheldTransform(rawCommand, parsedPlan, input.lexicalSession);
   }
   const finalPlan = replaceTransformPlanText(parsedPlan, canonicalAction);
   const final = planToTreeCommand(
@@ -352,18 +363,20 @@ export function prepareTransformIngress(
     // Local spelling authority may refine a valid answer, never cost it. Only
     // a real change that a canonical form pushes past a bound or policy keeps
     // its validated raw form.
-    return withheldTransform(raw.command, parsedPlan, input.lexicalSession);
+    return withheldTransform(rawCommand, parsedPlan, input.lexicalSession);
   }
+  const finalCommand = final.command;
+  if (!isAddressedReplacement(finalCommand, nodeId)) return rejectedTransform();
   const occurrences = attributeOccurrences(
     "written",
     parsedEnvelope.envelope.locale,
-    replacedText(final.command),
+    finalCommand.mutation.text,
     canonical,
     0,
   );
   return Object.freeze({
     ok: true,
-    command: final.command,
+    command: finalCommand,
     plan: finalPlan,
     receipt: createReceipt("transform", input.lexicalSession, canonical, occurrences),
     lexicalOccurrences: occurrences,
@@ -404,6 +417,9 @@ export function prepareTextSwapIngress(
 
   const parsedEnvelope = parseTextSwapEnvelope(input.envelope);
   if (!parsedEnvelope.ok) return rejectedTextSwap();
+  const nodeId = parsedEnvelope.envelope.selection.nodeId;
+  const rawCommand = raw.command;
+  if (!isAddressedReplacement(rawCommand, nodeId)) return rejectedTextSwap();
   const parsedPlan = parseTextSwapPlan(input.rawPlan, parsedEnvelope.envelope);
   if (parsedPlan === null) return rejectedTextSwap();
 
@@ -415,7 +431,7 @@ export function prepareTextSwapIngress(
   if (!canonical.changed) {
     return Object.freeze({
       ok: true,
-      command: raw.command,
+      command: rawCommand,
       plan: parsedPlan,
       receipt: createReceipt("text-swap", input.lexicalSession, canonical, null),
       lexicalOccurrences: null,
@@ -437,12 +453,14 @@ export function prepareTextSwapIngress(
     // Local spelling authority may refine a valid answer, never cost it.
     return Object.freeze({
       ok: true,
-      command: raw.command,
+      command: rawCommand,
       plan: parsedPlan,
       receipt: withheldReceipt("text-swap", input.lexicalSession),
       lexicalOccurrences: null,
     });
   }
+  const finalCommand = final.command;
+  if (!isAddressedReplacement(finalCommand, nodeId)) return rejectedTextSwap();
 
   // The answer replaces one exact segment or the complete node at its start.
   const occurrences = attributeOccurrences(
@@ -454,11 +472,19 @@ export function prepareTextSwapIngress(
   );
   return Object.freeze({
     ok: true,
-    command: final.command,
+    command: finalCommand,
     plan: finalPlan,
     receipt: createReceipt("text-swap", input.lexicalSession, canonical, occurrences),
     lexicalOccurrences: occurrences,
   });
+}
+
+/**
+ * A turn's contract may only replace the text of the passage it addressed.
+ * Anything else is refused here, before the store is asked to commit it.
+ */
+function isAddressedReplacement(command: TreeCommand, nodeId: string): command is TextReplacementCommand {
+  return command.mutation.type === "replace-text" && command.mutation.nodeId === nodeId;
 }
 
 function readAdmissionText(result: Extract<AdmissionCommandResult, { ok: true }>): string | null {
@@ -524,7 +550,7 @@ function replaceTransformPlanText(plan: TransformPlan, text: string): TransformP
 }
 
 function withheldTransform(
-  command: TreeCommand,
+  command: TextReplacementCommand,
   plan: TransformPlan,
   session: MaterialLexicalSession,
 ): PreparedTransform {

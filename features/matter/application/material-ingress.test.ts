@@ -315,10 +315,13 @@ describe("MaterialIngress transform preparation", () => {
       nowMs: NOW_MS,
     });
 
+    // A turn prepares exactly one replacement of the passage it addressed.
     expect(prepared).toMatchObject({
       ok: true,
       plan: { action: { text: `${PASSAGE} Codex` } },
-      command: { mutation: { text: `${PASSAGE} Codex. Next` } },
+      command: {
+        mutation: { type: "replace-text", nodeId: envelope.selection.nodeId, text: `${PASSAGE} Codex. Next` },
+      },
       receipt: {
         stage: "transform",
         lexicalGeneration: 13,
@@ -383,6 +386,7 @@ describe("MaterialIngress text-swap preparation", () => {
     expect(prepared.ok).toBe(true);
     if (!prepared.ok || !direct.ok) return;
     expect(prepared.command).toEqual(direct.command);
+    expect(prepared.command.mutation).toMatchObject({ type: "replace-text", nodeId: envelope.selection.nodeId });
     expect(prepared.plan).toEqual(rawPlan);
     expect(prepared.receipt).toEqual({
       stage: "text-swap",

@@ -92,12 +92,6 @@ export function isTerminalDurability(status: PersistenceStatus): boolean {
   return status.errorCode === "PERSISTENCE_SUPERSEDED" || status.errorCode === "PERSISTENCE_CLEARED";
 }
 
-/** Storage refused this material; the person may replace it with an archive. */
-export function isReplaceableUnsaved(status: PersistenceStatus): boolean {
-  return status.unsaved &&
-    (status.errorCode === "PERSISTENCE_STORAGE_FULL" || status.errorCode === "PERSISTENCE_WRITE_FAILED");
-}
-
 function risk(text: string): DurabilityLine {
   return Object.freeze({ tone: "risk", text });
 }

@@ -7,6 +7,7 @@ import {
   type TreeHistoryLimits,
 } from "../tree/history";
 import type { ThoughtTree, TreeCommand, TreeMutation } from "../tree/model";
+import { isNonNegativeSafeInteger, isPlainRecord } from "./stored-value";
 
 /**
  * A journal parsed at the storage boundary. `released` records that stored
@@ -117,11 +118,7 @@ export function parseLegacyHistory(
   const undo = readableTop(value.entries, treeId, limits);
   const redo = readableTop((value.redoEntries as unknown[] | undefined) ?? [], treeId, limits);
   return Object.freeze({
-    history: {
-      entries: undo.entries,
-      redoEntries: redo.entries,
-      retainedInverseBytes: sumBytes(undo.entries) + sumBytes(redo.entries),
-    },
+    history: { entries: undo.entries, redoEntries: redo.entries },
     released: undo.released || redo.released,
   });
 }
@@ -143,18 +140,3 @@ function readableTop(
   return Object.freeze({ entries: entries.reverse(), released: false });
 }
 
-export function sumBytes(entries: readonly TreeHistoryEntry[]): number {
-  let total = 0;
-  for (const entry of entries) total += entry.retainedInverseBytes;
-  return total;
-}
-
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-export function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}

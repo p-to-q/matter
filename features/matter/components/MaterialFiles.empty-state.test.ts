@@ -39,6 +39,7 @@ function renderMaterialFiles(tree: ThoughtTree): string {
         errorCode: null,
         historyNotice: null,
         unsaved: false,
+        replaceableByImport: false,
         upgradeBlocked: false,
         conflictOrigin: null,
       },

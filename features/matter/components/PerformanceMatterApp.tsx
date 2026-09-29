@@ -122,6 +122,7 @@ export function PerformanceMatterApp({
           errorCode: null,
           historyNotice: null,
           unsaved: false,
+          replaceableByImport: false,
           upgradeBlocked: false,
           conflictOrigin: null,
         },
