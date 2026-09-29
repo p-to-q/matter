@@ -160,6 +160,35 @@ describe("canvas pointer arbitration", () => {
     expect(arbiter.consumeRejectedClick(MOUSE, 60)).toBe(false);
   });
 
+  it("lets a contact that reuses an owned id found its own gesture after a lost end", () => {
+    const arbiter = createCanvasPointerArbiter();
+    expect(down(arbiter, pointer(FINGER, "touch", 0))).toEqual({ kind: "accept", founder: true });
+    // The finger's end never reached the page. An id is unique among active
+    // pointers, so its reuse proves that contact is over: a pan, not a pinch.
+    expect(down(arbiter, pointer(FINGER, "touch", 500))).toEqual({ kind: "accept", founder: true });
+  });
+
+  it("keeps a pinch's other contact when one lost end is settled by id reuse", () => {
+    const arbiter = createCanvasPointerArbiter();
+    down(arbiter, pointer(FINGER, "touch", 0));
+    down(arbiter, pointer(PALM, "touch", 5));
+    // The pinch partner is still down, so the returning id joins it.
+    expect(down(arbiter, pointer(FINGER, "touch", 400))).toEqual({ kind: "accept", founder: false });
+    expect(down(arbiter, pointer(MOUSE, "mouse", 410))).toEqual({ kind: "reject" });
+  });
+
+  it("does not carry a rejection whose end was lost into a new contact with its id", () => {
+    const arbiter = createCanvasPointerArbiter();
+    down(arbiter, pointer(PEN, "pen", 0));
+    expect(down(arbiter, pointer(PALM, "touch", 10))).toEqual({ kind: "reject" });
+    arbiter.notePointerEnd(pointer(PEN, "pen", 20));
+    expect(down(arbiter, pointer(PALM, "touch", 20 + PEN_PALM_GRACE_MS))).toEqual({
+      kind: "accept",
+      founder: true,
+    });
+    expect(arbiter.isRejected(PALM)).toBe(false);
+  });
+
   it("forgets a rejected click after its time bound", () => {
     const arbiter = createCanvasPointerArbiter();
     down(arbiter, pointer(PEN, "pen", 0));

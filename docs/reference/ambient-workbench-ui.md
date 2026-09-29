@@ -167,7 +167,10 @@ themselves, since they sit outside the canvas owner. Otherwise the
 first pointer owns the gesture and only another touch may join it, so two
 fingers still pinch whenever no pen is touching. Pen hover is not activity, and
 a mouse alone behaves as before. Pen contact is noted in the window capture
-phase, so a control that stops propagation cannot strand it.
+phase, so a control that stops propagation cannot strand it. A pointer-down
+that reuses an id still held as owned or rejected settles that earlier contact
+first: ids are unique among active pointers, so an end the page never received
+cannot leave every later touch joining a pinch that no longer exists.
 
 ## Chrome accessibility
 
