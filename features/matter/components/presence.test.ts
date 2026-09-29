@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   advancePresence,
   advanceSettledStatus,
+  createPresenceHandoff,
   createTimedStore,
   emptySettledStatus,
   PRESENCE_TIMING,
@@ -119,6 +120,10 @@ describe("surface presence", () => {
     expect(presenceReservesSpace(projectPresence(present, null, "person"))).toBe(true);
     expect(presenceReservesSpace(projectPresence(present, live("x"), "finished"))).toBe(true);
     expect(presenceReservesSpace(null)).toBe(false);
+    const exiting = syncPresence(present, null, "person", 1_010, MOTION);
+    expect(projectPresence(exiting, null, "person")).toMatchObject({ stage: "exiting", close: "person" });
+    // A modal or hidden page cuts even a surface that is already leaving.
+    expect(projectPresence(exiting, null, "preempted")).toBeNull();
   });
 });
 
@@ -207,6 +212,78 @@ describe("settled status labels", () => {
     expect(projectSettledStatus(shown, input("stopping", true))).toBe("stopping");
     expect(projectSettledStatus(shown, input("transcribing", false))).toBe("recording");
     expect(projectSettledStatus(shown, input(null, false))).toBeNull();
+  });
+});
+
+describe("presence handoff", () => {
+  it("hands a released surface its final content and declared close", () => {
+    const handoff = createPresenceHandoff<string>();
+    const listener = vi.fn();
+    handoff.subscribe(listener);
+    handoff.enter("turn_1");
+    handoff.show("turn_1", "Rewording…");
+    expect(handoff.getSnapshot()).toEqual({
+      identity: "turn_1",
+      view: "Rewording…",
+      lastView: "Rewording…",
+      close: "preempted",
+    });
+
+    handoff.intend("turn_1", "finished");
+    handoff.release("turn_1", null);
+    expect(handoff.getSnapshot()).toEqual({
+      identity: "turn_1",
+      view: null,
+      lastView: "Rewording…",
+      close: "finished",
+    });
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+
+  it("treats an undeclared close as a preemption and ignores another identity's intent", () => {
+    const handoff = createPresenceHandoff<string>();
+    handoff.show("turn_1", "form");
+    handoff.intend("turn_0", "person");
+    handoff.release("turn_1", "form with typed words");
+    expect(handoff.getSnapshot()).toMatchObject({
+      close: "preempted",
+      lastView: "form with typed words",
+    });
+  });
+
+  it("lets a newly mounted surface preempt the previous exit at once", () => {
+    const handoff = createPresenceHandoff<string>();
+    handoff.show("turn_1", "form");
+    handoff.intend("turn_1", "person");
+    handoff.release("turn_1", "form");
+    handoff.enter("turn_2");
+    expect(handoff.getSnapshot()).toEqual({
+      identity: "turn_2",
+      view: null,
+      lastView: null,
+      close: "preempted",
+    });
+    // A late release from the replaced owner cannot rewrite the new record.
+    handoff.release("turn_1", "stale");
+    expect(handoff.getSnapshot()?.identity).toBe("turn_2");
+  });
+
+  it("lets another slot owner cut the exit before the owner's release arrives", () => {
+    const handoff = createPresenceHandoff<string>();
+    handoff.show("turn_1", "form");
+    handoff.intend("turn_1", "person");
+    handoff.preempt();
+    handoff.release("turn_1", "form");
+    expect(handoff.getSnapshot()).toBeNull();
+  });
+
+  it("returns the same identity to live after a Strict Mode release and remount", () => {
+    const handoff = createPresenceHandoff<string>();
+    handoff.show("turn_1", "form");
+    handoff.release("turn_1", "form");
+    handoff.enter("turn_1");
+    handoff.show("turn_1", "form");
+    expect(handoff.getSnapshot()).toMatchObject({ view: "form", close: "preempted" });
   });
 });
 

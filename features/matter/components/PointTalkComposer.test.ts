@@ -5,6 +5,7 @@ import type {
 } from "../runtime/text-swap-interaction";
 import {
   pointTalkOutsidePointerDismisses,
+  pointTalkPhaseLabel,
   pointTalkRecoveryAction,
 } from "./PointTalkComposer";
 
@@ -96,5 +97,15 @@ describe("Point Talk recovery", () => {
       failure("MICROPHONE_DENIED", { retryable: false }),
       true,
     )).toBeNull();
+  });
+
+  it("names each status phase without the transient partial it may paint", () => {
+    for (const locale of ["en-US", "zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      for (const phase of ["permission", "recording", "transcribing", "pending", "error"] as const) {
+        expect(pointTalkPhaseLabel(phase, locale).length).toBeGreaterThan(0);
+      }
+    }
+    expect(pointTalkPhaseLabel("recording", "en-US")).toBe("Listening…");
+    expect(pointTalkPhaseLabel("error", "zh-CN")).toBe("原文没有改变。");
   });
 });

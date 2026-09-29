@@ -96,6 +96,7 @@ import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
   projectCanvasGuidance,
+  rewriteOutcomeAnnouncement,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
@@ -180,11 +181,14 @@ import {
   admissionPlacementLabel,
 } from "./admission-feedback-copy";
 import {
+  createPresenceHandoff,
   presenceReservesSpace,
   type PresenceClose,
   type PresenceFrame,
   type PresenceLive,
 } from "./presence";
+import type { PointTalkSurfaceView } from "./PointTalkComposer";
+import type { PointTalkDetachedOutcome } from "./PointTalkTurn";
 import { usePresence, useSettledStatus } from "./use-presence";
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
@@ -192,6 +196,10 @@ import type { TypographyHeightAuthority } from "./typography-height-authority";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
+  { ssr: false },
+);
+const PointTalkExit = dynamic(
+  () => import("./PointTalkComposer").then((module) => module.PointTalkExit),
   { ssr: false },
 );
 const NodeActionLens = dynamic(
@@ -415,6 +423,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(true),
   ), []);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
+  const [pointTalkOutcome, setPointTalkOutcome] = useState<PointTalkDetachedOutcome | null>(null);
   const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
     id: number;
     type: "start" | "stop";
@@ -1428,9 +1438,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretchKeyDown("Escape");
   }, [stretchKeyDown]);
   const abortFixedExpansion = useCallback(() => {
+    // Another owner takes the slot: a leaving Point Talk copy is cut, not faded.
+    pointTalkExitHandoff.preempt();
     closePointTalk();
     abortElasticExpansion();
-  }, [abortElasticExpansion, closePointTalk]);
+  }, [abortElasticExpansion, closePointTalk, pointTalkExitHandoff]);
+  useEffect(() => {
+    if (pointTalkOutcome === null) return;
+    // The outcome line is quiet and transient: the next gesture clears it.
+    const clear = () => setPointTalkOutcome(null);
+    const capture = { capture: true } as const;
+    window.addEventListener("pointerdown", clear, capture);
+    window.addEventListener("keydown", clear, capture);
+    window.addEventListener("wheel", clear, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", clear, capture);
+      window.removeEventListener("keydown", clear, capture);
+      window.removeEventListener("wheel", clear, capture);
+    };
+  }, [pointTalkOutcome]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
@@ -2252,6 +2278,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         : { kind: "none" },
       language: languageGuidance,
       material: materialGuidance,
+      rewriteOutcome: pointTalkOutcome,
     }),
     canvasPreferences.preferences.language,
   );
@@ -3669,6 +3696,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
             {guidance.text}
           </p>
         </footer>
+        <p aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
+          {pointTalkOutcome === null
+            ? ""
+            : rewriteOutcomeAnnouncement(pointTalkOutcome, canvasPreferences.preferences.language)}
+        </p>
         </div>
         <CanvasChrome
           {...canvasPreferences}
@@ -3710,14 +3742,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
             documentEpoch={props.documentEpoch}
             enabled={pointTalkSelectionCurrent && !persistenceLoading}
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}:${materialPresentationAvailable ? "surface" : "occluded"}`}
+            exitHandoff={pointTalkExitHandoff}
             interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
             key={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
             locale={props.locale}
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
+            onDetachedOutcome={setPointTalkOutcome}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
+            presenceIdentity={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}
@@ -3726,6 +3761,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
             deliveryVisibleNodeIds={visiblyLaidOutNodeIds}
             voiceCommand={pointTalkVoiceCommand}
             voiceAvailable={voiceReadiness.status === "ready"}
+          />
+        )}
+        {pointTalkOpeningId === 0 ? null : (
+          <PointTalkExit
+            available={outcomePresentationAvailable}
+            handoff={pointTalkExitHandoff}
+            locale={props.locale}
           />
         )}
         <LassoOverlay

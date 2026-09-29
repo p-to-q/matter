@@ -8,6 +8,7 @@ import {
   CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT,
   localizeCanvasGuidance,
   projectCanvasGuidance,
+  rewriteOutcomeAnnouncement,
   type CanvasGuidanceInput,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
@@ -85,6 +86,29 @@ describe("canvas guidance projection", () => {
       expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     },
   );
+
+  it.each([
+    ["unchanged", "rewrite-unchanged", "The original language was kept."],
+    ["passage-changed", "rewrite-passage-changed", "Passage changed; rewrite skipped."],
+  ] as const)("reports a detached %s rewrite once in place of the next hint", (outcome, id, text) => {
+    expect(projectCanvasGuidance(input({
+      rewriteOutcome: outcome,
+      language: { kind: "lasso-ready" },
+    }))).toEqual({ id, kind: "outcome", text });
+    expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    // Live voice still owns the line.
+    expect(projectCanvasGuidance(input({
+      rewriteOutcome: outcome,
+      admission: attempt({ phase: "recording", startedAtMs: 1 }),
+    })).id).toBe("speak-recording");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeCanvasGuidance({ id, kind: "outcome", text }, language).text)
+        .not.toBe(text);
+    }
+    expect(rewriteOutcomeAnnouncement(outcome, "en-US")).toBe(text);
+    expect(rewriteOutcomeAnnouncement(outcome, "zh-CN"))
+      .toBe(localizeCanvasGuidance({ id, kind: "outcome", text }, "zh-CN").text);
+  });
 
   it("asks to place or discard held words instead of dismissing the recording", () => {
     expect(projectCanvasGuidance(input({
@@ -264,6 +288,8 @@ describe("canvas guidance projection", () => {
       "unfold-thought": true,
       "speak-child": true,
       "select-thought": true,
+      "rewrite-unchanged": true,
+      "rewrite-passage-changed": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {

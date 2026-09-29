@@ -30,11 +30,18 @@ export type CanvasCameraGuidanceState =
   | Readonly<{ kind: "none" }>
   | Readonly<{ kind: "pan"; zoom: number }>;
 
+/**
+ * How a Point Talk rewrite ended after its field had been closed. It is shown
+ * once in place of the next hint and cleared by the person's next gesture.
+ */
+export type CanvasRewriteOutcomeGuidanceState = "unchanged" | "passage-changed";
+
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
+  rewriteOutcome?: CanvasRewriteOutcomeGuidanceState | null;
 }>;
 
 type CanvasActionGuidanceId =
@@ -59,7 +66,9 @@ type CanvasActionGuidanceId =
   | "circle-selection"
   | "unfold-thought"
   | "speak-child"
-  | "select-thought";
+  | "select-thought"
+  | "rewrite-unchanged"
+  | "rewrite-passage-changed";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
@@ -88,6 +97,8 @@ const GUIDANCE_COPY = Object.freeze({
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
   "select-thought": "Select one thought.",
+  "rewrite-unchanged": "The original language was kept.",
+  "rewrite-passage-changed": "Passage changed; rewrite skipped.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const GUIDANCE_COPY_ZH = Object.freeze({
@@ -113,12 +124,14 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
   "select-thought": "选择一段想法。",
+  "rewrite-unchanged": "原文没有改变。",
+  "rewrite-passage-changed": "原文已先变化，未改写。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
   | Readonly<{
       id: CanvasActionGuidanceId;
-      kind: "action" | "progress" | "recovery";
+      kind: "action" | "progress" | "recovery" | "outcome";
       text: string;
     }>
   | Readonly<{
@@ -141,6 +154,13 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     )
   ) {
     return projectAdmissionGuidance(input.admission);
+  }
+
+  if (input.rewriteOutcome === "unchanged") {
+    return guidance("rewrite-unchanged", "outcome");
+  }
+  if (input.rewriteOutcome === "passage-changed") {
+    return guidance("rewrite-passage-changed", "outcome");
   }
 
   if (input.material.kind === "empty") {
@@ -207,6 +227,17 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
   }
 }
 
+/** The one polite announcement for a detached rewrite outcome. */
+export function rewriteOutcomeAnnouncement(
+  outcome: CanvasRewriteOutcomeGuidanceState,
+  language: CanvasLanguage,
+): string {
+  return localizeCanvasGuidance(
+    guidance(outcome === "unchanged" ? "rewrite-unchanged" : "rewrite-passage-changed", "outcome"),
+    language,
+  ).text;
+}
+
 /** Localization changes copy only; the interaction state machine remains authoritative. */
 export function localizeCanvasGuidance(
   guidanceState: CanvasGuidance,
@@ -255,6 +286,8 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
   "select-thought": "選擇一段想法。",
+  "rewrite-unchanged": "原文沒有改變。",
+  "rewrite-passage-changed": "原文已先變化，未改寫。",
 });
 const GUIDANCE_COPY_JA = Object.freeze({
   ...GUIDANCE_COPY,
@@ -280,6 +313,8 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
   "select-thought": "考えを一つ選んでください。",
+  "rewrite-unchanged": "元の文章はそのままです。",
+  "rewrite-passage-changed": "文章が先に変わったため、書き換えていません。",
 });
 const GUIDANCE_COPY_DE = Object.freeze({
   ...GUIDANCE_COPY,
@@ -305,6 +340,8 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
   "select-thought": "Einen Gedanken auswählen.",
+  "rewrite-unchanged": "Der ursprüngliche Text bleibt erhalten.",
+  "rewrite-passage-changed": "Passage geändert; nicht umgeschrieben.",
 });
 
 function projectAdmissionGuidance(
@@ -355,7 +392,7 @@ function projectAdmissionError(errorCode: AdmissionErrorCode): CanvasGuidance {
 
 function guidance(
   id: CanvasActionGuidanceId,
-  kind: "action" | "progress" | "recovery",
+  kind: "action" | "progress" | "recovery" | "outcome",
 ): Extract<CanvasGuidance, { id: CanvasActionGuidanceId }> {
   const text = GUIDANCE_COPY[id];
   if (text.length > CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT) {

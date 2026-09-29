@@ -108,13 +108,10 @@ export function projectPresence<T>(
   if (live !== null) {
     return { identity: live.identity, stage: "present", view: live.view, close: null };
   }
-  if (state === null) return null;
-  if (state.stage !== "present") {
-    return { identity: state.identity, stage: state.stage, view: state.view, close: state.close };
-  }
-  return close === "preempted"
-    ? null
-    : { identity: state.identity, stage: "holding", view: state.view, close };
+  if (state === null || close === "preempted") return null;
+  return state.stage === "present"
+    ? { identity: state.identity, stage: "holding", view: state.view, close }
+    : { identity: state.identity, stage: state.stage, view: state.view, close: state.close };
 }
 
 /** Whether a leaving surface still owns the layout space it reserved. */
@@ -254,6 +251,83 @@ export function settledStatusDeadline<K>(
   return state.shown === null || state.shownAtMs === null
     ? settled
     : Math.max(settled, state.shownAtMs + timing.minVisibleMs);
+}
+
+export type PresenceHandoffRecord<T> = Readonly<{
+  identity: string;
+  /** Live content while the owner shows it; null before first paint or after release. */
+  view: T | null;
+  /** The owner's final content, kept for the frozen exit. */
+  lastView: T | null;
+  /** How the released surface left; `preempted` unless its closer said otherwise. */
+  close: PresenceClose;
+}> | null;
+
+export type PresenceHandoff<T> = Readonly<{
+  getSnapshot: () => PresenceHandoffRecord<T>;
+  subscribe: (listener: () => void) => () => void;
+  /** A surface mounted; any other surface's exit is preempted by it. */
+  enter: (identity: string) => void;
+  show: (identity: string, view: T) => void;
+  /** Declares how the next release of `identity` leaves. */
+  intend: (identity: string, close: Exclude<PresenceClose, "preempted">) => void;
+  release: (identity: string, finalView: T | null) => void;
+  /** Another owner took the slot: cut any exit and ignore the pending release. */
+  preempt: () => void;
+}>;
+
+/**
+ * Lets a live owner that unmounts at its close hand its last content to a
+ * presence host that outlives it. The owner's effects, listeners, and focus
+ * leave with the owner; the host renders only the frozen copy. A close is a
+ * preemption unless the closer declared otherwise before the release.
+ */
+export function createPresenceHandoff<T>(): PresenceHandoff<T> {
+  const listeners = new Set<() => void>();
+  let record: PresenceHandoffRecord<T> = null;
+  let intent: Readonly<{ identity: string; close: PresenceClose }> | null = null;
+  const publish = (next: PresenceHandoffRecord<T>) => {
+    record = next;
+    for (const listener of [...listeners]) listener();
+  };
+  const enter = (identity: string) => {
+    if (record?.identity === identity) return;
+    intent = null;
+    publish(Object.freeze({ identity, view: null, lastView: null, close: "preempted" }));
+  };
+  return Object.freeze({
+    getSnapshot: () => record,
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    enter,
+    show: (identity: string, view: T) => {
+      enter(identity);
+      if (record === null || (record.view === view && record.close === "preempted")) return;
+      publish(Object.freeze({ identity, view, lastView: view, close: "preempted" }));
+    },
+    intend: (identity: string, close: Exclude<PresenceClose, "preempted">) => {
+      intent = Object.freeze({ identity, close });
+    },
+    release: (identity: string, finalView: T | null) => {
+      if (record === null || record.identity !== identity) return;
+      const close = intent?.identity === identity ? intent.close : "preempted";
+      intent = null;
+      publish(Object.freeze({
+        identity,
+        view: null,
+        lastView: finalView ?? record.lastView,
+        close,
+      }));
+    },
+    preempt: () => {
+      intent = null;
+      if (record !== null) publish(null);
+    },
+  });
 }
 
 export type TimedStore<S> = Readonly<{
