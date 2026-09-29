@@ -1582,20 +1582,49 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // armed shape with both grips at zero instead of an expand projection that
   // no longer has a degree or grip to project from.
   const elasticLanguageActive = stretch.dragging || stretch.amount > 0;
-  const beginStretchAdjustment = useCallback(() => {
-    canvasChromeRef.current?.closeInquiry();
-  }, []);
   const abortElasticExpansion = useCallback(() => {
     // Presentation can close while an immutable submitted turn keeps owning
     // its exact material basis. Conflict/page-exit handling lives in the turn.
     stretchKeyDown("Escape");
   }, [stretchKeyDown]);
-  const abortFixedExpansion = useCallback(() => {
-    // Another owner takes the slot: a leaving Point Talk copy is cut, not faded.
+  const pointTalkPresenceIdentity = pointTalkHostNodeId === null
+    ? null
+    : `${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`;
+  // Dismissing a presentation and yielding the paper's one presentation slot
+  // are different closes. Submitted work continues through either; only the
+  // way a leaving Point Talk field is painted differs.
+  /** The person acted elsewhere: presentations leave as the person's close. */
+  const dismissPaperPresentations = useCallback(() => {
+    if (pointTalkPresented && pointTalkPresenceIdentity !== null) {
+      pointTalkExitHandoff.intend(pointTalkPresenceIdentity, "person");
+    }
+    closePointTalk();
+    abortElasticExpansion();
+  }, [
+    abortElasticExpansion,
+    closePointTalk,
+    pointTalkExitHandoff,
+    pointTalkPresenceIdentity,
+    pointTalkPresented,
+  ]);
+  /** Another owner takes the slot: a leaving Point Talk copy is cut, not faded. */
+  const preemptPaperPresentations = useCallback(() => {
     pointTalkExitHandoff.preempt();
     closePointTalk();
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk, pointTalkExitHandoff]);
+  // A document switch owns the paper outright, so nothing of the old one fades.
+  useLayoutEffect(() => () => pointTalkExitHandoff.preempt(), [
+    pointTalkExitHandoff,
+    props.documentEpoch,
+  ]);
+  const beginStretchAdjustment = useCallback(() => {
+    // A grip adjustment takes the slot from Inquiry and any Point Talk field;
+    // the adjustment itself is what now owns Elastic presentation.
+    canvasChromeRef.current?.closeInquiry();
+    pointTalkExitHandoff.preempt();
+    closePointTalk();
+  }, [closePointTalk, pointTalkExitHandoff]);
   useEffect(() => {
     if (wikiUnsaved === null) return;
     // Like a rewrite outcome, the line stays until the person acts again.
@@ -1970,12 +1999,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
     tree.id,
     viewportRenderer,
   ]);
-  const selectNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  const selectNodeDismissingPresentations = useCallback((nodeId: string) => {
+    dismissPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = null;
     onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, onSelectNode]);
+  }, [dismissPaperPresentations, interruptIndexCameraMotion, onSelectNode]);
   /**
    * A settled tap on a marked Wiki word opens its takeover instead of selecting
    * the passage; it never starts Point and Talk or a passage selection.
@@ -1997,11 +2026,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
       (dismissing?.pointerId === pointerId && dismissing.occurrenceId === occurrenceId) ||
       !wikiOccurrences.openTakeover(occurrenceId)
     ) return false;
-    abortFixedExpansion();
+    preemptPaperPresentations();
     return true;
   };
-  const focusIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  const focusIndexNode = useCallback((nodeId: string) => {
+    preemptPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2011,9 +2040,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     focusWorkingNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, focusWorkingNode, interruptIndexCameraMotion]);
-  const restoreIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [documentEpoch, focusWorkingNode, interruptIndexCameraMotion, preemptPaperPresentations]);
+  const restoreIndexNode = useCallback((nodeId: string) => {
+    preemptPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2023,9 +2052,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     restoreWorkingNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, restoreWorkingNode]);
-  const selectIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [documentEpoch, interruptIndexCameraMotion, preemptPaperPresentations, restoreWorkingNode]);
+  const selectIndexNode = useCallback((nodeId: string) => {
+    preemptPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2035,24 +2064,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     onSelectNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, onSelectNode]);
-  const archiveAfterAbort = useMemo<MaterialArchiveActions | undefined>(() => {
+  }, [documentEpoch, interruptIndexCameraMotion, onSelectNode, preemptPaperPresentations]);
+  const indexArchive = useMemo<MaterialArchiveActions | undefined>(() => {
     if (props.archive === undefined) return undefined;
     return Object.freeze({
       exportCopy: () => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.exportCopy();
       },
       validateImport: (file: File) => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.validateImport(file);
       },
       replaceImport: (file: File, options: Readonly<{ replaceUnsaved: boolean }>) => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.replaceImport(file, options);
       },
     });
-  }, [abortFixedExpansion, props.archive]);
+  }, [dismissPaperPresentations, props.archive]);
   useEffect(() => {
     const removeSelected = (event: KeyboardEvent) => {
       if (
@@ -2069,12 +2098,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onRemoveSelected();
     };
     window.addEventListener("keydown", removeSelected);
     return () => window.removeEventListener("keydown", removeSelected);
-  }, [abortFixedExpansion, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
+  }, [dismissPaperPresentations, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
   useEffect(() => {
     const undoFromKeyboard = (event: KeyboardEvent) => {
       if (
@@ -2090,12 +2119,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onUndo();
     };
     window.addEventListener("keydown", undoFromKeyboard);
     return () => window.removeEventListener("keydown", undoFromKeyboard);
-  }, [abortFixedExpansion, canUndo, interactionPending, onUndo]);
+  }, [dismissPaperPresentations, canUndo, interactionPending, onUndo]);
   useEffect(() => {
     const redoFromKeyboard = (event: KeyboardEvent) => {
       if (
@@ -2106,12 +2135,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       const key = event.key.toLowerCase();
       if ((key !== "z" || !event.shiftKey) && key !== "y") return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onRedo();
     };
     window.addEventListener("keydown", redoFromKeyboard);
     return () => window.removeEventListener("keydown", redoFromKeyboard);
-  }, [abortFixedExpansion, canRedo, interactionPending, onRedo]);
+  }, [dismissPaperPresentations, canRedo, interactionPending, onRedo]);
   useLayoutEffect(() => {
     stretchInvalidationRef.current = stretch.layoutInvalidated;
   }, [stretch.layoutInvalidated]);
@@ -3377,7 +3406,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           // A resting palm must not close Point and Talk or drop a committed
           // degree before the pen that follows it can take over.
           settleTouchFounderEffects(false);
-          const effects: (() => void)[] = [abortFixedExpansion];
+          const effects: (() => void)[] = [dismissPaperPresentations];
           const pointerId = event.pointerId;
           pendingTouchEffectsRef.current = {
             pointerId,
@@ -3390,7 +3419,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             ),
           };
         } else {
-          abortFixedExpansion();
+          dismissPaperPresentations();
         }
         if (event.pointerType === "touch") {
           const contact = projectCanvasTouchContact(
@@ -3674,9 +3703,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
             const nodeId = lassoClickOriginNodeRef.current;
             exitLasso();
             if (nodeId !== null && workingContext.activeNodeIds.has(nodeId)) {
-              selectNodeAfterAbort(nodeId);
+              selectNodeDismissingPresentations(nodeId);
             } else {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               props.onClearSelection();
             }
           }
@@ -3697,14 +3726,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           if (shouldMove && nodeDrag.sourceId !== null) {
-            abortFixedExpansion();
+            dismissPaperPresentations();
             props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
           }
           else if (!nodeDrag.dragging) {
             if (openWikiTakeoverAt(nodeDrag.originNodeId, event.clientX, event.clientY, event.pointerId)) return;
-            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeAfterAbort(nodeDrag.originNodeId);
+            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeDismissingPresentations(nodeDrag.originNodeId);
             else {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               props.onClearSelection();
             }
           }
@@ -3726,9 +3755,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         if (!dragged && !openWikiTakeoverAt(originNodeId, releaseX, releaseY, event.pointerId)) {
           setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
-            selectNodeAfterAbort(originNodeId);
+            selectNodeDismissingPresentations(originNodeId);
           } else {
-            abortFixedExpansion();
+            dismissPaperPresentations();
             props.onClearSelection();
           }
         }
@@ -3781,7 +3810,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFilesWithLabels
-        archive={archiveAfterAbort}
+        archive={indexArchive}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
         lassoSelectedNodeIds={lassoSelectedNodeIds}
@@ -3791,11 +3820,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
         heldAsideNodeIds={workingContext.heldAsideNodeIds}
         heldAsideRootIds={heldAsideRootIds}
         onFocusNode={(nodeId) => {
-          focusIndexNodeAfterAbort(nodeId);
+          focusIndexNode(nodeId);
         }}
         onMaterialCopied={props.wikiOccurrences?.noteMaterialCopied}
         onOpenOverlay={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           indexCenterRequestRef.current = null;
           interruptIndexCameraMotion();
           if (lasso.active) exitLasso();
@@ -3803,15 +3832,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onEditingChange={setEditingHeld}
         onOverlayChange={setIndexOverlayOpen}
         onRenameDocument={(title) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           props.onRenameDocument(title);
         }}
         onRestoreNode={(nodeId) => {
-          restoreIndexNodeAfterAbort(nodeId);
+          restoreIndexNode(nodeId);
         }}
-        onSelectNode={selectIndexNodeAfterAbort}
+        onSelectNode={selectIndexNode}
         onToggleHeldAside={(nodeId) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           toggleHeldAside(nodeId);
         }}
         persistence={props.persistence}
@@ -3823,7 +3852,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoAvailable={lassoEligibleNodeIds.size > 0 && (lasso.active || activeLayout !== null)}
         locale={props.locale}
         onLasso={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           cancelNodeDragOwnership();
           if (lasso.active) {
             exitLasso();
@@ -3843,7 +3872,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
         }}
         onMove={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           cancelNodeDragOwnership();
           if (canvasMode === "pan" && !lasso.active) {
             cancelViewportGesture();
@@ -3854,7 +3883,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           setCanvasMode("pan");
         }}
         onIntent={(intent) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
@@ -3880,7 +3909,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             issuePointTalkVoiceCommand("start");
             return;
           }
-          abortFixedExpansion();
+          dismissPaperPresentations();
           if (props.admission.state.phase === "recording") {
             props.admission.stop();
           } else if (props.admissionAnchor !== null) {
@@ -3983,7 +4012,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               selectionPreviewMode={visibleSplitPreviewMode}
               navigation={navigation}
               onKeyboardFocus={revealKeyboardFocusedMaterial}
-              onSelectNode={selectNodeAfterAbort}
+              onSelectNode={selectNodeDismissingPresentations}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
               heldAsideRootIds={heldAsideRootIds}
@@ -4037,10 +4066,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
               setPointTalkPresented(true);
             }}
             onOpenWikiReview={wikiOccurrences === undefined ? undefined : (occurrenceId) => {
-              if (wikiOccurrences.openTakeover(occurrenceId)) abortFixedExpansion();
+              if (wikiOccurrences.openTakeover(occurrenceId)) preemptPaperPresentations();
             }}
             onToggleHeldAside={(nodeId) => {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               toggleHeldAside(nodeId);
             }}
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
@@ -4083,7 +4112,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryContext={projectInquiryPayload}
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
-          onInquiryOpen={abortFixedExpansion}
+          onInquiryOpen={preemptPaperPresentations}
           onInquiryHoldChange={setInquiryHeld}
           onOverlayChange={changeCanvasOverlay}
           overlay={canvasOverlay}
@@ -4110,7 +4139,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             variant="actionable"
           />
         )}
-        {pointTalkHostNodeId === null ? null : (
+        {pointTalkHostNodeId === null || pointTalkPresenceIdentity === null ? null : (
           <PointTalkTurn
             boundaryRef={documentRef}
             canvasRef={canvasRef}
@@ -4131,7 +4160,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onReleased={releasePointTalkJob}
             onReleasedOutcome={reportPointTalkOutcome}
             penActive={pointerArbiter.penActive}
-            presenceIdentity={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
+            presenceIdentity={pointTalkPresenceIdentity}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}

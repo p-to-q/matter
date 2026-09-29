@@ -298,7 +298,10 @@ export type PresenceHandoff<T> = Readonly<{
   /** Declares how the next release of `identity` leaves. */
   intend: (identity: string, close: Exclude<PresenceClose, "preempted">) => void;
   release: (identity: string, finalView: T | null) => void;
-  /** Another owner took the slot: cut any exit and ignore the pending release. */
+  /**
+   * Another owner took the slot: cut any exit and ignore the pending release.
+   * Dismissing a presentation is not a preemption; the person's close fades.
+   */
   preempt: () => void;
 }>;
 

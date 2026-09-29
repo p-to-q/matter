@@ -62,12 +62,12 @@ describe("mobile canvas touch ownership", () => {
     const down = rooted.slice(downStart, rooted.indexOf("onPointerMove={(event) => {"));
     const founder = down.indexOf('if (event.pointerType === "touch" && claim?.kind === "accept" && claim.founder)');
     const deferral = down.indexOf("deferUntilTouchCommits(", founder);
-    const immediate = down.indexOf("abortFixedExpansion();", deferral);
+    const immediate = down.indexOf("dismissPaperPresentations();", deferral);
     expect(founder).toBeGreaterThan(-1);
     expect(deferral).toBeGreaterThan(founder);
-    expect(down.slice(founder, deferral)).toContain("const effects: (() => void)[] = [abortFixedExpansion];");
+    expect(down.slice(founder, deferral)).toContain("const effects: (() => void)[] = [dismissPaperPresentations];");
     // Mouse and pen founders still act at once.
-    expect(down.slice(deferral, immediate + 40)).toContain("} else {\n          abortFixedExpansion();");
+    expect(down.slice(deferral, immediate + 40)).toContain("} else {\n          dismissPaperPresentations();");
     // Camera interruption loses nothing and stays immediate.
     expect(down.indexOf("interruptIndexCameraMotion()")).toBeLessThan(founder);
     // A pinch commits; Lasso's repair dismissal joins the pending effects.
