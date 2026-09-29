@@ -81,11 +81,15 @@ type AdmissionTurn = Readonly<{
   context: "comparable" | "other-locale" | "other-script";
 }>;
 
-/** The one settlement of one applied occurrence of the scenario's form. */
+/**
+ * The settlement of one applied occurrence of the scenario's form. Every
+ * occurrence is applied from the basis of the latest admission turn, and the
+ * current state decides whether its rule is human-confirmed.
+ */
 type SettlementTurn = Readonly<{
   kind: "settlement";
+  occurrence: string;
   canonical: string;
-  authority: "confirmed" | "provisional";
   outcome: WikiOccurrenceOutcome;
   origin: WikiOccurrenceOrigin;
 }>;
@@ -182,6 +186,7 @@ const POLICY_CONSTANTS: QualifiedPolicyConstants = Object.freeze({
 
 const PROVISIONAL_MATERIAL = "zh-CN:spoken:word:才料=>材料";
 const RESTRICTED_SILENCE = "zh-CN:spoken:word:近音=>静音";
+const RESTRICTED_PAIR = Object.freeze([lexeme("zh-CN", "静音"), lexeme("zh-CN", "境音")]);
 
 /**
  * The manifest owns both opportunities and expected outcomes. The runner may
@@ -346,11 +351,11 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
         human("静音"),
         human("静音"),
         human("静音"),
-        settle("静音", "accepted-implicit"),
-        settle("静音", "accepted-implicit"),
+        settle("o1", "静音", "accepted-implicit"),
+        settle("o2", "静音", "accepted-implicit"),
         ...quiet(1),
-        settle("静音", "inspected-kept"),
-        settle("静音", "accepted-implicit"),
+        settle("o3", "静音", "inspected-kept"),
+        settle("o4", "静音", "accepted-implicit"),
         ...quiet(32),
         ...quiet(31),
       ],
@@ -393,7 +398,7 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
         human("材料"),
         human("材料"),
         human("材料"),
-        settle("材料", "accepted-implicit", "provisional", "generated"),
+        settle("o1", "材料", "accepted-implicit", "generated"),
       ],
       checkpointTurns: [4],
       expected: [
@@ -409,11 +414,11 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
         human("材料"),
         human("材料"),
         human("材料"),
-        settle("材料", "reverted"),
+        settle("o1", "材料", "reverted"),
         human("材料"),
         human("材料"),
         human("材料"),
-        settle("材料", "reverted"),
+        settle("o2", "材料", "reverted"),
         human("材料"),
       ],
       checkpointTurns: [4, 7, 8, 9],
@@ -437,13 +442,13 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
         human("材料"),
         human("材料"),
         human("材料"),
-        settle("材料", "reverted"),
+        settle("o1", "材料", "reverted"),
         ...quiet(127),
         ...quiet(1),
         human("材料"),
         human("材料"),
         human("材料"),
-        settle("材料", "reverted"),
+        settle("o2", "材料", "reverted"),
       ],
       checkpointTurns: [131, 132, 136],
       expected: [
@@ -458,9 +463,9 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
         human("材料"),
         human("材料"),
         human("材料"),
-        settle("材料", "explicit-confirm"),
-        settle("材料", "reverted", "confirmed"),
-        settle("材料", "accepted-implicit", "confirmed"),
+        settle("o1", "材料", "explicit-confirm"),
+        settle("o2", "材料", "reverted"),
+        settle("o3", "材料", "accepted-implicit"),
       ],
       checkpointTurns: [4, 6],
       expected: [
@@ -474,6 +479,81 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
           qualified: [PROVISIONAL_MATERIAL],
           unqualified: [PROVISIONAL_MATERIAL],
         }),
+      ],
+    }),
+    materialScenario({
+      scenarioId: "same-epoch-reverts-strike-once",
+      turns: [
+        human("材料"),
+        human("材料"),
+        human("材料"),
+        settle("o1", "材料", "reverted"),
+        settle("o2", "材料", "reverted"),
+      ],
+      checkpointTurns: [4, 5],
+      expected: [
+        checkpoint(4, { strikes: [strike("材料", 0)] }),
+        checkpoint(5, { strikes: [strike("材料", 0)] }),
+      ],
+    }),
+    materialScenario({
+      scenarioId: "duplicate-delivery-settles-once",
+      turns: [
+        human("材料"),
+        human("材料"),
+        human("材料"),
+        settle("o1", "材料", "accepted-implicit"),
+        ...quiet(1),
+        settle("o1", "材料", "accepted-implicit"),
+        settle("o1", "材料", "inspected-kept"),
+      ],
+      checkpointTurns: [4, 7],
+      expected: [
+        checkpoint(4, {
+          alias: [alias("材料", "active", 12, 0, 4, 0)],
+          qualified: [PROVISIONAL_MATERIAL],
+        }),
+        checkpoint(7, {
+          alias: [alias("材料", "active", 12, 1, 4, 1)],
+          qualified: [PROVISIONAL_MATERIAL],
+        }),
+      ],
+    }),
+    aliasScenario({
+      scenarioId: "kept-evidence-never-reactivates",
+      locale: "zh-CN",
+      scripts: ["han"],
+      form: "近音",
+      producer: "zh-final-pair-v1",
+      lexemes: RESTRICTED_PAIR,
+      turns: [
+        human("静音"),
+        human("静音"),
+        human("静音"),
+        human("静音"),
+        human("境音"),
+        human("境音"),
+        human("境音"),
+        settle("o1", "静音", "inspected-kept"),
+        settle("o2", "静音", "inspected-kept"),
+      ],
+      checkpointTurns: [6, 7, 9],
+      expected: [
+        checkpoint(6, {
+          alias: [
+            alias("境音", "candidate", 8, 0),
+            alias("静音", "active", 16, 2),
+          ],
+          qualified: [RESTRICTED_SILENCE],
+        }),
+        checkpoint(7, { alias: [
+          alias("境音", "candidate", 12, 0),
+          alias("静音", "candidate", 16, 3),
+        ] }),
+        checkpoint(9, { alias: [
+          alias("境音", "candidate", 12, 0),
+          alias("静音", "candidate", 16, 3, 16, 0),
+        ] }),
       ],
     }),
     aliasScenario({
@@ -563,10 +643,12 @@ function runScenario(
 
   const checkpointTurns = new Set(scenario.checkpointTurns);
   const checkpoints: ScenarioCheckpoint[] = [];
+  let appliedAtRevision = state.revision;
   scenario.turns.forEach((turn, index) => {
     const afterTurn = index + 1;
     const applied = turn.kind === "settlement"
       ? applyWikiOccurrenceSettlement(state, Object.freeze({
+          occurrenceId: turn.occurrence,
           outcome: turn.outcome as Exclude<WikiOccurrenceOutcome, "explicit-replace">,
           rule: Object.freeze({
             locale: scenario.locale,
@@ -574,7 +656,7 @@ function runScenario(
             boundary: "word" as const,
             form: (scenario as AliasScenario).form,
             canonical: turn.canonical,
-            authority: turn.authority,
+            appliedAtRevision,
           }),
           origin: turn.origin,
         }), qualifiedAliasProducers())
@@ -588,6 +670,7 @@ function runScenario(
         );
     if (!applied.ok) throw new Error(applied.error.message);
     state = applied.state;
+    if (turn.kind === "admission") appliedAtRevision = state.revision;
     if (checkpointTurns.has(afterTurn)) checkpoints.push(snapshot(state, afterTurn));
   });
   return Object.freeze({
@@ -878,12 +961,12 @@ function admission(
 }
 
 function settle(
+  occurrence: string,
   canonical: string,
   outcome: WikiOccurrenceOutcome,
-  authority: SettlementTurn["authority"] = "provisional",
   origin: WikiOccurrenceOrigin = "human-admission",
 ): SettlementTurn {
-  return Object.freeze({ kind: "settlement", canonical, authority, outcome, origin });
+  return Object.freeze({ kind: "settlement", occurrence, canonical, outcome, origin });
 }
 
 function alias(

@@ -358,6 +358,7 @@ function oversizedWikiState(): WikiState {
     aliasTombstones: [],
     lexemeTombstones: [],
     revertStrikes: [],
+    settledOccurrences: [],
   };
 }
 
@@ -394,6 +395,7 @@ function maximumMatcherState(): WikiState {
     aliasTombstones: [],
     lexemeTombstones: [],
     revertStrikes: [],
+    settledOccurrences: [],
   };
 }
 
@@ -431,6 +433,7 @@ function recoverySizeState(withTermEvidence = false): WikiState {
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   });
 }
 

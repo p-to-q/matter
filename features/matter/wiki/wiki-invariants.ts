@@ -8,7 +8,9 @@ import {
   MAX_WIKI_FORM_CODE_POINTS,
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
+  MAX_WIKI_OCCURRENCE_ID_LENGTH,
   MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_SETTLED_OCCURRENCES,
   MAX_WIKI_TOMBSTONES,
   WIKI_FITTING_VERSION,
   WIKI_SCHEMA_VERSION,
@@ -39,6 +41,7 @@ import {
 import { hasUnsafeWikiFormatControl } from "./wiki-text-safety";
 
 const ASCII_CONTROL = /[\u0000-\u001f\u007f]/u;
+const OCCURRENCE_ID = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_WIKI_OCCURRENCE_ID_LENGTH}}$`);
 const VALID_WIKI_STATE = Object.freeze({ ok: true as const });
 
 // These caches recognize only objects normalized by this module and then
@@ -109,6 +112,7 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
         "aliasTombstones",
         "lexemeTombstones",
         "revertStrikes",
+        "settledOccurrences",
       ])) {
     return invalid("The Wiki state is not an object.");
   }
@@ -131,7 +135,8 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     !Array.isArray(state.authorities) ||
     !Array.isArray(state.aliasTombstones) ||
     !Array.isArray(state.lexemeTombstones) ||
-    !Array.isArray(state.revertStrikes)
+    !Array.isArray(state.revertStrikes) ||
+    !Array.isArray(state.settledOccurrences)
   ) return invalid("The Wiki collections are invalid.");
   if (
     state.lexemes.length > MAX_WIKI_LEXEMES ||
@@ -140,7 +145,8 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     state.authorities.length > MAX_WIKI_AUTHORITY_RULES ||
     state.aliasTombstones.length > MAX_WIKI_TOMBSTONES ||
     state.lexemeTombstones.length > MAX_WIKI_LEXEME_TOMBSTONES ||
-    state.revertStrikes.length > MAX_WIKI_REVERT_STRIKES
+    state.revertStrikes.length > MAX_WIKI_REVERT_STRIKES ||
+    state.settledOccurrences.length > MAX_WIKI_SETTLED_OCCURRENCES
   ) return invalid("The Wiki collection bound is exceeded.");
 
   const lexemeIds = new Set<number>();
@@ -262,7 +268,8 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
   // same visible alias supersedes it, so the two can never coexist.
   const strikeKeys = new Set<string>();
   for (const strike of state.revertStrikes) {
-    if (!isWikiRevertStrike(strike) || !isValidAliasTarget(strike, lexemesById)) {
+    if (!isWikiRevertStrike(strike) || !isValidAliasTarget(strike, lexemesById) ||
+        strike.struckAtRevision > state.revision) {
       return invalid("A Wiki revert strike is invalid.");
     }
     const key = storedDecisionKey(strike);
@@ -271,6 +278,14 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
       return invalid("A Wiki revert strike overlaps a human decision.");
     }
     strikeKeys.add(key);
+  }
+
+  const settledOccurrences = new Set<string>();
+  for (const occurrenceId of state.settledOccurrences) {
+    if (!isWikiOccurrenceId(occurrenceId) || settledOccurrences.has(occurrenceId)) {
+      return invalid("A settled Wiki occurrence identity is invalid.");
+    }
+    settledOccurrences.add(occurrenceId);
   }
 
   if (normalizedWikiStates.has(state)) validatedWikiStates.add(state);
@@ -325,6 +340,12 @@ export function freezeWikiState(state: WikiState): WikiState {
     freezeRevertStrike,
     compareRevertStrike,
   );
+  // Settled identities keep arrival order: the oldest leaves the bounded window first.
+  const settledOccurrences = freezeWikiCollection(
+    state.settledOccurrences,
+    (value) => value,
+    () => 0,
+  );
   const normalized = Object.freeze({
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
@@ -339,6 +360,7 @@ export function freezeWikiState(state: WikiState): WikiState {
     aliasTombstones: Object.freeze(aliasTombstones),
     lexemeTombstones: Object.freeze(lexemeTombstones),
     revertStrikes: Object.freeze(revertStrikes),
+    settledOccurrences: Object.freeze(settledOccurrences),
   });
   normalizedWikiStates.add(normalized);
   return normalized;
@@ -492,13 +514,19 @@ export function isWikiAliasEvidenceAggregate(
 
 export function isWikiRevertStrike(value: unknown): value is WikiRevertStrike {
   return isPlainObject(value) &&
-    hasExactKeys(value, ["lexemeId", "channel", "form", "quietTurns"]) &&
+    hasExactKeys(value, ["lexemeId", "channel", "form", "quietTurns", "struckAtRevision"]) &&
     isLexemeId(value.lexemeId) &&
     isWikiChannel(value.channel) &&
     isWikiForm(value.form) &&
     Number.isSafeInteger(value.quietTurns) &&
     (value.quietTurns as number) >= 0 &&
-    (value.quietTurns as number) <= MAX_WIKI_REVERT_STRIKE_QUIET_TURNS;
+    (value.quietTurns as number) <= MAX_WIKI_REVERT_STRIKE_QUIET_TURNS &&
+    isRevision(value.struckAtRevision);
+}
+
+/** An opaque occurrence identity: bounded letters, digits, `_`, and `-`. */
+export function isWikiOccurrenceId(value: unknown): value is string {
+  return typeof value === "string" && OCCURRENCE_ID.test(value);
 }
 
 function isWikiQuietTurns(value: unknown): value is number {
@@ -557,6 +585,7 @@ function freezeRevertStrike(value: WikiRevertStrike): WikiRevertStrike {
     channel: value.channel,
     form: value.form,
     quietTurns: value.quietTurns,
+    struckAtRevision: value.struckAtRevision,
   });
 }
 

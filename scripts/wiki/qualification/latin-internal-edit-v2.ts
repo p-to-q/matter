@@ -228,6 +228,7 @@ function stateWithCanonicals(
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   });
 }
 

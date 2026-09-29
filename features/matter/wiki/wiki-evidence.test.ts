@@ -17,6 +17,7 @@ import {
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_SETTLED_OCCURRENCES,
   MAX_WIKI_TOMBSTONES,
   WIKI_SCORING_VERSION,
   type WikiAppliedRule,
@@ -60,6 +61,7 @@ describe("Wiki evidence and authority", () => {
       aliasTombstones: [],
       lexemeTombstones: [],
       revertStrikes: [],
+      settledOccurrences: [],
     });
     expect(WIKI_SCORE_POLICY.version).toBe(WIKI_SCORING_VERSION);
     expect(Object.isFrozen(state)).toBe(true);
@@ -1430,21 +1432,23 @@ describe("Wiki evidence and authority", () => {
 
   it("reinforces an applied provisional alias at most once per comparable turn", () => {
     let state = activeMetaphoneAlias();
-    const rule = appliedRule("Engelbart");
 
-    state = settle(state, "accepted-implicit", rule);
+    state = settle(state, "accepted-implicit", appliedRule(state, "Engelbart"));
     expect(state.aliasEvidence[0]).toMatchObject({ kept: 4, keptQuietTurns: 0 });
-    for (const trigger of ["accepted-implicit", "accepted-implicit"] as const) {
-      expect(applyWikiOccurrenceSettlement(state, { outcome: trigger, rule, origin: "generated" }))
-        .toEqual({ ok: true, state, changed: false });
-    }
+    const rule = appliedRule(state, "Engelbart");
+    expect(applyWikiOccurrenceSettlement(state, {
+      occurrenceId: "second-occurrence",
+      outcome: "accepted-implicit",
+      rule,
+      origin: "generated",
+    })).toEqual({ ok: true, state, changed: false });
 
     state = applyObservationBatch(state, []);
     expect(state.aliasEvidence[0]).toMatchObject({ kept: 4, keptQuietTurns: 1 });
-    state = settle(state, "accepted-implicit", rule, "generated");
+    state = settle(state, "accepted-implicit", appliedRule(state, "Engelbart"), "generated");
     expect(state.aliasEvidence[0]).toMatchObject({ kept: 8, keptQuietTurns: 0 });
-    state = settle(state, "inspected-kept", rule);
-    state = settle(state, "inspected-kept", rule);
+    state = settle(state, "inspected-kept", appliedRule(state, "Engelbart"));
+    state = settle(state, "inspected-kept", appliedRule(state, "Engelbart"));
     expect(state.aliasEvidence[0]).toMatchObject({
       phase: "active",
       kept: 24,
@@ -1456,12 +1460,55 @@ describe("Wiki evidence and authority", () => {
       .toEqual({ ok: true, state });
   });
 
+  it("records at most one scoring effect per occurrence identity", () => {
+    let state = activeMetaphoneAlias();
+    const settlement = {
+      occurrenceId: "occurrence-a",
+      outcome: "accepted-implicit" as const,
+      rule: appliedRule(state, "Engelbart"),
+      origin: "human-admission" as const,
+    };
+    state = expectChanged(applyWikiOccurrenceSettlement(state, settlement));
+    expect(state.settledOccurrences).toEqual(["occurrence-a"]);
+    state = applyObservationBatch(state, []);
+    for (const duplicate of [
+      settlement,
+      { ...settlement, outcome: "inspected-kept" as const },
+      { ...settlement, outcome: "reverted" as const },
+    ]) {
+      expect(applyWikiOccurrenceSettlement(state, duplicate))
+        .toEqual({ ok: true, state, changed: false });
+    }
+    // A person's explicit decision is never swallowed by the settled window.
+    const confirmed = expectChanged(applyWikiOccurrenceSettlement(state, {
+      ...settlement,
+      outcome: "explicit-confirm",
+    }));
+    expect(confirmed.authorities).toHaveLength(1);
+    expect(confirmed.settledOccurrences).toEqual(["occurrence-a"]);
+
+    let bounded = state;
+    for (let index = 0; index < MAX_WIKI_SETTLED_OCCURRENCES + 2; index += 1) {
+      bounded = applyObservationBatch(bounded, []);
+      bounded = settle(
+        bounded,
+        "accepted-implicit",
+        appliedRule(bounded, "Engelbart"),
+        "human-admission",
+        `window-${index}`,
+      );
+    }
+    expect(bounded.settledOccurrences).toHaveLength(MAX_WIKI_SETTLED_OCCURRENCES);
+    expect(bounded.settledOccurrences[0]).toBe("window-2");
+    expect(bounded.settledOccurrences.at(-1))
+      .toBe(`window-${MAX_WIKI_SETTLED_OCCURRENCES + 1}`);
+  });
+
   it("keeps a used rule retained where silence alone would demote it", () => {
-    const rule = appliedRule("Engelbart");
     const activated = activeMetaphoneAlias();
-    let used = settle(activated, "inspected-kept", rule);
+    let used = settle(activated, "inspected-kept", appliedRule(activated, "Engelbart"));
     used = applyObservationBatch(used, []);
-    used = settle(used, "accepted-implicit", rule);
+    used = settle(used, "accepted-implicit", appliedRule(used, "Engelbart"));
     let unused = applyObservationBatch(activated, []);
     for (let turn = 0; turn < 31; turn += 1) {
       used = applyObservationBatch(used, []);
@@ -1485,19 +1532,19 @@ describe("Wiki evidence and authority", () => {
     let state = apply(createEmptyWikiState(), {
       type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
     });
-    const rule = appliedRule("Engelbart");
     expect(applyWikiOccurrenceSettlement(state, {
+      occurrenceId: "no-relation",
       outcome: "accepted-implicit",
-      rule,
+      rule: appliedRule(state, "Engelbart"),
       origin: "human-admission",
     })).toEqual({ ok: true, state, changed: false });
 
     for (let turn = 0; turn < 3; turn += 1) {
       state = applyObservationBatch(state, [metaphone("Engelbart")]);
     }
-    state = settle(state, "inspected-kept", rule);
-    state = settle(state, "inspected-kept", rule);
-    state = settle(state, "inspected-kept", rule);
+    for (let occurrence = 0; occurrence < 3; occurrence += 1) {
+      state = settle(state, "inspected-kept", appliedRule(state, "Engelbart"));
+    }
     expect(state.aliasEvidence[0]).toMatchObject({
       phase: "candidate",
       support: 12,
@@ -1506,7 +1553,34 @@ describe("Wiki evidence and authority", () => {
     expect(projectApplicableWikiRules(state, QUALIFIED)).toEqual([]);
   });
 
-  it("returns a reverted form to zero, then tombstones a second revert in memory", () => {
+  it("does not re-activate a demoted relation through settlements after demotion", () => {
+    let state = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
+    });
+    state = apply(state, {
+      type: "create-lexeme", locale: "en-US", canonical: "Engelbert", scope: "both",
+    });
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [metaphone("Engelbart")]);
+    }
+    const appliedWhileActive = appliedRule(state, "Engelbart");
+    for (let turn = 0; turn < 3; turn += 1) {
+      state = applyObservationBatch(state, [metaphone("Engelbert")]);
+    }
+    expect(projectApplicableWikiRules(state, QUALIFIED)).toEqual([]);
+
+    state = settle(state, "inspected-kept", appliedWhileActive);
+    state = settle(state, "inspected-kept", appliedWhileActive);
+    expect(state.aliasEvidence.find((entry) =>
+      entry.lexemeId === lexemeIdOf(state, "Engelbart"))).toMatchObject({
+      phase: "candidate",
+      support: 16,
+      kept: 16,
+    });
+    expect(projectApplicableWikiRules(state, QUALIFIED)).toEqual([]);
+  });
+
+  it("returns a reverted form to zero, then tombstones a later-epoch second revert", () => {
     let state = apply(createEmptyWikiState(), {
       type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
     });
@@ -1523,11 +1597,16 @@ describe("Wiki evidence and authority", () => {
       expect.objectContaining({ canonical: "Engelbart", authority: "provisional" }),
     ]);
 
-    state = settle(state, "reverted", appliedRule("Engelbart"));
+    const sameEpoch = appliedRule(state, "Engelbart");
+    state = settle(state, "reverted", sameEpoch);
     expect(state.aliasEvidence).toEqual([]);
-    expect(state.revertStrikes).toEqual([
-      { lexemeId: lexemeIdOf(state, "Engelbart"), channel: "spoken", form: "code x", quietTurns: 0 },
-    ]);
+    expect(state.revertStrikes).toEqual([{
+      lexemeId: lexemeIdOf(state, "Engelbart"),
+      channel: "spoken",
+      form: "code x",
+      quietTurns: 0,
+      struckAtRevision: state.revision,
+    }]);
     expect(projectApplicableWikiRules(state, QUALIFIED)).toEqual([]);
 
     for (let turn = 0; turn < 4; turn += 1) {
@@ -1536,7 +1615,15 @@ describe("Wiki evidence and authority", () => {
     expect(state.revertStrikes[0]).toMatchObject({ quietTurns: 4 });
     expect(projectApplicableWikiRules(state, QUALIFIED)).toHaveLength(1);
 
-    state = settle(state, "reverted", appliedRule("Engelbart"));
+    // A late revert of an occurrence applied before the strike is the same epoch.
+    expect(applyWikiOccurrenceSettlement(state, {
+      occurrenceId: "late-same-epoch",
+      outcome: "reverted",
+      rule: sameEpoch,
+      origin: "human-admission",
+    })).toEqual({ ok: true, state, changed: false });
+
+    state = settle(state, "reverted", appliedRule(state, "Engelbart"));
     expect(state.revertStrikes).toEqual([]);
     expect(state.aliasEvidence).toEqual([]);
     expect(state.aliasTombstones).toEqual([
@@ -1546,31 +1633,73 @@ describe("Wiki evidence and authority", () => {
       .toEqual({ ok: true, state });
   });
 
-  it("escalates a revert to a tombstone when strike memory is full", () => {
-    const active = activeMetaphoneAlias();
-    const lexemeId = lexemeIdOf(active, "Engelbart");
-    const full: WikiState = Object.freeze({
-      ...active,
-      revertStrikes: Object.freeze(Array.from({ length: MAX_WIKI_REVERT_STRIKES }, (_, index) =>
-        Object.freeze({
-          lexemeId,
-          channel: "spoken" as const,
-          form: `old-${index.toString().padStart(3, "0")}`,
-          quietTurns: 0,
-        }))),
+  it("strikes once for two reverts from one application epoch", () => {
+    let state = activeMetaphoneAlias();
+    const epoch = appliedRule(state, "Engelbart");
+    state = settle(state, "reverted", epoch, "human-admission", "first");
+    const struck = state;
+    expect(applyWikiOccurrenceSettlement(state, {
+      occurrenceId: "second",
+      outcome: "reverted",
+      rule: epoch,
+      origin: "human-admission",
+    })).toEqual({ ok: true, state: struck, changed: false });
+    expect(struck.revertStrikes).toHaveLength(1);
+    expect(struck.aliasTombstones).toEqual([]);
+  });
+
+  it("treats a revert without relation evidence as neutral, even with full strike memory", () => {
+    const base = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
     });
+    expect(applyWikiOccurrenceSettlement(base, {
+      occurrenceId: "orphan",
+      outcome: "reverted",
+      rule: appliedRule(base, "Engelbart"),
+      origin: "human-admission",
+    })).toEqual({ ok: true, state: base, changed: false });
+
+    const full = withFullStrikeMemory(base);
+    expect(applyWikiOccurrenceSettlement(full, {
+      occurrenceId: "orphan",
+      outcome: "reverted",
+      rule: appliedRule(full, "Engelbart"),
+      origin: "human-admission",
+    })).toEqual({ ok: true, state: full, changed: false });
+  });
+
+  it("escalates a revert with evidence to a tombstone when strike memory is full", () => {
+    const full = withFullStrikeMemory(activeMetaphoneAlias());
     expect(parseWikiState(full)).toMatchObject({ ok: true });
 
-    const reverted = settle(full, "reverted", appliedRule("Engelbart"));
+    const reverted = settle(full, "reverted", appliedRule(full, "Engelbart"));
     expect(reverted.revertStrikes).toHaveLength(MAX_WIKI_REVERT_STRIKES);
     expect(reverted.aliasTombstones).toEqual([
-      expect.objectContaining({ lexemeId, form: "code x" }),
+      expect.objectContaining({ lexemeId: lexemeIdOf(full, "Engelbart"), form: "code x" }),
     ]);
     expect(projectApplicableWikiRules(reverted, QUALIFIED)).toEqual([]);
   });
 
+  it("ignores acceptance of an occurrence applied before a later revert", () => {
+    let state = activeMetaphoneAlias();
+    const beforeRevert = appliedRule(state, "Engelbart");
+    state = settle(state, "reverted", beforeRevert);
+    for (let turn = 0; turn < 4; turn += 1) {
+      state = applyObservationBatch(state, [metaphone("Engelbart")]);
+    }
+    expect(applyWikiOccurrenceSettlement(state, {
+      occurrenceId: "accepted-before-revert",
+      outcome: "inspected-kept",
+      rule: beforeRevert,
+      origin: "human-admission",
+    })).toEqual({ ok: true, state, changed: false });
+    state = settle(state, "inspected-kept", appliedRule(state, "Engelbart"));
+    expect(state.aliasEvidence[0]).toMatchObject({ kept: 8 });
+  });
+
   it("lets any human decision supersede a strike", () => {
-    let state = settle(activeMetaphoneAlias(), "reverted", appliedRule("Engelbart"));
+    const active = activeMetaphoneAlias();
+    let state = settle(active, "reverted", appliedRule(active, "Engelbart"));
     expect(state.revertStrikes).toHaveLength(1);
 
     const confirmed = apply(state, decision("confirm-rule", "Engelbart"));
@@ -1581,28 +1710,46 @@ describe("Wiki evidence and authority", () => {
     expect(state.revertStrikes).toEqual([]);
   });
 
-  it("keeps confirmed authority and censored outcomes outside scoring", () => {
+  it("reads authority from state, so confirmed rules stay outside scoring", () => {
     const confirmed = apply(createEmptyWikiState(), decision("confirm-rule", "Codex"));
-    const rule = appliedRule("Codex", "confirmed");
     for (const outcome of ["accepted-implicit", "inspected-kept", "reverted", "censored"] as const) {
       expect(applyWikiOccurrenceSettlement(confirmed, {
+        occurrenceId: `confirmed-${outcome}`,
         outcome,
-        rule,
+        rule: appliedRule(confirmed, "Codex"),
         origin: "human-admission",
       })).toEqual({ ok: true, state: confirmed, changed: false });
     }
 
+    // A provisional rule confirmed in the Wiki surface before its occurrence
+    // settled is now human authority; a caller cannot relabel it either way.
     const active = activeMetaphoneAlias();
+    const rule = appliedRule(active, "Engelbart");
+    const promoted = apply(active, decision("confirm-rule", "Engelbart"));
+    expect(applyWikiOccurrenceSettlement(promoted, {
+      occurrenceId: "promoted",
+      outcome: "reverted",
+      rule,
+      origin: "human-admission",
+    })).toEqual({ ok: true, state: promoted, changed: false });
     expect(applyWikiOccurrenceSettlement(active, {
+      occurrenceId: "relabelled",
+      outcome: "reverted",
+      rule: { ...rule, authority: "confirmed" } as never,
+      origin: "human-admission",
+    })).toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
+
+    expect(applyWikiOccurrenceSettlement(active, {
+      occurrenceId: "censored",
       outcome: "censored",
-      rule: appliedRule("Engelbart"),
+      rule,
       origin: "human-admission",
     })).toEqual({ ok: true, state: active, changed: false });
   });
 
   it("routes explicit outcomes through the existing human authority paths", () => {
     const active = activeMetaphoneAlias();
-    const kept = settle(active, "explicit-confirm", appliedRule("Engelbart"), "generated");
+    const kept = settle(active, "explicit-confirm", appliedRule(active, "Engelbart"), "generated");
     expect(kept.authorities).toEqual([
       expect.objectContaining({ form: "code x", lexemeId: lexemeIdOf(kept, "Engelbart") }),
     ]);
@@ -1610,11 +1757,11 @@ describe("Wiki evidence and authority", () => {
       expect.objectContaining({ canonical: "Engelbart", authority: "confirmed" }),
     ]);
 
-    const rejected = settle(active, "explicit-reject", appliedRule("Engelbart"));
+    const rejected = settle(active, "explicit-reject", appliedRule(active, "Engelbart"));
     expect(rejected.aliasTombstones).toHaveLength(1);
     expect(projectApplicableWikiRules(rejected, QUALIFIED)).toEqual([]);
 
-    const replaced = settle(kept, "explicit-replace", appliedRule("Engelbart", "confirmed"));
+    const replaced = settle(kept, "explicit-replace", appliedRule(kept, "Engelbart"));
     expect(projectApplicableWikiRules(replaced, QUALIFIED)).toEqual([
       expect.objectContaining({ form: "code ex", canonical: "Engelbart", authority: "confirmed" }),
     ]);
@@ -1624,28 +1771,41 @@ describe("Wiki evidence and authority", () => {
     const active = activeMetaphoneAlias();
     const saturated = Object.freeze({ ...active, automaticLearningSaturated: true });
     expect(applyWikiOccurrenceSettlement(saturated, {
+      occurrenceId: "saturated",
       outcome: "inspected-kept",
-      rule: appliedRule("Engelbart"),
+      rule: appliedRule(active, "Engelbart"),
       origin: "human-admission",
     })).toEqual({ ok: true, state: saturated, changed: false });
   });
 
   it("rejects malformed occurrence settlements without mutation", () => {
     const state = activeMetaphoneAlias();
-    const rule = appliedRule("Engelbart");
+    const rule = appliedRule(state, "Engelbart");
+    const base = { occurrenceId: "valid-id", rule, origin: "human-admission" };
     for (const malformed of [
-      { outcome: "survived-horizon", rule, origin: "human-admission" },
-      { outcome: "accepted-implicit", rule, origin: "model" },
-      { outcome: "accepted-implicit", rule: { ...rule, authority: "machine" }, origin: "generated" },
-      { outcome: "accepted-implicit", rule: { ...rule, excerpt: "x" }, origin: "generated" },
-      { outcome: "accepted-implicit", rule, origin: "generated", excerpt: "x" },
-      { outcome: "explicit-replace", rule, origin: "generated" },
-      { outcome: "reverted", rule, origin: "generated", replacement: descriptor("a", "B") },
+      { ...base, outcome: "survived-horizon" },
+      { ...base, outcome: "accepted-implicit", origin: "model" },
+      { ...base, outcome: "accepted-implicit", rule: { ...rule, excerpt: "x" } },
+      { ...base, outcome: "accepted-implicit", excerpt: "x" },
+      { ...base, outcome: "explicit-replace" },
+      { ...base, outcome: "reverted", replacement: descriptor("a", "B") },
+      { ...base, outcome: "accepted-implicit", occurrenceId: "" },
+      { ...base, outcome: "accepted-implicit", occurrenceId: "has space" },
+      { ...base, outcome: "accepted-implicit", occurrenceId: "x".repeat(65) },
+      { ...base, outcome: "accepted-implicit", rule: { ...rule, appliedAtRevision: -1 } },
+      { ...base, outcome: "accepted-implicit", rule: { ...rule, appliedAtRevision: 1.5 } },
+      {
+        ...base,
+        outcome: "accepted-implicit",
+        rule: { ...rule, appliedAtRevision: state.revision + 1 },
+      },
+      { outcome: "accepted-implicit", rule, origin: "human-admission" },
     ]) {
       expect(applyWikiOccurrenceSettlement(state, malformed as never))
         .toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
     }
   });
+
   it("keeps learning live after a locale switch fills the term reservoir", () => {
     let state = createEmptyWikiState();
     let word = 0;
@@ -1829,7 +1989,7 @@ function observe(
 ): WikiObserveEvidenceEvent {
   const base = {
     type: "observe-evidence" as const,
-    locale: "en-US" as const,
+    locale,
     channel: "spoken" as const,
     boundary: "word" as const,
     form: "code x",
@@ -1844,22 +2004,6 @@ function observe(
         producer: "locale-segment-v1",
       }
     : { ...base, source, producer: "legacy-v1" as const };
-}
-
-const HAN_TURN = Object.freeze({
-  locale: "zh-CN" as const,
-  channel: "spoken" as const,
-  scripts: Object.freeze(["han" as const]),
-});
-const HAN_CHARACTERS = [...new Set(
-  "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果",
-)];
-
-/** A distinct three-character Han word for reservoir fixtures. */
-function hanWord(index: number): string {
-  return HAN_CHARACTERS[index % HAN_CHARACTERS.length]! +
-    HAN_CHARACTERS[Math.floor(index / HAN_CHARACTERS.length) % HAN_CHARACTERS.length]! +
-    "词";
 }
 
 function descriptor(form: string, canonical: string) {
@@ -1938,22 +2082,66 @@ function ledgerTick(
     : Object.freeze({ disposition });
 }
 
+let occurrenceSequence = 0;
+
 function settle(
   state: WikiState,
   outcome: WikiOccurrenceOutcome,
   rule: WikiAppliedRule,
   origin: WikiOccurrenceSettlement["origin"] = "human-admission",
-  qualifiedProducers?: ReadonlySet<WikiAliasEvidenceProducer>,
+  occurrenceId = `occurrence-${occurrenceSequence += 1}`,
 ): WikiState {
   const result = applyWikiOccurrenceSettlement(
     state,
     outcome === "explicit-replace"
-      ? { outcome, rule, origin, replacement: descriptor("code ex", rule.canonical) }
-      : { outcome, rule, origin },
-    qualifiedProducers,
+      ? {
+          occurrenceId,
+          outcome,
+          rule,
+          origin,
+          replacement: descriptor("code ex", rule.canonical),
+        }
+      : { occurrenceId, outcome, rule, origin },
   );
   if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
   return result.state;
+}
+
+function expectChanged(result: ReturnType<typeof applyWikiEvent>): WikiState {
+  if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`);
+  expect(result.changed).toBe(true);
+  return result.state;
+}
+
+const HAN_TURN = Object.freeze({
+  locale: "zh-CN" as const,
+  channel: "spoken" as const,
+  scripts: Object.freeze(["han" as const]),
+});
+const HAN_CHARACTERS = [...new Set(
+  "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果",
+)];
+
+/** A distinct three-character Han word for reservoir fixtures. */
+function hanWord(index: number): string {
+  return HAN_CHARACTERS[index % HAN_CHARACTERS.length]! +
+    HAN_CHARACTERS[Math.floor(index / HAN_CHARACTERS.length) % HAN_CHARACTERS.length]! +
+    "词";
+}
+
+function withFullStrikeMemory(state: WikiState): WikiState {
+  const lexemeId = lexemeIdOf(state, "Engelbart");
+  return Object.freeze({
+    ...state,
+    revertStrikes: Object.freeze(Array.from({ length: MAX_WIKI_REVERT_STRIKES }, (_, index) =>
+      Object.freeze({
+        lexemeId,
+        channel: "spoken" as const,
+        form: `old-${index.toString().padStart(3, "0")}`,
+        quietTurns: 0,
+        struckAtRevision: state.revision,
+      }))),
+  });
 }
 
 function decision(
@@ -2023,11 +2211,9 @@ function activeMetaphoneAlias(): WikiState {
   return state;
 }
 
-function appliedRule(
-  canonical: string,
-  authority: WikiAppliedRule["authority"] = "provisional",
-): WikiAppliedRule {
-  return { ...descriptor("code x", canonical), authority };
+/** The occurrence was applied from the basis compiled at the current revision. */
+function appliedRule(state: WikiState, canonical: string): WikiAppliedRule {
+  return { ...descriptor("code x", canonical), appliedAtRevision: state.revision };
 }
 
 function lexemeIdOf(state: WikiState, canonical: string): number {

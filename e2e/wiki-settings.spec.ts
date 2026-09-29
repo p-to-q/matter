@@ -20,6 +20,7 @@ const WIKI_STATE_KEYS = Object.freeze([
   "revision",
   "schemaVersion",
   "scoringVersion",
+  "settledOccurrences",
   "termEvidence",
 ]);
 const ENGLISH_VOICE_LABELS = Object.freeze({

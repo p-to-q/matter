@@ -27,13 +27,16 @@ describe("qualified Wiki learning policy", () => {
       "two-strike-reversion",
       "revert-strike-memory-expires",
       "confirmed-authority-stays-outside-scoring",
+      "same-epoch-reverts-strike-once",
+      "duplicate-delivery-settles-once",
+      "kept-evidence-never-reactivates",
       "non-human-zero-vote",
     ]);
     expect(run.release).toEqual(MATTER_WIKI_QUALIFIED_LEARNING_POLICY);
   }, 60_000);
 
   it("keeps the compact release separate from labelled scenarios", () => {
-    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(14);
+    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(17);
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("scenarios");
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("results");
     expect(Object.isFrozen(MATTER_WIKI_QUALIFIED_LEARNING_POLICY)).toBe(true);

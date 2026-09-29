@@ -7,6 +7,7 @@ import {
   isWikiCanonical,
   isWikiDescriptor,
   isWikiLexemeScope,
+  isWikiOccurrenceId,
   lexemeKey,
   storedAliasKey,
   storedDecisionKey,
@@ -23,6 +24,7 @@ import {
   MAX_WIKI_OBSERVATIONS_PER_BATCH,
   MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_SETTLED_OCCURRENCES,
   MAX_WIKI_TOMBSTONES,
   WIKI_FITTING_VERSION,
   WIKI_SCHEMA_VERSION,
@@ -131,6 +133,7 @@ export function createEmptyWikiState(): WikiState {
     aliasTombstones: [],
     lexemeTombstones: [],
     revertStrikes: [],
+    settledOccurrences: [],
   });
 }
 
@@ -293,6 +296,7 @@ function isPristineLegacyStarterState(state: WikiState): boolean {
     state.aliasTombstones.length === 0 &&
     state.lexemeTombstones.length === 0 &&
     state.revertStrikes.length === 0 &&
+    state.settledOccurrences.length === 0 &&
     state.lexemes.length === tail.length + 1 &&
     (first === "Matter" || first === "Douglas Engelbart" || first === "Engelbart") &&
     state.lexemes.every((entry, index) =>
@@ -380,11 +384,15 @@ export function applyWikiObservationBatch(
 
 /**
  * Records the one settlement of one applied occurrence. Explicit decisions use
- * the existing human authority paths. Informed acceptance only adds bounded
- * kept evidence to a relation that already holds producer evidence; a revert
- * returns every automatic rewrite of that visible form to zero and remembers
- * one strike, and a second revert inside the strike memory becomes a
- * tombstone. Confirmed human rules and tombstones stay outside scoring.
+ * the existing human authority paths. Authority is read from the current
+ * state, never from the caller: confirmed human rules and tombstones stay
+ * outside scoring. Informed acceptance only adds bounded kept evidence to a
+ * relation that already holds producer evidence. A revert returns every
+ * automatic rewrite of that visible form to zero and remembers one strike; a
+ * second revert becomes a tombstone only for an occurrence applied from a
+ * basis that already held the first strike. A revert of a relation without
+ * evidence is neutral. At most one scoring effect is recorded per occurrence
+ * identity within the bounded settled window.
  */
 export function applyWikiOccurrenceSettlement(
   state: WikiState,
@@ -393,45 +401,99 @@ export function applyWikiOccurrenceSettlement(
 ): WikiTransitionResult {
   const stateValidation = validateWikiState(state);
   if (!stateValidation.ok) return failure("INVALID_STATE", stateValidation.message);
-  if (!isWikiOccurrenceSettlement(settlement)) {
+  if (!isWikiOccurrenceSettlement(settlement) ||
+      settlement.rule.appliedAtRevision > state.revision) {
     return failure("INVALID_EVENT", "The Wiki occurrence settlement is invalid.");
   }
   const rule = ruleDescriptor(settlement.rule);
   const effect = decideWikiOccurrenceEffect(
     settlement.outcome,
-    settlement.rule.authority,
+    currentAuthority(state, rule),
     settlement.origin,
   );
   if (effect.kind === "neutral") return success(state, false);
+  const explicit = effect.kind === "confirm" || effect.kind === "reject" ||
+    effect.kind === "replace";
+  if (!explicit && state.settledOccurrences.includes(settlement.occurrenceId)) {
+    return success(state, false);
+  }
+  let result: WikiTransitionResult;
   if (effect.kind === "confirm") {
-    return applyWikiEvent(state, Object.freeze({ type: "confirm-rule", ...rule }));
-  }
-  if (effect.kind === "reject") {
-    return applyWikiEvent(state, Object.freeze({ type: "reject-rule", ...rule }));
-  }
-  if (effect.kind === "replace") {
+    result = applyWikiEvent(state, Object.freeze({ type: "confirm-rule", ...rule }));
+  } else if (effect.kind === "reject") {
+    result = applyWikiEvent(state, Object.freeze({ type: "reject-rule", ...rule }));
+  } else if (effect.kind === "replace") {
     if (settlement.outcome !== "explicit-replace") {
       return failure("INVALID_EVENT", "The Wiki occurrence settlement is invalid.");
     }
-    return applyWikiEvent(state, Object.freeze({
+    result = applyWikiEvent(state, Object.freeze({
       type: "replace-rule",
       before: rule,
       after: settlement.replacement,
     }));
+  } else if (effect.kind === "strike") {
+    result = strikeRevertedAlias(state, rule, settlement.rule.appliedAtRevision);
+  } else {
+    result = keepAppliedAlias(
+      state,
+      rule,
+      settlement.rule.appliedAtRevision,
+      effect,
+      qualifiedAliasProducers,
+    );
   }
-  if (effect.kind === "strike") return strikeRevertedAlias(state, rule);
-  return keepAppliedAlias(state, rule, effect, qualifiedAliasProducers);
+  if (!result.ok || !result.changed) return result;
+  return recordSettledOccurrence(result.state, settlement.occurrenceId);
+}
+
+function currentAuthority(
+  state: WikiState,
+  rule: WikiRuleDescriptor,
+): "confirmed" | "provisional" {
+  const lexeme = findLexeme(state, rule);
+  if (lexeme === undefined) return "provisional";
+  const key = storedDecisionKey(aliasDescriptor(rule, lexeme.id));
+  return state.authorities.some((entry) => storedDecisionKey(entry) === key)
+    ? "confirmed"
+    : "provisional";
+}
+
+function recordSettledOccurrence(
+  state: WikiState,
+  occurrenceId: string,
+): WikiTransitionResult {
+  if (state.settledOccurrences.includes(occurrenceId)) return success(state, true);
+  const settledOccurrences = [...state.settledOccurrences, occurrenceId]
+    .slice(-MAX_WIKI_SETTLED_OCCURRENCES);
+  return commitAtRevision(state, state.revision, {
+    settledOccurrences: Object.freeze(settledOccurrences),
+  });
+}
+
+/** A strike recorded after an occurrence was applied supersedes it. */
+function strikeSince(
+  state: WikiState,
+  key: string,
+  appliedAtRevision: number,
+): WikiRevertStrike | undefined {
+  return state.revertStrikes.find((entry) =>
+    storedDecisionKey(entry) === key && entry.struckAtRevision > appliedAtRevision);
 }
 
 function keepAppliedAlias(
   state: WikiState,
   rule: WikiRuleDescriptor,
+  appliedAtRevision: number,
   effect: Extract<WikiOccurrenceEffect, { kind: "kept" }>,
   qualifiedProducers: WikiAliasReleaseQualification,
 ): WikiTransitionResult {
   if (state.automaticLearningSaturated) return success(state, false);
   const lexeme = findLexeme(state, rule);
   if (lexeme === undefined) return success(state, false);
+  // The person reverted this relation after the occurrence was applied; the
+  // older acceptance no longer describes the current evidence.
+  if (strikeSince(state, storedDecisionKey(aliasDescriptor(rule, lexeme.id)),
+    appliedAtRevision) !== undefined) return success(state, false);
   const matches = state.aliasEvidence.flatMap((entry, index) =>
     entry.lexemeId === lexeme.id && entry.channel === rule.channel &&
       entry.boundary === rule.boundary && entry.form === rule.form
@@ -463,12 +525,14 @@ function keepAppliedAlias(
   aliasEvidence[index] = Object.freeze({ ...entry, ...kept });
   const committed = commitAtRevision(state, state.revision + 1, { aliasEvidence });
   if (!committed.ok) return committed;
-  return reconcileAliasEvidencePhases(committed.state, qualifiedProducers, false);
+  const reconciled = reconcileAliasEvidencePhases(committed.state, qualifiedProducers, false);
+  return reconciled.ok ? success(reconciled.state, true) : reconciled;
 }
 
 function strikeRevertedAlias(
   state: WikiState,
   rule: WikiRuleDescriptor,
+  appliedAtRevision: number,
 ): WikiTransitionResult {
   const lexeme = findLexeme(state, rule);
   if (lexeme === undefined) return success(state, false);
@@ -476,6 +540,17 @@ function strikeRevertedAlias(
   const key = storedDecisionKey(alias);
   if (state.authorities.some((entry) => storedDecisionKey(entry) === key) ||
       state.aliasTombstones.some((entry) => storedDecisionKey(entry) === key)) {
+    return success(state, false);
+  }
+  // Without relation evidence there is nothing automatic to demote: a stale or
+  // duplicate revert is neutral and can never become a tombstone by itself.
+  if (!state.aliasEvidence.some((entry) => storedDecisionKey(entry) === key)) {
+    return success(state, false);
+  }
+  const priorStrike = state.revertStrikes.find((entry) => storedDecisionKey(entry) === key);
+  // A revert of an occurrence applied before the first strike belongs to the
+  // same application epoch; it neither escalates nor strikes again.
+  if (priorStrike !== undefined && appliedAtRevision < priorStrike.struckAtRevision) {
     return success(state, false);
   }
   if (state.revision === Number.MAX_SAFE_INTEGER) {
@@ -490,23 +565,23 @@ function strikeRevertedAlias(
     const target = lexemesById.get(entry.lexemeId);
     return target === undefined || storedAliasKey(entry, target.locale) !== visibleAlias;
   });
-  const priorStrike = state.revertStrikes.some((entry) =>
-    storedDecisionKey(entry) === key);
-  if (priorStrike || state.revertStrikes.length >= MAX_WIKI_REVERT_STRIKES) {
-    // A second revert inside the strike memory is a durable rejection. When no
-    // strike memory is free, the stronger reading wins rather than dropping a
-    // person's negative evidence.
+  if (priorStrike !== undefined || state.revertStrikes.length >= MAX_WIKI_REVERT_STRIKES) {
+    // A second revert after the first strike took effect is a durable
+    // rejection. When no strike memory is free, the stronger reading wins
+    // rather than dropping a person's negative evidence.
     const cleared = commitAtRevision(state, state.revision, { aliasEvidence });
     if (!cleared.ok) return cleared;
     return rejectRule(cleared.state, Object.freeze({ type: "reject-rule", ...rule }));
   }
+  const revision = state.revision + 1;
   const strike: WikiRevertStrike = Object.freeze({
     lexemeId: lexeme.id,
     channel: rule.channel,
     form: rule.form,
     quietTurns: 0,
+    struckAtRevision: revision,
   });
-  return commitAtRevision(state, state.revision + 1, {
+  return commitAtRevision(state, revision, {
     aliasEvidence,
     revertStrikes: Object.freeze([...state.revertStrikes, strike]),
   });
@@ -566,6 +641,7 @@ export function clearWikiState(state: WikiState): WikiTransitionResult {
     state.aliasTombstones.length === 0 &&
     state.lexemeTombstones.length === 0 &&
     state.revertStrikes.length === 0 &&
+    state.settledOccurrences.length === 0 &&
     !state.automaticLearningSaturated
   ) return success(state, false);
   return commit(state, {
@@ -578,6 +654,7 @@ export function clearWikiState(state: WikiState): WikiTransitionResult {
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   });
 }
 
@@ -1161,20 +1238,24 @@ function isWikiLedgerTick(value: unknown): value is WikiLedgerTick {
 }
 
 function isWikiOccurrenceSettlement(value: unknown): value is WikiOccurrenceSettlement {
-  if (!isPlainRecord(value) || !isWikiOccurrenceOutcome(value.outcome) ||
+  if (!isPlainRecord(value) || !isWikiOccurrenceId(value.occurrenceId) ||
+      !isWikiOccurrenceOutcome(value.outcome) ||
       (value.origin !== "human-admission" && value.origin !== "generated") ||
       !isAppliedRule(value.rule)) return false;
   if (value.outcome === "explicit-replace") {
-    return hasOnlyKeys(value, ["outcome", "rule", "origin", "replacement"]) &&
+    return hasOnlyKeys(value, ["occurrenceId", "outcome", "rule", "origin", "replacement"]) &&
       isWikiDescriptor(value.replacement);
   }
-  return hasOnlyKeys(value, ["outcome", "rule", "origin"]);
+  return hasOnlyKeys(value, ["occurrenceId", "outcome", "rule", "origin"]);
 }
 
 function isAppliedRule(value: unknown): value is WikiAppliedRule {
   return isPlainRecord(value) &&
-    hasOnlyKeys(value, ["locale", "channel", "boundary", "form", "canonical", "authority"]) &&
-    (value.authority === "confirmed" || value.authority === "provisional") &&
+    hasOnlyKeys(value, [
+      "locale", "channel", "boundary", "form", "canonical", "appliedAtRevision",
+    ]) &&
+    typeof value.appliedAtRevision === "number" &&
+    Number.isSafeInteger(value.appliedAtRevision) && value.appliedAtRevision >= 0 &&
     isWikiDescriptor(ruleDescriptor(value as WikiAppliedRule));
 }
 

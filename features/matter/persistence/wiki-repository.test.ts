@@ -52,7 +52,7 @@ describe("IndexedDB Wiki repository", () => {
     await expect(repository.save(state, null)).resolves.toEqual({ ok: true, value: 1 });
     expect(put).toHaveBeenCalledWith({
       storageSchemaVersion: 1,
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       key: "origin",
       writeGeneration: 1,
       state,
@@ -243,7 +243,7 @@ describe("IndexedDB Wiki repository", () => {
     });
     expect(put).toHaveBeenCalledOnce();
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       writeGeneration: 8,
       state: expect.objectContaining({ schemaVersion: 7, revertStrikes: [] }),
     }));
@@ -252,7 +252,7 @@ describe("IndexedDB Wiki repository", () => {
     expect(put).toHaveBeenCalledOnce();
   });
 
-  it("reads a current-record V6 state as V7 and persists V7 on the next write", async () => {
+  it("rewrites a V6 record once as one record-V7 quarter-unit state", async () => {
     let stored: unknown = {
       storageSchemaVersion: 1,
       recordSchemaVersion: 6,
@@ -305,31 +305,65 @@ describe("IndexedDB Wiki repository", () => {
     expect(loaded).toMatchObject({
       ok: true,
       value: {
-        writeGeneration: 3,
+        writeGeneration: 4,
         state: {
           schemaVersion: 7,
           scoringVersion: 4,
           aliasEvidence: [{ phase: "active", support: 16, kept: 0, keptQuietTurns: 0 }],
           revertStrikes: [],
+          settledOccurrences: [],
         },
       },
     });
-    expect(put).not.toHaveBeenCalled();
-    if (!loaded.ok || loaded.value === null) return;
-
-    const renamed = applyWikiEvent(loaded.value.state, {
-      type: "create-lexeme",
-      locale: "en-US",
-      canonical: "Morphogenesis",
-      scope: "both",
-    });
-    if (!renamed.ok) throw new Error(renamed.error.message);
-    await expect(repository.save(renamed.state, 3)).resolves.toEqual({ ok: true, value: 4 });
+    expect(put).toHaveBeenCalledOnce();
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      recordSchemaVersion: 7,
       writeGeneration: 4,
       state: expect.objectContaining({ schemaVersion: 7, scoringVersion: 4 }),
     }));
+
+    await expect(repository.load()).resolves.toEqual(loaded);
+    expect(put).toHaveBeenCalledOnce();
   });
+
+  it("treats a row from a newer Matter as unavailable and never resettable", async () => {
+    for (const newer of [
+      { recordSchemaVersion: 8, state: createInitialWikiState() },
+      { recordSchemaVersion: 7, state: { ...createInitialWikiState(), schemaVersion: 8 } },
+    ]) {
+      const stored = {
+        storageSchemaVersion: 1,
+        key: "origin",
+        writeGeneration: 9,
+        ...newer,
+      };
+      const put = vi.fn();
+      const abort = vi.fn();
+      vi.mocked(openDB).mockResolvedValue({
+        transaction: vi.fn(() => ({
+          store: { get: vi.fn(async () => stored), put },
+          abort,
+          done: Promise.resolve(),
+        })),
+      } as never);
+      const repository = createIndexedDbWikiRepository();
+
+      await expect(repository.load()).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PERSISTENCE_UNAVAILABLE" },
+      });
+      await expect(repository.save(createInitialWikiState(), 9)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PERSISTENCE_UNAVAILABLE" },
+      });
+      await expect(repository.resetCorrupt(0)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PERSISTENCE_CONFLICT" },
+      });
+      expect(put).not.toHaveBeenCalled();
+    }
+  });
+
 
   it("does not replay removed starters after the one-time record migration", async () => {
     const removed = applyWikiEvent(createInitialWikiState(), {
@@ -362,7 +396,7 @@ describe("IndexedDB Wiki repository", () => {
     });
     expect(put).toHaveBeenCalledOnce();
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       writeGeneration: 5,
       state: removed.state,
     }));
@@ -462,7 +496,7 @@ describe("IndexedDB Wiki repository", () => {
       value: { state, writeGeneration: 13 },
     });
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       writeGeneration: 13,
       state,
     }));

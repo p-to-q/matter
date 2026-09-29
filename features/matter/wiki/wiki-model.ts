@@ -51,14 +51,19 @@ export const MAX_WIKI_OBSERVATIONS_PER_LEDGER = 32;
 export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 2 * MAX_WIKI_OBSERVATIONS_PER_LEDGER;
 /** Revert strikes belong to automatic aliases, bounded by their reservoir. */
 export const MAX_WIKI_REVERT_STRIKES = MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS;
+/** Recent occurrence identities that already produced an effect. Duplicate
+ * delivery inside this window is ignored; the owner settles each occurrence
+ * once, so the window only has to outlive retries and repeated signals. */
+export const MAX_WIKI_SETTLED_OCCURRENCES = 128;
+export const MAX_WIKI_OCCURRENCE_ID_LENGTH = 64;
 // The lexeme schema may transiently represent every relation from a valid 4 MiB
 // V2 state as both a stable lexeme and an id-based alias. V4 adds one bounded
 // scope field to every V3 lexeme; 9 MiB keeps every formerly valid V2-V4 row
 // saveable. V6 adds one fixed producer field to at most 5,000 V5 term rows;
 // 256 KiB is a proved migration allowance, not an unbounded growth reserve.
 // V7 adds two fixed kept fields to at most 5,000 alias rows, one quarter-unit
-// digit to at most 10,000 evidence rows, and one empty strike collection;
-// 160 KiB is the proved V6-to-V7 allowance.
+// digit to at most 10,000 evidence rows, and two empty collections (strikes
+// and settled occurrences); 160 KiB is the proved V6-to-V7 allowance.
 export const MAX_LEGACY_WIKI_STATE_BYTES = 9 * 1_024 * 1_024;
 export const MAX_WIKI_MIGRATION_HEADROOM_BYTES = 256 * 1_024;
 export const MAX_WIKI_V6_STATE_BYTES = MAX_LEGACY_WIKI_STATE_BYTES +
@@ -157,12 +162,14 @@ export type WikiLexemeTombstone = Readonly<{
 }>;
 
 /** One reverted automatic alias, remembered for a bounded number of
- * comparable turns. A second revert inside that memory becomes a tombstone. */
+ * comparable turns. A second revert inside that memory becomes a tombstone
+ * only for an occurrence applied from a basis that already held this strike. */
 export type WikiRevertStrike = Readonly<{
   lexemeId: number;
   channel: WikiChannel;
   form: string;
   quietTurns: number;
+  struckAtRevision: number;
 }>;
 
 export type WikiState = Readonly<{
@@ -179,6 +186,8 @@ export type WikiState = Readonly<{
   aliasTombstones: readonly WikiTombstone[];
   lexemeTombstones: readonly WikiLexemeTombstone[];
   revertStrikes: readonly WikiRevertStrike[];
+  /** Opaque, content-free occurrence identities, oldest first. */
+  settledOccurrences: readonly string[];
 }>;
 
 export type WikiMatchRule = WikiRuleDescriptor & Readonly<{
@@ -233,22 +242,30 @@ export type WikiObservationTick = Readonly<{
   alias: WikiLedgerTick;
 }>;
 
-/** Exact rule identity captured when one occurrence was applied. */
+/**
+ * Exact rule identity captured when one occurrence was applied, with the Wiki
+ * state revision of the basis that applied it (the lexical session's
+ * `sourceRevision`). Authority is not carried: the current state decides
+ * whether the rule is human-confirmed when the occurrence settles.
+ */
 export type WikiAppliedRule = WikiRuleDescriptor & Readonly<{
-  authority: WikiRuleAuthority;
+  appliedAtRevision: number;
 }>;
 
 /**
- * The one settlement of one applied occurrence. The occurrence owner settles
- * each occurrence exactly once and carries no surrounding text.
+ * The one settlement of one applied occurrence. `occurrenceId` is an opaque
+ * random identity minted by the occurrence owner (letters, digits, `_`, `-`),
+ * never derived from text or an address; it carries no surrounding material.
  */
 export type WikiOccurrenceSettlement =
   | Readonly<{
+      occurrenceId: string;
       outcome: Exclude<WikiOccurrenceOutcome, "explicit-replace">;
       rule: WikiAppliedRule;
       origin: WikiOccurrenceOrigin;
     }>
   | Readonly<{
+      occurrenceId: string;
       outcome: "explicit-replace";
       rule: WikiAppliedRule;
       origin: WikiOccurrenceOrigin;

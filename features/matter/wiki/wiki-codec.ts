@@ -11,6 +11,7 @@ import {
   isWikiDescriptor,
   isWikiForm,
   isWikiLexemeScope,
+  isWikiOccurrenceId,
   isWikiRevertStrike,
   isWikiTermEvidenceAggregate,
   lexemeKey,
@@ -24,6 +25,7 @@ import {
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_SETTLED_OCCURRENCES,
   MAX_WIKI_STATE_BYTES,
   MAX_WIKI_TOMBSTONES,
   MAX_WIKI_V6_STATE_BYTES,
@@ -76,9 +78,10 @@ const CURRENT_STATE_KEYS = Object.freeze([
   "aliasTombstones",
   "lexemeTombstones",
   "revertStrikes",
+  "settledOccurrences",
 ]);
 const SPLIT_LEDGER_STATE_KEYS = Object.freeze(CURRENT_STATE_KEYS.filter((key) =>
-  key !== "revertStrikes"));
+  key !== "revertStrikes" && key !== "settledOccurrences"));
 
 export type WikiStateParse =
   | Readonly<{ ok: true; state: WikiState }>
@@ -167,10 +170,12 @@ export function parseWikiState(value: unknown): WikiStateParse {
     MAX_WIKI_LEXEME_TOMBSTONES, parseLexemeTombstone);
   const revertStrikes = parseArray(value.revertStrikes, MAX_WIKI_REVERT_STRIKES,
     parseRevertStrike);
+  const settledOccurrences = parseArray(value.settledOccurrences,
+    MAX_WIKI_SETTLED_OCCURRENCES, (entry) => isWikiOccurrenceId(entry) ? entry : null);
   if (lexemes === null || termEvidence === null || aliasEvidence === null ||
       authorities === null ||
       aliasTombstones === null || lexemeTombstones === null ||
-      revertStrikes === null) {
+      revertStrikes === null || settledOccurrences === null) {
     return invalidState("A Wiki collection is invalid.");
   }
   return validateParsedState(freezeWikiState({
@@ -187,6 +192,7 @@ export function parseWikiState(value: unknown): WikiStateParse {
     aliasTombstones,
     lexemeTombstones,
     revertStrikes,
+    settledOccurrences,
   }));
 }
 
@@ -339,6 +345,7 @@ function parseLegacyWholeUnitWikiState(
     aliasTombstones,
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   }));
 }
 
@@ -396,6 +403,7 @@ function parseLegacySplitLedgerWikiState(
     aliasTombstones,
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   }));
 }
 
@@ -471,6 +479,7 @@ function parseLegacyWikiState(value: Record<string, unknown>): WikiStateParse {
     })),
     lexemeTombstones: Object.freeze([]),
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   }));
 }
 
@@ -523,6 +532,7 @@ function parseLegacyLexemeWikiState(value: Record<string, unknown>): WikiStatePa
     aliasTombstones,
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   }));
 }
 
@@ -583,6 +593,7 @@ function parseLegacyScopedLexemeWikiState(
     aliasTombstones,
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   }));
 }
 
@@ -747,6 +758,7 @@ function parseRevertStrike(value: unknown): WikiRevertStrike | null {
     channel: value.channel,
     form: value.form,
     quietTurns: value.quietTurns,
+    struckAtRevision: value.struckAtRevision,
   });
 }
 

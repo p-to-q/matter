@@ -397,7 +397,7 @@ describe("Wiki codec", () => {
     const producerFieldBytes = new TextEncoder()
       .encode(',"producer":"legacy-term-v1"').byteLength;
     const strikeCollectionBytes = new TextEncoder()
-      .encode(',"revertStrikes":[]').byteLength;
+      .encode(',"revertStrikes":[],"settledOccurrences":[]').byteLength;
 
     expect(legacyBytes).toBeLessThanOrEqual(MAX_LEGACY_WIKI_STATE_BYTES);
     // Support 1 scales to 4 without a new digit, isolating the producer field.
@@ -703,9 +703,28 @@ describe("Wiki codec", () => {
       termEvidence: Record<string, unknown>[];
       aliasEvidence: Record<string, unknown>[];
     };
-    const strike = { lexemeId: 1, channel: "spoken", form: "aurora x", quietTurns: 0 };
+    const strike = {
+      lexemeId: 1,
+      channel: "spoken",
+      form: "aurora x",
+      quietTurns: 0,
+      struckAtRevision: 4,
+    };
     expect(parseWikiState({ ...v7, revertStrikes: [strike] }).ok).toBe(true);
+    expect(parseWikiState({ ...v7, settledOccurrences: ["b-2", "a_1"] })).toMatchObject({
+      ok: true,
+      state: { settledOccurrences: ["b-2", "a_1"] },
+    });
+    const withoutStrikeRevision: Record<string, unknown> = { ...strike };
+    delete withoutStrikeRevision.struckAtRevision;
     for (const invalid of [
+      { ...v7, revertStrikes: [{ ...strike, struckAtRevision: 5 }] },
+      { ...v7, revertStrikes: [withoutStrikeRevision] },
+      { ...v7, settledOccurrences: ["a_1", "a_1"] },
+      { ...v7, settledOccurrences: ["has space"] },
+      { ...v7, settledOccurrences: ["x".repeat(65)] },
+      { ...v7, settledOccurrences: Array.from({ length: 129 }, (_, index) => `o${index}`) },
+      { ...v6, settledOccurrences: [] },
       { ...v7, scoringVersion: 3 },
       { ...v7, termEvidence: [{ ...v7.termEvidence[0], phase: "collected", support: 3 }] },
       { ...v7, termEvidence: [{ ...v7.termEvidence[0], phase: "candidate", support: 8 }] },
@@ -755,7 +774,8 @@ describe("Wiki codec", () => {
     if (!parsed.ok) throw new Error(parsed.message);
     const migratedBytes = wikiStateStorageBytes(parsed.state);
     const keptFieldBytes = new TextEncoder().encode(',"kept":0,"keptQuietTurns":0').byteLength;
-    const strikeCollectionBytes = new TextEncoder().encode(',"revertStrikes":[]').byteLength;
+    const strikeCollectionBytes = new TextEncoder()
+      .encode(',"revertStrikes":[],"settledOccurrences":[]').byteLength;
 
     expect(legacyBytes).toBeLessThanOrEqual(MAX_WIKI_V6_STATE_BYTES);
     expect(migratedBytes - legacyBytes).toBe(
