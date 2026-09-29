@@ -45,12 +45,12 @@ import { askInquiry, createInquiryRequestId } from "../interaction/inquiry-clien
 import type { InquiryContextPayload } from "../protocol/inquiry-contract";
 import {
   sameInquiryContextOwner,
+  subscribeInquiryUnload,
   type InquiryContextOwner,
 } from "./inquiry-context-lifecycle";
 import styles from "./CanvasChrome.module.css";
 import { useEscapeLayer } from "./escape-layers";
 import type { InquiryRecordBinding } from "../interaction/use-inquiry-record";
-import { subscribePageExit } from "../interaction/page-suspension";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { preloadableComponent } from "./preloadable-component";
 
@@ -1375,8 +1375,9 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     request?.abort();
   }, []);
 
-  useEffect(() => subscribePageExit(() => {
-    // Page exit retires the owner. Ordinary presentation dismissal does not.
+  useEffect(() => subscribeInquiryUnload(() => {
+    // A real unload retires the owner. Ordinary presentation dismissal and a
+    // back-forward-cache hide do not: the page may return with this question.
     authorityRef.current += 1;
     requestRef.current?.abort(new DOMException("Page exited", "AbortError"));
     requestRef.current = null;

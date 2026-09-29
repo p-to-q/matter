@@ -45,8 +45,8 @@ export type InquiryEvent =
   | Readonly<{ type: "answer"; id: number; outcome: InquiryTurnOutcome }>
   /**
    * Returns a question that received no answer to the composer. `reason` names
-   * a provider refusal to say quietly; null is explicit cancellation or page
-   * exit, which need no notice.
+   * a provider refusal or transport failure to say quietly; null is explicit
+   * cancellation or a real page unload, which need no notice.
    */
   | Readonly<{
       type: "withdraw";

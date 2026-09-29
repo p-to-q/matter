@@ -65,7 +65,7 @@ the running product, not how ambitious a feature sounds.
 read-only Inquiry answer belongs to the question and bounded snapshot that were
 submitted, so ordinary edits, selection changes, and a temporarily hidden tab
 do not erase it. Dismissing a presentation is not cancellation after submit;
-explicit cancellation, page exit, document-owner replacement, or a real target
+explicit cancellation, a real unload (a back-forward-cache hide suspends), document-owner replacement, or a real target
 conflict is. `Escape` after an Elastic confirmation dismisses only the degree.
 A result that changes material may rebase across unrelated history, but it
 waits for a visible pointer-idle delivery window and must revalidate the exact
