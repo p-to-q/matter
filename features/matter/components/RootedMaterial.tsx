@@ -290,6 +290,8 @@ export type RootedMaterialProps = {
     status: PersistenceStatus;
     retry: () => void;
     resolveConflict: () => void;
+    acknowledgeHistoryNotice?: () => void;
+    storagePersisted?: boolean | null;
   }>;
   /** Fixture-only timing marks expose the cold canvas path without changing it. */
   performanceMarking?: boolean;
@@ -1431,12 +1433,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } = transform;
   const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
   const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
+  // Ask Matter and the index's name editors report what they hold so the root
+  // never replaces the document instance underneath them.
+  const [inquiryHeld, setInquiryHeld] = useState(false);
+  const [editingHeld, setEditingHeld] = useState(false);
   useLayoutEffect(() => {
-    const phases = Object.freeze({ elastic: transformState.phase, textSwap: pointTalkPhase });
+    const phases = Object.freeze({
+      elastic: transformState.phase,
+      textSwap: pointTalkPhase,
+      inquiryHeld,
+      editingHeld,
+    });
     if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
     reportedMaterialTurnPhasesRef.current = phases;
     reportMaterialTurnPhases?.(phases);
-  }, [pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+  }, [editingHeld, inquiryHeld, pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
   useLayoutEffect(() => () => {
     // Unmounting the paper releases its turns, so the root must not keep
     // waiting on phases nobody will report again.
@@ -1949,9 +1960,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         abortFixedExpansion();
         return props.archive!.validateImport(file);
       },
-      replaceImport: (file: File) => {
+      replaceImport: (file: File, options: Readonly<{ replaceUnsaved: boolean }>) => {
         abortFixedExpansion();
-        return props.archive!.replaceImport(file);
+        return props.archive!.replaceImport(file, options);
       },
     });
   }, [abortFixedExpansion, props.archive]);
@@ -3689,6 +3700,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           interruptIndexCameraMotion();
           if (lasso.active) exitLasso();
         }}
+        onEditingChange={setEditingHeld}
         onOverlayChange={setIndexOverlayOpen}
         onRenameDocument={(title) => {
           abortFixedExpansion();
@@ -3967,6 +3979,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
           onInquiryOpen={abortFixedExpansion}
+          onInquiryHoldChange={setInquiryHeld}
           onOverlayChange={changeCanvasOverlay}
           overlay={canvasOverlay}
           ref={canvasChromeRef}

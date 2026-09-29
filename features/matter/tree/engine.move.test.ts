@@ -6,7 +6,7 @@ import {
   createNodeMovePolicy,
   moveNodeToParentCommand,
 } from "../runtime/move";
-import { commitTreeCommand, createTreeHistory, undoTreeHistory } from "./history";
+import { commitTreeCommand, createTreeHistory, MATTER_HISTORY_LIMITS, undoTreeHistory } from "./history";
 import type { ThoughtNode, ThoughtTree, TreeCommand } from "./model";
 import { MAX_CHILDREN_PER_NODE, MAX_TREE_DEPTH, validateThoughtTree } from "./invariants";
 
@@ -57,7 +57,7 @@ describe("move-node", () => {
     expect(committed.ok).toBe(true);
     if (!committed.ok) return;
     expect(committed.tree.nodes[child.id].parentId).toBe(root.id);
-    const undone = undoTreeHistory(committed.tree, committed.history);
+    const undone = undoTreeHistory(committed.tree, committed.history, MATTER_HISTORY_LIMITS);
     expect(undone.ok).toBe(true);
     if (undone.ok) expect(undone.tree.nodes).toEqual(tree.nodes);
   });

@@ -47,6 +47,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @media (hover: hover) { .material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); } }
 .material-files-toggle[aria-expanded="true"] { color: var(--ink); }
 .material-files-toggle[data-persistence-error="true"] { background: rgba(173,74,54,.1); color: var(--active); }
+.material-files-toggle__dot { position: absolute; top: 5px; right: 5px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; pointer-events: none; }
+.material-files-toggle[data-durability="notice"] .material-files-toggle__dot { background: var(--ink); }
+.material-files-toggle[aria-expanded="true"] .material-files-toggle__dot { display: none; }
 .material-files__clip { display: contents; }
 .material-files { --index-row: 40px; --index-ink: #161d27; --index-muted: rgba(22,29,39,.72); --index-faint: rgba(22,29,39,.66); --index-line: rgba(22,29,39,.09); position: fixed; z-index: 41; top: 62px; bottom: var(--shell-gutter); left: 10px; display: grid; width: calc(var(--sidebar-width) - 24px); grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: 6px 4px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; opacity: 0; overflow: hidden; pointer-events: none; touch-action: pan-y; transform: translateX(-9px); transition: opacity 150ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
 .material-files[data-open="true"] { opacity: 1; pointer-events: auto; transform: translateX(0); }
@@ -79,6 +82,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__mode-action--archive,
 .material-files__mode-action--close { grid-column: 3; }
 .material-files__mode-action[aria-pressed="true"] { background: rgba(22,29,39,.07); color: var(--index-ink); }
+/* Archive carries the same static ink dot as the durability line it resolves. */
+.material-files__mode-action[data-attention]::after { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: currentColor; content: ""; }
+.material-files__mode-action[data-attention="risk"] { color: var(--active); }
 .material-files__mode-action:disabled { cursor: default; opacity: .42; }
 .material-files__section-label { min-width: 0; padding-left: 7px; color: var(--index-ink); font: 10px/1 var(--mono); letter-spacing: .025em; }
 :lang(zh) .material-files__mode-action,
@@ -227,6 +233,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__profile[data-state="error"] .material-files__profile-meta,
 .material-files__profile[data-state="error"] .material-files__profile-action { color: var(--active); }
 .material-files__status-dot { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+/* The durability line stays text: tapping it only opens Archive. */
+.material-files__durability { display: inline-flex; min-width: 0; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.material-files__durability > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+@media (hover: hover) { .material-files__durability:hover:not(:disabled) > span:first-child { text-decoration: underline; text-underline-offset: 2px; } }
+.material-files__durability:focus-visible > span:first-child { text-decoration: underline; text-underline-offset: 2px; }
+.material-files__durability:disabled { cursor: default; }
+.material-files__profile-meta[data-tone="notice"] { color: var(--index-muted); }
 .material-files__status-dot[data-saving="true"] { animation: material-saving-pulse 1.2s ease-in-out infinite; }
 
 @keyframes material-search-enter {

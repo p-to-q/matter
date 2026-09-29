@@ -7,48 +7,71 @@ import {
   type ImportedSnapshotReservation,
   type LoadedSnapshot,
   type RepositoryResult,
+  type SnapshotBasis,
+  type SnapshotWrite,
 } from "./document-repository";
 import { createPersistenceController } from "./persistence-controller";
-import { treeToBundle, type SnapshotBundle } from "./snapshot-codec";
+import { treeToBundle } from "./snapshot-codec";
 import { createTreeHistory, type TreeHistory } from "../tree/history";
+import type { ThoughtTree } from "../tree/model";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
+import {
+  emptyHistoryJournal,
+  FULL_HISTORY_RETENTION,
+  type HistoryRetention,
+  type PersistedHistoryJournal,
+} from "./history-journal";
+
+const EMPTY_RECOVERED = Object.freeze({ history: createTreeHistory(), released: false });
 
 describe("persistence controller", () => {
   it("loads a stored tree and reports the persisted revision", async () => {
     const tree = createSeededDocument().tree;
-    const repository = fakeRepository({ tree, writeGeneration: 3 });
+    const repository = fakeRepository(stored(tree, 3));
     const controller = createPersistenceController(repository.port);
 
-    await expect(controller.start(tree)).resolves.toEqual({ storedTree: tree, storedHistory: null });
+    await expect(controller.start(tree)).resolves.toEqual({
+      storedTree: tree,
+      storedHistory: EMPTY_RECOVERED,
+    });
     expect(controller.getStatus()).toEqual({
       phase: "saved",
       persistedRevision: tree.revision,
       dirtyRevision: null,
       errorCode: null,
+      historyNotice: null,
+      unsaved: false,
+      upgradeBlocked: false,
+      conflictOrigin: null,
     });
   });
 
   it("holds a diverged load window unsaved instead of choosing a winner", async () => {
     const seeded = createSeededDocument().tree;
     // The person's last session, already on disk and further along.
-    const stored = { ...seeded, revision: seeded.revision + 5 };
-    const repository = controlledRepository({ tree: stored, writeGeneration: 4 });
+    const storedTree = { ...seeded, revision: seeded.revision + 5 };
+    const repository = controlledRepository(stored(storedTree, 4));
     const controller = createPersistenceController(repository.port);
 
     await expect(controller.start(seeded)).resolves.toEqual({
-      storedTree: stored,
-      storedHistory: null,
+      storedTree,
+      storedHistory: EMPTY_RECOVERED,
     });
     // What they committed while the read was still in flight. Its revision is
     // higher than the stored one and means nothing: it counts from the seed.
     const live = { ...seeded, revision: seeded.revision + 9 };
-    controller.declareConflict(live);
+    controller.declareConflict(live, undefined, "load-window");
 
+    // No other tab is involved; the surface must not claim one.
     expect(controller.getStatus()).toEqual({
       phase: "error",
-      persistedRevision: stored.revision,
+      persistedRevision: storedTree.revision,
       dirtyRevision: live.revision,
       errorCode: "PERSISTENCE_CONFLICT",
+      historyNotice: null,
+      unsaved: true,
+      upgradeBlocked: false,
+      conflictOrigin: "load-window",
     });
     // The stored session is untouched: nothing was written over it.
     expect(repository.pending).toHaveLength(0);
@@ -59,15 +82,17 @@ describe("persistence controller", () => {
     await Promise.resolve();
     expect(repository.savedRevisions).toEqual([]);
 
-    // The gesture the index footer already offers resolves it, and only then.
-    await expect(controller.resolveConflict()).resolves.toEqual({
-      storedTree: stored,
-      storedHistory: null,
-    });
+    // The gesture Archive offers resolves it, and only once the store took the row.
+    const candidate = await controller.resolveConflict();
+    expect(candidate).toMatchObject({ tree: storedTree, history: EMPTY_RECOVERED });
+    expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_CONFLICT", conflictOrigin: "load-window" });
+    expect(controller.adoptStored(candidate!)).toBe(true);
     expect(controller.getStatus()).toMatchObject({
       phase: "saved",
-      persistedRevision: stored.revision,
+      persistedRevision: storedTree.revision,
       errorCode: null,
+      conflictOrigin: null,
+      unsaved: false,
     });
   });
 
@@ -159,36 +184,373 @@ describe("persistence controller", () => {
     expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
   });
 
-  it("flushes the latest hidden-page candidate without forking the active write", async () => {
+  it("holds material unsaved where IndexedDB is unavailable, as in a private window, and retries on request", async () => {
     const tree = createSeededDocument().tree;
-    const latest = { ...tree, revision: tree.revision + 1 };
     const repository = controlledRepository();
+    repository.port = {
+      ...repository.port,
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_UNAVAILABLE", message: "no database" } }),
+    };
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
-    await waitFor(() => repository.pending.length === 1);
-    controller.publish(latest);
 
-    controller.flush();
-    expect(repository.pending).toHaveLength(1);
-    repository.settleNext({ ok: true, value: 1 });
+    await expect(controller.start(tree)).resolves.toEqual({ storedTree: null, storedHistory: null });
+    expect(controller.getStatus()).toMatchObject({
+      phase: "error",
+      errorCode: "PERSISTENCE_UNAVAILABLE",
+      dirtyRevision: tree.revision,
+      unsaved: true,
+    });
+    controller.retry();
     await waitFor(() => repository.pending.length === 1);
-    expect(repository.pending[0]?.treeRevision).toBe(latest.revision);
-    repository.settleNext({ ok: true, value: 2 });
-    await waitFor(() => controller.getStatus().phase === "saved");
-    expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
+    expect(repository.pending[0]).toMatchObject({ treeRevision: tree.revision, expectedGeneration: null });
   });
 
-  it("writes the inverse journal with the same snapshot transaction", async () => {
+  it("marks material unsaved until its write lands and announces the committed generation", async () => {
     const tree = createSeededDocument().tree;
-    const history: TreeHistory = { entries: [], retainedInverseBytes: 0 };
+    const repository = controlledRepository();
+    const announceGeneration = vi.fn();
+    const controller = createPersistenceController(repository.port, { announceGeneration });
+    await controller.start(tree);
+    await waitFor(() => repository.pending.length === 1);
+    expect(controller.getStatus()).toMatchObject({ phase: "saving", unsaved: true });
+
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().unsaved).toBe(false);
+    expect(announceGeneration).toHaveBeenCalledExactlyOnceWith({
+      treeId: tree.id,
+      writeGeneration: 1,
+      storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+    });
+  });
+
+  it("prepares a newer row for a clean tab and adopts it only after the store accepts it", async () => {
+    const tree = createSeededDocument().tree;
+    const newer = { ...tree, revision: tree.revision + 4 };
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+
+    const generation = (writeGeneration: number, treeId = tree.id) =>
+      ({ treeId, writeGeneration, storageSchemaVersion: STORAGE_SCHEMA_VERSION });
+    expect(controller.observeStoredGeneration(generation(2))).toBe("ignored");
+    expect(controller.observeStoredGeneration(generation(9, "another_tree"))).toBe("ignored");
+    expect(controller.observeStoredGeneration(generation(3))).toBe("refresh");
+
+    repository.setLoaded(stored(newer, 3));
+    const candidate = await controller.prepareRefresh();
+    expect(candidate).toMatchObject({ tree: newer, history: EMPTY_RECOVERED, replaces: null });
+    // Reading the row changes nothing: the basis still names the old row.
+    expect(controller.getStatus()).toMatchObject({ phase: "saved", persistedRevision: tree.revision });
+    expect(controller.observeStoredGeneration(generation(3))).toBe("refresh");
+
+    expect(controller.adoptStored(candidate!)).toBe(true);
+    expect(controller.getStatus()).toMatchObject({ phase: "saved", persistedRevision: newer.revision });
+    expect(controller.observeStoredGeneration(generation(3))).toBe("ignored");
+  });
+
+  it("keeps the old basis when the store refuses a prepared row, so the next save meets the newer one", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    repository.setLoaded(stored({ ...tree, revision: tree.revision + 3 }, 3));
+    const candidate = await controller.prepareRefresh();
+    expect(candidate).not.toBeNull();
+
+    // The store refused hydration because a commit landed first; that commit
+    // is published and must be written against the row this tab last saw.
+    const local = { ...tree, revision: tree.revision + 1 };
+    controller.publish(local);
+    expect(controller.adoptStored(candidate!)).toBe(false);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]).toMatchObject({ treeRevision: local.revision, expectedGeneration: 2 });
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+    expect(controller.getStatus()).toMatchObject({ unsaved: true, conflictOrigin: "another-tab" });
+  });
+
+  it("never adopts a candidate prepared for an earlier document", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    repository.setLoaded(stored({ ...tree, revision: tree.revision + 3 }, 3));
+    const candidate = await controller.prepareRefresh();
+
+    await controller.start(tree);
+    expect(controller.adoptStored(candidate!)).toBe(false);
+  });
+
+  it("holds unsaved material as a conflict when a newer generation arrives", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    const local = { ...tree, revision: tree.revision + 1 };
+    controller.publish(local);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => controller.getStatus().phase === "error");
+
+    expect(controller.observeStoredGeneration({
+      treeId: tree.id,
+      writeGeneration: 3,
+      storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+    })).toBe("conflict");
+    expect(controller.getStatus()).toMatchObject({
+      errorCode: "PERSISTENCE_CONFLICT",
+      conflictOrigin: "another-tab",
+      dirtyRevision: local.revision,
+      unsaved: true,
+    });
+    await expect(controller.prepareRefresh()).resolves.toBeNull();
+  });
+
+  it("lets an in-flight write meet a newer generation through its own compare-and-swap", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    await waitFor(() => repository.pending.length === 1);
+
+    expect(controller.observeStoredGeneration({
+      treeId: tree.id,
+      writeGeneration: 3,
+      storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+    })).toBe("conflict");
+    expect(controller.getStatus().phase).toBe("saving");
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+  });
+
+  it("turns a refresh into a conflict when a local commit lands during its read", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    repository.setLoaded(stored({ ...tree, revision: tree.revision + 3 }, 3));
+    repository.deferLoad();
+
+    const refreshing = controller.prepareRefresh();
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    repository.settleLoad();
+    await expect(refreshing).resolves.toBeNull();
+    // The local write is in flight; its compare-and-swap raises the conflict.
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+    expect(controller.getStatus().unsaved).toBe(true);
+  });
+
+  it("treats a missing row this tab saved as cleared storage, never as another copy", async () => {
+    const tree = createSeededDocument().tree;
+    const cleared = async (act: (
+      controller: ReturnType<typeof createPersistenceController>,
+      repository: ReturnType<typeof controlledRepository>,
+    ) => Promise<unknown>) => {
+      const repository = controlledRepository(stored(tree, 2));
+      const controller = createPersistenceController(repository.port);
+      await controller.start(tree);
+      repository.setLoaded(null);
+      await act(controller, repository);
+      expect(controller.getStatus()).toMatchObject({ phase: "error", errorCode: "PERSISTENCE_CLEARED" });
+      // Terminal: nothing retries into the empty store behind the person's back.
+      controller.retry();
+      controller.publish({ ...tree, revision: tree.revision + 1 });
+      await Promise.resolve();
+      expect(repository.pending).toHaveLength(0);
+    };
+
+    await cleared(async (controller) => {
+      await expect(controller.checkStoredGeneration()).resolves.toBe("cleared");
+    });
+    await cleared(async (controller) => {
+      await expect(controller.prepareRefresh()).resolves.toBeNull();
+    });
+    await cleared(async (controller) => {
+      controller.declareConflict({ ...tree, revision: tree.revision + 1 });
+      await expect(controller.resolveConflict()).resolves.toBeNull();
+    });
+
+    // Before this tab has saved anything, a missing row is only a first run.
+    const fresh = controlledRepository();
+    const controller = createPersistenceController(fresh.port);
+    await controller.start(tree);
+    await expect(controller.checkStoredGeneration()).resolves.toBe("ignored");
+    expect(controller.getStatus().errorCode).toBeNull();
+  });
+
+  it("reads the stored generation when the page returns and treats it like a broadcast", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const readGeneration = vi.fn<DocumentRepository["readGeneration"]>()
+      .mockResolvedValueOnce({ ok: true, value: { writeGeneration: 2, storageSchemaVersion: 1 } })
+      .mockResolvedValueOnce({ ok: true, value: { writeGeneration: 5, storageSchemaVersion: 1 } })
+      .mockResolvedValueOnce({ ok: false, error: { code: "PERSISTENCE_SUPERSEDED", message: "newer" } });
+    const controller = createPersistenceController({ ...repository.port, readGeneration });
+    await controller.start(tree);
+
+    await expect(controller.checkStoredGeneration()).resolves.toBe("ignored");
+    await expect(controller.checkStoredGeneration()).resolves.toBe("refresh");
+    await expect(controller.checkStoredGeneration()).resolves.toBe("superseded");
+    expect(controller.getStatus()).toMatchObject({ phase: "error", errorCode: "PERSISTENCE_SUPERSEDED" });
+  });
+
+  it("treats a newer schema as terminal: nothing retries, drains, or imports", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+
+    expect(controller.observeStoredGeneration({
+      treeId: tree.id,
+      writeGeneration: 3,
+      storageSchemaVersion: STORAGE_SCHEMA_VERSION + 1,
+    })).toBe("superseded");
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    controller.retry();
+    await Promise.resolve();
+    expect(repository.savedRevisions).toEqual([]);
+    expect(controller.getStatus()).toMatchObject({
+      phase: "error",
+      errorCode: "PERSISTENCE_SUPERSEDED",
+      unsaved: true,
+    });
+    await expect(controller.prepareImportedTree(tree)).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_SUPERSEDED",
+    });
+  });
+
+  it("reports a blocked upgrade and keeps a cleared database terminal over later write failures", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository();
+    let emit: ((event: "upgrade-blocked" | "upgrade-ready" | "superseded" | "cleared") => void) | null = null;
+    const controller = createPersistenceController({
+      ...repository.port,
+      subscribeLifecycle(listener) {
+        emit = listener;
+        return () => undefined;
+      },
+    });
+    const starting = controller.start(tree);
+    emit!("upgrade-blocked");
+    expect(controller.getStatus()).toMatchObject({ phase: "loading", upgradeBlocked: true });
+    emit!("upgrade-ready");
+    expect(controller.getStatus().upgradeBlocked).toBe(false);
+    await starting;
+    await waitFor(() => repository.pending.length === 1);
+
+    emit!("cleared");
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_WRITE_FAILED", message: "closed" } });
+    await waitFor(() => repository.pending.length === 0);
+    await Promise.resolve();
+    expect(controller.getStatus()).toMatchObject({ phase: "error", errorCode: "PERSISTENCE_CLEARED" });
+  });
+
+  it("reclaims derived storage once before shedding any durable undo step", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const repository = controlledRepository();
+    const reclaimDerivedStorage = vi.fn(async () => true);
+    const controller = createPersistenceController({ ...repository.port, reclaimDerivedStorage });
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    expect(reclaimDerivedStorage).toHaveBeenCalledOnce();
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    expect(reclaimDerivedStorage).toHaveBeenCalledOnce();
+    expect(repository.pending[0]?.retention).toEqual({ maxUndoBytes: 50, keepRedo: true });
+  });
+
+  it("refuses to import over unsaved material unless storage refused it and the person confirmed", async () => {
+    const tree = createSeededDocument().tree;
+    const imported = { ...tree, revision: tree.revision + 2 };
+    const reservation = importReservation(imported, 3, tree, 2);
+    const repository = controlledRepository(stored(tree, 2));
+    const reserveImportedSnapshot = vi.fn(async () => ({ ok: true as const, value: reservation }));
+    const load = vi.fn(repository.port.load);
+    const controller = createPersistenceController({ ...repository.port, load, reserveImportedSnapshot });
+    await controller.start(tree);
+    const local = { ...tree, revision: tree.revision + 1 };
+    controller.publish(local);
+    await waitFor(() => repository.pending.length === 1);
+
+    // A write still in flight can never be replaced.
+    await expect(controller.prepareImportedTree(imported, { replaceUnsaved: true })).resolves.toEqual({
+      ok: false,
+      errorCode: "IMPORT_SAVING",
+    });
+    repository.settleNext(storageFull());
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_STORAGE_FULL");
+    await expect(controller.prepareImportedTree(imported)).resolves.toEqual({
+      ok: false,
+      errorCode: "IMPORT_DIRTY",
+    });
+
+    load.mockClear();
+    const prepared = await controller.prepareImportedTree(imported, { replaceUnsaved: true });
+    expect(prepared).toMatchObject({ ok: true, writeGeneration: 3 });
+    // The refused material never reached storage: the loaded row stays the basis.
+    expect(reserveImportedSnapshot).toHaveBeenCalledWith(imported.id, imported.revision, treeToBundle(imported), 2);
+    expect(load).not.toHaveBeenCalled();
+    if (!prepared.ok) return;
+    controller.activateImportedDocument(prepared);
+    expect(controller.getStatus()).toMatchObject({
+      phase: "saved",
+      persistedRevision: imported.revision,
+      errorCode: null,
+      unsaved: false,
+    });
+  });
+
+  it("keeps the refused material and its error when the replacing import cannot be stored", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController({
+      ...repository.port,
+      reserveImportedSnapshot: async () => storageFull() as RepositoryResult<ImportedSnapshotReservation>,
+    });
+    await controller.start(tree);
+    const local = { ...tree, revision: tree.revision + 1 };
+    controller.publish(local);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_STORAGE_FULL");
+    const before = controller.getStatus();
+
+    await expect(controller.prepareImportedTree(tree, { replaceUnsaved: true })).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_STORAGE_FULL",
+    });
+    expect(controller.getStatus()).toEqual(before);
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.treeRevision).toBe(local.revision);
+  });
+
+  it("writes the inverse journal against the basis the previous save returned", async () => {
+    const tree = createSeededDocument().tree;
+    const history: TreeHistory = createTreeHistory();
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
 
     await controller.start(tree, history);
     await waitFor(() => repository.pending.length === 1);
-    expect(repository.pending[0]?.history).toEqual(history);
-    repository.settleNext({ ok: true, value: 1 });
+    expect(repository.pending[0]?.history).toBe(history);
+    const returnedJournal = emptyHistoryJournal(3);
+    repository.settleNext({ ok: true, value: { writeGeneration: 1, journal: returnedJournal } });
     await waitFor(() => controller.getStatus().phase === "saved");
+
+    controller.publish({ ...tree, revision: tree.revision + 1 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.basis).toEqual({ writeGeneration: 1, journal: returnedJournal });
+    expect(repository.pending[0]?.basis.journal).toBe(returnedJournal);
   });
 
   it("retains the latest dirty tree on conflict until explicit reload resolves it", async () => {
@@ -211,10 +573,11 @@ describe("persistence controller", () => {
     await Promise.resolve();
     expect(repository.pending).toHaveLength(0);
 
-    repository.setLoaded({ tree: newer, writeGeneration: 7 });
-    await expect(controller.resolveConflict()).resolves.toEqual({ storedTree: newer, storedHistory: null });
+    repository.setLoaded(stored(newer, 7));
+    const candidate = await controller.resolveConflict();
+    expect(candidate).toMatchObject({ tree: newer, history: EMPTY_RECOVERED });
     expect(repository.loads).toBe(2);
-    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.adoptStored(candidate!)).toBe(true);
     expect(controller.getStatus()).toMatchObject({
       persistedRevision: newer.revision,
       dirtyRevision: null,
@@ -230,17 +593,60 @@ describe("persistence controller", () => {
     await waitFor(() => repository.pending.length === 1);
     repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
     await waitFor(() => controller.getStatus().phase === "error");
-    repository.setLoaded({ tree, writeGeneration: 4 });
+    repository.setLoaded(stored(tree, 4));
     repository.deferLoad();
     const resolving = controller.resolveConflict();
     const newerLocal = { ...tree, revision: tree.revision + 2 };
     controller.publish(newerLocal);
     repository.settleLoad();
-    await expect(resolving).resolves.toEqual({ storedTree: null, storedHistory: null });
+    await expect(resolving).resolves.toBeNull();
     expect(controller.getStatus()).toMatchObject({
       phase: "error",
       dirtyRevision: newerLocal.revision,
       errorCode: "PERSISTENCE_CONFLICT",
+    });
+  });
+
+  it("refuses a reload candidate once a newer local commit replaced what it would reload over", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
+    await waitFor(() => controller.getStatus().phase === "error");
+    repository.setLoaded(stored(tree, 4));
+    const candidate = await controller.resolveConflict();
+    expect(candidate?.replaces?.tree).toBe(tree);
+
+    controller.publish({ ...tree, revision: tree.revision + 2 });
+    expect(controller.adoptStored(candidate!)).toBe(false);
+    expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_CONFLICT", unsaved: true });
+  });
+
+  it("names why an import cannot replace material that is not yet saved", async () => {
+    const tree = createSeededDocument().tree;
+    const imported = { ...tree, revision: tree.revision + 2 };
+
+    const conflicted = controlledRepository(stored(tree, 2));
+    const conflictController = createPersistenceController(conflicted.port);
+    await conflictController.start(tree);
+    conflictController.declareConflict({ ...tree, revision: tree.revision + 1 });
+    await expect(conflictController.prepareImportedTree(imported)).resolves.toEqual({
+      ok: false,
+      errorCode: "IMPORT_CONFLICT",
+    });
+
+    const corrupt = controlledRepository();
+    corrupt.port = {
+      ...corrupt.port,
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_CORRUPT", message: "damaged" } }),
+    };
+    const corruptController = createPersistenceController(corrupt.port);
+    await corruptController.start(tree);
+    await expect(corruptController.prepareImportedTree(imported)).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_CORRUPT",
     });
   });
 
@@ -280,18 +686,138 @@ describe("persistence controller", () => {
       persistedRevision: latest.revision,
       dirtyRevision: null,
       errorCode: null,
+      historyNotice: null,
+      unsaved: false,
+      upgradeBlocked: false,
+      conflictOrigin: null,
     });
     expect(repository.savedRevisions).toEqual([tree.revision, latest.revision]);
   });
 
+  it("sheds durable undo steps before material, keeps that retention, and restores it on retry", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual({ maxUndoBytes: 50, keepRedo: true });
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus()).toMatchObject({
+      persistedRevision: tree.revision,
+      errorCode: null,
+      historyNotice: "released",
+    });
+
+    controller.publish({ ...tree, revision: tree.revision + 1 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual({ maxUndoBytes: 50, keepRedo: true });
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual({ maxUndoBytes: 0, keepRedo: true });
+    repository.settleNext(storageFull());
+    await waitFor(() => controller.getStatus().phase === "error");
+    expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_STORAGE_FULL" });
+
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+  });
+
+  it("saves a history-only change at an unchanged revision and skips the history it already holds", async () => {
+    const tree = createSeededDocument().tree;
+    const loadedHistory = historyOfBytes([10, 20]);
+    const repository = controlledRepository({
+      ...stored(tree, 2),
+      history: { history: loadedHistory, released: false },
+    });
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+
+    controller.publish(tree, loadedHistory);
+    await Promise.resolve();
+    expect(repository.pending).toHaveLength(0);
+    const released: TreeHistory = { entries: [], redoEntries: [], retainedInverseBytes: 0 };
+    controller.publish(tree, released);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.history).toBe(released);
+    repository.settleNext({ ok: true, value: 3 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    controller.publish(tree, released);
+    await Promise.resolve();
+    expect(repository.pending).toHaveLength(0);
+  });
+
+  it("ends a released notice after a full save, and never lets a shed hide an unread unavailable one", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().historyNotice === "released");
+
+    // Retry restores full retention; the next save keeps every step again.
+    controller.publish({ ...tree, revision: tree.revision + 1 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => controller.getStatus().phase === "error");
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext({ ok: true, value: 2 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().historyNotice).toBeNull();
+
+    controller.reportHistoryUnavailable();
+    controller.publish({ ...tree, revision: tree.revision + 2 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 3 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().historyNotice).toBe("unavailable");
+  });
+
+  it("carries one history notice until it is acknowledged or a new document begins", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = fakeRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+    const listener = vi.fn();
+    controller.subscribe(listener);
+
+    controller.reportHistoryUnavailable();
+    controller.reportHistoryUnavailable();
+    expect(controller.getStatus().historyNotice).toBe("unavailable");
+    expect(listener).toHaveBeenCalledTimes(1);
+    controller.acknowledgeHistoryNotice();
+    expect(controller.getStatus().historyNotice).toBeNull();
+
+    controller.reportHistoryUnavailable();
+    const reloaded = createPersistenceController(fakeRepository(stored(tree, 2)).port);
+    await reloaded.start(tree);
+    expect(reloaded.getStatus().historyNotice).toBeNull();
+  });
+
   it("CAS-reserves a different valid same-id bundle after explicit archive replacement", async () => {
     const imported = createSeededDocument().tree;
-    const stored = { ...imported, revision: imported.revision + 3 };
-    const reservation = importReservation(imported, 4, stored, 3);
+    const storedTree = { ...imported, revision: imported.revision + 3 };
+    const reservation = importReservation(imported, 4, storedTree, 3);
     const reserveImportedSnapshot = vi.fn(async () => ({ ok: true as const, value: reservation }));
     const repository: DocumentRepository = {
-      ...unsupportedRecovery(),
-      load: async () => ({ ok: true, value: { tree: stored, writeGeneration: 3 } }),
+      ...inertPort(),
+      load: async () => ({ ok: true, value: stored(storedTree, 3) }),
       save: vi.fn(),
       reserveImportedSnapshot,
       close: () => undefined,
@@ -316,26 +842,33 @@ describe("persistence controller", () => {
   it("keeps an exact same-id archive import working and activates its empty-history generation", async () => {
     const imported = createSeededDocument().tree;
     const reservation = importReservation(imported, 4, imported, 3);
-    const repository: DocumentRepository = {
-      ...unsupportedRecovery(),
-      load: async () => ({ ok: true, value: { tree: imported, writeGeneration: 3 } }),
-      save: vi.fn(),
+    const repository = controlledRepository(stored(imported, 3));
+    repository.port = {
+      ...repository.port,
       reserveImportedSnapshot: async () => ({ ok: true, value: reservation }),
-      close: () => undefined,
     };
-    const controller = createPersistenceController(repository);
+    const controller = createPersistenceController(repository.port);
+    await controller.start(imported);
+    controller.reportHistoryUnavailable();
 
     const prepared = await controller.prepareImportedTree(imported);
     expect(prepared).toMatchObject({ ok: true, tree: imported, writeGeneration: 4 });
     if (!prepared.ok) throw new Error("import preparation rejected");
-    expect(prepared.reservation.imported.history).toEqual(createTreeHistory());
     controller.activateImportedDocument(prepared);
     expect(controller.getStatus()).toEqual({
       phase: "saved",
       persistedRevision: imported.revision,
       dirtyRevision: null,
       errorCode: null,
+      historyNotice: null,
+      unsaved: false,
+      upgradeBlocked: false,
+      conflictOrigin: null,
     });
+
+    controller.publish({ ...imported, revision: imported.revision + 1 });
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.basis).toBe(reservation.basis);
   });
 
   it("rolls a stale prepared import back before draining a newer local commit", async () => {
@@ -345,19 +878,20 @@ describe("persistence controller", () => {
     const reservation = importReservation(imported, 4, current, 3);
     let settleReserve!: (result: RepositoryResult<ImportedSnapshotReservation>) => void;
     let settleRollback!: (result: Awaited<ReturnType<DocumentRepository["rollbackImportedSnapshot"]>>) => void;
-    let settleSave!: (result: RepositoryResult<number>) => void;
+    let settleSave!: (result: RepositoryResult<SnapshotBasis>) => void;
     const reserveImportedSnapshot = vi.fn(() => new Promise<RepositoryResult<ImportedSnapshotReservation>>((resolve) => {
       settleReserve = resolve;
     }));
     const rollbackImportedSnapshot = vi.fn(() => new Promise<Awaited<ReturnType<DocumentRepository["rollbackImportedSnapshot"]>>>((resolve) => {
       settleRollback = resolve;
     }));
-    const save = vi.fn(() => new Promise<RepositoryResult<number>>((resolve) => {
+    const save = vi.fn<DocumentRepository["save"]>(() => new Promise<RepositoryResult<SnapshotBasis>>((resolve) => {
       settleSave = resolve;
     }));
+    const loaded = stored(current, 3);
     const repository: DocumentRepository = {
-      ...unsupportedRecovery(),
-      load: async () => ({ ok: true, value: { tree: current, writeGeneration: 3 } }),
+      ...inertPort(),
+      load: async () => ({ ok: true, value: loaded }),
       save,
       reserveImportedSnapshot,
       rollbackImportedSnapshot,
@@ -381,25 +915,56 @@ describe("persistence controller", () => {
     settleRollback({ ok: true, value: { status: "rolled-back", writeGeneration: 5 } });
     await expect(importing).resolves.toEqual({ status: "rejected", errorCode: "IMPORT_STALE" });
     await waitFor(() => save.mock.calls.length === 1);
-    expect(save).toHaveBeenCalledWith(
-      newer.id,
-      newer.revision,
-      treeToBundle(newer),
-      5,
-      expect.anything(),
-    );
-    settleSave({ ok: true, value: 6 });
+    expect(save.mock.calls[0]?.[0]).toMatchObject({
+      treeId: newer.id,
+      treeRevision: newer.revision,
+      bundle: treeToBundle(newer),
+      // The restored row carries the same journal the loaded basis described.
+      basis: { writeGeneration: 5, journal: loaded.basis.journal },
+    });
+    settleSave({ ok: true, value: { writeGeneration: 6, journal: loaded.basis.journal } });
     await waitFor(() => controller.getStatus().phase === "saved");
     expect(controller.getStatus()).toMatchObject({ persistedRevision: newer.revision, errorCode: null });
     expect(switchDocument).not.toHaveBeenCalled();
   });
 
+  it("does not adopt a rolled-back generation for a row this tab never described", async () => {
+    const imported = createSeededDocument().tree;
+    const current = { ...imported, revision: imported.revision + 3 };
+    // Another tab wrote generation 7 between this tab's load and the import.
+    const reservation = importReservation(imported, 8, current, 7);
+    const save = vi.fn(async (write: SnapshotWrite): Promise<RepositoryResult<SnapshotBasis>> => ({
+      ok: true,
+      value: { writeGeneration: (write.basis.writeGeneration ?? 0) + 1, journal: write.basis.journal },
+    }));
+    const repository: DocumentRepository = {
+      ...inertPort(),
+      load: vi.fn()
+        .mockResolvedValueOnce({ ok: true, value: stored(current, 3) })
+        .mockResolvedValue({ ok: true, value: stored(current, 7) }),
+      save,
+      reserveImportedSnapshot: async () => ({ ok: true, value: reservation }),
+      rollbackImportedSnapshot: async () => ({ ok: true, value: { status: "rolled-back", writeGeneration: 9 } }),
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository);
+    await controller.start(current);
+    const prepared = await controller.prepareImportedTree(imported);
+    if (!prepared.ok) throw new Error("import preparation rejected");
+    await expect(controller.discardImportedDocument(prepared)).resolves.toBeNull();
+
+    controller.publish({ ...current, revision: current.revision + 1 });
+    await waitFor(() => save.mock.calls.length === 1);
+    expect(save.mock.calls[0]?.[0].basis.writeGeneration).toBe(3);
+  });
+
   it("requires an exact corrupt export before atomically replacing local storage", async () => {
     const tree = createSeededDocument().tree;
-    const history = { entries: [], retainedInverseBytes: 0 };
+    const history = createTreeHistory();
     const basis = { treeId: tree.id, serialized: "{\"damaged\":true}" };
+    const replacedBasis = { writeGeneration: 6, journal: emptyHistoryJournal(1) };
     const repository: DocumentRepository = {
-      ...unsupportedRecovery(),
+      ...inertPort(),
       load: async () => ({
         ok: false,
         error: { code: "PERSISTENCE_CORRUPT", message: "damaged" },
@@ -409,7 +974,7 @@ describe("persistence controller", () => {
         ok: true as const,
         value: { basis, bytes: new TextEncoder().encode(basis.serialized) },
       })),
-      replaceCorrupt: vi.fn(async () => ({ ok: true as const, value: 6 })),
+      replaceCorrupt: vi.fn(async () => ({ ok: true as const, value: replacedBasis })),
       close: () => undefined,
     };
     const controller = createPersistenceController(repository);
@@ -429,18 +994,22 @@ describe("persistence controller", () => {
     const exported = await controller.exportCorruptRecovery();
     expect(exported).toMatchObject({ ok: true, fileName: `${tree.id}.matter-recovery.json` });
     await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: true });
-    expect(repository.replaceCorrupt).toHaveBeenCalledWith(
-      tree.id,
-      tree.revision,
-      expect.anything(),
+    expect(repository.replaceCorrupt).toHaveBeenCalledWith({
+      treeId: tree.id,
+      treeRevision: tree.revision,
+      bundle: treeToBundle(tree),
       history,
-      basis,
-    );
+      retention: FULL_HISTORY_RETENTION,
+    }, basis);
     expect(controller.getStatus()).toEqual({
       phase: "saved",
       persistedRevision: tree.revision,
       dirtyRevision: null,
       errorCode: null,
+      historyNotice: null,
+      unsaved: false,
+      upgradeBlocked: false,
+      conflictOrigin: null,
     });
   });
 
@@ -448,7 +1017,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     let settleExport!: (result: RepositoryResult<CorruptSnapshotExport>) => void;
     const repository: DocumentRepository = {
-      ...unsupportedRecovery(),
+      ...inertPort(),
       load: async () => ({
         ok: false,
         error: { code: "PERSISTENCE_CORRUPT", message: "damaged" },
@@ -485,11 +1054,45 @@ describe("persistence controller", () => {
   });
 });
 
+function stored(
+  tree: ThoughtTree,
+  writeGeneration: number,
+  journal: PersistedHistoryJournal = emptyHistoryJournal(0),
+): LoadedSnapshot {
+  return Object.freeze({
+    tree,
+    history: EMPTY_RECOVERED,
+    basis: Object.freeze({ writeGeneration, journal }),
+  });
+}
+
+/** A history whose entries only carry byte counts; the controller never reads mementos. */
+function historyOfBytes(bytes: readonly number[]): TreeHistory {
+  const entries = bytes.map((retainedInverseBytes, index) => ({
+    commandId: `step_${index}`,
+    source: "human" as const,
+    inverse: {} as TreeHistory["entries"][number]["inverse"],
+    retainedInverseBytes,
+  }));
+  return {
+    entries,
+    redoEntries: [],
+    retainedInverseBytes: bytes.reduce((total, value) => total + value, 0),
+  };
+}
+
+function storageFull(): RepositoryResult<number> {
+  return { ok: false, error: { code: "PERSISTENCE_STORAGE_FULL", message: "storage full" } };
+}
+
 function fakeRepository(loaded: LoadedSnapshot | null) {
   const port: DocumentRepository = {
-    ...unsupportedRecovery(),
+    ...inertPort(),
     load: async (): Promise<RepositoryResult<LoadedSnapshot | null>> => ({ ok: true, value: loaded }),
-    save: async (_treeId, _revision, _bundle, generation) => ({ ok: true, value: (generation ?? 0) + 1 }),
+    save: async ({ basis }) => ({
+      ok: true,
+      value: { writeGeneration: (basis.writeGeneration ?? 0) + 1, journal: basis.journal },
+    }),
     close: () => undefined,
   };
   return { port };
@@ -502,14 +1105,16 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
   type Pending = {
     treeRevision: number;
     expectedGeneration: number | null;
-    history: TreeHistory | undefined;
-    settle: (result: RepositoryResult<number>) => void;
+    basis: SnapshotBasis;
+    history: TreeHistory;
+    retention: HistoryRetention;
+    settle: (result: RepositoryResult<SnapshotBasis>) => void;
   };
   const pending: Pending[] = [];
   const savedRevisions: number[] = [];
   let loads = 0;
   const port: DocumentRepository = {
-    ...unsupportedRecovery(),
+    ...inertPort(),
     load: async () => {
       loads += 1;
       if (!deferNextLoad) return { ok: true, value: loaded };
@@ -518,10 +1123,16 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
         pendingLoad = settle;
       });
     },
-    save: async (_treeId: string, treeRevision: number, bundle: SnapshotBundle, expectedGeneration, history) => {
-      void bundle;
+    save: async ({ treeRevision, basis, history, retention }) => {
       savedRevisions.push(treeRevision);
-      return new Promise<RepositoryResult<number>>((settle) => pending.push({ treeRevision, expectedGeneration, history, settle }));
+      return new Promise<RepositoryResult<SnapshotBasis>>((settle) => pending.push({
+        treeRevision,
+        expectedGeneration: basis.writeGeneration,
+        basis,
+        history,
+        retention,
+        settle,
+      }));
     },
     close: () => undefined,
   };
@@ -544,10 +1155,20 @@ function controlledRepository(initialLoaded: LoadedSnapshot | null = null) {
       pendingLoad = null;
       settle({ ok: true, value: loaded });
     },
-    settleNext(result: RepositoryResult<number>) {
+    /** A bare generation settles with the journal the write was based on. */
+    settleNext(result: RepositoryResult<number | SnapshotBasis>) {
       const write = pending.shift();
       if (write === undefined) throw new Error("no pending write");
-      write.settle(result);
+      if (!result.ok) {
+        write.settle(result);
+        return;
+      }
+      write.settle({
+        ok: true,
+        value: typeof result.value === "number"
+          ? { writeGeneration: result.value, journal: write.basis.journal }
+          : result.value,
+      });
     },
   };
 }
@@ -566,7 +1187,6 @@ function importReservation(
       treeRevision: imported.revision,
       writeGeneration,
       bundle: treeToBundle(imported),
-      history: createTreeHistory(),
     }),
     previous: previousTree === null || previousGeneration === null
       ? null
@@ -576,14 +1196,20 @@ function importReservation(
           treeRevision: previousTree.revision,
           writeGeneration: previousGeneration,
           bundle: treeToBundle(previousTree),
-          history: createTreeHistory(),
         }),
+    basis: Object.freeze({ writeGeneration, journal: emptyHistoryJournal(1) }),
   });
 }
 
-function unsupportedRecovery(): Pick<
+function inertPort(): Pick<
   DocumentRepository,
-  "exportCorrupt" | "replaceCorrupt" | "reserveImportedSnapshot" | "rollbackImportedSnapshot"
+  | "exportCorrupt"
+  | "replaceCorrupt"
+  | "reserveImportedSnapshot"
+  | "rollbackImportedSnapshot"
+  | "readGeneration"
+  | "reclaimDerivedStorage"
+  | "subscribeLifecycle"
 > {
   return {
     exportCorrupt: async () => ({
@@ -602,6 +1228,9 @@ function unsupportedRecovery(): Pick<
       ok: false,
       error: { code: "PERSISTENCE_UNAVAILABLE", message: "unsupported" },
     }),
+    readGeneration: async () => ({ ok: true, value: null }),
+    reclaimDerivedStorage: async () => false,
+    subscribeLifecycle: () => () => undefined,
   };
 }
 

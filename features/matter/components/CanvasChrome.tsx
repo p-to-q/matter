@@ -64,6 +64,8 @@ export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryOwner: InquiryContextOwner;
   inquiryRecord?: InquiryRecordBinding;
   onInquiryOpen?: () => void;
+  /** Ask Matter holds a question (typed, dictated, or awaiting its answer). */
+  onInquiryHoldChange?: (held: boolean) => void;
   onOverlayChange: (overlay: CanvasChromeOverlay) => void;
   overlay: CanvasChromeOverlay;
 }>;
@@ -625,6 +627,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   inquiryOwner,
   inquiryRecord,
   onInquiryOpen,
+  onInquiryHoldChange,
   onOverlayChange,
   overlay,
   preferences,
@@ -959,6 +962,7 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
                 copy={copy}
                 hint={typeof info.inquiry.body[0] === "string" ? info.inquiry.body[0] : ""}
                 language={preferences.language}
+                onHoldChange={onInquiryHoldChange}
                 owner={inquiryOwner}
                 presented={overlay === "inquiry"}
                 record={inquiryRecord}
@@ -1227,6 +1231,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   copy: CanvasChromeCopy;
   hint: string;
   language: CanvasLanguage;
+  onHoldChange?: (held: boolean) => void;
   owner: InquiryContextOwner;
   presented: boolean;
   record?: InquiryRecordBinding;
@@ -1235,6 +1240,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   copy,
   hint,
   language,
+  onHoldChange,
   owner,
   presented,
   record,
@@ -1265,6 +1271,12 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   const hasPendingAnswer = state.turns.some(
     (turn) => turn.role === "matter" && turn.outcome.status === "pending",
   );
+  // A different document instance revokes all of this, so the root waits.
+  const held = hasPendingAnswer || submissionPending || voiceBusy || text.trim().length > 0;
+  useEffect(() => {
+    onHoldChange?.(held);
+  }, [held, onHoldChange]);
+  useEffect(() => () => onHoldChange?.(false), [onHoldChange]);
   const dictation = useInquiryDictation({
     onHeard: (transcript) => dispatch({ type: "hear", value: transcript }),
     onProcessing: () => dispatch({ type: "transcribe" }),

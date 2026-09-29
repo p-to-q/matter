@@ -12,8 +12,11 @@ Concretely:
 - an inverse exists for every mutation, including subtree removal;
 - an invalid plan is rejected whole; partial application never happens;
 - undo restores text, structure, order, and time fields exactly;
-- history is never policy-trimmed; browser storage capacity is its only physical
-  bound and a failed save remains explicit;
+- history is bounded (owner decision 2026-09-29): the newest 1,000 steps within
+  32 MiB of exact inverses across both stacks; older steps are released and the
+  exported archive is long-term recovery;
+- a step that cannot be restored is released and announced, never silently
+  replaced by an empty journal;
 - transient state — pointer, audio level, partial transcript — never enters it.
 
 ## Prior art
@@ -75,8 +78,11 @@ type CommandResult =
   material. A successful undo moves the engine-produced inverse to the redo
   stack; keyboard redo applies that inverse through the engine again. A new
   human command clears the alternate redo future; a delivered result keeps the
-  part of it that still replays (see below). Failure preserves both tree and
-  stacks. The paper rail exposes only Undo; `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`
+  part of it that still replays (see below). An empty stack preserves both tree
+  and stacks. A top inverse the engine refuses (`HISTORY_UNAVAILABLE`) leaves
+  the tree unchanged and releases that whole stack, because every older step on
+  it could only be reached through the refused one. The paper rail exposes only
+  Undo; `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`
   retain the platform convention without adding another visible tool.
   Opening, importing, or hydrating a foreign document clears history and
   pending turns.
@@ -84,11 +90,52 @@ type CommandResult =
   than the view diffing to find out.
 - Exact undo restores text, structure, order, and node timestamps. Tree revision
   remains monotonic because undo is a new commit.
-- The undo and redo stacks hold committed human and agent commands. Matter does
-  not discard an old inverse to satisfy an application policy; one subtree
-  memento may be close to the size of the document, so storage exhaustion is a
-  recoverable durability failure rather than a reason to rewrite history.
-  Folding, focus, and selection are view state and are not undoable.
+- The undo and redo stacks hold committed human and agent commands. Folding,
+  focus, and selection are view state and are not undoable.
+
+### Bounds
+
+`MATTER_HISTORY_LIMITS` in `tree/history.ts` is `{ maxEntries: 1_000,
+maxRetainedInverseBytes: 32 MiB }` across both stacks.
+
+- The byte bound admits every legal inverse. The largest is a subtree restore of
+  every node but the root at the text and id bounds with every code unit needing
+  a six-byte JSON escape: about 24 MiB (`history.test.ts` builds it). CJK text
+  at the bound is about 12 MiB and ASCII about 4 MiB. `HISTORY_LIMIT_EXCEEDED`
+  therefore stays a guard for other limits, not a refusal a person can meet.
+- Commit evicts whole oldest undo entries, never the newest, until count and
+  bytes fit; redo is already empty. Undo and Redo keep the count but may grow
+  bytes slightly (each move re-inverts the command and extends its id), so they
+  also evict the oldest undo entries; an overage that remains once undo is empty
+  is tolerated until the next commit.
+- Each inverse is serialized once when it enters a stack. For human commits,
+  Undo, and Redo the byte total is amortized constant-cost: the redo total is
+  summed only when a commit discards redo, which each entry reaches at most
+  once. A delivered commit keeps a redo prefix instead, so it recomputes both
+  totals from the kept entries: linear in the bounded 1,000 entries, not in
+  their bytes.
+- Reaching the bound is ordinary editing and is not announced. Only an abnormal
+  release is: a stored step that could not be read, a step that no longer
+  applies, or durable steps shed under storage pressure.
+
+### Recovery
+
+`persistence/history-recovery.ts` attaches a stored journal in constant cost:
+after the storage boundary's O(entries) shape check, it applies the bounds and
+dry-runs only the next Undo and the next Redo (`verifyHistoryTops`). Every
+deeper step is validated when first used, by the same engine preconditions that
+make any memento exact. Replaying the whole journal on hydrate cost about 9 ms
+per step at 2,000 nodes; the per-step storage layout and its measurements live
+in [`virtual-file-system.md`](virtual-file-system.md#undo-journal-schema-v6).
+
+A restored step carries `bytesUnverified`: its stored byte count is compared
+with its memento when it is first applied, so a damaged record fails closed.
+Seed relocalization follows the same rule. It answers "unchanged" without
+reading history unless an untouched seed passage or title differs for the new
+language, re-measures only the mementos it rewrites, and dry-runs only the two
+stack tops; it runs for language and document changes, not for save phases. A
+deeper stale step never stops translation. With about 1,000 nodes and 1,000
+steps, the whole-journal replay it replaced cost 4.4 s of main thread.
 
 ### Late results and the redo future
 
@@ -161,6 +208,15 @@ clones of affected nodes.
 **Undoable view state.** Rejected. If folding entered the undo stack, undo would
 sometimes change what a person sees and sometimes change what they wrote, and
 they would stop trusting it. Undo means "take back what was generated".
+
+**Unbounded retention to physical storage.** Held until 2026-09-29, then
+reversed by the owner. It rewrote the whole journal inside every snapshot save,
+replayed every step on hydrate, and let one long session exhaust quota before
+material could be saved; a stale entry discarded the whole journal silently.
+
+**Whole-journal validation on hydrate.** Rejected: it is proportional to the
+journal, blocks the main thread, and proves nothing the engine does not prove
+again at use. Only the two stack tops are dry-run.
 
 **Snapshot stacks and opaque browser history.** Still rejected. Redo remains a
 first-class inverse stack because a person may reverse an accidental Undo after
