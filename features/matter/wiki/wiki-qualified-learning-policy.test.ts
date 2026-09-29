@@ -50,6 +50,9 @@ describe("qualified Wiki learning policy", () => {
     for (const file of [
       "wiki-learning-policy.ts",
       "wiki-evidence.ts",
+      "wiki-evidence-aging.ts",
+      "wiki-occurrence-settlement.ts",
+      "wiki-transition.ts",
       "wiki-model.ts",
       "wiki-invariants.ts",
       "wiki-script.ts",

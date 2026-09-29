@@ -127,8 +127,10 @@ itself.
 
 Informed implicit acceptance is approval (owner decision, 2026-09-29). One
 exact applied occurrence settles exactly once, through the pure policy in
-`wiki-learning-policy.ts` and the state transition
-`applyWikiOccurrenceSettlement` in `wiki-evidence.ts`. A settlement carries an
+`wiki-learning-policy.ts` and the state transition in
+`wiki-occurrence-settlement.ts`, entered through `applyWikiOccurrenceSettlement`
+in `wiki-evidence.ts`, which routes explicit outcomes through its own human
+decision paths. A settlement carries an
 opaque random occurrence identity minted by the occurrence owner (never derived
 from text or an address), the applied rule descriptor, the Wiki state revision
 of the basis that applied it (the lexical session's `sourceRevision`), and the

@@ -50,6 +50,9 @@ const ROOT = resolve(import.meta.dirname, "../../..");
 const POLICY_SOURCE_FILES = Object.freeze([
   "features/matter/wiki/wiki-learning-policy.ts",
   "features/matter/wiki/wiki-evidence.ts",
+  "features/matter/wiki/wiki-evidence-aging.ts",
+  "features/matter/wiki/wiki-occurrence-settlement.ts",
+  "features/matter/wiki/wiki-transition.ts",
   "features/matter/wiki/wiki-model.ts",
   "features/matter/wiki/wiki-invariants.ts",
   "features/matter/wiki/wiki-script.ts",
