@@ -1,7 +1,7 @@
 import type { MatterLocale } from "../config/locales";
 import {
   findProtectedWikiSpans,
-  findRoutedWikiProtectedSpans,
+  findWidthAwareProtectedWikiSpans,
   hasWikiWordBoundaryAround,
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
@@ -29,6 +29,7 @@ import {
 import type { WikiQualifiedProducerRelease } from "./wiki-producer-qualification";
 import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
 import {
+  isWikiLatinScriptLocale,
   isWikiLatinWord,
   routeWikiWord,
   wikiLatinRouteLocale,
@@ -320,10 +321,14 @@ export function fitCommittedWikiTextResult(
     request.text.length,
   );
   if (eligibleRanges === null) return CENSORED_FITTING;
-  const protectedSpans = findProtectedWikiSpans(request.text);
+  // Learning mirrors matching: Latin words, routed or in a Latin-script turn,
+  // are protected across widths.
+  const protectedSpans = isWikiLatinScriptLocale(request.locale)
+    ? findWidthAwareProtectedWikiSpans(request.text)
+    : findProtectedWikiSpans(request.text);
   const routedProtectedSpans = wikiLatinRouteLocale(request.locale) === null
     ? protectedSpans
-    : findRoutedWikiProtectedSpans(request.text);
+    : findWidthAwareProtectedWikiSpans(request.text);
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
   const words = [...segmenter.segment(request.text)].flatMap((segment) => {
@@ -339,7 +344,9 @@ export function fitCommittedWikiTextResult(
     // `#tag`, and joined forms are never rewritten, so like protected
     // literals they neither vote nor offer an opportunity.
     if (isWikiLatinWord(route.form) &&
-        !hasWikiWordBoundaryAround(request.text, start, end, route.routed)) return [];
+        !hasWikiWordBoundaryAround(request.text, start, end, request.locale, route.routed)) {
+      return [];
+    }
     return [route];
   });
 

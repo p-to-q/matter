@@ -280,6 +280,71 @@ describe("canonicalizeWikiText", () => {
   });
 });
 
+describe("canonicalizeWikiText width-aware Latin-script turns", () => {
+  const FULL_WIDTH_SHAPES = [
+    "＠Englebart said",
+    "＃Englebart",
+    "＃Englebart＃",
+    "｀Englebart｀",
+    "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Englebart",
+    "englebart＠example.com",
+    "ｅｎｇｌｅｂａｒｔ＠ｅｘａｍｐｌｅ．ｃｏｍ",
+    "src／Englebart／index．ts",
+    "－－Englebart",
+    "Englebart．ts",
+    "my＿Englebart",
+    "Englebart－style",
+    "Englebart＇s",
+  ];
+
+  it("protects full-width literals and joiners in en-US and de-DE own matching", () => {
+    for (const locale of ["en-US", "de-DE"] as const) {
+      for (const channel of ["spoken", "written"] as const) {
+        const compiled = snapshot([
+          rule("Englebart", "Engelbart", { locale, channel, boundary: "word" }),
+          rule("englebart", "engelbart", { locale, channel, boundary: "word" }),
+        ]);
+        for (const text of FULL_WIDTH_SHAPES) {
+          expect(canonicalizeWikiText(compiled, locale, channel, text).text).toBe(text);
+        }
+        // Full-width punctuation that is not a joiner still ends the word.
+        expect(canonicalizeWikiText(compiled, locale, channel, "（Englebart），ok").text)
+          .toBe("（Engelbart），ok");
+        expect(canonicalizeWikiText(compiled, locale, channel, "Englebart　said").text)
+          .toBe("Engelbart　said");
+      }
+    }
+  });
+
+  it("keeps half-width outcomes identical", () => {
+    const compiled = snapshot([
+      rule("Englebart", "Engelbart", { locale: "en-US", channel: "spoken", boundary: "word" }),
+    ]);
+    const expectations: readonly (readonly [string, string])[] = [
+      ["Englebart said", "Engelbart said"],
+      ["(Englebart), ok", "(Engelbart), ok"],
+      ["@Englebart said", "@Englebart said"],
+      ["#Englebart", "#Englebart"],
+      ["`Englebart`", "`Englebart`"],
+      ["https://example.com/Englebart", "https://example.com/Englebart"],
+      ["src/Englebart/index.ts", "src/Englebart/index.ts"],
+      ["--Englebart", "--Englebart"],
+      ["Englebart-style", "Englebart-style"],
+    ];
+    for (const [text, expected] of expectations) {
+      expect(canonicalizeWikiText(compiled, "en-US", "spoken", text).text).toBe(expected);
+    }
+  });
+
+  it("leaves CJK own matching on the written-text protection", () => {
+    const compiled = snapshot([
+      rule("材料", "材料库", { locale: "zh-CN", channel: "spoken" }),
+    ]);
+
+    expect(canonicalizeWikiText(compiled, "zh-CN", "spoken", "＠材料").text).toBe("＠材料库");
+  });
+});
+
 /** Literal shapes a routed rule must never rewrite, as written and full width. */
 const ROUTED_PROTECTED_TEXTS = Object.freeze([
   "看https://example.com/Englebart的页面",

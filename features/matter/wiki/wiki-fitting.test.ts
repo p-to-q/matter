@@ -434,6 +434,29 @@ describe("script-routed Wiki fitting", () => {
     ]);
   });
 
+  it("never fits full-width literals or joiners in an English turn", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of [
+      "＠Englebart said",
+      "＃Englebart＃",
+      "｀Englebart｀",
+      "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Englebart",
+      "englebart＠example.com",
+      "src／Englebart／index．ts",
+      "－－Englebart",
+      "Englebart．ts",
+      "my＿Englebart",
+      "Englebart－style",
+    ]) {
+      expect(fit(state, "en-US", text).events).toEqual([]);
+    }
+    // A protected or joined word is not an opportunity either.
+    expect(fit(state, "en-US", "＃Englebart＃").scannedScripts).toEqual([]);
+    expect(fit(state, "en-US", "（Englebart），later").events).toEqual([
+      expect.objectContaining({ form: "Englebart", canonical: "Engelbart" }),
+    ]);
+  });
+
   it("never lets a CJK span reach the Latin producer", () => {
     expect(fit(withLexemes("Engelbart"), "zh-CN", "恩格尔巴特的演示")).toEqual({
       status: "ok",

@@ -92,12 +92,12 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
       foregroundDwellMillisecondsToSettle: 60_000,
     }),
   }),
-  policySourceDigest: "sha256:896f3486dff05cc687441372bd790e1804d28b72e4a0253b4154ef3c5d24d46b",
+  policySourceDigest: "sha256:30521f8a9da2f0a32dc7efec8b8b231f9dca6337e5cfb5c85e58d4b744f92935",
   corpus: Object.freeze({
     corpusVersion: "wiki-learning-policy-v4-corpus/2",
     corpusDigest: "sha256:a75bd008ffd31329b33fffdba3eee2904df1a9a64b606c020915cfc5a46d65c3",
     scenarioCount: 18,
   }),
   resultDigest: "sha256:64c70e2bced4f9cc96414c677e8fbc8867ff3b85e8f0ad7265bb3951260e1bcf",
-  producerQualificationDigest: "sha256:3c0c280d11d3472fb8b6526099eb6182190dc83457a4a721e0829de77415de60",
+  producerQualificationDigest: "sha256:e7dd51b3c6d268799b5a1e3d115ba52e980c8f4f3ee09591f814e36df25dfdfe",
 }) satisfies WikiQualifiedLearningPolicyRelease;

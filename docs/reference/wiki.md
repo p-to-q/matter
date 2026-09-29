@@ -345,9 +345,15 @@ Replacements inspect only the original input. Output from one rule cannot
 trigger another rule in the same commit. Matching is leftmost-longest,
 grapheme-safe, boundary-aware, and skips protected literals such as quoted
 text, code, URLs, email addresses, paths, flags, versions, IP addresses, and
-identifier-shaped tokens. In a Chinese or Japanese turn, Latin spans the
-turn's own rules left untouched are also matched against the `en-US` view they
-route to; see [Script routing](#script-routing).
+identifier-shaped tokens. In `en-US` and `de-DE` turns, protection and word
+boundaries also read full-width ASCII folded, index for index, so `＠name`,
+`＃tag`, a full-width code span, URL, email address, path, or flag, and a
+full-width joiner such as `－` or `＇` protect exactly as their half-width forms
+do. Half-width text folds to itself, so its outcome is unchanged; the same
+test decides what fitting and term collection may count. A Chinese or Japanese
+turn's own matching keeps the written-text protection, and Latin spans its
+own rules left untouched are also matched against the `en-US` view they route
+to; see [Script routing](#script-routing).
 
 Human admission, a late repair of that admission, and a generated text turn
 must each capture one lexical session for the complete synchronous preparation.

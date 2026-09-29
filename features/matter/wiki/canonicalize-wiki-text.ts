@@ -11,6 +11,7 @@ import {
   hasWikiFullWidthAscii,
   hasWikiLatinLetter,
   isWikiCjkLetter,
+  isWikiLatinScriptLocale,
   isWikiLatinWord,
   isWikiRoutableGrapheme,
   wikiLatinRouteLocale,
@@ -93,7 +94,14 @@ export function canonicalizeWikiText(
   }
 
   const input = segmentText(text);
-  const protectedSpans = findProtectedWikiSpans(text);
+  // A Latin-script turn protects and bounds its own words across widths, so
+  // `＠name` or a full-width URL is as safe as its half-width form. Half-width
+  // text folds to itself, so its outcome is unchanged.
+  const widthAware = isWikiLatinScriptLocale(locale);
+  const protectedSpans = widthAware
+    ? findWidthAwareProtectedWikiSpans(text)
+    : findProtectedWikiSpans(text);
+  const endsWord = widthAware ? endsFoldedWord : endsOwnWord;
   const pendingEdits: WikiCanonicalizationEdit[] = [];
   let transitionCount = 0;
   let protectedIndex = 0;
@@ -133,7 +141,7 @@ export function canonicalizeWikiText(
       if (
         !wikiRangeOverlapsProtected(start, end, protectedSpans, protectedIndex) &&
         isWikiRangeEligible(start, end, eligibleRanges, eligibleIndex) &&
-        hasRequiredBoundary(rule, input, graphemeIndex, cursor)
+        hasRequiredBoundary(rule, input, graphemeIndex, cursor, endsWord)
       ) {
         bestRuleIndex = terminalRuleIndex;
         bestEndGrapheme = cursor;
@@ -251,14 +259,17 @@ function segmentText(text: string): Grapheme[] {
   }));
 }
 
+type WikiWordEnd = (neighbor: string | undefined) => boolean;
+
 function hasRequiredBoundary(
   rule: CompiledWikiRule,
   input: readonly Grapheme[],
   start: number,
   end: number,
+  endsWord: WikiWordEnd,
 ): boolean {
   if (rule.boundary === "literal") return true;
-  return endsOwnWord(input[start - 1]?.segment) && endsOwnWord(input[end]?.segment);
+  return endsWord(input[start - 1]?.segment) && endsWord(input[end]?.segment);
 }
 
 function endsOwnWord(neighbor: string | undefined): boolean {
@@ -266,15 +277,26 @@ function endsOwnWord(neighbor: string | undefined): boolean {
 }
 
 /**
- * Whether a word rule could apply to `text[start, end)`: the matcher's own or
- * routed boundary test on the graphemes around the span. Evidence producers use
- * it so an occurrence no resulting rule could rewrite, such as `@name`, `#tag`,
- * or a hyphen-joined word, is never counted.
+ * Full-width joiners such as `＠＃｀－＿` join a word exactly as their ASCII
+ * forms do, so the neighbour is folded before the word-character test.
+ */
+function endsFoldedWord(neighbor: string | undefined): boolean {
+  return neighbor === undefined ||
+    !WORD_CONSTITUENT.test(foldWikiFullWidthAscii(neighbor));
+}
+
+/**
+ * Whether a word rule could apply to `text[start, end)` in a `locale` turn:
+ * the same own, width-aware, or routed boundary test the matcher uses, on the
+ * graphemes around the span. Evidence producers use it so an occurrence no
+ * resulting rule could rewrite, such as `@name`, `#tag`, or a hyphen-joined
+ * word, is never counted.
  */
 export function hasWikiWordBoundaryAround(
   text: string,
   start: number,
   end: number,
+  locale: MatterLocale,
   routed: boolean,
 ): boolean {
   const before = text.slice(Math.max(0, start - BOUNDARY_WINDOW), start);
@@ -285,7 +307,9 @@ export function hasWikiWordBoundaryAround(
   const next = after.length === 0
     ? undefined
     : GRAPHEME_SEGMENTER.segment(after).containing(0)?.segment;
-  const ends = routed ? endsRoutedWord : endsOwnWord;
+  const ends = routed
+    ? endsRoutedWord
+    : isWikiLatinScriptLocale(locale) ? endsFoldedWord : endsOwnWord;
   return ends(previous) && ends(next);
 }
 
@@ -365,7 +389,7 @@ function matchRoutedWikiView(
     return false;
   };
 
-  const protectedSpans = findRoutedWikiProtectedSpans(text);
+  const protectedSpans = findWidthAwareProtectedWikiSpans(text);
   const edits: WikiCanonicalizationEdit[] = [];
   const candidates: [ruleIndex: number, endGrapheme: number][] = [];
   let protectedIndex = 0;
@@ -442,13 +466,8 @@ function hasRoutedBoundary(
   return endsRoutedWord(input[start - 1]?.segment) && endsRoutedWord(input[end]?.segment);
 }
 
-/**
- * Full-width joiners such as `＠＃｀－＿` join a routed word exactly as their
- * ASCII forms do, so the neighbour is folded before the word-character test.
- */
 function endsRoutedWord(neighbor: string | undefined): boolean {
-  return neighbor === undefined || isWikiCjkLetter(neighbor) ||
-    !WORD_CONSTITUENT.test(foldWikiFullWidthAscii(neighbor));
+  return neighbor === undefined || isWikiCjkLetter(neighbor) || endsFoldedWord(neighbor);
 }
 
 export function wikiRangeOverlapsProtected(
@@ -476,14 +495,15 @@ export function findProtectedWikiSpans(
 }
 
 /**
- * Protection for script-routed words: every literal of the text as written,
- * plus every literal that appears once full-width ASCII is folded, so a
- * full-width URL, email address, path, flag, code span, or identifier stays
- * protected. Folding the full-width colon lets a URL tail run past a
- * full-width colon in the same sentence; the union can only protect more.
- * Own-locale matching keeps the written-text spans alone.
+ * Width-aware protection for Latin words, routed or in a Latin-script turn:
+ * every literal of the text as written, plus every literal that appears once
+ * full-width ASCII is folded, so a full-width URL, email address, path, flag,
+ * code span, or identifier stays protected. Folding the full-width colon lets
+ * a URL tail run past a full-width colon in the same sentence; the union can
+ * only protect more, and half-width text yields exactly the written spans.
+ * CJK turns keep the written-text spans alone for their own words.
  */
-export function findRoutedWikiProtectedSpans(
+export function findWidthAwareProtectedWikiSpans(
   text: string,
   level: "matching" | "evidence" = "matching",
 ): readonly WikiProtectedSpan[] {

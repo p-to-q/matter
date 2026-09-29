@@ -185,6 +185,24 @@ describe("Wiki automatic term collection", () => {
     })).toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
   });
 
+  it("never collects from a full-width literal in a Latin-script turn", () => {
+    for (const locale of ["en-US", "de-DE"] as const) {
+      for (const text of [
+        "｀ｍｏｒｐｈｏｇｅｎｅｓｉｓ｀",
+        "｀OpenAI｀",
+        "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Morphogenesis",
+        "src／Morphogenesis／index．ts",
+      ]) {
+        expect(collectCommittedWikiTerms({ locale, channel: "spoken", text })).toEqual([]);
+      }
+    }
+    expect(collectCommittedWikiTerms({
+      locale: "en-US",
+      channel: "spoken",
+      text: "（Morphogenesis）",
+    })).toEqual([expect.objectContaining({ canonical: "Morphogenesis" })]);
+  });
+
   it("keeps English and German turns in their own ledgers", () => {
     expect(collectCommittedWikiTerms({
       locale: "de-DE",

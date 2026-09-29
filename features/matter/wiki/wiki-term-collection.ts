@@ -1,6 +1,6 @@
 import {
   findProtectedWikiSpans,
-  findRoutedWikiProtectedSpans,
+  findWidthAwareProtectedWikiSpans,
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
@@ -19,7 +19,11 @@ import type {
   WikiAdmissionProducerResult,
 } from "./wiki-admission";
 import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
-import { routeWikiWord, wikiLatinRouteLocale } from "./wiki-script-routing";
+import {
+  isWikiLatinScriptLocale,
+  routeWikiWord,
+  wikiLatinRouteLocale,
+} from "./wiki-script-routing";
 import type { MatterLocale } from "../config/locales";
 
 const LATIN = /^[\p{Script=Latin}\p{M}]+$/u;
@@ -120,10 +124,13 @@ export function collectCommittedWikiTermsResult(
     request.text.length,
   );
   if (eligibleRanges === null) return CENSORED_COLLECTION;
-  const protectedSpans = findProtectedWikiSpans(request.text, "evidence");
+  // A literal protected across widths during matching is no evidence either.
+  const protectedSpans = isWikiLatinScriptLocale(request.locale)
+    ? findWidthAwareProtectedWikiSpans(request.text, "evidence")
+    : findProtectedWikiSpans(request.text, "evidence");
   const routedProtectedSpans = wikiLatinRouteLocale(request.locale) === null
     ? protectedSpans
-    : findRoutedWikiProtectedSpans(request.text, "evidence");
+    : findWidthAwareProtectedWikiSpans(request.text, "evidence");
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
   let scannedScripts = 0;

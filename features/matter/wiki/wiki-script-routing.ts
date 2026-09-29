@@ -21,6 +21,10 @@ const LATIN_ROUTING_TURN_LOCALES: ReadonlySet<MatterLocale> = new Set<MatterLoca
   "zh-TW",
   "ja-JP",
 ]);
+const LATIN_SCRIPT_LOCALES: ReadonlySet<MatterLocale> = new Set<MatterLocale>([
+  "en-US",
+  "de-DE",
+]);
 const LATIN_LETTER = /\p{Script=Latin}/u;
 const LETTER_GLOBAL = /\p{L}/gu;
 // The full-width ASCII block and the ideographic space, except the CJK
@@ -45,6 +49,15 @@ const ROUTED_SCRIPTS = Object.freeze(["latin"] as const);
 /** The ledger that Latin words of a turn in `turnLocale` route to, if any. */
 export function wikiLatinRouteLocale(turnLocale: MatterLocale): MatterLocale | null {
   return LATIN_ROUTING_TURN_LOCALES.has(turnLocale) ? LATIN_LEDGER_LOCALE : null;
+}
+
+/**
+ * A locale whose own words are Latin script. Its own matching, like routed
+ * matching, reads full-width ASCII folded for protection and word boundaries,
+ * so `＠name` or a full-width URL stays as protected as its half-width form.
+ */
+export function isWikiLatinScriptLocale(locale: MatterLocale): boolean {
+  return LATIN_SCRIPT_LOCALES.has(locale);
 }
 
 /** The one ledger locale that owns a Latin word spoken in `turnLocale`. */
