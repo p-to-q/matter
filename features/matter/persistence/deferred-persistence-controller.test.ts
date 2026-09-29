@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSeededDocument } from "../material/seeded-document";
 import { createTreeHistory } from "../tree/history";
-import { createDeferredPersistenceController } from "./deferred-persistence-controller";
+import { createDeferredPersistenceController, ENGINE_RETRY_DELAYS_MS } from "./deferred-persistence-controller";
 import type { DocumentRepository, LoadedSnapshot } from "./document-repository";
 import { emptyHistoryJournal } from "./history-journal";
 import {
@@ -74,42 +74,132 @@ describe("deferred persistence controller", () => {
     expect(listener).toHaveBeenCalled();
   });
 
-  it("reports an engine that cannot load as unavailable storage and fetches it again on Retry", async () => {
+  it("stays loading while a failed engine fetch retries on its backoff, then says the code could not load", async () => {
     const tree = createSeededDocument().tree;
-    let attempts = 0;
+    const retry = retryEnvironment();
+    let failuresLeft = Number.POSITIVE_INFINITY;
     const created = vi.fn((options: PersistenceControllerOptions) =>
       createPersistenceController(repository(null), options));
     const load = vi.fn(async () => {
-      attempts += 1;
-      if (attempts <= 2) throw new Error("chunk load failed");
+      if (failuresLeft > 0) {
+        failuresLeft -= 1;
+        throw new Error("chunk load failed");
+      }
       return { createIndexedDbPersistenceController: created };
     });
-    const facade = createDeferredPersistenceController({}, load);
+    const facade = createDeferredPersistenceController({}, load, retry.environment);
     let startSettled = false;
     const started = facade.start(tree).then((value) => {
       startSettled = true;
       return value;
     });
 
+    // Every backoff wait of the grace keeps the loading status.
+    for (const delay of ENGINE_RETRY_DELAYS_MS) {
+      await vi.waitFor(() => expect(retry.timers).toHaveLength(1));
+      expect(retry.timers[0]?.delayMs).toBe(delay);
+      expect(facade.getStatus()).toBe(LOADING_PERSISTENCE_STATUS);
+      retry.fire();
+    }
     await vi.waitFor(() => expect(facade.getStatus().phase).toBe("error"));
+    expect(load).toHaveBeenCalledTimes(ENGINE_RETRY_DELAYS_MS.length + 1);
+    // Its own answer: the code did not load, not "this browser does not save".
     expect(facade.getStatus()).toEqual({
       ...LOADING_PERSISTENCE_STATUS,
       phase: "error",
+      errorCode: "PERSISTENCE_ENGINE_UNAVAILABLE",
+    });
+    expect(retry.timers).toHaveLength(0);
+    expect(startSettled).toBe(false);
+    // Other asynchronous calls answer once the grace ends; none hangs.
+    await expect(facade.prepareImportedTree(tree)).resolves.toEqual({
+      ok: false,
       errorCode: "PERSISTENCE_UNAVAILABLE",
     });
-    expect(startSettled).toBe(false);
-    // Other asynchronous calls answer for the attempt they joined; none hangs.
-    const prepared = facade.prepareImportedTree(tree);
-    await expect(prepared).resolves.toEqual({ ok: false, errorCode: "PERSISTENCE_UNAVAILABLE" });
-    expect(load).toHaveBeenCalledTimes(2);
-    expect(created).not.toHaveBeenCalled();
-    expect(startSettled).toBe(false);
 
-    facade.retry();
-    expect(facade.getStatus().phase).toBe("loading");
+    // Back online: one quiet fetch, and the line stays until it lands.
+    load.mockClear();
+    retry.recover();
+    expect(facade.getStatus().errorCode).toBe("PERSISTENCE_ENGINE_UNAVAILABLE");
+    await vi.waitFor(() => expect(load).toHaveBeenCalledOnce());
+    await Promise.resolve();
+    expect(retry.timers).toHaveLength(0);
+    expect(facade.getStatus().errorCode).toBe("PERSISTENCE_ENGINE_UNAVAILABLE");
+
+    // Visible again, and the network is back this time.
+    failuresLeft = 0;
+    retry.recover();
     await expect(started).resolves.toBeNull();
     expect(created).toHaveBeenCalledOnce();
     expect(facade.getStatus().errorCode).toBeNull();
+    // The engine arrived: nothing listens for recovery any longer.
+    expect(retry.listening).toBe(false);
+  });
+
+  it("lets a returning connection cut a backoff wait short, and Retry restart the grace", async () => {
+    const tree = createSeededDocument().tree;
+    const retry = retryEnvironment();
+    let failuresLeft = 1;
+    const created = vi.fn((options: PersistenceControllerOptions) =>
+      createPersistenceController(repository(null), options));
+    const load = vi.fn(async () => {
+      if (failuresLeft > 0) {
+        failuresLeft -= 1;
+        throw new Error("chunk load failed");
+      }
+      return { createIndexedDbPersistenceController: created };
+    });
+    const facade = createDeferredPersistenceController({}, load, retry.environment);
+    const started = facade.start(tree);
+    await vi.waitFor(() => expect(retry.timers).toHaveLength(1));
+
+    retry.recover();
+    await expect(started).resolves.toBeNull();
+    expect(retry.cleared).toBe(1);
+    expect(retry.timers).toHaveLength(0);
+    expect(created).toHaveBeenCalledOnce();
+
+    // Retry after the grace ended shows loading again and fetches at once.
+    const again = retryEnvironment();
+    let failing = true;
+    const flaky = vi.fn(async () => {
+      if (failing) throw new Error("chunk load failed");
+      return { createIndexedDbPersistenceController: created };
+    });
+    const retried = createDeferredPersistenceController({}, flaky, again.environment);
+    void retried.start(tree);
+    for (let index = 0; index < ENGINE_RETRY_DELAYS_MS.length; index += 1) {
+      await vi.waitFor(() => expect(again.timers).toHaveLength(1));
+      again.fire();
+    }
+    await vi.waitFor(() => expect(retried.getStatus().phase).toBe("error"));
+    failing = false;
+    retried.retry();
+    expect(retried.getStatus()).toBe(LOADING_PERSISTENCE_STATUS);
+    await vi.waitFor(() => expect(created).toHaveBeenCalledTimes(2));
+    expect(retried.getStatus().errorCode).toBeNull();
+    expect(again.timers).toHaveLength(0);
+  });
+
+  it("releases its backoff timer and recovery listeners when disposed during the grace", async () => {
+    const retry = retryEnvironment();
+    const load = vi.fn(async () => {
+      throw new Error("chunk load failed");
+    });
+    const facade = createDeferredPersistenceController({}, load, retry.environment);
+    const started = facade.start(createSeededDocument().tree);
+    await vi.waitFor(() => expect(retry.timers).toHaveLength(1));
+    expect(retry.listening).toBe(true);
+
+    facade.dispose();
+    expect(retry.timers).toHaveLength(0);
+    expect(retry.listening).toBe(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(load).toHaveBeenCalledOnce();
+    retry.recover();
+    expect(load).toHaveBeenCalledOnce();
+    void started;
   });
 
   it("creates no controller once disposed before its engine arrives", async () => {
@@ -127,6 +217,49 @@ describe("deferred persistence controller", () => {
     await expect(facade.start(createSeededDocument().tree)).resolves.toBeNull();
   });
 });
+
+/** Timers the test fires by hand, and one recovery signal (online or visible). */
+function retryEnvironment() {
+  let nextHandle = 0;
+  const timers: { handle: number; delayMs: number; callback: () => void }[] = [];
+  let recovery: (() => void) | null = null;
+  const state = {
+    timers,
+    cleared: 0,
+    get listening() {
+      return recovery !== null;
+    },
+    environment: {
+      setTimeout(callback: () => void, delayMs: number) {
+        nextHandle += 1;
+        timers.push({ handle: nextHandle, delayMs, callback });
+        return nextHandle;
+      },
+      clearTimeout(handle: unknown) {
+        const index = timers.findIndex((timer) => timer.handle === handle);
+        if (index >= 0) {
+          timers.splice(index, 1);
+          state.cleared += 1;
+        }
+      },
+      listenForRecovery(listener: () => void) {
+        recovery = listener;
+        return () => {
+          if (recovery === listener) recovery = null;
+        };
+      },
+    },
+    fire() {
+      const timer = timers.shift();
+      if (timer === undefined) throw new Error("no timer");
+      timer.callback();
+    },
+    recover() {
+      recovery?.();
+    },
+  };
+  return state;
+}
 
 function deferredEngine(
   create: (options: PersistenceControllerOptions) => PersistenceController =

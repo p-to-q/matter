@@ -13,5 +13,23 @@ import {
 export function createIndexedDbPersistenceController(
   options: PersistenceControllerOptions,
 ): PersistenceController {
-  return createPersistenceController(createIndexedDbDocumentRepository(), options);
+  return createPersistenceController(createIndexedDbDocumentRepository(), {
+    storageHeadroom: readStorageHeadroom,
+    ...options,
+  });
+}
+
+/**
+ * The origin's remaining quota as the browser estimates it. Engines round or
+ * pad the estimate, so the controller treats it as permission to try one
+ * write, never as a promise that the write fits.
+ */
+async function readStorageHeadroom(): Promise<number | null> {
+  try {
+    const estimate = await globalThis.navigator?.storage?.estimate?.();
+    if (typeof estimate?.quota !== "number" || typeof estimate.usage !== "number") return null;
+    return Math.max(0, estimate.quota - estimate.usage);
+  } catch {
+    return null;
+  }
 }

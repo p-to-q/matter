@@ -43,7 +43,7 @@ describe("Matter transcription route", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
     });
   });
 
@@ -73,7 +73,7 @@ describe("Matter transcription route", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
     });
   });
 
@@ -89,7 +89,7 @@ describe("Matter transcription route", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
     });
     expect(pulled).not.toHaveBeenCalled();
     expect(cancelled).toHaveBeenCalledOnce();
@@ -103,12 +103,12 @@ describe("Matter transcription route", () => {
     form.set("durationMs", String(MAX_ACCEPTED_RECORDING_MS + 1));
 
     // A client that does not declare the purpose in its URL is refused as soon
-    // as the field is read: unavailable and retryable, not a too-long recording.
+    // as the field is read: an unavailable surface, not a too-long recording.
     const response = await POST(requestFrom(form));
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
     });
   });
 
@@ -227,6 +227,33 @@ describe("Matter transcription route", () => {
     await expect(limited.json()).resolves.toMatchObject({
       error: { code: "TRANSCRIPTION_FAILED", retryable: true },
     });
+  });
+
+  it("refuses a closed declared purpose before spending the caller's rate window", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+      MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+      NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: "true",
+      MATTER_TEXT_SWAP_SURFACE: "off",
+    };
+    const swap = validForm();
+    swap.set("purpose", "swap-direction");
+    for (let index = 0; index < 20; index += 1) {
+      const refused = await POST(productionRequestFrom(swap, "192.0.2.1", "?purpose=swap-direction"));
+      expect(refused.status).toBe(503);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
+      });
+    }
+    // Every slot of the window is still there for the purpose that is open.
+    for (let index = 0; index < 12; index += 1) {
+      const response = await POST(productionRequestFrom(validForm(), "192.0.2.1", "?purpose=admission"));
+      expect(response.status).toBe(200);
+    }
+    const limited = await POST(productionRequestFrom(validForm(), "192.0.2.1", "?purpose=admission"));
+    expect(limited.status).toBe(429);
   });
 
   it("keeps temporary busy admission distinct from browser incompatibility", async () => {
@@ -586,8 +613,8 @@ function requestFrom(form: FormData, query = ""): Request {
   return new Request(`http://localhost/api/transcribe${query}`, { method: "POST", body: form });
 }
 
-function productionRequestFrom(form: FormData, address = "192.0.2.1"): Request {
-  return new Request("https://matter.ptoq.io/api/transcribe", {
+function productionRequestFrom(form: FormData, address = "192.0.2.1", query = ""): Request {
+  return new Request(`https://matter.ptoq.io/api/transcribe${query}`, {
     method: "POST",
     headers: productionHeaders(address),
     body: form,

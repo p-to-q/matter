@@ -602,8 +602,9 @@ it is cheaper than reading it back.
 attempt, `purpose` (`admission`, `direction`, or `swap-direction`), locale,
 duration, and audio, and never a tree, target, lineage, provider, or fixture
 flag. The browser also declares the purpose once as the URL query parameter
-`?purpose=`, so a route whose purpose is closed refuses with retryable
-`TRANSCRIPTION_UNAVAILABLE` (503) before reading a recording byte. The form
+`?purpose=`, so a route whose purpose is closed refuses with non-retryable
+`TRANSCRIPTION_UNAVAILABLE` (503) before admission accounting and before
+reading a recording byte. The form
 field stays authoritative: a URL value that is repeated, invalid, or different
 from the field is `INVALID_REQUEST` (400), and a request without the URL value
 is gated as soon as the field is parsed. Each purpose has its own product gate;

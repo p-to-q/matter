@@ -831,6 +831,70 @@ describe("persistence controller", () => {
     expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
   });
 
+  it("keeps every undo step again once storage has room, trying at most once when the estimate misjudges", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const repository = controlledRepository();
+    let headroom: number | null = 0;
+    const storageHeadroom = vi.fn(async () => headroom);
+    const controller = createPersistenceController(repository.port, { storageHeadroom });
+    await startAccepted(controller, tree, history);
+    await waitFor(() => repository.pending.length === 1);
+    // Full retention is the norm: nothing asks the storage estimate.
+    expect(storageHeadroom).not.toHaveBeenCalled();
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().historyNotice === "released");
+    const shed = { maxUndoBytes: 50, keepRedo: true };
+
+    // Still no room: the save keeps the retention storage last accepted.
+    controller.publish({ ...tree, revision: tree.revision + 1 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(storageHeadroom).toHaveBeenCalledOnce();
+    expect(repository.pending[0]?.retention).toEqual(shed);
+    repository.settleNext({ ok: true, value: 2 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+
+    // Room came back: one save keeps every step and the notice ends.
+    headroom = 64 * 1_024 * 1_024;
+    controller.publish({ ...tree, revision: tree.revision + 2 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext({ ok: true, value: 3 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().historyNotice).toBeNull();
+    controller.publish({ ...tree, revision: tree.revision + 3 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext({ ok: true, value: 4 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+
+    // Pressure again, and this engine's estimate overstates the room.
+    controller.publish({ ...tree, revision: tree.revision + 4 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 5 });
+    await waitFor(() => controller.getStatus().historyNotice === "released");
+    controller.publish({ ...tree, revision: tree.revision + 5 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext(storageFull());
+    // The refusal falls straight back to the accepted retention in the same save.
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual(shed);
+    repository.settleNext({ ok: true, value: 6 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus()).toMatchObject({ errorCode: null, historyNotice: "released" });
+    // No second attempt for this document, however roomy the estimate.
+    const asked = storageHeadroom.mock.calls.length;
+    controller.publish({ ...tree, revision: tree.revision + 6 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual(shed);
+    expect(storageHeadroom).toHaveBeenCalledTimes(asked);
+  });
+
   it("saves a history-only change at an unchanged revision and skips the history it already holds", async () => {
     const tree = createSeededDocument().tree;
     const loadedHistory = historyOfBytes([10, 20]);
@@ -1115,6 +1179,116 @@ describe("persistence controller", () => {
       upgradeBlocked: false,
       conflictOrigin: null,
     });
+  });
+
+  it("sheds undo to replace a corrupt row under storage pressure and keeps Replace open when it cannot", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const basis = { treeId: tree.id, serialized: "{\"damaged\":true}" };
+    const replacedBasis = { writeGeneration: 6, journal: emptyHistoryJournal(1) };
+    const replaceCorrupt = vi.fn<DocumentRepository["replaceCorrupt"]>(async () =>
+      storageFull() as RepositoryResult<SnapshotBasis>);
+    // The damaged row still holds generation 5: a save against no row meets it.
+    const save = vi.fn<DocumentRepository["save"]>(async () => ({
+      ok: false,
+      error: { code: "PERSISTENCE_CONFLICT", message: "row exists" },
+    }));
+    const reserveImportedSnapshot = vi.fn(inertPort().reserveImportedSnapshot);
+    const controller = createPersistenceController({
+      ...inertPort(),
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_CORRUPT", message: "damaged" } }),
+      save,
+      exportCorrupt: async () => ({
+        ok: true,
+        value: { basis, bytes: new TextEncoder().encode(basis.serialized) },
+      }),
+      replaceCorrupt,
+      reserveImportedSnapshot,
+      close: () => undefined,
+    });
+    const seen: string[] = [];
+    controller.subscribe(() => seen.push(`${controller.getStatus().errorCode}/${controller.getStatus().conflictOrigin}`));
+    await startAccepted(controller, tree, history);
+    const edited = { ...tree, revision: tree.revision + 1 };
+    controller.publish(edited, history, true);
+    await controller.exportCorruptRecovery();
+
+    // Storage refuses every retention, material alone included.
+    await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: false, errorCode: "PERSISTENCE_STORAGE_FULL" });
+    expect(replaceCorrupt.mock.calls.map(([write]) => write.retention)).toEqual([
+      FULL_HISTORY_RETENTION,
+      { maxUndoBytes: 50, keepRedo: true },
+      { maxUndoBytes: 0, keepRedo: true },
+    ]);
+    // Still a damaged row: nothing may save or import against a generation
+    // this tab never read, and the recovery basis is kept for another Replace.
+    expect(controller.getStatus()).toMatchObject({
+      phase: "error",
+      errorCode: "PERSISTENCE_CORRUPT",
+      unsaved: true,
+      replaceableByImport: false,
+    });
+    controller.retry();
+    await Promise.resolve();
+    expect(save).not.toHaveBeenCalled();
+    await expect(controller.prepareImportedTree(tree, { replaceUnsaved: true })).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_CORRUPT",
+    });
+    expect(reserveImportedSnapshot).not.toHaveBeenCalled();
+
+    // Some space came back: the second Replace keeps half the undo bytes.
+    replaceCorrupt.mockClear();
+    replaceCorrupt
+      .mockResolvedValueOnce(storageFull() as RepositoryResult<SnapshotBasis>)
+      .mockResolvedValueOnce({ ok: true, value: replacedBasis });
+    await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: true });
+    expect(replaceCorrupt.mock.calls.map(([write]) => write.retention)).toEqual([
+      FULL_HISTORY_RETENTION,
+      { maxUndoBytes: 50, keepRedo: true },
+    ]);
+    expect(replaceCorrupt.mock.calls[1]?.[1]).toBe(basis);
+    expect(controller.getStatus()).toMatchObject({
+      phase: "saved",
+      persistedRevision: edited.revision,
+      errorCode: null,
+      historyNotice: "released",
+      unsaved: false,
+    });
+    // The next save continues from the replaced row with the shed retention.
+    controller.publish({ ...tree, revision: tree.revision + 2 }, history);
+    await waitFor(() => save.mock.calls.length === 1);
+    expect(save.mock.calls[0]?.[0]).toMatchObject({ basis: replacedBasis, retention: { maxUndoBytes: 50, keepRedo: true } });
+    expect(seen.some((entry) => entry.includes("another-tab"))).toBe(false);
+  });
+
+  it("names a conflict met by a first save after a failed load a difference, never another tab", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository();
+    const controller = createPersistenceController({
+      ...repository.port,
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_UNAVAILABLE", message: "closed" } }),
+    });
+    await startAccepted(controller, tree);
+    expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_UNAVAILABLE" });
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.expectedGeneration).toBeNull();
+    // Storage opened this time and holds a row this tab never read.
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "row exists" } });
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+    expect(controller.getStatus().conflictOrigin).toBe("load-window");
+
+    // With a row this tab saved, a failed compare is another tab's newer copy.
+    const saved = controlledRepository(stored(tree, 2));
+    const savedController = createPersistenceController(saved.port);
+    await startAccepted(savedController, tree);
+    savedController.publish({ ...tree, revision: tree.revision + 1 });
+    await waitFor(() => saved.pending.length === 1);
+    saved.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "newer" } });
+    await waitFor(() => savedController.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+    expect(savedController.getStatus().conflictOrigin).toBe("another-tab");
   });
 
   it("invalidates a corrupt export when newer local material arrives", async () => {

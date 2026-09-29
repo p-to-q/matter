@@ -12,12 +12,13 @@ import {
   createWikiMaterialLexicalPort,
 } from "../application/wiki-material-lexical-adapter";
 import {
-  claimMatterWikiOccurrences,
+  claimMatterWikiPublication,
   isMatterWikiPhoneticFittingEnabled,
   mintMatterWikiOccurrence,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
   readMatterWikiInterpreter,
+  renewMatterWikiOccurrence,
   settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
 import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
@@ -45,6 +46,7 @@ const readMaterial = (): MaterialView => {
 const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
   readMaterial,
   settle: settleMatterWikiOccurrence,
+  renew: renewMatterWikiOccurrence,
   restore: (request) => matterStore.getState().restoreHumanTextRange({
     ...request,
     commandId: `human_restore_${createOperationId()}`,
@@ -70,8 +72,7 @@ const matterStore = createMatterStore(singletonInitialDocument, {
   }),
   lexicalOccurrences: Object.freeze({
     publishCommitted: (publication) => {
-      claimMatterWikiOccurrences(publication.edits.map((edit) => edit.occurrence));
-      wikiOccurrences.admit(publication);
+      wikiOccurrences.admit(claimMatterWikiPublication(publication));
     },
   }),
   // Loaded with the repair port, before any repair candidate can exist.
