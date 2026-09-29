@@ -5,7 +5,7 @@ import {
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
 import {
-  claimMatterWikiOccurrences,
+  claimMatterWikiPublication,
   mintMatterWikiOccurrence,
   takeMatterWikiOccurrence,
 } from "./wiki-occurrence-owner";
@@ -18,7 +18,7 @@ export const readMatterWikiBasis = matterWikiBasisPublication.read;
 export const readMatterWikiInterpreter = matterWikiBasisPublication.readInterpreter;
 
 export {
-  claimMatterWikiOccurrences,
+  claimMatterWikiPublication,
   isMatterWikiAutomaticCollectionEnabled,
   isMatterWikiPhoneticFittingEnabled,
   mintMatterWikiOccurrence,

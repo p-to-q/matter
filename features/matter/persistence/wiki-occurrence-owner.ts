@@ -1,3 +1,4 @@
+import type { MaterialLexicalOccurrencePublication } from "../application/material-lexical-occurrence-port";
 import {
   createWikiOccurrenceRegistry,
   type WikiOccurrenceAttribution,
@@ -31,10 +32,21 @@ export function mintMatterWikiOccurrence(attribution: WikiOccurrenceAttribution)
   return registry.register(token, attribution, monotonicNow()) ? token : null;
 }
 
-/** Keeps only the tokens that reached committed material beyond the short unclaimed window. */
-export function claimMatterWikiOccurrences(occurrenceIds: readonly string[]): void {
+/**
+ * Keeps the tokens of one committed publication beyond the short unclaimed
+ * window, and returns the publication narrowed to the edits still
+ * attributable. A token released before its commit (the registry bound, its
+ * unclaimed window) leaves its word corrected but unmarked, rather than
+ * marking a word whose settlement nothing could record.
+ */
+export function claimMatterWikiPublication(
+  publication: MaterialLexicalOccurrencePublication,
+): MaterialLexicalOccurrencePublication {
   const nowMs = monotonicNow();
-  for (const occurrenceId of occurrenceIds) registry.claim(occurrenceId, nowMs);
+  const edits = publication.edits.filter((edit) => registry.claim(edit.occurrence, nowMs));
+  return edits.length === publication.edits.length
+    ? publication
+    : Object.freeze({ ...publication, edits: Object.freeze(edits) });
 }
 
 /** Consumes one attribution; a second take of the same id returns nothing. */

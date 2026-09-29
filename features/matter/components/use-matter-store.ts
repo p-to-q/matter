@@ -12,7 +12,7 @@ import {
   createWikiMaterialLexicalPort,
 } from "../application/wiki-material-lexical-adapter";
 import {
-  claimMatterWikiOccurrences,
+  claimMatterWikiPublication,
   isMatterWikiPhoneticFittingEnabled,
   mintMatterWikiOccurrence,
   observeMatterWikiEvidence,
@@ -70,8 +70,7 @@ const matterStore = createMatterStore(singletonInitialDocument, {
   }),
   lexicalOccurrences: Object.freeze({
     publishCommitted: (publication) => {
-      claimMatterWikiOccurrences(publication.edits.map((edit) => edit.occurrence));
-      wikiOccurrences.admit(publication);
+      wikiOccurrences.admit(claimMatterWikiPublication(publication));
     },
   }),
   // Loaded with the repair port, before any repair candidate can exist.

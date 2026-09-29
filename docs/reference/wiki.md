@@ -470,8 +470,16 @@ neighbouring language rather than the edge of the answer.
 Each applied edit may carry one opaque occurrence token. The Wiki session mints
 it per edit from a secure random source (never from text or position) and
 registers `occurrence → { rule, appliedAtRevision, origin }` in a bounded
-in-memory registry owned by the Wiki runtime: at most 64 entries, a 10 s window
-for a token whose candidate never committed, and 5 min for a committed one.
+in-memory registry owned by the Wiki runtime: room for 64 committed
+occurrences (the driver's live bound) plus 64 uncommitted candidates, a 10 s
+window for a token whose candidate never committed, and 5 min for a committed
+one. Only an uncommitted candidate is ever evicted, oldest first, so a
+candidate that never commits can never cost a marked word its attribution. A
+registry full of committed occurrences refuses the next mint; that edit, like
+one whose token was evicted or expired before its commit, is applied as an
+ordinary corrected word without a mark, exactly as an edit beyond the live
+bound is censored. Withholding it instead would cost the person the
+correction, and marking it would promise a settlement nothing could record.
 The rule is the exact `locale, channel, boundary, form, canonical` identity of
 the compiled rule that matched, so a Latin span routed out of a Chinese or
 Japanese turn settles against its `en-US` ledger, never the turn's locale;
@@ -502,7 +510,8 @@ edits measured, the store calls one narrow port,
 `publishCommittedLexicalOccurrences({ treeId, documentEpoch, nodeId,
 nodeUpdatedAt, stage, channel, locale, edits })`, after its state update and
 after the committed-observation call. Composition claims the tokens in the
-registry and hands the publication to the browser occurrence driver. The store
+registry and hands the browser occurrence driver only the edits it could
+claim. The store
 never learns that Wiki exists, and no heard form reaches store state, history,
 a receipt, persistence, the archive, a model request, or a log.
 

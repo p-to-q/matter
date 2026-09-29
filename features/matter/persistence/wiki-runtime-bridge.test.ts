@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MaterialLexicalOccurrencePublication } from "../application/material-lexical-occurrence-port";
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import { compileWikiBasis } from "../wiki/wiki-basis";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
@@ -148,7 +149,7 @@ describe("Wiki runtime bridge", () => {
     const bridge = await import("./wiki-runtime-bridge");
     const occurrenceId = bridge.mintMatterWikiOccurrence(ATTRIBUTION);
     expect(occurrenceId).toMatch(/^[0-9a-f]{32}$/u);
-    bridge.claimMatterWikiOccurrences([occurrenceId!]);
+    bridge.claimMatterWikiPublication(publicationOf([occurrenceId!]));
 
     await expect(bridge.settleMatterWikiOccurrence(occurrenceId!, "accepted-implicit"))
       .resolves.toBe("recorded");
@@ -170,7 +171,7 @@ describe("Wiki runtime bridge", () => {
     }));
     const bridge = await import("./wiki-runtime-bridge");
     const censored = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
-    bridge.claimMatterWikiOccurrences([censored]);
+    bridge.claimMatterWikiPublication(publicationOf([censored]));
     const uncommitted = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
 
     await expect(bridge.settleMatterWikiOccurrence(censored, "censored")).resolves.toBe("neutral");
@@ -180,12 +181,44 @@ describe("Wiki runtime bridge", () => {
     expect(settle).not.toHaveBeenCalled();
   });
 
+  it("offers only the edits whose attribution is still claimable as occurrences", async () => {
+    const bridge = await import("./wiki-runtime-bridge");
+    const kept = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+    const complete = publicationOf([kept]);
+    // Every edit still attributable: the very same publication passes through.
+    expect(bridge.claimMatterWikiPublication(complete)).toBe(complete);
+
+    const minted = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+    // An id the registry never held (evicted, expired, or never minted).
+    const narrowed = bridge.claimMatterWikiPublication(publicationOf([minted, "f".repeat(32)]));
+    expect(narrowed.edits.map((edit) => edit.occurrence)).toEqual([minted]);
+    expect(Object.isFrozen(narrowed.edits)).toBe(true);
+  });
+
   it("mints no attribution without a secure random source", async () => {
     vi.stubGlobal("crypto", undefined);
     const bridge = await import("./wiki-runtime-bridge");
     expect(bridge.mintMatterWikiOccurrence(ATTRIBUTION)).toBeNull();
   });
 });
+
+function publicationOf(occurrences: readonly string[]): MaterialLexicalOccurrencePublication {
+  return Object.freeze({
+    treeId: "tree_1",
+    documentEpoch: 1,
+    nodeId: "thought_1",
+    nodeUpdatedAt: "2026-09-30T00:00:00.000Z",
+    stage: "admission" as const,
+    channel: "spoken" as const,
+    locale: "zh-CN" as const,
+    edits: Object.freeze(occurrences.map((occurrence, index) => Object.freeze({
+      start: index * 2,
+      end: index * 2 + 1,
+      occurrence,
+      sourceText: "p",
+    }))),
+  });
+}
 
 const ATTRIBUTION = Object.freeze({
   rule: Object.freeze({

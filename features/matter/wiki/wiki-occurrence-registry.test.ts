@@ -56,9 +56,10 @@ describe("Wiki occurrence registry", () => {
     expect(registry.take("occ_in_time", 100 + bounds.claimedTtlMs)).toEqual(ATTRIBUTION);
   });
 
-  it("stays bounded, releasing unclaimed candidates before committed occurrences", () => {
+  it("stays bounded by releasing unclaimed candidates only, and refuses a mint when full of claimed", () => {
     const registry = createWikiOccurrenceRegistry({
-      maxEntries: 3,
+      maxClaimed: 2,
+      unclaimedHeadroom: 1,
       unclaimedTtlMs: 1_000,
       claimedTtlMs: 10_000,
     });
@@ -68,16 +69,57 @@ describe("Wiki occurrence registry", () => {
     registry.register("claimed_c", ATTRIBUTION, 2);
     registry.claim("claimed_c", 2);
 
-    registry.register("newest_d", ATTRIBUTION, 3);
+    expect(registry.register("newest_d", ATTRIBUTION, 3)).toBe(true);
     expect(registry.size()).toBe(3);
-    registry.claim("newest_d", 3);
-    expect(registry.take("unclaimed_b", 4)).toBeNull();
+    expect(registry.claim("newest_d", 3)).toBe(true);
+    // The unclaimed candidate made room; it can no longer be claimed.
+    expect(registry.claim("unclaimed_b", 3)).toBe(false);
 
-    registry.register("newest_e", ATTRIBUTION, 5);
-    // With no unclaimed candidate left, the oldest committed entry leaves.
-    expect(registry.take("claimed_a", 6)).toBeNull();
+    // Every entry is a committed occurrence: none is evicted for a newcomer.
+    expect(registry.register("newest_e", ATTRIBUTION, 5)).toBe(false);
+    expect(registry.claim("newest_e", 5)).toBe(false);
+    expect(registry.take("claimed_a", 6)).toEqual(ATTRIBUTION);
     expect(registry.take("claimed_c", 6)).toEqual(ATTRIBUTION);
     expect(registry.take("newest_d", 6)).toEqual(ATTRIBUTION);
+  });
+
+  it("never lets a candidate that does not commit cost a marked occurrence its attribution", () => {
+    const registry = createWikiOccurrenceRegistry();
+    const { maxClaimed, unclaimedHeadroom } = WIKI_OCCURRENCE_REGISTRY_BOUNDS;
+    for (let index = 0; index < maxClaimed; index += 1) {
+      registry.register(`live_${index}`, ATTRIBUTION, index);
+      registry.claim(`live_${index}`, index);
+    }
+    // A burst of repair candidates that never commit, beyond all headroom.
+    for (let index = 0; index < unclaimedHeadroom * 3; index += 1) {
+      expect(registry.register(`candidate_${index}`, ATTRIBUTION, 100 + index)).toBe(true);
+    }
+    expect(registry.size()).toBe(maxClaimed + unclaimedHeadroom);
+    for (let index = 0; index < maxClaimed; index += 1) {
+      expect(registry.take(`live_${index}`, 1_000)).toEqual(ATTRIBUTION);
+    }
+  });
+
+  it("keeps the newest attributions of a turn with more edits than the live bound", () => {
+    const registry = createWikiOccurrenceRegistry();
+    const { maxClaimed, unclaimedHeadroom } = WIKI_OCCURRENCE_REGISTRY_BOUNDS;
+    // A full set of live occurrences from earlier turns.
+    const earlier = Array.from({ length: maxClaimed }, (_, index) => `earlier_${index}`);
+    for (const id of earlier) {
+      registry.register(id, ATTRIBUTION, 0);
+      registry.claim(id, 0);
+    }
+    // One long dictation mints more edits than the headroom holds.
+    const turn = Array.from({ length: unclaimedHeadroom + 36 }, (_, index) => `turn_${index}`);
+    for (const id of turn) expect(registry.register(id, ATTRIBUTION, 10)).toBe(true);
+    // Its earliest edits made room for its latest; the earlier live set is intact.
+    const claimed = turn.filter((id) => registry.claim(id, 20));
+    expect(claimed).toEqual(turn.slice(36));
+    // The driver keeps the newest live occurrences and censors the rest, which
+    // takes them: exactly the earlier set, since it is the oldest.
+    for (const id of earlier) expect(registry.take(id, 30)).toEqual(ATTRIBUTION);
+    expect(registry.size()).toBe(maxClaimed);
+    for (const id of claimed) expect(registry.take(id, 40)).toEqual(ATTRIBUTION);
   });
 
   it("owns an immutable copy of the attribution", () => {
@@ -93,10 +135,13 @@ describe("Wiki occurrence registry", () => {
   });
 
   it("rejects invalid bounds", () => {
-    expect(() => createWikiOccurrenceRegistry({
-      maxEntries: 0,
-      unclaimedTtlMs: 1,
-      claimedTtlMs: 1,
-    })).toThrow(RangeError);
+    for (const bounds of [
+      { maxClaimed: 0, unclaimedHeadroom: 1 },
+      { maxClaimed: 1, unclaimedHeadroom: 0 },
+      { maxClaimed: 1.5, unclaimedHeadroom: 1 },
+    ]) {
+      expect(() => createWikiOccurrenceRegistry({ ...bounds, unclaimedTtlMs: 1, claimedTtlMs: 1 }))
+        .toThrow(RangeError);
+    }
   });
 });
