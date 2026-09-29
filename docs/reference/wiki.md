@@ -205,6 +205,16 @@ is that silence over disclosed but unread generated text is weaker evidence
 than silence over a person's own dictation. Every weight and memory is a
 calibration candidate.
 
+Today that switch is unreachable. Generated text receives only the written
+channel's rules, and every automatic relation is spoken, because the one
+released fitting producer observes spoken human admission only; a written rule
+is therefore always human-confirmed, and confirmed rules stay outside scoring.
+The switch gains an effect only when a written-channel producer exists. The
+`generated-implicit-acceptance-counts-by-policy` policy scenario replays a
+spoken relation settled from generated text, a combination production cannot
+produce; it stays in the corpus as a forward guard for that producer, not as
+evidence of current behavior.
+
 No rule falls back across locales. The same form may resolve differently in
 `zh-CN`, `zh-TW`, `ja-JP`, `de-DE`, and `en-US`; an unsupported or missing
 locale cannot activate a rule. [Script routing](#script-routing) is not a
@@ -823,7 +833,8 @@ not age, a routed Latin relation that activates from Chinese turns and ages
 only on Chinese turns that contained Latin, a partial scan that scores only
 what it saw, informed acceptance that
 retains a used rule, generated-text implicit acceptance under the policy
-switch, two-strike reversion, strike-memory expiry, confirmed authority outside
+switch (a forward guard; see [Occurrence outcomes](#occurrence-outcomes)),
+two-strike reversion, strike-memory expiry, confirmed authority outside
 scoring, two same-epoch reverts that strike once, duplicate delivery that
 settles once, kept evidence that never re-activates a demoted relation, and
 generated/protected zero-vote behavior. Its compact release binds
