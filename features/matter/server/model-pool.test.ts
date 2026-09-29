@@ -662,22 +662,35 @@ describe("pool adapter", () => {
     ]);
   });
 
-  it("keeps a cooling request credential ahead of a cooling managed candidate", async () => {
+  it("places a cooling request credential behind healthy managed candidates, ahead of cooling ones", async () => {
     const tried: string[] = [];
     const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1 };
+    let steadyAnswers = 1;
     const adapter = createPoolAdapter([
       candidate("managed", "managed"),
-      { ...candidate("selected", "user"), credentialScopeId: "both-cooling" },
+      { ...candidate("selected", "user"), credentialScopeId: "user-cooling" },
+      candidate("steady", "steady"),
     ], limits, Date.now, async (_url, init) => {
-      tried.push((JSON.parse(String(init?.body)) as { model: string }).model);
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+      tried.push(model);
+      if (model === "steady" && steadyAnswers > 0) {
+        steadyAnswers -= 1;
+        return chatResponse("steady");
+      }
       return chatResponse("", 503);
     });
 
+    // All healthy: the person's provider leads. Its failure and the first
+    // managed failure cool both; the steady candidate answers.
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .resolves.toEqual({ text: "steady" });
+    // Next action: the healthy managed candidate first, then the cooling user
+    // scope ahead of the cooling managed one. Cooling orders, never removes.
     await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
-    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
-    // Cooling orders candidates and never removes one, so both are retried,
-    // and the person's own provider still leads among cooling candidates.
-    expect(tried).toEqual(["selected", "managed", "selected", "managed"]);
+    expect(tried).toEqual([
+      "selected", "managed", "steady",
+      "steady", "selected", "managed",
+    ]);
   });
 
   it("skips a request credential only while its exact scoped attempt is still draining", async () => {
