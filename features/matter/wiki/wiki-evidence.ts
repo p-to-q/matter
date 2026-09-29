@@ -35,6 +35,7 @@ import {
   type WikiAliasEvidenceAggregate,
   type WikiAppliedRule,
   type WikiEvent,
+  type WikiEvidenceOpportunity,
   type WikiLedgerTick,
   type WikiLexeme,
   type WikiLexemeScope,
@@ -84,6 +85,7 @@ import {
   wikiScriptsCover,
   type WikiScriptMask,
 } from "./wiki-script";
+import { isWikiRoutedOpportunity } from "./wiki-script-routing";
 import {
   isWikiQualifiedProducerRelease,
   type WikiQualifiedProducerRelease,
@@ -1066,8 +1068,10 @@ function evictWeakestAliasEvidence(
  * Advances the candidate-local quiet clocks for one human turn. A candidate
  * ages only when this turn was a comparable opportunity for it: a complete
  * scan in the same locale (and, for relations, the same channel) whose
- * eligible content contained every script the candidate needs. Absence from a
- * turn that could not have contained it is not evidence of disuse.
+ * eligible content contained every script the candidate needs. A turn's
+ * routed opportunity is the same test for the Latin ledger its Latin words
+ * routed to. Absence from a turn that could not have contained it is not
+ * evidence of disuse.
  */
 function advanceUnobservedEvidence(
   state: WikiState,
@@ -1081,8 +1085,8 @@ function advanceUnobservedEvidence(
     !initialTermKeys.has(lexemeKey(lexeme)));
   if (state.termEvidence.length === 0 && state.aliasEvidence.length === 0 &&
       state.revertStrikes.length === 0 && !hasOwnerlessAutomaticLexeme) return state;
-  const termAging = agingScope(tick.term);
-  const aliasAging = agingScope(tick.alias);
+  const termAging = agingScopes(tick.term);
+  const aliasAging = agingScopes(tick.alias);
   const scriptMasks = new Map<string, WikiScriptMask>();
   const scriptsOf = (text: string): WikiScriptMask => {
     const cached = scriptMasks.get(text);
@@ -1100,9 +1104,9 @@ function advanceUnobservedEvidence(
       event.locale, event.channel, event.boundary, event.form, event.canonical, event.producer,
     ])));
   const agedTermEvidence = state.termEvidence.map((entry) => {
-    if (termAging === null || observedTerms.has(lexemeKey(entry)) ||
-        entry.locale !== termAging.locale ||
-        !wikiScriptsCover(termAging.scripts, scriptsOf(entry.canonical))) return entry;
+    if (observedTerms.has(lexemeKey(entry)) || !termAging.some((scope) =>
+      entry.locale === scope.locale &&
+      wikiScriptsCover(scope.scripts, scriptsOf(entry.canonical)))) return entry;
     const aged = advanceWikiTermQuietTurn(entry);
     return Object.freeze({
       locale: entry.locale,
@@ -1116,9 +1120,9 @@ function advanceUnobservedEvidence(
     entry: Pick<WikiAliasDescriptor, "lexemeId" | "channel" | "form">,
   ): boolean => {
     const lexeme = lexemesById.get(entry.lexemeId);
-    return aliasAging !== null && lexeme !== undefined &&
-      lexeme.locale === aliasAging.locale && entry.channel === aliasAging.channel &&
-      wikiScriptsCover(aliasAging.scripts, scriptsOf(entry.form));
+    return lexeme !== undefined && aliasAging.some((scope) =>
+      lexeme.locale === scope.locale && entry.channel === scope.channel &&
+      wikiScriptsCover(scope.scripts, scriptsOf(entry.form)));
   };
   const aliasEvidence = state.aliasEvidence.map((entry) => {
     if (!aliasComparable(entry)) return entry;
@@ -1201,13 +1205,19 @@ type WikiAgingScope = Readonly<{
   scripts: WikiScriptMask;
 }>;
 
-function agingScope(tick: WikiLedgerTick): WikiAgingScope | null {
-  if (tick.disposition !== "observed" && tick.disposition !== "quiet") return null;
-  return Object.freeze({
-    locale: tick.opportunity.locale,
-    channel: tick.opportunity.channel,
-    scripts: wikiScriptMaskFromClasses(tick.opportunity.scripts),
-  });
+const NO_AGING: readonly WikiAgingScope[] = Object.freeze([]);
+
+/** The turn's own opportunity and, when it routed Latin words, that ledger's. */
+function agingScopes(tick: WikiLedgerTick): readonly WikiAgingScope[] {
+  if (tick.disposition !== "observed" && tick.disposition !== "quiet") return NO_AGING;
+  const opportunities = tick.routedOpportunity === undefined
+    ? [tick.opportunity]
+    : [tick.opportunity, tick.routedOpportunity];
+  return Object.freeze(opportunities.map((opportunity) => Object.freeze({
+    locale: opportunity.locale,
+    channel: opportunity.channel,
+    scripts: wikiScriptMaskFromClasses(opportunity.scripts),
+  })));
 }
 
 function admitsObservations(tick: WikiLedgerTick): boolean {
@@ -1226,15 +1236,25 @@ function isWikiLedgerTick(value: unknown): value is WikiLedgerTick {
     return hasOnlyKeys(value, ["disposition"]);
   }
   if (value.disposition !== "observed" && value.disposition !== "quiet") return false;
-  const opportunity = value.opportunity;
-  return hasOnlyKeys(value, ["disposition", "opportunity"]) &&
-    isPlainRecord(opportunity) &&
-    hasOnlyKeys(opportunity, ["locale", "channel", "scripts"]) &&
-    typeof opportunity.locale === "string" && isMatterLocale(opportunity.locale) &&
-    (opportunity.channel === "spoken" || opportunity.channel === "written") &&
-    Array.isArray(opportunity.scripts) &&
-    opportunity.scripts.every(isWikiScriptClass) &&
-    new Set(opportunity.scripts).size === opportunity.scripts.length;
+  if (!isWikiEvidenceOpportunity(value.opportunity)) return false;
+  if (!Object.hasOwn(value, "routedOpportunity")) {
+    return hasOnlyKeys(value, ["disposition", "opportunity"]);
+  }
+  // A routed opportunity is accepted only for the one ledger the turn's
+  // locale routes Latin words to; a caller cannot age an arbitrary locale.
+  return hasOnlyKeys(value, ["disposition", "opportunity", "routedOpportunity"]) &&
+    isWikiEvidenceOpportunity(value.routedOpportunity) &&
+    isWikiRoutedOpportunity(value.opportunity, value.routedOpportunity);
+}
+
+function isWikiEvidenceOpportunity(value: unknown): value is WikiEvidenceOpportunity {
+  return isPlainRecord(value) &&
+    hasOnlyKeys(value, ["locale", "channel", "scripts"]) &&
+    typeof value.locale === "string" && isMatterLocale(value.locale) &&
+    (value.channel === "spoken" || value.channel === "written") &&
+    Array.isArray(value.scripts) &&
+    value.scripts.every(isWikiScriptClass) &&
+    new Set(value.scripts).size === value.scripts.length;
 }
 
 function isWikiOccurrenceSettlement(value: unknown): value is WikiOccurrenceSettlement {

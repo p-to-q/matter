@@ -92,12 +92,12 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
       foregroundDwellMillisecondsToSettle: 60_000,
     }),
   }),
-  policySourceDigest: "sha256:2771f14d08c11bf4f531cdd17da9e1c74788a71004bb60a1f8c22f04538b24b2",
+  policySourceDigest: "sha256:30521f8a9da2f0a32dc7efec8b8b231f9dca6337e5cfb5c85e58d4b744f92935",
   corpus: Object.freeze({
-    corpusVersion: "wiki-learning-policy-v4-corpus/1",
-    corpusDigest: "sha256:44e73d0c9703d0080755b69389a4dcf009edc2575a6252e21606225b6eb53681",
-    scenarioCount: 17,
+    corpusVersion: "wiki-learning-policy-v4-corpus/2",
+    corpusDigest: "sha256:a75bd008ffd31329b33fffdba3eee2904df1a9a64b606c020915cfc5a46d65c3",
+    scenarioCount: 18,
   }),
-  resultDigest: "sha256:99f1f2cdddbe358844e1251298a4145dfef8dca950048d056d2e7d7cad3f2af7",
-  producerQualificationDigest: "sha256:c84ef0780c77eda26404b943b99fe0eb7b1d5f9a05ad7278afe71c2a4438fff3",
+  resultDigest: "sha256:64c70e2bced4f9cc96414c677e8fbc8867ff3b85e8f0ad7265bb3951260e1bcf",
+  producerQualificationDigest: "sha256:e7dd51b3c6d268799b5a1e3d115ba52e980c8f4f3ee09591f814e36df25dfdfe",
 }) satisfies WikiQualifiedLearningPolicyRelease;

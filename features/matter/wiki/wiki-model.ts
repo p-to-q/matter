@@ -228,10 +228,17 @@ export type WikiEvidenceOpportunity = Readonly<{
   scripts: readonly WikiScriptClass[];
 }>;
 
+/**
+ * A complete scan of a Chinese or Japanese turn that contained Latin words
+ * also offers `routedOpportunity`: those words belong to the Latin ledger they
+ * route to (see wiki-script-routing), so that ledger ages only on turns that
+ * actually contained Latin. A turn without routed words carries none.
+ */
 export type WikiLedgerTick =
   | Readonly<{
       disposition: "observed" | "quiet";
       opportunity: WikiEvidenceOpportunity;
+      routedOpportunity?: WikiEvidenceOpportunity;
     }>
   | Readonly<{ disposition: "partial" | "paused" | "censored" }>;
 

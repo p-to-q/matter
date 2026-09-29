@@ -98,7 +98,11 @@ without creating a global cohort boundary. A tick ages a candidate only when it
 was a comparable opportunity: a complete scan in the candidate's locale (and,
 for a relation, its channel) whose eligible, unprotected words contained every
 script the candidate needs. Absence from a turn that could not have contained
-the word is not evidence of disuse. The production `recent-material` source
+the word is not evidence of disuse. A Chinese or Japanese turn whose scan
+contained Latin words also offers the `en-US` ledger a routed opportunity for
+the Latin script alone (see [Script routing](#script-routing)), so English
+candidates age only on turns that actually contained Latin; a turn without
+Latin words offers that ledger nothing. The production `recent-material` source
 receives only a successful, validated human admission; it records one
 content-minimal candidate vote per turn and never observes a later document
 diff. The ordering of authority is fixed: an addressed human decision bypasses
@@ -201,7 +205,9 @@ calibration candidate.
 
 No rule falls back across locales. The same form may resolve differently in
 `zh-CN`, `zh-TW`, `ja-JP`, `de-DE`, and `en-US`; an unsupported or missing
-locale cannot activate a rule.
+locale cannot activate a rule. [Script routing](#script-routing) is not a
+fallback: it assigns a span to a ledger by the span's own script before any
+rule is consulted, never because the turn's locale lacked one.
 
 The repository provisions `Engelbart`, `Morphogenesis`, `KFC`, and `[p → q]` as
 ordinary automatic lexemes on the first successful local load. On Matter's
@@ -221,6 +227,99 @@ that it is product-owned. It abstains around human ownership or unknown evidence
 A one-time compatibility migration replaces a former `Matter` or
 `Douglas Engelbart` starter only when the complete four-entry legacy set
 remains pristine; any human change disables that migration.
+
+### Script routing
+
+Matter's default interface admits `zh-CN` speech, and the recognition errors
+Wiki exists for cluster on the Latin names inside it: `Engelbart`,
+`Morphogenesis`, product names. The only released fitting producer is an
+internal edit over ASCII Latin words, qualified in the `en-US` ledger, so
+before routing it never saw them.
+
+A word inside a `zh-CN`, `zh-TW`, or `ja-JP` turn whose letters are all Latin
+script belongs to the `en-US` ledger. That is the locale settings already infer
+for a Latin word typed under those interfaces, so learned and hand-added Latin
+names share one identity. Every other word, and every word of an `en-US` or
+`de-DE` turn, stays in the turn's own locale. Nothing routes toward a CJK
+ledger, and a span holding any CJK letter never reaches a Latin producer or a
+Latin rule. `wiki-script-routing.ts` owns this table.
+
+Words are the turn locale's `Intl.Segmenter` word segments, which break
+between Latin and Han, kana, or Hangul whether or not the speaker left a space.
+A segment is routed when it has a letter and every letter is Latin. A segment
+mixing scripts, such as Latin joined to Bopomofo, stays in the turn locale,
+where no Latin producer reads it, so a host segmenter that failed to break
+would lose routing, not precision. Full-width ASCII, meaning letters, digits,
+and symbols such as `＠／．－｀`, folds to ASCII for matching and protection
+only, index for index, as does the ideographic space. The CJK sentence marks
+`，！？；` stay unfolded so a URL or path tail still ends at the sentence.
+Committed text is never width-normalized: only a rule that replaces a whole
+span changes it, and term collection never collects a full-width spelling,
+because a collected canonical becomes rewrite output.
+
+Routing keeps every existing contract of the routed ledger:
+
+- evidence is keyed by the routed locale, channel, and form, so a relation
+  learned from `我读了Englebart的论文` is the same `en-US` relation an English
+  turn would teach, under the same four-turn gate, margin, precedence, kept
+  evidence, and strikes;
+- the routed ledger ages only on routed opportunities, and the turn's own
+  opportunity still names every script it scanned, so a Latin term stored
+  under a CJK locale before routing is retired at the ordinary cadence
+  instead of living forever;
+- a unique internal-edit relation still claims its source in the same
+  ledger, so a routed misspelling with one target is not also collected as a
+  word, while competing targets still suppress nothing;
+- protected literals are checked on the text as written and again after
+  width folding, so a full-width URL, email address, path, flag, code span, or
+  identifier stays protected;
+- an occurrence is relation evidence only where a word rule for its form
+  could apply, so `@name`, `#tag`, and a hyphen- or underscore-joined word,
+  in full width or not, neither vote nor offer an opportunity. This holds for
+  English turns as well. Term collection still reads such a word as a word.
+
+Application is additive, and the turn's own locale keeps authority. In a CJK
+turn the turn's own rules match first, unchanged. The `en-US` view of the same
+channel then matches only graphemes the own rules left untouched and that
+hold no non-Latin letter, and never a span that overlaps a complete form of
+the turn's own rules, as written or width-folded. That holds even where the
+own rule could not apply, for instance a word-boundary form written against
+Han characters, so a human-confirmed `zh-CN` spelling of a Latin form is never
+overridden by an automatic `en-US` relation at any spacing. A routed word rule
+treats a CJK letter as a word boundary; digits, apostrophes, hyphens, `@`,
+`#`, backticks, and any other letter still join the word, in full width too. A
+turn without a Latin letter skips the routed pass entirely. Otherwise the
+routed pass walks the routed view once per start and, near a routed candidate,
+the own view at most twice per start, so the hot path stays bounded by the
+grapheme count times three own-view and one routed-view longest forms. The
+written channel routes the same way, which today reaches only human-confirmed
+`en-US` written rules, because fitting learns spoken relations.
+
+Of the product starters, `Engelbart` and `Morphogenesis` are `en-US`
+internal-edit targets and are reached from routed words. `KFC` is an `en-US`
+target in principle but has three graphemes, below the seven-grapheme edit
+minimum, and an all-caps word is a protected identifier during matching.
+`[p → q]` is a `zh-CN` lexeme whose two exact spoken aliases apply through the
+turn's own rules; routing neither reaches nor overrides it, and a `zh-TW` or
+`ja-JP` turn still does not receive it.
+
+The rejected alternative was a separate `latin` pseudo-locale. It would split
+one Latin name into two identities, depending on whether it was first heard in
+English or Chinese speech; leave settings, which infer `en-US`, out of step
+with learning; and give the qualified producer a ledger its corpus never
+covered. Routing reuses the ledger, the producer, and the evidence semantics
+that were already qualified.
+
+A multi-word Latin phrase term, such as `Douglas Engelbart`, is deferred. It
+would add listing, not correction: internal-edit fitting reads single words,
+multi-word fuzzy fitting is out of scope, and the single word `Engelbart`
+already carries the recognition error. Title-case collocations such as
+sentence starts, headings, and `Machine Learning` recur often enough to be
+collected, and the product already retired its former `Douglas Engelbart`
+starter in favour of `Engelbart`. Admitting phrases would need a corpus of recurring names
+against adversarial collocations with zero false collections, a precedence rule
+between a phrase and its contained words, and a candidate bound that keeps the
+33rd-candidate partial scan honest when one word opens up to three phrases.
 
 ## Commit boundary
 
@@ -246,7 +345,15 @@ Replacements inspect only the original input. Output from one rule cannot
 trigger another rule in the same commit. Matching is leftmost-longest,
 grapheme-safe, boundary-aware, and skips protected literals such as quoted
 text, code, URLs, email addresses, paths, flags, versions, IP addresses, and
-identifier-shaped tokens.
+identifier-shaped tokens. In `en-US` and `de-DE` turns, protection and word
+boundaries also read full-width ASCII folded, index for index, so `＠name`,
+`＃tag`, a full-width code span, URL, email address, path, or flag, and a
+full-width joiner such as `－` or `＇` protect exactly as their half-width forms
+do. Half-width text folds to itself, so its outcome is unchanged; the same
+test decides what fitting and term collection may count. A Chinese or Japanese
+turn's own matching keeps the written-text protection, and Latin spans its
+own rules left untouched are also matched against the `en-US` view they route
+to; see [Script routing](#script-routing).
 
 Human admission, a late repair of that admission, and a generated text turn
 must each capture one lexical session for the complete synchronous preparation.
@@ -446,8 +553,12 @@ in authority. Automatic collection observes only successful human admissions.
 Locale word segmentation may collect ordinary Latin, Han, and Japanese words
 after recurrence; all-caps, internal-capital identifiers such as `OpenAI`, and
 Katakana may surface after one turn. Ordinary title case does not receive that
-shortcut. Stop words, numeric-only tokens, protected literals, generated
-ranges, and malformed ranges produce no evidence. A producer scans eligible
+shortcut. A Latin word of a Chinese or Japanese turn is classified in the
+`en-US` ledger under English stop words and shape rules, so `OpenAI` said in
+Chinese is the same term as `OpenAI` said in English and English glue such as
+`with` is never collected. Stop words, numeric-only tokens, protected literals,
+full-width routed spellings, generated ranges, and malformed ranges produce no
+evidence. A producer scans eligible
 words in text order and stops before the 33rd distinct candidate: that turn is
 a partial scan, which scores what it saw and ages nothing, because a candidate
 absent from the scanned prefix may sit in the unscanned remainder. Host
@@ -461,7 +572,13 @@ existing immutable exact-match index only after independent turns clear the
 score and ambiguity margin. The product runtime currently releases one
 conservative internal ASCII-Latin edit after four turns. It requires a bounded
 single internal edit toward an eligible canonical target; a form that is itself
-already canonical is a hard no-op authority.
+already canonical is a hard no-op authority. Its targets are `en-US` lexemes,
+and it reads Latin words of English turns and Latin words routed out of
+Chinese and Japanese turns. In any locale it cannot tell a misspelling from a
+different real name exactly one internal edit away, such as `Engelhart` beside
+`Engelbart`, and no corpus can prove otherwise. The four-turn gate and margin,
+the hard no-op once that name is itself a canonical, and the revert and reject
+paths are its mitigation.
 
 Exact Double Metaphone identity, exact tone-bearing Mandarin pinyin identity,
 and `an`/`ang`, `en`/`eng`, and `in`/`ing` final-pair normalization remain in the
@@ -595,6 +712,30 @@ new family id rather than reinterpret old machine votes under a new digest.
 Merely adding source code, turning on a preference, or persisting old evidence still
 cannot grant runtime authority.
 
+Script routing did not need a new family. It widens which turns can present a
+word to a producer, but the candidate function and what a stored vote asserts
+are unchanged: an `en-US` internal-edit vote still says that one human turn
+held that ASCII word one conservative edit from that `en-US` canonical, and an
+`en-US` term vote still says that the word surfaced under English
+classification. No older vote is reinterpreted, since before routing no CJK
+turn could produce either. The releases therefore carry minor versions,
+`latin-internal-edit-v2` 2.1.0 on resource `ascii-latin` 1.1.0 (which names the
+route and the width fold) and both term producers 1.1.0, each requalified on a
+version-2 corpus. The Latin corpus adds whole Chinese and Japanese turns:
+routed positives including full-width, punctuation, and emoji; adversarial Han
+transliteration, a different real name outside one edit, code-switched English,
+a digit-joined word, a URL, an email address, a file path, a mention, a
+hashtag, a full-width URL, email address, path, flag, mention, hashtag, and
+code span, a full-width identifier, and the written channel; a two-name
+collision, a two-brand collision, and a correct name that is already
+canonical; and locale-isolation cases whose targets live in every locale
+except the turn's Latin ledger. Corpus 1's `locale-isolation` case asserted
+that a Chinese turn never reaches `en-US`; routing deliberately reverses that,
+so the case was replaced by those isolation cases, not relabelled. Every Latin
+action names the ledger locale, the stored form, and the canonical, so the
+full-width positive proves the folded ASCII form is what is kept. The term
+corpora likewise bind the ledger locale into every action.
+
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
 `human-admission` environment. Generated output and protected text produce zero
@@ -638,11 +779,13 @@ fixture continues to prove only the parser and gate.
 The default-on learning policy has its own controlled receipt rather than
 borrowing producer success. A manifest-owned replay (policy V4,
 `scripts/wiki/qualification/learning-policy-v4.ts`) runs the production state
-transitions, occurrence settlements, and projection over seventeen scenarios:
+transitions, occurrence settlements, and projection over eighteen scenarios:
 exact three-turn activation, restricted four-turn activation, ambiguity-margin
 abstention and later activation, quiet decay and retention, quarter-unit
 gradual decay, two-turn ordinary-term collection, non-comparable turns that do
-not age, a partial scan that scores only what it saw, informed acceptance that
+not age, a routed Latin relation that activates from Chinese turns and ages
+only on Chinese turns that contained Latin, a partial scan that scores only
+what it saw, informed acceptance that
 retains a used rule, generated-text implicit acceptance under the policy
 switch, two-strike reversion, strike-memory expiry, confirmed authority outside
 scoring, two same-epoch reverts that strike once, duplicate delivery that
