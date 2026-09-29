@@ -108,6 +108,9 @@ export function NodeActionLens({
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
   const [target, setTarget] = useState<LensTarget | null>(null);
   const [placement, setPlacement] = useState<LensPlacement | null>(null);
+  // Escape dismisses the selected passage's lens until that passage is
+  // pressed or selected again; a selection alone never brings it back.
+  const [dismissedSelectionNodeId, setDismissedSelectionNodeId] = useState<string | null>(null);
   // Wiki reviews are the keyboard's and touch's path to a changed word. A fine
   // pointer taps the word itself, so its lens never grows over that word.
   const [keyboardNodeId, setKeyboardNodeId] = useState<string | null>(null);
@@ -235,7 +238,18 @@ export function NodeActionLens({
       reveal(candidate, "focus");
       if (entered) focusPendingKeyboardEntry(candidate.nodeId);
     };
-    const pointerDown = () => close();
+    // A press on a passage keeps that passage's lens: the click selects it,
+    // and the selection holds the lens once the pointer leaves. A press on
+    // anything else closes the pointer's lens.
+    const pointerDown = (event: PointerEvent) => {
+      const candidate = materialTarget(event.target);
+      if (candidate === null) {
+        close();
+        return;
+      }
+      setDismissedSelectionNodeId(null);
+      if (enabled && !chromeIsSuppressed() && event.pointerType !== "touch") reveal(candidate, "pointer");
+    };
     const reconcileCurrentTarget = () => {
       const focused = materialTarget(document.activeElement);
       const hovered = window.matchMedia("(pointer: coarse)").matches
@@ -276,11 +290,16 @@ export function NodeActionLens({
     };
   }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, heldAsideRootIds, noteKeyboardEntry, scheduleClose]);
 
+  // The selected passage keeps its lens for every pointer: a fine pointer's
+  // click selects the passage it will act on, so the lens must not depend on
+  // the pointer staying over it or on a later hover.
   const selectedTarget = useMemo<LensTarget | null>(
-    () => coarse && navigation.selectedNodeId !== null && activeNodeIds.has(navigation.selectedNodeId)
+    () => navigation.selectedNodeId !== null &&
+        navigation.selectedNodeId !== dismissedSelectionNodeId &&
+        activeNodeIds.has(navigation.selectedNodeId)
       ? { kind: "active", nodeId: navigation.selectedNodeId, source: "selection" }
       : null,
-    [activeNodeIds, coarse, navigation.selectedNodeId],
+    [activeNodeIds, dismissedSelectionNodeId, navigation.selectedNodeId],
   );
   const retainedTarget = target !== null && tree.nodes[target.nodeId] !== undefined && (
     target.kind === "active" ? activeNodeIds.has(target.nodeId) : heldAsideRootIds.has(target.nodeId)
@@ -293,10 +312,12 @@ export function NodeActionLens({
       ? retainedTarget?.kind === "held-root" || retainedTarget?.source === "focus"
         ? retainedTarget
         : selectedTarget
-      : retainedTarget;
+      : retainedTarget ?? selectedTarget;
 
+  // Wiki reviews grow only a touch selection's or keyboard's lens: a fine
+  // pointer taps the changed word itself.
   const reviews = activeTarget?.kind === "active" && onOpenWikiReview !== undefined &&
-      (activeTarget.source === "selection" || keyboardNodeId === activeTarget.nodeId)
+      ((activeTarget.source === "selection" && coarse) || keyboardNodeId === activeTarget.nodeId)
     ? (wikiReviews?.get(activeTarget.nodeId) ?? NO_WIKI_REVIEWS).slice(0, MAX_NODE_ACTION_WIKI_REVIEWS)
     : NO_WIKI_REVIEWS;
   const actionCount = activeTarget === null ? 0 : 2 + reviews.length;
@@ -417,6 +438,9 @@ export function NodeActionLens({
     // Only a lens that holds keyboard focus hands it back to its passage.
     const focusWasInside = lensRef.current?.contains(document.activeElement) === true;
     dismissedFocusNodeIdRef.current = activeTarget.nodeId;
+    if (activeTarget.nodeId === navigation.selectedNodeId) {
+      setDismissedSelectionNodeId(activeTarget.nodeId);
+    }
     close();
     if (focusWasInside) {
       canvasRef.current?.querySelector<HTMLElement>(
