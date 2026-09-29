@@ -6,11 +6,17 @@ import type { FixedExpandTurnState } from "./use-fixed-expand-turn";
 export type PaperMaterialTurnPhases = Readonly<{
   elastic: FixedExpandTurnState["phase"];
   textSwap: TextSwapInteractionState["phase"];
+  /** Ask Matter holds a typed or dictated question, or one awaiting its answer. */
+  inquiryHeld: boolean;
+  /** A thought name or the canvas title is being typed in the material index. */
+  editingHeld: boolean;
 }>;
 
 export const SETTLED_PAPER_MATERIAL_TURNS: PaperMaterialTurnPhases = Object.freeze({
   elastic: "idle",
   textSwap: "idle",
+  inquiryHeld: false,
+  editingHeld: false,
 });
 
 /**
@@ -33,11 +39,28 @@ export function materialTurnsHoldBasis(input: Readonly<{
     textSwapHoldsBasis(input.paper.textSwap);
 }
 
+/**
+ * Whether replacing the loaded document instance now (hydrating material
+ * another tab saved, or reloading for a newer schema) would lose nothing the
+ * person started in this tab. Every holder of seed relocalization counts, and
+ * so do Ask Matter and an open name editor: each is bound to the document
+ * instance and would be revoked by the replacement.
+ */
+export function materialIsIdle(input: Readonly<{
+  admission: AdmissionInteractionState["phase"];
+  paper: PaperMaterialTurnPhases;
+}>): boolean {
+  return !materialTurnsHoldBasis(input) && !input.paper.inquiryHeld && !input.paper.editingHeld;
+}
+
 export function samePaperMaterialTurnPhases(
   left: PaperMaterialTurnPhases,
   right: PaperMaterialTurnPhases,
 ): boolean {
-  return left.elastic === right.elastic && left.textSwap === right.textSwap;
+  return left.elastic === right.elastic &&
+    left.textSwap === right.textSwap &&
+    left.inquiryHeld === right.inquiryHeld &&
+    left.editingHeld === right.editingHeld;
 }
 
 function textSwapHoldsBasis(phase: TextSwapInteractionState["phase"]): boolean {

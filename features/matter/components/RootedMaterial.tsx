@@ -293,6 +293,8 @@ export type RootedMaterialProps = {
     status: PersistenceStatus;
     retry: () => void;
     resolveConflict: () => void;
+    acknowledgeHistoryNotice?: () => void;
+    storagePersisted?: boolean | null;
   }>;
   /** Fixture-only timing marks expose the cold canvas path without changing it. */
   performanceMarking?: boolean;
@@ -1447,12 +1449,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } = transform;
   const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
   const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
+  // Ask Matter and the index's name editors report what they hold so the root
+  // never replaces the document instance underneath them.
+  const [inquiryHeld, setInquiryHeld] = useState(false);
+  const [editingHeld, setEditingHeld] = useState(false);
   useLayoutEffect(() => {
-    const phases = Object.freeze({ elastic: transformState.phase, textSwap: pointTalkPhase });
+    const phases = Object.freeze({
+      elastic: transformState.phase,
+      textSwap: pointTalkPhase,
+      inquiryHeld,
+      editingHeld,
+    });
     if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
     reportedMaterialTurnPhasesRef.current = phases;
     reportMaterialTurnPhases?.(phases);
-  }, [pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+  }, [editingHeld, inquiryHeld, pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
   useLayoutEffect(() => () => {
     // Unmounting the paper releases its turns, so the root must not keep
     // waiting on phases nobody will report again.
@@ -1537,8 +1548,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       type,
     }));
   }, []);
-  const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
-    transformState.phase !== "idle";
+  // Elastic presentation follows the degree on the paper, not the request. A
+  // submitted turn may lose its presented degree to Escape or another slot
+  // owner and still deliver; its address then stays painted in the neutral
+  // armed shape with both grips at zero instead of an expand projection that
+  // no longer has a degree or grip to project from.
+  const elasticLanguageActive = stretch.dragging || stretch.amount > 0;
   const beginStretchAdjustment = useCallback(() => {
     canvasChromeRef.current?.closeInquiry();
   }, []);
@@ -1582,8 +1597,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
-  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0 ||
-    transformState.phase !== "idle"
+  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0
     ? "expand"
     : "neutral";
   const renderedElasticPreviewSource = useMemo(() => {
@@ -1984,9 +1998,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         abortFixedExpansion();
         return props.archive!.validateImport(file);
       },
-      replaceImport: (file: File) => {
+      replaceImport: (file: File, options: Readonly<{ replaceUnsaved: boolean }>) => {
         abortFixedExpansion();
-        return props.archive!.replaceImport(file);
+        return props.archive!.replaceImport(file, options);
       },
     });
   }, [abortFixedExpansion, props.archive]);
@@ -3678,8 +3692,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
-      {/* Mounted empty first, so assistive technology observes each insertion. */}
-      <span aria-atomic="true" className="visually-hidden" role="status">
+      {/* Mounted empty first, so assistive technology observes each insertion.
+          The explicit politeness matches every other outcome region, since not
+          every screen reader derives it from the status role alone. */}
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
         {transformNotice !== null ? (
           <span key={`expansion_${transformNotice.id}`}>
             {localizeExpansionOutcome(transformNotice.kind, props.locale)}
@@ -3727,6 +3743,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           interruptIndexCameraMotion();
           if (lasso.active) exitLasso();
         }}
+        onEditingChange={setEditingHeld}
         onOverlayChange={setIndexOverlayOpen}
         onRenameDocument={(title) => {
           abortFixedExpansion();
@@ -4005,6 +4022,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
           onInquiryOpen={abortFixedExpansion}
+          onInquiryHoldChange={setInquiryHeld}
           onOverlayChange={changeCanvasOverlay}
           overlay={canvasOverlay}
           ref={canvasChromeRef}

@@ -1,0 +1,2132 @@
+# Release readiness history — Preview.8 to Preview.57
+
+**Trace, not current instruction.** These per-preview receipts were moved
+verbatim from [`../docs/release-readiness.md`](../docs/release-readiness.md)
+on 2026-09-29, in their original order (which is not strictly chronological).
+Each one describes its own candidate at the time it was written: "current",
+"next", "remains", and "pending" refer to that moment, not today. The current
+deployable slice, material-provider gate, latest receipts, and hard gates stay
+in `docs/release-readiness.md`; where this file disagrees with it, that
+document is right.
+
+Relative links were written from `docs/` and are kept as written, so
+`deployment-handoff.md` and `material.md` below mean the files in `docs/`.
+
+Hard-gate lines that were corrected in place in the current document on the
+same day are kept, in their previous wording, at the end of this file.
+
+---
+
+## Receipt verification — 0.2.0-preview.57
+
+The "97 Node boundary checks, 49-document link proof" receipt for Preview.57
+appears only in Codex session records as a local-candidate claim dated
+2026-09-11. It remains invalid: its UI contract and source tree predate the
+accepted candidate. The replacement implementation tree at `fb37ef8`, followed
+by the browser-diagnostic-only successor `2f3d506`, produced the local receipts
+below and was accepted through PR #102. PR #103 then added the release-profile
+cooldown guard. Subsequent lifecycle, deployment-gate, or provider-compatibility
+work must earn its own exact-head CI, Preview, Production, and independent-
+verifier receipts; the PR #102 counts cannot certify a successor. PR #105 and
+its merged-main CI passed, but its public provider-session receipt still
+reports `available: false` and its strict pool receipt still fails Repair. No
+Preview.57 tag or GitHub release exists.
+
+Preview.42 source work merged through PR #73 as `738d077`; the exact public
+cache receipt merged through PR #74 as `776b003`. Exact Production deployment
+`6053793739` succeeded and the first final public-origin probe matched
+`0.2.0-preview.42`, including the approved favicon bytes, discovery links,
+manifest roles, cache policy, health surfaces, and security headers. Its final
+release-record Production SHA is the target of the annotated immutable
+`v0.2.0-preview.42` tag and GitHub prerelease. npm publication remains
+unauthorized.
+
+## Candidate release boundary — 0.2.0-preview.57
+
+Preview.57 separates accepted work from its temporary presentation. Admission,
+Elastic, Point Talk, and Inquiry keep one immutable submitted basis across
+unrelated selection, navigation, revision, dismissal, and temporary page
+hiding. Material delivery waits for a visible, pointer-idle, target-visible
+window and revalidates the exact text and lineage before the tree engine makes
+one undoable commit. Exact conflict, document replacement, explicit cancel,
+page exit, or unmount still revokes authority.
+
+Lasso now retains a bounded complete stroke, simplifies it with an explicit
+client-space error ceiling, and uses the same path for paint and hit testing.
+Projected layout is only a fail-open candidate prefilter. Multi-line address
+corners are glyph-relative and bounded; zero-size microsteps no longer create
+visual teeth. Mobile Pan owns the browser gesture only on the material plane
+while Move is active, so one touch continues beyond the paper without disabling
+ordinary chrome, Lasso, index scrolling, or desktop input.
+
+Settings adds one quiet Model API surface. The browser supplies one HTTPS API
+address and an optional replacement key; the server detects only a finite
+reviewed protocol set: OpenAI-compatible Chat, an explicitly addressed
+Responses operation, Anthropic Messages, and Google's official
+OpenAI-compatible Gemini endpoint. It owns the model, completion path, request
+shape, response vocabulary, DNS/public-address check, TLS address pin, global
+admission, and fallback. It does not promise arbitrary APIs or blindly spend a
+second wire guess. Test never saves. A successful explicit save is AES-GCM
+sealed for a fixed 30 days in a path-scoped HttpOnly cookie; failure preserves
+the prior credential. The key does not enter material, browser-readable
+storage, response JSON, logs, cache keys, or process health/drain identity. The
+non-secret canonical address may be returned so the form can be restored.
+Configuration remains subject to every existing product capability gate.
+
+```text
+source proof           implementation tree fb37ef8 passed npm run check:
+                       111 Node boundary tests, 50-document link proof, the
+                       485-file architecture gate, 2,584 passing Vitest cases
+                       plus five explicit skips, type generation, TypeScript,
+                       zero-warning lint, and the Next production build
+runtime proof          the same build passed the runtime-artifact budget at
+                       1,208.9 KiB initial raw / 381.3 KiB gzip
+browser proof          exact diagnostic successor 2f3d506 passed the complete
+                       serial Chromium matrix: 161 cases with 15 historical or
+                       explicitly scoped skips; desktop, narrow, real touch,
+                       Model API, paint-only click/double-click selection,
+                       continuous Pan, and Voice recovery all passed. Its only
+                       source change after fb37ef8 makes a coarse-target failure
+                       identify the exact control and measured dimensions
+performance diagnostic the fb37ef8 production artifact retained 4,485 DOM
+                       elements, 188–260ms FCP, and 302.8–425ms layout-ready.
+                       Two formal three-round receipts measured 145ms and 135ms
+                       maximum long tasks; the same-host a101d5c control measured
+                       122ms. All exceed the unchanged strict <100ms optimization
+                       target, so it remains honestly open; no renderer-path
+                       source changed and no threshold was relaxed to manufacture
+                       a pass
+independent review     provider, lifecycle, Model API, and corner-geometry proof
+                       passed 175/175 focused Vitest cases and 19/19 focused
+                       Chromium cases; the final verifier found no P0–P3 issue
+GitHub CI proof         PRs #102, #103, and #105 passed on their exact topic and
+                       merged-main identities; every successor still requires
+                       its own exact-head proof
+automatic deploy proof PR #105 completed its GitHub-triggered Preview and
+                       Production paths at merged commit 2f85b94; the public
+                       session receipt remains available:false and issue #104
+                       owns the missing deployment-side sealing ring
+publication state      withheld; the newest strict release receipt reached the
+                       provider for Label 6/6 (four accepted, two rejected) and
+                       returned accepted Inquiry answers 6/6, but Repair ended
+                       in MODEL_TIMEOUT 6/6. No tag or prerelease unless a
+                       successor passes exact public identity, the fresh strict
+                       six-round pool gate, and provider-session availability
+```
+
+Successor commit `919743b`, now included in PR #105 and merged main, hardens only
+the bounded user-provider seam; it does not widen the release claim. On that
+exact commit, `npm run check` passed
+119 Node boundary tests, all 50 Markdown files, the 485-file architecture gate,
+2,615 Vitest cases with five explicit skips, type generation, typecheck,
+zero-warning lint, the Next production build, and the runtime-artifact budget.
+The complete 177-case Chromium run passed 151 cases with 15 explicit skips and
+reported 11 shared-server timeouts or animation sampling misses under three
+workers; every reported case then passed 11/11 in an exact single-worker rerun.
+The independent provider verifier additionally passed 247/247 focused tests and
+reported no P0–P3 finding. This is local candidate evidence only: exact PR-head
+CI, Preview and Production identities, issue #104's deployment-owned session
+ring, and the fresh six-round managed-pool gate remain unsatisfied publication
+conditions.
+
+One earlier full run reached 160 passes and reported one aggregate narrow-index
+target below 48 px without naming it. The unchanged product then passed that
+exact scenario in ten independent repeats. `2f3d506` replaced the aggregate
+boolean with per-control dimensions, and its complete serial matrix passed; no
+runtime rule was changed to hide or excuse the observation.
+
+## Release boundary — 0.2.0-preview.56
+
+Preview.56 is a deployed maintainer hardening source, not a wider product or
+provider claim. Elastic now treats a drag as degree selection only: release
+never spends a model turn, while Enter, Space, the painted address, and the
+opened pocket are the explicit confirmation surfaces. A stationary grip click
+remains inert.
+Point Talk owns one visible whole-node address, rejects stale geometry, and
+keeps its bounded direction input and mutation authority separate from Lasso.
+
+The 2,000-node canvas retains a bounded native owner set across transient focus
+and fold views, while only active owners participate in layout, hit testing,
+focus, or accessibility. This removes repeated DOM reconstruction without
+changing the material tree. The material index and label runtime are a secondary
+lazy surface with their own readiness; its independent scrolling cannot revoke
+an in-flight canvas lasso, and a named font used only by sibling chrome cannot
+republish material geometry. Unknown or material-owned font events remain
+fail-closed. Label persistence now preserves manual names through quota pressure
+and cross-tab races, applies the same global 4,000-row model-cache limit during
+v4 migration and ordinary writes, and retries a failed lazy repository load
+only on a later explicit operation.
+
+All streamed request and response seams share one bounded, ownership-copying
+byte accumulator, including fragmented and adversarial bodies. Layout and
+height caches are keyed by exact document, projection, locale, text, width, and
+measurement authority rather than presentation coincidence. The formal local
+production receipt completed three 20-cycle rounds with whole-session and
+measurement long-task maxima of 69ms and 68ms, 4,474 DOM elements, and an initial runtime
+of 1,196,550 raw / 379,215 gzip bytes. CI, Production identity, strict live model-pool proof,
+the annotated tag, and the GitHub prerelease remain publication gates; none is
+claimed by this local receipt.
+
+Final review closed five lifecycle gaps without widening product authority.
+Point Talk now remeasures only when its exact paper-modal or index-visibility
+owner changes. Cached structural geometry carries both DOM owners that produced
+it, so missing or replacement elements cannot revive old pixels. A label driver
+owns one closeable repository for its locale lifetime, and explicit label
+transactions observe completion before their first request. Unit upgrade proof
+now binds open success to completed reclaim and open failure to versionchange
+abort; real Chromium also upgraded a v3 database from 4,002 to 4,000 model rows
+while preserving a manual name, then preserved another manual name across a
+locale-owned driver replacement.
+
+The exact source passed 97 Node checks, 48-document link proof, the 462-file
+seven-layer architecture gate, 2,224 Vitest cases with four explicit skips,
+type generation, TypeScript, zero-warning lint, production build, and runtime
+artifact inspection. The final controlled Chromium sweep passed 141 cases with
+15 explicit skips and reported three timing failures while the contended host
+took 10.2 minutes rather than its prior 3.6-minute baseline; each failed case
+then passed in one isolated run against the same source and artifact. Final
+topic CI passed run `34557892540`; merged-main CI independently passed the same
+complete suite in run `34558357704`.
+
+The existing dependency surface is patched to Next 16.3.4, Sharp 0.35.4,
+js-yaml 4.3.2, Vitest 4.1.11, and the matching Next lint rules. `npm audit`
+reports no high or critical vulnerability. Its three remaining moderate entries
+are one transitive chain from the browser speech package through
+`onnxruntime-node` to `adm-zip`, for which no patched `adm-zip` release exists;
+changing Transformers.js back to its older major
+would trade away the proven browser worker for an audit-number shortcut. Matter
+imports Transformers.js only from the deferred local-transcription worker, and
+the runtime verifier now rejects either Node-only package from every server
+trace. The exact production artifact contains neither and still keeps the worker
+out of the initial graph.
+
+This release adds no dependency, durable material field, provider SDK, prompt
+authority, remote audio path, hidden retrieval, service worker, or manual
+deployment route.
+
+```text
+source proof           PR #96 final head e88d06c passed topic CI run
+                       34557892540; merged main 536d792 passed run 34558357704
+automatic deploy proof Preview A1HV4GbsmLw7Cocrq8ubcntZMR9p and Production
+                       GcFQr3beW677Y6easpT2JobKuHzo completed; GitHub Production
+                       deployment 6385805166 settled success
+public identity proof  the bounded no-store check matched Preview.56 after one
+                       probe at https://matter.ptoq.io
+publication state      withheld: the exact paced six-round release profile
+                       reported pool-degraded and surface-degraded. Repair
+                       reached a model 5/6 with one MODEL_TIMEOUT; Label reached
+                       the pool 5/6 but produced only one accepted model label,
+                       with four MODEL_REJECTED and one MODEL_TIMEOUT; Inquiry
+                       produced an accepted model answer 6/6. No annotated tag
+                       or GitHub prerelease was created
+```
+
+## Release boundary — 0.2.0-preview.55
+
+Preview.55 is a maintainer hardening release. It does not widen the public
+product or provider boundary. Voice focus restoration is now owned by the exact
+admission, keyboard focus reveals a complete passage without stealing an active
+pointer or wheel camera, and an Elastic grip that has focus transfers it only
+to the same semantic successor while font or viewport geometry republishes.
+Lasso browser receipts wait for the post-tool font and layout epoch rather than
+retrying a stroke that correctly failed closed. Elastic keeps the Preview.54
+contract: drag settles degree, a primary click in the painted address or opened
+pocket confirms it, Enter and Space are the keyboard equivalents, and clicking
+a grip without movement never submits.
+
+Every durable or model-bound text seam now rejects incomplete Unicode scalar
+values before mutation, persistence, encoding, prompting, or display while
+preserving valid astral text byte-for-byte. Inquiry IndexedDB compare-and-swap
+versions refuse unsafe successors before a write. The deployment verifier
+streams every consumed body through an artifact-specific byte ceiling, grows
+one bounded buffer instead of retaining attacker-controlled chunk metadata, and
+does not trust `Content-Length`. The opt-in persistence benchmark and the real
+maximum archive boundary own explicit hang guards without widening the global
+test timeout. Transcript punctuation skips the full protected-literal matcher
+when a bounded passage cannot contain any protected form; all URL, email, path,
+identifier, quote, version, and address alternatives retain focused coverage.
+
+The production 2,000-node renderer now keeps immutable base geometry beside
+the actual displayed geometry. Elastic reuses that base instead of forcing a
+style read and rebuilding every layout box after publication. Material action
+callbacks depend only on their real owners, so an internal geometry publication
+does not invalidate the memoized 2,000-passage list. This changes no DOM,
+presentation rule, cache ceiling, interaction threshold, or measurement mark.
+
+This release adds no dependency, durable format, cache, provider SDK, public
+live Transform/Text Swap gate, service worker, or production route. Existing
+provider prompt/cache identities and no-store rules remain unchanged. The
+repository still proves only process-local admission control; distributed edge
+limits, provider spend caps, alert delivery, and rollback ownership remain
+deployment-owner evidence. The strict model-pool gate below is publication
+authority, not the successful source, browser, or deployment checks.
+
+```text
+source proof           exact runtime candidate 5db2c62 passed npm run check:
+                       97 Node checks; 48 Markdown files; architecture across
+                       446 files and seven layers; 2,173 Vitest passed with
+                       four explicit skips; type generation, TypeScript,
+                       zero-warning lint, production build, and npm audit with
+                       zero known vulnerabilities all passed
+runtime proof          exact artifact passed at 1,239.7 KiB raw / 391.3 KiB
+                       gzip under the unchanged 396 KiB ceiling; the complete
+                       production 2,000-node receipt passed with 188ms FCP,
+                       322.1ms layout ready, a 90ms cold-attributed long task,
+                       5.2ms pure layout, and 61ms interaction-task p95. Three
+                       independent cold receipts also passed at 87/78/93ms,
+                       with 2,000 nodes, 4,483 elements, and zero blocking rounds
+browser proof          full controlled Chromium passed 139 cases with 15
+                       explicit historical/capability skips and zero retries;
+                       focused cold-start and geometry-successor pressure
+                       receipts also passed, including pointer, touch, keyboard,
+                       opened-pocket confirmation, focus transfer, failure,
+                       Undo/Redo, reload, and 2,000-node geometry
+persistence proof      deterministic Node and Chromium IndexedDB profiles
+                       passed; realistic median validate/paths/encode/decode
+                       were 4.25/5.69/11.15/27.05ms; maximum-text medians were
+                       15.05/13.33/29.80/52.43ms. Chromium realistic put/get
+                       medians were 1.6/0.6ms and maximum-text 7.3/2.8ms
+GitHub CI proof         topic 132e670 passed run 34255465066; merged main
+                       989d3d1 passed run 34257149975
+automatic deploy proof Preview G2VtUt486jLhShhLHNNvjRpnPSxY and Production
+                       79EU4MxFmfEGU9XdhnwPJLozubtQ completed; the bounded
+                       public-origin check matched Preview.55 after one probe
+publication state      withheld: the exact six-round Production release profile
+                       reached a model for Repair 6/6, Label 0/6, and Inquiry
+                       1/6; no annotated tag or GitHub prerelease was created
+```
+
+## Provisional release boundary — 0.2.0-preview.54
+
+Preview.54 makes a material change deliberate before it spends a model turn.
+Releasing an Elastic grip now settles the exact positive degree created after
+the pointer deadzone; it does not submit. A primary tap inside the same painted
+address — including the empty pocket the drag opened — confirms that degree,
+while Enter or Space remains the keyboard equivalent. Pointer movement,
+cancellation, lost capture, page suspension, or
+any tree, document, layout, viewport, partition, direction, or outline change
+revokes an in-progress confirmation. The grip itself no longer doubles as a
+hidden submit target.
+
+The server continues to receive strict `transform/2` and `text-swap/2`
+envelopes and to construct the only public plan. Their adjudicators now preserve
+accepted text byte-for-byte instead of trimming a model answer before policy,
+reject malformed Unicode and whitespace-only lineage before provider work, and
+run format rejection before length diagnostics. Transform's prompt artifact is
+`transform/4`: it names the exact accepted grapheme interval, keeps surrounding
+and lineage material fenced as reference, and closes with the server-owned
+answer contract. Even the smallest confirmable degree (`1 / 120`) derives a
+bounded one-grapheme request, stays inside the existing deadline/token lattice,
+and appears in content-free operational buckets.
+
+A loopback-only, dry-by-default maintainer harness can exercise the five
+server-backed AI routes without changing public authority. It sends no request
+on startup or dry run, keeps Label and Elastic on fixtures unless explicitly
+enabled, checks exact version/base-path/no-store/response bounds, and never logs
+provider text or secrets. Repair carries no document-derived term field;
+whole-tree or render-effect-derived hints are not an acceptable shortcut.
+Voice failure, Inquiry retry, Point Talk retry, localized material
+actions, and focus restoration now have browser-level recovery receipts.
+
+This release adds no dependency, durable format, service worker, response
+cache, provider SDK, public live Transform/Text Swap gate, or production route.
+Existing cache keys, bounds, invalidation, no-store rules, runtime ceilings, and
+tree-engine-only mutation authority remain unchanged. This candidate passes one
+production 2,000-node receipt, but sustained cold-task optimization,
+corrupt-history recovery measurement, distributed provider controls, and live
+material-language promotion remain separately owned work; none is silently
+claimed here.
+
+```text
+source proof           exact local candidate passed npm run check: 95 Node
+                       checks; 48 Markdown files; architecture across 438 files
+                       and seven layers; 2,109 Vitest passed with four explicit
+                       skips; type generation, TypeScript, zero-warning lint,
+                       production build, and an npm audit with zero known
+                       vulnerabilities all passed
+runtime proof          exact artifact passed at 1,229.9 KiB raw / 388.8 KiB
+                       gzip under the unchanged 396 KiB ceiling; the separate
+                       production 2,000-node receipt passed with a 98ms
+                       cold-attributed long task and 4.3ms pure layout
+browser proof          full controlled Chromium passed 136 cases with 15
+                       explicit historical/capability skips, including pointer,
+                       touch, keyboard, opened-pocket confirmation, failure,
+                       stale-owner, Undo/Redo, reload, and 2,000-node geometry
+GitHub CI proof         topic `e5f1831` passed run `34201919255`; PR #92 merged
+                       as `08e346c`, which passed run `34202824083`
+automatic deploy proof exact GitHub-triggered Preview `6323203631` and
+                       Production `6323365156` succeeded; the bounded public
+                       check matched Preview.54 after 35 probes
+publication state      withheld: the exact six-round Production release probe
+                       reached a model 0/6 for Repair, 0/6 for Label, and 6/6
+                       for Inquiry; Repair ended in five `MODEL_TIMEOUT` and one
+                       `TRANSPORT`, while Label ended in five `MODEL_TIMEOUT`
+                       and one `MODEL_UNAVAILABLE`. It reported
+                       `surface-specific` / `surface-degraded`; no Preview.54
+                       tag or GitHub prerelease exists
+```
+
+## Provisional release boundary — 0.2.0-preview.53
+
+Preview.53 keeps pointer-selected whole-node structure as one glyph-bounded
+capsule per visual row. Native copy, neutral Lasso, and both Elastic projections
+instead use one continuous post-reflow reading interval: first row to logical
+end, interior rows across the text column, and logical start to the true final
+endpoint. Horizontally disjoint boundary rows turn through measured positive
+leading with topology fixed by the neutral receipt; an unprovable turn fails
+open without grips. No endpoint uses proximity snapping. The two grips, their
+physical meaning, palette, request amount, transform/2 wire, server plan,
+tree-engine commit, and pointer Undo remain unchanged.
+
+The painted address may include the protected visible punctuation seam so the
+surface and projected text end together; the request continues to contain only
+the validated semantic `selectedText`. Trailing whitespace remains layout-only.
+Native copy synchronously supersedes structural selection, RTL uses one
+node-level direction owner, and every viewport, transition, font, partition, or
+source-receipt invalidation revokes stale fixed geometry before it can remain
+visible or operable. Pointer movement performs no DOM measurement.
+
+The initial gzip ceiling remains 396 KiB on the enforcing Linux CI basis. That
+bound was established by a same-host comparison during the original selected-
+material slice: Preview.48 measured 380.8 KiB gzip / 1,199.6 KiB raw and its
+successor measured 386.4 KiB / 1,224.0 KiB. The Linux build was about 2,820
+bytes larger than the same source on macOS, which is why the older 388 KiB local
+number is not the release contract. Preview.53 must provide its own exact
+artifact receipt and may not raise this ceiling. The strict 2,000-node cold-task
+`<100 ms` optimization target remains unchanged and open.
+
+This release keeps the public Transform and Text Swap adapters unavailable.
+The fixture transform proves request, server-constructed plan, browser
+revalidation, one tree-engine mutation, Undo/Redo, and reload; it does not
+promote a live model adapter or satisfy the separate multilingual, provider,
+distributed-rate, spend, alert, or rollback evidence.
+
+```text
+source proof           exact local Preview.53 candidate passed npm run check:
+                       79 Node checks; 47 Markdown files; architecture across
+                       427 files and seven layers; 2,090 Vitest passed with four
+                       explicit skips; type generation, TypeScript, zero-warning
+                       lint, and the production build all passed
+runtime proof          exact local artifact passed at 1,224.2 KiB raw / 386.5
+                       KiB gzip under the 396 KiB Linux-CI ceiling; the enforcing
+                       Linux receipt remains part of GitHub CI
+browser proof          full controlled Chromium passed: 130 cases and 15
+                       explicit historical/capability skips, including real
+                       double click, multi-line native and actionable corridors,
+                       both Elastic grips, touch, reduced motion, forced colours,
+                       font invalidation, and the 2,000-node fixtures
+GitHub CI proof         exact topic `884dfc0` passed run `33821304049`; merged
+                       main `7cd3bb6` passed run `33822246434`, including the
+                       Linux runtime ceiling and full Chromium suite
+automatic deploy proof Preview deployment `6255338383` succeeded for exact
+                       topic `884dfc0`; Production deployment `6255484923`
+                       succeeded for exact main `7cd3bb6`; matter.ptoq.io
+                       matched Preview.53 after one bounded public check
+publication state      withheld: the six-round release probe reached a model
+                       for repair 0/6, label 1/6, and Inquiry 1/6; no Preview.53
+                       tag or GitHub prerelease may exist. After a full recovery
+                       window, a second six-round probe reached 0/6 on all three
+                       surfaces and reported pool-down. Publication requires a
+                       later fresh exact closed-count pass, not another immediate
+                       retry
+```
+
+## Provisional release boundary — 0.2.0-preview.48
+
+Preview.48 is a narrow operability patch over the deployed Preview.47 source.
+It does not change a model prompt, context projector, public wire, material
+mutation, provider budget, capability gate, or persistence format.
+
+The patch makes a long Inquiry answer keyboard-scrollable only when measured
+overflow exists, preserves the restrained visual controls while giving both
+mobile actions a 48px coarse-pointer target, and lets the root of a held-aside
+branch expose its existing local restore action to touch and keyboard. Held
+descendants remain inert and the restore still changes working context rather
+than material or history. A malformed explicit `ENABLE_THINKING` station value
+is now refused instead of being treated as absence, and the deployment probe
+bounds and strictly decodes the health body before parsing it.
+
+The patch intentionally leaves the measured initial-bundle headroom, long
+history/IndexedDB recovery work, Inquiry semantic evaluation corpus, distributed
+rate/spend/alert controls, and unknown provider-terminator compatibility policy
+as separately owned follow-up. None is disguised as a UI patch.
+
+```text
+source proof           pending on the exact versioned candidate
+runtime proof          pending on the exact versioned candidate
+browser proof          pending on the exact versioned candidate
+GitHub CI proof         pending on the exact topic and merged main identities
+automatic deploy proof pending from GitHub-triggered Preview and Production
+publication state      pending; no tag or prerelease unless the strict
+                       deployed-origin surface probe also passes
+```
+
+## Deployed source boundary — 0.2.0-preview.47
+
+Preview.47 hardens the shared model execution boundary without creating one
+generic AI protocol. Transform, Point-and-Talk / Text Swap, and Ask Matter keep
+their own public contracts, context projectors, prompts, adjudicators, and
+settlement paths. They share only the typed prompt spine, provider pool,
+deadline and cancellation grammar, and content-zero observation seam.
+
+The candidate separates bounded human intent from reference material, keeps
+the previously optimized shorter Matter background, and binds
+language-evaluation authority to every exact compiled prompt plus its candidate
+thinking mode and endpoint digest, deterministic adjudication/completion versions, pool limits,
+and per-case budgets. Prompt artifacts advance to `thought-label/3`,
+`transform/3`, `text-swap/3`, and `inquiry/3`; the public material wires remain
+`transform/2` and `text-swap/2`. A neutral inquiry configuration now owns the
+context and answer ceilings instead of either the material projector or wire
+parser.
+
+Provider completions fail closed when an explicit stop reason says the answer
+was truncated, blocked, refused, delegated to a tool, contradictory, or
+unknown. Missing stop metadata remains a counted compatibility path rather than
+an implicit claim that the relay is conformant. Anonymous terminal receipts
+distinguish those outcomes without storing prompt, material, answer, provider,
+or request identity. A relay that ignores cancellation may finish draining, but
+its late value cannot enter adjudication, UI, record, history, or material; a
+lease per abandoned attempt prevents later requests from multiplying that
+scenario/candidate. The process threshold sheds after abandoned work; it is not
+a strict cap on active healthy attempts. Product admission remains bounded by
+the five scenario-owned governors (label 4, repair 4, inquiry 3, Transform 2,
+Text Swap 2; aggregate 15 per instance), as frozen in the architecture
+contract.
+
+The five provider, route, browser, lease, and platform deadlines now form one
+explicit lattice, and provider-specific thinking flags are sent only to a
+candidate that declared support. The release probe distinguishes pool
+reachability from real per-surface usability, rejects cache/fixture/floor and
+browser-invalid envelopes, and binds the expected source version. The later
+Preview.57 strict receipt falsified the assumption that two three-to-four-second
+Repair windows were usable: its 6,504 ms canary reached no complete answer in
+six rounds while the longer Label and Inquiry scenarios reached the same pool.
+The current successor therefore restores a Repair-local 95-percent first
+attempt and refuses a sub-second tail; global pool allocation remains 50/50,
+and the existing deadline lattice is unchanged pending deployment proof.
+
+AI settlement is strict about ownership rather than incidental global revision.
+Elastic and Point-and-Talk may rebase across unrelated edits only while their
+exact selection and visible-lineage read set remains unchanged; Lasso retains
+semantic selection across an unrelated revision while discarding stale DOM
+geometry. Ask Matter is read-only: it retains the submitted context snapshot
+through ordinary edits, selection changes, and a hidden tab, then admits the
+complete answer only while the same `{treeId, documentEpoch}` owner still
+exists. Its quiet-prose answer boundary is 3,200 code points through a 16 KiB
+envelope, with no locally manufactured clipping.
+
+This source does not enable a new model surface or widen material-mutation
+authority. Labels, transcript repair, and Ask Matter retain their current
+gates. Elastic and Text Swap remain unavailable to a live provider, issues #34
+and #68 remain open, and no distributed rate, spend, alert, rollback, or public
+deployment receipt is inferred from source hardening. The larger read-only
+Inquiry envelope does not change its 720-token provider budget.
+
+```text
+source proof           exact candidate and full repository gate passed
+runtime proof          production build and bounded artifact gate passed
+browser proof          full Chromium suite passed
+GitHub/deploy proof    exact PR, CI, merge, Production and public version passed
+live model proof       failed: label, repair and Inquiry produced no accepted
+                       model result in the strict paced release probe
+publication state      withheld; no annotated tag or GitHub prerelease exists
+```
+
+## Release verification — 0.2.0-preview.45
+
+Preview.45 restores the material index's local structural grammar while Select
+is active. Select still replaces every leading mark with an 11px checkbox, but
+the unchanged current tree retains its relationship guides on that same axis.
+The projection comes from the complete subtree Select actually presents, keeps
+eight pixels of air around checkbox endpoints, clips through the existing
+virtual window, and remains absent from Search and Archive.
+
+The guide projector now receives the visible endpoint presentation explicitly;
+React does not allocate a second all-row protection set merely because a
+2,000-row selection list paints controls. A time-dependent reduced-motion
+browser receipt found during the release audit now freezes its initial light
+preference before proving the light-to-dark transition. Neither correction
+changes the material document, tree engine, persistence, command history,
+protocol, model context, provider configuration, or public capability profile.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor found 28 repository files; 43 linked Markdown
+                       documents passed; architecture covered 405 files across
+                       7 layers with no outward edge, provider leak, or cycle;
+                       Vitest passed 160 files with 2 skipped, 1,864 cases with
+                       4 skipped; typegen, typecheck, lint, and the Next 16.3
+                       webpack production build of all 22 pages/routes passed
+runtime proof          static root; initial 1,194.0 KiB raw / 378.9 KiB gzip,
+                       below the 384 KiB release ceiling; no new dependency,
+                       route, provider path, or initial browser asset
+browser proof          full Chromium: 116 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 131 total; receipts
+                       include laptop and 390px selection-guide geometry,
+                       checkbox clearance, the bounded 2,000-row virtualized
+                       index, coarse targets, reduced motion, and all existing
+                       material mutation and cancellation paths
+publication state      source `b0cbad6` passed CI run `32784091448` and exact
+                       Vercel deployment `7YhTAqHt7hUg5m6YVsjAEvXS45zY`;
+                       matter.ptoq.io matched 0.2.0-preview.45 on the first
+                       bounded public-origin probe; the final record-only main
+                       becomes the immutable tag and GitHub prerelease target
+                       only after identical settlement
+```
+
+## Release verification — 0.2.0-preview.44
+
+Preview.44 keeps the complete Preview.43 Point-and-Talk authority and changes
+only its local rendering policy. The white direction field now has a smaller
+`264 × 38px` desktop basis, follows material zoom through a bounded asymmetric
+`.74–1.10` optical response, and retains the `48px` coarse-pointer target floor.
+Its fixed geometry intersects the visual viewport, clipped paper, and translated
+material plane, then clamps available width as well as position. Damaged,
+disjoint, or too-narrow geometry stays hidden and does not take focus or gain
+material authority. Resize, scroll, and observer invalidations are coalesced to
+one animation-frame measurement; a revoked target or positioning surface closes
+the turn instead of leaving an invisible focused control.
+
+The public deployment profile remains unchanged: Text Swap stays unavailable
+without its independent live-provider gate. This release neither widens the
+`text-swap/2` contract nor changes model context, provider configuration,
+persistence, history, or the tree-engine commit path.
+
+```text
+source proof           exact source `1847530`; npm run check exited 0:
+                       doctor found 28 repository files; 43 linked Markdown
+                       documents passed; architecture covered 405 files across
+                       7 layers with no outward edge, provider leak, or cycle;
+                       Vitest passed 160 files with 2 skipped, 1,862 cases with
+                       4 skipped; typegen, typecheck, lint, and the Next 16.3
+                       webpack production build of all 22 pages/routes passed
+runtime proof          static root; initial 1,193.8 KiB raw / 378.8 KiB gzip,
+                       below the 384 KiB release ceiling; the Point-and-Talk
+                       request, Voice, and Text Swap graph remains lazy
+browser proof          full Chromium: 116 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 131 total; receipts
+                       cover zoom extrema, clipped index-edge placement, typed
+                       and Voice mutation, Undo, cancellation, coarse bounds,
+                       unusably narrow revocation, and hidden-focus refusal
+publication state      proof record `54a258f` passed CI run `32761201277` and
+                       exact Production deployment `6068655811`;
+                       matter.ptoq.io returned no-store 0.2.0-preview.44 with
+                       the unchanged truthful surface profile; the final
+                       record-only main is the immutable annotated tag and
+                       GitHub prerelease target after identical settlement
+```
+
+## Release verification — 0.2.0-preview.43
+
+Preview.43 replaces the former passage-local Branch/Focus catalogue with one
+measured two-position control fog. The selected AI mark opens a small local
+Point-and-Talk field for the exact clicked node; the adjacent `−` / `+` reuses
+the material index's transient working-context transition. Point-and-Talk is
+not Ask Matter and creates no answer bubble or thread. Its strict
+`text-swap/2` address admits exactly one whole current node or the retained
+one-segment lasso grammar, and a valid server-built plan reaches the tree engine
+as one atomic, pointer-undoable material replacement.
+
+The same candidate restores the action fog's horizontal shoulder and glyph
+weight without enlarging its targets. Below the 960 px dock boundary the index
+now meets the canvas through one straight, unbordered right seam. Compact widths
+remove the residual depth shadow as well. Index navigation first centres the
+unshifted material and adds only the open drawer's temporary translation, so
+closing the drawer returns the addressed passage to the browser centre without
+mutating the camera.
+
+The public deployment profile still leaves the Text Swap provider unavailable.
+This release activates and proves the client, protocol, cancellation, strict
+adjudication, tree-engine, Undo, and local presentation boundaries; it does not
+claim live generative material transformation without the separate provider and
+origin-promotion evidence.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor and 43 linked Markdown documents passed;
+                       architecture covered 405 files across 7 layers with no
+                       outward edge, provider leak, or cycle; Vitest passed
+                       160 files with 2 skipped, 1,858 cases with 3 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack
+                       production build of all 22 pages/routes passed
+runtime proof          a cache-empty build emits 1,194.2 KiB raw / 379.1 KiB gzip,
+                       below the 384 KiB release ceiling; the Point-and-Talk
+                       interaction, local speech/transform graph, and secondary
+                       passage action lens stay behind client-only lazy boundaries
+browser proof          full Chromium: 113 passed, 15 explicitly historical or
+                       capability-gated skipped, 0 failed, 128 total; receipts
+                       cover typed and Voice Point-and-Talk, late-response
+                       revocation, coarse targets, compact and tablet drawer
+                       return centring, and the straight unbordered drawer seam
+publication state      source `d75f38a` passed CI run `32742182110` and exact
+                       Production deployment `6065375891`; matter.ptoq.io
+                       matched 0.2.0-preview.43 after two bounded probes; the
+                       final record-only main is the immutable annotated tag
+                       and GitHub prerelease target after identical settlement
+```
+
+## Release verification — 0.2.0-preview.42
+
+Preview.42 is the current release after the immutable Preview.41 release.
+It changes no model authority, material mutation, or live adapter gate. It
+replaces the provisional tree metadata mark with the approved Slate / Bone
+stone system across the browser favicon, Apple touch icon, installable app
+icons, and web manifest. One unsharpened 1024 px master remains the high-fidelity
+brand authority; 180, 192, and 512 px outputs preserve it through one Lanczos3
+downsample, while 16 and 32 px use separate restrained small-raster profiles so
+the same stone remains legible in a real browser tab.
+
+The discovery surface also removes one duplicate search phrase, keeps the
+sitemap's modification date truthful without unsupported priority hints, and
+uses the external GitHub profile—not Matter's own canonical URL—as the
+Organization identity reference. Canonical, Open Graph, robots, and the
+dedicated-root deployment shape remain unchanged.
+
+The release also keeps the foreground leaf canvas as one continuous media
+owner while desktop chrome opens. Language, settings, Ask Matter, and modal
+content temporarily raise the existing chrome stacking context above that
+canvas instead of replacing it with a weaker poster below the wash. Light and
+dark paper therefore keep one ambient tone through those interactions, and the
+external tool rail and material index remain above the leaf pass.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       160 test files passed and 2 skipped; 1,839 tests passed
+                       and 4 skipped; doctor, docs, typegen, typecheck, lint,
+                       and the Next 16.3 webpack production build passed
+browser proof          full Chromium: 98 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 113 total
+brand proof            one frozen 1024 px master; static 16/32/180/192/512 px
+                       platform outputs; decoded RGB and file digests verified;
+                       metadata images total 475.0 KiB under the 512 KiB budget;
+                       the public-origin gate verifies the five fingerprinted
+                       discovery links, manifest roles, exact PNG digests, and
+                       the bounded four-hour, must-revalidate, non-immutable
+                       public icon cache policy
+publication state      topic `233614e` passed exact Preview `6053631689`; PR #73
+                       merged as `738d077` and Production `6053671842` exposed
+                       the approved bytes; cache-receipt topic `0eeb289` passed
+                       Preview `6053732823`; PR #74 merged as `776b003`, exact
+                       Production `6053793739` and the first final public-origin
+                       probe succeeded; a real browser adopted all five metadata
+                       links and kept one ambient foreground through the tested
+                       light and dark overlay transitions
+```
+
+Preview.42 has crossed the source, Preview, Production, public-origin, and real
+browser boundaries without expanding model authority. The immutable
+`v0.2.0-preview.42` tag and GitHub prerelease must point to the final
+release-record Production SHA.
+
+## Release verification — 0.2.0-preview.41
+
+Preview.41 was the preceding release after the immutable Preview.40 release.
+It does not expand model authority or make Elastic or Text Swap available. It
+finishes the five-locale control copy while preserving both equivalent Stop
+recording controls: the fixed rail remains reachable as the primary instrument,
+and material-local feedback keeps the same action next to the live recording.
+It also gives the privacy surface a truthful browser-recognition versus
+on-device-fallback disclosure. The fallback remains lazy, cancellable, and local
+for raw audio; its first fixed-model download is named rather than hidden.
+
+The candidate also centralizes Lasso accessibility copy rather than retaining a
+second locale conditional chain in the canvas owner. Starting Lasso now adopts
+the currently rendered index camera before a stroke begins. That is a
+pointer-authority correction: a person no longer starts a deliberate selection
+against a camera that is still travelling to a different coordinate. The
+browser proof repeats the formerly intermittent camera case rather than
+lengthening an animation or relaxing the lasso topology assertion.
+
+The three desktop corner groups retain the transparent two-depth optical
+grammar without acquiring a visible surface. Upper-right and lower-left use
+smaller footprint-specific guards, while bottom-right keeps its established
+baseline. Lower-left text alone owns the entry animation; its parent backdrop
+owner remains static, so ambient and material pixels can be sampled throughout
+hover, focus, active state, and camera motion.
+
+The material index keeps its compact hierarchy without treating CJK glyphs as
+Latin glyphs of the same nominal size. Search, selection, archive, close, and
+the archive-mode heading render at 12px for Simplified Chinese, Traditional
+Chinese, and Japanese, while English and German retain 10px. Archive-internal
+actions retain their established 9px density in every locale.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor 21; 42 linked Markdown documents; Node 60/60;
+                       architecture 403 files across 7 layers with no outward
+                       edge, provider leak, or cycle; Vitest 159 files passed
+                       and 2 skipped, 1,836 cases passed and 4 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack
+                       production build of all 21 pages/routes passed
+browser proof          full Chromium: 96 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 111 total
+camera proof           the index-motion Lasso receipt passed six serial
+                       Chromium repetitions after activation takes the
+                       rendered camera; it still asserts live ink, closure,
+                       selected-language state, and both stretch grips
+runtime proof          static root; initial 1,191.0 KiB raw / 377.8 KiB gzip;
+                       one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
+                       visual media 350.8 KiB; 0 repository-only trace files
+production boundary    the owner has directed one Preview.41 promotion while
+                       #34/#68 remain open; label, repair, inquiry, and voice
+                       retain their current gates; Elastic and Text Swap stay off
+publication state      topic `7fb7774` passed exact Preview; PR #71 merged as
+                       `6ecbabc`; exact Production `6050614354` and the first
+                       public-origin probe succeeded; the annotated immutable
+                       tag must peel to the final release-record Production SHA
+```
+
+Preview.41 retains the Preview.40-only operational exception only as a fresh,
+explicit owner direction for this one promotion. It does not prove a distributed
+rate limit, provider spend cap, alert delivery, or an operator rollback receipt.
+Those controls remain prerequisites for a later authority expansion.
+
+## Candidate verification — 0.2.0-preview.40
+
+Preview.40 strengthens the spoken-to-written path without adding an LLM to the
+immediate transcript boundary. Every final Web Speech, local Whisper, and
+server transcript passes one insertion-only punctuation planner. Locale packs
+cover simplified and traditional Chinese, English, Japanese, and German, with
+token-anchored English available as a code-switch bridge. Reliable Whisper
+segment gaps may corroborate a boundary only after Matter's waveform check;
+short one-segment speech remains semantic-only. The Chinese pack now recognizes
+bounded stance and temporal frames, paired relations, and guarded clause
+restarts, so continuous speech can gain internal commas without splitting by
+length or cutting protected literals and fixed compounds. Late lexical repair
+re-enters the same planner instead of maintaining a drifting second connector
+grammar.
+
+Expression remains a separate, later, pointer-undoable repair. It is disabled
+for Ask Matter and spoken tool directions. Each repair may take at most one
+decoration path, never both: a closed semantic set may append one affect symbol
+only after text evidence passes its vetoes, or a closed set of ordinary entity
+nouns may receive one token-tail symbol on a stable 24 percent admission sample.
+The identity-derived sample is repeatable across exact store revalidation,
+never `Math.random()`, so the candidate cannot disagree with the tree command
+that commits it. Missing identity, protected literals, questions, negation,
+reported speech, capacity pressure, existing symbols, and unlisted nouns fail
+closed.
+
+The voice lifecycle also becomes honest and recoverable. Ask Matter and material
+admission can cancel a long transcription from the same microphone control;
+assistive technology receives a polite atomic status; a failed local worker is
+retired so retry creates a clean model lease; audio decode is cancellable; and
+every asynchronous recording is revalidated against its operation identity.
+Provider-authored emoji is rejected at the STT transport boundary, leaving
+expression ownership with the later local repair.
+
+The candidate also hardens the public perimeter and long-lived resources.
+Label, repair, inquiry, and transcription share production origin, identity
+window, and instance-concurrency admission; strict media-type parsing rejects
+prefix lookalikes. Failed ZIP import terminates every open inflater, and model
+health evidence has a bounded TTL and entry count. These are source-local first
+lines, not distributed abuse or spend controls.
+
+The local fallback is intentionally conditional. Web Speech remains preferred.
+Only after unsupported browser speech and a person's recording intent does the
+browser lazily fetch the pinned fp32 Whisper graph, about 151.5 MiB before
+tokenizer, WASM, and runtime overhead. It returns final text only and may be
+slow or fail on weak networks or low-performance devices, but is cancellable.
+The release proves a Chromium synthetic-audio path; it does not claim Safari,
+mobile, weak-network, quantized-model, or real multi-segment acoustic-pause
+readiness. Audio remains on-device, while the browser contacts Hugging Face for
+the fixed model revision.
+
+```text
+source proof           npm run check exited 0 on the versioned candidate:
+                       doctor 21; 42 linked Markdown documents; Node 60/60;
+                       architecture 396 files across 7 layers with no outward
+                       edge, provider leak, or cycle; Vitest 155 files passed
+                       and 2 skipped, 1,791 cases passed and 4 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack
+                       production build of all 21 pages/routes passed
+browser proof          full Chromium: 95 passed, 15 explicitly capability-
+                       gated skipped, 0 failed, 110 total
+speech proof           gated real-worker Chromium receipt: 1/1 in 34.9 s;
+                       generated Mandarin WAV stayed under /private/tmp;
+                       worker started and completed, expected lexical anchors
+                       arrived with at least two internal commas, one terminal
+                       full stop and one later expression symbol; zero server
+                       transcription requests and zero browser errors
+runtime proof          static root; initial 1,171.0 KiB raw / 371.1 KiB gzip;
+                       one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
+                       visual media 350.8 KiB; 0 repository-only trace files
+punctuation bound      dense 2,000-code-unit / 333-marker corpus median:
+                       immediate normalize 1.57 ms, late repair 3.67 ms;
+                       250/500/1,000/2,000 scaling remains near-linear
+production boundary    fresh Preview.40-only owner exception; label, repair,
+                       and inquiry stay live; Elastic and Text Swap stay off;
+                       issues #34 and #68 remain open
+publication state      final review-fix merge `af4bcb9` has its exact
+                       Production and public-origin receipts; annotated
+                       immutable tag `v0.2.0-preview.40` is published;
+                       npm publication is not authorized
+```
+
+The versioned candidate completed its source, exact Production, public-origin,
+and immutable-release boundary at `af4bcb9`. The Preview.40-only owner exception
+does not prove distributed rate limits, a provider spend cap, alert delivery, or
+an operator rollback receipt; those remain the conditions for a later release
+or any expansion of model authority.
+
+## Candidate verification — 0.2.0-preview.39
+
+Preview.39 is the post-Preview.38 engineering-hardening candidate. Ordinary
+Matter keeps the complete renderer and the existing product form. The candidate
+adds hard browser and provider deadlines, bounded fatal-UTF-8 response reads,
+no-store and no-redirect transport, ordered provider fallback that remains
+bounded even when a relay ignores cancellation, and one content-zero scalar
+scenario receipt. The external environment may configure the shared station
+order, endpoints, credentials, model order, and optional thinking flag through
+the canonical `MATTER_MODEL_*` namespace; scenario gates, prompts,
+adjudication, byte ceilings, deadlines, and mutation authority remain reviewed
+source contracts. The complete deployed `MATTER_LABEL_*` namespace remains an
+all-or-nothing compatibility fallback and is never merged with the canonical
+namespace.
+
+Runtime work remains equally bounded. The local Whisper graph is absent from
+the initial page and its model revision is pinned; the worker begins only after
+a recorded-speech intent and is terminated on page suspension. Hidden or
+pagehide state cancels transient admission, inquiry, material-model, speech, and
+derived-label work without reviving it on return. Stable-name public media keep
+the existing four-hour revalidation policy, while model answers, material,
+audio, and transcripts never enter shared caches. The production build now
+fails when the static root, initial transfer, lazy WASM split, public assets,
+source maps, or root/server traces leave their recorded budgets. IndexedDB
+snapshot serialization is faster without changing bytes, generations, atomic
+history, corrupt recovery, import rollback, or the existing first-plus-latest
+publish contract.
+
+The candidate also makes one document invariant explicit: every non-root
+passage contains at least one non-whitespace Unicode character, while the
+document root remains exactly empty. The viewport-DOM work is not part of the
+ordinary product renderer. Its typography authority, complete layout
+publication, spatial projection, research renderer, pin registry, and pure
+lease coordinator are isolated behind the explicit performance fixture. They
+prove a possible bounded path for later work but have no ordinary-route importer
+and do not yet satisfy the keyboard, assistive-technology, full interaction
+lifecycle, or deployed performance gates required for promotion.
+
+```text
+source proof           npm run check exited 0 on the frozen pre-release source:
+                       doctor 21; Markdown parser 5/5 and 39 linked documents;
+                       Node 60/60; architecture 381 files across 7 layers with
+                       no outward edge, provider leak, or cycle; Vitest 147
+                       files passed and 2 skipped, 1,590 cases passed and 4
+                       skipped; typegen, typecheck, lint, and the Next 16.3
+                       webpack build of all 21 pages/routes passed
+browser proof          ordinary full Chromium: 95 passed, 15 explicitly
+                       capability-gated skipped, 0 failed, 110 total;
+                       research-only production viewport proof: 5/5 plus five
+                       repeat cold runs, with ordinary routes proving no
+                       viewport authority or lazy research chunk
+runtime proof          static root; initial 1,131.7 KiB raw / 357.5 KiB gzip;
+                       one lazy 23,014.7 KiB WASM asset; public 458.2 KiB,
+                       visual media 350.8 KiB; 0 production source maps and 0
+                       forbidden repository-only runtime trace entries
+release comparison     Preview.38 → Preview.39 candidate: 103 files, 10,972
+                       insertions, 333 deletions, net +10,639
+product boundary       ordinary Matter keeps the complete renderer; the C1-C4b
+                       viewport work remains research-only and cannot be cited
+                       as a shipped end-to-end performance improvement
+production boundary    OWNER-AUTHORIZED EXCEPTION for Preview.39 with label,
+                       repair, and inquiry preserved exactly as the existing
+                       live gates; Elastic and Text Swap remain unavailable;
+                       issue #34 remains open and unverified
+publication state      `v0.2.0-preview.39` (`c347f78`) is tagged and deployed
+                       at `matter.ptoq.io`; its no-store health receipt was
+                       verified on 2026-08-22. npm publication is not authorized
+```
+
+The frozen local candidate is a source-level browser-preview **GO**. Production
+promotion is conditionally **GO** only through the owner-authorized exception
+above and the exact-SHA branch, tag, deployment, and origin sequence. It does
+not close issue #34, prove external distributed admission or spend controls, or
+enable a material-model surface. `elastic-live` and npm publication remain
+**NO-GO**.
+
+## Candidate verification — 0.2.0-preview.38
+
+Preview.38 reopens the lasso freeze from direct browser evidence. Adjacent
+current punctuation segments inside one node now form one contiguous Elastic
+range, so a loop around a whole multi-clause title remains one transform target.
+Disconnected runs or runs across two or more nodes instead enter transient
+material selection: their source rows are marked in the left index and they may
+bound inquiry context, but they expose no Elastic grips and never enter
+`transform/2`. Ordinary material, blank paper, and the active Lasso tool clear
+either state.
+
+The same correction makes the material index's punctuation local. In each
+current visible sibling group, leaves receive terminal points only when the
+group also contains a structural branch; an all-leaf group stays blank. A row's
+leading slot is exactly one disclosure, point, blank, or held-context restore.
+Only a currently expanded disclosure arrow may start a guide, and only when at
+least one visible interior row separates it from the next same-parent control;
+its target may be that sibling's arrow or point. A collapsed or immediately
+adjacent arrow and point/blank → anything remain absent. The root branch →
+branch guide may therefore cross the first branch's flattened descendants.
+A leaf / branch / leaf group reads point / arrow / point and keeps its
+arrow → point segment only while the branch's blank child is visible; collapse
+makes the controls adjacent and removes that short connector. Search, selection,
+folding, and window clipping cannot invent an endpoint or change that grammar.
+When an expanded final structural sibling has visible descendants but no later
+same-parent control, its guide instead closes its own range at the last visible
+descendant with one short rightward hook. That hook is a branch-range closure,
+not a child connector; it disappears when the branch is collapsed or
+compressed, and its reach shrinks before entering any row control's clear
+space. Index navigation also restores only undersized target text to the
+15-CSS-pixel readability floor; already-readable text keeps the current zoom,
+and pointer camera input still takes authority from an in-flight arrival.
+The footer again contains only the
+localized non-account identity and local-device line, with saving shown only
+while a write is active. Conflict, save failure, corrupt-row recovery, export,
+retry, and stored-material reload remain reachable in Archive instead of
+becoming permanent footer chrome.
+
+This candidate also carries the bounded-response, archive-authority,
+camera-attention, Elastic-only promotion, and live vertical-band corrections
+recorded on 2026-08-21 and 2026-08-22. Its release boundary is still
+`browser-preview`: both material-model gates remain off. The existing Elastic
+live corpus and origin suite prove exact-one-segment inputs only; they must be
+versioned with contiguous multi-segment cases and rebound to new digests before
+they can support an `elastic-live` claim.
+
+The final interaction correction restores the two physical edges: the upper
+grip increases the shared degree when pulled upward and the lower when pulled
+downward, while both still open one downward material band. The document shell
+also tolerates extension-owned attributes injected on either root element before
+hydration; the focused receipt covers the Grammarly body attributes reported in
+the candidate browser. Transcription success and every normalized error carry
+an explicit `no-store` response boundary. The upper-right pair, bottom-right
+utility row, and lower-left guidance now share one transparent two-depth optical
+contract, so passing material yields behind corner copy without
+a panel, material mutation,
+collision observer, or new mobile surface. Bottom-right keeps the 28/22 outer
+and 15/11 inner baseline; the other two footprints add only a few pixels. The
+capped outer plane samples at 0.8px and the inner at 3.25px. Both masks share an
+exceptionally slow zero-foot from a transparent perimeter, then diverge into a
+broad shallow outer shoulder and a later compact S-shaped inner soft step, so
+magnification exposes neither a hard rectangle nor two interchangeable blur rings.
+
+```text
+source proof           npm run check exited 0: doctor 21; Markdown checker 5/5
+                       and 38 local-link-valid documents; Node 53/53;
+                       architecture 356 files across 7 layers; Vitest 138 files
+                       passed and 1 skipped, 1,445 cases passed and 3 skipped;
+                       typegen, typecheck, lint, and the Next 16.3 webpack build
+                       of all 21 pages/routes passed
+browser proof          npm run test:e2e: 89 passed, 6 capability-gated skipped,
+                       0 failed, 95 total in 1.3 minutes
+release comparison     frozen Preview.37 → Preview.38 worktree, including all
+                       5 new untracked source files: 109 files changed, 8,925
+                       insertions, 3,232 deletions, net +5,693. Preview.34 → .35
+                       was 91 / +9,888 / -1,423; .35 → .36 was 40 / +3,720 /
+                       -63; .36 → .37 was 40 / +3,506 / -383
+runtime package proof  23 Next trace manifests contained 3,659 entries; runtime
+                       entries from docs, e2e, archive, tmp, .env, and *.test
+                       were all 0
+source pack posture    npm pack listed 471 entries; about 1.47 MB compressed
+                       and 4.34 MB unpacked. The private UNLICENSED source
+                       pack still includes docs, e2e, archive, and tests; it is
+                       not a public install artifact or the deployed runtime
+production boundary    OWNER-AUTHORIZED EXCEPTION for Preview.38 with the three
+                       existing live gates unchanged and both material-model
+                       gates off; #34 remains open and unverified
+known live gap         the #34 edge/spend controls are unverified; contiguous
+                       multi-segment Elastic corpus and origin coverage are not
+                       yet digest-bound or executed
+publication state      source promotion, immutable tag, and deployed-origin
+                       receipts remain execution evidence; npm publication is
+                       neither authorized nor part of this release
+```
+
+The frozen local candidate is therefore a source-level browser-preview **GO**.
+Preview.38 production promotion is owner-authorized as the documented exception
+above, while issue #34 remains an explicit, unverified operational exposure;
+`elastic-live` remains **NO-GO**. A release commit, immutable tag, and
+deployed-origin receipt remain separate actions and evidence.
+
+## Candidate verification — 0.2.0-preview.37
+
+Preview.37 makes selected language feel like one place rather than a stack of
+overlays. An exact one-segment lasso now opens a transient lane between the
+selected passage and its suffix. The same lane offers the two bounded paths:
+pull downward for Elastic expansion, or use Voice/the local typed alternative
+for Text Swap. The suffix moves out of the instrument's way, the selected words
+remain the visible reference, and choosing one operation makes it the sole
+local owner. No panel, prompt surface, durable UI entity, tree field, or second
+history path was added. The 834px tablet receipt now uses a real touch
+down/move/up drag for Elastic rather than only a tap alternative.
+
+The release also closes the evidence boundary needed before these operations
+can ever become live. Every material-model terminal outcome has one private,
+allow-listed aggregate observation with no material or identity field. Both
+five-locale corpora consist only of passages the production segment parser can
+actually select, protect regional and ISO currency designators, and write each
+paid result before proceeding. Paid authority is bound to the exact candidate,
+prompt, corpus, axes, call count, and output-token ceiling. Scoring rebuilds the
+blinded review set from that run's private journal, so review packets from a
+sibling run cannot be substituted. The origin promotion suite is a versioned,
+digest-bound 50+50 set of distinct strict inputs with a running journal and
+truthful `running` / `stopped` / `completed` receipts. Health verification now
+requires both a strict JSON MIME and `no-store`.
+
+```text
+source proof           npm run check: doctor and 38 Markdown files passed;
+                       52 Node checks passed; architecture covered 352 files
+                       across 7 layers with no outward dependency, provider
+                       leak, or cycle; 1,382 Vitest passed and 3 capability
+                       cases skipped; typegen, typecheck, lint, and the Next
+                       16.3.0 production build passed
+browser proof          controlled full Chromium suite: 67 passed, 2
+                       capability-gated cases skipped, 0 failed; laptop,
+                       390px/coarse/reduced-motion, and 834px real-touch paths
+                       prove local-lane geometry, both atomic operations,
+                       cancellation, late-response loss of authority,
+                       pointer Undo/Redo, and reload
+evaluation proof       default evaluation: 17 passed, 1 live run skipped;
+                       origin tooling and all focused proof used zero network
+                       and no provider call
+independent review     final diff audit found no open P0/P1 after the cross-run
+                       review binding, currency, and health-MIME corrections
+production boundary    release only as browser-preview; both material-model
+                       gates remain off. No paid 360-call corpus, two-person
+                       review, distributed rate/spend controls, or executed
+                       origin promotion is claimed
+known product gap      a foreign-id archive can be imported and saved, but a
+                       strict active-document pointer is still required before
+                       reload can promise to return to that imported document
+```
+
+## Candidate verification — 0.2.0-preview.36
+
+Preview.36 makes the difference between a safe browser preview and a live
+material-model promotion explicit. Health reports Elastic and Text Swap as
+independent surfaces. The deployment checker now has a `browser-preview`
+profile that requires both to remain unavailable and a `material-live` profile
+that requires both to be configured without treating configuration as proof of
+quality. The default-off evaluation harness freezes two independent
+five-locale, 180-case corpora with two no-retry repeats, while the separately
+authorized origin sampler plans either a 1+1 smoke receipt or a paced 50+50
+promotion receipt using synthetic material only. Their default invocations use
+no network and spend nothing.
+
+The browser slice also closes three interaction and commit boundaries. A local
+Elastic basis that cannot form a bounded envelope reopens its existing recovery
+state instead of presenting a false submit affordance. The request-start
+document epoch now reaches the final Elastic store commit, so a late plan loses
+authority even after a same-id, same-revision hydrate; stale receipts leave
+history, material, presentation and `lastError` untouched. On an 834×1112
+coarse-pointer canvas, the fresh selection offers Elastic and Text Swap without
+local-control collisions. Choosing a non-zero Elastic degree makes expansion
+the sole local operation until lasso reset, rather than leaving a second model
+action visible over adjusted or pending material. Both strict lineage parsers
+now share the tree's 32-visible-node maximum and reject one node beyond it.
+
+```text
+source proof           npm run check: doctor and 38 Markdown files passed;
+                       51 Node checks passed; architecture covered 350 files
+                       across 7 layers with no outward dependency, provider
+                       leak, or cycle; 1,355 Vitest passed and 3 capability
+                       cases skipped; typegen, typecheck, lint, and the Next
+                       16.3.0 production build passed
+browser proof          controlled full Chromium suite: 65 passed, 2
+                       capability-gated cases skipped, 0 failed at the measured
+                       three-worker shared-server boundary; the 834×1112
+                       touch receipt proves lasso, selection-time operation
+                       choice, symmetric ownership, both atomic commits and
+                       pointer Undo
+evaluation proof       default evaluation: 9 passed, 1 live run skipped; origin
+                       smoke dry-run planned exactly 1+1 calls at eight-second
+                       spacing and reported that no network was used
+independent review      product/interaction, implementation boundary, and
+                       release audits identified the epoch, operation-
+                       ownership, and paid-evaluation artifact defects; all
+                       were corrected before the final suites
+production boundary    release only as browser-preview; neither paid 360-call
+                       corpus, two-person review, distributed rate/spend
+                       controls, nor an executed origin promotion is claimed
+known product gap       a foreign-id archive can be imported and saved, but a
+                       strict active-document pointer is still required before
+                       reload can promise to return to that imported document
+```
+
+## Candidate verification — 0.2.0-preview.35
+
+Preview.35 turns the existing elastic language demonstration into two strict,
+selection-local material operations without changing the tree, archive, Voice
+admission, or five-slot tool rail.
+
+Elastic Language 2 now accepts exactly one current punctuation segment in Focus.
+One bottom grip or its no-drag pointer rail supplies a bounded degree; release
+above 15% sends one immutable `transform/2` request for the fixed
+`expand-in-place` operation. Grapheme targets are projected through the existing
+UTF-16 replacement and node capacities, the server adjudicates one complete
+`{ text }` answer, and the tree engine applies one exact range replacement.
+Pending stays in the opened pocket; cancellation, stale basis, malformed output,
+and failure leave canonical text unchanged. Arrival is complete and atomic, with
+one private grow receipt that neither Redo nor reload replays.
+
+Text Swap is a sibling grammar, not an optional Voice field in Elastic. The same
+exact Focus selection changes the existing Voice action to **Rewrite selected
+language**. One transient spoken direction, or the selection-local typed
+accessibility carrier, enters a strict `text-swap/1` request at the independent
+`/api/text-swap` boundary. Its tool-owned length band, protected-meaning and
+format policy, server-built plan, browser revalidation, atomic tree command, and
+private settle receipt keep the operation near-source and pointer-undoable. No
+direction, audio, partial transcript, pending state, or receipt enters material,
+history, persistence, archive, context, or routine logs.
+
+The three Voice lifecycles now share one browser lease. Admission, Ask Matter
+dictation, and Text Swap retain separate reducers, but a new owner atomically
+revokes the previous capture and every late permission, sample, transcript,
+repair, and model callback loses authority. Text Swap additionally carries the
+browser-only document epoch through the final store commit, so an import or
+hydrate that happens to preserve tree id and revision still rejects the old
+result.
+
+```text
+source proof           npm test: 1,318 Vitest passed, 2 skipped; 49 Node tests
+                       passed; doctor, docs, architecture (342 files, 7 layers,
+                       no outward dependency, no provider leak, no cycle),
+                       typegen, typecheck, lint, and production build passed
+browser proof          full Chromium suite: 64 passed, 2 capability-gated
+                       cases skipped; focused Elastic + Text Swap: 7/7 passed
+                       at laptop, 390px/coarse pointer, keyboard, reduced motion,
+                       atomic Undo/Redo/reload, cancellation and late response
+independent review      protocol/server, Voice authority, browser flow, and
+                       product/HCI render-edge reviews found no open P0/P1
+known timing flake      one full source run let the pre-existing model-pool
+                       attempt-bound test spend its synthetic deadline under
+                       parallel load; its isolated rerun and the next full run
+                       passed without changing code or widening the bound
+production boundary    both generative gates remain off; fixture receipts do
+                       not promote a provider or satisfy distributed rate,
+                       hard spend, multilingual corpus, or deployed-origin gates
+```
+
+## Candidate verification — 0.2.0-preview.34
+
+Preview.34 is the first release since Preview.32; Preview.33 was prepared but
+never tagged, so this candidate carries both the canvas work recorded under
+Preview.33 and everything since.
+
+The passage-local action field is now control fog. It had carried `filter` and
+`backdrop-filter` on the same element, which makes that element a backdrop root,
+so its own blur sampled nothing and the field rendered as an invisible smear
+over dark material — the effect had not been reaching the screen. Its box is
+derived from the measured ink height of the passage's first line and clamped to
+the pointer target floors, so a leaf gets a smaller control than a root, and
+those metrics are one value shared by the placement rule and the CSS in place of
+two hardcoded copies that disagreed by 2px. Proportions are the tool rail's: a
+40px core around a 20px glyph inside a 44px target. The field sits at the
+material's upper-left corner, where the fog and a bounded `CORNER_GLYPH_DESCENT`
+of the glyphs rest on the first line; every fallback placement stays clear of
+material and the browser receipt states that bound once, measured against ink
+rather than the element box. The glyphs are `+` and `−`. Pressing compresses in
+place and never travels downward onto material.
+
+Four robustness corrections land with it. `audioFileExtension` resolves the
+accepted-container table with `Object.hasOwn`: the table inherits from
+`Object.prototype`, so `isAcceptedAudioType("constructor")` returned true at the
+HTTP boundary of the one route that accepts a binary body.
+`withBoundedJsonRequest` attributes a deadline reached while its handler runs, so
+the `timed-out` branch every route declares is reachable and returns 504 rather
+than an opaque 500. The architecture checker resolves `@/` specifiers, which it
+had been dropping — 21 alias edges were invisible to the layering and provider
+rules while the check still printed no leak and no cycle. The browser-proof
+wrapper reaps its process group and stops the web server with SIGTERM instead of
+killing it behind its wrapper, which had left the port held so the next run read
+as a failed proof.
+
+The visible Ask Matter record is now discarded only on a move to different
+material — another document, scope, or lineage — rather than on any revision.
+Admission, repair, a derived label, undo and redo all raise the revision while
+the person is still reading the passage they asked about, and looking back over
+earlier questions is the purpose of the surface. A settled fallback is also
+recorded once per scenario through an injectable observer, carrying surface,
+reason and elapsed time and no material, prompt, provider identity or credential.
+
+```text
+source proof           npm run check: 1,179 Vitest passed, 1 skipped; Node tests
+                       passed; doctor, docs, architecture (310 files, 7 layers,
+                       no outward dependency, no provider leak, no cycle),
+                       typegen, typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 57 Chromium cases passed, 2
+                       capability-gated cases skipped
+known flake            `lasso addresses wrapped language at laptop width` failed
+                       once in a full run and passed on an isolated run and on a
+                       repeat of the full suite. Not reproduced; recorded rather
+                       than dismissed
+product boundary       no new durable state, no new intent, no live transform
+                       promotion, and no change to the performance gates
+```
+
+## Candidate verification — 0.2.0-preview.33
+
+Preview.33 corrects the auxiliary canvas layer without moving material. The
+dashed ruling is now one SVG world texture whose repeated origin, cells, visible
+dash/gap rhythm, and open crossings move and scale with the same Pan/zoom camera
+as material. Each responsive cell width remains exactly the established online
+column width plus gap (`520 + 116`, `280 + 64`, or `236 + 56` px); only the
+non-authoritative vertical reference rhythm is more open. At `1x`, both axes
+show a nominal `6px / 10px` rhythm with `3px` of visible clearance on each side
+of every crossing. Each segment is a custom filled Bézier silhouette with
+softened ends and a screen-space `1.4px` thickness, not a native round stroke.
+The ruling remains pointer-inert and outside material, history,
+persistence, context, and protocol.
+Its single `300ms` opacity breath does not move geometry and becomes a `1ms`
+settle under reduced-motion preference.
+
+Direct hover, keyboard focus, or coarse selection now reveals one frosted field,
+preferring the passage's upper-left edge with collision-safe fallbacks, and all
+of its currently projected actions in the same frame.
+Full view retains Branch and Focus; focus view retains Show all. The presenter
+still revalidates the active node and revision immediately before dispatch and
+yields to lasso, stretch, pan, wheel motion, node drag, pending work, held
+material, overlays, and unsafe geometry.
+
+The same release audit keeps the material index quiet without making actionable
+small text illegible: normal copy uses a `72%` ink tier and faint or held-aside
+copy uses `66%`, active branches remain full ink, and selection and drawer
+controls retain a non-text contrast floor. The narrow index entry shares the
+Matter menu's right-hand axis and `20px` mark. If a lasso selection is
+held aside before submission, its explicit selection scope remains empty and
+returns `NO_MATERIAL`; the request never widens to the remaining tree.
+
+```text
+source proof           npm run check: 1,160 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 57 Chromium cases passed, 2
+                       capability-gated cases skipped; focused 9-case ruling/
+                       field matrix passed at light/dark, laptop/narrow,
+                       keyboard, coarse pointer, held context, Pan and 2,000 nodes
+layout proof           browser receipts freeze the online 520/116 and 280/64
+                       column tokens; Pan/zoom move ruling and material through
+                       one camera while every crossing retains its open joint
+scale proof            one full-paper ruling and at most one delegated field are
+                       mounted at 2,000 nodes; Pan updates placement in O(1),
+                       while zoom rebuilds only two paths bounded to 128 dashes
+                       per axis; no per-node controls or measurements are created
+product boundary       no authored coordinates, snapping, layout refit, local
+                       delete/fold, blank AI nodes, new intents, or new durable/
+                       transmitted state
+```
+
+## Candidate verification — 0.2.0-preview.32
+
+Preview.32 gives the leaf-off paper a quiet structural rhythm without turning
+Matter into a coordinate editor. One solid, low-contrast ruling repeats the
+derived column and vertical steps, remains fixed to the paper during camera
+movement, and never enters material, hit testing, persistence, or protocol.
+
+One shared action lens now serves the complete canvas rather than mounting
+controls per passage. It measures the real first line of the current text and
+prefers its upper-right clear space. Full view offers the existing undoable
+Branch and transient Focus actions; focus view offers Show all. Fine pointers
+hover, coarse pointers act from selection, and keyboard focus enters with
+ArrowRight, moves through the vertical toolbar, and returns with Escape. Lasso,
+stretch, pan, wheel motion, node drag, pending work, held-aside material, canvas
+chrome overlays, stale tree revisions, and unsafe adjacent space all remove the
+lens.
+
+```text
+source proof           npm run check: 1,146 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 55 Chromium cases passed, 2
+                       capability-gated cases skipped; the focused 7-case
+                       ruling/lens matrix passed at light/dark, laptop/narrow,
+                       keyboard, true coarse pointer, held context and 2,000 nodes
+scale proof            one ruling and at most one lens are mounted at 2,000 nodes;
+                       the production receipt kept 4,463 elements and responsive
+                       fold/focus/selection samples, while its 122 ms raw cold task
+                       honestly leaves the existing <100 ms optimization gate open
+product boundary       no snapping, free coordinates, local delete/fold, blank AI
+                       nodes, second tool catalog, or new durable/transmitted state
+```
+
+## Candidate verification — 0.2.0-preview.31
+
+Preview.31 gives the person a transient working-context boundary without
+creating a second material model. Directory disclosure remains `›` / `⌄`; a
+quiet trailing `−` holds one branch aside, and the branch's persistent `+`
+returns it. Held material remains faintly legible but is unavailable to normal
+selection, lasso, and Ask Matter. Its ids never enter the document, command
+history, persistence, archive, or request payload.
+
+The browse index derives parent-owned relationship segments in one linear
+projection over the visible outline. Only adjacent siblings in a group that
+continues deeper receive a segment; singleton and terminal leaf groups remain
+unmarked. A 1 px rail shares the disclosure/selection axis, with 8 px clearance
+at controls and 6 px at blank leaf joints. Windowing clips those pure segments
+without DOM measurement.
+
+The release also advances the existing Nano ID 3.x transitive override to
+3.3.18, the patched version for its zero-length custom-generator denial of
+service advisory. Matter does not call that generator path; the update removes
+the known vulnerable package from both the active lockfile and its archived
+prototype lockfile without changing a dependency line or product behavior.
+
+```text
+source proof           npm run check: 1,136 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 48 Chromium cases passed, 2
+                       capability-gated cases skipped; desktop and narrow
+                       disclosure, recovery, search, Select, Ask Matter,
+                       deletion/Undo, and 48 px pointer targets passed
+scale proof            exact 2,000-row / 32-level guide projection passed;
+                       the existing full-canvas remount gate remains the
+                       separately recorded release risk below
+privacy boundary       held material cannot leak through pointer selection,
+                       lasso measurement, aggregate count, or inquiry payload
+```
+
+## Candidate verification — 0.2.0-preview.30
+
+Preview.30 is an operational-contract correction over Preview.29. The deployed
+repair route already requires `transcript-repair/4`; the cross-surface pool probe
+now sends that same version and its test freezes the equality. Product behavior,
+material documents, UI, history, and network response shapes do not change.
+
+```text
+source proof           focused Node probe contract, typecheck, lint, production
+                       build, architecture, doctor, docs and diff checks passed
+browser proof          unchanged from Preview.29: 46 Chromium cases passed, 2
+                       capability-gated cases skipped
+operational boundary   a probe contract mismatch can no longer masquerade as a
+                       provider or transcript-repair failure
+```
+
+## Candidate verification — 0.2.0-preview.29
+
+Preview.29 strengthens the spoken-to-written boundary without turning admission
+into a writing assistant. The dependency-free local floor now applies ordered,
+literal-safe repair across English, Simplified and Traditional Chinese,
+Japanese, and German, including only high-confidence spoken percentages,
+decimals, measures, dates, times, and version spans. One managed proposal may
+faithfully redraft a proven broken spoken seam, but the browser and store still
+lock facts, stable identifiers, speaker, modality, logical
+relations, question type, and claim order before one separately undoable repair
+can settle.
+
+The right rail again exposes a single retreat direction: Undo. Exact Redo stays
+available through `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`, using the same durable inverse
+journal without a second visible tool. Ask Matter's existing bounded bubble now
+uses a presentation-only pending pulse and grapheme-aware terminal reveal; the
+full answer remains its accessible name, restored answers do not replay, and no
+partial text enters its record or protocol.
+
+```text
+source proof           npm run check: 1,118 Vitest passed, 1 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 46 Chromium cases passed, 2
+                       capability-gated cases skipped; visible Undo, both Redo
+                       shortcuts, inquiry arrival, repair, reload, archives,
+                       narrow layouts, and 2,000-node diagnostics passed
+repair proof           locale-exact positive, ambiguity, literal, semantic-lock,
+                       idempotence, and model-adjudication corpora passed; no
+                       worker download, transcript cache, or new dependency
+product boundary       no visible Redo, repair controls or provider status;
+                       no free style rewrite or durable partial inquiry answer
+still gated            a fresh deployed source:model repair receipt and live
+                       transform promotion; deterministic repair is complete
+                       when every managed proposal fails
+```
+
+## Candidate verification — 0.2.0-preview.28
+
+Preview.28 keeps one server-only provider foundation without making its product
+surfaces one failure domain. Label and repair still share the ordered candidate
+registry, credentials, transport, and prompt harness; candidate health is now
+scoped to the scenario whose deadline observed it. A repair stall cannot reorder
+label candidates, and a label success cannot clear repair's cooldown.
+
+The left material index remains deterministic-first and quiet. The browser keeps
+the same deadline through the complete label response body, cancels stale work
+when the passage basis changes or disappears, treats bounded upstream fallback
+as background failure, and repeats semantic validation before publishing or
+storing a model label. A manual name continues to outrank every automatic path.
+Transcript repair remains immediate-admission-first, rule-backed, separately
+undoable, uncached, and visually unchanged from Preview.27.
+
+```text
+source proof           npm run check: 1,104 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 46 Chromium cases passed, 2
+                       capability-gated cases skipped
+isolation proof        295 focused pool/label/repair tests passed;
+                       cross-scenario stall, cooldown and success remain local
+fallback proof         deterministic label and transcript-rule floors remain;
+                       no provider, cache, breaker, or fallback status enters UI
+still gated            a fresh deployed source:model receipt for both label and
+                       repair; configured health alone is not that proof
+```
+
+## Candidate verification — 0.2.0-preview.27
+
+Preview.27 changes only how an already-committed transcript repair is perceived.
+The heard baseline still remains visible for at least 650 ms and repair still
+commits as one exact tree command. A bounded Myers grapheme diff then keeps
+stable language still, reserves 160 ms for recognition, and reveals only
+inserted or replaced units in reading order. Deletion-only repair cues one
+adjacent seam glyph because the deleted text has no final glyph. At most 64
+timing units finish below 800 ms; the short-lived before/after receipt and DOM
+shape are released by 1.2 seconds.
+
+```text
+release proof          npm run check: 1,082 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 46 Chromium cases passed, 2
+                       capability-gated cases skipped; laptop and 390px repair
+                       flows observed delayed ordered grapheme arrivals while
+                       unchanged text, opacity, accessible name, and pre/post
+                       reveal geometry stayed exact
+accessibility proof    reduced motion rendered the complete repaired text with
+                       no animation; forced colors shares that final-state rule
+material boundary      DOM textContent is canonical from the repair commit;
+                       no old-text layer, token stream, per-character command,
+                       timer per glyph, cache, status, or persistent fragment
+still gated            the external managed model pool; deterministic rules
+                       remain the complete offline repair path
+```
+
+## Candidate verification — 0.2.0-preview.26
+
+Preview.26 makes the managed repair budget reachable in the deployed user
+journey and narrows its visible effect to the material ink. One proposal gets a
+six-to-eight-second server deadline inside the existing twelve-second material
+lease; the browser bounds headers, body, and parsing at 8.8 seconds. The raw
+transcript and deterministic floor remain the complete offline path, so the
+additional wait never blocks admission and never creates a retry queue.
+
+The canonical repaired text is present from its first frame. Its glyph color
+settles once for 240 ms, while selection fill, focus outline, opacity, geometry,
+hit testing, and accessibility remain steady. The feature-local presentation
+owner survives React development effect replay but releases its retained text
+receipt and timers on a real unmount. It remains presentation only: no old-text
+layer, per-character DOM, status, history, persistence, archive, or context.
+
+```text
+release proof          npm run check: 1,067 Vitest passed, 2 skipped; 48 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2
+                       capability-gated cases skipped; laptop and narrow voice
+                       admission observed the repair animation while the text
+                       control remained fully opaque
+lifecycle proof        a Strict Mode release/retain replay keeps the owner live;
+                       a real final release clears receipts, timers, and future
+                       publications
+product boundary       no typing simulation, correction badge, confidence UI,
+                       provider status, transcript/output cache, or retry
+still gated            a successful deployed managed-repair answer receipt;
+                       health configuration alone is not that proof
+```
+
+## Production spot check — 0.2.0-preview.26
+
+The deployment gate reached `matter.ptoq.io` after nine probes and confirmed
+the Preview.26 version and capability shape. The hydrated interface restored
+its bounded local material, enabled the voice and pointer tools, and exposed no
+new repair, cache, or provider surface. Before hydration and voice readiness,
+the same controls remained visible but inert rather than accepting a recording
+they could not yet own.
+
+Two generated repair utterances reached the new server budget in 6.72 and 6.59
+seconds, then safely returned the unchanged floor with `MODEL_UNAVAILABLE`. One
+generated cross-surface round returned repair `MODEL_UNAVAILABLE`, label
+`MODEL_TIMEOUT`, and inquiry `MODEL_TIMEOUT`; that is a pool-down receipt, not a
+repair-only fault. Health still reports the configured transcript-repair
+capability, exactly as designed, but is not evidence that a relay answered.
+Preview.26 therefore proves the longer repair path and its fallback online; a
+managed repair answer remains gated on restoring a responding relay.
+
+## Candidate verification — 0.2.0-preview.25
+
+Preview.25 makes transcript repair a real staged path without making it a new
+surface. Recognizer text still becomes human material immediately. An ordered,
+locale-exact analyzer produces the offline floor; one bounded managed proposal
+may then resolve a contextual restart, correction, misrecognition, or forced
+grammar seam. Rules and model settle as one separately undoable repair command
+after the baseline has remained visible for at least 650 ms. Failure keeps the
+rules, and neither branch exposes status, retains transcript/output cache, or
+receives material identity.
+
+```text
+release proof          npm run check: 1,066 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2
+                       capability-gated cases skipped; raw-before-repair,
+                       managed repair, reload, two-step Undo, narrow layout,
+                       lasso/stretch, archives, and 2,000-node diagnostics passed
+repair boundary        33 runtime corpus groups cover punctuation, filler,
+                       echo, stutter, restart, correction, ITN, literal guards,
+                       idempotence, and negative semantic cases; server,
+                       browser, and store independently adjudicate model output
+product boundary       no repair panel, progress, typing simulation, transcript
+                       cache, retry queue, retrieved context, material address,
+                       or structure created by a spoken formatting command
+still gated            a measured browser repair model and live transform
+                       promotion; managed repair remains an optional proposal
+                       above the deterministic offline floor
+```
+
+## Candidate verification — 0.2.0-preview.24
+
+Preview.24 closes one speech-to-material boundary without widening the product.
+The recognized transcript becomes durable material immediately; a detachable,
+rules-only local repair may commit one separately undoable correction within a
+twelve-second capability lease. First-use voice readiness prepares only an
+unstarted browser recognizer or evaluated worker code graph, never permission,
+audio, or model bytes. Ask Matter remains visually unchanged: its bounded local
+record stays behind the existing inquiry, while strict response receipts now
+distinguish application busy, provider timeout, temporary unavailability, and
+an unreachable request without exposing provider prose.
+
+```text
+release proof          npm run check: 1,028 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2
+                       capability-gated cases skipped; voice admission,
+                       on-device transcription, Undo/Redo, lasso, archives,
+                       reparenting, narrow layouts, and 2,000-node diagnostics
+                       all passed
+product boundary       no repair status, cache UI, record manager, chat panel,
+                       hidden retrieval, or new material authority
+still gated            live transform provider and deployed-origin transform
+                       receipt; local repair model remains a measured future
+                       adapter, with deterministic rules as the complete floor
+```
+
+## Production spot check — 0.2.0-preview.23
+
+Checked through the public interface on 2026-08-11. `matter.ptoq.io` loaded the
+root-seeded canvas; selection, Branch, Undo, Redo, reload, and Undo/Redo after
+reload all preserved the same local tree and history. Entering Lasso disabled
+conflicting file actions and exposed the bounded selection guidance. The test
+browser denied microphone permission, and the product returned to an idle,
+retryable state with a permission instruction; this proves the denied path, not
+real acoustic capture.
+
+The inquiry health capability reported `available`, but one real bounded
+inquiry spent its browser deadline and returned the retryable busy answer. A
+later generated-data pool probe reached inquiry and received a model answer in
+915ms; a second real browser question also answered, kept the input focused,
+and produced no console warning. In the same probe, label reached the pool in
+1.128s while repair used its deterministic floor after a 5.591s model timeout.
+Preview.23 therefore proves an intermittent pool, not a permanently absent
+inquiry provider. The health payload explicitly is not a dependency monitor,
+and the old client also collapsed a provider timeout into `BUSY`; neither
+signal may stand in for an actual answer receipt. The dedicated root is the
+live product URL; `www.ptoq.io/matter` currently returns the marketing site's
+intentional 404 and is not an alias.
+
+## Candidate verification — 0.2.0-preview.22
+
+Preview.22 is a source-preview convergence receipt. It does not widen Matter
+into a workspace or promote live material transformation. It joins four
+already-narrow paths: exact local undo/redo through reload; a bounded Ask Matter
+record behind the existing inquiry; the fixture-gated transform vertical slice;
+and first-turn voice readiness. The voice warm-up prepares only capability and
+worker code. It never pre-asks for microphone permission, captures audio, or
+downloads a speech model; a browser recognition start that never settles now
+fails recoverably instead of remaining indefinitely pending.
+
+```text
+release proof          npm run check: 996 Vitest passed, 2 skipped; 47 Node
+                       tests passed; doctor, docs, architecture, typegen,
+                       typecheck, lint, and production build passed
+browser proof          npm run test:e2e: 47 Chromium cases passed, including
+                       browser speech, local transcription, undo, lasso,
+                       archive, mobile chrome, reparenting, and 2,000-node
+                       diagnostics
+product boundary       Ask Matter record introduces no new panel, navigation,
+                       or log manager; retained exchanges return only within
+                       the existing inquiry surface
+still gated            live transform provider, distributed rate/spend control,
+                       deployed-origin transform receipt, and the strict
+                       large-tree optimization target
+```
+
+The first remaining product proof is intentionally singular: execute the full
+fixture transform loop in a browser, then undo, redo, and reload it. Until that
+receipt exists, this is a source preview of the completed boundaries—not a
+claim that live generative transformation is publicly ready.
+
+## Candidate verification — 0.2.0-preview.8
+
+The proprietary candidate was rebuilt and verified locally on 2026-08-07:
+
+```text
+npm run check          921 tests passed + 1 skipped; doctor, links, typecheck,
+                       lint, and browser-mode production build also passed
+npm run test:e2e       39 passed + 2 skipped Chromium cases at laptop, 390 px, 320 px,
+                       and a wide structural-drag fixture
+npm audit              0 known vulnerabilities after bounded transitive overrides
+npm run test:receipt   measured, but the strict 2,000-node raw long-task gate remains open
+```
+
+The current production diagnostic keeps 4,359 elements and a `93 ms` cold
+task. Its measured fold p95 is `111.9–115.8 ms`, focus p95 is `113.5–116.5 ms`,
+selection p95 is `34.2–39.7 ms`, and the maximum raw long task is `111 ms`.
+Most full-tree measurement tasks now land below `100 ms`, but occasional
+complete-DOM remount spikes remain. The `<100 ms` target remains deliberately
+visible and is never weakened to manufacture a pass; it is an optimization
+target rather than a release veto. The viewport-DOM renderer decision remains
+open in the active plan.
+
+These receipts prove the proprietary, root-seeded preview boundary. They do not
+promote the missing transform or accounts/sync. The repository and release
+artifacts are currently publicly visible for operational reasons, but remain
+proprietary and `UNLICENSED`; `LICENSE` grants no public-use rights.
+
+## Candidate verification — 0.2.0-preview.9
+
+Preview.8 remains an immutable receipt. Preview.9 adds the hydration hotfix and
+the maintenance line below without changing the seeded-preview product claim:
+
+```text
+npm run check          928 Vitest tests passed + 1 skipped; 10 Node tests,
+                       explicit typegen, typecheck, lint, docs, and production build passed
+npm run test:e2e       41 passed + 2 capability-gated skips across 43 cases
+runner proof           missing generated file, explicit E2E ownership, and
+                       POSIX process-group interruption passed
+provider proof         pre-abort, disconnect/deadline propagation, and
+                       cancellation-without-cooldown passed
+interaction proof      visible controls meet a 24 CSS px floor; the 44 px rail
+                       visuals keep non-overlapping 72 px horizontal hit areas
+```
+
+No rendering model or performance threshold changed in this maintenance line;
+the 2,000-node boundary above remains the honest open performance constraint.
+These changes form Preview.9; they do not rewrite or move the Preview.8 tag.
+Preview.9 is a GitHub source prerelease only: its exact package version is
+ignored by the connected Vercel build. Production promotion remains tracked in
+GitHub issue #34 and requires a later version after the provider controls exist.
+
+## Candidate verification — 0.2.0-preview.10
+
+Preview.10 retains the same source-prerelease-only deployment boundary. It
+adds durable local undo, exact hierarchy presentation, and recording/lasso
+interaction corrections without changing the public root-seeded claim:
+
+```text
+npm run check          938 tests passed + 1 skipped; doctor, links, explicit
+                       typegen, typecheck, lint, and production build passed
+npm run test:e2e       43 Chromium browser flows passed, including archive,
+                       2,000-node windowing/performance, voice, lasso, move,
+                       hierarchy, and reload-then-undo receipts
+durability proof       tree and inverse journal write atomically; reload
+                       validates every saved inverse before it is exposed
+```
+
+This exact package version is ignored by the connected Vercel build. The
+GitHub prerelease is therefore a source candidate only, not a deployment of
+`matter.ptoq.io`; production remains gated by issue #34 and a later version.
+GitHub CI subsequently rejected Preview.10 because one old lasso E2E still
+looked for the removed "Leave language selection" control. The immutable tag
+remains an audit record; Preview.11 corrects that verifier rather than moving it.
+
+## Candidate verification — 0.2.0-preview.11
+
+Preview.11 changes the stale lasso exit assertion to the explicit re-click exit
+contract for both lasso and Canvas pan. It also declares
+`MATTER_LABEL_ADAPTER=live` in Vercel's non-secret
+configuration, so the existing server pool can serve labels as soon as its
+encrypted environment variables are configured. The exact version remains
+ignored by Vercel until the handoff in
+[`deployment-handoff.md`](deployment-handoff.md) is completed.
+
+```text
+npm run check          938 tests passed + 1 skipped; doctor, docs, typegen,
+                       typecheck, lint, and production build passed
+npm run test:e2e       43 Chromium browser flows passed; the persisted report
+                       records no failed test, including lasso toggle, pan
+                       toggle, voice, archive, tree move, and 2,000-node view
+localhost inspection   root seed, default title, and post-hydration tool
+                       availability checked against the live client surface
+```
+
+## Candidate verification — 0.2.0-preview.12
+
+Preview.12 deploys the root-seeded browser experience from `main` again. The
+server model adapters remain capability-gated: without encrypted provider
+variables, labels keep their deterministic floor, transcript repair admits the
+heard text, and Ask Matter truthfully reports that no answer model is connected.
+That safe no-model mode is deployable; enabling a live model still requires the
+separate controls in [`deployment-handoff.md`](deployment-handoff.md).
+
+```text
+focused proof          selected and default voice feedback clears every visible
+                       text block at laptop and narrow widths; Enter, Shift+Enter,
+                       visible Ask, pending, and composition boundaries are covered
+release proof          npm run check: 943 passed, 1 skipped; npm run test:e2e:
+                       45 passed; typecheck, lint, production build, and docs
+                       link verification all pass
+deployment proof       after Git integration deploys, check the dedicated origin
+                       with npm run check:deployment -- https://matter.ptoq.io
+```
+
+## Candidate verification — 0.2.0-preview.16
+
+Preview.16 makes the launch configuration enforce the live-model product claim
+and makes the pool behind it able to keep that claim from the deployed region.
+The public runtime declares label, transcript-repair, and inquiry gates as
+`live`, and the deployment receipt requires all three health surfaces to be
+`available`. The pool now bounds one relay's share of a caller's deadline, so a
+hanging relay can no longer spend the whole budget alone, and the three
+scenario deadlines carry two attempts rather than one. It does not add a
+transform route or relax the model-provider boundary. The release runner's
+POSIX socket fixture now skips only on hosts that forbid loopback binding;
+where the capability exists it retains the original grandchild-port cleanup
+proof.
+
+```text
+release proof          npm run check: 960 Vitest passed, 1 opt-in live-pool
+                       skip; 29 Node tests passed; doctor, docs, typegen,
+                       typecheck, lint, Vercel configuration, and production
+                       build passed
+browser proof          npm run test:e2e: 44 Chromium cases passed, 2 skipped,
+                       including inquiry Enter/Shift+Enter, scoped reply
+                       lifecycle, browser voice, local Whisper, lasso ink
+                       clipped to the paper and its echo through a rounded
+                       corner, archive, and tree interactions at laptop,
+                       390 px, and 320 px
+live-path proof        a local production build against the same relay pool
+                       answered /api/label with source=model and /api/inquiry
+                       with status=answered
+deployment requirement after promotion, npm run check:deployment must report
+                       the preview.16 version and all three model surfaces as
+                       available; separately, all three must answer from the
+                       deployed origin — /api/label source=model, /api/repair
+                       source=model on an utterance that needs punctuation,
+                       and /api/inquiry status=answered. `available` is a
+                       configuration fact, not a reachability one, so the
+                       second probe is the only evidence that the released AI
+                       surfaces actually answer
+```
+
+## Candidate verification — 0.2.0-preview.21
+
+Two harness corrections found by measuring the pool from outside, and the
+instrument that found them.
+
+```text
+refused answers      an adjudication rejection no longer counts toward the
+                     provider cooldown. Three refusable requests in a row used
+                     to take a surface off a live relay for 15 s, for everyone
+                     on that instance, while it was answering all along
+stalled relays       a candidate that spends its whole attempt without
+                     answering now reaches the cooldown threshold in one event
+                     rather than two. A fast refusal still needs two, because
+                     it costs the next caller nothing
+pool probe           npm run probe:pool <origin> asks repair, label, and
+                     inquiry each round and reads fallbackReason rather than
+                     status, so a floor answer is not mistaken for a working
+                     pool
+release proof        npm run check: 969 Vitest passed, 1 opt-in live-pool
+                     skip; 52 Node tests passed
+browser proof        npm run test:e2e: 45 Chromium cases passed, 2 skipped
+```
+
+Interface unchanged. The one-exchange inquiry change from preview.20 is
+reverted: Ask Matter keeps its scrollable record, which is the product
+decision.
+
+## Candidate verification — 0.2.0-preview.19
+
+Three durability and boundary slices, and the first release where the
+architecture rules are enforced rather than described.
+
+```text
+load window            two lineages no longer resolve by revision. A commit
+                       during the read raises the conflict a second tab
+                       raises; neither version is overwritten
+manual names           label writes return a typed receipt; a failed manual
+                       write returns the row to its editor instead of looking
+                       taken and vanishing on reload
+architecture           npm run check:architecture holds 4 rules over 255 files;
+                       all 3 recorded exceptions cleared first
+release proof          npm run check: 963 Vitest passed, 1 opt-in live-pool
+                       skip; 34 Node tests passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2 skipped
+```
+
+Interface unchanged, with one deliberate exception: a manual name whose write
+fails returns to the editor it was typed in. That is the failure path, and it
+previously presented as success.
+
+## Candidate verification — 0.2.0-preview.18
+
+Preview.18 is one measured tuning change, taken from the preview.17 promotion
+receipt rather than from reasoning.
+
+```text
+deployed origin        inquiry answers in 1.3-2.2 s with a 16 s budget
+                       (8 s per attempt); label spends its whole 6 s budget
+                       (3 s per attempt) and falls back; repair likewise
+reading                the first call from a cold function pays the connection
+                       before the model, and only the wider budget survives it
+change                 label 6 s -> 12 s, browser bound 7 s -> 13 s. Repair
+                       keeps its short budget: a person is holding still for it
+                       and the words as heard are the better answer. Nothing on
+                       screen waits for a label
+release proof          npm run check: 961 Vitest passed, 1 opt-in live-pool
+                       skip; 29 Node tests; npm run test:e2e: 45 passed,
+                       2 skipped
+```
+
+## Candidate verification — 0.2.0-preview.17
+
+Preview.17 is an issue-closing line. It changes no interface: the rail, the
+paper, the bubble, and every control keep their shape and copy. What changes is
+what happens underneath them.
+
+- a branched thought carries its own id and timestamp rather than a build
+  constant that reached exported Markdown frontmatter;
+- material clears the editing rail at every tested phone width; the 341–389px band was
+  never measured and overlapped by up to 18px;
+- an unanswered inquiry names its scenario outcome, so a released model surface
+  can be diagnosed rather than guessed at;
+- the two interaction flakes CI was retrying away were unstable pointer
+  coordinates in the tests, not product races. Both now hover the element they
+  mean, so the assertion tests the product rule instead of the canvas position.
+
+```text
+release proof          npm run check: 961 Vitest passed, 1 opt-in live-pool
+                       skip; 29 Node tests passed; doctor, docs, typegen,
+                       typecheck, lint, Vercel configuration, and production
+                       build passed
+browser proof          npm run test:e2e: 45 Chromium cases passed, 2 skipped
+flake proof            five consecutive full-suite runs at retries: 0, no
+                       failures. The same suite failed roughly two runs in five
+                       before, on the unmodified tree
+narrow-width proof     material clears the rail at the eight measured widths
+                       320, 341, 360, 375, 376, 389, 390, and 414px
+```
+
+## Promotion receipt — 0.2.0-preview.16
+
+Promoted to `main` and served from `matter.ptoq.io` on 2026-08-09.
+`npm run check:deployment -- https://matter.ptoq.io --wait=120` matched the
+version on the first probe, with all three model surfaces `available`.
+
+```text
+transcript repair      answered live from the deployed origin in 0.909 s,
+                       source=model, on an utterance that needed punctuation.
+                       Repair has no cache, so this is a real relay call and
+                       the first proof that the pool is reachable from hkg1.
+                       It is intermittent: later calls at a wider 3.4 s single
+                       attempt still timed out, so the relay is sometimes under
+                       a second and usually several seconds away from hkg1
+thought label          answered source=model in 1.489 s. Labelling caches and
+                       coalesces, so this is a live call or a late answer read
+                       back from that cache; either way a person sees a name
+inquiry                still unanswered. Every call spends the whole 16 s
+                       budget and returns 503, then the governor cools down.
+                       Not a relay-speed problem: the same pool answers repair
+                       in under a second from the same deployment, and a local
+                       production build against the same relays answers the
+                       identical inquiry request in ~1.1 s, repeatedly
+```
+
+So preview.16 fixes two of the three surfaces the previous release only
+claimed. Inquiry — the one with no floor — is still down, and its browser
+message is a truthful, retryable "could not answer just now" rather than an
+invented answer. The remaining difference between it and the two that work is
+inside the scenario, not in the relays: prompt size, output ceiling, and the
+per-scenario governor are the untested candidates, and the token cap is already
+ruled out (every relay answers a 720-token request in about a second). The next
+step is to make the failure legible before guessing again — the inquiry error
+carries no reason, while label and repair both report `fallbackReason`, so
+nothing outside the function can tell a timeout from a rejection.
+
+Widening deadlines further is not that step. Repair was given a single 3.4 s
+attempt and still timed out on three consecutive calls after answering one in
+0.909 s, which is the shape of a connection cost paid per cold relay rather
+than of a model that needs more time. Every further second is spent by a person
+holding still, so the next move is measurement — and, if the reading holds, a
+warm connection or a nearer relay rather than a longer wait. Tracked in
+issue #52.
+
+The credentials, pool endpoint, and model ordering remain Vercel-encrypted
+server environment values. Distributed rate limits and a provider spend ceiling
+remain the outstanding production control in issue #34.
+
+One pre-existing intermittent browser failure is carried into this release
+rather than hidden: `canvas-chrome.spec.ts` occasionally loses the inquiry
+reply when a lasso begins, roughly one full-suite run in three, and CI's two
+retries absorb it. It reproduces on the unmodified preview.15 tree, so it is
+not introduced here — preview.15 is live with it now — and it is not understood
+yet. Two mechanisms can produce it and neither has been proven: the
+material-scope comparison discarding the exchange, or the paper's outside-
+pointer dismissal closing the bubble on the same gesture the assertion races.
+A dedicated repro loop of that sequence did not reproduce it in 40 attempts, so
+the trigger involves more of the session than the gesture itself.
+
+Carrying it was a deliberate trade, not an oversight, and retries are not
+offered as proof. Holding preview.16 would keep a live outage in place — all
+three released model surfaces currently answer nothing in production — to avoid
+an intermittent reply loss that is already shipped. It is the first thing to
+take after this release, and the reply-loss race should be reproduced under
+instrumentation rather than re-derived by reading.
+
+## Candidate verification — 0.2.0-preview.15
+
+Preview.15 is the reviewed fixture-seeded preview following the live-gate
+integration. It keeps the root-seeded, local-first material claim and does not
+turn Ask Matter into durable chat: a visible answer survives callback churn for
+the same bounded material scope, but a real scope change or closing the bubble
+still discards the transient thread.
+
+```text
+release proof          npm run check: 952 Vitest passed + 1 skipped; 28 Node
+                       tests passed; doctor, docs, typegen, typecheck, lint,
+                       and the production build all passed
+browser proof          npm run test:e2e: 43 Chromium cases passed + 2
+                       capability-gated skips, including the real on-device
+                       Whisper worker, inquiry Enter and Shift+Enter, voice,
+                       lasso, archive, tree move, and the 2,000-node material
+                       index at laptop, 390 px, and 320 px
+dependency proof       root and archived public lockfiles resolve nanoid 3.3.17;
+                       npm ci reported 0 vulnerabilities
+origin baseline        before promotion, matter.ptoq.io reported preview.14 at
+                       the dedicated root with the three model gates available
+```
+
+The earlier browser receipt briefly failed because the new inquiry regression
+assertion began a lasso stroke outside the bubble. That pointer-down is the
+existing, intentional close boundary for a lightweight non-persistent inquiry,
+so the assertion was removed rather than changing Matter into a permanent chat
+surface. The final focused canvas receipt and the full suite pass.
+
+Preview.15 does not resolve the external deployment-control gap: distributed
+rate rules and a provider spend ceiling remain required for the live label,
+repair, and inquiry gates. The release remains a proprietary fixture-seeded
+preview; no transform API, accounts, server material storage, hidden retrieval,
+or persistent assistant history is claimed.
+
+## Candidate verification — 0.2.0-preview.14
+
+Preview.14 opens the three model gates on the deployed origin and corrects the
+surfaces those gates make reachable. `matter.ptoq.io` and a local `.env.local`
+now carry the same label, repair, and inquiry configuration.
+
+```text
+release proof          npm run check: 950 Vitest passed + 1 skipped; 32 Node
+                       tests passed; doctor, docs, typegen, typecheck, lint,
+                       and the production build all passed
+browser proof          npm run test:e2e: 43 passed + 2 capability-gated skips
+                       across 45 Chromium cases
+parity proof           /api/health reports thoughtLabel, transcriptRepair, and
+                       inquiry as available on the deployed origin, matching a
+                       local run with the same three gates
+```
+
+Corrections shipped with it, each one a state a live provider produces:
+
+- English spoken-punctuation substitution is removed from admission. "period"
+  and "comma" are ordinary nouns, so the rule rewrote wording, which
+  [`material.md`](material.md) forbids on the human path. CJK substitution
+  remains and now skips a punctuation word following a determiner.
+- A rate-limited or shed inquiry is reported as refused, not as never sent.
+- A label queue dropped on cooldown releases its session entries, so one bad
+  endpoint window no longer costs those rows their label for the session.
+- Enter and Escape yield to an IME composition wherever they commit or discard,
+  including the durable canvas title.
+- The material index is localized; `<html lang>` follows the canvas language.
+- A modal's inert set is live rather than a one-time snapshot and now covers the
+  docked material index.
+- The inquiry dictation and Ask controls meet the 24 CSS px floor, and the
+  browser receipt that claims that floor now actually measures them.
+
+One parity gap was found by measurement rather than by reading. Transcript
+repair answered from the model on localhost but timed out on roughly half of
+production requests and fell back to the verbatim floor. Its deadline scales
+with the utterance — about 1.5s for a short one, because repair fires once per
+utterance and must not delay admission — and a cross-Pacific hop from `iad1` to
+the pool spent most of it. Pinning the functions to `hkg1` in `vercel.json`
+closed it: six consecutive production repairs answered from the model with text
+identical to localhost. The deadline was not relaxed, and the deployment check
+now requires a region to be pinned.
+
+```text
+parity receipt         localhost and matter.ptoq.io, same version, all three
+                       gates available, label and repair both source=model,
+                       inquiry answered on both
+```
+
+Outstanding and deliberately not claimed: the distributed rate rules and
+provider spend ceiling in issue #34 are still absent, so the gates are open
+without an abuse or cost control. The `lasso-flow` stretch flake recorded under
+Preview.13 is unchanged.
+
+## Candidate verification — 0.2.0-preview.13
+
+Preview.13 changes no product code. It makes the repository deployable again and
+makes the constraint that broke it executable.
+
+Preview.8 moved the dedicated-domain build shape into an environment prefix
+inside `vercel.json`'s `buildCommand`, which grew that string to 340 characters.
+Vercel rejects a `buildCommand` over 256 during deployment schema validation,
+before any build step, so the eight production deployments from Preview.8 to
+Preview.12 all failed with no build log and `matter.ptoq.io` stayed on
+Preview.7. Source, tags, and GitHub CI stayed green throughout, because nothing
+verified that the committed configuration was one Vercel would accept.
+
+The build shape now lives in `build.env`, its server-read subset in `env`, and
+`buildCommand` is `npm run build`. `npm test` checks the length bound, both
+shapes, agreement between them, and the absence of any credential-shaped entry.
+
+`npm run check:deployment` also runs for the first time. Its retry clock
+defaulted to an unbound `performance.now`, which throws when called, so the real
+gate exited with `deployment: check failed` for every origin — healthy or not —
+while its tests passed because each one injected a clock. Preview.13 is the
+first candidate whose deployed-origin receipt means anything.
+
+```text
+release proof          npm run check: 943 Vitest passed + 1 skipped, and 29 Node
+                       tests passed, including 12 new deployment-configuration
+                       cases; doctor, docs, typegen, typecheck, lint, and the
+                       production build all passed
+browser proof          npm run test:e2e: 43 passed + 2 capability-gated skips
+                       across 45 Chromium cases
+deployment proof       the same commit is accepted by Vercel's deployment schema
+                       and verified with
+                       npm run check:deployment -- https://matter.ptoq.io
+```
+
+Local runs at `retries: 0` showed `lasso-flow.spec.ts` "lasso addresses wrapped
+language at laptop width" failing intermittently — roughly two runs in five —
+when its stretch re-grab measures a handle the layout has not settled. It passes
+alone and on a clean checkout, and no Preview.13 change touches runtime code. CI
+sets two retries, which is why the suite has read as uniformly green. This is an
+open interaction-proof defect, recorded rather than retried away.
+
+## Superseded hard-gate lines, replaced 2026-09-29
+
+These two bullets of "Hard gates before a public pre-release" predate the
+2026-09-25 decision that Elastic and Text Swap are separately gated public
+product surfaces a verified user Model API lease may supply, with both managed
+adapters off. Their previous wording:
+
+- `POST /api/turn` now has its strict fixture browser receipt through release,
+  one atomic replacement, Undo, Redo, and reload. That receipt does not promote
+  a model: the route still needs its separately enabled live provider,
+  versioned multilingual acceptance corpus covering both single-segment and
+  contiguous multi-segment ranges, distributed rate rule, hard spend ceiling,
+  and digest-bound deployed-origin receipt before it can support a public live
+  claim.
+- `POST /api/text-swap` remains a dormant strict grammar with an independent
+  production-off gate. It is not a browser-preview release gate and must not
+  become available with Elastic. If the product later reactivates it, its own
+  multilingual paraphrase corpus, human review, rate/spend controls, and
+  deployed-origin promotion procedure become a separate freeze.

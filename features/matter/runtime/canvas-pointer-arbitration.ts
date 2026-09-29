@@ -18,7 +18,10 @@
  *   ends;
  * - every later event of a rejected pointer is ignored, and so is an unknown
  *   touch's cancel while a pen is active, which would otherwise clear state the
- *   pen owns.
+ *   pen owns;
+ * - a pointer-down that reuses an id still held as owned or rejected settles
+ *   that earlier contact first. Pointer Events keep an id unique among active
+ *   pointers, so the reuse proves the earlier end was never delivered here.
  *
  * Pen hover does not count as activity: a person may pan with a finger while
  * holding a pencil above the glass.
@@ -107,6 +110,12 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
       // Every event of an earlier contact has been dispatched by now.
       endedRejected.clear();
       endedOwned.clear();
+      // A lost end would otherwise strand the owner, and every later touch
+      // would join a pinch that no longer exists.
+      rejected.delete(pointer.pointerId);
+      if (owner !== null && owner.pointerIds.delete(pointer.pointerId) && owner.pointerIds.size === 0) {
+        owner = null;
+      }
       for (const [pointerId, rejectedAt] of rejectedClicks) {
         if (pointer.timeStamp - rejectedAt > REJECTED_CLICK_TTL_MS) rejectedClicks.delete(pointerId);
       }

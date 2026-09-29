@@ -819,10 +819,13 @@ test.describe("passage-local Point and Talk", () => {
     await page.locator("[data-node-action=point-talk]").click();
     await expect(direction).toBeFocused();
     await readStages();
-    const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
-    await settings.focus();
-    await settings.press("Enter");
-    await expect(page.getByRole("menu", { name: "Matter 设置" })).toBeVisible();
+    // Modal chrome takes the paper. It opens from the keyboard, so no outside
+    // press closes the field first; the settings menu is a transient peer that
+    // does not take the paper, so it cannot stand in for a modal here.
+    const about = page.getByRole("button", { name: "关于", exact: true });
+    await about.focus();
+    await about.press("Enter");
+    await expect(page.getByRole("dialog", { name: "关于 Matter" })).toBeVisible();
     await expect(page.locator(".point-talk")).toHaveCount(0);
     const preempted = await readStages();
     // A modal preempts: the field is cut without a leaving stage.

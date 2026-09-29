@@ -28,7 +28,12 @@ try {
 async function measureIndexedDb() {
   const openDatabase = (name) => new Promise((resolve, reject) => {
     const request = indexedDB.open(name, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("snapshots", { keyPath: "treeId" });
+    request.onupgradeneeded = () => {
+      request.result.createObjectStore("snapshots", { keyPath: "treeId" });
+      request.result.createObjectStore("historyEntries", {
+        keyPath: ["treeId", "epoch", "stack", "position"],
+      });
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -48,7 +53,7 @@ async function measureIndexedDb() {
       maxMs: Number(durations.at(-1).toFixed(2)),
     };
   };
-  const measureProfile = async (database, treeId, text) => {
+  const bundleFor = (text) => {
     const files = { "matter/matter.json": "{}" };
     for (let index = 0; index < 2_000; index += 1) {
       const id = String(index).padStart(4, "0");
@@ -56,13 +61,26 @@ async function measureIndexedDb() {
         `---\nid: thought_${id}\ncreatedAt: 2026-08-22T00:00:00.000Z\n` +
         `updatedAt: 2026-08-22T00:00:00.000Z\n---\n\n${text}${id}`;
     }
+    return { files };
+  };
+  const manifest = (writeGeneration, undoEnd) => ({
+    formatVersion: 1,
+    epoch: 0,
+    writeGeneration,
+    treeRevision: 0,
+    undo: [0, undoEnd],
+    redo: [0, 0],
+    count: undoEnd,
+    bytes: 0,
+  });
+  const measureProfile = async (database, treeId, text) => {
     const snapshot = {
       storageSchemaVersion: 1,
       treeId,
       treeRevision: 0,
       writeGeneration: 1,
-      bundle: { files },
-      history: { entries: [], redoEntries: [], retainedInverseBytes: 0 },
+      bundle: bundleFor(text),
+      historyJournal: manifest(1, 0),
     };
     const serializedBytes = new TextEncoder().encode(JSON.stringify(snapshot)).byteLength;
     const rounds = [];
@@ -87,6 +105,108 @@ async function measureIndexedDb() {
       get: summarize(rounds, "getMs"),
     };
   };
+  /**
+   * A full bounded journal: 1,000 steps and about 32 MiB of inverses beside a
+   * realistic row. Compares one per-step save and one recovery read with the
+   * v5 layout, which rewrote the whole journal inside the row on every save.
+   */
+  const measureJournal = async (database) => {
+    const treeId = "journal";
+    const bundle = bundleFor("这是一段大约用于现实材料记录的文字。".repeat(12));
+    const nodeText = "界".repeat(2_000);
+    const inverse = (position) => ({
+      id: `step_${position}:inverse`,
+      source: "human",
+      expectedTreeId: treeId,
+      expectedRevision: position + 1,
+      createdAt: "2026-09-29T00:00:00.000Z",
+      mutation: {
+        type: "restore-subtree",
+        detached: {
+          rootId: `n${position}_0`,
+          parentId: "root",
+          index: 0,
+          parentChildrenBeforeDetach: [`n${position}_0`],
+          nodes: Object.fromEntries(Array.from({ length: 5 }, (_, node) => [`n${position}_${node}`, {
+            id: `n${position}_${node}`,
+            text: nodeText,
+            parentId: node === 0 ? "root" : `n${position}_0`,
+            children: [],
+            createdAt: "2026-09-29T00:00:00.000Z",
+            updatedAt: "2026-09-29T00:00:00.000Z",
+          }])),
+        },
+      },
+    });
+    const record = (position) => ({
+      formatVersion: 1,
+      treeId,
+      epoch: 0,
+      stack: "undo",
+      position,
+      commandId: `step_${position}`,
+      source: "human",
+      inverse: inverse(position),
+      retainedInverseBytes: 0,
+    });
+    const records = Array.from({ length: 1_000 }, (_, position) => record(position));
+    const journalBytes = new TextEncoder().encode(JSON.stringify(records)).byteLength;
+
+    const seed = database.transaction(["snapshots", "historyEntries"], "readwrite");
+    seed.objectStore("snapshots").put({
+      storageSchemaVersion: 1, treeId, treeRevision: 0, writeGeneration: 1, bundle,
+      historyJournal: manifest(1, 1_000),
+    });
+    for (const value of records) seed.objectStore("historyEntries").put(value);
+    await transactionDone(seed);
+
+    const rounds = [];
+    for (let round = 0; round < 5; round += 1) {
+      const generation = round + 2;
+      const saveStartedAt = performance.now();
+      const save = database.transaction(["snapshots", "historyEntries"], "readwrite");
+      await requestDone(save.objectStore("snapshots").get(treeId));
+      save.objectStore("snapshots").put({
+        storageSchemaVersion: 1, treeId, treeRevision: generation, writeGeneration: generation, bundle,
+        historyJournal: manifest(generation, 1_000 + round + 1),
+      });
+      save.objectStore("historyEntries").put(record(1_000 + round));
+      const entries = save.objectStore("historyEntries");
+      entries.delete(IDBKeyRange.bound([treeId, -Infinity], [treeId, 0], false, true));
+      entries.delete(IDBKeyRange.bound([treeId, 1], [treeId, Infinity]));
+      for (const stack of ["undo", "redo"]) {
+        entries.delete(IDBKeyRange.bound([treeId, 0, stack, -Infinity], [treeId, 0, stack, round + 1], false, true));
+        entries.delete(IDBKeyRange.bound([treeId, 0, stack, 1_000 + round + 1], [treeId, 0, stack, Infinity]));
+      }
+      await transactionDone(save);
+      const stepSaveMs = performance.now() - saveStartedAt;
+
+      const loadStartedAt = performance.now();
+      const load = database.transaction(["snapshots", "historyEntries"], "readonly");
+      await requestDone(load.objectStore("snapshots").get(treeId));
+      await requestDone(load.objectStore("historyEntries").getAll(
+        IDBKeyRange.bound([treeId, 0, "undo", round + 1], [treeId, 0, "undo", 1_000 + round + 1], false, true),
+      ));
+      await transactionDone(load);
+      const loadMs = performance.now() - loadStartedAt;
+
+      const legacyStartedAt = performance.now();
+      const legacy = database.transaction("snapshots", "readwrite");
+      legacy.objectStore("snapshots").put({
+        storageSchemaVersion: 1, treeId: "legacy", treeRevision: generation, writeGeneration: generation, bundle,
+        history: { entries: records, redoEntries: [], retainedInverseBytes: journalBytes },
+      });
+      await transactionDone(legacy);
+      rounds.push({ stepSaveMs, loadMs, legacyInlineSaveMs: performance.now() - legacyStartedAt });
+    }
+    return {
+      entries: records.length,
+      journalBytes,
+      stepSave: summarize(rounds, "stepSaveMs"),
+      load: summarize(rounds, "loadMs"),
+      legacyInlineSave: summarize(rounds, "legacyInlineSaveMs"),
+    };
+  };
   const databaseName = "matter-persistence-benchmark";
   const database = await openDatabase(databaseName);
   const storageBefore = await navigator.storage?.estimate();
@@ -97,6 +217,7 @@ async function measureIndexedDb() {
       "这是一段大约用于现实材料记录的文字。".repeat(12),
     );
     const maximumText = await measureProfile(database, "maximum-text", "界".repeat(2_000));
+    const journal = await measureJournal(database);
     const storageAfter = await navigator.storage?.estimate();
     return {
       userAgent: navigator.userAgent,
@@ -107,6 +228,7 @@ async function measureIndexedDb() {
       },
       realistic,
       maximumText,
+      journal,
     };
   } finally {
     database.close();

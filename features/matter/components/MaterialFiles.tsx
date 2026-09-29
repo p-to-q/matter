@@ -35,6 +35,12 @@ import {
 import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-keys";
 import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
+import {
+  isReplaceableUnsaved,
+  isTerminalDurability,
+  projectArchiveNote,
+  projectDurabilityLine,
+} from "./durability-line";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
 import {
@@ -69,6 +75,8 @@ export type MaterialFilesProps = Readonly<{
   onMaterialCopied?: (nodeIds: ReadonlySet<string>) => void;
   /** Reports only the transient narrow disclosure; docked presentation is false. */
   onOverlayChange?: (open: boolean) => void;
+  /** A thought name or the canvas title is being typed; a document switch would drop it. */
+  onEditingChange?: (editing: boolean) => void;
   /** Returns transient canvas tools before the narrow overlay takes focus. */
   onOpenOverlay?: () => void;
   /** Restores a held search result without unexpectedly narrowing full view. */
@@ -97,6 +105,10 @@ export type MaterialFilesProps = Readonly<{
     status: PersistenceStatus;
     retry: () => void;
     resolveConflict: () => void;
+    /** Opening Archive, where recovery lives, is where the notice is read. */
+    acknowledgeHistoryNotice?: () => void;
+    /** Whether the browser keeps this origin's storage out of eviction. */
+    storagePersisted?: boolean | null;
   }>;
 }>;
 
@@ -115,6 +127,8 @@ export type MaterialArchiveActionResult =
       ok: true;
       /** Present only after a corrupt row has been exported by this action. */
       repairCorrupt?: () => Promise<MaterialArchiveActionResult>;
+      /** A validated archive older than the current material. */
+      olderThanCurrent?: boolean;
     }>
   | Readonly<{ ok: false; message: string }>;
 
@@ -122,12 +136,19 @@ export type MaterialArchiveActionResult =
  * `validateImport` must not mutate the current document. `replaceImport` is
  * called only after the person confirms replacement and must perform the
  * persistence CAS and runtime document switch as one operation.
+ * `replaceUnsaved` is set only when the person confirmed replacing material
+ * storage refused.
  */
 export type MaterialArchiveActions = Readonly<{
   exportCopy: () => Promise<MaterialArchiveActionResult>;
   validateImport: (file: File) => Promise<MaterialArchiveActionResult>;
-  replaceImport: (file: File) => Promise<MaterialArchiveActionResult>;
+  replaceImport: (
+    file: File,
+    options: Readonly<{ replaceUnsaved: boolean }>,
+  ) => Promise<MaterialArchiveActionResult>;
 }>;
+
+type PreparedImport = Readonly<{ file: File; olderThanCurrent: boolean }>;
 
 export function MaterialFiles(props: MaterialFilesProps) {
   const copy = materialFilesCopy(props.locale);
@@ -148,7 +169,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const [showSaving, setShowSaving] = useState(false);
   const [archivePhase, setArchivePhase] = useState<ArchivePhase>("idle");
   const [archiveError, setArchiveError] = useState<string | null>(null);
-  const [preparedImport, setPreparedImport] = useState<File | null>(null);
+  const [preparedImport, setPreparedImport] = useState<PreparedImport | null>(null);
+  // Opening Archive acknowledges a history notice; its note stays readable
+  // for as long as the panel that explains it is open.
+  const [archiveHistoryNotice, setArchiveHistoryNotice] =
+    useState<PersistenceStatus["historyNotice"]>(null);
   const [corruptRepair, setCorruptRepair] = useState<(() => Promise<MaterialArchiveActionResult>) | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState({ top: 0, height: 0 });
   const [rowHeight, setRowHeight] = useState(40);
@@ -487,6 +512,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // What they typed, when the editor was reopened because the write failed.
   const activeRenameDraft = activeRename === null ? undefined : renaming?.draft;
   const renameEnabled = props.onRenameNode !== undefined && props.onResetNodeName !== undefined;
+  const reportEditing = props.onEditingChange;
+  const editing = activeRename !== null || renamingDocument;
+  useEffect(() => {
+    reportEditing?.(editing);
+  }, [editing, reportEditing]);
+  useEffect(() => () => reportEditing?.(false), [reportEditing]);
 
   const beginRename = (nodeId: string) => {
     // A stale projection blocks actions that depend on *which* rows are shown.
@@ -618,9 +649,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
     [props.documentEpoch, props.tree.nodes, selectionState],
   );
   const selectedCount = currentSelectedIds.size;
-  const persistenceFailed = props.persistence.status.phase === "error";
-  const storageFull = props.persistence.status.errorCode === "PERSISTENCE_STORAGE_FULL";
-  const corrupt = props.persistence.status.errorCode === "PERSISTENCE_CORRUPT";
+  const persistenceStatus = props.persistence.status;
+  const storageFull = persistenceStatus.errorCode === "PERSISTENCE_STORAGE_FULL";
+  const corrupt = persistenceStatus.errorCode === "PERSISTENCE_CORRUPT";
+  const durability = projectDurabilityLine(persistenceStatus, showSaving, copy);
+  const terminalDurability = isTerminalDurability(persistenceStatus);
   const activeLineageIds = useMemo(() => {
     const lineage = new Set<string>();
     let current = activeNodeId === null ? null : props.tree.nodes[activeNodeId]?.parentId ?? null;
@@ -766,7 +799,16 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setArchiveError(null);
     setPreparedImport(null);
     setCorruptRepair(null);
+    setArchiveHistoryNotice(null);
     setMode("browse");
+  };
+  const openArchive = () => {
+    setCopyState("idle");
+    setArchiveError(null);
+    setPreparedImport(null);
+    setArchiveHistoryNotice(persistenceStatus.historyNotice);
+    setMode("archive");
+    props.persistence.acknowledgeHistoryNotice?.();
   };
 
   const exportArchive = async () => {
@@ -784,9 +826,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
           setCorruptRepair(() => repair);
         }
       }
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -811,9 +853,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
       } else {
         setArchiveError(result.message);
       }
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -829,11 +871,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
     try {
       const result = await props.archive.validateImport(file);
       if (liveDocumentEpochRef.current !== documentEpoch) return;
-      if (result.ok) setPreparedImport(file);
+      if (result.ok) setPreparedImport({ file, olderThanCurrent: result.olderThanCurrent === true });
       else setArchiveError(result.message);
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -846,7 +888,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setArchiveError(null);
     setArchivePhase("replacing");
     try {
-      const result = await props.archive.replaceImport(preparedImport);
+      const result = await props.archive.replaceImport(preparedImport.file, {
+        replaceUnsaved: isReplaceableUnsaved(persistenceStatus),
+      });
       if (liveDocumentEpochRef.current !== documentEpoch) return;
       if (result.ok) {
         setPreparedImport(null);
@@ -854,9 +898,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
       } else {
         setArchiveError(result.message);
       }
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -871,12 +915,13 @@ export function MaterialFiles(props: MaterialFilesProps) {
           aria-expanded={open}
           aria-label={open
             ? copy.hideMaterialFiles
-            : persistenceFailed
+            : durability.tone === "risk"
               ? copy.showMaterialFilesSavingNeedsAttention
               : copy.showMaterialFiles}
           className="material-files-toggle"
           data-canvas-interactive
-          data-persistence-error={persistenceFailed || undefined}
+          data-durability={durability.tone === "quiet" ? undefined : durability.tone}
+          data-persistence-error={durability.tone === "risk" || undefined}
           onClick={() => {
             if (!open) props.onOpenOverlay?.();
             setOpen((value) => !value);
@@ -885,6 +930,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
           type="button"
         >
           <SidebarIcon />
+          {/* A closed index still shows that its line needs reading; static,
+              never a badge count or a pulse. */}
+          {durability.tone === "quiet" ? null : (
+            <span aria-hidden="true" className="material-files-toggle__dot" />
+          )}
         </button>
       )}
       <div className="material-files__clip" data-open={open || undefined}>
@@ -1019,12 +1069,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
               {props.archive !== undefined ? (
                 <button
                   className="material-files__mode-action material-files__mode-action--archive"
-                  onClick={() => {
-                    setCopyState("idle");
-                    setArchiveError(null);
-                    setPreparedImport(null);
-                    setMode("archive");
-                  }}
+                  data-attention={durability.tone === "quiet" ? undefined : durability.tone}
+                  onClick={openArchive}
                   type="button"
                 >
                   {copy.archive}
@@ -1047,11 +1093,22 @@ export function MaterialFiles(props: MaterialFilesProps) {
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
+            replacesUnsaved={isReplaceableUnsaved(persistenceStatus)}
+            note={projectArchiveNote(
+              persistenceStatus,
+              archiveHistoryNotice,
+              props.persistence.storagePersisted ?? null,
+              copy,
+            )}
             corrupt={corrupt}
             corruptExported={corruptRepair !== null}
-            conflict={props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"}
-            saveFailed={persistenceFailed && !storageFull && !corrupt && props.persistence.status.errorCode !== "PERSISTENCE_CONFLICT"}
-            storageFull={storageFull}
+            conflict={persistenceStatus.errorCode === "PERSISTENCE_CONFLICT"}
+            retryable={
+              storageFull ||
+              persistenceStatus.errorCode === "PERSISTENCE_WRITE_FAILED" ||
+              persistenceStatus.errorCode === "PERSISTENCE_UNAVAILABLE"
+            }
+            terminal={terminalDurability}
             onClose={closeArchive}
             onExport={() => void exportArchive()}
             onPickImport={() => archiveInputRef.current?.click()}
@@ -1385,28 +1442,49 @@ export function MaterialFiles(props: MaterialFilesProps) {
             </button>
           </footer>
         ) : null}
-        {/* Local identity stays a quiet, non-account presentation. Persistence
-            recovery belongs to the explicit Archive surface, not this footer. */}
+        {/* Local identity stays a quiet, non-account presentation. Its one
+            line tells the truth about this tab's material until resolved; a
+            line that needs attention only opens Archive, where every recovery
+            control lives. It is never a banner, toast, or modal. */}
         <footer className="material-files__identity">
-          <div className="material-files__profile">
+          <div className="material-files__profile" data-state={durability.tone === "risk" ? "error" : undefined}>
             <PixelIdenticon />
             <span className="material-files__profile-copy">
               <span className="material-files__profile-name">{copy.identityName}</span>
-              <span className="material-files__profile-meta">
-                {showSaving && !persistenceFailed ? copy.saving : copy.localOnly}
-                {showSaving && !persistenceFailed ? (
-                  <span
-                    aria-hidden="true"
-                    className="material-files__status-dot"
-                    data-saving="true"
-                  />
-                ) : null}
+              <span className="material-files__profile-meta" data-tone={durability.tone}>
+                {durability.tone !== "quiet" && props.archive !== undefined ? (
+                  <button
+                    className="material-files__durability"
+                    disabled={mode === "archive"}
+                    onClick={openArchive}
+                    type="button"
+                  >
+                    <span>{durability.text}</span>
+                    <span aria-hidden="true" className="material-files__status-dot" />
+                  </button>
+                ) : (
+                  <>
+                    {durability.text}
+                    {durability.tone !== "quiet" || (persistenceStatus.phase === "saving" && showSaving) ? (
+                      <span
+                        aria-hidden="true"
+                        className="material-files__status-dot"
+                        data-saving={durability.tone === "quiet" || undefined}
+                      />
+                    ) : null}
+                  </>
+                )}
               </span>
             </span>
           </div>
         </footer>
       </aside>
       </div>
+      {/* Outside the aside: a closed index is aria-hidden and inert, and the
+          durability line must still be announced when it changes. */}
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" data-durability-announcer>
+        {durability.tone === "quiet" ? "" : durability.text}
+      </span>
     </>
   );
 }
@@ -1514,13 +1592,15 @@ function ArchivePanel({
   copy,
   error,
   inputRef,
+  note,
   phase,
   preparedImport,
+  replacesUnsaved,
   corrupt,
   corruptExported,
   conflict,
-  saveFailed,
-  storageFull,
+  retryable,
+  terminal,
   onClose,
   onExport,
   onPickImport,
@@ -1534,13 +1614,17 @@ function ArchivePanel({
   copy: MaterialFilesCopy;
   error: string | null;
   inputRef: RefObject<HTMLInputElement | null>;
+  note: string;
   phase: ArchivePhase;
-  preparedImport: File | null;
+  preparedImport: PreparedImport | null;
+  /** Replacing refused material says so, and says what an older copy loses. */
+  replacesUnsaved: boolean;
   corrupt: boolean;
   corruptExported: boolean;
   conflict: boolean;
-  saveFailed: boolean;
-  storageFull: boolean;
+  retryable: boolean;
+  /** A newer schema or cleared storage leaves only Export and a page reload. */
+  terminal: boolean;
   onClose: () => void;
   onExport: () => void;
   onPickImport: () => void;
@@ -1561,24 +1645,20 @@ function ArchivePanel({
         : null;
   return (
     <section aria-busy={busy || undefined} aria-label={copy.archivePanel} className="material-files__archive">
-      <p className="material-files__archive-note">
-        {corrupt
-          ? copy.archiveNoteCorrupt
-          : conflict
-          ? copy.archiveNoteConflict
-          : storageFull
-          ? copy.archiveNoteStorageFull
-          : saveFailed
-          ? copy.archiveNoteSaveFailed
-          : copy.archiveNoteDefault}
-      </p>
+      <p className="material-files__archive-note">{note}</p>
       <div className="material-files__archive-actions">
         <button disabled={busy} onClick={onExport} type="button">
           {copy.archiveExportCopy}
         </button>
-        <button disabled={busy} onClick={onPickImport} type="button">
-          {copy.archiveImportCopy}
-        </button>
+        {terminal ? (
+          <button disabled={busy} onClick={() => window.location.reload()} type="button">
+            {copy.archiveReloadPage}
+          </button>
+        ) : (
+          <button disabled={busy} onClick={onPickImport} type="button">
+            {copy.archiveImportCopy}
+          </button>
+        )}
       </div>
       {corrupt && corruptExported ? (
         <button
@@ -1600,7 +1680,7 @@ function ArchivePanel({
           {copy.archiveReloadStoredMaterial}
         </button>
       ) : null}
-      {storageFull || saveFailed ? (
+      {retryable ? (
         <button
           className="material-files__archive-retry"
           disabled={busy}
@@ -1628,7 +1708,8 @@ function ArchivePanel({
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
           <p>
-            {copy.archiveConfirmReplace}
+            {replacesUnsaved ? copy.archiveConfirmReplaceUnsaved : copy.archiveConfirmReplace}
+            {preparedImport.olderThanCurrent ? ` ${copy.archiveConfirmOlder}` : ""}
           </p>
           <div>
             <button disabled={busy} onClick={onClose} type="button">{copy.archiveKeepCurrent}</button>
@@ -1640,10 +1721,9 @@ function ArchivePanel({
   );
 }
 
-function actionErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message.trim().length > 0
-    ? error.message
-    : "Archive action could not finish.";
+/** An exception's own text is engineering detail, never archive copy. */
+function actionErrorMessage(copy: MaterialFilesCopy): string {
+  return copy.archiveErrorAction;
 }
 
 function stopPointerPropagation(event: ReactPointerEvent<HTMLElement>) {

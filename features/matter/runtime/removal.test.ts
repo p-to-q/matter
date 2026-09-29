@@ -44,7 +44,7 @@ describe("human thought removal", () => {
     expect(removed.state.tree.nodes.root.children).toEqual(["other"]);
     expect(removed.state.navigation.selectedNodeId).toBe("root");
 
-    const undone = undoSession(removed.state);
+    const undone = undoSession(removed.state, LIMITS);
     expect(undone.ok).toBe(true);
     if (!undone.ok) throw new Error(undone.receipt.errorCode);
     expect(undone.state.tree.nodes.parent.children).toEqual(["child"]);

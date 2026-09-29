@@ -115,7 +115,16 @@ export function PerformanceMatterApp({
       admissionAnchor={null}
       navigation={navigation}
       persistence={{
-        status: { phase: "saved", persistedRevision: performanceTree.revision, dirtyRevision: null, errorCode: null },
+        status: {
+          phase: "saved",
+          persistedRevision: performanceTree.revision,
+          dirtyRevision: null,
+          errorCode: null,
+          historyNotice: null,
+          unsaved: false,
+          upgradeBlocked: false,
+          conflictOrigin: null,
+        },
         retry: () => undefined,
         resolveConflict: () => undefined,
       }}

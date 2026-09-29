@@ -1,6 +1,8 @@
 import type { MatterLocale } from "../config/locales";
 import {
   findProtectedWikiSpans,
+  findWidthAwareProtectedWikiSpans,
+  hasWikiWordBoundaryAround,
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
@@ -26,6 +28,12 @@ import {
 } from "./wiki-model";
 import type { WikiQualifiedProducerRelease } from "./wiki-producer-qualification";
 import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
+import {
+  isWikiLatinScriptLocale,
+  isWikiLatinWord,
+  routeWikiWord,
+  wikiLatinRouteLocale,
+} from "./wiki-script-routing";
 
 const MIN_EDIT_GRAPHEMES = 7;
 const MAX_FIT_GRAPHEMES = 48;
@@ -107,6 +115,9 @@ export function compileWikiFitSnapshot(
     if (candidate === null) continue;
     let indexed = false;
 
+    // Only the `en-US` ledger has internal-edit targets. Latin words of an
+    // English turn, and Latin words routed out of a Chinese or Japanese turn,
+    // reach these; a same-spelling lexeme in any other locale never does.
     const internalEditTarget = lexeme.provenance === "human-confirmed" ||
       isWikiStarterLexemeIdentity(lexeme) ||
       termEvidence?.producer === "shape-specific-v1";
@@ -289,6 +300,13 @@ const CENSORED_FITTING: WikiFittingResult = Object.freeze({
  * Scans eligible words in text order. A word whose relations would exceed the
  * per-ledger bound is not scanned; the result is `partial`, so its relations
  * already found still count and nothing unscanned is treated as absent.
+ *
+ * Each word is fitted in the ledger its script routes to: a Latin word inside
+ * a Chinese or Japanese turn reaches the `en-US` internal-edit producer with
+ * its width-folded form, while CJK words never reach a Latin producer. The
+ * turn's own opportunity still names every script it scanned, so a candidate
+ * stored under the turn locale for a script that now routes away ages out at
+ * the ordinary cadence instead of becoming immortal.
  */
 export function fitCommittedWikiTextResult(
   snapshot: WikiFitSnapshot,
@@ -303,7 +321,14 @@ export function fitCommittedWikiTextResult(
     request.text.length,
   );
   if (eligibleRanges === null) return CENSORED_FITTING;
-  const protectedSpans = findProtectedWikiSpans(request.text);
+  // Learning mirrors matching: Latin words, routed or in a Latin-script turn,
+  // are protected across widths.
+  const protectedSpans = isWikiLatinScriptLocale(request.locale)
+    ? findWidthAwareProtectedWikiSpans(request.text)
+    : findProtectedWikiSpans(request.text);
+  const routedProtectedSpans = wikiLatinRouteLocale(request.locale) === null
+    ? protectedSpans
+    : findWidthAwareProtectedWikiSpans(request.text);
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
   const words = [...segmenter.segment(request.text)].flatMap((segment) => {
@@ -312,27 +337,40 @@ export function fitCommittedWikiTextResult(
     const end = start + segment.segment.length;
     if (!isWikiRangeEligible(start, end, eligibleRanges, 0) ||
         wikiRangeOverlapsProtected(start, end, protectedSpans, 0)) return [];
-    return [Object.freeze({ start, end })];
+    const route = routeWikiWord(request.locale, segment.segment.normalize("NFC"));
+    if (route.routed &&
+        wikiRangeOverlapsProtected(start, end, routedProtectedSpans, 0)) return [];
+    // A relation is evidence only where its word rule could apply: `@name`,
+    // `#tag`, and joined forms are never rewritten, so like protected
+    // literals they neither vote nor offer an opportunity.
+    if (isWikiLatinWord(route.form) &&
+        !hasWikiWordBoundaryAround(request.text, start, end, request.locale, route.routed)) {
+      return [];
+    }
+    return [route];
   });
 
   let scannedScripts = 0;
+  let routedScripts = 0;
   let partial = false;
   for (const word of words) {
-    const form = request.text.slice(word.start, word.end).normalize("NFC");
-    const additions = (LATIN_WORD.test(form)
-      ? latinEditEvents(snapshot, request.locale, form, enabledProducers)
+    const additions = (LATIN_WORD.test(word.form)
+      ? latinEditEvents(snapshot, word.locale, word.form, enabledProducers)
       : []).filter((event) => !events.has(fittingEventKey(event)));
     if (events.size + additions.length > MAX_WIKI_OBSERVATIONS_PER_LEDGER) {
       partial = true;
       break;
     }
     for (const event of additions) events.set(fittingEventKey(event), event);
-    scannedScripts |= wikiScriptMask(form);
+    const scripts = wikiScriptMask(word.form);
+    scannedScripts |= scripts;
+    if (word.routed) routedScripts |= scripts;
   }
   return Object.freeze({
     status: partial ? "partial" : "ok",
     events: Object.freeze([...events.values()].sort(compareEvent)),
     scannedScripts: wikiScriptClassesFromMask(scannedScripts),
+    routedScripts: wikiScriptClassesFromMask(routedScripts),
   });
 }
 

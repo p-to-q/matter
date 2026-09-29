@@ -1,7 +1,9 @@
 # Ask Matter record
 
-This is the persistence boundary for the product correction named in the active
-plan: Ask Matter may keep a small local record, but reopening Ask Matter never
+This is the persistence boundary for the product correction frozen in the plan
+on 2026-08-11 (now trace in
+[`../../archive/plans-0.2-history.md`](../../archive/plans-0.2-history.md)):
+Ask Matter may keep a small local record, but reopening Ask Matter never
 replays it. It creates no separate product surface. It is deliberately not
 conversation memory, material, or hidden retrieval.
 

@@ -17,6 +17,42 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-29 — admission refusal is `RATE_LIMITED`, not a busy model
+
+Changed: `POST /api/turn` (`transform/2`) and `POST /api/text-swap`
+(`text-swap/2`) refuse admission with retryable `RATE_LIMITED` and no
+`fallbackReason`: HTTP 429 when a source exhausts its request window, 503 at
+instance concurrency. They previously answered `TURN_UNAVAILABLE` with
+`fallbackReason: "MODEL_BUSY"`. Strict browser parsers accept `RATE_LIMITED`
+only as retryable, and the probes classify it as an admission refusal.
+Rollout cost: a tab still running an older build treats the refusal as
+non-retryable until it reloads, which matters only while the perimeter is
+actually refusing.
+
+Why: `fallbackReason` names a scenario outcome, and here no model was called.
+A 503 admission refusal was indistinguishable from the governor shedding a busy
+model, and the provider-session route already used `RATE_LIMITED` for the same
+limiter.
+
+Forecloses: labelling an admission refusal with any `MODEL_*` reason or pairing
+`RATE_LIMITED` with a `fallbackReason`; rate and concurrency refusals are
+distinguished by HTTP status alone.
+
+## 2026-09-29 — rejected scenario receipts name their declared rule
+
+Changed: a `matter.scenario-performance` line whose outcome is `rejected` now
+carries `rejectionReason`: one code from the scenario's declared
+`rejectionCodes`, an exhaustive record of its adjudicator's reason type, or
+`UNDECLARED`. The production logger rejects anything but a short ASCII
+identifier and records `UNDECLARED` in its place.
+
+Why: production could count `MODEL_REJECTED` but never say which rule refused
+the answer.
+
+Forecloses: an answer, material, provider, or free-text reason in any scenario
+receipt, or a code the scenario has not declared (it reads `UNDECLARED`);
+strict log parsers must accept the optional field.
+
 ## 2026-09-27 — bounded local Wiki automation separates proof from authority
 
 Changed: successful human material admission now drives two local term

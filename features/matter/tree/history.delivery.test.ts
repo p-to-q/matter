@@ -75,7 +75,7 @@ describe("delivered commits and the redo future", () => {
     expect(landed.tree.nodes.x?.text).toBe("C");
     expect(landed.history.redoEntries).toEqual([]);
     expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
-    expect(redoTreeHistory(landed.tree, landed.history)).toMatchObject({
+    expect(redoTreeHistory(landed.tree, landed.history, LIMITS)).toMatchObject({
       ok: false,
       error: { code: "EMPTY_REDO" },
     });
@@ -301,13 +301,13 @@ function replayablePrefix(
 }
 
 function undo(session: Session): Session {
-  const result = undoTreeHistory(session.tree, session.history);
+  const result = undoTreeHistory(session.tree, session.history, LIMITS);
   if (!result.ok) throw new Error(result.error.code);
   return { tree: result.tree, history: result.history };
 }
 
 function redo(session: Session): Session {
-  const result = redoTreeHistory(session.tree, session.history);
+  const result = redoTreeHistory(session.tree, session.history, LIMITS);
   if (!result.ok) throw new Error(result.error.code);
   return { tree: result.tree, history: result.history };
 }

@@ -166,6 +166,28 @@ describe("Wiki material lexical adapter", () => {
     }
   });
 
+  it("attributes a routed Latin match to its own ledger and keeps the written heard form", () => {
+    const minted: { rule: { locale: string; form: string } }[] = [];
+    const port = createWikiMaterialLexicalPort(() => basis("Codex", 3), {
+      mintOccurrence: (attribution) => {
+        minted.push(attribution);
+        return `routed_${minted.length}`;
+      },
+    });
+    const result = canonicalizeMaterialText(port.capture(), {
+      locale: "zh-CN",
+      channel: "spoken",
+      text: "我用 ｃｏｄｅ ｘ 写",
+    });
+
+    expect(result.text).toBe("我用 Codex 写");
+    expect(result.edits).toEqual([
+      { start: 3, end: 8, sourceText: "ｃｏｄｅ ｘ", occurrence: "routed_1" },
+    ]);
+    // The correction belongs to the en-US ledger the span routed to.
+    expect(minted).toMatchObject([{ rule: { locale: "en-US", form: "code x" } }]);
+  });
+
   it("attributes written-channel edits to generated material", () => {
     const transitioned = applyWikiEvent(createEmptyWikiState(), {
       type: "confirm-rule",

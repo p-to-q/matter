@@ -1192,21 +1192,58 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
 
   const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFilesSavingNeedsAttention });
   await expect(toggle).toHaveAttribute("data-persistence-error", "true");
+  // One static dot on the closed toggle; no badge count, no pulse.
+  await expect(toggle).toHaveAttribute("data-durability", "risk");
+  await expect(toggle.locator(".material-files-toggle__dot")).toHaveCount(1);
+  await expect(page.locator("[data-durability-announcer]")).toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
   await toggle.click();
 
   const sidebar = page.locator("aside.material-files");
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  // Persistence recovery belongs to the explicit Archive surface. The quiet
-  // local identity must not turn into an error banner or acquire an action.
+  // The identity line tells the truth instead of claiming the material is
+  // kept; it stays one quiet line whose only action is opening Archive.
   const identity = sidebar.locator(".material-files__profile");
   await expect(identity).toContainText("采石者");
-  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("仅存于这台设备");
-  await expect(identity.getByRole("button")).toHaveCount(0);
-  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive }).click();
+  const line = identity.getByRole("button", { name: fixtureUiCopy.materialFiles.durabilityNotSaved });
+  await expect(identity.getByRole("button")).toHaveCount(1);
+  await line.click();
 
   const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
   await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteStorageFull);
   await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRetrySaving })).toBeEnabled();
+});
+
+test("a docked index at desk width shows refused storage on its identity line and Archive", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore["put"]>) {
+      if (this.name === "snapshots") throw new DOMException("storage full", "QuotaExceededError");
+      return originalPut.apply(this, args);
+    };
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  // Docked, there is no toggle to carry the cue; the open index must.
+  const sidebar = page.locator("aside.material-files");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
+  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText(
+    fixtureUiCopy.materialFiles.durabilityNotSaved,
+  );
+  await expect(sidebar.locator(".material-files__profile-meta")).toHaveAttribute("data-tone", "risk");
+  await expect(sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }))
+    .toHaveAttribute("data-attention", "risk");
+  // The announcer lives outside the index, so a closed, inert index is still heard.
+  const announcer = page.locator("[data-durability-announcer]");
+  await expect(announcer).toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
+  expect(await announcer.evaluate((node) => node.closest("aside, [inert], [aria-hidden=true]") === null)).toBe(true);
+
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.durabilityNotSaved }).click();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteStorageFull);
   await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRetrySaving })).toBeEnabled();
 });
 
