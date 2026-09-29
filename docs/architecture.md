@@ -675,6 +675,18 @@ The concrete HTTP, CDN, local-model, compiler-cache, cold-start, and production
 artifact budgets are recorded in
 [`reference/runtime-cache-and-delivery.md`](reference/runtime-cache-and-delivery.md).
 
+The initial runtime carries only what first paint and the first gesture need.
+Code a person reaches later — the storage engine behind a synchronous stand-in,
+archive transport, archive-error copy, the Model API form, the Ask Matter
+record store, the Wiki canonicalizer and fitting release table, late-repair
+adjudication, and lazy components' own stylesheets — loads after first paint.
+Chunks a gesture renders (Point and Talk, the node action lens, the Wiki
+occurrence layer) preload after first paint and on first intent, so no gesture
+waits on a fetch. Ordering is structural: a Wiki port can publish rules only
+after its canonicalizer is bound, and the store refuses a repair candidate it
+has no adjudicator for, leaving admitted words unchanged. The budget is not
+relaxed to admit new code; new first-paint weight must displace other weight.
+
 ## Target modules
 
 The active product lives entirely beneath `features/matter/`. The retired scene

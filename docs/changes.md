@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-29 — the initial runtime carries only first paint and the first gesture
+
+Changed: the storage engine loads behind a synchronous stand-in that reports
+the controller's loading status, replays calls in order, and reports
+"unavailable" (with Retry) if its chunk cannot load. Archive transport and
+archive-error copy, the Model API form, the Ask Matter record store, the Wiki
+canonicalizer and fitting release table, late-repair adjudication (injected as
+the store's `admissionRepair` option), and component-owned stylesheets leave
+the initial runtime. Point and Talk, the node action lens, and the Wiki
+occurrence layer preload after first paint and on first pointer or focus on
+the paper. The initial runtime is 1,236,770 raw / 392,937 gzip bytes against
+the unchanged 1,310,720 / 405,504 budget.
+
+Why: the campaign had pushed the initial runtime past its budget, mostly with
+code used only on failure, after an explicit open, or after hydration, while
+three gesture surfaces fetched code at the moment of the gesture.
+
+Forecloses: relaxing the runtime budget to admit new code, rendering a
+gesture surface behind an unpreloaded dynamic import, publishing Wiki rules
+before the canonicalizer is bound, and a store that accepts a repair it cannot
+adjudicate.
+
 ## 2026-09-29 — a reference note binds where a contract delegates to it
 
 Changed: `docs/reference/` stays context, except where `product.md`,
