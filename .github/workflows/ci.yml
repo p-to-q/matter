@@ -12,7 +12,9 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The serial e2e matrix alone runs ~11.5 min on the hosted runner; the job
+    # ceiling guards against hangs, not suite size.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
