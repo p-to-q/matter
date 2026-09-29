@@ -37,13 +37,24 @@ const FIELD_NAMES = new Set([
 ]);
 
 export async function handleTranscriptionRequest(request: Request): Promise<Response> {
+  // A purpose the URL declares is judged before admission accounting: a closed
+  // surface is a deployment fact, not a request, so refusing it must not spend
+  // the caller's rate window and make its next usable request fail too.
+  let declaredPurpose: TranscriptionPurpose | null;
+  try {
+    declaredPurpose = parseDeclaredPurpose(request.url);
+    if (declaredPurpose !== null) assertTranscriptionPurposeAvailable(declaredPurpose);
+  } catch (error) {
+    cancelBody(request.body);
+    throw error;
+  }
   const admission = transcriptionAdmission.admit(request);
   if (!admission.ok) throw transcriptionAdmissionError(admission.reason);
   // This deadline starts at route entry and remains authoritative through both
   // reading the recording and provider transcription.
   const deadline = createRequestDeadline(request.signal, TRANSCRIPTION_SERVER_TIMEOUT_MS);
   try {
-    return await handleBoundedTranscriptionRequest(request, deadline.signal);
+    return await handleBoundedTranscriptionRequest(request, declaredPurpose, deadline.signal);
   } finally {
     deadline.dispose();
     admission.release();
@@ -58,20 +69,17 @@ export function resetTranscriptionAdmissionForTests(): void {
 
 async function handleBoundedTranscriptionRequest(
   request: Request,
+  declaredPurpose: TranscriptionPurpose | null,
   signal: AbortSignal,
 ): Promise<Response> {
   let adapter: TranscriptionAdapter;
-  let declaredPurpose: TranscriptionPurpose | null;
   let declaredLength: number | null;
   try {
     // Deployment capability is known before any recording byte is read. An
-    // unavailable deployment must not buffer and parse audio it would discard.
+    // unavailable deployment must not buffer and parse audio it would discard,
+    // just as a closed declared purpose was refused before admission, before
+    // size or duration could misreport it as a recording fault.
     adapter = resolveTranscriptionAdapter();
-    // So is a purpose the URL declares: a closed surface refuses before the
-    // upload is buffered, and before size or duration could misreport it as a
-    // non-retryable recording fault.
-    declaredPurpose = parseDeclaredPurpose(request.url);
-    if (declaredPurpose !== null) assertTranscriptionPurposeAvailable(declaredPurpose);
     declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
   } catch (error) {
     cancelBody(request.body);
