@@ -75,25 +75,30 @@ const QUALIFIED_PERFORMANCE_RECEIPT = Object.freeze({
  * so it proves a Latin word reaches its own ledger and no other. Corpus 1's
  * `locale-isolation` case asserted that a Chinese turn never reaches en-US;
  * script routing deliberately reverses that, so the case was replaced rather
- * than relabelled.
+ * than relabelled. An action names the ledger locale and the stored form, so
+ * the full-width positive proves that the folded ASCII form is what is kept.
  */
 export const LATIN_INTERNAL_EDIT_CASES = Object.freeze([
   corpusCase("positive-transposition", "positive", "en-US", "spoken",
-    "Englebart", ["Engelbart"], "human-material", "canonical:Engelbart"),
+    "Englebart", ["Engelbart"], "human-material", "relation:en-US:Englebart>Engelbart"),
   corpusCase("positive-substitution", "positive", "en-US", "spoken",
-    "Morphogenasis", ["Morphogenesis"], "human-material", "canonical:Morphogenesis"),
+    "Morphogenasis", ["Morphogenesis"], "human-material",
+    "relation:en-US:Morphogenasis>Morphogenesis"),
   corpusCase("positive-routed-zh-cn", "positive", "zh-CN", "spoken",
-    "我读了Englebart的论文", ["Engelbart"], "human-material", "canonical:Engelbart"),
+    "我读了Englebart的论文", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
   corpusCase("positive-routed-zh-tw", "positive", "zh-TW", "spoken",
     "我讀了Morphogenasis的論文", ["Morphogenesis"], "human-material",
-    "canonical:Morphogenesis"),
+    "relation:en-US:Morphogenasis>Morphogenesis"),
   corpusCase("positive-routed-ja-jp", "positive", "ja-JP", "spoken",
-    "Englebartの論文を読んだ", ["Engelbart"], "human-material", "canonical:Engelbart"),
+    "Englebartの論文を読んだ", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
   corpusCase("positive-routed-full-width", "positive", "zh-CN", "spoken",
     "我读了Ｅｎｇｌｅｂａｒｔ的论文", ["Engelbart"], "human-material",
-    "canonical:Engelbart"),
+    "relation:en-US:Englebart>Engelbart"),
   corpusCase("positive-routed-punctuation-emoji", "positive", "zh-CN", "spoken",
-    "😀Englebart，对吧？", ["Engelbart"], "human-material", "canonical:Engelbart"),
+    "😀Englebart，对吧？", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
   corpusCase("adversarial-written", "adversarial", "en-US", "written",
     "Englebart", ["Engelbart"], "human-material", null),
   corpusCase("adversarial-distant", "adversarial", "en-US", "spoken",
@@ -114,6 +119,29 @@ export const LATIN_INTERNAL_EDIT_CASES = Object.freeze([
     "邮箱Englebart@example.com", ["Engelbart"], "human-material", null),
   corpusCase("adversarial-routed-width-identifier", "adversarial", "zh-CN", "spoken",
     "打开ＥｎｇｌｅＢａｒｔ模块", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-file-path", "adversarial", "zh-CN", "spoken",
+    "路径src/Englebart/index.ts", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-mention", "adversarial", "zh-CN", "spoken",
+    "@Englebart 你好", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-hashtag", "adversarial", "zh-CN", "spoken",
+    "#Englebart 话题", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-url", "adversarial", "zh-CN", "spoken",
+    "看ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Ｅｎｇｌｅｂａｒｔ的页面", ["Engelbart"],
+    "human-material", null),
+  corpusCase("adversarial-routed-full-width-email", "adversarial", "zh-CN", "spoken",
+    "邮箱englebart＠example.com", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-path", "adversarial", "zh-CN", "spoken",
+    "路径ｓｒｃ／Ｅｎｇｌｅｂａｒｔ／ｉｎｄｅｘ．ｔｓ", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-flag", "adversarial", "zh-CN", "spoken",
+    "运行－－Ｅｎｇｌｅｂａｒｔ参数", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-mention", "adversarial", "zh-CN", "spoken",
+    "＠Englebart 你好", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-hashtag", "adversarial", "zh-CN", "spoken",
+    "＃Englebart＃话题", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-backticks", "adversarial", "zh-CN", "spoken",
+    "代码｀Englebart｀里", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-mention", "adversarial", "en-US", "spoken",
+    "@Englebart said", ["Engelbart"], "human-material", null),
   corpusCase("ambiguity-two-canonicals", "ambiguity", "en-US", "spoken",
     "Abczefgh", ["Abcxefgh", "Abcyefgh"], "human-material", null),
   corpusCase("ambiguity-canonical-noop", "ambiguity", "en-US", "spoken",
@@ -223,7 +251,10 @@ function runCase(
       ? { eligibleRanges: [{ start: item.input.observedForm.length + 1, end: text.length }] }
       : {}),
   }, new Set(["latin-internal-edit-v2"]));
-  return events.length === 1 ? `canonical:${events[0].canonical}` : null;
+  const event = events.length === 1 ? events[0] : undefined;
+  return event?.source === "machine-inference"
+    ? `relation:${event.locale}:${event.form}>${event.canonical}`
+    : null;
 }
 
 async function measurePerformance(

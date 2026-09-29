@@ -2,6 +2,7 @@ import type { MatterLocale } from "../config/locales";
 import {
   findProtectedWikiSpans,
   findRoutedWikiProtectedSpans,
+  hasWikiWordBoundaryAround,
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
@@ -27,7 +28,11 @@ import {
 } from "./wiki-model";
 import type { WikiQualifiedProducerRelease } from "./wiki-producer-qualification";
 import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
-import { routeWikiWord, wikiLatinRouteLocale } from "./wiki-script-routing";
+import {
+  isWikiLatinWord,
+  routeWikiWord,
+  wikiLatinRouteLocale,
+} from "./wiki-script-routing";
 
 const MIN_EDIT_GRAPHEMES = 7;
 const MAX_FIT_GRAPHEMES = 48;
@@ -330,6 +335,11 @@ export function fitCommittedWikiTextResult(
     const route = routeWikiWord(request.locale, segment.segment.normalize("NFC"));
     if (route.routed &&
         wikiRangeOverlapsProtected(start, end, routedProtectedSpans, 0)) return [];
+    // A relation is evidence only where its word rule could apply: `@name`,
+    // `#tag`, and joined forms are never rewritten, so like protected
+    // literals they neither vote nor offer an opportunity.
+    if (isWikiLatinWord(route.form) &&
+        !hasWikiWordBoundaryAround(request.text, start, end, route.routed)) return [];
     return [route];
   });
 

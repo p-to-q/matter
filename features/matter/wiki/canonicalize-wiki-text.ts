@@ -7,8 +7,9 @@ import type {
   CompiledWikiView,
 } from "./wiki-compiler";
 import {
-  foldWikiFullWidthLatin,
-  hasWikiFullWidthLatin,
+  foldWikiFullWidthAscii,
+  hasWikiFullWidthAscii,
+  hasWikiLatinLetter,
   isWikiCjkLetter,
   isWikiLatinWord,
   isWikiRoutableGrapheme,
@@ -23,6 +24,8 @@ const LONE_SURROGATE = /[\uD800-\uDFFF]/u;
 const MAY_CONTAIN_PROTECTED_LITERAL =
   /[`\u201c\u2018\u300c\u300e"@/\\_.]|--|[a-z][A-Z]|[A-Z][A-Za-z0-9]*[A-Z]/u;
 const EMPTY_EDITS: readonly WikiCanonicalizationEdit[] = Object.freeze([]);
+// Code units read on each side of a span to find its neighbouring grapheme.
+const BOUNDARY_WINDOW = 32;
 
 type Grapheme = Readonly<{
   segment: string;
@@ -77,8 +80,15 @@ export function canonicalizeWikiText(
   }
   const view = snapshot.views[locale][channel];
   const routedLocale = wikiLatinRouteLocale(locale);
-  const routedView = routedLocale === null ? null : snapshot.views[routedLocale][channel];
-  if (text.length === 0 || (view.ruleCount === 0 && (routedView?.ruleCount ?? 0) === 0)) {
+  const candidateRoutedView = routedLocale === null
+    ? null
+    : snapshot.views[routedLocale][channel];
+  // Without a Latin letter nothing can route, so a pure-CJK turn pays nothing.
+  const routedView = candidateRoutedView !== null && candidateRoutedView.ruleCount > 0 &&
+      hasWikiLatinLetter(text)
+    ? candidateRoutedView
+    : null;
+  if (text.length === 0 || (view.ruleCount === 0 && routedView === null)) {
     return result("unchanged", text, snapshot.generation, EMPTY_EDITS, 0, 0);
   }
 
@@ -145,10 +155,11 @@ export function canonicalizeWikiText(
     graphemeIndex = bestEndGrapheme;
   }
 
-  if (routedView !== null && routedView.ruleCount > 0) {
+  if (routedView !== null) {
     const routed = matchRoutedWikiView(
       snapshot,
       routedView,
+      view,
       text,
       input,
       eligibleRanges,
@@ -247,10 +258,35 @@ function hasRequiredBoundary(
   end: number,
 ): boolean {
   if (rule.boundary === "literal") return true;
-  const previous = input[start - 1]?.segment;
-  const next = input[end]?.segment;
-  return (previous === undefined || !WORD_CONSTITUENT.test(previous)) &&
-    (next === undefined || !WORD_CONSTITUENT.test(next));
+  return endsOwnWord(input[start - 1]?.segment) && endsOwnWord(input[end]?.segment);
+}
+
+function endsOwnWord(neighbor: string | undefined): boolean {
+  return neighbor === undefined || !WORD_CONSTITUENT.test(neighbor);
+}
+
+/**
+ * Whether a word rule could apply to `text[start, end)`: the matcher's own or
+ * routed boundary test on the graphemes around the span. Evidence producers use
+ * it so an occurrence no resulting rule could rewrite, such as `@name`, `#tag`,
+ * or a hyphen-joined word, is never counted.
+ */
+export function hasWikiWordBoundaryAround(
+  text: string,
+  start: number,
+  end: number,
+  routed: boolean,
+): boolean {
+  const before = text.slice(Math.max(0, start - BOUNDARY_WINDOW), start);
+  const after = text.slice(end, end + BOUNDARY_WINDOW);
+  const previous = before.length === 0
+    ? undefined
+    : GRAPHEME_SEGMENTER.segment(before).containing(before.length - 1)?.segment;
+  const next = after.length === 0
+    ? undefined
+    : GRAPHEME_SEGMENTER.segment(after).containing(0)?.segment;
+  const ends = routed ? endsRoutedWord : endsOwnWord;
+  return ends(previous) && ends(next);
 }
 
 type RoutedWikiMatches = Readonly<{
@@ -260,23 +296,25 @@ type RoutedWikiMatches = Readonly<{
 
 /**
  * Matches the Latin ledger a CJK turn routes to. Routing is additive: a routed
- * match never covers a grapheme holding a non-Latin letter, nor one the turn's
- * own rules already replaced, so it cannot change an own-locale outcome and no
- * CJK span can reach the Latin ledger. Keys are width-folded for matching
- * only; the replaced span is always the text as written.
+ * match never covers a grapheme holding a non-Latin letter or one the turn's
+ * own rules replaced, and it never overlaps a complete form of the turn's own
+ * rules even where that rule could not apply, so human authority in the turn's
+ * locale always wins and no CJK span can reach the Latin ledger. Keys and
+ * protection are width-folded for matching only; the replaced span is always
+ * the text as written.
  */
 function matchRoutedWikiView(
   snapshot: CompiledWikiSnapshot,
   view: CompiledWikiView,
+  ownView: CompiledWikiView,
   text: string,
   input: readonly Grapheme[],
   eligibleRanges: readonly WikiEligibleRange[],
   ownEdits: readonly WikiCanonicalizationEdit[],
 ): RoutedWikiMatches {
-  const keys: (string | null)[] = input.map((grapheme) =>
-    isWikiRoutableGrapheme(grapheme.segment)
-      ? foldWikiFullWidthLatin(grapheme.normalized)
-      : null);
+  const foldedKeys = input.map((grapheme) => foldWikiFullWidthAscii(grapheme.normalized));
+  const keys: (string | null)[] = input.map((grapheme, index) =>
+    isWikiRoutableGrapheme(grapheme.segment) ? foldedKeys[index] : null);
   // A routable grapheme's letters are all Latin, so a routed span is a Latin
   // word exactly when one of its graphemes holds a letter.
   const letters = input.map((grapheme, index) =>
@@ -290,9 +328,46 @@ function matchRoutedWikiView(
     if (own !== undefined && own.start <= input[index].start) keys[index] = null;
   }
 
+  let transitionCount = 0;
+  // The furthest end of any complete own form starting at a grapheme, walked
+  // lazily and at most once per start for the written and the folded keys.
+  const ownFormEnds = new Map<number, number>();
+  const foldingChanges = hasWikiFullWidthAscii(text);
+  const walkOwnForm = (from: number, keyAt: (index: number) => string): number => {
+    let nodeIndex = 0;
+    let furthest = -1;
+    for (let cursor = from;
+      cursor < input.length && cursor - from < ownView.maxFormGraphemes;) {
+      transitionCount += 1;
+      const nextNodeIndex = ownView.nodes[nodeIndex].edges[keyAt(cursor)];
+      if (nextNodeIndex === undefined) break;
+      nodeIndex = nextNodeIndex;
+      cursor += 1;
+      if (ownView.nodes[nodeIndex].terminalRuleIndex !== null) furthest = cursor;
+    }
+    return furthest;
+  };
+  const ownFormEndFrom = (from: number): number => {
+    const cached = ownFormEnds.get(from);
+    if (cached !== undefined) return cached;
+    let furthest = walkOwnForm(from, (index) => input[index].normalized);
+    if (foldingChanges) {
+      furthest = Math.max(furthest, walkOwnForm(from, (index) => foldedKeys[index]));
+    }
+    ownFormEnds.set(from, furthest);
+    return furthest;
+  };
+  const overlapsOwnForm = (start: number, end: number): boolean => {
+    if (ownView.ruleCount === 0) return false;
+    for (let from = Math.max(0, start - ownView.maxFormGraphemes + 1); from < end; from += 1) {
+      if (ownFormEndFrom(from) > start) return true;
+    }
+    return false;
+  };
+
   const protectedSpans = findRoutedWikiProtectedSpans(text);
   const edits: WikiCanonicalizationEdit[] = [];
-  let transitionCount = 0;
+  const candidates: [ruleIndex: number, endGrapheme: number][] = [];
   let protectedIndex = 0;
   let eligibleIndex = 0;
   let graphemeIndex = 0;
@@ -310,8 +385,7 @@ function matchRoutedWikiView(
     let nodeIndex = 0;
     let cursor = graphemeIndex;
     let latinWord = false;
-    let bestRuleIndex: number | null = null;
-    let bestEndGrapheme = graphemeIndex;
+    candidates.length = 0;
     while (cursor < input.length && cursor - graphemeIndex < view.maxFormGraphemes) {
       const key = keys[cursor];
       if (key === null) break;
@@ -329,23 +403,30 @@ function matchRoutedWikiView(
         !wikiRangeOverlapsProtected(start, end, protectedSpans, protectedIndex) &&
         isWikiRangeEligible(start, end, eligibleRanges, eligibleIndex) &&
         hasRoutedBoundary(snapshot.rules[terminalRuleIndex], input, graphemeIndex, cursor)
-      ) {
-        bestRuleIndex = terminalRuleIndex;
-        bestEndGrapheme = cursor;
-      }
+      ) candidates.push([terminalRuleIndex, cursor]);
     }
 
-    if (bestRuleIndex === null) {
+    // Leftmost-longest among the candidates that no own form claims.
+    let chosen: [ruleIndex: number, endGrapheme: number] | undefined;
+    for (let index = candidates.length - 1; index >= 0; index -= 1) {
+      const candidate = candidates[index]!;
+      if (!overlapsOwnForm(graphemeIndex, candidate[1])) {
+        chosen = candidate;
+        break;
+      }
+    }
+    if (chosen === undefined) {
       graphemeIndex += 1;
       continue;
     }
+    const [ruleIndex, endGrapheme] = chosen;
     edits.push(Object.freeze({
       start,
-      end: input[bestEndGrapheme - 1].end,
-      ruleIndex: bestRuleIndex,
-      sourceIndex: snapshot.rules[bestRuleIndex].sourceIndex,
+      end: input[endGrapheme - 1].end,
+      ruleIndex,
+      sourceIndex: snapshot.rules[ruleIndex].sourceIndex,
     }));
-    graphemeIndex = bestEndGrapheme;
+    graphemeIndex = endGrapheme;
   }
   return Object.freeze({ edits: Object.freeze(edits), transitionCount });
 }
@@ -361,9 +442,13 @@ function hasRoutedBoundary(
   return endsRoutedWord(input[start - 1]?.segment) && endsRoutedWord(input[end]?.segment);
 }
 
+/**
+ * Full-width joiners such as `＠＃｀－＿` join a routed word exactly as their
+ * ASCII forms do, so the neighbour is folded before the word-character test.
+ */
 function endsRoutedWord(neighbor: string | undefined): boolean {
-  return neighbor === undefined || !WORD_CONSTITUENT.test(neighbor) ||
-    isWikiCjkLetter(neighbor);
+  return neighbor === undefined || isWikiCjkLetter(neighbor) ||
+    !WORD_CONSTITUENT.test(foldWikiFullWidthAscii(neighbor));
 }
 
 export function wikiRangeOverlapsProtected(
@@ -392,19 +477,21 @@ export function findProtectedWikiSpans(
 
 /**
  * Protection for script-routed words: every literal of the text as written,
- * plus every literal that appears once full-width Latin is folded, so a
- * full-width URL, path, or identifier stays protected. The union can only
- * protect more; own-locale matching keeps the written-text spans alone.
+ * plus every literal that appears once full-width ASCII is folded, so a
+ * full-width URL, email address, path, flag, code span, or identifier stays
+ * protected. Folding the full-width colon lets a URL tail run past a
+ * full-width colon in the same sentence; the union can only protect more.
+ * Own-locale matching keeps the written-text spans alone.
  */
 export function findRoutedWikiProtectedSpans(
   text: string,
   level: "matching" | "evidence" = "matching",
 ): readonly WikiProtectedSpan[] {
   const written = findProtectedWikiSpans(text, level);
-  if (!hasWikiFullWidthLatin(text)) return written;
+  if (!hasWikiFullWidthAscii(text)) return written;
   return mergeProtectedSpans(
     written,
-    findProtectedWikiSpans(foldWikiFullWidthLatin(text), level),
+    findProtectedWikiSpans(foldWikiFullWidthAscii(text), level),
   );
 }
 
@@ -454,12 +541,16 @@ function result(
 
 /**
  * Maximum trie transitions for one call, independent of corpus size. A
- * script-routed turn also walks the one view its Latin spans route to.
+ * script-routed turn also walks the one view its Latin spans route to and, to
+ * keep own-locale authority first, re-walks its own view at most once per
+ * start for the written and once for the width-folded keys.
  */
 export function wikiCanonicalizationOperationBudget(
   view: CompiledWikiView,
   graphemeCount: number,
   routedView?: CompiledWikiView,
 ): number {
-  return graphemeCount * (view.maxFormGraphemes + (routedView?.maxFormGraphemes ?? 0));
+  return routedView === undefined
+    ? graphemeCount * view.maxFormGraphemes
+    : graphemeCount * (3 * view.maxFormGraphemes + routedView.maxFormGraphemes);
 }

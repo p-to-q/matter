@@ -400,18 +400,38 @@ describe("script-routed Wiki fitting", () => {
       .toEqual([expect.objectContaining({ locale: "en-US", form: "Englebart" })]);
   });
 
-  it("never fits protected literals in routed spans", () => {
+  it("never fits protected or joined literals in routed spans", () => {
     const state = withLexemes("Engelbart");
     for (const text of [
       "看https://example.com/Englebart的页面",
       "邮箱Englebart@example.com",
       "代码`Englebart`里",
       "他说“Englebart”",
+      "路径src/Englebart/index.ts",
+      "@Englebart 你好",
+      "#Englebart#话题",
+      "Englebart-2.0版本",
       "打开ＥｎｇｌｅＢａｒｔ模块",
+      "看ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Ｅｎｇｌｅｂａｒｔ的页面",
+      "邮箱englebart＠example.com",
+      "路径ｓｒｃ／Ｅｎｇｌｅｂａｒｔ／ｉｎｄｅｘ．ｔｓ",
+      "运行－－Ｅｎｇｌｅｂａｒｔ参数",
+      "＠Englebart 你好",
+      "＃Englebart＃话题",
+      "代码｀Englebart｀里",
     ]) {
-      expect(fit(state, "zh-CN", text).events).toEqual([]);
+      expect(fit(state, "zh-CN", text)).toMatchObject({ events: [], routedScripts: [] });
     }
-    expect(fit(state, "zh-CN", "打开ＥｎｇｌｅＢａｒｔ模块").routedScripts).toEqual([]);
+  });
+
+  it("counts an English word only where its word rule could apply", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of ["@Englebart said", "#Englebart", "Englebart-style", "Englebart_x"]) {
+      expect(fit(state, "en-US", text).events).toEqual([]);
+    }
+    expect(fit(state, "en-US", "(Englebart), later").events).toEqual([
+      expect.objectContaining({ form: "Englebart", canonical: "Engelbart" }),
+    ]);
   });
 
   it("never lets a CJK span reach the Latin producer", () => {

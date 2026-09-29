@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  foldWikiFullWidthLatin,
-  hasWikiFullWidthLatin,
+  foldWikiFullWidthAscii,
+  hasWikiFullWidthAscii,
+  hasWikiLatinLetter,
   isWikiCjkLetter,
   isWikiLatinWord,
   isWikiRoutableGrapheme,
@@ -53,15 +54,28 @@ describe("Wiki script routing", () => {
     expect(routeWikiWord("de-DE", "Englebart")).toMatchObject({ locale: "de-DE", routed: false });
   });
 
-  it("folds full-width letters and digits for matching without moving any index", () => {
-    const text = "ＡＢＣ１２３ａｂｃ，＠材料";
-    const folded = foldWikiFullWidthLatin(text);
+  it("folds full-width ASCII for matching without moving any index", () => {
+    const text = "ｈｔｔｐｓ：／／ｅｘ．ｃｏｍ／Ａ１＠＃｀－＿（ｘ）　材料";
+    const folded = foldWikiFullWidthAscii(text);
 
-    expect(folded).toBe("ABC123abc，＠材料");
+    expect(folded).toBe("https://ex.com/A1@#`-_(x) 材料");
     expect(folded).toHaveLength(text.length);
-    expect(hasWikiFullWidthLatin(text)).toBe(true);
-    expect(hasWikiFullWidthLatin("ABC，材料")).toBe(false);
-    expect(foldWikiFullWidthLatin("ABC")).toBe("ABC");
+    expect(hasWikiFullWidthAscii(text)).toBe(true);
+    expect(hasWikiFullWidthAscii("　")).toBe(true);
+    expect(foldWikiFullWidthAscii("ABC")).toBe("ABC");
+  });
+
+  it("keeps CJK sentence punctuation unfolded so literal tails still stop", () => {
+    const sentence = "好，对！是？嗯；。";
+
+    expect(foldWikiFullWidthAscii(sentence)).toBe(sentence);
+    expect(hasWikiFullWidthAscii(sentence)).toBe(false);
+  });
+
+  it("finds whether a text holds any Latin letter", () => {
+    expect(hasWikiLatinLetter("我读了Englebart")).toBe(true);
+    expect(hasWikiLatinLetter("我读了Ｅ")).toBe(true);
+    expect(hasWikiLatinLetter("我读了２０２６年的论文，😀")).toBe(false);
   });
 
   it("lets a routed match cover Latin, digits, spacing, and symbols but no CJK letter", () => {

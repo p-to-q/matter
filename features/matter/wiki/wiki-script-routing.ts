@@ -23,14 +23,23 @@ const LATIN_ROUTING_TURN_LOCALES: ReadonlySet<MatterLocale> = new Set<MatterLoca
 ]);
 const LATIN_LETTER = /\p{Script=Latin}/u;
 const LETTER_GLOBAL = /\p{L}/gu;
-const FULL_WIDTH_ALPHANUMERIC = /[０-９Ａ-Ｚａ-ｚ]/u;
-const FULL_WIDTH_ALPHANUMERIC_GLOBAL = /[０-９Ａ-Ｚａ-ｚ]/gu;
+// The full-width ASCII block and the ideographic space, except the CJK
+// sentence marks U+FF01, U+FF0C, U+FF1B, and U+FF1F: those stay unfolded so a
+// URL or path tail still ends where the sentence does.
+const FULL_WIDTH_ASCII_SOURCE =
+  "[\\u3000\\uff02-\\uff0b\\uff0d-\\uff1a\\uff1c-\\uff1e\\uff20-\\uff5e]";
+const FULL_WIDTH_ASCII = new RegExp(FULL_WIDTH_ASCII_SOURCE, "u");
+const FULL_WIDTH_ASCII_GLOBAL = new RegExp(FULL_WIDTH_ASCII_SOURCE, "gu");
 const FULL_WIDTH_OFFSET = 0xfee0;
+const IDEOGRAPHIC_SPACE = 0x3000;
 // Letters that end a routed Latin word without whitespace: CJK ideographs,
 // kana (including half-width), Hangul, Bopomofo, and the CJK iteration and
 // prolonged-sound marks that Unicode assigns to the Common script.
-const CJK_LETTER =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Bopomofo}々〆ーｰ]/u;
+const CJK_LETTER = new RegExp(
+  "[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}" +
+    "\\p{Script=Bopomofo}\\u3005\\u3006\\u30fc\\uff70]",
+  "u",
+);
 const ROUTED_SCRIPTS = Object.freeze(["latin"] as const);
 
 /** The ledger that Latin words of a turn in `turnLocale` route to, if any. */
@@ -53,13 +62,18 @@ export function isWikiLatinWord(surface: string): boolean {
   return latin;
 }
 
+/** A cheap whole-text test: without a Latin letter nothing can route. */
+export function hasWikiLatinLetter(text: string): boolean {
+  return LATIN_LETTER.test(text);
+}
+
 export type WikiRoutedWord = Readonly<{
   /** Ledger locale that owns this word's evidence. */
   locale: MatterLocale;
   /** Matching form: the surface, width-folded only when the word is routed. */
   form: string;
   routed: boolean;
-  /** The routed surface used full-width Latin; the form is not what was written. */
+  /** The routed surface used full-width forms; the form is not what was written. */
   widthFolded: boolean;
 }>;
 
@@ -69,7 +83,7 @@ export function routeWikiWord(turnLocale: MatterLocale, surface: string): WikiRo
   if (routedLocale === null || !isWikiLatinWord(surface)) {
     return Object.freeze({ locale: turnLocale, form: surface, routed: false, widthFolded: false });
   }
-  const form = foldWikiFullWidthLatin(surface);
+  const form = foldWikiFullWidthAscii(surface);
   return Object.freeze({
     locale: routedLocale,
     form,
@@ -79,19 +93,22 @@ export function routeWikiWord(turnLocale: MatterLocale, surface: string): WikiRo
 }
 
 /**
- * Maps full-width ASCII letters and digits to ASCII for matching only. Each
+ * Maps full-width ASCII (letters, digits, and symbols such as `＠／．－｀`) and
+ * the ideographic space to ASCII, for matching and protection scans only. Each
  * mapped character is one UTF-16 code unit on both sides, so every index into
  * the folded text addresses the same character of the original. Committed text
  * is never width-normalized; only a rule that replaces a whole span changes it.
  */
-export function foldWikiFullWidthLatin(text: string): string {
-  if (!FULL_WIDTH_ALPHANUMERIC.test(text)) return text;
-  return text.replace(FULL_WIDTH_ALPHANUMERIC_GLOBAL, (character) =>
-    String.fromCharCode(character.charCodeAt(0) - FULL_WIDTH_OFFSET));
+export function foldWikiFullWidthAscii(text: string): string {
+  if (!FULL_WIDTH_ASCII.test(text)) return text;
+  return text.replace(FULL_WIDTH_ASCII_GLOBAL, (character) => {
+    const code = character.charCodeAt(0);
+    return code === IDEOGRAPHIC_SPACE ? " " : String.fromCharCode(code - FULL_WIDTH_OFFSET);
+  });
 }
 
-export function hasWikiFullWidthLatin(text: string): boolean {
-  return FULL_WIDTH_ALPHANUMERIC.test(text);
+export function hasWikiFullWidthAscii(text: string): boolean {
+  return FULL_WIDTH_ASCII.test(text);
 }
 
 /** A grapheme a routed match may cover: it has no letter outside Latin. */

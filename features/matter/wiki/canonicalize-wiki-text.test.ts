@@ -51,7 +51,7 @@ describe("canonicalizeWikiText", () => {
     expect(apply(compiled, "written", "open eye").text).toBe("open-eye");
   });
 
-  it("never applies an identical form across locales", () => {
+  it("resolves a form only in its own ledger and routes Latin by script", () => {
     const compiled = snapshot([
       rule("gift", "present", { locale: "en-US" }),
       rule("gift", "poison", { locale: "de-DE" }),
@@ -280,6 +280,40 @@ describe("canonicalizeWikiText", () => {
   });
 });
 
+/** Literal shapes a routed rule must never rewrite, as written and full width. */
+const ROUTED_PROTECTED_TEXTS = Object.freeze([
+  "看https://example.com/Englebart的页面",
+  "访问www.Englebart.com了解",
+  "邮箱Englebart@example.com",
+  "@Englebart 你好",
+  "@Englebart你好",
+  "#Englebart 话题",
+  "#Englebart#话题",
+  "路径src/Englebart/index.ts",
+  "路径/docs/Englebart",
+  "文件Englebart.ts里",
+  "运行--Englebart参数",
+  "变量my_Englebart里",
+  "代码`Englebart`里",
+  "他说“Englebart”",
+  "他说「Englebart」",
+  "C:\\Users\\Englebart\\docs",
+  "Englebart-2.0版本",
+  "打开ＥｎｇｌｅＢａｒｔ模块",
+  "看ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Ｅｎｇｌｅｂａｒｔ的页面",
+  "看https：//example.com/Englebart的页面",
+  "邮箱ｅｎｇｌｅｂａｒｔ＠ｅｘａｍｐｌｅ．ｃｏｍ",
+  "邮箱englebart＠example.com",
+  "＠Englebart 你好",
+  "＃Englebart 话题",
+  "＃Englebart＃话题",
+  "路径ｓｒｃ／Ｅｎｇｌｅｂａｒｔ／ｉｎｄｅｘ．ｔｓ",
+  "文件Ｅｎｇｌｅｂａｒｔ．ｔｓ里",
+  "运行－－Ｅｎｇｌｅｂａｒｔ参数",
+  "变量ｍｙ＿Ｅｎｇｌｅｂａｒｔ里",
+  "代码｀Englebart｀里",
+]);
+
 describe("canonicalizeWikiText script routing", () => {
   const LATIN = rule("Englebart", "Engelbart", {
     locale: "en-US",
@@ -342,21 +376,49 @@ describe("canonicalizeWikiText script routing", () => {
     expect(spoken(compiled, "我读了Ｍｏｒｐｈ的论文").text).toBe("我读了Ｍｏｒｐｈ的论文");
   });
 
-  it("protects URLs, email, code, quotes, and full-width identifiers in routed spans", () => {
-    const compiled = snapshot([
-      LATIN,
-      rule("EngleBart", "EngelBart", { locale: "en-US", channel: "spoken" }),
-    ]);
-    for (const text of [
-      "看https://example.com/Englebart的页面",
-      "邮箱Englebart@example.com",
-      "代码`Englebart`里",
-      "他说“Englebart”",
-      "路径/docs/Englebart",
-      "打开ＥｎｇｌｅＢａｒｔ模块",
-    ]) {
-      expect(spoken(compiled, text).text).toBe(text);
+  it("protects written and full-width literals in routed spans on both channels", () => {
+    for (const channel of ["spoken", "written"] as const) {
+      const compiled = snapshot([
+        { ...LATIN, channel },
+        { ...LATIN, channel, form: "englebart", canonical: "engelbart" },
+        rule("EngleBart", "EngelBart", { locale: "en-US", channel }),
+      ]);
+      for (const text of ROUTED_PROTECTED_TEXTS) {
+        expect(canonicalizeWikiText(compiled, "zh-CN", channel, text).text).toBe(text);
+      }
     }
+  });
+
+  it("lets the turn's own human authority win over a routed rule at any spacing", () => {
+    const compiled = snapshot([
+      rule("Englebart", "恩格尔巴特", { locale: "zh-CN", channel: "spoken", boundary: "word" }),
+      LATIN,
+    ]);
+
+    // Spaced, the own rule applies; unspaced, its word boundary fails, and the
+    // routed rule still may not take the span the own lexicon names.
+    expect(spoken(compiled, "我读了 Englebart 的论文").text).toBe("我读了 恩格尔巴特 的论文");
+    expect(spoken(compiled, "我读了Englebart的论文").text).toBe("我读了Englebart的论文");
+    expect(spoken(compiled, "我读了Ｅｎｇｌｅｂａｒｔ的论文").text)
+      .toBe("我读了Ｅｎｇｌｅｂａｒｔ的论文");
+    // An own form that covers more than the routed form claims the overlap too.
+    const longer = snapshot([
+      rule("Englebart Smith", "恩格尔巴特·史密斯", { locale: "zh-CN", channel: "spoken" }),
+      LATIN,
+    ]);
+    expect(spoken(longer, "我见了Englebart Smith先生", "zh-CN").text)
+      .toBe("我见了恩格尔巴特·史密斯先生");
+    expect(spoken(snapshot([
+      rule("Englebart Smith", "恩格尔巴特·史密斯", {
+        locale: "zh-CN",
+        channel: "spoken",
+        boundary: "word",
+      }),
+      LATIN,
+    ]), "我见了Englebart Smith先生").text).toBe("我见了Englebart Smith先生");
+    // A routed word elsewhere in the turn is still corrected.
+    expect(spoken(compiled, "Englebart和Englebart", "zh-TW").text)
+      .toBe("Engelbart和Engelbart");
   });
 
   it("never lets a CJK span, a digit-only form, or a German rule reach a routed turn", () => {
@@ -429,6 +491,41 @@ describe("canonicalizeWikiText script routing", () => {
     expect(result.text).toBe(`${"a".repeat(256)}材料库`);
     expect(result.transitionCount).toBeGreaterThan(4_000);
     expect(result.transitionCount).toBeLessThanOrEqual(budget);
-    expect(budget).toBe(258 * (2 + 32));
+    expect(budget).toBe(258 * (3 * 2 + 32));
+  });
+
+  it("bounds own-form re-walks around routed candidates", () => {
+    const own = Array.from({ length: 15 }, (_, index) =>
+      rule(`${"x".repeat(index + 1)}y`, `own-${index + 1}`, { locale: "zh-CN" }));
+    const compiled = snapshot([...own, rule("x", "X", { locale: "en-US" })]);
+    const text = `${"x".repeat(200)}${"ｘ".repeat(56)}`;
+    const result = canonicalizeWikiText(compiled, "zh-CN", "written", text);
+    const budget = wikiCanonicalizationOperationBudget(
+      compiled.views["zh-CN"].written,
+      result.graphemeCount,
+      compiled.views["en-US"].written,
+    );
+
+    // Every grapheme is a routed candidate that no complete own form claims,
+    // so each start is re-walked on the written and the folded keys.
+    expect(result.edits).toHaveLength(256);
+    expect(result.transitionCount).toBeLessThanOrEqual(budget);
+  });
+
+  it("skips the routed pass when a turn holds no Latin letter", () => {
+    const own = rule("材料", "材料库", { locale: "zh-CN" });
+    const compiled = snapshot([own, rule("ab", "AB", { locale: "en-US" })]);
+    const ownOnly = snapshot([own]);
+
+    expect(canonicalizeWikiText(compiled, "zh-CN", "written", "这个材料ab").text)
+      .toBe("这个材料库AB");
+    // A pure-CJK turn costs exactly what it cost without any routed rule.
+    const cost = (compiledSnapshot: CompiledWikiSnapshot) => {
+      const { text, graphemeCount, transitionCount } =
+        canonicalizeWikiText(compiledSnapshot, "zh-CN", "written", "这个材料好");
+      return { text, graphemeCount, transitionCount };
+    };
+    expect(cost(compiled)).toEqual(cost(ownOnly));
+    expect(cost(compiled).text).toBe("这个材料库好");
   });
 });

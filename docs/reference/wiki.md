@@ -249,10 +249,13 @@ between Latin and Han, kana, or Hangul whether or not the speaker left a space.
 A segment is routed when it has a letter and every letter is Latin. A segment
 mixing scripts, such as Latin joined to Bopomofo, stays in the turn locale,
 where no Latin producer reads it, so a host segmenter that failed to break
-would lose routing, not precision. Full-width Latin letters and digits fold to ASCII for matching only,
-index for index. Committed text is never width-normalized: only a rule that
-replaces a whole span changes it, and term collection never collects a
-full-width spelling, because a collected canonical becomes rewrite output.
+would lose routing, not precision. Full-width ASCII, meaning letters, digits,
+and symbols such as `＠／．－｀`, folds to ASCII for matching and protection
+only, index for index, as does the ideographic space. The CJK sentence marks
+`，！？；` stay unfolded so a URL or path tail still ends at the sentence.
+Committed text is never width-normalized: only a rule that replaces a whole
+span changes it, and term collection never collects a full-width spelling,
+because a collected canonical becomes rewrite output.
 
 Routing keeps every existing contract of the routed ledger:
 
@@ -268,16 +271,29 @@ Routing keeps every existing contract of the routed ledger:
   ledger, so a routed misspelling with one target is not also collected as a
   word, while competing targets still suppress nothing;
 - protected literals are checked on the text as written and again after
-  width folding, so a full-width URL, path, or identifier stays protected.
+  width folding, so a full-width URL, email address, path, flag, code span, or
+  identifier stays protected;
+- an occurrence is relation evidence only where a word rule for its form
+  could apply, so `@name`, `#tag`, and a hyphen- or underscore-joined word,
+  in full width or not, neither vote nor offer an opportunity. This holds for
+  English turns as well. Term collection still reads such a word as a word.
 
-Application is additive. In a CJK turn the turn's own rules match first,
-unchanged; the `en-US` view of the same channel then matches only graphemes
-the own rules left untouched and that hold no non-Latin letter. A routed word
-rule treats a CJK letter as a word boundary; digits, apostrophes, hyphens, and
-any other letter still join the word. A routed turn walks at most two views,
-so the hot path stays bounded by the grapheme count times both views' longest
-forms. The written channel routes the same way, which today reaches only
-human-confirmed `en-US` written rules, because fitting learns spoken relations.
+Application is additive, and the turn's own locale keeps authority. In a CJK
+turn the turn's own rules match first, unchanged. The `en-US` view of the same
+channel then matches only graphemes the own rules left untouched and that
+hold no non-Latin letter, and never a span that overlaps a complete form of
+the turn's own rules, as written or width-folded. That holds even where the
+own rule could not apply, for instance a word-boundary form written against
+Han characters, so a human-confirmed `zh-CN` spelling of a Latin form is never
+overridden by an automatic `en-US` relation at any spacing. A routed word rule
+treats a CJK letter as a word boundary; digits, apostrophes, hyphens, `@`,
+`#`, backticks, and any other letter still join the word, in full width too. A
+turn without a Latin letter skips the routed pass entirely. Otherwise the
+routed pass walks the routed view once per start and, near a routed candidate,
+the own view at most twice per start, so the hot path stays bounded by the
+grapheme count times three own-view and one routed-view longest forms. The
+written channel routes the same way, which today reaches only human-confirmed
+`en-US` written rules, because fitting learns spoken relations.
 
 Of the product starters, `Engelbart` and `Morphogenesis` are `en-US`
 internal-edit targets and are reached from routed words. `KFC` is an `en-US`
@@ -702,13 +718,17 @@ route and the width fold) and both term producers 1.1.0, each requalified on a
 version-2 corpus. The Latin corpus adds whole Chinese and Japanese turns:
 routed positives including full-width, punctuation, and emoji; adversarial Han
 transliteration, a different real name outside one edit, code-switched English,
-a digit-joined word, a URL, an email address, a full-width identifier, and the
-written channel; a two-name collision, a two-brand collision, and a correct
-name that is already canonical; and locale-isolation cases whose targets live
-in every locale except the turn's Latin ledger. Corpus 1's `locale-isolation`
-case asserted that a Chinese turn never reaches `en-US`; routing deliberately
-reverses that, so the case was replaced by those isolation cases, not
-relabelled. The term corpora now bind the ledger locale into every action.
+a digit-joined word, a URL, an email address, a file path, a mention, a
+hashtag, a full-width URL, email address, path, flag, mention, hashtag, and
+code span, a full-width identifier, and the written channel; a two-name
+collision, a two-brand collision, and a correct name that is already
+canonical; and locale-isolation cases whose targets live in every locale
+except the turn's Latin ledger. Corpus 1's `locale-isolation` case asserted
+that a Chinese turn never reaches `en-US`; routing deliberately reverses that,
+so the case was replaced by those isolation cases, not relabelled. Every Latin
+action names the ledger locale, the stored form, and the canonical, so the
+full-width positive proves the folded ASCII form is what is kept. The term
+corpora likewise bind the ledger locale into every action.
 
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
