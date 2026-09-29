@@ -42,8 +42,9 @@ contiguous run of current punctuation segments inside one node. The active
 the passage-local AI mark owns the whole-node Point-and-Talk entry while Lasso
 continues to mount only Elastic. The deleted
 Voice-direction `transform/1` path is historical trace only and its envelopes
-remain invalid. The Elastic production gate is off; the Text Swap live gate
-is independently off. Markdown
+remain invalid. Elastic and Text Swap are separately gated public product
+surfaces that only a verified user Model API lease can supply; both managed
+adapters are off. Markdown
 archive export/import is available as a strict local return path.
 
 `0.2` is a clean break because `0.1` has no persisted documents. One-node
@@ -328,6 +329,20 @@ text/timestamp, selection, complete visible lineage, grapheme, adjudication, and
 composed-node checks synchronously before the tree engine receives one command
 against the current revision.
 
+An admission refusal is not a turn outcome. In production, before any model
+work, the process-local public perimeter that `/api/turn` shares with
+`/api/text-swap` may refuse with `RATE_LIMITED`: HTTP 429 when the source has
+used its request window (eight requests per 60 seconds), or 503 when the
+instance already has three material turns in flight. The error is always
+`retryable: true` and never carries a `fallbackReason`, because that field
+names only a scenario outcome and no model was called. `MODEL_BUSY` therefore
+remains the governor shedding an already admitted turn. Rate and concurrency
+are distinguished only by HTTP status. The strict browser parser rejects a
+non-retryable `RATE_LIMITED` or one paired with a `fallbackReason`; an accepted
+refusal leaves material unchanged like any other failure. A browser still
+running a build from before this code existed treats the refusal as a
+non-retryable failure until it reloads.
+
 One click inside the settled address surface creates one immutable interaction
 id and one POST. Pointer release alone is local preview state. Neither
 client nor route automatically retries it. A successful commit increments the
@@ -487,11 +502,19 @@ the direction. The scenario uses the same
 boundaries as Elastic while retaining its own operation identity, governor, and
 candidate-health lane.
 
+Admission refusal follows the Elastic rule above. The two routes share one
+process-local perimeter, so a `text-swap/2` request may receive the same
+retryable `RATE_LIMITED` refusal without `fallbackReason`: HTTP 429 for the
+source's request window, 503 for instance concurrency. It is distinct from
+`MODEL_BUSY`, which only a governor shedding an admitted turn reports.
+
 `POST /api/text-swap` is the only Text Swap wire boundary; `/api/turn` remains
 the `transform/2` boundary and never accepts this envelope. Production
-`text-swap/2` is independently gated off for live providers and has no current promotion owner. It
+`text-swap/2` is a separately gated public product surface that only a
+verified user Model API lease can supply; its managed adapter is off and has no
+current promotion owner. It
 cannot reuse a fixture as production fallback or open merely because
-`transform/2` is enabled. Any future promotion would require a frozen synthetic
+`transform/2` is enabled. Any future managed promotion would require a frozen synthetic
 fixture, a dedicated multilingual corpus,
 critical-drift review, distributed rate limiting, an isolated or explicitly
 approved provider credential, hard spend cap and alerts, a deployed-origin

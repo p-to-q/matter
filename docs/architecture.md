@@ -581,10 +581,14 @@ between fixture and live behavior for itself.
 
 Caches hold only reproducible work: derived segments may key on node text;
 measured ranges key on `layoutEpoch`; encoded snapshots key on tree revision;
-server label answers key on a non-cryptographic fingerprint of the complete
-normalized label input and prompt version, including its ordered reference
-context, and are re-validated on every read rather than trusted because they
-were written by this process.
+server label answers key on a SHA-256 digest of the credential scope and the
+complete label question (the normalized label input and prompt version,
+including its ordered reference context), so one scope's answer cannot serve
+another. Every hit runs the scenario's complete adjudication against the
+current question rather than being trusted because this process wrote it; a
+hit that fails is deleted, not shown. Concurrent identical requests join one
+in-flight provider call only on the exact scoped question, never its digest,
+because a joiner receives that answer without adjudicating it again.
 They are disposable and never authoritative. Raw audio, transcripts, repair or
 inquiry answers, transform responses, and lineage are not cached. A bounded diagnostic trace may record
 operation ids, state transitions, error codes, durations, and byte counts, but
@@ -594,8 +598,13 @@ A production model-scenario invocation with a non-null adapter emits at most one
 `matter.scenario-performance` scalar receipt through the harness observation
 seam. It carries only the closed scenario/outcome enums, a bounded numeric
 duration, anonymous candidate counts, and whether the shared pool actually
-reported those counts. Candidate observations are aggregated in memory into
-that terminal receipt; no per-candidate log or telemetry request is made. The
+reported those counts. A `rejected` outcome also carries `rejectionReason`: one
+code from the scenario's declared `rejectionCodes`, an exhaustive record of its
+adjudicator's reason type, or `UNDECLARED`. The logger admits only a short
+ASCII identifier there and records anything else as `UNDECLARED`, so no answer,
+material, provider, or free text can enter the field. Candidate observations
+are aggregated in memory into that terminal receipt; no per-candidate log or
+telemetry request is made. The
 logger rebuilds an allowlisted object, a failing sink cannot affect the scenario,
 and no cold/warm field exists because provider cache state is not provable inside
 Matter. Cache hits, missing adapters, and caller cancellations remain silent.
@@ -607,9 +616,10 @@ application persistence and cannot stand in for externally measured origin SLOs.
 Browser model and audio POSTs use no-store transport and reject redirects; the
 same is true between Matter and its configured model relay. These flags are a
 privacy and routing boundary, not an answer cache. The only shared in-process
-answer cache remains the bounded label cache: its key covers the complete
-normalized label input and prompt version, its value is only the adjudicated
-label, and the browser still revalidates current material and operation identity.
+answer cache remains the bounded label cache: its key is the SHA-256 digest of
+the credential scope and complete label question, its value is only the
+adjudicated label, and the browser still revalidates current material and
+operation identity.
 
 Recovery stays with the state owner: a validated inverse journal recovers local
 undo after reload; interaction cancel preserves its semantic address for pointer
@@ -645,7 +655,7 @@ app/
   api/label/route.ts               implemented label boundary; live adapter gated
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
-  api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; live gate off
+  api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; public surface, managed adapter off
   api/provider-session/route.ts    no-store persistent provider status, explicit test/save, and removal
 
 features/matter/
@@ -669,7 +679,7 @@ features/matter/
   runtime/                         pure event reducer and effect descriptions
   interaction/                     DOM geometry and pointer/voice adapters
   persistence/                     codec, IndexedDB, archive transport
-  server/                          provider adapters, planner, transcription
+  server/                          route handlers, provider adapters, transcription
   components/
   store/
 
