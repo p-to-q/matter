@@ -89,10 +89,40 @@ describe("subscribeDeliveryWindow", () => {
     h.subscription.unsubscribe();
   });
 
-  it("releases a pointer whose capture was lost", () => {
+  it("releases a pointer whose capture was lost with no button held", () => {
     const h = subscribe();
     pageWindow.dispatchEvent(pointer("pointerdown", 5, 1));
     pageWindow.dispatchEvent(pointer("lostpointercapture", 5));
+    expect(h.onChange).toHaveBeenLastCalledWith(true);
+    h.subscription.unsubscribe();
+  });
+
+  it("keeps the window closed when canvas code releases capture mid-press", () => {
+    const h = subscribe();
+    pageWindow.dispatchEvent(pointer("pointerdown", 1, 1));
+    // e.g. a drag owner cancelling itself while the person still presses.
+    pageWindow.dispatchEvent(pointer("lostpointercapture", 1, 1));
+    expect(h.onChange).toHaveBeenLastCalledWith(false);
+    pageWindow.dispatchEvent(pointer("pointermove", 1, 1));
+    expect(h.onChange).toHaveBeenLastCalledWith(false);
+    pageWindow.dispatchEvent(pointer("pointerup", 1));
+    expect(h.onChange).toHaveBeenLastCalledWith(true);
+    h.subscription.unsubscribe();
+  });
+
+  it("closes again for a pointer seen pressed only by its move", () => {
+    const h = subscribe();
+    // Released on blur while the person kept pressing, or pressed before
+    // this owner subscribed: its next pressed move is the only evidence.
+    pageWindow.dispatchEvent(pointer("pointerdown", 2, 1));
+    pageWindow.dispatchEvent(new Event("blur"));
+    expect(h.onChange).toHaveBeenLastCalledWith(true);
+    pageWindow.dispatchEvent(pointer("pointermove", 2, 1));
+    expect(h.onChange).toHaveBeenLastCalledWith(false);
+    h.onChange.mockClear();
+    pageWindow.dispatchEvent(pointer("pointermove", 2, 1));
+    expect(h.onChange).not.toHaveBeenCalled();
+    pageWindow.dispatchEvent(pointer("pointerup", 2));
     expect(h.onChange).toHaveBeenLastCalledWith(true);
     h.subscription.unsubscribe();
   });

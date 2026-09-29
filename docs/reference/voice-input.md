@@ -340,9 +340,11 @@ already crossed submit. That bounded inference may finish in the existing local
 worker; any material write then waits until the page is visible, no pointer is
 active, and its exact node is rendered. One owner tracks pressed pointers for
 admission, Point Talk, and Elastic; a release it never saw — outside the
-window, during a permission sheet — is recovered on window blur, lost pointer
-capture, or the next buttonless move, so one lost `pointerup` cannot hold
-delivery closed. `pagehide`, document replacement,
+window, during a permission sheet — is recovered on window blur, capture
+lost with no button held, or the next buttonless move, so one lost `pointerup`
+cannot hold delivery closed. Canvas code may release capture while the person
+still presses; that is not a release, and a pressed move closes the window
+again for a pointer it had cleared. `pagehide`, document replacement,
 explicit cancellation, and owner disposal still retire the worker and reject
 late messages. Returning visible never starts capture, constructs a worker, or
 reloads model assets by itself; it may only release an already-retained result.

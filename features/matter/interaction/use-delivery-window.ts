@@ -8,12 +8,13 @@ import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
  * Elastic: submitted work may change material only while the page is visible,
  * the caller's surface is available, and no pointer is pressed.
  *
- * A pressed pointer is released by `pointerup`, `pointercancel`, or
- * `lostpointercapture`, and also by evidence that its release was never
- * delivered here: the window losing focus (a permission sheet, another
- * application) or its next move reporting no pressed buttons (a mouse let go
+ * A pressed pointer is released by `pointerup` or `pointercancel`, and also by
+ * evidence that its release was never delivered here: capture lost with no
+ * button held, the window losing focus (a permission sheet, another
+ * application), or its next move reporting no pressed buttons (a mouse let go
  * outside the window). Without those, one lost release would hold delivery
- * closed for the rest of the session.
+ * closed for the rest of the session. Canvas code may release capture while
+ * the person still presses, so a pressed move re-closes the window.
  */
 export type DeliveryWindowBinding = Readonly<{
   /** Caller-owned surface availability, read at every evaluation. */
@@ -58,9 +59,18 @@ export function subscribeDeliveryWindow(
     pressed.delete(event.pointerId);
     evaluate();
   };
+  const onCaptureLost = (event: PointerEvent) => {
+    if (event.buttons !== 0) return;
+    onPointerReleased(event);
+  };
   const onPointerMove = (event: PointerEvent) => {
-    if (event.buttons !== 0 || !pressed.delete(event.pointerId)) return;
-    evaluate();
+    if (event.buttons === 0) {
+      if (pressed.delete(event.pointerId)) evaluate();
+      return;
+    }
+    if (pressed.has(event.pointerId)) return;
+    pressed.add(event.pointerId);
+    binding.onChange(false);
   };
   const onWindowBlur = (event: Event) => {
     // Element blur does not bubble, but a capturing ancestor would still see
@@ -75,7 +85,7 @@ export function subscribeDeliveryWindow(
   pageWindow.addEventListener("pointerdown", onPointerDown, capture);
   pageWindow.addEventListener("pointerup", onPointerReleased, capture);
   pageWindow.addEventListener("pointercancel", onPointerReleased, capture);
-  pageWindow.addEventListener("lostpointercapture", onPointerReleased, capture);
+  pageWindow.addEventListener("lostpointercapture", onCaptureLost, capture);
   pageWindow.addEventListener("pointermove", onPointerMove, { capture: true, passive: true });
   pageWindow.addEventListener("blur", onWindowBlur);
   const unsubscribeSuspension = subscribePageSuspension(
@@ -96,7 +106,7 @@ export function subscribeDeliveryWindow(
       pageWindow.removeEventListener("pointerdown", onPointerDown, capture);
       pageWindow.removeEventListener("pointerup", onPointerReleased, capture);
       pageWindow.removeEventListener("pointercancel", onPointerReleased, capture);
-      pageWindow.removeEventListener("lostpointercapture", onPointerReleased, capture);
+      pageWindow.removeEventListener("lostpointercapture", onCaptureLost, capture);
       pageWindow.removeEventListener("pointermove", onPointerMove, capture);
       pageWindow.removeEventListener("blur", onWindowBlur);
       unsubscribeSuspension();
