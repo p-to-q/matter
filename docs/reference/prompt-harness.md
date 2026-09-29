@@ -3,7 +3,7 @@
 Modules: `features/matter/server/harness.ts`, `prompt-spine.ts`,
 `repair-harness.ts`, `label-harness.ts`, `inquiry-harness.ts`,
 `transform-harness.ts`, `text-swap-harness.ts`, `model-pool.ts`,
-`user-provider-registry.ts`
+`user-provider-registry.ts`, `openai-chat-completion.ts`, `completion-outcome.ts`
 
 ## Problem
 
@@ -217,12 +217,17 @@ therefore cannot be reinterpreted as a locally short answer.
 The boundary is fail-closed for every explicit terminator. Known complete values
 may return text; truncation, guardrail/refusal, tool/continuation, conflicting
 fields, and explicit unknown values cannot. The managed pool and every
-compatible user transport read one shared vocabulary in `completion-outcome.ts`,
-so a terminator cannot answer on one lane and be refused on the other. The
-official OpenAI, DeepSeek, Anthropic, and Responses wires keep their own
-narrower lists; Gemini's official OpenAI-compatible transport is the exception
-and reads the shared list, because its documented surface is the compatible
-one. A missing field remains a
+compatible chat-completions user transport read one shared vocabulary in
+`completion-outcome.ts`, over one response parser in
+`openai-chat-completion.ts`, so a terminator cannot answer on one lane and be
+refused on the other. The official OpenAI and DeepSeek chat transports keep a
+narrower list. Anthropic Messages and the Responses API are different wires:
+each of their transports, official or compatible, reads its own stop fields
+with its own vocabulary. Gemini's official OpenAI-compatible transport reads
+the shared list, because its documented surface is the compatible one. The
+shared list knows one numeric form: vLLM's integer stop-token id, such as
+Llama 3's end-of-turn token, beside `finish_reason: "stop"`; any other number,
+or a token id beside another finish, is unknown. A missing field remains a
 counted compatibility path for managed relays while they are measured; a
 reviewed user transport requires an explicit terminator. Production receipts keep
 only closed counts — attempt, timeout, failure, truncation, refusal, unknown,

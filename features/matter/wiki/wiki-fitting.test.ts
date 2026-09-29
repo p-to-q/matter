@@ -384,9 +384,11 @@ describe("script-routed Wiki fitting", () => {
   it("does not fit a word joined to digits, and never routes digits alone", () => {
     const state = withLexemes("Engelbart");
 
+    // A word no relation could name neither votes nor counts as an absence.
     expect(fit(state, "zh-CN", "Englebart2号")).toMatchObject({
       events: [],
-      routedScripts: ["latin"],
+      scannedScripts: ["han"],
+      routedScripts: [],
     });
     expect(fit(state, "zh-CN", "2026年的材料")).toMatchObject({
       events: [],
@@ -398,6 +400,27 @@ describe("script-routed Wiki fitting", () => {
   it("folds full-width Latin to the form the matcher applies", () => {
     expect(fit(withLexemes("Engelbart"), "zh-CN", "我读了Ｅｎｇｌｅｂａｒｔ的论文").events)
       .toEqual([expect.objectContaining({ locale: "en-US", form: "Englebart" })]);
+  });
+
+  it("reads a full-width Latin word by script, not by ledger", () => {
+    const state = withLexemes("Engelbart");
+
+    // In an English turn it votes exactly as it does routed out of Chinese.
+    expect(fit(state, "en-US", "I read Ｅｎｇｌｅｂａｒｔ today")).toMatchObject({
+      events: [expect.objectContaining({ locale: "en-US", form: "Englebart" })],
+      scannedScripts: ["latin"],
+    });
+    // A German turn has no Latin producer, and its full-width words still
+    // never reach the en-US targets.
+    expect(fit(state, "de-DE", "Ｅｎｇｌｅｂａｒｔ").events).toEqual([]);
+  });
+
+  it("never counts a Latin word the producer cannot read as an absence", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of ["Englebart2", "Ｅｎｇｌｅｂａｒｔ２", "Englebart's", "Café"]) {
+      expect(fit(state, "en-US", text)).toMatchObject({ events: [], scannedScripts: [] });
+    }
+    expect(fit(state, "en-US", "Café Englebart").scannedScripts).toEqual(["latin"]);
   });
 
   it("never fits protected or joined literals in routed spans", () => {

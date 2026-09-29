@@ -49,6 +49,13 @@ const ECHO: MatterScenario<string, string> = Object.freeze({
 
 const answers = (text: string): ScenarioAdapter => async () => ({ text });
 
+/** The production receipt is one named line of JSON; its key order is not the contract. */
+function performanceRecord(line: string): Record<string, unknown> {
+  const prefix = "matter.scenario-performance ";
+  expect(line.startsWith(prefix)).toBe(true);
+  return JSON.parse(line.slice(prefix.length)) as Record<string, unknown>;
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
@@ -214,14 +221,20 @@ describe("runScenario", () => {
 
     expect(info).toHaveBeenCalledOnce();
     const line = String(info.mock.calls[0]?.[0]);
-    expect(line).toBe(
-      "matter.scenario-performance "
-      + '{"scenario":"matter-inquiry","outcome":"answered","elapsedMs":128,'
-      + '"candidateTelemetry":"pool","candidateAttempts":2,"candidateTimeouts":1,'
-      + '"candidateFailures":0,"candidateTruncations":0,"candidateRefusals":0,'
-      + '"candidateRejections":0,'
-      + '"candidateUnknownTerminators":0,"candidateMissingTerminators":0}',
-    );
+    expect(performanceRecord(line)).toEqual({
+      scenario: "matter-inquiry",
+      outcome: "answered",
+      elapsedMs: 128,
+      candidateTelemetry: "pool",
+      candidateAttempts: 2,
+      candidateTimeouts: 1,
+      candidateFailures: 0,
+      candidateTruncations: 0,
+      candidateRefusals: 0,
+      candidateRejections: 0,
+      candidateUnknownTerminators: 0,
+      candidateMissingTerminators: 0,
+    });
     expect(line).not.toContain("MATERIAL_SENTINEL");
     expect(line).not.toContain("request_secret");
     info.mockRestore();
@@ -232,7 +245,7 @@ describe("runScenario", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     await runScenario(ECHO, "hello", answers("ok"), new ScenarioGovernor());
     expect(info).toHaveBeenCalledOnce();
-    expect(String(info.mock.calls[0]?.[0])).toContain('"outcome":"answered"');
+    expect(performanceRecord(String(info.mock.calls[0]?.[0]))).toMatchObject({ outcome: "answered" });
   });
 
   it("says why production refused an answer, by declared code only", async () => {
@@ -246,8 +259,10 @@ describe("runScenario", () => {
     expect(warn).not.toHaveBeenCalled();
     expect(info).toHaveBeenCalledOnce();
     const line = String(info.mock.calls[0]?.[0]);
-    expect(line).toContain('"outcome":"rejected"');
-    expect(line.endsWith(',"rejectionReason":"empty"}')).toBe(true);
+    expect(performanceRecord(line)).toMatchObject({
+      outcome: "rejected",
+      rejectionReason: "empty",
+    });
     expect(line).not.toContain("MATERIAL_SENTINEL");
   });
 
@@ -299,8 +314,7 @@ describe("runScenario", () => {
       { ...base, outcome: "answered", rejectionReason: "EMPTY" },
     ].map((observation) => {
       recordScenarioPerformance(observation as ScenarioPerformanceObservation);
-      return JSON.parse(String(info.mock.lastCall?.[0]).replace("matter.scenario-performance ", "")) as
-        Record<string, unknown>;
+      return performanceRecord(String(info.mock.lastCall?.[0]));
     });
 
     expect(lines.map((line) => line.rejectionReason)).toEqual([

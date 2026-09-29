@@ -185,6 +185,30 @@ describe("Wiki automatic term collection", () => {
     })).toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
   });
 
+  it("never collects a full-width Latin spelling in any locale", () => {
+    // Width is decided by the word's script, not by the ledger it belongs to.
+    for (const [locale, text] of [
+      ["en-US", "ＯｐｅｎＡＩ"],
+      ["en-US", "ｍｏｒｐｈｏｇｅｎｅｓｉｓ"],
+      ["de-DE", "ＫＦＣ"],
+      ["de-DE", "Ｍｏｒｐｈｏｇｅｎｅｓｅ"],
+    ] as const) {
+      for (let turn = 0; turn < 2; turn += 1) {
+        expect(collectCommittedWikiTermsResult({ locale, channel: "spoken", text }))
+          .toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
+      }
+    }
+    // Its half-width spelling beside it is still collected, and still an opportunity.
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "ＯｐｅｎＡＩ OpenAI",
+    })).toMatchObject({
+      events: [expect.objectContaining({ locale: "en-US", canonical: "OpenAI" })],
+      scannedScripts: ["latin"],
+    });
+  });
+
   it("never collects from a full-width literal in a Latin-script turn", () => {
     for (const locale of ["en-US", "de-DE"] as const) {
       for (const text of [

@@ -362,7 +362,7 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
     markTranscriptionFulfilled = resolve;
   });
   let transcriptionRequested = false;
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     transcriptionRequested = true;
     await transcriptionGate;
     const response = await route.fetch();
@@ -441,7 +441,7 @@ test("a transcription outage keeps material unchanged and Record again can recov
   const outageFulfilled = new Promise<void>((resolve) => {
     markOutageFulfilled = resolve;
   });
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     transcriptionRequests += 1;
     if (transcriptionRequests === 1) {
       await outageGate;
@@ -620,7 +620,7 @@ test("a finished admission fades in place without moving the passage it admitted
 
 test("Record again after an unrelated edit re-anchors the turn instead of dropping it", async ({ page }) => {
   let transcriptionRequests = 0;
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     transcriptionRequests += 1;
     if (transcriptionRequests === 1) {
       await route.fulfill({

@@ -6,8 +6,12 @@ import type {
 } from "idb";
 import { openDB } from "idb";
 import type { SnapshotBundle } from "./snapshot-codec";
+import type {
+  StoredHistoryEntry,
+  StoredHistoryJournal,
+  StoredHistoryKey,
+} from "./history-journal";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
-import type { TreeCommand } from "../tree/model";
 import type { WikiState } from "../wiki/wiki-model";
 
 /**
@@ -24,28 +28,6 @@ import type { WikiState } from "../wiki/wiki-model";
  */
 
 export const STORAGE_SCHEMA_VERSION = 1 as const;
-export const HISTORY_JOURNAL_FORMAT_VERSION = 1 as const;
-
-export type HistoryStackName = "undo" | "redo";
-
-/** Half-open `[first, end)` positions of one stack inside the manifest epoch. */
-export type StoredHistoryRange = readonly [first: number, end: number];
-
-/**
- * The snapshot row's description of its undo journal. It repeats the row's
- * generation and revision so a row rewritten by a writer that copied the
- * manifest without owning the records is recognized as stale.
- */
-export type StoredHistoryJournal = Readonly<{
-  formatVersion: typeof HISTORY_JOURNAL_FORMAT_VERSION;
-  epoch: number;
-  writeGeneration: number;
-  treeRevision: number;
-  undo: StoredHistoryRange;
-  redo: StoredHistoryRange;
-  count: number;
-  bytes: number;
-}>;
 
 export type StoredSnapshot = Readonly<{
   storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
@@ -60,20 +42,6 @@ export type StoredSnapshot = Readonly<{
    * it only while no save of this schema has replaced that row.
    */
   history?: unknown;
-}>;
-
-export type StoredHistoryKey = [treeId: string, epoch: number, stack: HistoryStackName, position: number];
-
-export type StoredHistoryEntry = Readonly<{
-  formatVersion: typeof HISTORY_JOURNAL_FORMAT_VERSION;
-  treeId: string;
-  epoch: number;
-  stack: HistoryStackName;
-  position: number;
-  commandId: string;
-  source: TreeCommand["source"];
-  inverse: TreeCommand;
-  retainedInverseBytes: number;
 }>;
 
 /** Origin of a stored label. A provisional label is never stored: it is a pure

@@ -92,6 +92,31 @@ test("a check that cannot fail proves nothing", () => {
       expect: /store may depend only on the neutral material lexical port/u,
     },
     {
+      why: "a history journal reaching Wiki through the shared database schema",
+      graph: new Map([
+        ["features/matter/persistence/history-journal.ts", ["features/matter/persistence/matter-database.ts"]],
+        ["features/matter/persistence/matter-database.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /history-journal\.ts reaches Wiki through .*matter-database\.ts -> features\/matter\/wiki\/wiki-model\.ts/u,
+    },
+    {
+      why: "an exported archive serializing Wiki",
+      graph: new Map([
+        ["features/matter/persistence/archive-transport.ts", ["features/matter/wiki/wiki-codec.ts"]],
+        ["features/matter/wiki/wiki-codec.ts", []],
+      ]),
+      expect: /Archive, snapshot, and history modules carry material only/u,
+    },
+    {
+      why: "a snapshot codec that can name a Wiki type",
+      graph: new Map([
+        ["features/matter/persistence/snapshot-codec.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /Archive, snapshot, and history modules carry material only/u,
+    },
+    {
       why: "two transports importing each other",
       graph: new Map([
         ["features/matter/interaction/browser-voice.ts", ["features/matter/interaction/browser-speech-voice.ts"]],
@@ -130,6 +155,24 @@ test("an aliased import is an edge, not an exemption", () => {
       ["features/matter/server/model-pool.ts", []],
     ])).length > 0,
     "a route reaching the provider module must still be reported",
+  );
+});
+
+test("the Wiki repository may still reach Wiki; only persisted material may not", () => {
+  assert.deepEqual(
+    findProblems(new Map([
+      ["features/matter/persistence/wiki-repository.ts", ["features/matter/wiki/wiki-codec.ts"]],
+      ["features/matter/wiki/wiki-codec.ts", []],
+    ])),
+    [],
+  );
+  const graph = buildRepositoryGraph();
+  const persisted = [...graph.keys()].filter((file) =>
+    /^features\/matter\/persistence\/(?:archive|snapshot|history)-/u.test(file) &&
+    !/\.test\./u.test(file));
+  assert.ok(
+    persisted.length >= 4,
+    "the rule must see the archive, snapshot, and history modules it holds",
   );
 });
 

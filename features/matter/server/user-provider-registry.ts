@@ -8,6 +8,7 @@ import {
 } from "../protocol/provider-session-contract";
 import { abortError, rejectOnAbort } from "./abort-boundary";
 import { classifyCompletionTerminators } from "./completion-outcome";
+import { parseOpenAiChatCompletion } from "./openai-chat-completion";
 import type {
   PoolCandidate,
   PoolCompletionDisposition,
@@ -737,7 +738,7 @@ function chatTransport(input: Readonly<{
     }),
     // A compatible mirror reads the same relay families as the managed pool,
     // so it shares that one stop vocabulary rather than keeping a drifting copy.
-    parseCompletion: (payload) => parseChatCompletion(
+    parseCompletion: (payload) => parseOpenAiChatCompletion(
       payload,
       input.completion === "official" ? classifyOfficialChatCompletion : classifyCompletionTerminators,
     ),
@@ -781,29 +782,6 @@ function responsesTransport(input: Readonly<{
       ...(input.reasoning === undefined ? {} : { reasoning: input.reasoning }),
     }),
     parseCompletion: parseResponsesCompletion,
-  });
-}
-
-function parseChatCompletion(
-  payload: unknown,
-  classify: (choice: Readonly<Record<string, unknown>>) => PoolCompletionDisposition,
-): PoolParsedCompletion {
-  if (!isPlainObject(payload) || !Array.isArray(payload.choices) || payload.choices.length === 0) {
-    throw new Error("The model provider response had no choice.");
-  }
-  const choice = payload.choices[0];
-  if (!isPlainObject(choice)) throw new Error("The model provider response had no choice object.");
-  const message = isPlainObject(choice.message) ? choice.message : null;
-  const unusable = hasRefusal(message?.refusal)
-    ? "blocked-or-refused" as const
-    : hasCollection(message?.tool_calls) || hasCollection(choice.tool_calls) ||
-        hasValue(message?.function_call) || hasValue(choice.function_call)
-      ? "tool-or-continuation" as const
-      : undefined;
-  return Object.freeze({
-    content: message?.content,
-    disposition: classify(choice),
-    ...(unusable === undefined ? {} : { unusable }),
   });
 }
 
@@ -1033,20 +1011,6 @@ async function readWithAbort(
   } finally {
     boundary.dispose();
   }
-}
-
-function hasRefusal(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return typeof value !== "string" || value.trim().length > 0;
-}
-
-function hasCollection(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return !Array.isArray(value) || value.length > 0;
-}
-
-function hasValue(value: unknown): boolean {
-  return value !== undefined && value !== null;
 }
 
 function isUserProviderProfileId(value: unknown): value is UserProviderProfileId {

@@ -30,6 +30,7 @@ import {
 import { wikiLatinLedgerLocale } from
   "../../../features/matter/wiki/wiki-script-routing";
 import { selectBestCompleteWikiPerformanceTrial } from "./performance-trials";
+import { recordWikiProducerVotes, type WikiProducerCaseVotes } from "./producer-votes";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const PRODUCER_FILES = Object.freeze([
@@ -41,16 +42,20 @@ const PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-script.ts",
   "features/matter/wiki/wiki-script-routing.ts",
 ]);
-// Version 1.1.0 adds the script route and the matching-only width fold. Both
-// only widen which turns can present an ASCII word; what a vote means for a
-// stored (en-US, form, canonical) relation is unchanged, so the family stays v2.
+// Version 1.1.0 added the script route and the width fold for routed words.
+// Version 1.2.0 decides width by script: every Latin word is read by its
+// folded spelling, in English turns too, and a Latin word the producer cannot
+// read in any width is not an opportunity. Both only change which turns can
+// present an ASCII word; what a vote means for a stored (en-US, form,
+// canonical) relation is unchanged, so the family stays v2.
 const RESOURCE_BYTES = new TextEncoder().encode(
   "ascii-latin:a-z;case-fold:en-US;segmentation:ecmascript-2026;" +
-    "route:zh-CN,zh-TW,ja-JP>en-US:latin;width-fold:ff10-ff19,ff21-ff3a,ff41-ff5a",
+    "route:zh-CN,zh-TW,ja-JP>en-US:latin;" +
+    "width-fold:every-latin-word:ff10-ff19,ff21-ff3a,ff41-ff5a;opportunity:readable-words",
 );
-const PRODUCER_VERSION = "2.1.0";
-const RESOURCE_VERSION = "1.1.0";
-const CORPUS_VERSION = "latin-internal-edit-corpus/2";
+const PRODUCER_VERSION = "2.2.0";
+const RESOURCE_VERSION = "1.2.0";
+const CORPUS_VERSION = "latin-internal-edit-corpus/3";
 const CAPACITY = 512;
 const LOOKUPS = 1_000;
 const PERFORMANCE_TRIALS = 3;
@@ -62,9 +67,9 @@ const QUALIFIED_PERFORMANCE_RECEIPT = Object.freeze({
   attemptedEntryCount: CAPACITY,
   compiledEntryCount: CAPACITY,
   overflowCount: 0,
-  compileMicros: 87_432,
+  compileMicros: 2_038,
   lookupSampleCount: LOOKUPS,
-  lookupP95Micros: 253,
+  lookupP95Micros: 20,
 });
 
 /**
@@ -77,6 +82,9 @@ const QUALIFIED_PERFORMANCE_RECEIPT = Object.freeze({
  * script routing deliberately reverses that, so the case was replaced rather
  * than relabelled. An action names the ledger locale and the stored form, so
  * the full-width positive proves that the folded ASCII form is what is kept.
+ * Corpus 3 adds full-width English and German turns: an English full-width
+ * word votes like its routed spelling, and a German one reaches no en-US
+ * target in either width.
  */
 export const LATIN_INTERNAL_EDIT_CASES = Object.freeze([
   corpusCase("positive-transposition", "positive", "en-US", "spoken",
@@ -165,6 +173,16 @@ export const LATIN_INTERNAL_EDIT_CASES = Object.freeze([
   corpusCase("positive-full-width-parentheses", "positive", "en-US", "spoken",
     "（Englebart），later", ["Engelbart"], "human-material",
     "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-full-width-en-us", "positive", "en-US", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-full-width-en-us-sentence", "positive", "en-US", "spoken",
+    "I read Ｍｏｒｐｈｏｇｅｎａｓｉｓ today", ["Morphogenesis"], "human-material",
+    "relation:en-US:Morphogenasis>Morphogenesis"),
+  corpusCase("adversarial-full-width-digit-joined", "adversarial", "en-US", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ２", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-de-de", "adversarial", "de-DE", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ", ["Engelbart"], "human-material", null),
   corpusCase("ambiguity-two-canonicals", "ambiguity", "en-US", "spoken",
     "Abczefgh", ["Abcxefgh", "Abcyefgh"], "human-material", null),
   corpusCase("ambiguity-canonical-noop", "ambiguity", "en-US", "spoken",
@@ -181,6 +199,8 @@ export const LATIN_INTERNAL_EDIT_CASES = Object.freeze([
     "spoken", "Englebartの論文", ["Engelbart"], "human-material", null),
   corpusCase("locale-isolation-de-de", "locale-isolation", "de-DE", "spoken",
     "Englebart", ["Engelbart"], "human-material", null),
+  corpusCase("locale-isolation-full-width-de-de", "locale-isolation", "de-DE", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ", ["Engelbart"], "human-material", null),
   corpusCase("locale-isolation-en-us", "locale-isolation", "en-US", "spoken",
     "Englebart", ["Engelbart"], "human-material", null),
   corpusCase("protected-code", "protected", "en-US", "spoken",
@@ -231,13 +251,15 @@ export async function runLatinInternalEditQualification(
       ...PERFORMANCE_BUDGET,
     }),
   });
+  const votes = Object.freeze(LATIN_INTERNAL_EDIT_CASES.map((item) =>
+    runCase(item, candidateRelease)));
   const receipt: WikiProducerCorpusRun = Object.freeze({
     qualificationVersion: WIKI_PRODUCER_QUALIFICATION_VERSION,
     identity,
     corpus,
-    outputs: Object.freeze(LATIN_INTERNAL_EDIT_CASES.map((item) => Object.freeze({
+    outputs: Object.freeze(votes.map((item) => Object.freeze({
       caseId: item.caseId,
-      appliedActionId: runCase(item, candidateRelease),
+      appliedActionId: item.appliedActionId,
     }))),
     performance: measureLivePerformance
       ? await measurePerformance(candidateRelease)
@@ -246,13 +268,13 @@ export async function runLatinInternalEditQualification(
   const qualification = await qualifyWikiProducerReleases([
     Object.freeze({ manifest, receipt, artifacts }),
   ]);
-  return Object.freeze({ manifest, receipt, artifacts, qualification });
+  return Object.freeze({ manifest, receipt, artifacts, qualification, votes });
 }
 
 function runCase(
   item: WikiProducerExpectedCase,
   candidateRelease: WikiQualifiedProducerRelease,
-): string | null {
+): WikiProducerCaseVotes {
   const ledger = wikiLatinLedgerLocale(item.input.locale);
   const candidateLocales = item.category === "locale-isolation"
     ? MATTER_LOCALES.filter((locale) => locale !== ledger)
@@ -274,10 +296,13 @@ function runCase(
       ? { eligibleRanges: [{ start: item.input.observedForm.length + 1, end: text.length }] }
       : {}),
   }, new Set(["latin-internal-edit-v2"]));
-  const event = events.length === 1 ? events[0] : undefined;
-  return event?.source === "machine-inference"
-    ? `relation:${event.locale}:${event.form}>${event.canonical}`
-    : null;
+  return recordWikiProducerVotes(item.caseId, events.map((event) =>
+    event.source === "machine-inference"
+      ? Object.freeze({
+          actionId: `relation:${event.locale}:${event.form}>${event.canonical}`,
+          competesFor: `${event.locale}:${event.form}`,
+        })
+      : Object.freeze({ actionId: `term:${event.locale}:${event.canonical}` })));
 }
 
 async function measurePerformance(

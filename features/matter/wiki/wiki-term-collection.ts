@@ -108,9 +108,10 @@ const CENSORED_COLLECTION: WikiTermCollectionResult = Object.freeze({
  *
  * Each word is classified in the ledger its script routes to, so a Latin word
  * inside a Chinese or Japanese turn is an `en-US` term under English stop words
- * and shape rules. A routed word written in full-width Latin is neither a vote
- * nor an opportunity: a collected canonical becomes rewrite output, so it must
- * be a spelling the person produced, and width folding is for matching only.
+ * and shape rules. A Latin word written in full width, in any turn, is neither
+ * a vote nor an opportunity: a collected canonical becomes rewrite output, so
+ * it must be a spelling the person produced, and width folding is for reading
+ * only. Counting it as an absence would age the very term it spells.
  */
 export function collectCommittedWikiTermsResult(
   request: WikiAdmissionObservation,
@@ -145,7 +146,7 @@ export function collectCommittedWikiTermsResult(
         wikiRangeOverlapsProtected(start, end, protectedSpans, 0)) continue;
     const canonical = segment.segment.normalize("NFC");
     const route = routeWikiWord(request.locale, canonical);
-    if (route.routed && (route.widthFolded ||
+    if (route.widthFolded || (route.routed &&
         wikiRangeOverlapsProtected(start, end, routedProtectedSpans, 0))) continue;
     const producer = classifyTerm(route.locale, canonical);
     if (producer !== null && isWikiCanonical(canonical) &&

@@ -177,6 +177,35 @@ describe("generateLabel", () => {
     expect(observation.providerSignal?.aborted).toBe(false);
   });
 
+  it("caches a finished answer even when every caller left before it arrived", async () => {
+    let resolveProvider!: (value: { text: string }) => void;
+    let calls = 0;
+    const adapter: ScenarioAdapter = async () => {
+      calls += 1;
+      return new Promise<{ text: string }>((resolve) => {
+        resolveProvider = resolve;
+      });
+    };
+    const departed = new AbortController();
+    const first = generateLabel(labelRequest({ operationId: "a" }), departed.signal, adapter);
+    await vi.waitFor(() => expect(calls).toBe(1));
+    departed.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+
+    resolveProvider({ text: "想象的生活" });
+    // Let the abandoned flight settle completely, so the next caller cannot
+    // simply join it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const later = await generateLabel(
+      labelRequest({ operationId: "b" }),
+      new AbortController().signal,
+      adapter,
+    );
+    expect(later).toMatchObject({ source: "model", label: "想象的生活" });
+    expect(calls).toBe(1);
+  });
+
   it("serves a repeated question from cache without calling the provider", async () => {
     let calls = 0;
     const adapter: ScenarioAdapter = async () => {

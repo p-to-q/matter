@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { rejectOnAbort } from "./abort-boundary";
+import { createRequestDeadline, endedOnDeadline, rejectOnAbort } from "./abort-boundary";
 
 describe("rejectOnAbort", () => {
   it("settles a race whose work ignores the signal", async () => {
@@ -51,6 +51,74 @@ describe("rejectOnAbort", () => {
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
       process.off("unhandledRejection", unhandled);
+    }
+  });
+});
+
+describe("createRequestDeadline", () => {
+  it("ends on its deadline with a timeout the owner can recognise", () => {
+    vi.useFakeTimers();
+    try {
+      const parent = new AbortController();
+      const deadline = createRequestDeadline(parent.signal, 100);
+
+      vi.advanceTimersByTime(99);
+      expect(deadline.signal.aborted).toBe(false);
+      vi.advanceTimersByTime(1);
+
+      expect(endedOnDeadline(deadline.signal)).toBe(true);
+      deadline.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("turns a caller's private abort into one stable cancellation", () => {
+    const parent = new AbortController();
+    const deadline = createRequestDeadline(parent.signal, 60_000);
+
+    parent.abort(new Error("private caller reason"));
+
+    expect(deadline.signal.aborted).toBe(true);
+    expect(endedOnDeadline(deadline.signal)).toBe(false);
+    expect(deadline.signal.reason).toMatchObject({ name: "AbortError", message: "Cancelled" });
+    deadline.dispose();
+  });
+
+  it("keeps a parent deadline's identity through a nested deadline", () => {
+    const parent = new AbortController();
+    const nested = createRequestDeadline(parent.signal, 60_000);
+
+    parent.abort(new DOMException("Timed out", "TimeoutError"));
+
+    expect(endedOnDeadline(nested.signal)).toBe(true);
+    nested.dispose();
+  });
+
+  it("starts ended for a parent that has already aborted", () => {
+    const parent = new AbortController();
+    parent.abort();
+    const deadline = createRequestDeadline(parent.signal, 60_000);
+
+    expect(deadline.signal.aborted).toBe(true);
+    expect(endedOnDeadline(deadline.signal)).toBe(false);
+    deadline.dispose();
+  });
+
+  it("neither times out nor follows the parent once disposed", () => {
+    vi.useFakeTimers();
+    try {
+      const parent = new AbortController();
+      const deadline = createRequestDeadline(parent.signal, 100);
+      deadline.dispose();
+      deadline.dispose();
+
+      vi.advanceTimersByTime(1_000);
+      parent.abort();
+
+      expect(deadline.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

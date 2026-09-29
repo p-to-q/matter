@@ -242,7 +242,7 @@ test("capture the Matter launch master", async ({ context, page }) => {
     }
     await route.fallback();
   });
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     const contentType = route.request().headers()["content-type"] ?? "";
     if (route.request().method() === "POST" && contentType.startsWith("multipart/form-data")) {
       transcriptionRequests += 1;

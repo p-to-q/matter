@@ -128,8 +128,10 @@ itself.
 
 Informed implicit acceptance is approval (owner decision, 2026-09-29). One
 exact applied occurrence settles exactly once, through the pure policy in
-`wiki-learning-policy.ts` and the state transition
-`applyWikiOccurrenceSettlement` in `wiki-evidence.ts`. A settlement carries an
+`wiki-learning-policy.ts` and the state transition in
+`wiki-occurrence-settlement.ts`, entered through `applyWikiOccurrenceSettlement`
+in `wiki-evidence.ts`, which routes explicit outcomes through its own human
+decision paths. A settlement carries an
 opaque random occurrence identity minted by the occurrence owner (never derived
 from text or an address), the applied rule descriptor, the Wiki state revision
 of the basis that applied it (the lexical session's `sourceRevision`), and the
@@ -260,6 +262,16 @@ is that silence over disclosed but unread generated text is weaker evidence
 than silence over a person's own dictation. Every weight and memory is a
 calibration candidate.
 
+Today that switch is unreachable. Generated text receives only the written
+channel's rules, and every automatic relation is spoken, because the one
+released fitting producer observes spoken human admission only; a written rule
+is therefore always human-confirmed, and confirmed rules stay outside scoring.
+The switch gains an effect only when a written-channel producer exists. The
+`generated-implicit-acceptance-counts-by-policy` policy scenario replays a
+spoken relation settled from generated text, a combination production cannot
+produce; it stays in the corpus as a forward guard for that producer, not as
+evidence of current behavior.
+
 No rule falls back across locales. The same form may resolve differently in
 `zh-CN`, `zh-TW`, `ja-JP`, `de-DE`, and `en-US`; an unsupported or missing
 locale cannot activate a rule. [Script routing](#script-routing) is not a
@@ -307,12 +319,20 @@ A segment is routed when it has a letter and every letter is Latin. A segment
 mixing scripts, such as Latin joined to Bopomofo, stays in the turn locale,
 where no Latin producer reads it, so a host segmenter that failed to break
 would lose routing, not precision. Full-width ASCII, meaning letters, digits,
-and symbols such as `＠／．－｀`, folds to ASCII for matching and protection
-only, index for index, as does the ideographic space. The CJK sentence marks
-`，！？；` stay unfolded so a URL or path tail still ends at the sentence.
-Committed text is never width-normalized: only a rule that replaces a whole
-span changes it, and term collection never collects a full-width spelling,
-because a collected canonical becomes rewrite output.
+and symbols such as `＠／．－｀`, folds to ASCII for reading only, index for
+index, as does the ideographic space. The CJK sentence marks `，！？；` stay
+unfolded so a URL or path tail still ends at the sentence. Committed text is
+never width-normalized: only a rule that replaces a whole span changes it.
+
+Width is decided by a word's script, not by its ledger. A Latin word is read
+by its folded spelling in every turn, routed or not: fitting votes for a
+full-width `Ｅｎｇｌｅｂａｒｔ` in an English turn exactly as it does routed out
+of a Chinese one. Term collection never collects a full-width Latin spelling in
+any locale, because a collected canonical becomes rewrite output, and it does
+not count one as an opportunity either, since that would age the very term it
+spells. An English or German turn's own matcher still reads a rule's form as
+written, so a relation learned from a full-width spelling rewrites its
+half-width spelling there and both spellings in a routed turn.
 
 Routing keeps every existing contract of the routed ledger:
 
@@ -332,8 +352,12 @@ Routing keeps every existing contract of the routed ledger:
   identifier stays protected;
 - an occurrence is relation evidence only where a word rule for its form
   could apply, so `@name`, `#tag`, and a hyphen- or underscore-joined word,
-  in full width or not, neither vote nor offer an opportunity. This holds for
-  English turns as well. Term collection still reads such a word as a word.
+  in full width or not, neither vote nor offer an opportunity. Nor does a
+  Latin word the internal-edit producer cannot read in any width, such as one
+  holding a digit, an apostrophe, or a non-ASCII letter: no relation could
+  name it, so its presence says nothing about a relation's absence. This
+  holds for English turns as well. Term collection still reads such a word as
+  a word.
 
 Application is additive, and the turn's own locale keeps authority. In a CJK
 turn the turn's own rules match first, unchanged. The `en-US` view of the same
@@ -407,7 +431,9 @@ boundaries also read full-width ASCII folded, index for index, so `＠name`,
 `＃tag`, a full-width code span, URL, email address, path, or flag, and a
 full-width joiner such as `－` or `＇` protect exactly as their half-width forms
 do. Half-width text folds to itself, so its outcome is unchanged; the same
-test decides what fitting and term collection may count. A Chinese or Japanese
+test decides what fitting and term collection may count. The trie itself
+reads a rule's form as written, so a full-width spelling of an `en-US` or
+`de-DE` rule's form is not rewritten in its own turn. A Chinese or Japanese
 turn's own matching keeps the written-text protection, and Latin spans its
 own rules left untouched are also matched against the `en-US` view they route
 to; see [Script routing](#script-routing).
@@ -550,7 +576,10 @@ archive, or public agent action. This includes the whole dictionary, a filtered
 dictionary, selected canonical terms, and derived pronunciation aliases.
 Server, protocol, and API modules are forbidden from importing Wiki code through
 either static imports or string-literal dynamic imports, so a later product idea
-cannot silently widen today's privacy boundary.
+cannot silently widen today's privacy boundary. The persistence modules that own
+snapshot, undo-journal, and archive shapes may not reach Wiki either, even
+through the shared database schema; `npm run check:architecture` holds both
+rules.
 
 The former transcript-repair `vocabulary` hint was removed rather than reused.
 Repair receives one utterance and locale. Local lexical authority is applied
@@ -683,8 +712,8 @@ shortcut. A Latin word of a Chinese or Japanese turn is classified in the
 `en-US` ledger under English stop words and shape rules, so `OpenAI` said in
 Chinese is the same term as `OpenAI` said in English and English glue such as
 `with` is never collected. Stop words, numeric-only tokens, protected literals,
-full-width routed spellings, generated ranges, and malformed ranges produce no
-evidence. A producer scans eligible
+full-width Latin spellings in any locale, generated ranges, and malformed
+ranges produce no evidence. A producer scans eligible
 words in text order and stops before the 33rd distinct candidate: that turn is
 a partial scan, which scores what it saw and ages nothing, because a candidate
 absent from the scanned prefix may sit in the unscanned remainder. Host
@@ -862,6 +891,17 @@ action names the ledger locale, the stored form, and the canonical, so the
 full-width positive proves the folded ASCII form is what is kept. The term
 corpora likewise bind the ledger locale into every action.
 
+Deciding width by script rather than by ledger moved the same releases again,
+to `latin-internal-edit-v2` 2.2.0 on resource `ascii-latin` 1.2.0 and both term
+producers 1.2.0, each requalified on a version-3 corpus; the families stay
+unchanged for the same reason. Version 1.2.0 of the resource names the fold
+for every Latin word and the rule that only a readable word is an opportunity.
+The Latin corpus adds full-width English positives, a word and a sentence,
+that store the folded form; a full-width digit-joined word; and full-width
+German turns that reach no `en-US` target, in the German ledger or in
+isolation. The term corpora add full-width English and German spellings, both
+distinctive and ordinary, that are never collected.
+
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
 `human-admission` environment. Generated output and protected text produce zero
@@ -880,7 +920,13 @@ closed. The generic verifier does not execute a producer and therefore cannot
 prove that a self-reported receipt came from supplied bytes. Controlled local
 harnesses close that gap for every catalogued producer: they execute exact hashed
 producer artifacts, hash manifest-owned corpora and pinned resources, and
-measure the complete 512-target derived-index bound plus 1,000 lookups. The
+measure the complete 512-target derived-index bound plus 1,000 lookups. Each
+harness records every vote a producer casts for a case, sorted, before it
+derives the one application the verifier scores: votes that name different
+targets for one source compete and apply nothing, every other vote applies,
+and a case with more than one application reports them all, so an abstention
+can never hide two votes. The qualification test pins that only ambiguity
+cases carry competing votes and that every other non-positive case casts none. The
 live wall-clock receipt runs three serial trials and records the best complete
 trial as the uncontended host estimate; a sustained regression must exceed the
 fixed gate in every trial. The
@@ -913,7 +959,8 @@ not age, a routed Latin relation that activates from Chinese turns and ages
 only on Chinese turns that contained Latin, a partial scan that scores only
 what it saw, informed acceptance that
 retains a used rule, generated-text implicit acceptance under the policy
-switch, two-strike reversion, strike-memory expiry, confirmed authority outside
+switch (a forward guard; see [Occurrence outcomes](#occurrence-outcomes)),
+two-strike reversion, strike-memory expiry, confirmed authority outside
 scoring, two same-epoch reverts that strike once, duplicate delivery that
 settles once, kept evidence that never re-activates a demoted relation, and
 generated/protected zero-vote behavior. Its compact release binds

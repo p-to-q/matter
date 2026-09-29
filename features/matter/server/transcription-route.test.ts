@@ -77,6 +77,76 @@ describe("Matter transcription route", () => {
     });
   });
 
+  it("refuses a closed purpose the URL declares before reading any recording byte", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "off";
+    const pulled = vi.fn();
+    const cancelled = vi.fn();
+    // Reading this stream would hold the route until its deadline.
+    const body = new ReadableStream<Uint8Array>({ pull: pulled, cancel: cancelled }, { highWaterMark: 0 });
+
+    const response = await POST(requestFromStream(body, {}, undefined, "?purpose=swap-direction"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+    });
+    expect(pulled).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a closed purpose before judging the recording it carries", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "off";
+    const form = validForm();
+    form.set("purpose", "swap-direction");
+    form.set("durationMs", String(MAX_ACCEPTED_RECORDING_MS + 1));
+
+    // A client that does not declare the purpose in its URL is refused as soon
+    // as the field is read: unavailable and retryable, not a too-long recording.
+    const response = await POST(requestFrom(form));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+    });
+  });
+
+  it("accepts a URL purpose only when the form field names the same purpose", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "public";
+    const matching = validForm();
+    matching.set("purpose", "swap-direction");
+    const mismatched = validForm();
+
+    const accepted = await POST(requestFrom(matching, "?purpose=swap-direction"));
+    const refused = await POST(requestFrom(mismatched, "?purpose=swap-direction"));
+
+    expect(accepted.status).toBe(200);
+    expect(refused.status).toBe(400);
+    await expect(refused.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST", retryable: false },
+    });
+  });
+
+  it.each([
+    ["an unknown purpose", "?purpose=delete"],
+    ["an empty purpose", "?purpose="],
+    ["a repeated purpose", "?purpose=admission&purpose=admission"],
+  ])("rejects %s in the URL before reading any recording byte", async (_name, query) => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    const pulled = vi.fn();
+    const cancelled = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ pull: pulled, cancel: cancelled }, { highWaterMark: 0 });
+
+    const response = await POST(requestFromStream(body, {}, undefined, query));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "INVALID_REQUEST" } });
+    expect(pulled).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
   it("admits swap direction speech when the surface is public and the managed adapter is off", async () => {
     process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
     process.env.MATTER_TEXT_SWAP_SURFACE = "public";
@@ -512,8 +582,8 @@ function validForm(): FormData {
   return form;
 }
 
-function requestFrom(form: FormData): Request {
-  return new Request("http://localhost/api/transcribe", { method: "POST", body: form });
+function requestFrom(form: FormData, query = ""): Request {
+  return new Request(`http://localhost/api/transcribe${query}`, { method: "POST", body: form });
 }
 
 function productionRequestFrom(form: FormData, address = "192.0.2.1"): Request {
@@ -536,8 +606,9 @@ function requestFromStream(
   body: ReadableStream<Uint8Array>,
   headers: Record<string, string> = {},
   signal?: AbortSignal,
+  query = "",
 ): Request {
-  return new Request("http://localhost/api/transcribe", {
+  return new Request(`http://localhost/api/transcribe${query}`, {
     method: "POST",
     headers: {
       "content-type": "multipart/form-data; boundary=x",

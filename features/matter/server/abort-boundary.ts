@@ -39,3 +39,44 @@ export function rejectOnAbort(
 export function abortError(): DOMException {
   return new DOMException("Aborted", "AbortError");
 }
+
+export type RequestDeadline = Readonly<{
+  /** Aborts on the parent's abort or on the deadline, whichever comes first. */
+  signal: AbortSignal;
+  /** Clears the timer and the parent listener. Idempotent; call it on every exit path. */
+  dispose: () => void;
+}>;
+
+/**
+ * One deadline for work done on behalf of `parent`. The signal ends with one
+ * of two stable reasons, so its owner can say which happened without reading
+ * a caller's private reason: a `TimeoutError` when this deadline or a deadline
+ * further up the chain elapsed, and a `Cancelled` `AbortError` for any other
+ * parent abort, such as a disconnect.
+ */
+export function createRequestDeadline(parent: AbortSignal, timeoutMs: number): RequestDeadline {
+  const controller = new AbortController();
+  const cancel = () => controller.abort(endedOnDeadline(parent)
+    ? parent.reason
+    : new DOMException("Cancelled", "AbortError"));
+  if (parent.aborted) cancel();
+  else parent.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(
+    () => controller.abort(new DOMException("Timed out", "TimeoutError")),
+    timeoutMs,
+  );
+  return Object.freeze({
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timeout);
+      parent.removeEventListener("abort", cancel);
+    },
+  });
+}
+
+/** Whether a signal ended because a deadline elapsed, not because a caller left. */
+export function endedOnDeadline(signal: AbortSignal): boolean {
+  return signal.aborted &&
+    signal.reason instanceof DOMException &&
+    signal.reason.name === "TimeoutError";
+}

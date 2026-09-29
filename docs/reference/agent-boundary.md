@@ -101,7 +101,8 @@ the limits in [`../protocol.md`](../protocol.md).
 **Provider code stays in `server/`.** It is the only place a provider name,
 endpoint, or wire shape appears: the managed pool (`model-pool.ts`), reviewed
 user transports (`user-provider-registry.ts`), their pinned public fetch
-(`public-provider-fetch.ts`), and completion settlement
+(`public-provider-fetch.ts`), the one chat-completions response parser both
+lanes read (`openai-chat-completion.ts`), and completion settlement
 (`completion-outcome.ts`). The adapter is chosen per request by server
 configuration and, where the product surface allows it, by a person's own
 sealed Model API key lease; the browser never names one. Fixture, managed, and
