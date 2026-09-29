@@ -35,6 +35,7 @@ export function PointTalkTurn({
   onCommitted,
   onPhaseChange,
   onReleased,
+  penActive,
   presented,
   surfaceAvailable,
   positioningRef,
@@ -62,6 +63,7 @@ export function PointTalkTurn({
   onCommitted: (change: TextSwapCommittedChange) => void;
   onPhaseChange?: (phase: TextSwapInteractionState["phase"]) => void;
   onReleased: () => void;
+  penActive: (timeStamp: number) => boolean;
   presented: boolean;
   surfaceAvailable: boolean;
   positioningRef: RefObject<HTMLElement | null>;
@@ -153,6 +155,7 @@ export function PointTalkTurn({
       onRetry={controller.retry}
       onStartVoice={controller.startRecording}
       onStopVoice={controller.stopRecording}
+      penActive={penActive}
       onSubmit={(direction) => {
         if (!controller.acceptDirection(direction)) return;
         controller.submit();

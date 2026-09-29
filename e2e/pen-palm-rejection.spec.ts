@@ -57,6 +57,35 @@ test.describe("pen-active palm rejection", () => {
     }
   });
 
+  test("a palm that lands just before the pen keeps a typed Point and Talk direction", async ({ page }) => {
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator("[data-thought-text-id]").first();
+    await passage.hover();
+    await page.locator("[data-node-action=point-talk]").click();
+    const pointTalk = page.locator(".point-talk");
+    const field = pointTalk.locator("input");
+    await expect(field).toBeVisible();
+    await field.fill("更凝练一些");
+    const fieldBox = await field.boundingBox();
+    const box = await paperBox(page.locator(".matter-document"));
+    if (fieldBox === null) throw new Error("Point and Talk field is not visible");
+    const session = await page.context().newCDPSession(page);
+    try {
+      const palm = { x: box.x + 60, y: box.y + box.height - 90 };
+      const nib = { x: fieldBox.x + fieldBox.width / 2, y: fieldBox.y + fieldBox.height / 2 };
+      await touch(session, "touchStart", palm);
+      await pen(session, "mousePressed", nib);
+      await pen(session, "mouseReleased", nib);
+      await touch(session, "touchEnd");
+      await page.waitForTimeout(500);
+      await expect(pointTalk).toBeVisible();
+      await expect(field).toHaveValue("更凝练一些");
+    } finally {
+      await session.detach();
+    }
+  });
+
   test("two fingers still pinch when no pen is touching", async ({ page }) => {
     const { paper, shell, session } = await openPanCanvas(page);
     try {

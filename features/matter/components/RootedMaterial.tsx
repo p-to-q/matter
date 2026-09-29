@@ -184,6 +184,7 @@ import {
   createCanvasPointerArbiter,
   type ArbitratedPointer,
 } from "../runtime/canvas-pointer-arbitration";
+import { deferUntilTouchCommits } from "./touch-commitment";
 import { useEscapeLayer } from "./escape-layers";
 
 const PointTalkTurn = dynamic(
@@ -612,6 +613,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
   // One gesture owner and pen-active palm rejection; see the module contract.
   const [pointerArbiter] = useState(createCanvasPointerArbiter);
+  // Work-dismissing effects of a touch that may still be a palm; see
+  // `touchCommitment`. Mouse and pen founders act at once.
+  const pendingTouchEffectsRef = useRef<Readonly<{
+    pointerId: number;
+    effects: (() => void)[];
+    discard: () => void;
+  }> | null>(null);
+  const settleTouchFounderEffects = useCallback((run: boolean) => {
+    const pending = pendingTouchEffectsRef.current;
+    if (pending === null) return;
+    pendingTouchEffectsRef.current = null;
+    pending.discard();
+    if (run) for (const effect of pending.effects) effect();
+  }, []);
+  useEffect(() => () => settleTouchFounderEffects(false), [settleTouchFounderEffects]);
   const clearNodeDrag = useCallback(() => {
     const gesture = nodeDragRef.current;
     if (gesture?.targetElement) delete gesture.targetElement.dataset.dragOver;
@@ -2821,6 +2837,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
 
   const cancelCanvasPointerOwnership = useCallback(() => {
     pointerArbiter.reset();
+    settleTouchFounderEffects(false);
     const touchPointerIds = Array.from(canvasTouchContactsRef.current.keys());
     canvasTouchContactsRef.current.clear();
     multiTouchNavigationRef.current = false;
@@ -2837,12 +2854,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointerOriginNodeRef.current = null;
     cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
-  }, [cancelNodeDragOwnership, lasso, pointerArbiter, updateViewport]);
+  }, [cancelNodeDragOwnership, lasso, pointerArbiter, settleTouchFounderEffects, updateViewport]);
 
-  // A pen that lands just after a palm owns the canvas: the palm's lasso
+  // A pen that lands anywhere just after a palm revokes it: the palm's lasso
   // stroke restores its prior selection, its pan returns the camera to where it
-  // began, and its node drag ends before anything settled.
+  // began, and its node drag and tap never settle.
   const revokeTouchesForPen = useCallback((pointerIds: readonly number[]) => {
+    // The palm never committed, so nothing it would have dismissed is lost.
+    settleTouchFounderEffects(false);
     const shell = shellRef.current;
     for (const pointerId of pointerIds) {
       canvasTouchContactsRef.current.delete(pointerId);
@@ -2853,14 +2872,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     multiTouchNavigationRef.current = false;
     pointerOriginNodeRef.current = null;
-  }, [cancelNodeDragOwnership, lasso, updateViewport]);
+  }, [cancelNodeDragOwnership, lasso, settleTouchFounderEffects, updateViewport]);
 
   useEffect(() => {
     // Capture phase: a control that stops propagation must not strand a pen
     // "in contact" or a canvas owner. The arbiter keeps an ended pointer's
     // disposition until the next contact, so the canvas handlers that run
     // after this still recognise it.
-    const noteDown = (event: PointerEvent) => pointerArbiter.notePointerDown(arbitratedPointer(event));
+    const noteDown = (event: PointerEvent) => {
+      const revoked = pointerArbiter.notePointerDown(arbitratedPointer(event));
+      if (revoked.length > 0) revokeTouchesForPen(revoked);
+    };
     const noteMove = (event: PointerEvent) => pointerArbiter.notePointerMove(arbitratedPointer(event));
     const noteEnd = (event: PointerEvent) => pointerArbiter.notePointerEnd(arbitratedPointer(event));
     window.addEventListener("pointerdown", noteDown, true);
@@ -2873,7 +2895,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       window.removeEventListener("pointerup", noteEnd, true);
       window.removeEventListener("pointercancel", noteEnd, true);
     };
-  }, [pointerArbiter]);
+  }, [pointerArbiter, revokeTouchesForPen]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -3047,9 +3069,27 @@ export function RootedMaterial(props: RootedMaterialProps) {
           event.preventDefault();
           return;
         }
-        if (claim?.kind === "takeover") revokeTouchesForPen(claim.cancelledTouchIds);
+        // Interrupting camera motion loses nothing and stays immediate.
         const pointerViewport = interruptIndexCameraMotion();
-        abortFixedExpansion();
+        if (event.pointerType === "touch" && claim?.kind === "accept" && claim.founder) {
+          // A resting palm must not close Point and Talk or drop a committed
+          // degree before the pen that follows it can take over.
+          settleTouchFounderEffects(false);
+          const effects: (() => void)[] = [abortFixedExpansion];
+          const pointerId = event.pointerId;
+          pendingTouchEffectsRef.current = {
+            pointerId,
+            effects,
+            discard: deferUntilTouchCommits(
+              { pointerId, clientX: event.clientX, clientY: event.clientY },
+              () => {
+                if (pendingTouchEffectsRef.current?.pointerId === pointerId) settleTouchFounderEffects(true);
+              },
+            ),
+          };
+        } else {
+          abortFixedExpansion();
+        }
         if (event.pointerType === "touch") {
           const contact = projectCanvasTouchContact(
             event.pointerId,
@@ -3059,6 +3099,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           );
           if (contact !== null) canvasTouchContactsRef.current.set(event.pointerId, contact);
           if (canvasTouchContactsRef.current.size >= 2) {
+            // A second finger makes it a pinch: a real gesture, not a palm.
+            settleTouchFounderEffects(true);
             for (const pointerId of canvasTouchContactsRef.current.keys()) {
               if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
             }
@@ -3087,7 +3129,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           lassoClickOriginNodeRef.current = originNodeId !== null && workingContext.activeNodeIds.has(originNodeId)
             ? originNodeId
             : null;
-          props.admission.clearRepairPresentations();
+          const pendingTouchEffects = pendingTouchEffectsRef.current;
+          if (pendingTouchEffects?.pointerId === event.pointerId) {
+            pendingTouchEffects.effects.push(props.admission.clearRepairPresentations);
+          } else {
+            props.admission.clearRepairPresentations();
+          }
           event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -3747,6 +3794,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onCommitted={publishPointTalkChange}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
+            penActive={pointerArbiter.penActive}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}
@@ -3777,6 +3825,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           onFocusRestored={finishStretchFocusRestore}
           onPreciseGesture={props.admission.clearRepairPresentations}
           onRequestFocusRestore={requestStretchFocusRestore}
+          penActive={pointerArbiter.penActive}
           restoreFocusHandle={stretchFocusRestoreHandle}
           status={transformState.phase}
           stretchVisible={materialPresentationAvailable && elasticSelection !== null}
@@ -4161,6 +4210,7 @@ function LassoOverlay({
   onFocusRestored,
   onPreciseGesture,
   onRequestFocusRestore,
+  penActive,
   restoreFocusHandle,
   status,
   stretchVisible,
@@ -4185,6 +4235,7 @@ function LassoOverlay({
   onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
+  penActive: (timeStamp: number) => boolean;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretchVisible: boolean;
@@ -4303,6 +4354,7 @@ function LassoOverlay({
               onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
+              penActive={penActive}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
@@ -4315,6 +4367,7 @@ function LassoOverlay({
               onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
+              penActive={penActive}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
@@ -4406,6 +4459,7 @@ function StretchHandleButton({
   onFocusRestored,
   onPreciseGesture,
   onRequestFocusRestore,
+  penActive,
   restoreFocusHandle,
   status,
   stretch,
@@ -4417,6 +4471,7 @@ function StretchHandleButton({
   onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
+  penActive: (timeStamp: number) => boolean;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretch: ReturnType<typeof useStretch>;
@@ -4460,6 +4515,9 @@ function StretchHandleButton({
       onPointerDown={(event) => {
         event.stopPropagation();
         if (status === "requesting") return;
+        // The grips sit outside the canvas owner, so they apply the same palm
+        // rule themselves: a touch while a pen writes is not a stretch.
+        if (event.pointerType === "touch" && penActive(event.timeStamp)) return;
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           onBeginAdjustment();

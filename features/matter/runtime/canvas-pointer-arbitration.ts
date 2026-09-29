@@ -10,9 +10,9 @@
  * Rules, all driven by values the caller passes (event time included):
  * - a touch pointer-down while a pen is in contact, or within
  *   `PEN_PALM_GRACE_MS` of its last contact event, is rejected;
- * - a pen that lands within `PEN_TAKEOVER_WINDOW_MS` of a single-finger touch
- *   takes the canvas over; the caller cancels that touch and restores what it
- *   had changed;
+ * - a pen that lands anywhere within `PEN_TAKEOVER_WINDOW_MS` of a
+ *   single-finger touch takes the canvas over, even inside a local field: the
+ *   caller cancels that touch and restores what it had changed;
  * - otherwise the first pointer owns the gesture. Only another touch may join
  *   a touch owner (a pinch); any other pointer-down is rejected until the owner
  *   ends;
@@ -43,9 +43,7 @@ export type ArbitratedPointer = Readonly<{
 export type CanvasPointerClaim =
   | Readonly<{ kind: "reject" }>
   /** `founder` is false for a touch joining an existing touch owner. */
-  | Readonly<{ kind: "accept"; founder: boolean }>
-  /** The pen founded a new owner; the caller must cancel these touches. */
-  | Readonly<{ kind: "takeover"; cancelledTouchIds: readonly number[] }>;
+  | Readonly<{ kind: "accept"; founder: boolean }>;
 
 type OwnerType = "mouse" | "pen" | "touch";
 
@@ -58,8 +56,11 @@ type Owner = {
 };
 
 export type CanvasPointerArbiter = Readonly<{
-  /** Window capture phase, for every pointer-down anywhere. */
-  notePointerDown: (pointer: ArbitratedPointer) => void;
+  /**
+   * Window capture phase, for every pointer-down anywhere. Returns the touches
+   * a pen revoked by landing just after them; the caller cancels them.
+   */
+  notePointerDown: (pointer: ArbitratedPointer) => readonly number[];
   /** Window capture phase, for every pointer-move anywhere. */
   notePointerMove: (pointer: ArbitratedPointer) => void;
   /** Window capture phase, for every pointer-up and pointer-cancel anywhere. */
@@ -109,9 +110,21 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
       for (const [pointerId, rejectedAt] of rejectedClicks) {
         if (pointer.timeStamp - rejectedAt > REJECTED_CLICK_TTL_MS) rejectedClicks.delete(pointerId);
       }
-      if (pointer.pointerType !== "pen") return;
+      // A new contact with a reused id (a mouse is always 1) owns its own
+      // click; only a claim that rejects it may suppress that click again.
+      rejectedClicks.delete(pointer.pointerId);
+      if (pointer.pointerType !== "pen") return NONE;
       pensInContact.add(pointer.pointerId);
       lastPenContactAt = pointer.timeStamp;
+      if (
+        owner?.type !== "touch" ||
+        owner.contactsSeen !== 1 ||
+        pointer.timeStamp - owner.startedAt > PEN_TAKEOVER_WINDOW_MS
+      ) return NONE;
+      const revoked = Object.freeze(Array.from(owner.pointerIds));
+      for (const pointerId of revoked) rejectAt(pointerId, pointer.timeStamp);
+      owner = null;
+      return revoked;
     },
     notePointerMove(pointer: ArbitratedPointer) {
       if (pointer.pointerType === "pen" && pensInContact.has(pointer.pointerId)) {
@@ -146,17 +159,6 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
         owner.pointerIds.add(pointer.pointerId);
         owner.contactsSeen += 1;
         return JOINED;
-      }
-      if (
-        type === "pen" &&
-        owner?.type === "touch" &&
-        owner.contactsSeen === 1 &&
-        pointer.timeStamp - owner.startedAt <= PEN_TAKEOVER_WINDOW_MS
-      ) {
-        const cancelledTouchIds = Object.freeze(Array.from(owner.pointerIds));
-        for (const pointerId of cancelledTouchIds) rejectAt(pointerId, pointer.timeStamp);
-        found("pen", pointer);
-        return Object.freeze({ kind: "takeover", cancelledTouchIds });
       }
       if (owner !== null) {
         rejectAt(pointer.pointerId, pointer.timeStamp);
@@ -193,6 +195,47 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
   });
 }
 
+/** Travel after which a touch is a real gesture rather than a resting palm. */
+export const TOUCH_COMMIT_SLOP_PX = 8;
+
+export type TouchCommitmentOrigin = Readonly<{ pointerId: number; clientX: number; clientY: number }>;
+
+export type TouchCommitmentSignal =
+  | Readonly<{ type: "move"; pointerId: number; clientX: number; clientY: number }>
+  | Readonly<{ type: "end"; pointerId: number; cancelled: boolean }>
+  | Readonly<{ type: "pen-down" }>
+  | Readonly<{ type: "window-elapsed" }>;
+
+/**
+ * A touch that founds a canvas gesture may be a palm that a pen is about to
+ * follow. Effects that dismiss a person's work (a Point and Talk draft, a
+ * committed Elastic degree, a repair presentation) wait until that touch
+ * commits: it travels beyond the slop, ends as a tap, or outlives the pen
+ * takeover window. A pen landing first, or the browser cancelling the touch,
+ * discards them. Only that touch's own events count.
+ */
+export function touchCommitment(
+  origin: TouchCommitmentOrigin,
+  signal: TouchCommitmentSignal,
+): "commit" | "discard" | "wait" {
+  switch (signal.type) {
+    case "pen-down":
+      return "discard";
+    case "window-elapsed":
+      return "commit";
+    case "end":
+      if (signal.pointerId !== origin.pointerId) return "wait";
+      return signal.cancelled ? "discard" : "commit";
+    case "move":
+      if (signal.pointerId !== origin.pointerId) return "wait";
+      return Math.hypot(signal.clientX - origin.clientX, signal.clientY - origin.clientY) >=
+          TOUCH_COMMIT_SLOP_PX
+        ? "commit"
+        : "wait";
+  }
+}
+
+const NONE: readonly number[] = Object.freeze([]);
 const REJECT: CanvasPointerClaim = Object.freeze({ kind: "reject" });
 const FOUNDER: CanvasPointerClaim = Object.freeze({ kind: "accept", founder: true });
 const JOINED: CanvasPointerClaim = Object.freeze({ kind: "accept", founder: false });

@@ -22,6 +22,7 @@ import {
 } from "./point-talk-placement";
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
 import { useEscapeLayer } from "./escape-layers";
+import { deferUntilTouchCommits } from "./touch-commitment";
 
 export function PointTalkComposer({
   boundaryRef,
@@ -36,6 +37,7 @@ export function PointTalkComposer({
   onStartVoice,
   onStopVoice,
   onSubmit,
+  penActive,
   positioningRef,
   surfaceAvailable,
   targetBounds,
@@ -53,6 +55,7 @@ export function PointTalkComposer({
   onStartVoice: () => void;
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
+  penActive: (timeStamp: number) => boolean;
   positioningRef: RefObject<HTMLElement | null>;
   surfaceAvailable: boolean;
   targetBounds: PointTalkBounds | null;
@@ -198,6 +201,7 @@ export function PointTalkComposer({
 
   useEffect(() => {
     if (!surfaceAvailable) return;
+    let pendingTouchDismissal: (() => void) | null = null;
     const cancelFromOutsidePointer = (event: PointerEvent) => {
       const target = event.target;
       const targetElement = target instanceof Element
@@ -205,16 +209,32 @@ export function PointTalkComposer({
         : target instanceof Node
           ? target.parentElement
           : null;
-      if (pointTalkOutsidePointerDismisses({
+      if (!pointTalkOutsidePointerDismisses({
         insideBubble: target instanceof Node && bubbleRef.current?.contains(target) === true,
         insideCanvasChrome: targetElement?.closest("[data-canvas-chrome]") != null,
         insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
-      })) onCancel();
+      })) return;
+      if (event.pointerType !== "touch") {
+        onCancel();
+        return;
+      }
+      // A palm while a pen writes (perhaps into this very field) is not a tap.
+      if (penActive(event.timeStamp)) return;
+      // A palm resting beside the pen must not discard a typed direction: a
+      // touch dismisses only once it commits to a real tap or gesture.
+      pendingTouchDismissal?.();
+      pendingTouchDismissal = deferUntilTouchCommits(
+        { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+        onCancel,
+      );
     };
     document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
-    return () => document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
-  }, [onCancel, submitted, surfaceAvailable]);
+    return () => {
+      document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
+      pendingTouchDismissal?.();
+    };
+  }, [onCancel, penActive, submitted, surfaceAvailable]);
 
   useEffect(() => {
     if (

@@ -154,9 +154,15 @@ a pinch. There is no persistent pen mode. While a pen is in contact, and for
 `PEN_PALM_GRACE_MS` (400 ms) after its last contact event, a touch pointer-down
 is rejected before the contact registry, capture, Lasso, drag, or camera; every
 later event of that pointer and its click are ignored, and so is an unowned
-touch's cancel. A pen that lands within `PEN_TAKEOVER_WINDOW_MS` (300 ms) of a
-single-finger touch takes the canvas over: the touch's Lasso stroke restores its
-prior selection and its Pan returns the camera to where it began. Otherwise the
+touch's cancel. A pen that lands anywhere, a local field included, within
+`PEN_TAKEOVER_WINDOW_MS` (300 ms) of a single-finger touch takes the canvas
+over: the touch's Lasso stroke restores its prior selection, its Pan returns the
+camera to where it began, and its tap never settles. Until a touch founder
+commits (it travels `TOUCH_COMMIT_SLOP_PX`, ends as a tap, or outlives the
+window) it dismisses nothing a person made: Point and Talk, a committed Elastic
+degree, and repair presentations wait, while camera interruption stays
+immediate. The grips and Point and Talk's outside dismissal apply the same rule
+themselves, since they sit outside the canvas owner. Otherwise the
 first pointer owns the gesture and only another touch may join it, so two
 fingers still pinch whenever no pen is touching. Pen hover is not activity, and
 a mouse alone behaves as before. Pen contact is noted in the window capture

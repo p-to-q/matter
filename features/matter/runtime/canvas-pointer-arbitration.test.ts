@@ -4,6 +4,8 @@ import {
   PEN_PALM_GRACE_MS,
   PEN_TAKEOVER_WINDOW_MS,
   REJECTED_CLICK_TTL_MS,
+  TOUCH_COMMIT_SLOP_PX,
+  touchCommitment,
   type ArbitratedPointer,
   type CanvasPointerArbiter,
 } from "./canvas-pointer-arbitration";
@@ -84,10 +86,10 @@ describe("canvas pointer arbitration", () => {
   it("lets a pen take over a single-finger touch that began just before it", () => {
     const arbiter = createCanvasPointerArbiter();
     expect(down(arbiter, pointer(PALM, "touch", 0))).toEqual({ kind: "accept", founder: true });
-    expect(down(arbiter, pointer(PEN, "pen", PEN_TAKEOVER_WINDOW_MS))).toEqual({
-      kind: "takeover",
-      cancelledTouchIds: [PALM],
-    });
+    // The pen revokes the palm wherever it lands, even inside a local field
+    // the canvas never claims; on the paper it then founds its own gesture.
+    expect(arbiter.notePointerDown(pointer(PEN, "pen", PEN_TAKEOVER_WINDOW_MS))).toEqual([PALM]);
+    expect(arbiter.claim(pointer(PEN, "pen", PEN_TAKEOVER_WINDOW_MS))).toEqual({ kind: "accept", founder: true });
     // The cancelled palm's later move, cancel, and click all belong to no one.
     expect(arbiter.isRejected(PALM)).toBe(true);
     expect(arbiter.ignoresCancel(pointer(PALM, "touch", 350))).toBe(true);
@@ -100,7 +102,8 @@ describe("canvas pointer arbitration", () => {
   it("leaves an older touch gesture with its owner instead of taking it over", () => {
     const arbiter = createCanvasPointerArbiter();
     down(arbiter, pointer(FINGER, "touch", 0));
-    expect(down(arbiter, pointer(PEN, "pen", PEN_TAKEOVER_WINDOW_MS + 1))).toEqual({ kind: "reject" });
+    expect(arbiter.notePointerDown(pointer(PEN, "pen", PEN_TAKEOVER_WINDOW_MS + 1))).toEqual([]);
+    expect(arbiter.claim(pointer(PEN, "pen", PEN_TAKEOVER_WINDOW_MS + 1))).toEqual({ kind: "reject" });
   });
 
   it("never lets a pen take over a pinch", () => {
@@ -108,7 +111,8 @@ describe("canvas pointer arbitration", () => {
     down(arbiter, pointer(FINGER, "touch", 0));
     expect(down(arbiter, pointer(PALM, "touch", 10))).toEqual({ kind: "accept", founder: false });
     arbiter.notePointerEnd(pointer(PALM, "touch", 20));
-    expect(down(arbiter, pointer(PEN, "pen", 30))).toEqual({ kind: "reject" });
+    expect(arbiter.notePointerDown(pointer(PEN, "pen", 30))).toEqual([]);
+    expect(arbiter.claim(pointer(PEN, "pen", 30))).toEqual({ kind: "reject" });
   });
 
   it("allows a two-finger pinch when no pen is in contact", () => {
@@ -144,6 +148,18 @@ describe("canvas pointer arbitration", () => {
     expect(down(arbiter, pointer(9, "pen", 5))).toEqual({ kind: "reject" });
   });
 
+  it("never lets a reused pointer id swallow the next accepted click", () => {
+    const arbiter = createCanvasPointerArbiter();
+    down(arbiter, pointer(FINGER, "touch", 0));
+    // A mouse press while a touch owns the canvas is rejected, and its click
+    // never arrives because the mouse dragged away.
+    expect(down(arbiter, pointer(MOUSE, "mouse", 10))).toEqual({ kind: "reject" });
+    arbiter.notePointerEnd(pointer(MOUSE, "mouse", 20));
+    arbiter.notePointerEnd(pointer(FINGER, "touch", 30));
+    expect(down(arbiter, pointer(MOUSE, "mouse", 40))).toEqual({ kind: "accept", founder: true });
+    expect(arbiter.consumeRejectedClick(MOUSE, 60)).toBe(false);
+  });
+
   it("forgets a rejected click after its time bound", () => {
     const arbiter = createCanvasPointerArbiter();
     down(arbiter, pointer(PEN, "pen", 0));
@@ -159,5 +175,30 @@ describe("canvas pointer arbitration", () => {
     expect(arbiter.isRejected(PALM)).toBe(false);
     expect(arbiter.penActive(11)).toBe(false);
     expect(down(arbiter, pointer(FINGER, "touch", 12))).toEqual({ kind: "accept", founder: true });
+  });
+});
+
+describe("touch commitment", () => {
+  const origin = { pointerId: FINGER, clientX: 100, clientY: 100 };
+
+  it("waits while the touch rests within the slop", () => {
+    expect(TOUCH_COMMIT_SLOP_PX).toBe(8);
+    expect(touchCommitment(origin, { type: "move", pointerId: FINGER, clientX: 104, clientY: 104 })).toBe("wait");
+  });
+
+  it("commits when the touch travels, ends as a tap, or outlives the takeover window", () => {
+    expect(touchCommitment(origin, { type: "move", pointerId: FINGER, clientX: 108, clientY: 100 })).toBe("commit");
+    expect(touchCommitment(origin, { type: "end", pointerId: FINGER, cancelled: false })).toBe("commit");
+    expect(touchCommitment(origin, { type: "window-elapsed" })).toBe("commit");
+  });
+
+  it("discards when a pen lands first or the browser cancels the touch", () => {
+    expect(touchCommitment(origin, { type: "pen-down" })).toBe("discard");
+    expect(touchCommitment(origin, { type: "end", pointerId: FINGER, cancelled: true })).toBe("discard");
+  });
+
+  it("ignores every other pointer", () => {
+    expect(touchCommitment(origin, { type: "move", pointerId: PALM, clientX: 400, clientY: 400 })).toBe("wait");
+    expect(touchCommitment(origin, { type: "end", pointerId: PALM, cancelled: false })).toBe("wait");
   });
 });

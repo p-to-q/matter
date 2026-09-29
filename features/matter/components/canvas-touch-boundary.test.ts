@@ -57,6 +57,39 @@ describe("mobile canvas touch ownership", () => {
     expect(rooted).toContain('window.addEventListener("pointercancel", noteEnd, true)');
   });
 
+  it("lets a palm that lands first dismiss nothing until it commits", () => {
+    const downStart = rooted.indexOf("onPointerDown={(event) => {");
+    const down = rooted.slice(downStart, rooted.indexOf("onPointerMove={(event) => {"));
+    const founder = down.indexOf('if (event.pointerType === "touch" && claim?.kind === "accept" && claim.founder)');
+    const deferral = down.indexOf("deferUntilTouchCommits(", founder);
+    const immediate = down.indexOf("abortFixedExpansion();", deferral);
+    expect(founder).toBeGreaterThan(-1);
+    expect(deferral).toBeGreaterThan(founder);
+    expect(down.slice(founder, deferral)).toContain("const effects: (() => void)[] = [abortFixedExpansion];");
+    // Mouse and pen founders still act at once.
+    expect(down.slice(deferral, immediate + 40)).toContain("} else {\n          abortFixedExpansion();");
+    // Camera interruption loses nothing and stays immediate.
+    expect(down.indexOf("interruptIndexCameraMotion()")).toBeLessThan(founder);
+    // A pinch commits; Lasso's repair dismissal joins the pending effects.
+    expect(down).toMatch(/size >= 2\) \{\s*\/\/[^\n]*\n\s*settleTouchFounderEffects\(true\);/u);
+    expect(down).toContain("pendingTouchEffects.effects.push(props.admission.clearRepairPresentations)");
+    const revoke = rooted.slice(
+      rooted.indexOf("const revokeTouchesForPen"),
+      rooted.indexOf("}, [cancelNodeDragOwnership, lasso, settleTouchFounderEffects, updateViewport]);"),
+    );
+    expect(revoke).toContain("settleTouchFounderEffects(false);");
+  });
+
+  it("applies the palm rule on the Elastic grips and in Point and Talk dismissal", () => {
+    const grip = rooted.slice(rooted.indexOf("function StretchHandleButton"));
+    const gripDown = grip.slice(grip.indexOf("onPointerDown={(event) => {"), grip.indexOf("onPointerMove="));
+    expect(gripDown.indexOf('if (event.pointerType === "touch" && penActive(event.timeStamp)) return;'))
+      .toBeLessThan(gripDown.indexOf("stretch.pointerDown(handle, event)"));
+    const composer = readFileSync(new URL("./PointTalkComposer.tsx", import.meta.url), "utf8");
+    expect(composer).toContain("if (penActive(event.timeStamp)) return;");
+    expect(composer).toContain("pendingTouchDismissal = deferUntilTouchCommits(");
+  });
+
   it("cancels transient canvas ownership on browser lifecycle loss", () => {
     expect(rooted).toContain('window.addEventListener("pagehide", cancelCanvasPointerOwnership)');
     expect(rooted).toContain('window.addEventListener("blur", cancelCanvasPointerOwnership)');
