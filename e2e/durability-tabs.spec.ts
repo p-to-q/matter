@@ -44,7 +44,9 @@ test("a tab holding refused material meets another tab's save as a conflict", as
 });
 
 test("a hidden tab keeps a submitted fixture AI turn while another tab commits", async ({ context }) => {
-  const rewritten = "在隐藏的标签页里送达的改写";
+  // A paraphrase near its source: the Text Swap policy refuses a candidate
+  // outside its length range, which would end the turn before any tab matters.
+  const rewritten = "我们也许怀念的，并不是一个曾经真实存在的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
   const writer = await openSaved(context.newPage());
   const reader = await context.newPage();
   // Headless pages always report visible; the shim lets this tab be hidden.
@@ -117,12 +119,20 @@ test("a hidden tab keeps a submitted fixture AI turn while another tab commits",
 
   // The broadcast has arrived, yet the hidden tab keeps its document instance:
   // the submitted turn is bound to it and would be revoked by a replacement.
+  // A hidden page cuts the field's presentation at once; the turn itself still
+  // owns its passage.
   await reader.waitForTimeout(750);
   await expect(reader.locator(`[data-thought-id="${writerChild}"]`)).toHaveCount(0);
-  await expect(reader.locator('.point-talk[data-phase="pending"]')).toHaveCount(1);
+  await expect(reader.locator(".point-talk")).toHaveCount(0);
+  await expect(shell).toHaveAttribute("data-point-talk-node-id", rootId);
   await expect(shell).toHaveAttribute("data-tree-revision", revisionBefore);
 
+  // The answer arrives while hidden and waits for a visible delivery window.
   releaseResponse();
+  await reader.waitForTimeout(500);
+  await expect(passage).not.toContainText(rewritten);
+  await expect(shell).toHaveAttribute("data-tree-revision", revisionBefore);
+  await reader.evaluate(() => (window as unknown as { __matterSetHidden(next: boolean): void }).__matterSetHidden(false));
   await expect(passage).toContainText(rewritten);
   // The result stays, and the line says truthfully that another tab saved a
   // newer copy; nothing was written over either side.
