@@ -3,6 +3,7 @@ import {
   commitTreeCommand,
   createTreeHistory,
   redoTreeHistory,
+  retainedInverseBytes,
   undoTreeHistory,
   type TreeHistory,
 } from "../tree/history";
@@ -111,20 +112,18 @@ describe("persisted undo history", () => {
       history: restored(history),
       released: false,
     });
-    // Journals written before redo existed carry no redo stack.
+    // Journals written before redo existed carry no redo stack. A v5 row also
+    // carried a byte total, which recovery never trusts.
+    const v5Total = retainedInverseBytes(history.entries);
     expect(parseLegacyHistory({
       entries: structuredClone(history.entries),
-      retainedInverseBytes: history.retainedInverseBytes,
+      retainedInverseBytes: v5Total,
     }, "tree", LIMITS)).toEqual({ history: restored(history), released: false });
     expect(parseLegacyHistory({
       entries: [{ bad: true }, newest],
-      retainedInverseBytes: history.retainedInverseBytes,
+      retainedInverseBytes: v5Total,
     }, "tree", LIMITS)).toEqual({
-      history: {
-        entries: [{ ...newest!, bytesUnverified: true }],
-        redoEntries: [],
-        retainedInverseBytes: newest!.retainedInverseBytes,
-      },
+      history: { entries: [{ ...newest!, bytesUnverified: true }], redoEntries: [] },
       released: true,
     });
     expect(parseLegacyHistory({ entries: [oldest, { bad: true }] }, "tree", LIMITS)).toEqual({
@@ -159,11 +158,7 @@ describe("persisted undo history", () => {
 /** A history as storage hands it back: every step's byte count is still unmeasured. */
 function restored(history: TreeHistory): TreeHistory {
   const mark = (entry: TreeHistory["entries"][number]) => ({ ...entry, bytesUnverified: true as const });
-  return {
-    entries: history.entries.map(mark),
-    redoEntries: history.redoEntries.map(mark),
-    retainedInverseBytes: history.retainedInverseBytes,
-  };
+  return { entries: history.entries.map(mark), redoEntries: history.redoEntries.map(mark) };
 }
 
 function twoSteps() {

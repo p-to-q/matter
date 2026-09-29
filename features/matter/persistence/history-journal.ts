@@ -5,13 +5,15 @@ import {
   type StoredHistoryJournal,
   type StoredHistoryRange,
 } from "./matter-database";
+import { parseHistoryEntry, type RecoveredHistory } from "./history-recovery";
+import { isNonNegativeSafeInteger, isPlainRecord } from "./stored-value";
 import {
-  isPlainRecord,
-  parseHistoryEntry,
-  sumBytes,
-  type RecoveredHistory,
-} from "./history-recovery";
-import type { TreeHistory, TreeHistoryEntry, TreeHistoryLimits } from "../tree/history";
+  createTreeHistory,
+  retainedInverseBytes,
+  type TreeHistory,
+  type TreeHistoryEntry,
+  type TreeHistoryLimits,
+} from "../tree/history";
 
 /**
  * Owns the per-entry undo journal layout: which positions of which epoch hold
@@ -73,7 +75,7 @@ export function shedHistoryRetention(
   history: TreeHistory,
   retention: HistoryRetention,
 ): HistoryRetention | null {
-  const undoBytes = sumBytes(retainedUndo(history.entries, retention.maxUndoBytes));
+  const undoBytes = retainedInverseBytes(retainedUndo(history.entries, retention.maxUndoBytes));
   if (undoBytes > 0 && retention.maxUndoBytes === FULL_HISTORY_RETENTION.maxUndoBytes) {
     return Object.freeze({ maxUndoBytes: Math.floor(undoBytes / 2), keepRedo: retention.keepRedo });
   }
@@ -115,7 +117,7 @@ export function historyJournalManifest(
     undo: stackRange(journal.undo),
     redo: stackRange(journal.redo),
     count: journal.undo.entries.length + journal.redo.entries.length,
-    bytes: sumBytes(journal.undo.entries) + sumBytes(journal.redo.entries),
+    bytes: retainedInverseBytes(journal.undo.entries) + retainedInverseBytes(journal.redo.entries),
   });
 }
 
@@ -167,22 +169,18 @@ export function assembleHistoryJournal(
 ): Readonly<{ recovered: RecoveredHistory; journal: PersistedHistoryJournal }> {
   const undo = assembleStack(treeId, manifest, "undo", undoRecords, limits);
   const redo = assembleStack(treeId, manifest, "redo", redoRecords, limits);
-  const bytes = sumBytes(undo.stack.entries) + sumBytes(redo.stack.entries);
+  const bytes = retainedInverseBytes(undo.stack.entries) + retainedInverseBytes(redo.stack.entries);
   const readWhole = !undo.released && !redo.released &&
     undo.stack.first === manifest.undo[0] && redo.stack.first === manifest.redo[0];
   if (readWhole && bytes !== manifest.bytes) {
     return Object.freeze({
-      recovered: Object.freeze({ history: emptyHistory(), released: true }),
+      recovered: Object.freeze({ history: createTreeHistory(), released: true }),
       journal: emptyHistoryJournal(manifest.epoch),
     });
   }
   return Object.freeze({
     recovered: Object.freeze({
-      history: {
-        entries: [...undo.stack.entries],
-        redoEntries: [...redo.stack.entries],
-        retainedInverseBytes: bytes,
-      },
+      history: { entries: [...undo.stack.entries], redoEntries: [...redo.stack.entries] },
       released: undo.released || redo.released,
     }),
     journal: Object.freeze({ epoch: manifest.epoch, undo: undo.stack, redo: redo.stack }),
@@ -300,20 +298,11 @@ function stackRange(stack: PersistedHistoryStack): StoredHistoryRange {
 function isStoredRange(value: unknown): value is StoredHistoryRange {
   return Array.isArray(value) &&
     value.length === 2 &&
-    Number.isSafeInteger(value[0]) &&
-    Number.isSafeInteger(value[1]) &&
-    (value[0] as number) >= 0 &&
-    (value[0] as number) <= (value[1] as number);
+    isNonNegativeSafeInteger(value[0]) &&
+    isNonNegativeSafeInteger(value[1]) &&
+    value[0] <= value[1];
 }
 
 function rangeLength(range: StoredHistoryRange): number {
   return range[1] - range[0];
-}
-
-function emptyHistory(): TreeHistory {
-  return { entries: [], redoEntries: [], retainedInverseBytes: 0 };
-}
-
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

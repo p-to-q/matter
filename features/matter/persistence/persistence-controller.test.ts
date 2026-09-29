@@ -10,7 +10,7 @@ import {
   type SnapshotBasis,
   type SnapshotWrite,
 } from "./document-repository";
-import { createPersistenceController } from "./persistence-controller";
+import { createPersistenceController, holdsUnsavedPersonMaterial } from "./persistence-controller";
 import { treeToBundle } from "./snapshot-codec";
 import { createTreeHistory, type TreeHistory } from "../tree/history";
 import type { ThoughtTree } from "../tree/model";
@@ -23,17 +23,23 @@ import {
 } from "./history-journal";
 
 const EMPTY_RECOVERED = Object.freeze({ history: createTreeHistory(), released: false });
+/** The store accepted a row and restored every stored step. */
+const KEPT_HISTORY = Object.freeze({ historyReleased: false });
 
 describe("persistence controller", () => {
-  it("loads a stored tree and reports the persisted revision", async () => {
+  it("reads the first stored row as a candidate and adopts it only once the store takes it", async () => {
     const tree = createSeededDocument().tree;
     const repository = fakeRepository(stored(tree, 3));
     const controller = createPersistenceController(repository.port);
 
-    await expect(controller.start(tree)).resolves.toEqual({
-      storedTree: tree,
-      storedHistory: EMPTY_RECOVERED,
-    });
+    const candidate = await controller.start(tree);
+    expect(candidate).toMatchObject({ tree, history: EMPTY_RECOVERED, replaces: null });
+    // Reading the row adopts nothing: it names no basis and no saved revision.
+    expect(controller.getStatus()).toMatchObject({ phase: "loading", persistedRevision: null });
+
+    const hydrate = vi.fn(() => KEPT_HISTORY);
+    expect(controller.adoptStored(candidate!, hydrate)).toBe("adopted");
+    expect(hydrate).toHaveBeenCalledExactlyOnceWith(candidate);
     expect(controller.getStatus()).toEqual({
       phase: "saved",
       persistedRevision: tree.revision,
@@ -41,9 +47,51 @@ describe("persistence controller", () => {
       errorCode: null,
       historyNotice: null,
       unsaved: false,
+      replaceableByImport: false,
       upgradeBlocked: false,
       conflictOrigin: null,
     });
+  });
+
+  it("starts the adopted row's notice with the steps the store could not restore", async () => {
+    const tree = createSeededDocument().tree;
+    const controller = createPersistenceController(fakeRepository(stored(tree, 3)).port);
+    const candidate = await controller.start(tree);
+
+    expect(controller.adoptStored(candidate!, () => ({ historyReleased: true }))).toBe("adopted");
+    expect(controller.getStatus()).toMatchObject({ phase: "saved", historyNotice: "unavailable" });
+  });
+
+  it("never adopts the first row the store refused, and never hydrates one that went stale", async () => {
+    const tree = createSeededDocument().tree;
+    const refusing = controlledRepository(stored(tree, 3));
+    const refused = createPersistenceController(refusing.port);
+    const first = await refused.start(tree);
+    expect(refused.adoptStored(first!, () => null)).toBe("refused");
+    // The caller holds the material it kept as a conflict; nothing is written
+    // against the unadopted row.
+    const live = { ...tree, revision: tree.revision + 1 };
+    refused.declareConflict(live, undefined, "load-window");
+    await Promise.resolve();
+    expect(refused.getStatus()).toMatchObject({
+      phase: "error",
+      persistedRevision: null,
+      errorCode: "PERSISTENCE_CONFLICT",
+      conflictOrigin: "load-window",
+    });
+    expect(refusing.pending).toHaveLength(0);
+
+    const superseding = controlledRepository(stored(tree, 3));
+    const superseded = createPersistenceController(superseding.port);
+    const candidate = await superseded.start(tree);
+    superseded.observeStoredGeneration({
+      treeId: tree.id,
+      writeGeneration: 4,
+      storageSchemaVersion: STORAGE_SCHEMA_VERSION + 1,
+    });
+    const hydrate = vi.fn(() => KEPT_HISTORY);
+    expect(superseded.adoptStored(candidate!, hydrate)).toBe("stale");
+    expect(hydrate).not.toHaveBeenCalled();
   });
 
   it("holds a diverged load window unsaved instead of choosing a winner", async () => {
@@ -53,23 +101,26 @@ describe("persistence controller", () => {
     const repository = controlledRepository(stored(storedTree, 4));
     const controller = createPersistenceController(repository.port);
 
-    await expect(controller.start(seeded)).resolves.toEqual({
-      storedTree,
-      storedHistory: EMPTY_RECOVERED,
+    await expect(controller.start(seeded)).resolves.toMatchObject({
+      tree: storedTree,
+      history: EMPTY_RECOVERED,
+      replaces: null,
     });
     // What they committed while the read was still in flight. Its revision is
     // higher than the stored one and means nothing: it counts from the seed.
     const live = { ...seeded, revision: seeded.revision + 9 };
     controller.declareConflict(live, undefined, "load-window");
 
-    // No other tab is involved; the surface must not claim one.
+    // No other tab is involved; the surface must not claim one. The stored row
+    // was read but never adopted.
     expect(controller.getStatus()).toEqual({
       phase: "error",
-      persistedRevision: storedTree.revision,
+      persistedRevision: null,
       dirtyRevision: live.revision,
       errorCode: "PERSISTENCE_CONFLICT",
       historyNotice: null,
       unsaved: true,
+      replaceableByImport: false,
       upgradeBlocked: false,
       conflictOrigin: "load-window",
     });
@@ -86,13 +137,14 @@ describe("persistence controller", () => {
     const candidate = await controller.resolveConflict();
     expect(candidate).toMatchObject({ tree: storedTree, history: EMPTY_RECOVERED });
     expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_CONFLICT", conflictOrigin: "load-window" });
-    expect(controller.adoptStored(candidate!)).toBe(true);
+    expect(controller.adoptStored(candidate!, () => KEPT_HISTORY)).toBe("adopted");
     expect(controller.getStatus()).toMatchObject({
       phase: "saved",
       persistedRevision: storedTree.revision,
       errorCode: null,
       conflictOrigin: null,
       unsaved: false,
+      replaceableByImport: false,
     });
   });
 
@@ -100,7 +152,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     await waitFor(() => repository.pending.length === 1);
     expect(repository.pending[0]?.expectedGeneration).toBeNull();
     const second = { ...tree, revision: tree.revision + 1 };
@@ -120,7 +172,7 @@ describe("persistence controller", () => {
     const history = createTreeHistory();
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
 
     controller.publish(tree, history);
@@ -137,7 +189,7 @@ describe("persistence controller", () => {
     const newer = { ...tree, revision: tree.revision + 1 };
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
 
     controller.publish(newer, history);
@@ -156,7 +208,7 @@ describe("persistence controller", () => {
     const history = createTreeHistory();
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
 
     let latest = tree;
@@ -193,12 +245,14 @@ describe("persistence controller", () => {
     };
     const controller = createPersistenceController(repository.port);
 
-    await expect(controller.start(tree)).resolves.toEqual({ storedTree: null, storedHistory: null });
+    await expect(controller.start(tree)).resolves.toBeNull();
+    // The untouched seed waits to be written, but nothing the person made is unsaved.
     expect(controller.getStatus()).toMatchObject({
       phase: "error",
       errorCode: "PERSISTENCE_UNAVAILABLE",
       dirtyRevision: tree.revision,
-      unsaved: true,
+      unsaved: false,
+      replaceableByImport: false,
     });
     controller.retry();
     await waitFor(() => repository.pending.length === 1);
@@ -210,18 +264,22 @@ describe("persistence controller", () => {
     const repository = controlledRepository();
     const announceGeneration = vi.fn();
     const controller = createPersistenceController(repository.port, { announceGeneration });
-    await controller.start(tree);
+    await startAccepted(controller, tree);
+    const edited = { ...tree, revision: tree.revision + 1 };
+    controller.publish(edited);
     await waitFor(() => repository.pending.length === 1);
     expect(controller.getStatus()).toMatchObject({ phase: "saving", unsaved: true });
 
     repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 2 });
     await waitFor(() => controller.getStatus().phase === "saved");
     expect(controller.getStatus().unsaved).toBe(false);
-    expect(announceGeneration).toHaveBeenCalledExactlyOnceWith({
+    expect(announceGeneration.mock.calls).toEqual([1, 2].map((writeGeneration) => [{
       treeId: tree.id,
-      writeGeneration: 1,
+      writeGeneration,
       storageSchemaVersion: STORAGE_SCHEMA_VERSION,
-    });
+    }]));
   });
 
   it("prepares a newer row for a clean tab and adopts it only after the store accepts it", async () => {
@@ -229,7 +287,7 @@ describe("persistence controller", () => {
     const newer = { ...tree, revision: tree.revision + 4 };
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
 
     const generation = (writeGeneration: number, treeId = tree.id) =>
       ({ treeId, writeGeneration, storageSchemaVersion: STORAGE_SCHEMA_VERSION });
@@ -244,7 +302,7 @@ describe("persistence controller", () => {
     expect(controller.getStatus()).toMatchObject({ phase: "saved", persistedRevision: tree.revision });
     expect(controller.observeStoredGeneration(generation(3))).toBe("refresh");
 
-    expect(controller.adoptStored(candidate!)).toBe(true);
+    expect(controller.adoptStored(candidate!, () => KEPT_HISTORY)).toBe("adopted");
     expect(controller.getStatus()).toMatchObject({ phase: "saved", persistedRevision: newer.revision });
     expect(controller.observeStoredGeneration(generation(3))).toBe("ignored");
   });
@@ -253,7 +311,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     repository.setLoaded(stored({ ...tree, revision: tree.revision + 3 }, 3));
     const candidate = await controller.prepareRefresh();
     expect(candidate).not.toBeNull();
@@ -262,7 +320,7 @@ describe("persistence controller", () => {
     // is published and must be written against the row this tab last saw.
     const local = { ...tree, revision: tree.revision + 1 };
     controller.publish(local);
-    expect(controller.adoptStored(candidate!)).toBe(false);
+    expect(controller.adoptStored(candidate!, () => KEPT_HISTORY)).toBe("stale");
     await waitFor(() => repository.pending.length === 1);
     expect(repository.pending[0]).toMatchObject({ treeRevision: local.revision, expectedGeneration: 2 });
     repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
@@ -274,19 +332,19 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     repository.setLoaded(stored({ ...tree, revision: tree.revision + 3 }, 3));
     const candidate = await controller.prepareRefresh();
 
-    await controller.start(tree);
-    expect(controller.adoptStored(candidate!)).toBe(false);
+    await startAccepted(controller, tree);
+    expect(controller.adoptStored(candidate!, () => KEPT_HISTORY)).toBe("stale");
   });
 
   it("holds unsaved material as a conflict when a newer generation arrives", async () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     const local = { ...tree, revision: tree.revision + 1 };
     controller.publish(local);
     await waitFor(() => repository.pending.length === 1);
@@ -303,6 +361,7 @@ describe("persistence controller", () => {
       conflictOrigin: "another-tab",
       dirtyRevision: local.revision,
       unsaved: true,
+      replaceableByImport: false,
     });
     await expect(controller.prepareRefresh()).resolves.toBeNull();
   });
@@ -311,7 +370,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     controller.publish({ ...tree, revision: tree.revision + 1 });
     await waitFor(() => repository.pending.length === 1);
 
@@ -329,7 +388,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     repository.setLoaded(stored({ ...tree, revision: tree.revision + 3 }, 3));
     repository.deferLoad();
 
@@ -351,7 +410,7 @@ describe("persistence controller", () => {
     ) => Promise<unknown>) => {
       const repository = controlledRepository(stored(tree, 2));
       const controller = createPersistenceController(repository.port);
-      await controller.start(tree);
+      await startAccepted(controller, tree);
       repository.setLoaded(null);
       await act(controller, repository);
       expect(controller.getStatus()).toMatchObject({ phase: "error", errorCode: "PERSISTENCE_CLEARED" });
@@ -376,7 +435,7 @@ describe("persistence controller", () => {
     // Before this tab has saved anything, a missing row is only a first run.
     const fresh = controlledRepository();
     const controller = createPersistenceController(fresh.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     await expect(controller.checkStoredGeneration()).resolves.toBe("ignored");
     expect(controller.getStatus().errorCode).toBeNull();
   });
@@ -389,7 +448,7 @@ describe("persistence controller", () => {
       .mockResolvedValueOnce({ ok: true, value: { writeGeneration: 5, storageSchemaVersion: 1 } })
       .mockResolvedValueOnce({ ok: false, error: { code: "PERSISTENCE_SUPERSEDED", message: "newer" } });
     const controller = createPersistenceController({ ...repository.port, readGeneration });
-    await controller.start(tree);
+    await startAccepted(controller, tree);
 
     await expect(controller.checkStoredGeneration()).resolves.toBe("ignored");
     await expect(controller.checkStoredGeneration()).resolves.toBe("refresh");
@@ -401,7 +460,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
 
     expect(controller.observeStoredGeneration({
       treeId: tree.id,
@@ -416,6 +475,7 @@ describe("persistence controller", () => {
       phase: "error",
       errorCode: "PERSISTENCE_SUPERSEDED",
       unsaved: true,
+      replaceableByImport: false,
     });
     await expect(controller.prepareImportedTree(tree)).resolves.toEqual({
       ok: false,
@@ -455,7 +515,7 @@ describe("persistence controller", () => {
     const repository = controlledRepository();
     const reclaimDerivedStorage = vi.fn(async () => true);
     const controller = createPersistenceController({ ...repository.port, reclaimDerivedStorage });
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
 
     repository.settleNext(storageFull());
@@ -476,18 +536,21 @@ describe("persistence controller", () => {
     const reserveImportedSnapshot = vi.fn(async () => ({ ok: true as const, value: reservation }));
     const load = vi.fn(repository.port.load);
     const controller = createPersistenceController({ ...repository.port, load, reserveImportedSnapshot });
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     const local = { ...tree, revision: tree.revision + 1 };
     controller.publish(local);
     await waitFor(() => repository.pending.length === 1);
 
     // A write still in flight can never be replaced.
+    expect(controller.getStatus().replaceableByImport).toBe(false);
     await expect(controller.prepareImportedTree(imported, { replaceUnsaved: true })).resolves.toEqual({
       ok: false,
       errorCode: "IMPORT_SAVING",
     });
     repository.settleNext(storageFull());
     await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_STORAGE_FULL");
+    // The status offers exactly the replacement this controller will honor.
+    expect(controller.getStatus()).toMatchObject({ unsaved: true, replaceableByImport: true });
     await expect(controller.prepareImportedTree(imported)).resolves.toEqual({
       ok: false,
       errorCode: "IMPORT_DIRTY",
@@ -506,7 +569,44 @@ describe("persistence controller", () => {
       persistedRevision: imported.revision,
       errorCode: null,
       unsaved: false,
+      replaceableByImport: false,
     });
+  });
+
+  it("offers archive replacement only for material storage refused, never over a conflict", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository(stored(tree, 2));
+    const controller = createPersistenceController(repository.port);
+    await startAccepted(controller, tree);
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_WRITE_FAILED", message: "failed" } });
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_WRITE_FAILED");
+    expect(controller.getStatus().replaceableByImport).toBe(true);
+
+    controller.observeStoredGeneration({ treeId: tree.id, writeGeneration: 3, storageSchemaVersion: STORAGE_SCHEMA_VERSION });
+    expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_CONFLICT", replaceableByImport: false });
+  });
+
+  it("counts only material the person made as unsaved, and lets authorship answer before the first load", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    // Before reconciliation the controller has received nothing yet.
+    expect(holdsUnsavedPersonMaterial(controller.getStatus(), false, true)).toBe(true);
+    expect(holdsUnsavedPersonMaterial(controller.getStatus(), false, false)).toBe(false);
+
+    await startAccepted(controller, tree);
+    await waitFor(() => repository.pending.length === 1);
+    // The first save of untouched material is in flight but puts nothing at risk.
+    expect(controller.getStatus()).toMatchObject({ phase: "saving", unsaved: false });
+    const relocalized = { ...tree, revision: tree.revision + 1 };
+    controller.publish(relocalized, undefined, false);
+    expect(controller.getStatus().unsaved).toBe(false);
+    const edited = { ...tree, revision: tree.revision + 2 };
+    controller.publish(edited, undefined, true);
+    expect(controller.getStatus().unsaved).toBe(true);
+    expect(holdsUnsavedPersonMaterial(controller.getStatus(), true, false)).toBe(true);
   });
 
   it("keeps the refused material and its error when the replacing import cannot be stored", async () => {
@@ -516,7 +616,7 @@ describe("persistence controller", () => {
       ...repository.port,
       reserveImportedSnapshot: async () => storageFull() as RepositoryResult<ImportedSnapshotReservation>,
     });
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     const local = { ...tree, revision: tree.revision + 1 };
     controller.publish(local);
     await waitFor(() => repository.pending.length === 1);
@@ -540,7 +640,7 @@ describe("persistence controller", () => {
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
 
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
     expect(repository.pending[0]?.history).toBe(history);
     const returnedJournal = emptyHistoryJournal(3);
@@ -558,7 +658,7 @@ describe("persistence controller", () => {
     const newer = { ...tree, revision: tree.revision + 8 };
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     await waitFor(() => repository.pending.length === 1);
     repository.settleNext({
       ok: false,
@@ -577,7 +677,7 @@ describe("persistence controller", () => {
     const candidate = await controller.resolveConflict();
     expect(candidate).toMatchObject({ tree: newer, history: EMPTY_RECOVERED });
     expect(repository.loads).toBe(2);
-    expect(controller.adoptStored(candidate!)).toBe(true);
+    expect(controller.adoptStored(candidate!, () => KEPT_HISTORY)).toBe("adopted");
     expect(controller.getStatus()).toMatchObject({
       persistedRevision: newer.revision,
       dirtyRevision: null,
@@ -589,7 +689,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     await waitFor(() => repository.pending.length === 1);
     repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
     await waitFor(() => controller.getStatus().phase === "error");
@@ -611,7 +711,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     await waitFor(() => repository.pending.length === 1);
     repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "conflict" } });
     await waitFor(() => controller.getStatus().phase === "error");
@@ -620,7 +720,7 @@ describe("persistence controller", () => {
     expect(candidate?.replaces?.tree).toBe(tree);
 
     controller.publish({ ...tree, revision: tree.revision + 2 });
-    expect(controller.adoptStored(candidate!)).toBe(false);
+    expect(controller.adoptStored(candidate!, () => KEPT_HISTORY)).toBe("stale");
     expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_CONFLICT", unsaved: true });
   });
 
@@ -630,7 +730,7 @@ describe("persistence controller", () => {
 
     const conflicted = controlledRepository(stored(tree, 2));
     const conflictController = createPersistenceController(conflicted.port);
-    await conflictController.start(tree);
+    await startAccepted(conflictController, tree);
     conflictController.declareConflict({ ...tree, revision: tree.revision + 1 });
     await expect(conflictController.prepareImportedTree(imported)).resolves.toEqual({
       ok: false,
@@ -643,7 +743,7 @@ describe("persistence controller", () => {
       load: async () => ({ ok: false, error: { code: "PERSISTENCE_CORRUPT", message: "damaged" } }),
     };
     const corruptController = createPersistenceController(corrupt.port);
-    await corruptController.start(tree);
+    await startAccepted(corruptController, tree);
     await expect(corruptController.prepareImportedTree(imported)).resolves.toEqual({
       ok: false,
       errorCode: "PERSISTENCE_CORRUPT",
@@ -656,7 +756,7 @@ describe("persistence controller", () => {
     const latest = { ...tree, revision: tree.revision + 2 };
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     await waitFor(() => repository.pending.length === 1);
 
     controller.publish(second);
@@ -688,6 +788,7 @@ describe("persistence controller", () => {
       errorCode: null,
       historyNotice: null,
       unsaved: false,
+      replaceableByImport: false,
       upgradeBlocked: false,
       conflictOrigin: null,
     });
@@ -699,7 +800,7 @@ describe("persistence controller", () => {
     const history = historyOfBytes([40, 30, 20, 10]);
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
 
     expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
@@ -737,12 +838,12 @@ describe("persistence controller", () => {
       history: { history: loadedHistory, released: false },
     });
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
 
     controller.publish(tree, loadedHistory);
     await Promise.resolve();
     expect(repository.pending).toHaveLength(0);
-    const released: TreeHistory = { entries: [], redoEntries: [], retainedInverseBytes: 0 };
+    const released: TreeHistory = createTreeHistory();
     controller.publish(tree, released);
     await waitFor(() => repository.pending.length === 1);
     expect(repository.pending[0]?.history).toBe(released);
@@ -758,7 +859,7 @@ describe("persistence controller", () => {
     const history = historyOfBytes([40, 30, 20, 10]);
     const repository = controlledRepository();
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     await waitFor(() => repository.pending.length === 1);
     repository.settleNext(storageFull());
     await waitFor(() => repository.pending.length === 1);
@@ -793,7 +894,7 @@ describe("persistence controller", () => {
     const tree = createSeededDocument().tree;
     const repository = fakeRepository(stored(tree, 2));
     const controller = createPersistenceController(repository.port);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
     const listener = vi.fn();
     controller.subscribe(listener);
 
@@ -806,7 +907,7 @@ describe("persistence controller", () => {
 
     controller.reportHistoryUnavailable();
     const reloaded = createPersistenceController(fakeRepository(stored(tree, 2)).port);
-    await reloaded.start(tree);
+    await startAccepted(reloaded, tree);
     expect(reloaded.getStatus().historyNotice).toBeNull();
   });
 
@@ -848,7 +949,7 @@ describe("persistence controller", () => {
       reserveImportedSnapshot: async () => ({ ok: true, value: reservation }),
     };
     const controller = createPersistenceController(repository.port);
-    await controller.start(imported);
+    await startAccepted(controller, imported);
     controller.reportHistoryUnavailable();
 
     const prepared = await controller.prepareImportedTree(imported);
@@ -862,6 +963,7 @@ describe("persistence controller", () => {
       errorCode: null,
       historyNotice: null,
       unsaved: false,
+      replaceableByImport: false,
       upgradeBlocked: false,
       conflictOrigin: null,
     });
@@ -898,7 +1000,7 @@ describe("persistence controller", () => {
       close: () => undefined,
     };
     const controller = createPersistenceController(repository);
-    await controller.start(current);
+    await startAccepted(controller, current);
     const basis = { treeId: current.id, revision: current.revision, documentEpoch: 4 };
     let currentBasis = basis;
     const switchDocument = vi.fn();
@@ -948,7 +1050,7 @@ describe("persistence controller", () => {
       close: () => undefined,
     };
     const controller = createPersistenceController(repository);
-    await controller.start(current);
+    await startAccepted(controller, current);
     const prepared = await controller.prepareImportedTree(imported);
     if (!prepared.ok) throw new Error("import preparation rejected");
     await expect(controller.discardImportedDocument(prepared)).resolves.toBeNull();
@@ -979,7 +1081,7 @@ describe("persistence controller", () => {
     };
     const controller = createPersistenceController(repository);
 
-    await controller.start(tree, history);
+    await startAccepted(controller, tree, history);
     expect(controller.getStatus()).toMatchObject({
       phase: "error",
       errorCode: "PERSISTENCE_CORRUPT",
@@ -1008,6 +1110,7 @@ describe("persistence controller", () => {
       errorCode: null,
       historyNotice: null,
       unsaved: false,
+      replaceableByImport: false,
       upgradeBlocked: false,
       conflictOrigin: null,
     });
@@ -1030,7 +1133,7 @@ describe("persistence controller", () => {
       close: () => undefined,
     };
     const controller = createPersistenceController(repository);
-    await controller.start(tree);
+    await startAccepted(controller, tree);
 
     const exporting = controller.exportCorruptRecovery();
     controller.publish({ ...tree, revision: tree.revision + 1 });
@@ -1054,6 +1157,17 @@ describe("persistence controller", () => {
   });
 });
 
+/** Starts as a tab does: a stored row becomes the basis once the store takes it. */
+async function startAccepted(
+  controller: ReturnType<typeof createPersistenceController>,
+  tree: ThoughtTree,
+  history?: TreeHistory,
+) {
+  const candidate = await controller.start(tree, history);
+  if (candidate !== null) expect(controller.adoptStored(candidate, () => KEPT_HISTORY)).toBe("adopted");
+  return candidate;
+}
+
 function stored(
   tree: ThoughtTree,
   writeGeneration: number,
@@ -1074,11 +1188,7 @@ function historyOfBytes(bytes: readonly number[]): TreeHistory {
     inverse: {} as TreeHistory["entries"][number]["inverse"],
     retainedInverseBytes,
   }));
-  return {
-    entries,
-    redoEntries: [],
-    retainedInverseBytes: bytes.reduce((total, value) => total + value, 0),
-  };
+  return { entries, redoEntries: [] };
 }
 
 function storageFull(): RepositoryResult<number> {

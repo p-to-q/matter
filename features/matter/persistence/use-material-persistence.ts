@@ -4,11 +4,20 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
 import { createIndexedDbDocumentRepository } from "./document-repository";
-import { createDocumentGenerationChannel } from "./document-generation-channel";
+import {
+  createDocumentGenerationChannel,
+  type DocumentGeneration,
+  type DocumentGenerationChannel,
+} from "./document-generation-channel";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
 import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
-import { createPersistenceController, type StoredCandidate } from "./persistence-controller";
+import {
+  createPersistenceController,
+  holdsUnsavedPersonMaterial,
+  type ConflictOrigin,
+  type StoredCandidate,
+} from "./persistence-controller";
 import {
   createStoredGenerationWatch,
   type StoredGenerationWatch,
@@ -27,6 +36,8 @@ type HydrateSnapshot = (
 export function useMaterialPersistence(
   tree: ThoughtTree,
   history: TreeHistory,
+  /** The store's untouched material for this document instance. */
+  untouchedTree: ThoughtTree,
   documentEpoch: number,
   hydrateSnapshot: HydrateSnapshot,
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
@@ -36,18 +47,23 @@ export function useMaterialPersistence(
    */
   materialIdle: boolean,
 ) {
-  // The channel and controller share one lifetime: every committed row is
-  // announced, and disposal closes both.
+  // The generation channel is an external resource, so the effect that listens
+  // on it creates and closes it; the controller announces every committed row
+  // through it while it is open. Constructing the controller opens nothing, so
+  // a Strict Mode rehearsal of this initializer leaks no channel or database.
   const [owner] = useState(() => {
-    const channel = createDocumentGenerationChannel();
+    const announcer = new GenerationAnnouncer();
     const controller = createPersistenceController(createIndexedDbDocumentRepository(), {
-      announceGeneration: channel.publish,
+      announceGeneration: (generation) => announcer.publish(generation),
     });
-    return Object.freeze({ channel, controller });
+    return Object.freeze({ announcer, controller });
   });
-  const { controller } = owner;
+  const { announcer, controller } = owner;
   const latestTreeRef = useRef(tree);
   const latestHistoryRef = useRef(history);
+  const latestUntouchedTreeRef = useRef(untouchedTree);
+  // Store authorship: only material the person changed can be unsaved.
+  const authoredLatest = () => latestTreeRef.current !== latestUntouchedTreeRef.current;
   // The tree the controller last received. A newer row may replace only this
   // exact tree: a commit the store holds but has not yet published (effects run
   // after layout) would otherwise be overwritten before it is ever saved.
@@ -68,49 +84,55 @@ export function useMaterialPersistence(
   ), [controller, documentBasisOwner, switchDocument]);
 
   /**
-   * Hydrates a stored row only over the material this hook last saw, so a
-   * commit made after storage was read is never replaced. Stored steps that
-   * cannot be restored are released in the store; the durability owner carries
-   * the one notice. Returns whether the store accepted the row.
+   * Replaces the document by a stored row, only over the tree the store is
+   * expected to hold, so a commit made after storage was read is never
+   * replaced. The controller refuses a stale candidate before anything
+   * hydrates and adopts the row only once the store took it; a store refusal
+   * holds the live material as a conflict.
    */
-  const hydrateOver = useCallback((
-    storedTree: ThoughtTree,
-    storedHistory: RecoveredHistory | null,
+  const applyCandidate = useCallback((
+    candidate: StoredCandidate,
     expectedCurrentTree: ThoughtTree,
+    conflictOrigin: ConflictOrigin,
   ): boolean => {
-    const receipt = hydrateSnapshot(storedTree, storedHistory, expectedCurrentTree);
-    if (receipt.operation !== "hydrate" || receipt.status !== "hydrated") return false;
-    if (receipt.historyReleased) controller.reportHistoryUnavailable();
-    return true;
+    const outcome = controller.adoptStored(candidate, (stored) => {
+      const receipt = hydrateSnapshot(stored.tree, stored.history, expectedCurrentTree);
+      return receipt.operation === "hydrate" && receipt.status === "hydrated"
+        ? Object.freeze({ historyReleased: receipt.historyReleased })
+        : null;
+    });
+    if (outcome === "refused") {
+      controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, conflictOrigin, authoredLatest());
+    }
+    return outcome === "adopted";
   }, [controller, hydrateSnapshot]);
 
   useLayoutEffect(() => {
     latestTreeRef.current = tree;
     latestHistoryRef.current = history;
+    latestUntouchedTreeRef.current = untouchedTree;
     documentBasisOwner.publish(tree, documentEpoch);
-  }, [documentBasisOwner, documentEpoch, history, tree]);
+  }, [documentBasisOwner, documentEpoch, history, tree, untouchedTree]);
 
   useEffect(() => {
     let active = true;
     lifecycleRef.current += 1;
     const lifecycle = lifecycleRef.current;
     startPromiseRef.current ??= controller.start(initialTree, initialHistory);
-    void startPromiseRef.current.then(({ storedTree, storedHistory }) => {
+    void startPromiseRef.current.then((candidate) => {
       if (!active || reconciledRef.current) return;
       reconciledRef.current = true;
-      const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, storedTree);
-      if (decision.action === "hydrate") {
-        if (!hydrateOver(decision.tree, storedHistory, initialTree)) {
-          controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, "load-window");
-        }
+      const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, candidate?.tree ?? null);
+      if (decision.action === "hydrate" && candidate !== null) {
+        applyCandidate(candidate, initialTree, "load-window");
       } else if (decision.action === "publish") {
-        controller.publish(decision.tree, latestHistoryRef.current);
+        controller.publish(decision.tree, latestHistoryRef.current, authoredLatest());
         publishedTreeRef.current = decision.tree;
       } else if (decision.action === "conflict") {
         // Material committed during the load window does not descend from the
         // stored session. Neither is written over the other; Archive offers
         // the explicit reload.
-        controller.declareConflict(decision.tree, latestHistoryRef.current, "load-window");
+        controller.declareConflict(decision.tree, latestHistoryRef.current, "load-window", authoredLatest());
       }
       setInitialReconciliationComplete(true);
     });
@@ -119,28 +141,16 @@ export function useMaterialPersistence(
       queueMicrotask(() => {
         // React development mode rehearses setup/cleanup synchronously. Close
         // IndexedDB only when no replacement lifecycle claimed this controller.
-        if (lifecycleRef.current === lifecycle) {
-          controller.dispose();
-          owner.channel.close();
-        }
+        if (lifecycleRef.current === lifecycle) controller.dispose();
       });
     };
-  }, [controller, hydrateOver, initialHistory, initialTree, owner]);
+  }, [applyCandidate, controller, initialHistory, initialTree]);
 
   useEffect(() => {
     if (!reconciledRef.current) return;
-    controller.publish(tree, history);
+    controller.publish(tree, history, tree !== untouchedTree);
     publishedTreeRef.current = tree;
-  }, [controller, history, tree]);
-
-  /** Adopts a candidate only after the store took it; otherwise holds a conflict. */
-  const applyCandidate = useCallback((candidate: StoredCandidate, expectedCurrentTree: ThoughtTree): boolean => {
-    if (!hydrateOver(candidate.tree, candidate.history, expectedCurrentTree)) {
-      controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, "another-tab");
-      return false;
-    }
-    return controller.adoptStored(candidate);
-  }, [controller, hydrateOver]);
+  }, [controller, history, tree, untouchedTree]);
 
   const applyCandidateRef = useRef(applyCandidate);
   const materialIdleRef = useRef(materialIdle);
@@ -153,6 +163,8 @@ export function useMaterialPersistence(
     watchRef.current?.setMaterialIdle(materialIdle);
   }, [materialIdle]);
   useEffect(() => {
+    const channel = createDocumentGenerationChannel();
+    announcer.attach(channel);
     const watch = createStoredGenerationWatch({ window, document }, {
       ready: () => reconciledRef.current,
       observe: (generation) => controller.observeStoredGeneration(generation),
@@ -161,21 +173,27 @@ export function useMaterialPersistence(
         const candidate = await controller.prepareRefresh();
         if (candidate === null) return "none";
         if (!stillIdle()) return "deferred";
-        return applyCandidateRef.current(candidate, publishedTreeRef.current) ? "applied" : "none";
+        return applyCandidateRef.current(candidate, publishedTreeRef.current, "another-tab") ? "applied" : "none";
       },
     });
     watchRef.current = watch;
     watch.setMaterialIdle(materialIdleRef.current);
-    const unsubscribe = owner.channel.subscribe((generation) => watch.receive(generation));
+    const unsubscribe = channel.subscribe((generation) => watch.receive(generation));
     return () => {
       unsubscribe();
       watch.dispose();
       if (watchRef.current === watch) watchRef.current = null;
+      announcer.detach(channel);
+      channel.close();
     };
-  }, [controller, owner]);
+  }, [announcer, controller]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
-  const materialDiverged = tree !== initialTree;
+  const unsavedPersonMaterial = holdsUnsavedPersonMaterial(
+    status,
+    initialReconciliationComplete,
+    tree !== untouchedTree,
+  );
   const unloadGuardRef = useRef<UnloadGuard | null>(null);
   useEffect(() => {
     const guard = createUnloadGuard({
@@ -191,8 +209,8 @@ export function useMaterialPersistence(
     };
   }, []);
   useEffect(() => {
-    unloadGuardRef.current?.update({ status, materialDiverged });
-  }, [materialDiverged, status]);
+    unloadGuardRef.current?.update({ phase: status.phase, unsavedPersonMaterial });
+  }, [status.phase, unsavedPersonMaterial]);
 
   const supersededReloadRef = useRef<SupersededReload | null>(null);
   useEffect(() => {
@@ -211,15 +229,18 @@ export function useMaterialPersistence(
   useEffect(() => {
     supersededReloadRef.current?.update({
       superseded: status.errorCode === "PERSISTENCE_SUPERSEDED",
-      unsaved: status.unsaved,
+      unsavedPersonMaterial,
       materialIdle,
     });
-  }, [materialIdle, status.errorCode, status.unsaved]);
+  }, [materialIdle, status.errorCode, unsavedPersonMaterial]);
 
   const resolveConflict = useCallback(async () => {
     const candidate = await controller.resolveConflict();
-    // The store must still hold exactly the material this reload replaces.
-    if (candidate !== null && candidate.replaces !== null) applyCandidate(candidate, candidate.replaces.tree);
+    // The store must still hold exactly the material this reload replaces. A
+    // refusal keeps the conflict where it came from.
+    if (candidate !== null && candidate.replaces !== null) {
+      applyCandidate(candidate, candidate.replaces.tree, controller.getStatus().conflictOrigin ?? "another-tab");
+    }
   }, [applyCandidate, controller]);
 
   // A plain object: the memo keeps its identity stable across renders.
@@ -242,6 +263,23 @@ function readSessionStorage(): Storage | null {
   } catch {
     // Some privacy modes throw on access to session storage itself.
     return null;
+  }
+}
+
+/** Render-independent route from the controller to whichever channel is open. */
+class GenerationAnnouncer {
+  #channel: DocumentGenerationChannel | null = null;
+
+  attach(channel: DocumentGenerationChannel): void {
+    this.#channel = channel;
+  }
+
+  detach(channel: DocumentGenerationChannel): void {
+    if (this.#channel === channel) this.#channel = null;
+  }
+
+  publish(generation: DocumentGeneration): void {
+    this.#channel?.publish(generation);
   }
 }
 

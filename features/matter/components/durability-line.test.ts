@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import {
-  isReplaceableUnsaved,
   isTerminalDurability,
   projectArchiveNote,
   projectDurabilityLine,
@@ -16,6 +15,7 @@ const SAVED: PersistenceStatus = Object.freeze({
   errorCode: null,
   historyNotice: null,
   unsaved: false,
+  replaceableByImport: false,
   upgradeBlocked: false,
   conflictOrigin: null,
 });
@@ -88,11 +88,7 @@ describe("durability line", () => {
       .toBe(`${copy.archiveNoteDefault} ${copy.archiveNoteNotPersisted}`);
   });
 
-  it("offers replacement of unsaved material only where storage refused it", () => {
-    expect(isReplaceableUnsaved(failed("PERSISTENCE_STORAGE_FULL"))).toBe(true);
-    expect(isReplaceableUnsaved(failed("PERSISTENCE_WRITE_FAILED"))).toBe(true);
-    expect(isReplaceableUnsaved(failed("PERSISTENCE_CONFLICT"))).toBe(false);
-    expect(isReplaceableUnsaved({ ...failed("PERSISTENCE_STORAGE_FULL"), unsaved: false })).toBe(false);
+  it("leaves only export and reload for superseded or cleared storage", () => {
     expect(isTerminalDurability(failed("PERSISTENCE_CLEARED"))).toBe(true);
     expect(isTerminalDurability(failed("PERSISTENCE_CONFLICT"))).toBe(false);
   });

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  canReplayTreeHistory,
   commitDeliveredTreeCommand,
   commitTreeCommand,
   createTreeHistory,
@@ -10,6 +9,7 @@ import {
   type TreeHistory,
   type TreeHistoryLimits,
 } from "./history";
+import { canReplayTreeHistory } from "./history-replay-oracle";
 import { applyTreeCommand } from "./engine";
 import { createEmptyTree } from "./invariants";
 import type { ThoughtNode, ThoughtTree, TreeCommand } from "./model";
@@ -33,7 +33,6 @@ describe("delivered commits and the redo future", () => {
     expect(landed.tree.nodes.x?.text).toBe("A grown");
     expect(landed.history.entries.map((entry) => entry.source)).toEqual(["human", "human", "agent"]);
     expect(landed.history.redoEntries).toHaveLength(1);
-    expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
     expect(canReplayTreeHistory(landed.tree, landed.history)).toBe(true);
 
     const redone = redo(landed);
@@ -74,7 +73,6 @@ describe("delivered commits and the redo future", () => {
     const landed = deliver(undone, replaceX("A", T0, "C", T2));
     expect(landed.tree.nodes.x?.text).toBe("C");
     expect(landed.history.redoEntries).toEqual([]);
-    expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
     expect(redoTreeHistory(landed.tree, landed.history, LIMITS)).toMatchObject({
       ok: false,
       error: { code: "EMPTY_REDO" },
@@ -102,7 +100,6 @@ describe("delivered commits and the redo future", () => {
     // Initialization is released; X's insertion, the turn, and both redo steps stay.
     expect(landed.history.entries.map((entry) => entry.commandId)).toEqual(["insert_x", "turn_A_grown"]);
     expect(landed.history.redoEntries).toHaveLength(2);
-    expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
     const both = redo(redo(landed));
     expect(both.tree.nodes.y?.text).toBe("Y");
     expect(both.tree.nodes.z?.text).toBe("Z");
@@ -114,19 +111,20 @@ describe("delivered commits and the redo future", () => {
     expect(landed.history.entries.map((entry) => entry.commandId)).toEqual(["turn_A_grown"]);
     expect(landed.history.redoEntries).toHaveLength(1);
     expect(redo(landed).tree.nodes.y?.text).toBe("Y");
-    expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
   });
 
   it("applies the byte limit across both stacks in the same order", () => {
     const undone = twoUndoneSiblings();
     const unbounded = deliver(undone, replaceX("A", T0, "A grown", T1));
     const oldest = unbounded.history.entries[0]!.retainedInverseBytes;
+    const bound = exactBytes(unbounded.history) - oldest;
     const landed = deliver(undone, replaceX("A", T0, "A grown", T1), {
       ...LIMITS,
-      maxRetainedInverseBytes: unbounded.history.retainedInverseBytes - oldest,
+      maxRetainedInverseBytes: bound,
     });
     expect(landed.history.entries).toHaveLength(unbounded.history.entries.length - 1);
     expect(landed.history.redoEntries).toHaveLength(2);
+    expect(exactBytes(landed.history)).toBe(bound);
   });
 
   it("releases an undone move of the delivered passage, whose memento holds its old text", () => {

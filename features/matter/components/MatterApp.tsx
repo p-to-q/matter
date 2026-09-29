@@ -37,6 +37,7 @@ export function MatterApp() {
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
+  const untouchedTree = useMatterStore((state) => state.untouchedTree);
   const navigation = useMatterStore((state) => state.navigation);
   const extendMaterial = useMatterStore((state) => state.extendMaterial);
   const localizeSeededMaterial = useMatterStore((state) => state.localizeSeededMaterial);
@@ -70,6 +71,7 @@ export function MatterApp() {
   const persistence = useMaterialPersistence(
     tree,
     history,
+    untouchedTree,
     documentEpoch,
     hydrateSnapshot,
     switchDocument,
@@ -193,16 +195,22 @@ export function MatterApp() {
   // a reason to look at the seed again.
   const materialReconciled = persistence.initialReconciliationComplete &&
     persistence.status.phase !== "loading";
+  // The language and document instance the seed copy was last localized for.
+  const localizedForRef = useRef<string | null>(null);
   useLayoutEffect(() => {
     // Relocalization waits for every material turn that read current passages
-    // and reruns when the last one settles, so a locale change never revokes a
-    // submitted Point-and-Talk or Elastic request on seed copy. It runs for a
-    // language or document change only; its cost never follows the journal.
+    // and runs once the last one settles, so a locale change never revokes a
+    // submitted Point-and-Talk or Elastic request on seed copy. It walks the
+    // bounded journal, so it runs once per language and document instance,
+    // never again merely because a turn settled.
     if (
       seededSessionRelocalizer === null ||
       !materialReconciled ||
       turnsHoldSeedBasis
     ) return;
+    const localizedFor = `${canvasPreferences.preferences.language} ${documentEpoch}`;
+    if (localizedForRef.current === localizedFor) return;
+    localizedForRef.current = localizedFor;
     const receipt = localizeSeededMaterial(
       canvasPreferences.preferences.language,
       seededSessionRelocalizer,

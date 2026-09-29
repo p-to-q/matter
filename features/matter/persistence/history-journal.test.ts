@@ -3,6 +3,7 @@ import {
   commitTreeCommand,
   createTreeHistory,
   redoTreeHistory,
+  retainedInverseBytes,
   undoTreeHistory,
   type TreeHistory,
 } from "../tree/history";
@@ -106,7 +107,7 @@ describe("history journal layout", () => {
 
   it("sheds half of the retained undo bytes, then all undo, then redo, and stops at material", () => {
     const session = undo(steps(4));
-    const undoBytes = session.history.entries.reduce((total, entry) => total + entry.retainedInverseBytes, 0);
+    const undoBytes = retainedInverseBytes(session.history.entries);
 
     const half = shedHistoryRetention(session.history, FULL_HISTORY_RETENTION);
     expect(half).toEqual({ maxUndoBytes: Math.floor(undoBytes / 2), keepRedo: true });
@@ -115,8 +116,7 @@ describe("history journal layout", () => {
     expect(kept.length).toBeGreaterThan(0);
     expect(kept.length).toBeLessThan(session.history.entries.length);
     expect(kept).toEqual(session.history.entries.slice(-kept.length));
-    expect(kept.reduce((total, entry) => total + entry.retainedInverseBytes, 0))
-      .toBeLessThanOrEqual(half!.maxUndoBytes);
+    expect(retainedInverseBytes(kept)).toBeLessThanOrEqual(half!.maxUndoBytes);
     expect(halfPlan.journal.redo.entries).toEqual(session.history.redoEntries);
 
     const noUndo = shedHistoryRetention(session.history, half!);
@@ -252,11 +252,7 @@ type Session = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
 /** A history as storage hands it back: every step's byte count is still unmeasured. */
 function restored(history: TreeHistory): TreeHistory {
   const mark = (entry: TreeHistory["entries"][number]) => ({ ...entry, bytesUnverified: true as const });
-  return {
-    entries: history.entries.map(mark),
-    redoEntries: history.redoEntries.map(mark),
-    retainedInverseBytes: history.retainedInverseBytes,
-  };
+  return { entries: history.entries.map(mark), redoEntries: history.redoEntries.map(mark) };
 }
 
 function steps(count: number, limits = LIMITS): Session {

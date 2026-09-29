@@ -265,7 +265,7 @@ describe("runtime session", () => {
     const capacity = commitHumanAdmission(state, anchored.anchor, values, {
       maxEntries: 1,
       maxRetainedInverseBytes: 0,
-    }, () => 1);
+    });
     expect(capacity).toMatchObject({ ok: false, receipt: { errorCode: "HISTORY_LIMIT_EXCEEDED" } });
     expect(capacity.state.tree).toBe(state.tree);
     expect(capacity.state.history).toBe(state.history);
@@ -331,7 +331,6 @@ describe("runtime session", () => {
         root: node("root", null),
       }),
       { maxEntries: 1, maxRetainedInverseBytes: 0 },
-      () => 1,
     );
 
     expect(result).toMatchObject({

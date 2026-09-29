@@ -1148,6 +1148,29 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes[values.nodeId].text).toBe(text);
   });
 
+  it("tells untouched material from the person's change across relocalization, hydration, and import", () => {
+    const store = createMatterStore();
+    const untouched = () => store.getState().tree === store.getState().untouchedTree;
+    expect(untouched()).toBe(true);
+    store.getState().localizeSeededMaterial("de-DE", relocalizeSeededSession);
+    expect(untouched()).toBe(true);
+
+    store.getState().extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
+    expect(untouched()).toBe(false);
+    // Relocalizing after the person's change never makes it untouched again.
+    store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    expect(untouched()).toBe(false);
+    store.getState().undo();
+    expect(untouched()).toBe(false);
+
+    const stored = store.getState().tree as ThoughtTree;
+    expect(store.getState().hydrateSnapshot(stored)).toMatchObject({ status: "hydrated" });
+    expect(untouched()).toBe(true);
+    store.getState().extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
+    expect(store.getState().switchDocument(stored)).toMatchObject({ status: "switched" });
+    expect(untouched()).toBe(true);
+  });
+
   it.each([
     ["throws", (() => { throw new Error("interaction copy chunk unavailable"); })],
     ["returns no options", (() => [])],

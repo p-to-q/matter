@@ -24,7 +24,8 @@ import {
   type HistoryRetention,
   type PersistedHistoryJournal,
 } from "./history-journal";
-import { isPlainRecord, parseLegacyHistory, type RecoveredHistory } from "./history-recovery";
+import { parseLegacyHistory, type RecoveredHistory } from "./history-recovery";
+import { isPlainRecord } from "./stored-value";
 import type { ThoughtTree } from "../tree/model";
 import { MATTER_HISTORY_LIMITS, type TreeHistory } from "../tree/history";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
@@ -520,7 +521,7 @@ function compactionRanges(treeId: string, journal: PersistedHistoryJournal): IDB
 function decodeStoredSnapshot(value: unknown, treeId: string): RepositoryResult<ThoughtTree> {
   if (isNewerSchema(value)) return superseded();
   if (
-    !isRecord(value) ||
+    !isPlainRecord(value) ||
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
     value.treeId !== treeId ||
     !Number.isSafeInteger(value.treeRevision) ||
@@ -538,13 +539,13 @@ function decodeStoredSnapshot(value: unknown, treeId: string): RepositoryResult<
 
 /** A newer build's row is valid material this build cannot read, not damage. */
 function isNewerSchema(value: unknown): boolean {
-  return isRecord(value) &&
+  return isPlainRecord(value) &&
     Number.isSafeInteger(value.storageSchemaVersion) &&
     (value.storageSchemaVersion as number) > STORAGE_SCHEMA_VERSION;
 }
 
 function generationOf(value: unknown): unknown {
-  return isRecord(value) ? value.writeGeneration : undefined;
+  return isPlainRecord(value) ? value.writeGeneration : undefined;
 }
 
 function holdsSameMaterial(
@@ -554,14 +555,14 @@ function holdsSameMaterial(
   bundle: SnapshotBundle,
 ): boolean {
   if (
-    !isRecord(value) ||
+    !isPlainRecord(value) ||
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
     value.treeId !== treeId ||
     value.treeRevision !== treeRevision ||
     !Number.isSafeInteger(value.writeGeneration) ||
     (value.writeGeneration as number) < 1 ||
-    !isRecord(value.bundle) ||
-    !isRecord(value.bundle.files)
+    !isPlainRecord(value.bundle) ||
+    !isPlainRecord(value.bundle.files)
   ) return false;
   const stored = value.bundle.files;
   const files = bundle.files as Readonly<Record<string, string>>;
@@ -581,7 +582,7 @@ function serializeStoredSnapshot(value: unknown): string | null {
 }
 
 function nextRecoveryGeneration(value: unknown): number {
-  if (!isRecord(value)) return 1;
+  if (!isPlainRecord(value)) return 1;
   const generation = value.writeGeneration;
   return Number.isSafeInteger(generation) && (generation as number) >= 1 && (generation as number) < Number.MAX_SAFE_INTEGER
     ? (generation as number) + 1
@@ -682,10 +683,6 @@ function isConnectionLost(error: unknown, transaction: TransactionLike | null): 
     candidate instanceof DOMException &&
     candidate.name === "UnknownError" &&
     /connection to indexed database server lost/iu.test(candidate.message));
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function success<Value>(value: Value): RepositoryResult<Value> {

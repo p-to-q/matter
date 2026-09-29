@@ -3,7 +3,6 @@ import {
   commitTreeCommand,
   redoTreeHistory,
   undoTreeHistory,
-  type EstimateInverseBytes,
   type TreeHistory,
   type TreeHistoryLimits,
 } from "../tree/history";
@@ -75,14 +74,12 @@ export function commitSessionCommand(
   state: RuntimeState,
   command: TreeCommand,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const committed = commitTreeCommand(
     state.tree,
     state.history,
     command,
     limits,
-    estimateBytes,
   );
   if (!committed.ok) {
     return reject(state, "commit", committed.error);
@@ -106,14 +103,12 @@ export function commitDeliveredSessionCommand(
   state: RuntimeState,
   command: TreeCommand,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const committed = commitDeliveredTreeCommand(
     state.tree,
     state.history,
     command,
     limits,
-    estimateBytes,
   );
   if (!committed.ok) return reject(state, "commit", committed.error);
   return publish(
@@ -134,7 +129,6 @@ export function commitHumanAdmission(
   anchor: AdmissionAnchor,
   values: AdmissionValues,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const translated = admissionToTreeCommand(
     state.tree,
@@ -150,7 +144,6 @@ export function commitHumanAdmission(
     state,
     translated.command,
     limits,
-    estimateBytes,
   );
   if (!committed.ok) return committed;
 
@@ -197,22 +190,20 @@ export function commitHumanAdmissionRepair(
   state: RuntimeState,
   values: AdmissionRepairValues,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const translated = admissionRepairToTreeCommand(state.tree, values);
   if (!translated.ok) return reject(state, "commit", translated.error);
-  return commitDeliveredSessionCommand(state, translated.command, limits, estimateBytes);
+  return commitDeliveredSessionCommand(state, translated.command, limits);
 }
 
 export function commitHumanRemoval(
   state: RuntimeState,
   values: HumanRemovalValues,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const translated = selectedNodeToRemovalCommand(state.tree, state.navigation, values);
   if (!translated.ok) return reject(state, "commit", translated.error);
-  return commitSessionCommand(state, translated.command, limits, estimateBytes);
+  return commitSessionCommand(state, translated.command, limits);
 }
 
 /**

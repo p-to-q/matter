@@ -8,9 +8,9 @@ export type UnloadGuardEnvironment = Readonly<{
 }>;
 
 export type UnloadRisk = Readonly<{
-  status: PersistenceStatus;
-  /** The material differs from the seed this page started with. */
-  materialDiverged: boolean;
+  phase: PersistenceStatus["phase"];
+  /** `holdsUnsavedPersonMaterial`: material the person made that no row holds. */
+  unsavedPersonMaterial: boolean;
 }>;
 
 export type UnloadGuard = Readonly<{
@@ -24,11 +24,12 @@ export const SLOW_SAVE_MS = 1_000;
 
 /**
  * Owns the one `beforeunload` listener. It is attached only while material the
- * person made is at risk — refused by storage, still writing after
+ * person made is unsaved and at risk — refused by storage, still writing after
  * `SLOW_SAVE_MS`, or changed while stored material is still loading — and
  * removed the moment that ends, so ordinary navigation keeps the page eligible
- * for the back-forward cache. An untouched seed is never at risk: a browser
- * that blocks storage must not prompt on every exit.
+ * for the back-forward cache. Untouched material (the seed, a stored row, their
+ * relocalization) is never at risk: a browser that blocks storage must not
+ * prompt on every exit.
  */
 export function createUnloadGuard(
   environment: UnloadGuardEnvironment,
@@ -55,18 +56,18 @@ export function createUnloadGuard(
     slowSaveReached = false;
   };
   const evaluate = () => {
-    if (risk === null || !risk.materialDiverged) {
+    if (risk === null || !risk.unsavedPersonMaterial) {
       stopSlowTimer();
       setArmed(false);
       return;
     }
-    const { status } = risk;
-    if (status.phase !== "saving") stopSlowTimer();
-    if (status.phase === "loading" || (status.unsaved && status.phase === "error")) {
+    const { phase } = risk;
+    if (phase !== "saving") stopSlowTimer();
+    if (phase === "loading" || phase === "error") {
       setArmed(true);
       return;
     }
-    if (status.unsaved && status.phase === "saving") {
+    if (phase === "saving") {
       if (!slowSaveReached && slowTimer === null) {
         slowTimer = environment.setTimeout(() => {
           slowTimer = null;
