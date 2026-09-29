@@ -6,6 +6,8 @@ import {
   isValidUserProviderApiKey,
   normalizeUserProviderEndpoint,
 } from "../protocol/provider-session-contract";
+import { abortError, rejectOnAbort } from "./abort-boundary";
+import { classifyCompletionTerminators } from "./completion-outcome";
 import type {
   PoolCandidate,
   PoolCompletionDisposition,
@@ -733,9 +735,11 @@ function chatTransport(input: Readonly<{
       ...(input.store === undefined ? {} : { store: input.store }),
       messages: [{ role: "user", content: call.prompt }],
     }),
+    // A compatible mirror reads the same relay families as the managed pool,
+    // so it shares that one stop vocabulary rather than keeping a drifting copy.
     parseCompletion: (payload) => parseChatCompletion(
       payload,
-      input.completion === "official" ? classifyOfficialChatCompletion : classifyCompatibleChatCompletion,
+      input.completion === "official" ? classifyOfficialChatCompletion : classifyCompletionTerminators,
     ),
   });
 }
@@ -928,30 +932,6 @@ function classifyOfficialChatCompletion(choice: Readonly<Record<string, unknown>
   }
 }
 
-function classifyCompatibleChatCompletion(choice: Readonly<Record<string, unknown>>): PoolCompletionDisposition {
-  const raw = [choice.finish_reason, choice.stop_reason];
-  if (raw.some((reason) => reason !== undefined && reason !== null && typeof reason !== "string")) {
-    return "unknown-terminator";
-  }
-  const reasons = raw
-    .filter((reason): reason is string => typeof reason === "string")
-    .map((reason) => reason.trim().toLowerCase());
-  if (reasons.length === 0) return "missing";
-  if (reasons.some((reason) => reason.length === 0)) return "unknown-terminator";
-  const dispositions = reasons.map((reason): PoolCompletionDisposition => {
-    if (reason === "stop" || reason === "end_turn" || reason === "stop_sequence") return "complete";
-    if (reason === "length" || reason === "max_tokens") return "truncated";
-    if (reason === "content_filter" || reason === "refusal" || reason === "safety") return "blocked-or-refused";
-    if (reason === "function_call" || reason === "tool_calls" || reason === "tool_use") return "tool-or-continuation";
-    return "unknown-terminator";
-  });
-  if (dispositions.every((value) => value === "complete")) return "complete";
-  if (dispositions.includes("unknown-terminator")) return "unknown-terminator";
-  if (dispositions.includes("blocked-or-refused")) return "blocked-or-refused";
-  if (dispositions.includes("tool-or-continuation")) return "tool-or-continuation";
-  return "truncated";
-}
-
 function acceptsJsonResponse(response: Response): boolean {
   if (response.status !== 200) return false;
   const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
@@ -1032,7 +1012,7 @@ async function fetchWithAbortBoundary(
   signal: AbortSignal,
 ): Promise<Response> {
   const request = fetchImpl(url, init);
-  const boundary = rejectOnAbort(signal);
+  const boundary = rejectOnAbort(signal, () => signal.reason ?? abortError());
   try {
     return await Promise.race([request, boundary.promise]);
   } finally {
@@ -1047,22 +1027,12 @@ async function readWithAbort(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   signal: AbortSignal,
 ): Promise<ReadableStreamReadResult<Uint8Array>> {
-  const boundary = rejectOnAbort(signal);
+  const boundary = rejectOnAbort(signal, () => signal.reason ?? abortError());
   try {
     return await Promise.race([reader.read(), boundary.promise]);
   } finally {
     boundary.dispose();
   }
-}
-
-function rejectOnAbort(signal: AbortSignal): Readonly<{ promise: Promise<never>; dispose: () => void }> {
-  let rejectPromise!: (reason: unknown) => void;
-  const promise = new Promise<never>((_resolve, reject) => { rejectPromise = reject; });
-  promise.catch(() => undefined);
-  const abort = () => rejectPromise(signal.reason ?? new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) abort();
-  else signal.addEventListener("abort", abort, { once: true });
-  return Object.freeze({ promise, dispose: () => signal.removeEventListener("abort", abort) });
 }
 
 function hasRefusal(value: unknown): boolean {

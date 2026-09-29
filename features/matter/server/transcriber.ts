@@ -1,6 +1,7 @@
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 import type {
+  TranscriptionPurpose,
   TranscriptionRequest,
   TranscriptionSuccess,
 } from "../protocol/transcription-contract";
@@ -10,6 +11,7 @@ import {
   maxTranscriptionOutputCodePoints,
   transcriptionTextFitsCapacity,
 } from "../protocol/transcription-contract";
+import { rejectOnAbort } from "./abort-boundary";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
 import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import {
@@ -32,7 +34,7 @@ const FIXTURE_ADMISSION_TRANSCRIPT =
 export async function transcribeRecording(
   request: TranscriptionRequest,
   requestSignal: AbortSignal,
-  adapter?: TranscriptionAdapter,
+  adapter: TranscriptionAdapter,
 ): Promise<TranscriptionSuccess> {
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), TRANSCRIPTION_SERVER_TIMEOUT_MS);
@@ -40,11 +42,10 @@ export async function transcribeRecording(
   const abortBoundary = rejectOnAbort(combined.signal);
   try {
     if (requestSignal.aborted) throw new DOMException("Aborted", "AbortError");
-    const selectedAdapter = adapter ?? resolveTranscriptionAdapter(request.purpose);
     // Aborting a signal is advisory. The boundary must still settle when an SDK
     // or provider adapter ignores it, otherwise one request can hang forever.
     const result = await Promise.race([
-      selectedAdapter(request, combined.signal),
+      adapter(request, combined.signal),
       abortBoundary.promise,
     ]);
     const transcript = validateTranscript(result.transcript, request, result.pauses);
@@ -95,21 +96,22 @@ export const fixtureTranscriptionAdapter: TranscriptionAdapter = async (request)
   transcript: fixtureTranscript(request.purpose),
 });
 
-function resolveTranscriptionAdapter(purpose: TranscriptionRequest["purpose"]): TranscriptionAdapter {
-  // Preserve both existing voice paths exactly. Swap direction belongs to the
-  // Text Swap product surface; provider promotion is a separate concern.
-  const existingVoiceDisabled = purpose !== "swap-direction" &&
-    process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED === "false";
-  const textSwapDisabled = purpose === "swap-direction" &&
-    !materialModelSurfaceAuthorized("matter-text-swap");
-  if (existingVoiceDisabled || textSwapDisabled) {
-    throw new TranscriptionServerError(
-      "TRANSCRIPTION_UNAVAILABLE",
-      "Speech transcription is not configured.",
-      true,
-      503,
-    );
-  }
+// Exhaustive by construction: a new purpose that is not listed here is a
+// compile error, not a deployment that silently refuses it before parsing.
+const TRANSCRIPTION_PURPOSES = Object.freeze(Object.keys({
+  admission: true,
+  direction: true,
+  "swap-direction": true,
+} satisfies Readonly<Record<TranscriptionPurpose, true>>) as TranscriptionPurpose[]);
+
+/**
+ * Resolves this deployment's server transcription capability from
+ * configuration alone. The route calls it before it reads a recording, so a
+ * deployment that cannot transcribe any purpose refuses without buffering
+ * audio it would only discard. The per-purpose product gate still runs once the
+ * purpose is known; see `assertTranscriptionPurposeAvailable`.
+ */
+export function resolveTranscriptionAdapter(): TranscriptionAdapter {
   const configured = process.env.MATTER_TRANSCRIPTION_ADAPTER;
   // Native browser recognition is a client-owned path; never silently turn a
   // server request into fixture speech when that deployment mode is selected.
@@ -121,10 +123,28 @@ function resolveTranscriptionAdapter(purpose: TranscriptionRequest["purpose"]): 
       503,
     );
   }
+  if (!TRANSCRIPTION_PURPOSES.some(transcriptionPurposeEnabled)) throw transcriptionNotConfigured();
   if (configured === "fixture" || (configured === undefined && process.env.NODE_ENV !== "production")) {
     return fixtureTranscriptionAdapter;
   }
-  throw new TranscriptionServerError(
+  throw transcriptionNotConfigured();
+}
+
+/** Each voice purpose belongs to its own product surface and gate. */
+export function assertTranscriptionPurposeAvailable(purpose: TranscriptionRequest["purpose"]): void {
+  if (!transcriptionPurposeEnabled(purpose)) throw transcriptionNotConfigured();
+}
+
+function transcriptionPurposeEnabled(purpose: TranscriptionRequest["purpose"]): boolean {
+  // Preserve both existing voice paths exactly. Swap direction belongs to the
+  // Text Swap product surface; provider promotion is a separate concern.
+  return purpose === "swap-direction"
+    ? materialModelSurfaceAuthorized("matter-text-swap")
+    : process.env.NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED !== "false";
+}
+
+function transcriptionNotConfigured(): TranscriptionServerError {
+  return new TranscriptionServerError(
     "TRANSCRIPTION_UNAVAILABLE",
     "Speech transcription is not configured.",
     true,
@@ -211,22 +231,5 @@ function combineSignals(...signals: AbortSignal[]): {
     dispose: () => {
       for (const signal of signals) signal.removeEventListener("abort", abort);
     },
-  };
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: DOMException) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return {
-    promise,
-    dispose: () => signal.removeEventListener("abort", reject),
   };
 }

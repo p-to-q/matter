@@ -216,11 +216,21 @@ therefore cannot be reinterpreted as a locally short answer.
 
 The boundary is fail-closed for every explicit terminator. Known complete values
 may return text; truncation, guardrail/refusal, tool/continuation, conflicting
-fields, and explicit unknown values cannot. A missing field remains a counted
-compatibility path while deployed relays are measured. Production receipts keep
+fields, and explicit unknown values cannot. The managed pool and every
+compatible user transport read one shared vocabulary in `completion-outcome.ts`,
+so a terminator cannot answer on one lane and be refused on the other. The
+official OpenAI, DeepSeek, Anthropic, and Responses wires keep their own
+narrower lists; Gemini's official OpenAI-compatible transport is the exception
+and reads the shared list, because its documented surface is the compatible
+one. A missing field remains a
+counted compatibility path for managed relays while they are measured; a
+reviewed user transport requires an explicit terminator. Production receipts keep
 only closed counts — attempt, timeout, failure, truncation, refusal, unknown,
 missing, and explicit-action scenario rejection — never the relay's raw
-vocabulary.
+vocabulary. A rejected terminal also carries one code from the scenario's
+declared `rejectionCodes`, or `UNDECLARED`, so a refused answer can be explained
+without its text; each scenario builds that vocabulary exhaustively from its
+adjudicator's own reason type.
 
 **One provider foundation, five execution lanes.** `model-pool.ts` owns the
 managed registry and execution machinery; `user-provider-registry.ts` owns the

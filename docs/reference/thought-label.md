@@ -124,7 +124,9 @@ identifier the deterministic label kept (`API v2`), or when it is materially
 less distinct from its siblings than the label it would replace. Adjudication
 runs on the server and again in the browser, including on a cache hit — the
 bound, the sibling set, or the prompt version may have moved since the entry was
-written.
+written. A server cache hit is judged by the scenario's complete adjudicator,
+not only its syntax check, so that cache cannot show a label the fresh path
+would refuse.
 
 Both thresholds were set from the corpus, not from taste. Grounding first
 measured Han character *bigrams*, which refused 8 of 17 answers — including
@@ -153,8 +155,8 @@ word, and a shorter candidate wins.
 derived, so folding it into a child's identity would make labelling a fixpoint
 problem: naming a parent invalidates its children, whose new names invalidate
 their siblings. `materialFingerprint` covers material only, so labelling
-terminates; the full `labelFingerprint`, which does include context, is used
-only as a server cache key.
+terminates; the full `labelQuestionIdentity`, which does include context, is
+used only as the input to the server cache's SHA-256 key.
 
 **A name a person types outranks everything.** It survives edits to the
 material, restoration from storage, a model answer already in flight, and the

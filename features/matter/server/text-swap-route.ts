@@ -223,11 +223,12 @@ function admissionError(reason: "ORIGIN" | "RATE" | "BUSY"): TextSwapServerError
   if (reason === "ORIGIN") {
     return new TextSwapServerError("INVALID_REQUEST", "This text swap origin is not allowed.", false, 403);
   }
+  // The perimeter refused before any model work, so no scenario outcome exists
+  // to report; a fallback reason here would read as the model being busy.
   return new TextSwapServerError(
-    "TURN_UNAVAILABLE",
+    "RATE_LIMITED",
     reason === "RATE" ? "Please wait before swapping this passage again." : "Matter is busy. Please try again shortly.",
     true,
     reason === "RATE" ? 429 : 503,
-    "MODEL_BUSY",
   );
 }

@@ -361,18 +361,21 @@ describe("deployed material origin probe", () => {
     expect(boundaryFailures.bySurface["text-swap"].transportFailed).toBe(1);
   });
 
-  it("stops immediately when the probe itself reaches admission", async () => {
+  it.each([
+    [429, "Synthetic rate boundary reached."],
+    // Instance concurrency is still the perimeter, never a model outcome.
+    [503, "Synthetic admission concurrency reached."],
+  ])("stops immediately when the probe itself reaches %i admission", async (status, message) => {
     const receipt = receiptRecorder();
     let posts = 0;
     const fetchImpl = deploymentFetch({
       post: async (url) => {
         posts += 1;
-        return jsonResponse(url, 429, {
+        return jsonResponse(url, status, {
           error: {
-            code: "TURN_UNAVAILABLE",
-            message: "Synthetic rate boundary reached.",
+            code: "RATE_LIMITED",
+            message,
             retryable: true,
-            fallbackReason: "MODEL_BUSY",
           },
         });
       },
@@ -383,6 +386,7 @@ describe("deployed material origin probe", () => {
     });
     expect(posts).toBe(1);
     expect(summary.bySurface.turn.admissionFailed).toBe(1);
+    expect(summary.bySurface.turn.busy).toBe(0);
     expect(summary.bySurface["text-swap"].calls).toBe(0);
     expect(receipt.stopped).toMatchObject({
       status: "stopped",
@@ -391,6 +395,26 @@ describe("deployed material origin probe", () => {
       expectedSamples: 2,
     });
     expect(receipt.completed).toBeUndefined();
+  });
+
+  it("does not accept a model fallback reason on an admission refusal", async () => {
+    const receipt = receiptRecorder();
+    const fetchImpl = deploymentFetch({
+      post: async (url) => jsonResponse(url, 429, {
+        error: {
+          code: "RATE_LIMITED",
+          message: "Synthetic mislabelled refusal.",
+          retryable: true,
+          fallbackReason: "MODEL_BUSY",
+        },
+      }),
+    });
+    const summary = await runMaterialOriginProbe(config(), {
+      fetchImpl,
+      receiptStore: receipt.store,
+    });
+    expect(summary.bySurface.turn.admissionFailed).toBe(0);
+    expect(receipt.stopped).toMatchObject({ stoppedBecause: "invalid-response" });
   });
 
   it("stops on malformed success instead of accepting or retrying it", async () => {

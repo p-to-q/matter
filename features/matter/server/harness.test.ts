@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_GOVERNOR_LIMITS,
   ScenarioGovernor,
+  UNDECLARED_REJECTION,
   recordScenarioPerformance,
   runScenario,
   withAdapterOwnedHealth,
@@ -43,6 +44,7 @@ const ECHO: MatterScenario<string, string> = Object.freeze({
   adjudicate: (answer) => typeof answer === "string" && answer.length > 0
     ? { ok: true, value: answer }
     : { ok: false, reason: "empty" },
+  rejectionCodes: ["empty"],
 });
 
 const answers = (text: string): ScenarioAdapter => async () => ({ text });
@@ -231,6 +233,104 @@ describe("runScenario", () => {
     await runScenario(ECHO, "hello", answers("ok"), new ScenarioGovernor());
     expect(info).toHaveBeenCalledOnce();
     expect(String(info.mock.calls[0]?.[0])).toContain('"outcome":"answered"');
+  });
+
+  it("says why production refused an answer, by declared code only", async () => {
+    // Inquiry, repair, and label pass no fallback observer, so this default
+    // receipt is the only production record of why an answer was refused.
+    vi.stubEnv("NODE_ENV", "production");
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await runScenario(ECHO, "MATERIAL_SENTINEL", answers(""), new ScenarioGovernor());
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(info).toHaveBeenCalledOnce();
+    const line = String(info.mock.calls[0]?.[0]);
+    expect(line).toContain('"outcome":"rejected"');
+    expect(line.endsWith(',"rejectionReason":"empty"}')).toBe(true);
+    expect(line).not.toContain("MATERIAL_SENTINEL");
+  });
+
+  it("reports an undeclared adjudicator reason as UNDECLARED to every observer", async () => {
+    const leaky: MatterScenario<string, string> = {
+      ...ECHO,
+      adjudicate: (answer) => ({ ok: false, reason: `refused: ${String(answer)}` }),
+    };
+    const observe = vi.fn();
+    const observePerformance = vi.fn();
+    await runScenario(leaky, "hello", answers("MODEL_TEXT_SENTINEL"), new ScenarioGovernor(), {
+      observe,
+      observePerformance,
+    });
+
+    expect(observe).toHaveBeenCalledWith(expect.objectContaining({
+      reason: "MODEL_REJECTED",
+      rejectionReason: UNDECLARED_REJECTION,
+    }));
+    expect(observePerformance).toHaveBeenCalledWith(expect.objectContaining({
+      outcome: "rejected",
+      rejectionReason: UNDECLARED_REJECTION,
+    }));
+    expect(JSON.stringify([observe.mock.calls, observePerformance.mock.calls]))
+      .not.toContain("MODEL_TEXT_SENTINEL");
+  });
+
+  it("carries a rejection code only on a rejected receipt and only as an identifier", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const base = {
+      scenario: "matter-thought-label",
+      elapsedMs: 5,
+      candidateTelemetry: "pool",
+      candidateAttempts: 1,
+      candidateTimeouts: 0,
+      candidateFailures: 0,
+      candidateTruncations: 0,
+      candidateRefusals: 0,
+      candidateRejections: 0,
+      candidateUnknownTerminators: 0,
+      candidateMissingTerminators: 0,
+    } as const;
+    const lines = [
+      { ...base, outcome: "rejected", rejectionReason: "not-better-than-provisional" },
+      { ...base, outcome: "rejected", rejectionReason: "想象的生活" },
+      { ...base, outcome: "rejected", rejectionReason: "two words" },
+      { ...base, outcome: "rejected", rejectionReason: "X".repeat(49) },
+      { ...base, outcome: "rejected" },
+      { ...base, outcome: "answered", rejectionReason: "EMPTY" },
+    ].map((observation) => {
+      recordScenarioPerformance(observation as ScenarioPerformanceObservation);
+      return JSON.parse(String(info.mock.lastCall?.[0]).replace("matter.scenario-performance ", "")) as
+        Record<string, unknown>;
+    });
+
+    expect(lines.map((line) => line.rejectionReason)).toEqual([
+      "not-better-than-provisional",
+      UNDECLARED_REJECTION,
+      UNDECLARED_REJECTION,
+      UNDECLARED_REJECTION,
+      UNDECLARED_REJECTION,
+      undefined,
+    ]);
+  });
+
+  it("declares a closed, loggable rejection vocabulary for every production scenario", () => {
+    for (const scenario of [
+      INQUIRY_SCENARIO,
+      LABEL_SCENARIO,
+      REPAIR_SCENARIO,
+      TEXT_SWAP_SCENARIO,
+      TRANSFORM_SCENARIO,
+    ]) {
+      expect(scenario.rejectionCodes.length).toBeGreaterThan(0);
+      for (const code of scenario.rejectionCodes) {
+        expect(code).toMatch(/^[A-Za-z][A-Za-z0-9]*(?:[_-][A-Za-z0-9]+)*$/u);
+        expect(code.length).toBeLessThanOrEqual(48);
+      }
+      // Every adjudicator refuses a non-text answer before reading its input.
+      const verdict = scenario.adjudicate(42, undefined as never);
+      expect(verdict.ok).toBe(false);
+      if (!verdict.ok) expect(scenario.rejectionCodes).toContain(verdict.reason);
+    }
   });
 
   it("keeps a performance sink failure outside scenario settlement", async () => {

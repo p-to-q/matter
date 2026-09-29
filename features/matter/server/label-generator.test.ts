@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
 import type { LabelRequest } from "../protocol/label-contract";
@@ -214,6 +215,20 @@ describe("generateLabel", () => {
       Date.now,
       "credential-b",
     );
+    expect(calls).toBe(2);
+  });
+
+  it.each([
+    ["reference context", { reference: { siblingLabels: ["别的名字"] } }],
+    ["prompt version", { promptVersion: "thought-label/next" }],
+  ] as const)("keys a different %s as a different question", async (_name, change) => {
+    let calls = 0;
+    const adapter: ScenarioAdapter = async () => {
+      calls += 1;
+      return { text: "想象的生活" };
+    };
+    await generateLabel(labelRequest(), new AbortController().signal, adapter);
+    await generateLabel(labelRequest({ operationId: "second", ...change }), new AbortController().signal, adapter);
     expect(calls).toBe(2);
   });
 
