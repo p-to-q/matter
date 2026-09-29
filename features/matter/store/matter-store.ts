@@ -53,7 +53,7 @@ import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import { createTreeHistory } from "../tree/history";
 import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
-import type { ThoughtTree, TreeCommand } from "../tree/model";
+import type { ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
@@ -74,6 +74,7 @@ import {
   prepareRepairIngress,
   prepareTransformIngress,
   prepareTextSwapIngress,
+  type TextReplacementCommand,
 } from "../application/material-ingress";
 import {
   captureMaterialLexicalSession,
@@ -841,7 +842,6 @@ export function createMatterStore(
       set((current) => {
         const settled = commitMaterialTurn(current, {
           expectedDocumentEpoch,
-          nodeId: envelope.selection.nodeId,
           motionHint: "grow",
           prepare: (tree) => prepareTransformIngress({
             tree,
@@ -866,7 +866,6 @@ export function createMatterStore(
       set((current) => {
         const settled = commitMaterialTurn(current, {
           expectedDocumentEpoch,
-          nodeId: envelope.selection.nodeId,
           motionHint: "settle",
           prepare: (tree) => prepareTextSwapIngress({
             tree,
@@ -1096,11 +1095,17 @@ function runtimeState(state: MatterStoreInternalState): RuntimeState {
 
 type MaterialTurn<Motion extends MaterialTextMotion> = Readonly<{
   expectedDocumentEpoch: number;
-  nodeId: string;
   motionHint: Motion;
-  /** Strict ingress for this turn's contract; it prepares but never commits. */
+  /**
+   * Strict ingress for this turn's contract; it prepares but never commits,
+   * and it admits only a replacement of the passage the turn addressed.
+   */
   prepare: (tree: ThoughtTree) =>
-    | Readonly<{ ok: true; command: TreeCommand; plan: Readonly<{ action: Readonly<{ id: string }> }> }>
+    | Readonly<{
+        ok: true;
+        command: TextReplacementCommand;
+        plan: Readonly<{ action: Readonly<{ id: string }> }>;
+      }>
     | Readonly<{ ok: false; reason: "STALE" | "INVALID_PLAN" }>;
 }>;
 
@@ -1138,8 +1143,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
   ) return stale;
   const prepared = turn.prepare(current.tree);
   if (!prepared.ok && prepared.reason === "STALE") return stale;
-  const mutation = prepared.ok ? prepared.command.mutation : null;
-  if (!prepared.ok || mutation?.type !== "replace-text" || mutation.nodeId !== turn.nodeId) {
+  if (!prepared.ok) {
     const error: MatterStoreError = protectValue({
       code: "INVALID_COMMAND",
       message: "The turn result does not satisfy its material contract.",
@@ -1155,6 +1159,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
       outcome: Object.freeze({ status: "rejected" as const, receipt }),
     });
   }
+  const { mutation } = prepared.command;
   const result = commitDeliveredSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
   const domain = protectDomain(result.state);
   const receipt = protectValue(result.receipt);
@@ -1180,7 +1185,7 @@ function commitMaterialTurn<Motion extends MaterialTextMotion>(
         id: prepared.plan.action.id,
         treeId: current.tree.id,
         documentEpoch: current.documentEpoch,
-        nodeId: turn.nodeId,
+        nodeId: mutation.nodeId,
         committedRevision: result.state.tree.revision,
         motionHint: turn.motionHint,
         before: Object.freeze({ text: mutation.expectedText, updatedAt: mutation.expectedUpdatedAt }),
