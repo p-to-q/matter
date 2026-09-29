@@ -443,7 +443,10 @@ archive, or public agent action. This includes the whole dictionary, a filtered
 dictionary, selected canonical terms, and derived pronunciation aliases.
 Server, protocol, and API modules are forbidden from importing Wiki code through
 either static imports or string-literal dynamic imports, so a later product idea
-cannot silently widen today's privacy boundary.
+cannot silently widen today's privacy boundary. The persistence modules that own
+snapshot, undo-journal, and archive shapes may not reach Wiki either, even
+through the shared database schema; `npm run check:architecture` holds both
+rules.
 
 The former transcript-repair `vocabulary` hint was removed rather than reused.
 Repair receives one utterance and locale. Local lexical authority is applied

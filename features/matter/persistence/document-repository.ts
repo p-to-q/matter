@@ -8,7 +8,6 @@ import {
   SUPERSEDED_DATABASE_ERROR,
 } from "./matter-database";
 import type {
-  HistoryStackName,
   MatterDatabase,
   MatterDatabaseLifecycle,
   StoredSnapshot,
@@ -22,6 +21,7 @@ import {
   planHistoryJournalWrite,
   readHistoryManifest,
   type HistoryRetention,
+  type HistoryStackName,
   type PersistedHistoryJournal,
 } from "./history-journal";
 import { isPlainRecord, parseLegacyHistory, type RecoveredHistory } from "./history-recovery";

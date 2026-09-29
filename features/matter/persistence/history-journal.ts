@@ -1,17 +1,48 @@
 import {
-  HISTORY_JOURNAL_FORMAT_VERSION,
-  type HistoryStackName,
-  type StoredHistoryEntry,
-  type StoredHistoryJournal,
-  type StoredHistoryRange,
-} from "./matter-database";
-import {
   isPlainRecord,
   parseHistoryEntry,
   sumBytes,
   type RecoveredHistory,
 } from "./history-recovery";
 import type { TreeHistory, TreeHistoryEntry, TreeHistoryLimits } from "../tree/history";
+import type { TreeCommand } from "../tree/model";
+
+export const HISTORY_JOURNAL_FORMAT_VERSION = 1 as const;
+
+export type HistoryStackName = "undo" | "redo";
+
+/** Half-open `[first, end)` positions of one stack inside the manifest epoch. */
+export type StoredHistoryRange = readonly [first: number, end: number];
+
+/**
+ * The snapshot row's description of its undo journal. It repeats the row's
+ * generation and revision so a row rewritten by a writer that copied the
+ * manifest without owning the records is recognized as stale.
+ */
+export type StoredHistoryJournal = Readonly<{
+  formatVersion: typeof HISTORY_JOURNAL_FORMAT_VERSION;
+  epoch: number;
+  writeGeneration: number;
+  treeRevision: number;
+  undo: StoredHistoryRange;
+  redo: StoredHistoryRange;
+  count: number;
+  bytes: number;
+}>;
+
+export type StoredHistoryKey = [treeId: string, epoch: number, stack: HistoryStackName, position: number];
+
+export type StoredHistoryEntry = Readonly<{
+  formatVersion: typeof HISTORY_JOURNAL_FORMAT_VERSION;
+  treeId: string;
+  epoch: number;
+  stack: HistoryStackName;
+  position: number;
+  commandId: string;
+  source: TreeCommand["source"];
+  inverse: TreeCommand;
+  retainedInverseBytes: number;
+}>;
 
 /**
  * Owns the per-entry undo journal layout: which positions of which epoch hold

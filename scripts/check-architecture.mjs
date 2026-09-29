@@ -48,6 +48,10 @@ export const LAYERS = Object.freeze([
 
 const PROVIDER_MODULE = "features/matter/server/model-pool.ts";
 const WIKI_ROOT = "features/matter/wiki/";
+/** Modules that own the shape of persisted material: snapshots, the undo
+ * journal, and the archive a person exports. */
+const PERSISTED_MATERIAL_MODULE =
+  /^features\/matter\/persistence\/(?:archive|snapshot|history)-[^/]+$/u;
 
 /**
  * Runtime value specifiers only.
@@ -217,9 +221,23 @@ export function findProblems(graph) {
         );
       }
     }
+
+    // 7. A snapshot, the undo journal, and an archive hold exactly what a
+    // person wrote; Wiki stays outside all of them. The modules that own
+    // those shapes may not reach Wiki at all, not even through a shared row
+    // schema, because a writer that can name a Wiki type can serialize one.
+    if (PERSISTED_MATERIAL_MODULE.test(file)) {
+      const path = pathToWiki(graph, file);
+      if (path !== null) {
+        problems.push(
+          `${file} reaches Wiki through ${path.join(" -> ")}. ` +
+          "Archive, snapshot, and history modules carry material only; Wiki stays outside them.",
+        );
+      }
+    }
   }
 
-  // 7. No cycles. A cycle means neither module can be understood, tested, or
+  // 8. No cycles. A cycle means neither module can be understood, tested, or
   //    replaced without the other, whatever the layer table says.
   const WHITE = 0, GREY = 1, BLACK = 2;
   const colour = new Map([...graph.keys()].map((file) => [file, WHITE]));
