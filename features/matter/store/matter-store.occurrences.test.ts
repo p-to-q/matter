@@ -26,6 +26,10 @@ import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import type { MatterLocale } from "../config/locales";
 import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
 import { decorateSpokenExpression } from "../runtime/expressive-transcript";
+import { adjudicateAdmissionRepair } from "../runtime/admission-repair-adjudication";
+
+// The repair runtime supplies this adjudicator; the product loads it lazily.
+const judgeRepair = () => adjudicateAdmissionRepair;
 
 const TIME = "2026-09-29T00:00:00.000Z";
 const PASSAGE = "Rain touched the window";
@@ -130,6 +134,7 @@ describe("Matter store committed lexical occurrences", () => {
     let nowMs = 100;
     const published: MaterialLexicalOccurrencePublication[] = [];
     const store = createMatterStore("root", {
+      admissionRepair: judgeRepair,
       materialLexical: attributedPort("spoken", "code x", "Codex", true, "zh-CN"),
       lexicalOccurrences: recordingPort(published),
       monotonicNow: () => nowMs,

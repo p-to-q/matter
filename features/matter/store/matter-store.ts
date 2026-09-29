@@ -40,15 +40,7 @@ import {
   ADMISSION_REPAIR_WINDOW_MS,
   type AdmissionRepairValues,
 } from "../runtime/admission-repair";
-import {
-  adjudicateRepair,
-  normalizeRepairInput,
-} from "../material/transcript-repair";
-import {
-  canonicalSpokenExpressionBase,
-  decorateSpokenExpression,
-} from "../runtime/expressive-transcript";
-import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
+import type { AdmissionRepairAdjudicator } from "../runtime/admission-repair-adjudication";
 import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
 import {
@@ -56,7 +48,7 @@ import {
   type HumanTextRangeRestorationValues,
 } from "../runtime/text-range-restoration";
 import { createTreeHistory } from "../tree/history";
-import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
+import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
@@ -107,26 +99,6 @@ import {
 // recovery. Only an abnormal release (an unreadable or no longer applicable
 // step) is announced; reaching the bound is ordinary editing.
 const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = MATTER_HISTORY_LIMITS;
-
-function locallyDecorateAdjudicatedRepair(
-  verdict: ReturnType<typeof adjudicateRepair>,
-  locale: string,
-  sampleSeed: string,
-  expectedText: string,
-): Readonly<{ ok: true; text: string; changed: boolean }> | Readonly<{ ok: false }> {
-  if (!verdict.ok || !verdict.changed) return Object.freeze({ ok: false as const });
-  const text = decorateSpokenExpression({
-    text: verdict.text,
-    locale,
-    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
-    sampleSeed,
-  });
-  return Object.freeze({
-    ok: true as const,
-    text,
-    changed: text !== expectedText,
-  });
-}
 
 type NavigationOperation = "select" | "clear-selection" | "focus" | "show-full" | "toggle-fold";
 
@@ -394,6 +366,12 @@ export function createMatterStore(
     materialLexical?: MaterialLexicalPort;
     humanAdmissionObservation?: MaterialLexicalObservationPort;
     lexicalOccurrences?: MaterialLexicalOccurrencePort;
+    /**
+     * The store's authority over a late repair candidate. It loads with the
+     * repair port, so it is present before any candidate can exist; a
+     * settlement it cannot judge is refused and the admitted words stand.
+     */
+    admissionRepair?: () => AdmissionRepairAdjudicator | null;
   }> = {},
 ): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
@@ -407,6 +385,7 @@ export function createMatterStore(
     IDENTITY_MATERIAL_LEXICAL_OBSERVATION_PORT;
   const lexicalOccurrences = options.lexicalOccurrences ??
     IDENTITY_MATERIAL_LEXICAL_OCCURRENCE_PORT;
+  const readAdmissionRepair = options.admissionRepair ?? noAdmissionRepair;
   // Published only after the state update returns, so a consumer always reads
   // the committed tree and can never re-enter an unfinished Zustand update.
   const publishOccurrences = (publication: MaterialLexicalOccurrencePublication | null) => {
@@ -689,36 +668,16 @@ export function createMatterStore(
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;
         }
-        const ruleWords = repairAdmittedTranscriptWords(lease.expectedText, lease.locale);
-        const ruleFloor = decorateSpokenExpression({
-          text: ruleWords,
-          locale: lease.locale,
-          maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
-          sampleSeed: lease.interactionId,
-        });
-        const modelWords = settlement.source === "model"
-          ? canonicalSpokenExpressionBase({
-              text: settlement.text,
+        const adjudicate = readAdmissionRepair();
+        const adjudicated = adjudicate === null
+          ? Object.freeze({ ok: false as const })
+          : adjudicate({
+              expectedText: lease.expectedText,
               locale: lease.locale,
-              maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
               sampleSeed: lease.interactionId,
-            })
-          : undefined;
-        const adjudicated = settlement.source === "rules"
-          ? settlement.text === ruleFloor
-            ? Object.freeze({ ok: true as const, text: settlement.text, changed: settlement.text !== lease.expectedText })
-            : Object.freeze({ ok: false as const })
-          : modelWords === undefined
-            ? Object.freeze({ ok: false as const })
-            : locallyDecorateAdjudicatedRepair(adjudicateRepair(
-              // Rules and model are one candidate, not two model edits. The
-              // recomputed floor is trusted only because the rules branch above
-              // is pure and exact; the model receives authority solely over its
-              // bounded delta from that floor. Expression is stripped and
-              // re-proven locally before the model delta is judged.
-              normalizeRepairInput({ text: ruleWords, locale: lease.locale }),
-              modelWords,
-            ), lease.locale, lease.interactionId, lease.expectedText);
+              source: settlement.source,
+              text: settlement.text,
+            });
         if (!adjudicated.ok || !adjudicated.changed) {
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;
@@ -1565,4 +1524,8 @@ function protectUnknown(
 
 function freezeState(state: MatterStoreInternalState): MatterStoreInternalState {
   return Object.freeze(state);
+}
+
+function noAdmissionRepair(): AdmissionRepairAdjudicator | null {
+  return null;
 }

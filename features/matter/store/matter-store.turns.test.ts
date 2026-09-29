@@ -18,6 +18,10 @@ import { compileWikiBasis } from "../wiki/wiki-basis";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
 import { createWikiMaterialLexicalPort } from "../application/wiki-material-lexical-adapter";
 import { createMatterStore, type MatterStore } from "./matter-store";
+import { adjudicateAdmissionRepair } from "../runtime/admission-repair-adjudication";
+
+// The repair runtime supplies this adjudicator; the product loads it lazily.
+const judgeRepair = () => adjudicateAdmissionRepair;
 
 const TARGET = SEEDED_DOCUMENT_NODE_IDS.imaginedLives;
 const SIBLING_PARENT = SEEDED_DOCUMENT_NODE_IDS.bodilyMemory;
@@ -63,7 +67,7 @@ describe("Matter store material turns", () => {
 
   it("settles an admission repair without destroying an Undo made meanwhile", () => {
     let nowMs = 100;
-    const store = createMatterStore("expanded", { monotonicNow: () => nowMs });
+    const store = createMatterStore("expanded", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -120,6 +124,7 @@ describe("Matter store material turns", () => {
       if (!compiled.ok) throw new Error(compiled.error.code);
       let nowMs = 100;
       const store = createMatterStore("root", {
+        admissionRepair: judgeRepair,
         materialLexical: createWikiMaterialLexicalPort(() => compiled.basis, () => canonicalizeWikiText),
         monotonicNow: () => nowMs,
       });
