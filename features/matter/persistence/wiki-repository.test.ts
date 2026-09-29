@@ -126,7 +126,7 @@ describe("IndexedDB Wiki repository", () => {
     const migrated = await repository.load();
     expect(migrated).toMatchObject({
       ok: true,
-      value: { writeGeneration: 8, state: { schemaVersion: 6 } },
+      value: { writeGeneration: 8, state: { schemaVersion: 7 } },
     });
     if (!migrated.ok || migrated.value === null) return;
     expect(migrated.value.state.lexemes[0].scope).toBe("both");
@@ -184,7 +184,7 @@ describe("IndexedDB Wiki repository", () => {
     })).toBe(relations);
   });
 
-  it("durably rewrites a valid V5 split ledger as one V6 record", async () => {
+  it("durably rewrites a valid V5 split ledger as one current record", async () => {
     let stored: unknown = {
       storageSchemaVersion: 1,
       recordSchemaVersion: 5,
@@ -236,8 +236,8 @@ describe("IndexedDB Wiki repository", () => {
       value: {
         writeGeneration: 8,
         state: {
-          schemaVersion: 6,
-          termEvidence: [{ producer: "legacy-term-v1" }],
+          schemaVersion: 7,
+          termEvidence: [{ producer: "legacy-term-v1", support: 4 }],
         },
       },
     });
@@ -245,11 +245,90 @@ describe("IndexedDB Wiki repository", () => {
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       recordSchemaVersion: 6,
       writeGeneration: 8,
-      state: expect.objectContaining({ schemaVersion: 6 }),
+      state: expect.objectContaining({ schemaVersion: 7, revertStrikes: [] }),
     }));
 
     await expect(repository.load()).resolves.toEqual(migrated);
     expect(put).toHaveBeenCalledOnce();
+  });
+
+  it("reads a current-record V6 state as V7 and persists V7 on the next write", async () => {
+    let stored: unknown = {
+      storageSchemaVersion: 1,
+      recordSchemaVersion: 6,
+      key: "origin",
+      writeGeneration: 3,
+      state: {
+        schemaVersion: 6,
+        scoringVersion: 3,
+        fittingVersion: 1,
+        revision: 2,
+        nextLexemeId: 2,
+        automaticLearningSaturated: false,
+        lexemes: [{
+          id: 1,
+          locale: "en-US",
+          canonical: "Engelbart",
+          scope: "both",
+          provenance: "human-confirmed",
+          confirmedAtRevision: 1,
+        }],
+        termEvidence: [],
+        aliasEvidence: [{
+          lexemeId: 1,
+          channel: "spoken",
+          boundary: "word",
+          form: "Englebart",
+          producer: "latin-internal-edit-v2",
+          phase: "active",
+          support: 4,
+          quietTurns: 2,
+        }],
+        authorities: [],
+        aliasTombstones: [],
+        lexemeTombstones: [],
+      },
+    };
+    const put = vi.fn(async (value: unknown) => {
+      stored = value;
+    });
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn(() => ({
+        store: { get: vi.fn(async () => stored), put },
+        abort: vi.fn(),
+        done: Promise.resolve(),
+      })),
+    } as never);
+    const repository = createIndexedDbWikiRepository();
+
+    const loaded = await repository.load();
+    expect(loaded).toMatchObject({
+      ok: true,
+      value: {
+        writeGeneration: 3,
+        state: {
+          schemaVersion: 7,
+          scoringVersion: 4,
+          aliasEvidence: [{ phase: "active", support: 16, kept: 0, keptQuietTurns: 0 }],
+          revertStrikes: [],
+        },
+      },
+    });
+    expect(put).not.toHaveBeenCalled();
+    if (!loaded.ok || loaded.value === null) return;
+
+    const renamed = applyWikiEvent(loaded.value.state, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Morphogenesis",
+      scope: "both",
+    });
+    if (!renamed.ok) throw new Error(renamed.error.message);
+    await expect(repository.save(renamed.state, 3)).resolves.toEqual({ ok: true, value: 4 });
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      writeGeneration: 4,
+      state: expect.objectContaining({ schemaVersion: 7, scoringVersion: 4 }),
+    }));
   });
 
   it("does not replay removed starters after the one-time record migration", async () => {

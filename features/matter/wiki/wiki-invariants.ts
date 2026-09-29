@@ -8,6 +8,7 @@ import {
   MAX_WIKI_FORM_CODE_POINTS,
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
+  MAX_WIKI_REVERT_STRIKES,
   MAX_WIKI_TOMBSTONES,
   WIKI_FITTING_VERSION,
   WIKI_SCHEMA_VERSION,
@@ -20,6 +21,7 @@ import {
   type WikiLexeme,
   type WikiLexemeScope,
   type WikiLexemeTombstone,
+  type WikiRevertStrike,
   type WikiRuleDescriptor,
   type WikiState,
   type WikiTermEvidenceAggregate,
@@ -27,9 +29,12 @@ import {
 } from "./wiki-model";
 import {
   MAX_WIKI_LEARNING_QUIET_TURNS,
+  MAX_WIKI_REVERT_STRIKE_QUIET_TURNS,
   WIKI_ALIAS_PRODUCER_WEIGHTS,
+  WIKI_TERM_SCORE_POLICY,
+  isWikiKeptEvidence,
   isWikiStoredTermEvidenceProducer,
-  isWikiLearningCount,
+  isWikiLearningUnits,
 } from "./wiki-learning-policy";
 import { hasUnsafeWikiFormatControl } from "./wiki-text-safety";
 
@@ -103,6 +108,7 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
         "authorities",
         "aliasTombstones",
         "lexemeTombstones",
+        "revertStrikes",
       ])) {
     return invalid("The Wiki state is not an object.");
   }
@@ -124,7 +130,8 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     !Array.isArray(state.aliasEvidence) ||
     !Array.isArray(state.authorities) ||
     !Array.isArray(state.aliasTombstones) ||
-    !Array.isArray(state.lexemeTombstones)
+    !Array.isArray(state.lexemeTombstones) ||
+    !Array.isArray(state.revertStrikes)
   ) return invalid("The Wiki collections are invalid.");
   if (
     state.lexemes.length > MAX_WIKI_LEXEMES ||
@@ -132,7 +139,8 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     state.aliasEvidence.length > MAX_WIKI_EVIDENCE_RECORDS ||
     state.authorities.length > MAX_WIKI_AUTHORITY_RULES ||
     state.aliasTombstones.length > MAX_WIKI_TOMBSTONES ||
-    state.lexemeTombstones.length > MAX_WIKI_LEXEME_TOMBSTONES
+    state.lexemeTombstones.length > MAX_WIKI_LEXEME_TOMBSTONES ||
+    state.revertStrikes.length > MAX_WIKI_REVERT_STRIKES
   ) return invalid("The Wiki collection bound is exceeded.");
 
   const lexemeIds = new Set<number>();
@@ -250,6 +258,21 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     lexemeTombstoneKeys.add(key);
   }
 
+  // A strike is soft memory for one automatic alias. Any human decision on the
+  // same visible alias supersedes it, so the two can never coexist.
+  const strikeKeys = new Set<string>();
+  for (const strike of state.revertStrikes) {
+    if (!isWikiRevertStrike(strike) || !isValidAliasTarget(strike, lexemesById)) {
+      return invalid("A Wiki revert strike is invalid.");
+    }
+    const key = storedDecisionKey(strike);
+    if (strikeKeys.has(key)) return invalid("Wiki revert strikes are duplicated.");
+    if (authorityKeys.has(key) || tombstoneKeys.has(key)) {
+      return invalid("A Wiki revert strike overlaps a human decision.");
+    }
+    strikeKeys.add(key);
+  }
+
   if (normalizedWikiStates.has(state)) validatedWikiStates.add(state);
   return VALID_WIKI_STATE;
 }
@@ -297,6 +320,11 @@ export function freezeWikiState(state: WikiState): WikiState {
     }),
     compareLexemeIdentity,
   );
+  const revertStrikes = freezeWikiCollection(
+    state.revertStrikes,
+    freezeRevertStrike,
+    compareRevertStrike,
+  );
   const normalized = Object.freeze({
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
@@ -310,6 +338,7 @@ export function freezeWikiState(state: WikiState): WikiState {
     authorities: Object.freeze(authorities),
     aliasTombstones: Object.freeze(aliasTombstones),
     lexemeTombstones: Object.freeze(lexemeTombstones),
+    revertStrikes: Object.freeze(revertStrikes),
   });
   normalizedWikiStates.add(normalized);
   return normalized;
@@ -351,7 +380,9 @@ export function storedDescriptorKey(value: WikiAliasDescriptor): string {
   return JSON.stringify([value.lexemeId, value.channel, value.boundary, value.form]);
 }
 
-export function storedDecisionKey(value: WikiAliasDescriptor): string {
+export function storedDecisionKey(
+  value: Pick<WikiAliasDescriptor, "lexemeId" | "channel" | "form">,
+): string {
   return JSON.stringify([value.lexemeId, value.channel, value.form]);
 }
 
@@ -412,14 +443,17 @@ function isWikiLexemeTombstone(value: unknown): value is WikiLexemeTombstone {
 }
 
 function isValidAliasTarget(
-  value: WikiAliasDescriptor,
+  value: Pick<WikiAliasDescriptor, "lexemeId" | "form">,
   lexemesById: ReadonlyMap<number, WikiLexeme>,
 ): boolean {
   const lexeme = lexemesById.get(value.lexemeId);
   return lexeme !== undefined && value.form !== lexeme.canonical;
 }
 
-function isWikiTermEvidenceAggregate(value: unknown): value is WikiTermEvidenceAggregate {
+/** Term phase bands follow the quarter-unit collection and retention gates. */
+export function isWikiTermEvidenceAggregate(
+  value: unknown,
+): value is WikiTermEvidenceAggregate {
   return isPlainObject(value) &&
     hasExactKeys(value, [
       "locale", "canonical", "producer", "phase", "support", "quietTurns",
@@ -429,25 +463,42 @@ function isWikiTermEvidenceAggregate(value: unknown): value is WikiTermEvidenceA
     typeof value.producer === "string" &&
     isWikiStoredTermEvidenceProducer(value.producer) &&
     (value.phase === "candidate" || value.phase === "collected") &&
-    isWikiLearningCount(value.support) &&
+    isWikiLearningUnits(value.support) &&
     isWikiQuietTurns(value.quietTurns) &&
-    (value.phase !== "candidate" || value.support < 2) &&
-    (value.phase !== "collected" || value.support >= 1);
+    (value.phase !== "candidate" ||
+      value.support < WIKI_TERM_SCORE_POLICY.collectionSupport) &&
+    (value.phase !== "collected" ||
+      value.support >= WIKI_TERM_SCORE_POLICY.retentionSupport);
 }
 
-function isWikiAliasEvidenceAggregate(value: unknown): value is WikiAliasEvidenceAggregate {
+export function isWikiAliasEvidenceAggregate(
+  value: unknown,
+): value is WikiAliasEvidenceAggregate {
   return isPlainObject(value) &&
     hasExactKeys(value, [
       "lexemeId", "channel", "boundary", "form", "producer", "phase", "support",
-      "quietTurns",
+      "quietTurns", "kept", "keptQuietTurns",
     ]) &&
     typeof value.producer === "string" &&
     Object.hasOwn(WIKI_ALIAS_PRODUCER_WEIGHTS, value.producer) &&
     (value.phase === "candidate" || value.phase === "active") &&
-    isWikiLearningCount(value.support) &&
+    isWikiLearningUnits(value.support) &&
     value.support > 0 &&
     isWikiQuietTurns(value.quietTurns) &&
+    typeof value.kept === "number" && typeof value.keptQuietTurns === "number" &&
+    isWikiKeptEvidence({ kept: value.kept, keptQuietTurns: value.keptQuietTurns }) &&
     isWikiAliasDescriptor(value);
+}
+
+export function isWikiRevertStrike(value: unknown): value is WikiRevertStrike {
+  return isPlainObject(value) &&
+    hasExactKeys(value, ["lexemeId", "channel", "form", "quietTurns"]) &&
+    isLexemeId(value.lexemeId) &&
+    isWikiChannel(value.channel) &&
+    isWikiForm(value.form) &&
+    Number.isSafeInteger(value.quietTurns) &&
+    (value.quietTurns as number) >= 0 &&
+    (value.quietTurns as number) <= MAX_WIKI_REVERT_STRIKE_QUIET_TURNS;
 }
 
 function isWikiQuietTurns(value: unknown): value is number {
@@ -495,6 +546,17 @@ function freezeAliasEvidence(value: WikiAliasEvidenceAggregate): WikiAliasEviden
     phase: value.phase,
     support: value.support,
     quietTurns: value.quietTurns,
+    kept: value.kept,
+    keptQuietTurns: value.keptQuietTurns,
+  });
+}
+
+function freezeRevertStrike(value: WikiRevertStrike): WikiRevertStrike {
+  return Object.freeze({
+    lexemeId: value.lexemeId,
+    channel: value.channel,
+    form: value.form,
+    quietTurns: value.quietTurns,
   });
 }
 
@@ -516,6 +578,12 @@ function freezeTombstone(value: WikiTombstone): WikiTombstone {
     form: value.form,
     rejectedAtRevision: value.rejectedAtRevision,
   });
+}
+
+function compareRevertStrike(left: WikiRevertStrike, right: WikiRevertStrike): number {
+  return left.lexemeId - right.lexemeId ||
+    compareText(left.channel, right.channel) ||
+    compareText(left.form, right.form);
 }
 
 function compareLexeme(left: WikiLexeme, right: WikiLexeme): number {

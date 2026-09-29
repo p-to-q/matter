@@ -18,7 +18,7 @@ import {
   MAX_WIKI_STATE_BYTES,
   type WikiEvent,
   type WikiObserveEvidenceEvent,
-  type WikiObservationDispositions,
+  type WikiObservationTick,
   type WikiState,
   type WikiTransitionResult,
 } from "../wiki/wiki-model";
@@ -66,7 +66,7 @@ export type WikiCoordinator = Readonly<{
   decide(event: WikiDecision, expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
   observe(
     events: readonly WikiObserveEvidenceEvent[],
-    dispositions?: WikiObservationDispositions,
+    tick: WikiObservationTick,
     expectedView?: WikiObservationView,
   ): Promise<WikiCoordinatorResult>;
   clear(expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
@@ -91,14 +91,14 @@ const MAX_OBSERVATION_REBASE_ATTEMPTS = 4;
 export function applyBoundedWikiObservationBatch(
   state: WikiState,
   events: readonly WikiObserveEvidenceEvent[],
-  dispositions: WikiObservationDispositions | undefined,
+  tick: WikiObservationTick,
   qualifiedAliasProducers: ReadonlySet<WikiAliasEvidenceProducer>,
   maxStateBytes = MAX_WIKI_STATE_BYTES,
 ): WikiTransitionResult {
   const result = applyWikiObservationBatch(
     state,
     events,
-    dispositions,
+    tick,
     qualifiedAliasProducers,
   );
   if (!result.ok || !result.changed ||
@@ -108,7 +108,7 @@ export function applyBoundedWikiObservationBatch(
   const fallback = applyWikiObservationBatch(
     state,
     retained,
-    dispositions,
+    tick,
     qualifiedAliasProducers,
   );
   if (!fallback.ok || !fallback.changed ||
@@ -417,13 +417,13 @@ export function createWikiCoordinator(
       (state) => applyWikiEvent(state, event),
       expectedStateRevision,
     ),
-    async observe(events, dispositions, expectedView) {
+    async observe(events, tick, expectedView) {
       await start();
       return enqueue(
         (state) => applyBoundedWikiObservationBatch(
           state,
           events,
-          dispositions,
+          tick,
           qualifiedAliasProducers,
         ),
         expectedView?.stateRevision,

@@ -8,7 +8,7 @@ import {
   createWikiMaterialLexicalPort,
 } from "./wiki-material-lexical-adapter";
 import { compileWikiBasis, type WikiBasis } from "../wiki/wiki-basis";
-import { combineWikiAdmissionEvidence } from "../wiki/wiki-admission";
+import { planWikiAdmissionBatch } from "../wiki/wiki-admission";
 import {
   applyWikiEvent,
   applyWikiObservationBatch,
@@ -19,8 +19,8 @@ import {
   MATTER_WIKI_RUNTIME_PRODUCER_RELEASES,
 } from
   "../wiki/wiki-runtime-producer-releases";
-import { collectCommittedWikiTerms } from "../wiki/wiki-term-collection";
-import { fitCommittedWikiText } from "../wiki/wiki-fitting";
+import { collectCommittedWikiTermsResult } from "../wiki/wiki-term-collection";
+import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting";
 import type { WikiState } from "../wiki/wiki-model";
 
 describe("Wiki automation baseline", () => {
@@ -29,8 +29,12 @@ describe("Wiki automation baseline", () => {
     let basis = compileRuntime(state, 0);
     const observer = createWikiMaterialLexicalObservationPort(
       (observation) => {
-        const events = collectCommittedWikiTerms(observation.committed);
-        const result = applyWikiObservationBatch(state, events);
+        const batch = planWikiAdmissionBatch(
+          observation,
+          collectCommittedWikiTermsResult(observation.committed),
+          null,
+        );
+        const result = applyWikiObservationBatch(state, batch.events, batch.tick);
         if (!result.ok) throw new Error(result.error.message);
         state = result.state;
         basis = compileRuntime(state, basis.snapshot.generation + 1);
@@ -71,17 +75,19 @@ describe("Wiki automation baseline", () => {
     let basis = compileRuntime(state, 1);
     const observer = createWikiMaterialLexicalObservationPort(
       (observation) => {
-        const fittingEvents = fitCommittedWikiText(
-          basis.fitSnapshot,
-          observation.observed,
-          new Set(["latin-internal-edit-v2"]),
+        const batch = planWikiAdmissionBatch(
+          observation,
+          collectCommittedWikiTermsResult(
+            observation.committed,
+            new Set(["locale-segment-v1", "shape-specific-v1"]),
+          ),
+          fitCommittedWikiTextResult(
+            basis.fitSnapshot,
+            observation.observed,
+            new Set(["latin-internal-edit-v2"]),
+          ),
         );
-        const termEvents = collectCommittedWikiTerms(
-          observation.committed,
-          new Set(["locale-segment-v1", "shape-specific-v1"]),
-        );
-        const events = combineWikiAdmissionEvidence(termEvents, fittingEvents);
-        const result = applyWikiObservationBatch(state, events);
+        const result = applyWikiObservationBatch(state, batch.events, batch.tick);
         if (!result.ok) throw new Error(result.error.message);
         state = result.state;
         basis = compileRuntime(state, basis.snapshot.generation + 1);

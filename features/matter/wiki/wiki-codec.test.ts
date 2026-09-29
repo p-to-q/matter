@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { parseWikiEvent, parseWikiState, wikiStateStorageBytes } from "./wiki-codec";
+import {
+  maximumRawWikiStateBytes,
+  parseWikiEvent,
+  parseWikiState,
+  wikiStateStorageBytes,
+} from "./wiki-codec";
 import {
   applyWikiEvent,
   applyWikiObservationBatch,
   createEmptyWikiState,
+  createWikiProjectionPolicy,
+  projectApplicableWikiRules,
 } from "./wiki-evidence";
 import { compileWikiFitSnapshot } from "./wiki-fitting";
 import {
@@ -11,7 +18,10 @@ import {
   MAX_WIKI_EVIDENCE_RECORDS,
   MAX_WIKI_MIGRATION_HEADROOM_BYTES,
   MAX_WIKI_STATE_BYTES,
+  MAX_WIKI_V6_STATE_BYTES,
+  MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES,
   type WikiEvent,
+  type WikiObservationTick,
 } from "./wiki-model";
 import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from
   "./wiki-qualified-producer-releases";
@@ -216,8 +226,9 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 6,
+        schemaVersion: 7,
         lexemes: [{ canonical: "Engelbart", scope: "both" }],
+        revertStrikes: [],
       },
     });
   });
@@ -263,14 +274,14 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 6,
-        scoringVersion: 3,
+        schemaVersion: 7,
+        scoringVersion: 4,
         termEvidence: [{
           locale: "en-US",
           canonical: "Codex",
           producer: "legacy-term-v1",
           phase: "candidate",
-          support: 1,
+          support: 4,
           quietTurns: 0,
         }],
         aliasEvidence: [{
@@ -278,8 +289,10 @@ describe("Wiki codec", () => {
           form: "code x",
           producer: "legacy-v1",
           phase: "candidate",
-          support: 4,
+          support: 16,
           quietTurns: 0,
+          kept: 0,
+          keptQuietTurns: 0,
         }],
       },
     });
@@ -317,7 +330,7 @@ describe("Wiki codec", () => {
     if (!parsed.ok) throw new Error(parsed.message);
 
     expect(parsed.state.termEvidence).toEqual([
-      expect.objectContaining({ producer: "legacy-term-v1", phase: "collected" }),
+      expect.objectContaining({ producer: "legacy-term-v1", phase: "collected", support: 8 }),
     ]);
     expect(parseWikiState(JSON.parse(JSON.stringify(parsed.state))))
       .toEqual({ ok: true, state: parsed.state });
@@ -334,7 +347,7 @@ describe("Wiki codec", () => {
         locale: "en-US",
         canonical: "Lexicorium",
         producer: "locale-segment-v1",
-      }]);
+      }], englishTick("observed", "quiet"));
       if (!result.ok) throw new Error(result.error.message);
       observed = result.state;
     }
@@ -383,11 +396,14 @@ describe("Wiki codec", () => {
     const migratedBytes = wikiStateStorageBytes(parsed.state);
     const producerFieldBytes = new TextEncoder()
       .encode(',"producer":"legacy-term-v1"').byteLength;
+    const strikeCollectionBytes = new TextEncoder()
+      .encode(',"revertStrikes":[]').byteLength;
 
     expect(legacyBytes).toBeLessThanOrEqual(MAX_LEGACY_WIKI_STATE_BYTES);
+    // Support 1 scales to 4 without a new digit, isolating the producer field.
     expect(migratedBytes - legacyBytes)
-      .toBe(producerFieldBytes * MAX_WIKI_EVIDENCE_RECORDS);
-    expect(migratedBytes - legacyBytes).toBeLessThanOrEqual(
+      .toBe(producerFieldBytes * MAX_WIKI_EVIDENCE_RECORDS + strikeCollectionBytes);
+    expect(migratedBytes - legacyBytes - strikeCollectionBytes).toBeLessThanOrEqual(
       MAX_WIKI_MIGRATION_HEADROOM_BYTES,
     );
     expect(migratedBytes).toBeLessThanOrEqual(MAX_WIKI_STATE_BYTES);
@@ -425,12 +441,12 @@ describe("Wiki codec", () => {
 
     expect(parsed.state.termEvidence).toEqual([]);
     expect(parsed.state.aliasEvidence).toEqual([
-      expect.objectContaining({ form: "engel bard", support: 4 }),
+      expect.objectContaining({ form: "engel bard", support: 16 }),
     ]);
 
     let state = parsed.state;
-    for (let index = 0; index < 96; index += 1) {
-      const aged = applyWikiObservationBatch(state, []);
+    for (let index = 0; index < 160; index += 1) {
+      const aged = applyWikiObservationBatch(state, [], englishTick("quiet", "quiet"));
       if (!aged.ok) throw new Error(aged.error.message);
       state = aged.state;
     }
@@ -479,7 +495,7 @@ describe("Wiki codec", () => {
       ok: true,
       state: {
         termEvidence: [],
-        aliasEvidence: [{ producer: "legacy-v1", support: 1 }],
+        aliasEvidence: [{ producer: "legacy-v1", support: 4 }],
         authorities: [{ form: "code x" }],
       },
     });
@@ -557,7 +573,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 6,
+        schemaVersion: 7,
         fittingVersion: 1,
         revision: 2,
         nextLexemeId: 3,
@@ -622,7 +638,239 @@ describe("Wiki codec", () => {
     expect(parsed.state.lexemes).toHaveLength(5_001);
     expect(wikiStateStorageBytes(parsed.state)).toBeLessThanOrEqual(MAX_WIKI_STATE_BYTES);
   }, 20_000);
+
+  it("migrates a V6 whole-unit state to exact V7 quarter-units", () => {
+    const legacy = wholeUnitState({
+      termEvidence: [
+        term("Anemone", "candidate", 1, 7),
+        term("Borealis", "collected", 2, 0),
+        term("Codex", "collected", 255, 31),
+      ],
+      aliasEvidence: [
+        alias(1, "aurora x", "zh-exact-homophone-v1", "active", 3, 4),
+        alias(2, "borealis x", "legacy-v1", "candidate", 255, 0),
+      ],
+    });
+
+    const parsed = parseWikiState(legacy);
+    if (!parsed.ok) throw new Error(parsed.message);
+
+    expect(parsed.state).toMatchObject({
+      schemaVersion: 7,
+      scoringVersion: 4,
+      revertStrikes: [],
+      termEvidence: [
+        { canonical: "Anemone", phase: "candidate", support: 4, quietTurns: 7 },
+        { canonical: "Borealis", phase: "collected", support: 8, quietTurns: 0 },
+        { canonical: "Codex", phase: "collected", support: 1_020, quietTurns: 31 },
+      ],
+      aliasEvidence: [
+        { form: "aurora x", phase: "active", support: 12, quietTurns: 4, kept: 0, keptQuietTurns: 0 },
+        { form: "borealis x", phase: "candidate", support: 1_020, kept: 0, keptQuietTurns: 0 },
+      ],
+    });
+    // Every former gate is preserved: the active exact relation still projects.
+    expect(projectApplicableWikiRules(
+      parsed.state,
+      createWikiProjectionPolicy(MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES),
+    )).toEqual([expect.objectContaining({ form: "aurora x", canonical: "Aurora" })]);
+    expect(parseWikiState(JSON.parse(JSON.stringify(parsed.state))))
+      .toEqual({ ok: true, state: parsed.state });
+  });
+
+  it("rejects values outside each schema's own unit bands instead of repairing them", () => {
+    const v6 = wholeUnitState({
+      termEvidence: [term("Borealis", "collected", 2, 0)],
+      aliasEvidence: [alias(1, "aurora x", "zh-exact-homophone-v1", "candidate", 2, 0)],
+    });
+    expect(parseWikiState(v6).ok).toBe(true);
+    for (const invalid of [
+      { ...v6, termEvidence: [term("Borealis", "candidate", 2, 0)] },
+      { ...v6, termEvidence: [term("Borealis", "collected", 0, 0)] },
+      { ...v6, aliasEvidence: [alias(1, "aurora x", "zh-exact-homophone-v1", "candidate", 256, 0)] },
+      { ...v6, scoringVersion: 4 },
+      { ...v6, revertStrikes: [] },
+      { ...v6, aliasEvidence: [{
+        ...alias(1, "aurora x", "zh-exact-homophone-v1", "candidate", 2, 0),
+        kept: 0,
+        keptQuietTurns: 0,
+      }] },
+    ]) expect(parseWikiState(invalid).ok).toBe(false);
+
+    const parsed = parseWikiState(v6);
+    if (!parsed.ok) throw new Error(parsed.message);
+    const v7 = JSON.parse(JSON.stringify(parsed.state)) as Record<string, unknown> & {
+      termEvidence: Record<string, unknown>[];
+      aliasEvidence: Record<string, unknown>[];
+    };
+    const strike = { lexemeId: 1, channel: "spoken", form: "aurora x", quietTurns: 0 };
+    expect(parseWikiState({ ...v7, revertStrikes: [strike] }).ok).toBe(true);
+    for (const invalid of [
+      { ...v7, scoringVersion: 3 },
+      { ...v7, termEvidence: [{ ...v7.termEvidence[0], phase: "collected", support: 3 }] },
+      { ...v7, termEvidence: [{ ...v7.termEvidence[0], phase: "candidate", support: 8 }] },
+      { ...v7, termEvidence: [{ ...v7.termEvidence[0], support: 1_021 }] },
+      { ...v7, aliasEvidence: [{ ...v7.aliasEvidence[0], kept: 25 }] },
+      { ...v7, aliasEvidence: [{ ...v7.aliasEvidence[0], kept: 0, keptQuietTurns: 5 }] },
+      { ...v7, aliasEvidence: [{ ...v7.aliasEvidence[0], kept: 24, keptQuietTurns: 32 }] },
+      { ...v7, aliasEvidence: [{ ...v7.aliasEvidence[0], kept: 1, keptQuietTurns: 160 }] },
+      { ...v7, revertStrikes: [{ ...strike, quietTurns: 128 }] },
+      { ...v7, revertStrikes: [{ ...strike, form: "Aurora" }] },
+      { ...v7, revertStrikes: [strike, strike] },
+      { ...v7, revertStrikes: [{ ...strike, boundary: "word" }] },
+      {
+        ...v7,
+        revertStrikes: [strike],
+        aliasTombstones: [{
+          lexemeId: 1, channel: "spoken", boundary: "word", form: "aurora x", rejectedAtRevision: 1,
+        }],
+      },
+    ]) expect(parseWikiState(invalid).ok).toBe(false);
+    const withoutStrikes: Record<string, unknown> = { ...v7 };
+    delete withoutStrikes.revertStrikes;
+    expect(parseWikiState(withoutStrikes).ok).toBe(false);
+  });
+
+  it("reserves a proved byte allowance for the largest V6-to-V7 migration", () => {
+    const lexemes = Array.from({ length: MAX_WIKI_EVIDENCE_RECORDS }, (_, index) => ({
+      id: index + 1,
+      locale: "en-US" as const,
+      canonical: `Term ${index.toString().padStart(5, "0")}`,
+      scope: "both" as const,
+      provenance: "aggregate-evidence" as const,
+      confirmedAtRevision: null,
+    }));
+    const legacy = wholeUnitState({
+      nextLexemeId: MAX_WIKI_EVIDENCE_RECORDS + 1,
+      lexemes,
+      // 255 whole observations gain one decimal digit at 1,020 quarter-units,
+      // the largest per-row growth the scaling can cause.
+      termEvidence: lexemes.map((entry) =>
+        term(entry.canonical, "collected", 255, 0)),
+      aliasEvidence: lexemes.map((entry) =>
+        alias(entry.id, `alias ${entry.id}`, "zh-exact-homophone-v1", "candidate", 255, 0)),
+    });
+    const legacyBytes = wikiStateStorageBytes(legacy);
+    const parsed = parseWikiState(legacy);
+    if (!parsed.ok) throw new Error(parsed.message);
+    const migratedBytes = wikiStateStorageBytes(parsed.state);
+    const keptFieldBytes = new TextEncoder().encode(',"kept":0,"keptQuietTurns":0').byteLength;
+    const strikeCollectionBytes = new TextEncoder().encode(',"revertStrikes":[]').byteLength;
+
+    expect(legacyBytes).toBeLessThanOrEqual(MAX_WIKI_V6_STATE_BYTES);
+    expect(migratedBytes - legacyBytes).toBe(
+      MAX_WIKI_EVIDENCE_RECORDS * (keptFieldBytes + 1) +
+      MAX_WIKI_EVIDENCE_RECORDS * 1 +
+      strikeCollectionBytes,
+    );
+    expect(migratedBytes - legacyBytes)
+      .toBeLessThanOrEqual(MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES);
+    expect(MAX_WIKI_STATE_BYTES)
+      .toBe(MAX_WIKI_V6_STATE_BYTES + MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES);
+  }, 30_000);
+
+  it("bounds raw storage by the schema version that wrote it", () => {
+    expect(maximumRawWikiStateBytes({ schemaVersion: 7 })).toBe(MAX_WIKI_STATE_BYTES);
+    expect(maximumRawWikiStateBytes({ schemaVersion: 6 })).toBe(MAX_WIKI_V6_STATE_BYTES);
+    for (const legacy of [{ schemaVersion: 5 }, { schemaVersion: 2 }, null, "state"]) {
+      expect(maximumRawWikiStateBytes(legacy)).toBe(MAX_LEGACY_WIKI_STATE_BYTES);
+    }
+  });
 });
+
+function englishTick(
+  term: "observed" | "quiet",
+  alias: "observed" | "quiet",
+): WikiObservationTick {
+  const opportunity = Object.freeze({
+    locale: "en-US" as const,
+    channel: "spoken" as const,
+    scripts: Object.freeze(["latin" as const]),
+  });
+  return Object.freeze({
+    term: Object.freeze({ disposition: term, opportunity }),
+    alias: Object.freeze({ disposition: alias, opportunity }),
+  });
+}
+
+function wholeUnitState(overrides: Record<string, unknown>) {
+  return {
+    schemaVersion: 6,
+    scoringVersion: 3,
+    fittingVersion: 1,
+    revision: 4,
+    nextLexemeId: 4,
+    automaticLearningSaturated: false,
+    lexemes: [
+      {
+        id: 1,
+        locale: "en-US",
+        canonical: "Aurora",
+        scope: "both",
+        provenance: "human-confirmed",
+        confirmedAtRevision: 1,
+      },
+      {
+        id: 2,
+        locale: "en-US",
+        canonical: "Borealis",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      },
+      {
+        id: 3,
+        locale: "en-US",
+        canonical: "Codex",
+        scope: "both",
+        provenance: "aggregate-evidence",
+        confirmedAtRevision: null,
+      },
+    ],
+    termEvidence: [],
+    aliasEvidence: [],
+    authorities: [],
+    aliasTombstones: [],
+    lexemeTombstones: [],
+    ...overrides,
+  };
+}
+
+function term(
+  canonical: string,
+  phase: "candidate" | "collected",
+  support: number,
+  quietTurns: number,
+) {
+  return {
+    locale: "en-US",
+    canonical,
+    producer: "locale-segment-v1",
+    phase,
+    support,
+    quietTurns,
+  };
+}
+
+function alias(
+  lexemeId: number,
+  form: string,
+  producer: string,
+  phase: "candidate" | "active",
+  support: number,
+  quietTurns: number,
+) {
+  return {
+    lexemeId,
+    channel: "spoken",
+    boundary: "word",
+    form,
+    producer,
+    phase,
+    support,
+    quietTurns,
+  };
+}
 
 function event(type: "confirm-rule" | "reject-rule"): WikiEvent;
 function event(type: "observe-evidence"): WikiEvent;

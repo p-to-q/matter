@@ -10,10 +10,14 @@ import {
   type WikiTermEvidenceProducer,
 } from "./wiki-learning-policy";
 import {
-  MAX_WIKI_OBSERVATIONS_PER_BATCH,
+  MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   type WikiObserveEvidenceEvent,
 } from "./wiki-model";
-import type { WikiAdmissionObservation } from "./wiki-admission";
+import type {
+  WikiAdmissionObservation,
+  WikiAdmissionProducerResult,
+} from "./wiki-admission";
+import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
 import type { MatterLocale } from "../config/locales";
 
 const LATIN = /^[\p{Script=Latin}\p{M}]+$/u;
@@ -82,28 +86,37 @@ export function collectCommittedWikiTerms(
   return collectCommittedWikiTermsResult(request, enabledProducers).events;
 }
 
-export type WikiTermCollectionResult = Readonly<{
-  status: "ok" | "censored";
-  events: readonly WikiObserveEvidenceEvent[];
-}>;
+export type WikiTermCollectionResult = WikiAdmissionProducerResult;
 
+const CENSORED_COLLECTION: WikiTermCollectionResult = Object.freeze({
+  status: "censored",
+  events: Object.freeze([]),
+  scannedScripts: Object.freeze([]),
+});
+
+/**
+ * Scans eligible words in text order. When one more distinct term would
+ * exceed the per-ledger bound, scanning stops before that word and the result
+ * is `partial`: what was scanned still counts, and nothing beyond it may be
+ * treated as absent.
+ */
 export function collectCommittedWikiTermsResult(
   request: WikiAdmissionObservation,
   enabledProducers?: ReadonlySet<WikiTermEvidenceProducer>,
 ): WikiTermCollectionResult {
   if (request.text.length === 0 || !wikiTermSegmenterConforms()) {
-    return Object.freeze({ status: "censored", events: Object.freeze([]) });
+    return CENSORED_COLLECTION;
   }
   const eligibleRanges = normalizeWikiEligibleRanges(
     request.eligibleRanges,
     request.text.length,
   );
-  if (eligibleRanges === null) {
-    return Object.freeze({ status: "censored", events: Object.freeze([]) });
-  }
+  if (eligibleRanges === null) return CENSORED_COLLECTION;
   const protectedSpans = findProtectedWikiSpans(request.text, "evidence");
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
+  let scannedScripts = 0;
+  let partial = false;
 
   for (const segment of segmenter.segment(request.text)) {
     if (!segment.isWordLike) continue;
@@ -113,29 +126,34 @@ export function collectCommittedWikiTermsResult(
         wikiRangeOverlapsProtected(start, end, protectedSpans, 0)) continue;
     const canonical = segment.segment.normalize("NFC");
     const producer = classifyTerm(request.locale, canonical);
-    if (producer === null || !isWikiCanonical(canonical) ||
-        (enabledProducers !== undefined && !enabledProducers.has(producer))) continue;
-    const event: WikiObserveEvidenceEvent = Object.freeze({
-      type: "observe-evidence",
-      locale: request.locale,
-      canonical,
-      source: "recent-material",
-      producer,
-    });
-    const key = JSON.stringify([event.locale, event.canonical]);
-    const previous = events.get(key);
-    if (previous === undefined || (
-      previous.source === "recent-material" &&
-      compareWikiTermProducerPrecedence(producer, previous.producer) < 0
-    )) events.set(key, event);
-    if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) {
-      return Object.freeze({ status: "censored", events: Object.freeze([]) });
+    if (producer !== null && isWikiCanonical(canonical) &&
+        (enabledProducers === undefined || enabledProducers.has(producer))) {
+      const key = JSON.stringify([request.locale, canonical]);
+      const previous = events.get(key);
+      if (previous === undefined && events.size >= MAX_WIKI_OBSERVATIONS_PER_LEDGER) {
+        partial = true;
+        break;
+      }
+      if (previous === undefined || (
+        previous.source === "recent-material" &&
+        compareWikiTermProducerPrecedence(producer, previous.producer) < 0
+      )) {
+        events.set(key, Object.freeze({
+          type: "observe-evidence",
+          locale: request.locale,
+          canonical,
+          source: "recent-material",
+          producer,
+        }));
+      }
     }
+    scannedScripts |= wikiScriptMask(segment.segment);
   }
   return Object.freeze({
-    status: "ok",
+    status: partial ? "partial" : "ok",
     events: Object.freeze([...events.values()].sort((left, right) =>
       left.canonical.localeCompare(right.canonical, request.locale))),
+    scannedScripts: wikiScriptClassesFromMask(scannedScripts),
   });
 }
 

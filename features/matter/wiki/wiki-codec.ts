@@ -4,22 +4,29 @@ import {
   isNormalizedFrozenWikiState,
   isValidatedFrozenWikiState,
   isWikiAliasDescriptor,
+  isWikiAliasEvidenceAggregate,
   isWikiBoundary,
   isWikiCanonical,
   isWikiChannel,
   isWikiDescriptor,
   isWikiForm,
   isWikiLexemeScope,
+  isWikiRevertStrike,
+  isWikiTermEvidenceAggregate,
   lexemeKey,
   validateWikiState,
 } from "./wiki-invariants";
 import {
+  MAX_LEGACY_WIKI_STATE_BYTES,
   MAX_WIKI_AUTHORITY_RULES,
   MAX_WIKI_EVIDENCE_COUNT,
   MAX_WIKI_EVIDENCE_RECORDS,
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
+  MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_STATE_BYTES,
   MAX_WIKI_TOMBSTONES,
+  MAX_WIKI_V6_STATE_BYTES,
   WIKI_FITTING_VERSION,
   WIKI_RECENT_OBSERVATION_WINDOW,
   WIKI_SCHEMA_VERSION,
@@ -31,6 +38,7 @@ import {
   type WikiEvent,
   type WikiLexeme,
   type WikiLexemeTombstone,
+  type WikiRevertStrike,
   type WikiRuleDescriptor,
   type WikiState,
   type WikiTermEvidenceAggregate,
@@ -39,6 +47,7 @@ import {
 import {
   MAX_WIKI_LEARNING_QUIET_TURNS,
   WIKI_ALIAS_PRODUCER_WEIGHTS,
+  WIKI_EVIDENCE_UNITS_PER_OBSERVATION,
   isWikiAliasEvidenceProducer,
   isWikiStoredTermEvidenceProducer,
   isWikiTermEvidenceProducer,
@@ -49,7 +58,27 @@ const LEGACY_RELATION_SCHEMA_VERSION = 2;
 const LEGACY_LEXEME_SCHEMA_VERSION = 3;
 const LEGACY_SCOPED_LEXEME_SCHEMA_VERSION = 4;
 const LEGACY_SPLIT_LEDGER_SCHEMA_VERSION = 5;
+const LEGACY_WHOLE_UNIT_SCHEMA_VERSION = 6;
 const LEGACY_SCORING_VERSION = 2;
+/** Scoring V3 stored whole observations in the split V5 and V6 ledgers. */
+const LEGACY_WHOLE_UNIT_SCORING_VERSION = 3;
+const CURRENT_STATE_KEYS = Object.freeze([
+  "schemaVersion",
+  "scoringVersion",
+  "fittingVersion",
+  "revision",
+  "nextLexemeId",
+  "automaticLearningSaturated",
+  "lexemes",
+  "termEvidence",
+  "aliasEvidence",
+  "authorities",
+  "aliasTombstones",
+  "lexemeTombstones",
+  "revertStrikes",
+]);
+const SPLIT_LEDGER_STATE_KEYS = Object.freeze(CURRENT_STATE_KEYS.filter((key) =>
+  key !== "revertStrikes"));
 
 export type WikiStateParse =
   | Readonly<{ ok: true; state: WikiState }>
@@ -58,6 +87,18 @@ export type WikiStateParse =
 export type WikiEventParse =
   | Readonly<{ ok: true; event: WikiEvent }>
   | Readonly<{ ok: false; message: string }>;
+
+/**
+ * Raw persisted bound for the schema that wrote a value, checked before
+ * migration. Each bound is the previous one plus that migration's proved
+ * allowance, so every formerly valid row stays loadable and saveable.
+ */
+export function maximumRawWikiStateBytes(value: unknown): number {
+  const schemaVersion = isPlainObject(value) ? value.schemaVersion : undefined;
+  if (schemaVersion === WIKI_SCHEMA_VERSION) return MAX_WIKI_STATE_BYTES;
+  if (schemaVersion === LEGACY_WHOLE_UNIT_SCHEMA_VERSION) return MAX_WIKI_V6_STATE_BYTES;
+  return MAX_LEGACY_WIKI_STATE_BYTES;
+}
 
 /** Measures the exact compact JSON form used by local persistence. */
 export function wikiStateStorageBytes(value: unknown): number {
@@ -68,7 +109,7 @@ export function wikiStateStorageBytes(value: unknown): number {
   }
 }
 
-/** Strictly parses V6 or deterministically migrates a valid V2-V5 state. */
+/** Strictly parses V7 or deterministically migrates a valid V2-V6 state. */
 export function parseWikiState(value: unknown): WikiStateParse {
   // In-process domain transitions already own one strictly validated, deeply
   // immutable value. Reusing that exact object avoids reparsing recovery-sized
@@ -93,20 +134,13 @@ export function parseWikiState(value: unknown): WikiStateParse {
   if (value.schemaVersion === LEGACY_SPLIT_LEDGER_SCHEMA_VERSION) {
     return parseLegacySplitLedgerWikiState(value);
   }
-  if (value.schemaVersion !== WIKI_SCHEMA_VERSION || !hasExactKeys(value, [
-    "schemaVersion",
-    "scoringVersion",
-    "fittingVersion",
-    "revision",
-    "nextLexemeId",
-    "automaticLearningSaturated",
-    "lexemes",
-    "termEvidence",
-    "aliasEvidence",
-    "authorities",
-    "aliasTombstones",
-    "lexemeTombstones",
-  ])) return invalidState("The Wiki state fields are invalid.");
+  if (value.schemaVersion === LEGACY_WHOLE_UNIT_SCHEMA_VERSION) {
+    return parseLegacyWholeUnitWikiState(value);
+  }
+  if (value.schemaVersion !== WIKI_SCHEMA_VERSION ||
+      !hasExactKeys(value, CURRENT_STATE_KEYS)) {
+    return invalidState("The Wiki state fields are invalid.");
+  }
   if (
     value.scoringVersion !== WIKI_SCORING_VERSION ||
     value.fittingVersion !== WIKI_FITTING_VERSION ||
@@ -131,9 +165,12 @@ export function parseWikiState(value: unknown): WikiStateParse {
     parseAliasTombstone);
   const lexemeTombstones = parseArray(value.lexemeTombstones,
     MAX_WIKI_LEXEME_TOMBSTONES, parseLexemeTombstone);
+  const revertStrikes = parseArray(value.revertStrikes, MAX_WIKI_REVERT_STRIKES,
+    parseRevertStrike);
   if (lexemes === null || termEvidence === null || aliasEvidence === null ||
       authorities === null ||
-      aliasTombstones === null || lexemeTombstones === null) {
+      aliasTombstones === null || lexemeTombstones === null ||
+      revertStrikes === null) {
     return invalidState("A Wiki collection is invalid.");
   }
   return validateParsedState(freezeWikiState({
@@ -149,6 +186,7 @@ export function parseWikiState(value: unknown): WikiStateParse {
     authorities,
     aliasTombstones,
     lexemeTombstones,
+    revertStrikes,
   }));
 }
 
@@ -246,23 +284,69 @@ export function parseWikiEvent(value: unknown): WikiEventParse {
   return invalidEvent("The Wiki event type is unsupported.");
 }
 
+/**
+ * V6 stored whole observations. V7 scales every support value by the exact
+ * quarter-unit factor, adds empty kept evidence, and starts without strikes,
+ * so every former phase, gate, and competition outcome is preserved.
+ */
+function parseLegacyWholeUnitWikiState(
+  value: Record<string, unknown>,
+): WikiStateParse {
+  if (!hasExactKeys(value, SPLIT_LEDGER_STATE_KEYS) ||
+      value.scoringVersion !== LEGACY_WHOLE_UNIT_SCORING_VERSION ||
+      value.fittingVersion !== WIKI_FITTING_VERSION ||
+      !isRevision(value.revision) || !isLexemeId(value.nextLexemeId) ||
+      typeof value.automaticLearningSaturated !== "boolean") {
+    return invalidState("The legacy whole-unit Wiki state is invalid.");
+  }
+  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLexeme);
+  const termEvidence = parseArray(
+    value.termEvidence,
+    MAX_WIKI_EVIDENCE_RECORDS,
+    parseWholeUnitTermEvidence,
+  );
+  const aliasEvidence = parseArray(
+    value.aliasEvidence,
+    MAX_WIKI_EVIDENCE_RECORDS,
+    parseWholeUnitAliasEvidence,
+  );
+  const authorities = parseArray(value.authorities, MAX_WIKI_AUTHORITY_RULES, parseAuthority);
+  const aliasTombstones = parseArray(
+    value.aliasTombstones,
+    MAX_WIKI_TOMBSTONES,
+    parseAliasTombstone,
+  );
+  const lexemeTombstones = parseArray(
+    value.lexemeTombstones,
+    MAX_WIKI_LEXEME_TOMBSTONES,
+    parseLexemeTombstone,
+  );
+  if (lexemes === null || termEvidence === null || aliasEvidence === null ||
+      authorities === null || aliasTombstones === null || lexemeTombstones === null) {
+    return invalidState("A legacy whole-unit Wiki collection is invalid.");
+  }
+  return validateParsedState(freezeWikiState({
+    schemaVersion: WIKI_SCHEMA_VERSION,
+    scoringVersion: WIKI_SCORING_VERSION,
+    fittingVersion: WIKI_FITTING_VERSION,
+    revision: value.revision,
+    nextLexemeId: value.nextLexemeId,
+    automaticLearningSaturated: value.automaticLearningSaturated,
+    lexemes,
+    termEvidence: Object.freeze(termEvidence.map(scaleWholeUnitTermEvidence)),
+    aliasEvidence: Object.freeze(aliasEvidence.map(scaleWholeUnitAliasEvidence)),
+    authorities,
+    aliasTombstones,
+    lexemeTombstones,
+    revertStrikes: Object.freeze([]),
+  }));
+}
+
 function parseLegacySplitLedgerWikiState(
   value: Record<string, unknown>,
 ): WikiStateParse {
-  if (!hasExactKeys(value, [
-    "schemaVersion",
-    "scoringVersion",
-    "fittingVersion",
-    "revision",
-    "nextLexemeId",
-    "automaticLearningSaturated",
-    "lexemes",
-    "termEvidence",
-    "aliasEvidence",
-    "authorities",
-    "aliasTombstones",
-    "lexemeTombstones",
-  ]) || value.scoringVersion !== WIKI_SCORING_VERSION ||
+  if (!hasExactKeys(value, SPLIT_LEDGER_STATE_KEYS) ||
+      value.scoringVersion !== LEGACY_WHOLE_UNIT_SCORING_VERSION ||
       value.fittingVersion !== WIKI_FITTING_VERSION ||
       !isRevision(value.revision) || !isLexemeId(value.nextLexemeId) ||
       typeof value.automaticLearningSaturated !== "boolean") {
@@ -277,7 +361,7 @@ function parseLegacySplitLedgerWikiState(
   const aliasEvidence = parseArray(
     value.aliasEvidence,
     MAX_WIKI_EVIDENCE_RECORDS,
-    parseAliasEvidence,
+    parseWholeUnitAliasEvidence,
   );
   const authorities = parseArray(value.authorities, MAX_WIKI_AUTHORITY_RULES, parseAuthority);
   const aliasTombstones = parseArray(
@@ -302,14 +386,16 @@ function parseLegacySplitLedgerWikiState(
     nextLexemeId: value.nextLexemeId,
     automaticLearningSaturated: value.automaticLearningSaturated,
     lexemes,
-    termEvidence: Object.freeze(legacyTermEvidence.map((entry) => Object.freeze({
-      ...entry,
-      producer: "legacy-term-v1" as const,
-    }))),
-    aliasEvidence,
+    termEvidence: Object.freeze(legacyTermEvidence.map((entry) =>
+      scaleWholeUnitTermEvidence(Object.freeze({
+        ...entry,
+        producer: "legacy-term-v1" as const,
+      })))),
+    aliasEvidence: Object.freeze(aliasEvidence.map(scaleWholeUnitAliasEvidence)),
     authorities,
     aliasTombstones,
     lexemeTombstones,
+    revertStrikes: Object.freeze([]),
   }));
 }
 
@@ -384,6 +470,7 @@ function parseLegacyWikiState(value: Record<string, unknown>): WikiStateParse {
       ...aliasOf(entry), rejectedAtRevision: entry.rejectedAtRevision,
     })),
     lexemeTombstones: Object.freeze([]),
+    revertStrikes: Object.freeze([]),
   }));
 }
 
@@ -435,6 +522,7 @@ function parseLegacyLexemeWikiState(value: Record<string, unknown>): WikiStatePa
     authorities,
     aliasTombstones,
     lexemeTombstones,
+    revertStrikes: Object.freeze([]),
   }));
 }
 
@@ -494,6 +582,7 @@ function parseLegacyScopedLexemeWikiState(
     authorities,
     aliasTombstones,
     lexemeTombstones,
+    revertStrikes: Object.freeze([]),
   }));
 }
 
@@ -540,6 +629,19 @@ function parseLexeme(value: unknown): WikiLexeme | null {
 }
 
 function parseTermEvidence(value: unknown): WikiTermEvidenceAggregate | null {
+  if (!isWikiTermEvidenceAggregate(value)) return null;
+  return Object.freeze({
+    locale: value.locale,
+    canonical: value.canonical,
+    producer: value.producer,
+    phase: value.phase,
+    support: value.support,
+    quietTurns: value.quietTurns,
+  });
+}
+
+/** V5/V6 whole-observation bands: a candidate below two, collected at one. */
+function parseWholeUnitTermEvidence(value: unknown): WikiTermEvidenceAggregate | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "locale", "canonical", "producer", "phase", "support", "quietTurns",
   ]) || typeof value.locale !== "string" || !isMatterLocale(value.locale) ||
@@ -549,7 +651,8 @@ function parseTermEvidence(value: unknown): WikiTermEvidenceAggregate | null {
       (value.phase !== "candidate" && value.phase !== "collected") ||
       !isEvidenceCount(value.support) ||
       !isQuietTurns(value.quietTurns) ||
-      (value.phase === "candidate" && value.support >= 2)) return null;
+      (value.phase === "candidate" && value.support >= 2) ||
+      (value.phase === "collected" && value.support < 1)) return null;
   return Object.freeze({
     locale: value.locale,
     canonical: value.canonical,
@@ -569,7 +672,8 @@ function parseLegacyTermEvidence(
       !isWikiCanonical(value.canonical) ||
       (value.phase !== "candidate" && value.phase !== "collected") ||
       !isEvidenceCount(value.support) || !isQuietTurns(value.quietTurns) ||
-      (value.phase === "candidate" && value.support >= 2)) return null;
+      (value.phase === "candidate" && value.support >= 2) ||
+      (value.phase === "collected" && value.support < 1)) return null;
   return Object.freeze({
     locale: value.locale,
     canonical: value.canonical,
@@ -580,6 +684,23 @@ function parseLegacyTermEvidence(
 }
 
 function parseAliasEvidence(value: unknown): WikiAliasEvidenceAggregate | null {
+  if (!isWikiAliasEvidenceAggregate(value)) return null;
+  const descriptor = parseAliasDescriptor(value);
+  if (descriptor === null) return null;
+  return Object.freeze({
+    ...descriptor,
+    producer: value.producer,
+    phase: value.phase,
+    support: value.support,
+    quietTurns: value.quietTurns,
+    kept: value.kept,
+    keptQuietTurns: value.keptQuietTurns,
+  });
+}
+
+type WholeUnitAliasEvidence = Omit<WikiAliasEvidenceAggregate, "kept" | "keptQuietTurns">;
+
+function parseWholeUnitAliasEvidence(value: unknown): WholeUnitAliasEvidence | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "lexemeId", "channel", "boundary", "form", "producer", "phase", "support",
     "quietTurns",
@@ -595,6 +716,36 @@ function parseAliasEvidence(value: unknown): WikiAliasEvidenceAggregate | null {
     producer: value.producer,
     phase: value.phase,
     support: value.support,
+    quietTurns: value.quietTurns,
+  });
+}
+
+function scaleWholeUnitTermEvidence(
+  entry: WikiTermEvidenceAggregate,
+): WikiTermEvidenceAggregate {
+  return Object.freeze({
+    ...entry,
+    support: entry.support * WIKI_EVIDENCE_UNITS_PER_OBSERVATION,
+  });
+}
+
+function scaleWholeUnitAliasEvidence(
+  entry: WholeUnitAliasEvidence,
+): WikiAliasEvidenceAggregate {
+  return Object.freeze({
+    ...entry,
+    support: entry.support * WIKI_EVIDENCE_UNITS_PER_OBSERVATION,
+    kept: 0,
+    keptQuietTurns: 0,
+  });
+}
+
+function parseRevertStrike(value: unknown): WikiRevertStrike | null {
+  if (!isWikiRevertStrike(value)) return null;
+  return Object.freeze({
+    lexemeId: value.lexemeId,
+    channel: value.channel,
+    form: value.form,
     quietTurns: value.quietTurns,
   });
 }
@@ -744,8 +895,10 @@ function splitLegacyEvidence(
         form: entry.form,
         producer: "legacy-v1" as const,
         phase: "candidate" as const,
-        support: entry.counts.machineInference,
+        support: entry.counts.machineInference * WIKI_EVIDENCE_UNITS_PER_OBSERVATION,
         quietTurns: 0,
+        kept: 0,
+        keptQuietTurns: 0,
       }));
     }
   }
@@ -760,7 +913,7 @@ function splitLegacyEvidence(
   const termEvidence = [...termSupport.entries()].flatMap(([lexemeId, support]) => {
     const reconciled = reconcileWikiTermEvidence({
       phase: "candidate",
-      support,
+      support: support * WIKI_EVIDENCE_UNITS_PER_OBSERVATION,
       quietTurns: 0,
     });
     const identity = identityById.get(lexemeId);

@@ -6,17 +6,17 @@ import {
   WIKI_RECORD_SCHEMA_VERSION,
   type StoredWikiRecord,
 } from "./matter-database";
-import { parseWikiState, wikiStateStorageBytes } from "../wiki/wiki-codec";
+import {
+  maximumRawWikiStateBytes,
+  parseWikiState,
+  wikiStateStorageBytes,
+} from "../wiki/wiki-codec";
 import {
   createInitialWikiState,
   ensureWikiStarterLexemes,
 } from "../wiki/wiki-evidence";
 import type { WikiState } from "../wiki/wiki-model";
-import {
-  MAX_LEGACY_WIKI_STATE_BYTES,
-  MAX_WIKI_STATE_BYTES,
-  WIKI_SCHEMA_VERSION,
-} from "../wiki/wiki-model";
+import { MAX_WIKI_STATE_BYTES } from "../wiki/wiki-model";
 
 export const MAX_STORED_WIKI_BYTES = MAX_WIKI_STATE_BYTES;
 
@@ -225,11 +225,7 @@ function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
     "writeGeneration",
     "state",
   ])) return null;
-  const rawStateIsCurrent = isPlainObject(value.state) &&
-    value.state.schemaVersion === WIKI_SCHEMA_VERSION;
-  const maximumRawBytes = rawStateIsCurrent
-    ? MAX_STORED_WIKI_BYTES
-    : MAX_LEGACY_WIKI_STATE_BYTES;
+  const maximumRawBytes = maximumRawWikiStateBytes(value.state);
   if (
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
     !Number.isSafeInteger(value.recordSchemaVersion) ||

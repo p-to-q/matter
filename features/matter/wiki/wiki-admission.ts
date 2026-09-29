@@ -1,5 +1,10 @@
 import type { MatterLocale } from "../config/locales";
-import type { WikiChannel, WikiObserveEvidenceEvent } from "./wiki-model";
+import type {
+  WikiChannel,
+  WikiLedgerTick,
+  WikiObservationTick,
+  WikiObserveEvidenceEvent,
+} from "./wiki-model";
 import type { WikiEligibleRange } from "./canonicalize-wiki-text";
 import {
   findProtectedWikiSpans,
@@ -7,6 +12,7 @@ import {
   wikiRangeOverlapsProtected,
 } from "./canonicalize-wiki-text";
 import { wikiAliasProducerClaimsCollectionSource } from "./wiki-learning-policy";
+import type { WikiScriptClass } from "./wiki-script";
 
 /** Ephemeral human-material envelope; it is never stored or exported. */
 export type WikiAdmissionObservation = Readonly<{
@@ -21,6 +27,27 @@ export type WikiAdmissionTurn = Readonly<{
   observed: WikiAdmissionObservation;
   committed: WikiAdmissionObservation;
 }>;
+
+/**
+ * One producer's content-free result for one ledger of one human turn.
+ * `scannedScripts` names the scripts of the eligible, unprotected words the
+ * producer actually scanned; it is the comparable opportunity that turn
+ * offered, never a record of what was said.
+ */
+export type WikiAdmissionProducerResult = Readonly<{
+  status: "ok" | "partial" | "censored";
+  events: readonly WikiObserveEvidenceEvent[];
+  scannedScripts: readonly WikiScriptClass[];
+}>;
+
+export type WikiAdmissionBatch = Readonly<{
+  events: readonly WikiObserveEvidenceEvent[];
+  tick: WikiObservationTick;
+}>;
+
+const PAUSED_TICK: WikiLedgerTick = Object.freeze({ disposition: "paused" });
+const CENSORED_TICK: WikiLedgerTick = Object.freeze({ disposition: "censored" });
+const PARTIAL_TICK: WikiLedgerTick = Object.freeze({ disposition: "partial" });
 
 /**
  * Keeps collection and fitting ledgers independent without teaching a known
@@ -52,6 +79,38 @@ export function combineWikiAdmissionEvidence(
   ]);
 }
 
+/**
+ * Turns one successful human admission into one bounded batch and its tick.
+ * A ledger whose producer did not run is paused; a turn without eligible
+ * content, or a producer that could not scan, is censored and neutral; a
+ * partial scan scores what it saw and ages nothing; a complete scan offers
+ * its locale, channel, and scanned scripts as the comparable opportunity.
+ */
+export function planWikiAdmissionBatch(
+  turn: WikiAdmissionTurn,
+  term: WikiAdmissionProducerResult | null,
+  fitting: WikiAdmissionProducerResult | null,
+): WikiAdmissionBatch {
+  const events = combineWikiAdmissionEvidence(term?.events ?? [], fitting?.events ?? []);
+  return Object.freeze({
+    events,
+    tick: Object.freeze({
+      term: ledgerTick(
+        term,
+        turn.committed,
+        "evidence",
+        events.some((event) => event.source === "recent-material"),
+      ),
+      alias: ledgerTick(
+        fitting,
+        turn.observed,
+        "matching",
+        events.some((event) => event.source === "machine-inference"),
+      ),
+    }),
+  });
+}
+
 /** A protected or generated-only turn is censored, not negative evidence. */
 export function hasWikiAdmissionContent(
   request: WikiAdmissionObservation,
@@ -68,6 +127,27 @@ export function hasWikiAdmissionContent(
     }
   }
   return false;
+}
+
+function ledgerTick(
+  result: WikiAdmissionProducerResult | null,
+  observation: WikiAdmissionObservation,
+  protection: "matching" | "evidence",
+  observed: boolean,
+): WikiLedgerTick {
+  if (result === null) return PAUSED_TICK;
+  if (result.status === "censored" || !hasWikiAdmissionContent(observation, protection)) {
+    return CENSORED_TICK;
+  }
+  if (result.status === "partial") return PARTIAL_TICK;
+  return Object.freeze({
+    disposition: observed ? "observed" : "quiet",
+    opportunity: Object.freeze({
+      locale: observation.locale,
+      channel: observation.channel,
+      scripts: result.scannedScripts,
+    }),
+  });
 }
 
 function admissionLexicalKey(locale: MatterLocale, value: string): string {

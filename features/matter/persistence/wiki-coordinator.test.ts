@@ -13,7 +13,11 @@ import {
 import { WikiBasisOwner } from "../wiki/wiki-basis-owner";
 import { wikiStateStorageBytes } from "../wiki/wiki-codec";
 import type { WikiAliasEvidenceProducer } from "../wiki/wiki-learning-policy";
-import type { WikiState } from "../wiki/wiki-model";
+import type {
+  WikiEvidenceTickDisposition,
+  WikiObservationTick,
+  WikiState,
+} from "../wiki/wiki-model";
 
 const DECISION = Object.freeze({
   type: "confirm-rule" as const,
@@ -34,6 +38,25 @@ const OBSERVATION = Object.freeze({
   source: "machine-inference" as const,
   producer: "legacy-v1" as const,
 });
+
+const ENGLISH_TURN = Object.freeze({
+  locale: "en-US" as const,
+  channel: "spoken" as const,
+  scripts: Object.freeze(["latin" as const]),
+});
+
+function tick(
+  term: WikiEvidenceTickDisposition,
+  alias: WikiEvidenceTickDisposition,
+): WikiObservationTick {
+  const ledger = (disposition: WikiEvidenceTickDisposition) =>
+    disposition === "observed" || disposition === "quiet"
+      ? Object.freeze({ disposition, opportunity: ENGLISH_TURN })
+      : Object.freeze({ disposition });
+  return Object.freeze({ term: ledger(term), alias: ledger(alias) });
+}
+
+const ALIAS_TURN = tick("paused", "observed");
 
 describe("Wiki coordinator", () => {
   it("serves an empty basis while hydration completes", async () => {
@@ -210,7 +233,7 @@ describe("Wiki coordinator", () => {
     })).resolves.toMatchObject({ ok: true, generation: 1, stateRevision: 1 });
     await expect(coordinator.observe(
       [OBSERVATION],
-      undefined,
+      ALIAS_TURN,
       {
         generation: derivedFrom.snapshot.generation,
         stateRevision: derivedFrom.stateRevision,
@@ -238,7 +261,7 @@ describe("Wiki coordinator", () => {
     await expect(coordinator.observe([
       OBSERVATION,
       OBSERVATION,
-    ])).resolves.toMatchObject({
+    ], ALIAS_TURN)).resolves.toMatchObject({
       ok: true,
       changed: true,
       generation: 2,
@@ -249,14 +272,14 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         form: "Englebart",
         producer: "legacy-v1",
-        support: 1,
+        support: 4,
       }),
     ]);
   });
 
   it("keeps existing evidence and quiet aging when a new row exceeds the byte budget", () => {
     const state = createdLexemeState();
-    const seeded = applyWikiObservationBatch(state, [OBSERVATION]);
+    const seeded = applyWikiObservationBatch(state, [OBSERVATION], ALIAS_TURN);
     if (!seeded.ok) throw new Error(seeded.error.message);
     const newTerm = Object.freeze({
       type: "observe-evidence" as const,
@@ -269,7 +292,7 @@ describe("Wiki coordinator", () => {
     const knownOnly = applyWikiObservationBatch(
       seeded.state,
       [OBSERVATION],
-      { term: "observed", alias: "observed" },
+      tick("observed", "observed"),
       qualified,
     );
     if (!knownOnly.ok) throw new Error(knownOnly.error.message);
@@ -277,7 +300,7 @@ describe("Wiki coordinator", () => {
     const advanced = applyBoundedWikiObservationBatch(
       seeded.state,
       [OBSERVATION, newTerm],
-      { term: "observed", alias: "observed" },
+      tick("observed", "observed"),
       qualified,
       wikiStateStorageBytes(knownOnly.state),
     );
@@ -285,20 +308,20 @@ describe("Wiki coordinator", () => {
     if (!advanced.ok) return;
     expect(advanced.state.termEvidence).toEqual([]);
     expect(advanced.state.aliasEvidence).toEqual([
-      expect.objectContaining({ form: "Englebart", support: 2 }),
+      expect.objectContaining({ form: "Englebart", support: 8 }),
     ]);
 
     const quietOnly = applyWikiObservationBatch(
       seeded.state,
       [],
-      { term: "observed", alias: "quiet" },
+      tick("observed", "quiet"),
       qualified,
     );
     if (!quietOnly.ok) throw new Error(quietOnly.error.message);
     const aged = applyBoundedWikiObservationBatch(
       seeded.state,
       [newTerm],
-      { term: "observed", alias: "quiet" },
+      tick("observed", "quiet"),
       qualified,
       wikiStateStorageBytes(quietOnly.state),
     );
@@ -332,7 +355,7 @@ describe("Wiki coordinator", () => {
       ...upgrade,
       canonical: "Morphogenesis",
     });
-    const dispositions = Object.freeze({ term: "observed" as const, alias: "paused" as const });
+    const dispositions = tick("observed", "paused");
     const qualified = new Set<WikiAliasEvidenceProducer>();
     const upgraded = applyWikiObservationBatch(
       legacy,
@@ -364,13 +387,13 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         canonical: "Lexicorium",
         producer: "locale-segment-v1",
-        support: 1,
+        support: 4,
       }),
     ]);
   });
 
   it("retains an alias producer upgrade when an unseen row exceeds the byte budget", () => {
-    const seeded = applyWikiObservationBatch(createdLexemeState(), [OBSERVATION]);
+    const seeded = applyWikiObservationBatch(createdLexemeState(), [OBSERVATION], ALIAS_TURN);
     if (!seeded.ok) throw new Error(seeded.error.message);
     const upgrade = Object.freeze({
       ...OBSERVATION,
@@ -380,7 +403,7 @@ describe("Wiki coordinator", () => {
       ...upgrade,
       form: "Engelbartt",
     });
-    const dispositions = Object.freeze({ term: "paused" as const, alias: "observed" as const });
+    const dispositions = ALIAS_TURN;
     const qualified = new Set<WikiAliasEvidenceProducer>(["latin-internal-edit-v2"]);
     const upgraded = applyWikiObservationBatch(
       seeded.state,
@@ -432,7 +455,7 @@ describe("Wiki coordinator", () => {
     await expect(coordinator.observe([
       OBSERVATION,
       { ...OBSERVATION, form: "Engelbart" },
-    ])).resolves.toEqual({ ok: false, code: "INVALID_DECISION" });
+    ], ALIAS_TURN)).resolves.toEqual({ ok: false, code: "INVALID_DECISION" });
     expect(coordinator.readState()).toBe(before);
     expect(repository.save).toHaveBeenCalledTimes(1);
   });
@@ -459,13 +482,13 @@ describe("Wiki coordinator", () => {
     });
 
     for (let index = 0; index < 3; index += 1) {
-      await coordinator.observe([OBSERVATION]);
+      await coordinator.observe([OBSERVATION], ALIAS_TURN);
       expect(coordinator.readBasis().snapshot.rules).toEqual([]);
     }
-    await coordinator.observe([OBSERVATION]);
+    await coordinator.observe([OBSERVATION], ALIAS_TURN);
     expect(coordinator.readBasis().snapshot.rules).toEqual([]);
     expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({
-      producer: "legacy-v1", support: 4, phase: "candidate",
+      producer: "legacy-v1", support: 16, phase: "candidate",
     });
   });
 
@@ -569,8 +592,8 @@ describe("Wiki coordinator", () => {
     await Promise.all([first.start(), second.start()]);
 
     const results = await Promise.all([
-      first.observe([OBSERVATION]),
-      second.observe([{ ...OBSERVATION, form: "Engelbartt" }]),
+      first.observe([OBSERVATION], ALIAS_TURN),
+      second.observe([{ ...OBSERVATION, form: "Engelbartt" }], ALIAS_TURN),
     ]);
 
     expect(results.filter((result) => result.ok)).toHaveLength(1);
@@ -594,8 +617,8 @@ describe("Wiki coordinator", () => {
     await Promise.all([first.start(), second.start()]);
 
     const results = await Promise.all([
-      first.observe([OBSERVATION]),
-      second.observe([OBSERVATION]),
+      first.observe([OBSERVATION], ALIAS_TURN),
+      second.observe([OBSERVATION], ALIAS_TURN),
     ]);
 
     expect(results.filter((result) => result.ok)).toHaveLength(1);
@@ -609,7 +632,7 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         form: "Englebart",
         producer: "legacy-v1",
-        support: 1,
+        support: 4,
       }),
     ]);
   });

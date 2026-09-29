@@ -18,18 +18,13 @@ import {
   MATTER_WIKI_RUNTIME_TERM_PRODUCERS,
 } from
   "../wiki/wiki-runtime-producer-releases";
-import type {
-  WikiObservationDispositions,
-  WikiState,
-} from "../wiki/wiki-model";
+import type { WikiState } from "../wiki/wiki-model";
 import {
-  combineWikiAdmissionEvidence,
-  hasWikiAdmissionContent,
+  planWikiAdmissionBatch,
   type WikiAdmissionTurn,
 } from "../wiki/wiki-admission";
 import { collectCommittedWikiTermsResult } from "../wiki/wiki-term-collection";
 import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting";
-import { MAX_WIKI_OBSERVATIONS_PER_BATCH } from "../wiki/wiki-model";
 import {
   createWikiAdmissionQueue,
   type WikiAdmissionQueue,
@@ -189,40 +184,22 @@ async function observeHydratedMatterWikiCommittedMaterial(
     });
     if (!permissions.automaticCollection && !permissions.phoneticFitting) return;
     const basis = readMatterWikiBasis();
-    const termResult = permissions.automaticCollection
-      ? collectCommittedWikiTermsResult(request.committed, qualifiedTermProducers)
-      : Object.freeze({ status: "censored" as const, events: Object.freeze([]) });
-    const fittingResult = permissions.phoneticFitting
-      ? fitCommittedWikiTextResult(
-          basis.fitSnapshot,
-          request.observed,
-          qualifiedAliasProducers,
-        )
-      : Object.freeze({ status: "censored" as const, events: Object.freeze([]) });
-    const events = combineWikiAdmissionEvidence(termResult.events, fittingResult.events);
-    const termEvents = events.filter((event) => event.source === "recent-material");
-    const fittingEvents = fittingResult.events;
-    const overflow = events.length > MAX_WIKI_OBSERVATIONS_PER_BATCH;
-    const termContent = permissions.automaticCollection &&
-      hasWikiAdmissionContent(request.committed, "evidence");
-    const aliasContent = permissions.phoneticFitting &&
-      request.observed.channel === "spoken" &&
-      hasWikiAdmissionContent(request.observed, "matching");
-    const dispositions: WikiObservationDispositions = Object.freeze({
-      term: !permissions.automaticCollection
-        ? "paused"
-        : overflow || termResult.status === "censored" || !termContent
-          ? "censored"
-          : termEvents.length > 0 ? "observed" : "quiet",
-      alias: !permissions.phoneticFitting
-        ? "paused"
-        : overflow || fittingResult.status === "censored" || !aliasContent
-          ? "censored"
-          : fittingEvents.length > 0 ? "observed" : "quiet",
-    });
+    const batch = planWikiAdmissionBatch(
+      request,
+      permissions.automaticCollection
+        ? collectCommittedWikiTermsResult(request.committed, qualifiedTermProducers)
+        : null,
+      permissions.phoneticFitting
+        ? fitCommittedWikiTextResult(
+            basis.fitSnapshot,
+            request.observed,
+            qualifiedAliasProducers,
+          )
+        : null,
+    );
     const result = await publishChanged(matterWikiCoordinator.observe(
-      overflow ? Object.freeze([]) : events,
-      dispositions,
+      batch.events,
+      batch.tick,
       Object.freeze({
         generation: basis.snapshot.generation,
         stateRevision: basis.stateRevision,

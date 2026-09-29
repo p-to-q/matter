@@ -1,34 +1,47 @@
 import { describe, expect, it } from "vitest";
 import {
+  MAX_WIKI_KEPT_QUIET_TURNS,
   MAX_WIKI_LEARNING_CANDIDATES,
-  MAX_WIKI_LEARNING_COUNT,
+  MAX_WIKI_LEARNING_UNITS,
+  MAX_WIKI_REVERT_STRIKE_QUIET_TURNS,
+  WIKI_ALIAS_PRODUCER_PRECEDENCE,
   WIKI_ALIAS_SCORE_POLICY,
   WIKI_LEARNING_POLICY_VERSION,
+  WIKI_OCCURRENCE_OUTCOME_POLICY,
   WIKI_TERM_SCORE_POLICY,
   advanceWikiAliasQuietTurn,
+  advanceWikiKeptQuietTurn,
+  advanceWikiRevertStrikeTurn,
   advanceWikiTermQuietTurn,
   ageWikiAliasCandidate,
   ageWikiTermEvidence,
-  WIKI_ALIAS_PRODUCER_PRECEDENCE,
   compareWikiAliasProducerPrecedence,
   compareWikiLearningCorpusEvaluations,
   compareWikiTermProducerPrecedence,
-  wikiAliasProducerClaimsCollectionSource,
+  decideWikiOccurrenceEffect,
   decideWikiSoftCandidateAdmission,
   evaluateWikiLearningCorpus,
   evaluateWikiLearningInteractions,
+  hasWikiKeptSettlementSinceTurn,
   isWikiAliasCandidateEvictable,
+  isWikiKeptEvidence,
   isWikiTermCandidateEvictable,
   observeWikiAliasCandidate,
+  observeWikiTermEvidence,
   reconcileWikiTermEvidence,
   replayWikiAliasLearning,
   replayWikiTermLearning,
   resolveWikiAliasCompetition,
   scoreWikiAliasCandidate,
+  scoreWikiAliasRetention,
   scoreWikiTermEvidence,
+  settleWikiImplicitOccurrence,
+  settleWikiKeptEvidence,
+  wikiAliasProducerClaimsCollectionSource,
   type WikiAliasCandidate,
   type WikiAliasEvidenceProducer,
   type WikiAliasReleaseQualification,
+  type WikiImplicitSettlementFacts,
   type WikiLearningCorpusCase,
   type WikiLearningInteractionCase,
   type WikiTermEvidence,
@@ -80,20 +93,36 @@ describe("Wiki learning policy", () => {
     }]);
   });
 
+  it("stores one observation as four quarter-units that fade across three half-lives", () => {
+    let evidence = observeWikiTermEvidence(term("candidate", 0));
+    expect(evidence).toEqual({ phase: "candidate", support: 4, quietTurns: 0 });
+    const supports: number[] = [];
+    for (let turn = 0; turn < 96; turn += 1) {
+      evidence = advanceWikiTermQuietTurn(evidence);
+      if (evidence.quietTurns === 0) supports.push(evidence.support);
+    }
+    expect(supports).toEqual([2, 1, 0]);
+    expect(WIKI_TERM_SCORE_POLICY).toEqual({ collectionSupport: 8, retentionSupport: 4 });
+  });
+
   it("ages each unobserved term independently after 32 human turns", () => {
-    expect(advanceWikiTermQuietTurn(term("collected", 2, 30))).toEqual({
+    expect(advanceWikiTermQuietTurn(term("collected", 8, 30))).toEqual({
       phase: "collected",
-      support: 2,
+      support: 8,
       quietTurns: 31,
     });
     const aged = reconcileWikiTermEvidence(
-      advanceWikiTermQuietTurn(term("collected", 2, 31)),
+      advanceWikiTermQuietTurn(term("collected", 8, 31)),
     );
-    expect(aged).toEqual({ phase: "collected", support: 1, quietTurns: 0 });
+    expect(aged).toEqual({ phase: "collected", support: 4, quietTurns: 0 });
 
-    const dead = reconcileWikiTermEvidence(
-      advanceWikiTermQuietTurn(term("collected", 1, 31)),
+    const lapsed = reconcileWikiTermEvidence(
+      advanceWikiTermQuietTurn(term("collected", 4, 31)),
     );
+    expect(lapsed).toEqual({ phase: "candidate", support: 2, quietTurns: 0 });
+    expect(isWikiTermCandidateEvictable(lapsed, false)).toBe(false);
+
+    const dead = reconcileWikiTermEvidence(ageWikiTermEvidence(term("candidate", 1)));
     expect(dead).toEqual({ phase: "candidate", support: 0, quietTurns: 0 });
     expect(isWikiTermCandidateEvictable(dead, false)).toBe(true);
     expect(isWikiTermCandidateEvictable(dead, true)).toBe(false);
@@ -104,7 +133,7 @@ describe("Wiki learning policy", () => {
       [{
         canonicalId: "Matter",
         phase: "candidate",
-        support: 1,
+        support: 4,
         quietTurns: 31,
       }],
       [{ environment: "human-admission", observedCanonicalIds: ["Matter"] }],
@@ -112,139 +141,155 @@ describe("Wiki learning policy", () => {
     expect(replay.candidates).toEqual([{
       canonicalId: "Matter",
       phase: "collected",
-      support: 2,
+      support: 8,
       quietTurns: 0,
     }]);
   });
 
+  it("lets a faded remnant still count toward recollection", () => {
+    const replay = replayWikiTermLearning(
+      [{ canonicalId: "Matter", phase: "candidate", support: 2, quietTurns: 5 }],
+      [
+        { environment: "human-admission", observedCanonicalIds: ["Matter"] },
+        { environment: "human-admission", observedCanonicalIds: ["Matter"] },
+      ],
+    );
+    expect(replay.receipts.map((receipt) => receipt.collectedCanonicalIds))
+      .toEqual([[], ["Matter"]]);
+    expect(replay.candidates).toEqual([
+      { canonicalId: "Matter", phase: "collected", support: 10, quietTurns: 0 },
+    ]);
+  });
+
   it("does not advance term quiet time in generated or protected material", () => {
     const replay = replayWikiTermLearning(
-      [{ canonicalId: "Matter", phase: "collected", support: 2, quietTurns: 31 }],
+      [{ canonicalId: "Matter", phase: "collected", support: 8, quietTurns: 31 }],
       [
         { environment: "generated-output", observedCanonicalIds: [] },
         { environment: "protected-text", observedCanonicalIds: [] },
       ],
     );
     expect(replay.candidates).toEqual([
-      { canonicalId: "Matter", phase: "collected", support: 2, quietTurns: 31 },
+      { canonicalId: "Matter", phase: "collected", support: 8, quietTurns: 31 },
     ]);
   });
 
   it("normalizes term phases before zero-step and non-human replay", () => {
     const replay = replayWikiTermLearning([
-      { canonicalId: "dead", phase: "collected", support: 0, quietTurns: 0 },
-      { canonicalId: "ready", phase: "candidate", support: 2, quietTurns: 0 },
+      { canonicalId: "dead", phase: "collected", support: 3, quietTurns: 0 },
+      { canonicalId: "ready", phase: "candidate", support: 8, quietTurns: 0 },
     ], [{ environment: "generated-output", observedCanonicalIds: [] }]);
 
     expect(replay.candidates).toEqual([
-      { canonicalId: "dead", phase: "candidate", support: 0, quietTurns: 0 },
-      { canonicalId: "ready", phase: "collected", support: 2, quietTurns: 0 },
+      { canonicalId: "dead", phase: "candidate", support: 3, quietTurns: 0 },
+      { canonicalId: "ready", phase: "collected", support: 8, quietTurns: 0 },
     ]);
   });
 
-  it("uses bounded producer-specific integer evidence", () => {
+  it("uses bounded producer-specific integer evidence in quarter-units", () => {
     expect(WIKI_ALIAS_SCORE_POLICY).toEqual({
-      activationScore: 8,
-      retentionScore: 5,
-      activationMargin: 4,
-      retentionMargin: 3,
+      activationScore: 32,
+      retentionScore: 20,
+      activationMargin: 16,
+      retentionMargin: 12,
     });
-    expect(scoreWikiTermEvidence(term("candidate", 2))).toBe(2);
-    expect(scoreWikiAliasCandidate(alias("exact", "en-exact-homophone-v1", 3)))
-      .toBe(9);
-    expect(scoreWikiAliasCandidate(alias("near", "zh-final-pair-v1", 4)))
-      .toBe(8);
-    expect(scoreWikiAliasCandidate(alias("legacy", "legacy-v1", 255))).toBe(0);
+    expect(scoreWikiTermEvidence(term("candidate", 4))).toBe(4);
+    expect(scoreWikiAliasCandidate(alias("exact", "en-exact-homophone-v1", 12)))
+      .toBe(36);
+    expect(scoreWikiAliasCandidate(alias("near", "zh-final-pair-v1", 16)))
+      .toBe(32);
+    expect(scoreWikiAliasCandidate(alias("legacy", "legacy-v1", 1_020))).toBe(0);
 
     const saturated = observeWikiAliasCandidate(alias(
       "exact",
       "en-exact-homophone-v1",
-      MAX_WIKI_LEARNING_COUNT,
+      MAX_WIKI_LEARNING_UNITS,
       "candidate",
       31,
     ));
     expect(saturated).toMatchObject({
-      support: MAX_WIKI_LEARNING_COUNT,
+      support: MAX_WIKI_LEARNING_UNITS,
       quietTurns: 0,
     });
+    expect(MAX_WIKI_LEARNING_UNITS).toBe(1_020);
   });
 
   it("activates exact evidence on the third independent vote", () => {
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("exact", "en-exact-homophone-v1", 2),
+      alias("exact", "en-exact-homophone-v1", 8),
     ], qualified("en-exact-homophone-v1")))).toEqual([]);
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("exact", "en-exact-homophone-v1", 3),
+      alias("exact", "en-exact-homophone-v1", 12),
     ], qualified("en-exact-homophone-v1")))).toEqual(["exact"]);
   });
 
   it("activates restricted near evidence on the fourth independent vote", () => {
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("near", "zh-final-pair-v1", 3),
+      alias("near", "zh-final-pair-v1", 12),
     ], qualified("zh-final-pair-v1")))).toEqual([]);
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("near", "zh-final-pair-v1", 4),
+      alias("near", "zh-final-pair-v1", 16),
     ], qualified("zh-final-pair-v1")))).toEqual(["near"]);
   });
 
   it("lets exact and near observations at quiet turn 31 activate without decay", () => {
     const exact = replayWikiAliasLearning(
-      [alias("exact", "en-exact-homophone-v1", 2, "candidate", 31)],
+      [alias("exact", "en-exact-homophone-v1", 8, "candidate", 31)],
       [{ environment: "human-admission", observedCandidateIds: ["exact"] }],
       qualified("en-exact-homophone-v1"),
     );
     expect(exact.candidates).toEqual([
-      alias("exact", "en-exact-homophone-v1", 3, "active", 0),
+      alias("exact", "en-exact-homophone-v1", 12, "active", 0),
     ]);
 
     const near = replayWikiAliasLearning(
-      [alias("near", "zh-final-pair-v1", 3, "candidate", 31)],
+      [alias("near", "zh-final-pair-v1", 12, "candidate", 31)],
       [{ environment: "human-admission", observedCandidateIds: ["near"] }],
       qualified("zh-final-pair-v1"),
     );
     expect(near.candidates).toEqual([
-      alias("near", "zh-final-pair-v1", 4, "active", 0),
+      alias("near", "zh-final-pair-v1", 16, "active", 0),
     ]);
   });
 
   it("treats competitors as immediate counter-evidence", () => {
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("leader", "en-exact-homophone-v1", 3),
-      alias("runner-up", "en-exact-homophone-v1", 2),
+      alias("leader", "en-exact-homophone-v1", 12),
+      alias("runner-up", "en-exact-homophone-v1", 8),
     ], qualified("en-exact-homophone-v1")))).toEqual([]);
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("leader", "en-exact-homophone-v1", 3),
-      alias("runner-up", "en-exact-homophone-v1", 1),
+      alias("leader", "en-exact-homophone-v1", 12),
+      alias("runner-up", "en-exact-homophone-v1", 4),
     ], qualified("en-exact-homophone-v1")))).toEqual(["leader"]);
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("leader", "zh-final-pair-v1", 4),
-      alias("runner-up", "zh-final-pair-v1", 3),
+      alias("leader", "zh-final-pair-v1", 16),
+      alias("runner-up", "zh-final-pair-v1", 12),
     ], qualified("zh-final-pair-v1")))).toEqual([]);
     expect(activeIds(resolveWikiAliasCompetition([
-      alias("leader", "zh-final-pair-v1", 4),
-      alias("runner-up", "zh-final-pair-v1", 2),
+      alias("leader", "zh-final-pair-v1", 16),
+      alias("runner-up", "zh-final-pair-v1", 8),
     ], qualified("zh-final-pair-v1")))).toEqual(["leader"]);
   });
 
   it("ages each unobserved alias independently after 32 human turns", () => {
     expect(advanceWikiAliasQuietTurn(
-      alias("exact", "en-exact-homophone-v1", 3, "active", 30),
-    )).toEqual(alias("exact", "en-exact-homophone-v1", 3, "active", 31));
+      alias("exact", "en-exact-homophone-v1", 12, "active", 30),
+    )).toEqual(alias("exact", "en-exact-homophone-v1", 12, "active", 31));
     expect(advanceWikiAliasQuietTurn(
-      alias("exact", "en-exact-homophone-v1", 3, "active", 31),
-    )).toEqual(alias("exact", "en-exact-homophone-v1", 1, "active", 0));
+      alias("exact", "en-exact-homophone-v1", 12, "active", 31),
+    )).toEqual(alias("exact", "en-exact-homophone-v1", 6, "active", 0));
 
     const replay = replayWikiAliasLearning(
       [
-        alias("observed", "en-exact-homophone-v1", 2, "candidate", 31),
-        alias("quiet", "en-exact-homophone-v1", 2, "candidate", 31),
+        alias("observed", "en-exact-homophone-v1", 8, "candidate", 31),
+        alias("quiet", "en-exact-homophone-v1", 8, "candidate", 31),
       ],
       [{ environment: "human-admission", observedCandidateIds: ["observed"] }],
       qualified("en-exact-homophone-v1"),
     );
     expect(replay.candidates).toEqual([
-      alias("observed", "en-exact-homophone-v1", 3, "active", 0),
-      alias("quiet", "en-exact-homophone-v1", 1, "candidate", 0),
+      alias("observed", "en-exact-homophone-v1", 12, "active", 0),
+      alias("quiet", "en-exact-homophone-v1", 4, "candidate", 0),
     ]);
   });
 
@@ -253,7 +298,7 @@ describe("Wiki learning policy", () => {
       [alias(
         "unqualified",
         "en-exact-homophone-v1",
-        MAX_WIKI_LEARNING_COUNT,
+        MAX_WIKI_LEARNING_UNITS,
         "active",
       )],
       [],
@@ -265,20 +310,20 @@ describe("Wiki learning policy", () => {
 
   it("fails closed on multiple active initial candidates", () => {
     const resolved = resolveWikiAliasCompetition([
-      alias("first", "en-exact-homophone-v1", 10, "active"),
-      alias("second", "en-exact-homophone-v1", 1, "active"),
+      alias("first", "en-exact-homophone-v1", 40, "active"),
+      alias("second", "en-exact-homophone-v1", 4, "active"),
     ], qualified("en-exact-homophone-v1"));
     expect(activeIds(resolved)).toEqual([]);
 
     const replay = replayWikiAliasLearning([
-      alias("first", "en-exact-homophone-v1", 10, "active"),
-      alias("second", "en-exact-homophone-v1", 1, "active"),
+      alias("first", "en-exact-homophone-v1", 40, "active"),
+      alias("second", "en-exact-homophone-v1", 4, "active"),
     ], [], qualified("en-exact-homophone-v1"));
     expect(activeIds(replay.candidates)).toEqual([]);
   });
 
   it("freezes producer identity and clones every resolved candidate", () => {
-    const source = alias("stable", "en-exact-homophone-v1", 3);
+    const source = alias("stable", "en-exact-homophone-v1", 12);
     const resolved = resolveWikiAliasCompetition(
       [source],
       qualified("en-exact-homophone-v1"),
@@ -287,8 +332,8 @@ describe("Wiki learning policy", () => {
     expect(Object.isFrozen(resolved[0])).toBe(true);
 
     const changedProducer = resolveWikiAliasCompetition([
-      alias("stable", "en-exact-homophone-v1", 20, "active"),
-      alias("stable", "zh-exact-homophone-v1", 20),
+      alias("stable", "en-exact-homophone-v1", 80, "active"),
+      alias("stable", "zh-exact-homophone-v1", 80),
     ], qualified("en-exact-homophone-v1", "zh-exact-homophone-v1"));
     expect(activeIds(changedProducer)).toEqual([]);
 
@@ -307,8 +352,8 @@ describe("Wiki learning policy", () => {
 
   it("orders tied competitors by explicit precedence rather than names", () => {
     const tied = [
-      alias("zzz", "en-metaphone-v1", 10),
-      alias("aaa", "latin-internal-edit-v2", 10),
+      alias("zzz", "en-metaphone-v1", 40),
+      alias("aaa", "latin-internal-edit-v2", 40),
     ];
     const qualification = qualified("en-metaphone-v1", "latin-internal-edit-v2");
     expect(activeIds(resolveWikiAliasCompetition(tied, qualification))).toEqual([]);
@@ -348,7 +393,7 @@ describe("Wiki learning policy", () => {
 
   it("does not add or age alias evidence in protected and generated material", () => {
     const replay = replayWikiAliasLearning(
-      [alias("expected", "en-exact-homophone-v1", 2, "candidate", 31)],
+      [alias("expected", "en-exact-homophone-v1", 8, "candidate", 31)],
       [
         { environment: "generated-output", observedCandidateIds: ["expected"] },
         { environment: "protected-text", observedCandidateIds: ["expected"] },
@@ -378,16 +423,152 @@ describe("Wiki learning policy", () => {
       },
     ]);
     expect(replay.candidates).toEqual([
-      alias("expected", "en-exact-homophone-v1", 3, "active", 0),
+      alias("expected", "en-exact-homophone-v1", 12, "active", 0),
     ]);
   });
 
-  it("rejects out-of-range quiet turns", () => {
+  it("rejects out-of-range quiet turns and kept evidence", () => {
     expect(() => scoreWikiTermEvidence(term("candidate", 1, 32)))
       .toThrow(RangeError);
     expect(() => scoreWikiAliasCandidate(
       alias("bad", "en-exact-homophone-v1", 1, "candidate", -1),
     )).toThrow(RangeError);
+    expect(() => scoreWikiAliasCandidate({
+      ...alias("bad", "en-exact-homophone-v1", 4),
+      kept: 25,
+    })).toThrow(RangeError);
+    expect(isWikiKeptEvidence({ kept: 0, keptQuietTurns: 3 })).toBe(false);
+    expect(isWikiKeptEvidence({ kept: 24, keptQuietTurns: 40 })).toBe(false);
+    expect(isWikiKeptEvidence({ kept: 12, keptQuietTurns: 40 })).toBe(true);
+    expect(isWikiKeptEvidence({ kept: 1, keptQuietTurns: MAX_WIKI_KEPT_QUIET_TURNS }))
+      .toBe(true);
+    expect(isWikiKeptEvidence({ kept: 1, keptQuietTurns: MAX_WIKI_KEPT_QUIET_TURNS + 1 }))
+      .toBe(false);
+  });
+
+  it("settles kept evidence at most once per comparable turn and halves it every 32", () => {
+    const empty = { kept: 0, keptQuietTurns: 0 };
+    expect(hasWikiKeptSettlementSinceTurn(empty)).toBe(false);
+    let kept = settleWikiKeptEvidence(empty, 4);
+    expect(kept).toEqual({ kept: 4, keptQuietTurns: 0 });
+    expect(hasWikiKeptSettlementSinceTurn(kept)).toBe(true);
+    kept = advanceWikiKeptQuietTurn(kept);
+    expect(hasWikiKeptSettlementSinceTurn(kept)).toBe(false);
+    kept = settleWikiKeptEvidence(kept, 8);
+    kept = settleWikiKeptEvidence(kept, 8);
+    kept = settleWikiKeptEvidence(kept, 8);
+    expect(kept).toEqual({
+      kept: WIKI_OCCURRENCE_OUTCOME_POLICY.maximumKeptUnits,
+      keptQuietTurns: 0,
+    });
+    const halvings: number[] = [];
+    for (let turn = 1; turn <= MAX_WIKI_KEPT_QUIET_TURNS + 1; turn += 1) {
+      const before = kept.kept;
+      kept = advanceWikiKeptQuietTurn(kept);
+      expect(isWikiKeptEvidence(kept)).toBe(true);
+      // Aging never lands on the settled marker while kept evidence remains.
+      expect(hasWikiKeptSettlementSinceTurn(kept)).toBe(false);
+      if (kept.kept !== before) halvings.push(turn);
+    }
+    expect(halvings).toEqual([32, 64, 96, 128, 160]);
+    expect(kept).toEqual(empty);
+  });
+
+  it("remembers one revert strike for 128 comparable turns", () => {
+    let quietTurns: number | null = 0;
+    let turns = 0;
+    while (quietTurns !== null) {
+      quietTurns = advanceWikiRevertStrikeTurn(quietTurns);
+      turns += 1;
+    }
+    expect(turns).toBe(WIKI_OCCURRENCE_OUTCOME_POLICY.revertStrikeMemoryTurns);
+    expect(() => advanceWikiRevertStrikeTurn(MAX_WIKI_REVERT_STRIKE_QUIET_TURNS + 1))
+      .toThrow(RangeError);
+  });
+
+  it("lets informed acceptance retain and defend a rule but never activate one", () => {
+    const qualification = qualified("zh-final-pair-v1");
+    const decayed = { ...alias("near", "zh-final-pair-v1", 8, "active"), kept: 12 };
+    expect(scoreWikiAliasRetention(decayed)).toBe(28);
+    expect(activeIds(resolveWikiAliasCompetition([decayed], qualification)))
+      .toEqual(["near"]);
+    expect(activeIds(resolveWikiAliasCompetition([
+      { ...decayed, kept: 0 },
+    ], qualification))).toEqual([]);
+
+    const inactive = { ...alias("near", "zh-final-pair-v1", 12), kept: 24 };
+    expect(activeIds(resolveWikiAliasCompetition([inactive], qualification)))
+      .toEqual([]);
+
+    const incumbent = { ...alias("used", "zh-final-pair-v1", 16, "active"), kept: 24 };
+    const challenger = alias("challenger", "zh-final-pair-v1", 12);
+    expect(activeIds(resolveWikiAliasCompetition(
+      [incumbent, challenger],
+      qualification,
+    ))).toEqual(["used"]);
+    expect(activeIds(resolveWikiAliasCompetition(
+      [{ ...incumbent, kept: 0 }, challenger],
+      qualification,
+    ))).toEqual([]);
+  });
+
+  it("settles implicit acceptance only when the change was informed", () => {
+    expect(settleWikiImplicitOccurrence(facts({}))).toBe("pending");
+    expect(settleWikiImplicitOccurrence(facts({ furtherHumanAdmissions: 1 })))
+      .toBe("pending");
+    expect(settleWikiImplicitOccurrence(facts({ furtherHumanAdmissions: 2 })))
+      .toBe("accepted-implicit");
+    expect(settleWikiImplicitOccurrence(facts({ foregroundDwellMilliseconds: 59_999 })))
+      .toBe("pending");
+    expect(settleWikiImplicitOccurrence(facts({ foregroundDwellMilliseconds: 60_000 })))
+      .toBe("accepted-implicit");
+    expect(settleWikiImplicitOccurrence(facts({ copiedOrExported: true })))
+      .toBe("accepted-implicit");
+    expect(settleWikiImplicitOccurrence(facts({ pageExit: true })))
+      .toBe("accepted-implicit");
+
+    expect(settleWikiImplicitOccurrence(facts({
+      perceived: false,
+      furtherHumanAdmissions: 9,
+      foregroundDwellMilliseconds: 600_000,
+      copiedOrExported: true,
+    }))).toBe("pending");
+    expect(settleWikiImplicitOccurrence(facts({ perceived: false, pageExit: true })))
+      .toBe("censored");
+    expect(settleWikiImplicitOccurrence(facts({
+      addressIntact: false,
+      furtherHumanAdmissions: 2,
+    }))).toBe("censored");
+    expect(() => settleWikiImplicitOccurrence(facts({ furtherHumanAdmissions: -1 })))
+      .toThrow(RangeError);
+  });
+
+  it("maps every outcome to one effect and keeps confirmed authority outside scoring", () => {
+    expect(decideWikiOccurrenceEffect("accepted-implicit", "provisional", "human-admission"))
+      .toEqual({ kind: "kept", units: 4, implicit: true });
+    expect(decideWikiOccurrenceEffect("accepted-implicit", "provisional", "generated"))
+      .toEqual({ kind: "kept", units: 4, implicit: true });
+    expect(decideWikiOccurrenceEffect("inspected-kept", "provisional", "generated"))
+      .toEqual({ kind: "kept", units: 8, implicit: false });
+    expect(decideWikiOccurrenceEffect("reverted", "provisional", "human-admission"))
+      .toEqual({ kind: "strike" });
+    expect(decideWikiOccurrenceEffect("explicit-confirm", "provisional", "generated"))
+      .toEqual({ kind: "confirm" });
+    expect(decideWikiOccurrenceEffect("explicit-reject", "confirmed", "human-admission"))
+      .toEqual({ kind: "reject" });
+    expect(decideWikiOccurrenceEffect("explicit-replace", "confirmed", "generated"))
+      .toEqual({ kind: "replace" });
+    for (const outcome of ["accepted-implicit", "inspected-kept", "reverted"] as const) {
+      expect(decideWikiOccurrenceEffect(outcome, "confirmed", "human-admission"))
+        .toEqual({ kind: "neutral" });
+    }
+    expect(decideWikiOccurrenceEffect("censored", "provisional", "human-admission"))
+      .toEqual({ kind: "neutral" });
+    expect(() => decideWikiOccurrenceEffect(
+      "survived-horizon" as never,
+      "provisional",
+      "human-admission",
+    )).toThrow(TypeError);
   });
 
   it("evaluates replay outcomes with safety ahead of recall and latency", () => {
@@ -494,15 +675,18 @@ describe("Wiki learning policy", () => {
         attribution: "exact-occurrence",
         decisionLatencyTurns: 1,
       },
-      interaction("survived", "accepted", "survived-horizon"),
+      interaction("reverted", "rejected", "reverted"),
+      interaction("inspected", "accepted", "inspected-kept"),
+      interaction("accepted", "accepted", "accepted-implicit"),
       interaction("censored", "unknown", "censored"),
     ]);
 
     expect(evaluation).toEqual({
-      outcomeCount: 4,
+      outcomeCount: 6,
       explicitAcceptances: 1,
-      explicitRejections: 1,
-      survivedHorizons: 1,
+      inspectedAcceptances: 1,
+      explicitRejections: 2,
+      implicitAcceptances: 1,
       censoredOutcomes: 1,
       eligibleCensoredOutcomes: 1,
       unsafeOutcomes: 0,
@@ -512,26 +696,26 @@ describe("Wiki learning policy", () => {
       falseImplicitPositives: 0,
       incorrectExplicitDecisions: 0,
       decisionLatencyTurns: 3,
-      explicitRejectRate: { numerator: 1, denominator: 2 },
+      explicitRejectRate: { numerator: 2, denominator: 4 },
       censorRate: { numerator: 1, denominator: 2 },
     });
   });
 
-  it("separates unsafe attribution, generated exclusion, and false implicit approval", () => {
-    const evaluation = evaluateWikiLearningInteractions([
+  it("counts informed generated acceptance by policy and separates unsafe attribution", () => {
+    const outcomes: WikiLearningInteractionCase[] = [
       {
-        ...interaction("unattributed", "rejected", "survived-horizon"),
+        ...interaction("unattributed", "rejected", "accepted-implicit"),
         attribution: "unattributed",
       },
       {
-        ...interaction("protected", "unknown", "survived-horizon"),
+        ...interaction("protected", "unknown", "accepted-implicit"),
         environment: "protected-text",
       },
       {
-        ...interaction("generated", "accepted", "survived-horizon"),
+        ...interaction("generated", "accepted", "accepted-implicit"),
         environment: "generated-output",
       },
-      interaction("false-positive", "rejected", "survived-horizon"),
+      interaction("false-positive", "rejected", "accepted-implicit"),
       {
         ...interaction("generated-censor", "unknown", "censored"),
         environment: "generated-output",
@@ -540,31 +724,55 @@ describe("Wiki learning policy", () => {
         ...interaction("unattributed-censor", "unknown", "censored"),
         attribution: "unattributed",
       },
-    ]);
+    ];
 
-    expect(evaluation).toMatchObject({
+    expect(evaluateWikiLearningInteractions(outcomes)).toMatchObject({
       unsafeOutcomes: 2,
       unattributedOutcomes: 2,
-      generatedExcludedOutcomes: 2,
+      generatedExcludedOutcomes: 0,
       falseImplicitPositives: 1,
-      survivedHorizons: 1,
+      implicitAcceptances: 2,
+      censoredOutcomes: 2,
+      eligibleCensoredOutcomes: 1,
+      implicitExposureCount: 3,
+      censorRate: { numerator: 1, denominator: 3 },
+    });
+    expect(evaluateWikiLearningInteractions(outcomes, {
+      countGeneratedImplicitAcceptance: false,
+    })).toMatchObject({
+      generatedExcludedOutcomes: 2,
+      implicitAcceptances: 1,
       censoredOutcomes: 2,
       eligibleCensoredOutcomes: 0,
       implicitExposureCount: 1,
-      censorRate: { numerator: 0, denominator: 1 },
     });
   });
 
   it("rejects duplicate occurrence settlement and latency on implicit outcomes", () => {
     expect(() => evaluateWikiLearningInteractions([{
-      ...interaction("implicit-latency", "accepted", "survived-horizon"),
+      ...interaction("implicit-latency", "accepted", "accepted-implicit"),
       decisionLatencyTurns: 1,
     }])).toThrow(TypeError);
+    expect(() => evaluateWikiLearningInteractions([
+      interaction("legacy", "accepted", "survived-horizon" as never),
+    ])).toThrow(TypeError);
     const duplicated = interaction("same", "unknown", "censored");
     expect(() => evaluateWikiLearningInteractions([duplicated, duplicated]))
       .toThrow(TypeError);
   });
 });
+
+function facts(overrides: Partial<WikiImplicitSettlementFacts>): WikiImplicitSettlementFacts {
+  return {
+    perceived: true,
+    addressIntact: true,
+    furtherHumanAdmissions: 0,
+    foregroundDwellMilliseconds: 0,
+    copiedOrExported: false,
+    pageExit: false,
+    ...overrides,
+  };
+}
 
 function interaction(
   occurrenceId: string,
@@ -595,7 +803,7 @@ function alias(
   phase: WikiAliasCandidate["phase"] = "candidate",
   quietTurns = 0,
 ): WikiAliasCandidate {
-  return { candidateId, producer, support, phase, quietTurns };
+  return { candidateId, producer, support, phase, quietTurns, kept: 0, keptQuietTurns: 0 };
 }
 
 function activeIds(candidates: readonly WikiAliasCandidate[]): readonly string[] {

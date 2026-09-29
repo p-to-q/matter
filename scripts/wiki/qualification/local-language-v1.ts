@@ -56,6 +56,7 @@ const TERM_PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-invariants.ts",
   "features/matter/wiki/wiki-model.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
+  "features/matter/wiki/wiki-script.ts",
   "features/matter/config/locales.ts",
   "features/matter/tree/unicode-text.ts",
 ]);

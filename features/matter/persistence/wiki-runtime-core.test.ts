@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WikiObserveEvidenceEvent } from "../wiki/wiki-model";
 
 type StubProducerResult = Readonly<{
-  status: "ok" | "censored";
+  status: "ok" | "partial" | "censored";
   events: readonly WikiObserveEvidenceEvent[];
+  scannedScripts: readonly "latin"[];
 }>;
 type FitStub = (
   snapshot: unknown,
@@ -41,10 +42,12 @@ const stubs = vi.hoisted(() => {
     fit: vi.fn<FitStub>().mockReturnValue({
       status: "ok",
       events: Object.freeze([]),
+      scannedScripts: Object.freeze(["latin" as const]),
     }),
     collect: vi.fn<CollectionStub>().mockReturnValue({
       status: "ok",
       events: Object.freeze([]),
+      scannedScripts: Object.freeze(["latin" as const]),
     }),
     automaticCollection: true,
     phoneticFitting: true,
@@ -84,6 +87,11 @@ vi.mock("./wiki-capability-preferences-reader", () => ({
 }));
 
 const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
+const ENGLISH_OPPORTUNITY = Object.freeze({
+  locale: "en-US",
+  channel: "spoken",
+  scripts: ["latin"],
+});
 const LEGACY_RUNTIME_KEYS = Object.freeze([
   Symbol.for("ptoq.matter.wiki-runtime.v7"),
   Symbol.for("ptoq.matter.wiki-runtime.v8"),
@@ -111,10 +119,12 @@ afterEach(() => {
   stubs.fit.mockReset().mockReturnValue({
     status: "ok",
     events: Object.freeze([]),
+    scannedScripts: Object.freeze(["latin" as const]),
   });
   stubs.collect.mockReset().mockReturnValue({
     status: "ok",
     events: Object.freeze([]),
+    scannedScripts: Object.freeze(["latin" as const]),
   });
   stubs.refresh = undefined;
   stubs.automaticCollection = true;
@@ -253,10 +263,12 @@ describe("Wiki runtime ownership", () => {
     stubs.collect.mockReturnValueOnce({
       status: "ok",
       events: Object.freeze([termEvent]),
+      scannedScripts: Object.freeze(["latin" as const]),
     });
     stubs.fit.mockReturnValueOnce({
       status: "ok",
       events: Object.freeze([fittingEvent]),
+      scannedScripts: Object.freeze(["latin" as const]),
     });
     const runtime = await import("./wiki-runtime-core");
 
@@ -278,7 +290,10 @@ describe("Wiki runtime ownership", () => {
       );
       expect(stubs.coordinator.observe).toHaveBeenCalledWith(
         [fittingEvent],
-        { term: "quiet", alias: "observed" },
+        {
+          term: { disposition: "quiet", opportunity: ENGLISH_OPPORTUNITY },
+          alias: { disposition: "observed", opportunity: ENGLISH_OPPORTUNITY },
+        },
         { generation: 0, stateRevision: 0 },
       );
     });
@@ -331,13 +346,19 @@ describe("Wiki runtime ownership", () => {
     stubs.collect.mockReturnValue({
       status: "ok",
       events: Object.freeze([termEvent]),
+      scannedScripts: Object.freeze(["latin" as const]),
     });
     stubs.fit
       .mockReturnValueOnce({
         status: "ok",
         events: Object.freeze([fittingEvent]),
+        scannedScripts: Object.freeze(["latin" as const]),
       })
-      .mockReturnValueOnce({ status: "ok", events: Object.freeze([]) });
+      .mockReturnValueOnce({
+        status: "ok",
+        events: Object.freeze([]),
+        scannedScripts: Object.freeze(["latin" as const]),
+      });
     stubs.coordinator.start.mockResolvedValue({
       phase: "ready",
       generation: 3,
