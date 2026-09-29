@@ -3,7 +3,7 @@
 Modules: `features/matter/server/harness.ts`, `prompt-spine.ts`,
 `repair-harness.ts`, `label-harness.ts`, `inquiry-harness.ts`,
 `transform-harness.ts`, `text-swap-harness.ts`, `model-pool.ts`,
-`user-provider-registry.ts`
+`user-provider-registry.ts`, `openai-chat-completion.ts`, `completion-outcome.ts`
 
 ## Problem
 
