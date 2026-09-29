@@ -12,5 +12,7 @@ export default defineConfig([
     "next-env.d.ts",
     "omi/**",
     "tmp/**",
+    // Local agent worktrees are separate checkouts, not this tree's source.
+    ".claude/**",
   ]),
 ]);
