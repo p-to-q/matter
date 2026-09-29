@@ -5,19 +5,20 @@ import type {
   AdmissionErrorCode,
   AdmissionInteractionState,
 } from "../runtime/admission-interaction";
+import { admissionFeedbackActions } from "./admission-feedback-copy";
 import {
   CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT,
   localizeCanvasGuidance,
-  localizeExpansionOutcome,
+  localizeOutcome,
   localizeParkedRelease,
-  localizeRewriteOutcome,
-  localizeWikiUnsaved,
+  outcomeGuidanceId,
   projectCanvasGuidance,
-  type CanvasExpansionGuidanceState,
   type CanvasGuidanceInput,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
+import { CANVAS_LANGUAGE_OPTIONS } from "./canvas-preferences";
+import type { MaterialOutcome } from "./outcome-line";
 
 const ANCHOR: AdmissionAnchor = {
   kind: "child",
@@ -102,47 +103,59 @@ describe("canvas guidance projection", () => {
     ["unavailable", "text-swap-unavailable", "Not rewritten. Text unchanged."],
     ["stale", "text-swap-stale", "Passage changed. Not rewritten."],
   ] as const)("reports a released %s rewrite in place of the next hint", (reason, id, text) => {
+    const outcome: MaterialOutcome = { owner: "rewrite", reason };
     expect(projectCanvasGuidance(input({
-      rewrite: { kind: "unchanged", reason },
+      outcome,
       language: { kind: "lasso-ready" },
     }))).toEqual({ id, kind: "recovery", text });
+    expect(outcomeGuidanceId(outcome)).toBe(id);
     expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     // Live voice still owns the line.
     expect(projectCanvasGuidance(input({
-      rewrite: { kind: "unchanged", reason },
+      outcome,
       admission: attempt({ phase: "recording", startedAtMs: 1 }),
     })).id).toBe("speak-recording");
     for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
       expect(localizeCanvasGuidance({ id, kind: "recovery", text }, language).text)
         .not.toBe(text);
     }
-    expect(localizeRewriteOutcome(reason, "en-US")).toBe(text);
-    expect(localizeRewriteOutcome(reason, "zh-CN"))
+    expect(localizeOutcome(outcome, "en-US")).toBe(text);
+    expect(localizeOutcome(outcome, "zh-CN"))
       .toBe(localizeCanvasGuidance({ id, kind: "recovery", text }, "zh-CN").text);
   });
 
   it("says once that Wiki could not record an explicit choice", () => {
     const text = "Wiki could not save that.";
+    const outcome: MaterialOutcome = { owner: "wiki", reason: "unsaved" };
     expect(projectCanvasGuidance(input({
-      wiki: { kind: "unsaved" },
+      outcome,
       language: { kind: "lasso-ready" },
     }))).toEqual({ id: "wiki-unsaved", kind: "recovery", text });
     expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
-    // A rewrite outcome and live voice keep the line first.
+    // Live voice keeps the line first; the outcome waits rather than hiding.
     expect(projectCanvasGuidance(input({
-      wiki: { kind: "unsaved" },
-      rewrite: { kind: "unchanged", reason: "stale" },
-    })).id).toBe("text-swap-stale");
-    expect(projectCanvasGuidance(input({
-      wiki: { kind: "unsaved" },
+      outcome,
       admission: attempt({ phase: "recording", startedAtMs: 1 }),
     })).id).toBe("speak-recording");
     for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
-      const localized = localizeWikiUnsaved(language);
+      const localized = localizeOutcome(outcome, language);
       expect(localized).not.toBe(text);
       expect(localized.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
     }
-    expect(localizeWikiUnsaved("en-US")).toBe(text);
+    expect(localizeOutcome(outcome, "en-US")).toBe(text);
+  });
+
+  it("says the shown outcome ahead of a parked result, then the parked result", () => {
+    const outcome: MaterialOutcome = { owner: "wiki", reason: "unsaved" };
+    expect(projectCanvasGuidance(input({
+      outcome,
+      expansion: { kind: "parked" },
+      rewrite: { kind: "parked" },
+    })).id).toBe("wiki-unsaved");
+    expect(projectCanvasGuidance(input({
+      expansion: { kind: "parked" },
+      rewrite: { kind: "parked" },
+    })).id).toBe("expansion-parked");
   });
 
   it("asks to place or discard held words instead of dismissing the recording", () => {
@@ -176,14 +189,15 @@ describe("canvas guidance projection", () => {
   });
 
   it.each([
-    [{ kind: "parked" }, "expansion-parked", "Expansion waits for its passage."],
-    [{ kind: "unchanged", reason: "unavailable" }, "expansion-unavailable", "Not expanded. Text unchanged."],
-    [{ kind: "unchanged", reason: "stale" }, "expansion-stale", "Passage changed. Not expanded."],
-  ] satisfies readonly [CanvasExpansionGuidanceState, string, string][])(
-    "keeps a submitted expansion's %o outcome ahead of lasso guidance",
-    (expansion, id, text) => {
+    [{ kind: "parked" } as const, undefined, "expansion-parked", "Expansion waits for its passage."],
+    [undefined, { owner: "expansion", reason: "unavailable" } as const, "expansion-unavailable", "Not expanded. Text unchanged."],
+    [undefined, { owner: "expansion", reason: "stale" } as const, "expansion-stale", "Passage changed. Not expanded."],
+  ])(
+    "keeps a submitted expansion's %o / %o state ahead of lasso guidance",
+    (expansion, outcome, id, text) => {
       expect(projectCanvasGuidance(input({
         expansion,
+        outcome,
         language: { kind: "selected", stretch: { kind: "adjusted", amount: 0.4 } },
       }))).toEqual({ id, kind: "recovery", text });
       expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
@@ -213,10 +227,22 @@ describe("canvas guidance projection", () => {
   });
 
   it("localizes the expansion announcement and its explicit release", () => {
-    expect(localizeExpansionOutcome("unavailable", "en-US")).toBe("Not expanded. Text unchanged.");
-    expect(localizeExpansionOutcome("stale", "zh-CN")).toBe("段落已变化，未展开。");
+    expect(localizeOutcome({ owner: "expansion", reason: "unavailable" }, "en-US"))
+      .toBe("Not expanded. Text unchanged.");
+    expect(localizeOutcome({ owner: "expansion", reason: "stale" }, "zh-CN"))
+      .toBe("段落已变化，未展开。");
     expect(localizeParkedRelease("en-US")).toBe("Discard");
+    expect(localizeParkedRelease("zh-CN")).toBe("丢弃");
+    expect(localizeParkedRelease("zh-TW")).toBe("丟棄");
     expect(localizeParkedRelease("ja-JP")).toBe("破棄");
+  });
+
+  it("names releasing held work with one word in every locale", () => {
+    // A parked result and held admission words are both work kept for the
+    // person; one Discard means one consequence wherever it appears.
+    for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
+      expect(localizeParkedRelease(language)).toBe(admissionFeedbackActions(language).discard);
+    }
   });
 
   it("keeps urgent interaction guidance ahead of the Pan readout", () => {

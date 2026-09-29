@@ -95,16 +95,15 @@ import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
-  localizeExpansionOutcome,
+  localizeOutcome,
   localizeParkedRelease,
+  outcomeGuidanceId,
   projectCanvasGuidance,
-  localizeRewriteOutcome,
-  localizeWikiUnsaved,
-  type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
-  type CanvasRewriteGuidanceState,
+  type CanvasTurnGuidanceState,
 } from "./canvas-guidance";
+import { useOutcomeAcknowledgement, useOutcomeLine } from "./use-outcome-line";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import {
   createLayoutProjectionInput,
@@ -245,23 +244,6 @@ const WikiOccurrenceLayer = dynamic(
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
-const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
-  "Alt",
-  "AltGraph",
-  "CapsLock",
-  "Control",
-  "Fn",
-  "FnLock",
-  "Hyper",
-  "Meta",
-  "NumLock",
-  "OS",
-  "ScrollLock",
-  "Shift",
-  "Super",
-  "Symbol",
-  "SymbolLock",
-]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 
 export type RootedMaterialProps = {
@@ -495,27 +477,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   // The press that dismissed a takeover, so its release never reopens that word.
   const wikiDismissingPressRef = useRef<Readonly<{ pointerId: number; occurrenceId: string }> | null>(null);
-  const [wikiUnsaved, setWikiUnsaved] = useState<number | null>(null);
-  const wikiUnsavedSequenceRef = useRef(0);
+  const outcomeLine = useOutcomeLine(props.documentEpoch);
+  const reportOutcome = outcomeLine.report;
   useEffect(() => wikiOccurrences?.subscribeUnsaved(() => {
-    wikiUnsavedSequenceRef.current += 1;
-    setWikiUnsaved(wikiUnsavedSequenceRef.current);
-  }), [wikiOccurrences]);
+    reportOutcome({ owner: "wiki", reason: "unsaved" });
+  }), [reportOutcome, wikiOccurrences]);
   useEffect(() => {
     // A modal that owns the paper hides every word from perception.
     wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
   }, [materialPresentationAvailable, wikiOccurrences]);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
   const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
-  const [pointTalkOutcome, setPointTalkOutcome] = useState<Readonly<{
-    id: number;
-    reason: PointTalkReleasedOutcome;
-  }> | null>(null);
-  const pointTalkOutcomeSequenceRef = useRef(0);
   const reportPointTalkOutcome = useCallback((reason: PointTalkReleasedOutcome) => {
-    pointTalkOutcomeSequenceRef.current += 1;
-    setPointTalkOutcome(Object.freeze({ id: pointTalkOutcomeSequenceRef.current, reason }));
-  }, []);
+    reportOutcome({ owner: "rewrite", reason });
+  }, [reportOutcome]);
   const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
   const reportPointTalkParked = useCallback((release: (() => void) | null) => {
     setReleaseParkedPointTalk(() => release);
@@ -1467,10 +1442,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     deliveryVisibleNodeIds: visiblyLaidOutNodeIds,
     commit: props.onTransformCommit,
     onCommitted: publishMaterialTextChange,
+    onOutcome: (reason) => reportOutcome({ owner: "expansion", reason }),
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
-    acknowledgeNotice: acknowledgeTransformNotice,
     cancel: cancelTransform,
     start: startTransform,
     state: transformState,
@@ -1498,26 +1473,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     reportedMaterialTurnPhasesRef.current = SETTLED_PAPER_MATERIAL_TURNS;
     reportMaterialTurnPhases?.(SETTLED_PAPER_MATERIAL_TURNS);
   }, [reportMaterialTurnPhases]);
-  const transformNotice = transformState.notice;
-  useEffect(() => {
-    if (transformNotice === null) return;
-    // An outcome notice stays until the person acts again, so a slow reader
-    // never loses it to a timer. A held key's auto-repeat or a lone modifier
-    // is not a new action.
-    const acknowledge = () => acknowledgeTransformNotice();
-    const acknowledgeKey = (event: KeyboardEvent) => {
-      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
-      acknowledgeTransformNotice();
-    };
-    // Keydown only observes, so it listens in the bubble phase like every
-    // other window key owner; the Escape stack forbids capture-phase keydown.
-    window.addEventListener("pointerdown", acknowledge, true);
-    window.addEventListener("keydown", acknowledgeKey);
-    return () => {
-      window.removeEventListener("pointerdown", acknowledge, true);
-      window.removeEventListener("keydown", acknowledgeKey);
-    };
-  }, [acknowledgeTransformNotice, transformNotice]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1625,41 +1580,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointTalkExitHandoff.preempt();
     closePointTalk();
   }, [closePointTalk, pointTalkExitHandoff]);
-  useEffect(() => {
-    if (wikiUnsaved === null) return;
-    // Like a rewrite outcome, the line stays until the person acts again.
-    const clear = () => setWikiUnsaved(null);
-    const clearOnKey = (event: KeyboardEvent) => {
-      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
-      clear();
-    };
-    const capture = { capture: true } as const;
-    window.addEventListener("pointerdown", clear, capture);
-    window.addEventListener("keydown", clearOnKey);
-    return () => {
-      window.removeEventListener("pointerdown", clear, capture);
-      window.removeEventListener("keydown", clearOnKey);
-    };
-  }, [wikiUnsaved]);
-  useEffect(() => {
-    if (pointTalkOutcome === null) return;
-    // The outcome stays until the person acts again, so a slow reader never
-    // loses it to a timer. A held key's auto-repeat or a lone modifier, such
-    // as a screen reader's, is not a new action. Keydown only observes, so it
-    // listens in the bubble phase like every other window key owner.
-    const clear = () => setPointTalkOutcome(null);
-    const clearOnKey = (event: KeyboardEvent) => {
-      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
-      clear();
-    };
-    const capture = { capture: true } as const;
-    window.addEventListener("pointerdown", clear, capture);
-    window.addEventListener("keydown", clearOnKey);
-    return () => {
-      window.removeEventListener("pointerdown", clear, capture);
-      window.removeEventListener("keydown", clearOnKey);
-    };
-  }, [pointTalkOutcome]);
   const stretchReopen = stretch.reopen;
   const discardParkedExpansion = useCallback(() => {
     // An explicit release of a result whose passage is not shown. Only a
@@ -2513,17 +2433,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }
   // Parking is shown only against a settled layout: a relayout briefly
   // empties the laid-out set without the passage having left the paper.
-  const expansionGuidance: CanvasExpansionGuidanceState = transformState.phase === "requesting"
-    ? transformState.parked && activeLayout !== null ? { kind: "parked" } : { kind: "none" }
-    : transformState.notice === null
-      ? { kind: "none" }
-      : { kind: "unchanged", reason: transformState.notice.kind };
-  const rewriteGuidance: CanvasRewriteGuidanceState =
+  const expansionGuidance: CanvasTurnGuidanceState =
+    transformState.phase === "requesting" && transformState.parked && activeLayout !== null
+      ? { kind: "parked" }
+      : { kind: "none" };
+  const rewriteGuidance: CanvasTurnGuidanceState =
     releaseParkedPointTalk !== null && activeLayout !== null
       ? { kind: "parked" }
-      : pointTalkOutcome === null
-        ? { kind: "none" }
-        : { kind: "unchanged", reason: pointTalkOutcome.reason };
+      : { kind: "none" };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
@@ -2532,12 +2449,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
         : { kind: "none" },
       expansion: expansionGuidance,
       rewrite: rewriteGuidance,
-      wiki: wikiUnsaved === null ? { kind: "none" } : { kind: "unsaved" },
+      outcome: outcomeLine.current,
       language: languageGuidance,
       material: materialGuidance,
     }),
     canvasPreferences.preferences.language,
   );
+  // An outcome counts as shown only while the line says it on a paper the
+  // person can see; only then may their next action retire it.
+  const shownOutcome = outcomeLine.current !== null && outcomePresentationAvailable &&
+      guidance.id === outcomeGuidanceId(outcomeLine.current)
+    ? outcomeLine.current
+    : null;
+  useOutcomeAcknowledgement(shownOutcome, outcomeLine.acknowledge);
   const parkedRelease = guidance.id === "expansion-parked"
     ? discardParkedExpansion
     : guidance.id === "text-swap-parked"
@@ -3780,16 +3704,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           The explicit politeness matches every other outcome region, since not
           every screen reader derives it from the status role alone. */}
       <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
-        {transformNotice !== null ? (
-          <span key={`expansion_${transformNotice.id}`}>
-            {localizeExpansionOutcome(transformNotice.kind, props.locale)}
-          </span>
-        ) : pointTalkOutcome !== null ? (
-          <span key={`rewrite_${pointTalkOutcome.id}`}>
-            {localizeRewriteOutcome(pointTalkOutcome.reason, props.locale)}
-          </span>
-        ) : wikiUnsaved !== null ? (
-          <span key={`wiki_${wikiUnsaved}`}>{localizeWikiUnsaved(props.locale)}</span>
+        {shownOutcome !== null ? (
+          <span key={`outcome_${shownOutcome.id}`}>{localizeOutcome(shownOutcome, props.locale)}</span>
         ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
           <span key={guidance.id}>{guidance.text}</span>
         ) : null}
