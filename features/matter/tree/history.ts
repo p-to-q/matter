@@ -165,11 +165,12 @@ export function commitTreeCommand(
  * they submitted; clearing redo would let latency destroy it.
  *
  * Retained redo entries must still replay exactly, in stack order, against
- * the new tree and within the same limits across both stacks. The first entry
- * that does not is released together with everything after it, so the redo
- * stack stays one contiguous future that recovery and Redo can trust. Only an
- * exact text replacement is known to commute with that future; any other
- * delivered mutation ends it as a human command does.
+ * the new tree. The first entry that does not is released together with
+ * everything after it, so the redo stack stays one contiguous future that
+ * recovery and Redo can trust. At capacity the oldest undo steps go first,
+ * then the farthest redo steps. Only an exact text replacement is known to
+ * commute with that future; any other delivered mutation ends it as a human
+ * command does.
  */
 export function commitDeliveredTreeCommand(
   tree: ThoughtTree,
@@ -185,20 +186,11 @@ export function commitDeliveredTreeCommand(
     redoEntries.length === 0 ||
     command.mutation.type !== "replace-text"
   ) return committed;
-  const retained = redoFutureIndependentOf(
-    command.mutation.nodeId,
-    committed.history,
-    redoEntries,
-    limits,
-  );
-  if (retained.length === 0) return committed;
+  const future = redoFutureIndependentOf(command.mutation.nodeId, redoEntries);
+  if (future.length === 0) return committed;
   return {
     ...committed,
-    history: {
-      entries: committed.history.entries,
-      redoEntries: retained,
-      retainedInverseBytes: committed.history.retainedInverseBytes + retainedBytes(retained),
-    },
+    history: boundBothStacks(committed.history.entries, future, limits),
   };
 }
 
@@ -332,7 +324,7 @@ function retainedBytes(entries: readonly TreeHistoryEntry[]): number {
 
 /**
  * Returns the longest nearest-first redo prefix that still replays after one
- * delivered replacement of `nodeId`'s text, within limits across both stacks.
+ * delivered replacement of `nodeId`'s text. Capacity is applied separately.
  *
  * The redo stack replayed before the delivery. The delivery changes only that
  * node's text and timestamp, and the engine reads node content solely through
@@ -344,26 +336,52 @@ function retainedBytes(entries: readonly TreeHistoryEntry[]): number {
  */
 function redoFutureIndependentOf(
   nodeId: string,
-  undoHistory: TreeHistory,
   redoEntries: readonly TreeHistoryEntry[],
-  limits: TreeHistoryLimits,
 ): TreeHistoryEntry[] {
-  let entryCount = undoHistory.entries.length;
-  let bytes = undoHistory.retainedInverseBytes;
   let firstRetained = redoEntries.length;
   for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
     const entry = redoEntries[index];
-    if (
-      entry === undefined ||
-      carriesNodeMemento(entry.inverse.mutation, nodeId) ||
-      entryCount + 1 > limits.maxEntries ||
-      bytes + entry.retainedInverseBytes > limits.maxRetainedInverseBytes
-    ) break;
-    entryCount += 1;
-    bytes += entry.retainedInverseBytes;
+    if (entry === undefined || carriesNodeMemento(entry.inverse.mutation, nodeId)) break;
     firstRetained = index;
   }
   return redoEntries.slice(firstRetained);
+}
+
+/**
+ * Applies the entry and byte limits across both stacks after a delivery.
+ * The kept redo prefix is the person's most recently undone intent, fresher
+ * than the oldest undo steps, so the oldest undo steps are released first
+ * (never the delivered step itself) and only then the farthest redo steps.
+ * Totals are recomputed from the entries, so this does not depend on how a
+ * plain commit accounts for the stack it clears.
+ */
+function boundBothStacks(
+  entries: readonly TreeHistoryEntry[],
+  redoEntries: readonly TreeHistoryEntry[],
+  limits: TreeHistoryLimits,
+): TreeHistory {
+  const undo = [...entries];
+  let redoStart = 0;
+  let count = undo.length + redoEntries.length;
+  let bytes = retainedBytes(undo) + retainedBytes(redoEntries);
+  const overLimit = () =>
+    count > limits.maxEntries || bytes > limits.maxRetainedInverseBytes;
+  while (overLimit() && undo.length > 1) {
+    const released = undo.shift();
+    if (released === undefined) break;
+    count -= 1;
+    bytes -= released.retainedInverseBytes;
+  }
+  while (overLimit() && redoStart < redoEntries.length) {
+    bytes -= redoEntries[redoStart]?.retainedInverseBytes ?? 0;
+    count -= 1;
+    redoStart += 1;
+  }
+  return {
+    entries: undo,
+    redoEntries: redoEntries.slice(redoStart),
+    retainedInverseBytes: bytes,
+  };
 }
 
 /** Whether the engine will compare this node's current content to a memento. */

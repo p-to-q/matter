@@ -96,18 +96,37 @@ describe("delivered commits and the redo future", () => {
     expect(redone.tree.nodes.x?.text).toBe("C");
   });
 
-  it("retains redo only inside the limits shared by both stacks", () => {
-    const withY = admitSibling(rootWithX());
-    const withZ = commit(withY, insertNode("z", "Z", withY.tree.revision, ["y"], 2));
-    const undone = undo(undo(withZ));
-    expect(undone.history.redoEntries).toHaveLength(2);
+  it("releases the oldest undo step before the undone future at capacity", () => {
+    const undone = twoUndoneSiblings();
+    const landed = deliver(undone, replaceX("A", T0, "A grown", T1), { ...LIMITS, maxEntries: 4 });
+    // Initialization is released; X's insertion, the turn, and both redo steps stay.
+    expect(landed.history.entries.map((entry) => entry.commandId)).toEqual(["insert_x", "turn_A_grown"]);
+    expect(landed.history.redoEntries).toHaveLength(2);
+    expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
+    const both = redo(redo(landed));
+    expect(both.tree.nodes.y?.text).toBe("Y");
+    expect(both.tree.nodes.z?.text).toBe("Z");
+  });
 
-    const narrow = { ...LIMITS, maxEntries: 4 };
-    const landed = deliver(undone, replaceX("A", T0, "A grown", T1), narrow);
-    // Undo keeps its three steps; exactly one redo step fits beside them.
-    expect(landed.history.entries).toHaveLength(3);
+  it("releases the farthest redo step only after every older undo step is gone", () => {
+    const undone = twoUndoneSiblings();
+    const landed = deliver(undone, replaceX("A", T0, "A grown", T1), { ...LIMITS, maxEntries: 2 });
+    expect(landed.history.entries.map((entry) => entry.commandId)).toEqual(["turn_A_grown"]);
     expect(landed.history.redoEntries).toHaveLength(1);
     expect(redo(landed).tree.nodes.y?.text).toBe("Y");
+    expect(landed.history.retainedInverseBytes).toBe(exactBytes(landed.history));
+  });
+
+  it("applies the byte limit across both stacks in the same order", () => {
+    const undone = twoUndoneSiblings();
+    const unbounded = deliver(undone, replaceX("A", T0, "A grown", T1));
+    const oldest = unbounded.history.entries[0]!.retainedInverseBytes;
+    const landed = deliver(undone, replaceX("A", T0, "A grown", T1), {
+      ...LIMITS,
+      maxRetainedInverseBytes: unbounded.history.retainedInverseBytes - oldest,
+    });
+    expect(landed.history.entries).toHaveLength(unbounded.history.entries.length - 1);
+    expect(landed.history.redoEntries).toHaveLength(2);
   });
 
   it("releases an undone move of the delivered passage, whose memento holds its old text", () => {
@@ -181,6 +200,15 @@ function rootWithX(): Session {
     index: 0,
     expectedParentChildren: [],
   }));
+}
+
+/** Y and Z admitted after X, then both undone: redo holds Y nearest, Z farthest. */
+function twoUndoneSiblings(): Session {
+  const withY = admitSibling(rootWithX());
+  const withZ = commit(withY, insertNode("z", "Z", withY.tree.revision, ["y"], 2));
+  const undone = undo(undo(withZ));
+  expect(undone.history.redoEntries).toHaveLength(2);
+  return undone;
 }
 
 function admitSibling(session: Session): Session {

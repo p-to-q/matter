@@ -100,9 +100,13 @@ be destroyed by latency rather than by anything the person did: start Elastic
 on X, undo sibling Y's admission, and the arriving expansion would make Y
 impossible to redo.
 
-`commitDeliveredTreeCommand` therefore publishes the same undo stack as
-`commitTreeCommand` but keeps the redo future that still replays, inside the
-same entry and byte limits counted across both stacks. A delivery is one exact
+`commitDeliveredTreeCommand` therefore commits like `commitTreeCommand` but
+keeps the redo future that still replays. The entry and byte limits then count
+both stacks. At capacity, the oldest undo steps are released first, never the
+delivered step itself, and only then the farthest redo steps. The kept redo
+prefix is the person's most recently undone intent and is fresher than the
+oldest undo step. Totals are recomputed from the entries, so the policy does
+not assume that a commit clears redo. A delivery is one exact
 text replacement of one node, and the engine reads node content only through
 the node mementos a mutation carries. Every redo step nearer than the first one
 carrying that node's memento replays unchanged; that first carrier holds the
