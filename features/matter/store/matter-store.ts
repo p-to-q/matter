@@ -168,7 +168,7 @@ export type SeedLocalizationReceipt = Readonly<{
   operation: "localize-seed";
   status: "localized" | "unchanged" | "rejected";
   revision: number;
-  errorCode?: "SEED_LOCALIZATION_INVALID_TREE" | "SEED_LOCALIZATION_INVALID_HISTORY";
+  errorCode?: "SEED_LOCALIZATION_INVALID_TREE";
   /** A stack whose next step no longer matched the localized seed was released. */
   historyReleased?: boolean;
 }>;

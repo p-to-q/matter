@@ -134,12 +134,16 @@ in [`virtual-file-system.md`](virtual-file-system.md#undo-journal-schema-v6).
 
 A restored step carries `bytesUnverified`: its stored byte count is compared
 with its memento when it is first applied, so a damaged record fails closed.
-Seed relocalization follows the same rule. It answers "unchanged" without
-reading history unless an untouched seed passage or title differs for the new
-language, re-measures only the mementos it rewrites, and dry-runs only the two
-stack tops; it runs for language and document changes, not for save phases. A
-deeper stale step never stops translation. With about 1,000 nodes and 1,000
-steps, the whole-journal replay it replaced cost 4.4 s of main thread.
+Seed relocalization follows the same rule. Untouched seed copy lives in the
+material and in every memento that can restore it, so both follow the
+language: an Undo of a person's edit to a seed passage restores that passage in
+the language being read, even when no untouched passage is left in the
+material. It rewrites the seed copy of every memento, re-measures only the
+mementos it rewrites, and dry-runs only the two stack tops; the walk is linear
+in the bounded journal and replays nothing. It runs once per language and
+document instance, not for save phases or each settled turn. A deeper stale
+step never stops translation. With about 1,000 nodes and 1,000 steps, the
+whole-journal replay it replaced cost 4.4 s of main thread.
 
 ### Late results and the redo future
 

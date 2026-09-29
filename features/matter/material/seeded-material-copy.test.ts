@@ -184,18 +184,51 @@ describe("localized seeded material copy", () => {
     expect(canReplayTreeHistory(relocalized.tree, relocalized.history)).toBe(true);
   });
 
-  it("translates the seed without reading history when nothing needs translating", () => {
+  it("keeps a long journal's objects when nothing reads differently in the language", () => {
     const fixture = createSeededDocument();
     const localized = relocalizeSeededSession(fixture.tree, fixture.history, "en-US");
     if (!localized.ok) throw new Error(localized.errorCode);
     const session = longTextJournal(localized.tree, localized.history, 1_000);
-    const inverseReads = watchInverseReads(session.history);
 
     const repeated = relocalizeSeededSession(session.tree, session.history, "en-US");
     expect(repeated).toMatchObject({ ok: true, changed: false, historyReleased: false });
     if (!repeated.ok) return;
+    expect(repeated.tree).toBe(session.tree);
     expect(repeated.history).toBe(session.history);
-    expect(inverseReads()).toBe(0);
+  });
+
+  it("translates the seed text an Undo restores even when no untouched passage is left", () => {
+    // The root-only seed has one passage and no title; editing it leaves
+    // nothing untouched in the material, only the memento that restores it.
+    const fixture = createSeededDocument("root");
+    const root = fixture.tree.nodes[fixture.tree.rootId!]!;
+    const edited = commitTreeCommand(fixture.tree, fixture.history, {
+      id: "human_root_edit",
+      source: "human",
+      expectedTreeId: fixture.tree.id,
+      expectedRevision: fixture.tree.revision,
+      createdAt: "2026-08-24T00:05:00.000Z",
+      mutation: {
+        type: "replace-text",
+        nodeId: root.id,
+        expectedText: root.text,
+        expectedUpdatedAt: root.updatedAt,
+        text: "我自己的话。",
+        updatedAt: "2026-08-24T00:05:00.000Z",
+      },
+    }, TEST_HISTORY_LIMITS);
+    if (!edited.ok) throw new Error(edited.error.code);
+
+    const localized = relocalizeSeededSession(edited.tree, edited.history, "en-US");
+    expect(localized).toMatchObject({ ok: true, changed: true, historyReleased: false });
+    if (!localized.ok) return;
+    expect(localized.tree).toBe(edited.tree);
+    const undone = undoTreeHistory(localized.tree, localized.history, TEST_HISTORY_LIMITS);
+    if (!undone.ok) throw new Error(undone.error.code);
+    expect(undone.tree.nodes[root.id]).toMatchObject({
+      text: seededNodeText("en-US", "root"),
+      updatedAt: root.updatedAt,
+    });
   });
 
   it("checks only the next Undo and Redo when a language change rewrites seed mementos", () => {
@@ -308,22 +341,6 @@ function longTextJournal(tree: ThoughtTree, history: TreeHistory, count: number)
     session = result;
   }
   return session;
-}
-
-/** Counts reads of any memento, which a history-free answer must never make. */
-function watchInverseReads(history: TreeHistory): () => number {
-  let reads = 0;
-  for (const entry of [...history.entries, ...history.redoEntries]) {
-    const inverse = entry.inverse;
-    Object.defineProperty(entry, "inverse", {
-      configurable: true,
-      get() {
-        reads += 1;
-        return inverse;
-      },
-    });
-  }
-  return () => reads;
 }
 
 const JOURNAL_LIMITS = { maxEntries: 1_000, maxRetainedInverseBytes: 32 * 1_024 * 1_024 };
