@@ -31,6 +31,7 @@ import {
   storedAliasEvidenceKey,
   transitionFailure as failure,
   transitionSuccess as success,
+  type WikiCommit,
 } from "./wiki-transition";
 
 /**
@@ -172,6 +173,7 @@ export function advanceUnobservedEvidence(
   state: WikiState,
   events: readonly WikiObserveEvidenceEvent[],
   tick: WikiObservationTick,
+  commit: WikiCommit = commitAtRevision,
 ): WikiTransitionResult {
   const initialTermKeys = new Set(state.termEvidence.map(lexemeKey));
   const hasOwnerlessAutomaticLexeme = state.lexemes.some((lexeme) =>
@@ -290,7 +292,7 @@ export function advanceUnobservedEvidence(
   if (state.revision === Number.MAX_SAFE_INTEGER) {
     return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
   }
-  return commitAtRevision(state, state.revision + 1, {
+  return commit(state, state.revision + 1, {
     lexemes,
     termEvidence,
     aliasEvidence,

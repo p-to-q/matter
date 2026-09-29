@@ -2077,6 +2077,28 @@ describe("Wiki evidence and authority", () => {
     }
   });
 
+  it("publishes a batch whole or rejects it whole when its final state is invalid", () => {
+    const nearBound = Object.freeze({
+      ...createEmptyWikiState(),
+      revision: Number.MAX_SAFE_INTEGER - 1,
+    });
+    const one = applyObservationBatch(
+      nearBound,
+      [observe("recent-material", "Codex")],
+      tick("observed", "paused"),
+    );
+    expect(one.revision).toBe(Number.MAX_SAFE_INTEGER);
+    expect(parseWikiState(JSON.parse(JSON.stringify(one)))).toMatchObject({ ok: true });
+
+    // The first observation alone would fit; the second overruns the revision
+    // bound, so neither may be published.
+    expect(applyWikiObservationBatch(
+      nearBound,
+      [observe("recent-material", "Codex"), observe("recent-material", "Morphogenesis")],
+      tick("observed", "paused"),
+    )).toMatchObject({ ok: false, error: { code: "INVALID_STATE" } });
+  });
+
   it("fails a turn whose aging cannot commit instead of skipping the aging", () => {
     const aging = Object.freeze({
       ...repeatEvidence(createEmptyWikiState(), "recent-material", 1),

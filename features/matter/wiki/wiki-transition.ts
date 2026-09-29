@@ -38,16 +38,45 @@ export function transitionFailure(
   return Object.freeze({ ok: false, error: Object.freeze({ code, message }) });
 }
 
-export function commitAtRevision(
+/**
+ * How one step of a transition turns its candidate into the next state. A
+ * standalone transition commits and validates each step. An observation batch
+ * stages up to 64 steps and validates once, then publishes or rejects the
+ * whole batch; validating every intermediate state cost a full-state scan per
+ * event on a large Wiki.
+ */
+export type WikiCommit = (
   state: WikiState,
   revision: number,
   replacement: Partial<WikiState>,
-): WikiTransitionResult {
-  const merged = { ...state, ...replacement, revision };
-  const next = freezeWikiState({ ...merged, revertStrikes: retainRevertStrikes(merged) });
+) => WikiTransitionResult;
+
+/** Commits one step as a frozen, validated state or a stable failure. */
+export const commitAtRevision: WikiCommit = (state, revision, replacement) => {
+  const next = stage(state, revision, replacement);
   const validation = validateWikiState(next);
   if (!validation.ok) return transitionFailure("INVALID_STATE", validation.message);
   return transitionSuccess(next, true);
+};
+
+/**
+ * Stages one step without validating it. Only a batch that validates its
+ * final state with `publishStaged` before returning it may use this.
+ */
+export const stageAtRevision: WikiCommit = (state, revision, replacement) =>
+  transitionSuccess(stage(state, revision, replacement), true);
+
+/** Validates a staged batch once: its final state is published whole or not at all. */
+export function publishStaged(original: WikiState, staged: WikiState): WikiTransitionResult {
+  if (staged === original) return transitionSuccess(original, false);
+  const validation = validateWikiState(staged);
+  if (!validation.ok) return transitionFailure("INVALID_STATE", validation.message);
+  return transitionSuccess(staged, true);
+}
+
+function stage(state: WikiState, revision: number, replacement: Partial<WikiState>): WikiState {
+  const merged = { ...state, ...replacement, revision };
+  return freezeWikiState({ ...merged, revertStrikes: retainRevertStrikes(merged) });
 }
 
 /**
@@ -121,6 +150,7 @@ export function reconcileAliasEvidencePhases(
   state: WikiState,
   qualifiedProducers: WikiAliasReleaseQualification,
   mustAdvanceRevision: boolean,
+  commit: WikiCommit = commitAtRevision,
 ): WikiTransitionResult {
   if (state.aliasEvidence.length === 0) return transitionSuccess(state, false);
   const lexemes = new Map(state.lexemes.map((lexeme) => [lexeme.id, lexeme]));
@@ -152,7 +182,7 @@ export function reconcileAliasEvidencePhases(
   if (mustAdvanceRevision && state.revision === Number.MAX_SAFE_INTEGER) {
     return transitionFailure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
   }
-  return commitAtRevision(
+  return commit(
     state,
     mustAdvanceRevision ? state.revision + 1 : state.revision,
     { aliasEvidence: Object.freeze(aliasEvidence) },

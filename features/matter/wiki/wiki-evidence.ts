@@ -79,10 +79,13 @@ import {
   aliasDescriptor,
   commitAtRevision,
   findLexeme,
+  publishStaged,
   reconcileAliasEvidencePhases,
+  stageAtRevision,
   storedAliasEvidenceKey,
   transitionFailure as failure,
   transitionSuccess as success,
+  type WikiCommit,
 } from "./wiki-transition";
 
 /**
@@ -358,14 +361,16 @@ export function applyWikiObservationBatch(
       unique.set(key, event);
     }
   }
-  const aged = advanceUnobservedEvidence(state, [...unique.values()], tick);
+  // Every step is staged and the final state is validated once: the batch is
+  // published whole or rejected whole, never partly committed.
+  const aged = advanceUnobservedEvidence(state, [...unique.values()], tick, stageAtRevision);
   if (!aged.ok) return aged;
   let working = aged.state;
   // Rows observed in this turn are never evicted to make room for its newcomers.
   const observedThisTurn: ReadonlySet<string> = new Set(unique.keys());
   for (const event of [...unique.values()].sort(compareObservation)) {
     const result = isWikiEvent(event)
-      ? observeEvidence(working, event, observedThisTurn)
+      ? observeEvidence(working, event, observedThisTurn, stageAtRevision)
       : failure("INVALID_EVENT", "The Wiki event is invalid.");
     if (!result.ok) return result;
     working = result.state;
@@ -374,10 +379,10 @@ export function applyWikiObservationBatch(
     working,
     qualifiedAliasProducers,
     working.revision === state.revision,
+    stageAtRevision,
   );
   if (!reconciled.ok) return reconciled;
-  working = reconciled.state;
-  return success(working, working !== state);
+  return publishStaged(state, reconciled.state);
 }
 
 /**
@@ -601,6 +606,7 @@ function observeEvidence(
   state: WikiState,
   event: Extract<WikiEvent, { type: "observe-evidence" }>,
   observedThisTurn: ReadonlySet<string> = EMPTY_IDENTITIES,
+  commit: WikiCommit = commitAtRevision,
 ): WikiTransitionResult {
   if (state.automaticLearningSaturated) return success(state, false);
   if (hasLexemeTombstone(state, event)) return success(state, false);
@@ -653,11 +659,11 @@ function observeEvidence(
           !lexemesRetainedByDependents(working).has(existingLexeme.id)
         ? working.lexemes.filter((entry) => entry.id !== existingLexeme.id)
         : working.lexemes;
-      return commitAtRevision(working, revision, { termEvidence, lexemes });
+      return commit(working, revision, { termEvidence, lexemes });
     }
     const ensured = ensureLexeme(working, event, "aggregate-evidence", revision);
     if (!ensured.ok) return ensured.result;
-    return commitAtRevision(working, revision, {
+    return commit(working, revision, {
       lexemes: ensured.lexemes,
       nextLexemeId: ensured.nextLexemeId,
       termEvidence,
@@ -722,9 +728,7 @@ function observeEvidence(
     keptQuietTurns: observed.keptQuietTurns,
   });
   aliasEvidence.push(aggregate);
-  return commitAtRevision(working, revision, {
-    aliasEvidence,
-  });
+  return commit(working, revision, { aliasEvidence });
 }
 
 const EMPTY_IDENTITIES: ReadonlySet<string> = new Set();
