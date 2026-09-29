@@ -61,8 +61,11 @@ test.describe("pen-active palm rejection", () => {
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
     const passage = page.locator("[data-thought-text-id]").first();
-    await passage.hover();
-    await page.locator("[data-node-action=point-talk]").click();
+    // A pen-and-touch tablet reports a coarse primary pointer, where the local
+    // action lens follows the selected passage rather than hover.
+    expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
+    await passage.tap();
+    await page.locator("[data-node-action=point-talk]").tap();
     const pointTalk = page.locator(".point-talk");
     const field = pointTalk.locator("input");
     await expect(field).toBeVisible();

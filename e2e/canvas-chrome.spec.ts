@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { canvasRegionCopy } from "../features/matter/components/canvas-region-copy";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
@@ -332,16 +333,24 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await expect(page.locator(".matter-guidance__next")).toHaveText("Select one thought.");
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
+  // The paper region is named in the chosen language like the rest of the
+  // chrome; its locale table has no fallback to the fixture's language.
+  await expect(paper).toHaveCount(0);
+  const englishPaper = page.getByRole("region", {
+    name: canvasRegionCopy("en-US").material,
+    exact: true,
+  });
+  await expect(englishPaper).toBeVisible();
 
   await page.getByRole("button", { name: "Leaf shadows: On" }).click();
-  await expect(paper).toHaveAttribute("data-leaf-fx", "off");
+  await expect(englishPaper).toHaveAttribute("data-leaf-fx", "off");
   await expect(page.locator("[data-matter-ambient='leaf-shadows']")).toHaveAttribute("data-fx", "off");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Appearance: Auto" }).click();
-  await expect(paper).toHaveAttribute("data-canvas-theme-preference", "light");
-  await expect(paper).toHaveAttribute("data-canvas-theme", "light");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme-preference", "light");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme", "light");
   await rootThought.locator("[data-thought-text-id]").click();
   await expect(rootThought).toHaveAttribute("data-selected", "true");
   const structuralAddress = page.locator(
@@ -353,8 +362,8 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(structuralPath).toHaveCSS("fill", "rgba(22, 29, 39, 0.08)");
   await page.getByRole("button", { name: "Appearance: Light" }).click();
-  await expect(paper).toHaveAttribute("data-canvas-theme-preference", "dark");
-  await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme-preference", "dark");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme", "dark");
   await expect(rootThought).toHaveAttribute("data-selected", "true");
   await expect(rootThought.locator("[data-thought-text-id]")).toHaveCSS("color", "rgb(243, 244, 241)");
   await expect(rootThought.locator(".spatial-thought__label"))
@@ -366,8 +375,8 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), PREFERENCES_KEY))
     .toEqual({ version: 1, language: "en-US", leafFx: false, appearance: "dark" });
   await page.reload();
-  await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
-  await expect(paper).toHaveAttribute("data-leaf-fx", "off");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme", "dark");
+  await expect(englishPaper).toHaveAttribute("data-leaf-fx", "off");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });

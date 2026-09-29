@@ -1454,7 +1454,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
   // question. It returns the question to the field without a notice and gives
   // a late answer no authority over either the bubble or the local record.
   const cancelPendingAsk = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
-    if (!inquiryCancelAccepted(event.detail)) return;
+    if (!cancelArmed || !inquiryCancelAccepted(event.detail)) return;
     const pending = pendingSubmissionRef.current;
     const request = requestRef.current;
     if (pending === null || request === null) return;
@@ -1465,7 +1465,7 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     request.abort(new DOMException("Inquiry cancelled", "AbortError"));
     dispatch({ type: "withdraw", id: pending.answerId, question: pending.question, reason: null });
     requestAnimationFrame(() => focusWithoutScroll(fieldRef.current ?? undefined));
-  }, []);
+  }, [cancelArmed]);
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -1525,6 +1525,22 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           {state.turns.map((turn) => <InquiryTurn copy={copy} key={turn.id} turn={turn} />)}
         </div>
       )}
+      {/* Mounted before it speaks, so a later notice is announced. It sits
+          above the composer because the bubble is anchored at its bottom: a
+          hint, notice, or listening line that comes or goes then moves the
+          record, never the field and its controls under the pointer. */}
+      <p
+        aria-atomic="true"
+        aria-live="polite"
+        className={styles.inquiryStatus}
+        role="status"
+      >
+        {!statusLive ? null : record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
+          ? noticeCopy(copy, state.notice)
+          : listening ? copy.listening
+            : transcribing ? copy.transcribing
+              : state.turns.length === 0 ? hint : null}
+      </p>
       <div className={styles.inquiryComposer}>
         <textarea
           aria-label={copy.askPlaceholder}
@@ -1566,14 +1582,19 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
           <MicIcon />
         </button>
         {/* Distinct keys: the control that replaces Ask is a new element, and
-            focus goes back to the field rather than landing on Cancel. */}
+            focus goes back to the field rather than landing on Cancel. A press
+            on either keeps focus in the field. While arming, Cancel is inert
+            through aria-disabled rather than disabled: pressing a disabled
+            button still blurs the field, and the second press of a
+            double-click on Ask lands exactly there. */}
         {hasPendingAnswer && submissionPending ? (
           <button
+            aria-disabled={!cancelArmed || undefined}
             className={styles.inquiryAsk}
             data-inquiry-control="cancel"
-            disabled={!cancelArmed}
             key="cancel"
             onClick={cancelPendingAsk}
+            onMouseDown={keepInquiryFieldFocus}
             type="button"
           >
             {copy.askCancel}
@@ -1588,25 +1609,13 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
               ask();
               focusWithoutScroll(fieldRef.current ?? undefined);
             }}
+            onMouseDown={keepInquiryFieldFocus}
             type="button"
           >
             {copy.ask}
           </button>
         )}
       </div>
-      {/* Mounted before it speaks, so a later notice is announced. */}
-      <p
-        aria-atomic="true"
-        aria-live="polite"
-        className={styles.inquiryStatus}
-        role="status"
-      >
-        {!statusLive ? null : record?.phase === "error" ? copy.recordUnsaved : state.notice !== null
-          ? noticeCopy(copy, state.notice)
-          : listening ? copy.listening
-            : transcribing ? copy.transcribing
-              : state.turns.length === 0 ? hint : null}
-      </p>
     </div>
   );
 });
@@ -1717,6 +1726,11 @@ export const INQUIRY_CANCEL_ARM_MS = 400;
  */
 export function inquiryCancelAccepted(clickDetail: number): boolean {
   return clickDetail <= 1;
+}
+
+/** The field is the composer's focus home; a pointer press on its action keeps it there. */
+function keepInquiryFieldFocus(event: ReactMouseEvent<HTMLButtonElement>): void {
+  event.preventDefault();
 }
 type TerminalInquiryOutcome = Exclude<InquiryTurnOutcome, Readonly<{ status: "pending" }>>;
 const NO_MATERIAL: TerminalInquiryOutcome = Object.freeze({ status: "unavailable", reason: "NO_MATERIAL" });
