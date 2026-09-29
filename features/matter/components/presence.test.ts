@@ -4,6 +4,8 @@ import {
   advanceSettledStatus,
   createPresenceHandoff,
   createTimedStore,
+  markPresencePainted,
+  presenceAwaitsPaint,
   emptySettledStatus,
   PRESENCE_TIMING,
   presenceReservesSpace,
@@ -26,16 +28,17 @@ function live(view: string, identity = "voice_1"): PresenceLive<string> {
   return { identity, view };
 }
 
+/** A surface that became present and reached its first frame at `ms`. */
 function shownAt(ms: number, view = "Listening"): PresenceState<string> {
-  return syncPresence(null, live(view), "preempted", ms, MOTION);
+  return markPresencePainted(syncPresence(null, live(view), "preempted", ms, MOTION), ms);
 }
 
 describe("surface presence", () => {
   it("enters present at once and follows live content without a new first paint", () => {
     const entered = shownAt(1_000);
-    expect(entered).toMatchObject({ stage: "present", view: "Listening", shownAtMs: 1_000 });
+    expect(entered).toMatchObject({ stage: "present", view: "Listening", paintedAtMs: 1_000 });
     const updated = syncPresence(entered, live("Listening, a partial"), "finished", 1_050, MOTION);
-    expect(updated).toMatchObject({ stage: "present", view: "Listening, a partial", shownAtMs: 1_000 });
+    expect(updated).toMatchObject({ stage: "present", view: "Listening, a partial", paintedAtMs: 1_000 });
     expect(syncPresence(updated, live("Listening, a partial"), "finished", 1_060, MOTION))
       .toBe(updated);
   });
@@ -85,7 +88,7 @@ describe("surface presence", () => {
       identity: "voice_1",
       stage: "present",
       view: "Record again",
-      shownAtMs: 1_000,
+      paintedAtMs: 1_000,
       close: null,
       deadlineMs: null,
     });
@@ -94,7 +97,22 @@ describe("surface presence", () => {
   it("replaces a leaving surface immediately when another identity arrives", () => {
     const exiting = syncPresence(shownAt(1_000), null, "person", 1_010, MOTION);
     const next = syncPresence(exiting, live("Waiting", "voice_2"), "person", 1_020, MOTION);
-    expect(next).toMatchObject({ identity: "voice_2", stage: "present", shownAtMs: 1_020 });
+    expect(next).toMatchObject({ identity: "voice_2", stage: "present", paintedAtMs: null });
+  });
+
+  it("cuts a surface that finishes or closes before its first paint", () => {
+    // Modal chrome closed and released a held commit in the same task that
+    // re-presented the box: nobody saw it, so nothing holds or fades.
+    const unpainted = syncPresence(null, live("Transcribing"), "preempted", 1_000, MOTION);
+    expect(presenceAwaitsPaint(unpainted)).toBe(true);
+    expect(syncPresence(unpainted, null, "finished", 1_001, MOTION)).toBeNull();
+    expect(syncPresence(unpainted, null, "person", 1_001, MOTION)).toBeNull();
+    expect(projectPresence(unpainted, null, "finished")).toBeNull();
+    const painted = markPresencePainted(unpainted, 1_016);
+    expect(presenceAwaitsPaint(painted)).toBe(false);
+    expect(markPresencePainted(painted, 2_000)).toBe(painted);
+    expect(syncPresence(painted, null, "finished", 1_020, MOTION))
+      .toMatchObject({ stage: "holding", deadlineMs: 1_416 });
   });
 
   it("removes motion but keeps the hold under reduced motion", () => {
@@ -288,6 +306,8 @@ describe("presence handoff", () => {
 });
 
 describe("timed presence store", () => {
+  const FRAME_MS = 16;
+
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -296,14 +316,20 @@ describe("timed presence store", () => {
     vi.useRealTimers();
   });
 
-  function presenceStore(policy: PresencePolicy = MOTION) {
+  function presenceStore(policy: PresencePolicy = MOTION, framesRun = true) {
     const listener = vi.fn();
     const store = createTimedStore<PresenceState<string>>(null, {
       deadline: (state) => state?.deadlineMs ?? null,
       advance: (state, nowMs) => advancePresence(state, nowMs, policy),
       notifies: (previous, next) =>
         previous?.identity !== next?.identity || previous?.stage !== next?.stage,
+      frame: { due: presenceAwaitsPaint, mark: markPresencePainted },
       now: () => Date.now(),
+      // A hidden page runs no animation frames at all.
+      requestFrame: (callback) => framesRun ? setTimeout(callback, FRAME_MS) : Symbol("never"),
+      cancelFrame: (frame) => {
+        if (typeof frame !== "symbol") clearTimeout(frame as ReturnType<typeof setTimeout>);
+      },
     });
     store.subscribe(listener);
     const sync = (value: PresenceLive<string>, close: PresenceClose) =>
@@ -311,13 +337,15 @@ describe("timed presence store", () => {
     return { listener, store, sync };
   }
 
-  it("runs hold, exit, and unmount on one timer", async () => {
+  it("holds from the first paint, then exits and unmounts on one timer", async () => {
     const h = presenceStore();
     h.sync(live("Placing"), "finished");
-    await vi.advanceTimersByTimeAsync(100);
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
+    expect(h.store.getState()?.paintedAtMs).toBe(Date.now());
+    await vi.advanceTimersByTimeAsync(100 - FRAME_MS);
     h.sync(null, "finished");
     expect(h.store.getState()?.stage).toBe("holding");
-    await vi.advanceTimersByTimeAsync(299);
+    await vi.advanceTimersByTimeAsync(PRESENCE_TIMING.minVisibleMs - 100 + FRAME_MS - 1);
     expect(h.store.getState()?.stage).toBe("holding");
     await vi.advanceTimersByTimeAsync(1);
     expect(h.store.getState()?.stage).toBe("exiting");
@@ -326,20 +354,51 @@ describe("timed presence store", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("stores fresh live content silently and notifies only stage or identity changes", () => {
+  it("unmounts at once when work finishes before the re-presented surface is painted", async () => {
     const h = presenceStore();
+    // Modal chrome closes: the box re-presents and its held commit lands in
+    // the same task, before any frame could paint it.
+    h.sync(live("Transcribing"), "finished");
+    h.sync(null, "finished");
+    expect(h.store.getState()).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(h.store.getState()).toBeNull();
+  });
+
+  it("never holds a surface a hidden page never painted", async () => {
+    const h = presenceStore(MOTION, false);
+    h.sync(live("Placing"), "finished");
+    await vi.advanceTimersByTimeAsync(5_000);
+    h.sync(null, "finished");
+    expect(h.store.getState()).toBeNull();
+  });
+
+  it("stores fresh live content and its first paint silently", async () => {
+    const h = presenceStore();
+    const startedAt = Date.now();
     h.sync(live("a"), "finished");
     h.sync(live("ab"), "finished");
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
     h.sync(live("abc"), "finished");
-    expect(h.store.getState()?.view).toBe("abc");
+    expect(h.store.getState()).toMatchObject({ view: "abc", paintedAtMs: startedAt + FRAME_MS });
     expect(h.listener).toHaveBeenCalledTimes(1);
     h.sync(null, "person");
     expect(h.listener).toHaveBeenCalledTimes(2);
   });
 
-  it("clears its timer on detach and re-arms it on a Strict Mode re-attach", async () => {
+  it("clears its timer and frame on detach and re-arms them on a Strict Mode re-attach", async () => {
+    const unpainted = presenceStore();
+    unpainted.sync(live("Placing"), "finished");
+    unpainted.store.detach();
+    expect(vi.getTimerCount()).toBe(0);
+    unpainted.store.attach();
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
+    expect(unpainted.store.getState()?.paintedAtMs).not.toBeNull();
+
     const h = presenceStore();
     h.sync(live("Placing"), "finished");
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
     h.sync(null, "finished");
     h.store.detach();
     expect(vi.getTimerCount()).toBe(0);
@@ -356,7 +415,9 @@ describe("timed presence store", () => {
   it("cancels a pending exit when the surface reverses or is preempted", async () => {
     const reversed = presenceStore();
     reversed.sync(live("Retry"), "person");
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
     reversed.sync(null, "person");
+    expect(reversed.store.getState()?.stage).toBe("exiting");
     await vi.advanceTimersByTimeAsync(70);
     reversed.sync(live("Retry"), "person");
     await vi.advanceTimersByTimeAsync(1_000);
@@ -364,6 +425,7 @@ describe("timed presence store", () => {
 
     const preempted = presenceStore();
     preempted.sync(live("Placing"), "finished");
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
     preempted.sync(null, "finished");
     preempted.sync(null, "preempted");
     expect(preempted.store.getState()).toBeNull();
@@ -373,8 +435,9 @@ describe("timed presence store", () => {
   it("keeps the hold but skips the fade under reduced motion", async () => {
     const h = presenceStore(REDUCED);
     h.sync(live("Placing"), "finished");
+    await vi.advanceTimersByTimeAsync(FRAME_MS);
     h.sync(null, "finished");
-    await vi.advanceTimersByTimeAsync(399);
+    await vi.advanceTimersByTimeAsync(PRESENCE_TIMING.minVisibleMs - 1);
     expect(h.store.getState()?.stage).toBe("holding");
     await vi.advanceTimersByTimeAsync(1);
     expect(h.store.getState()).toBeNull();

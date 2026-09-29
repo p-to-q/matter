@@ -144,11 +144,16 @@ microphone. The live region announces phase labels only, never partial
 transcripts.
 
 When the attempt settles, the box keeps its last content frozen, inert, and
-unannounced. Committed work holds until the box has been visible 400 ms, then
-fades in place for 140 ms; its reserved lane is released as the exit starts,
-so the admitted passage never moves after its first paint. The person's
-Cancel, Dismiss, or Discard fades at once and keeps the lane until the box is
-gone. Modal chrome, a hidden page, or a document switch cuts it at 0 ms.
+unannounced. Committed work releases the reserved lane the moment the box
+stops being live, in the same commit that shows the admitted passage, so that
+passage never moves after its first paint; the frozen box then holds until it
+has been painted for 400 ms and fades in place for 140 ms over whatever now
+fills the lane. A box that finishes before it was ever painted — a held commit
+released the instant modal chrome closes — unmounts at once instead of holding
+a stale label over the new passage. The person's Cancel, Dismiss, or Discard
+fades at once and keeps the lane until the box is gone. Modal chrome, a hidden
+page, or a document switch cuts it at 0 ms; while such work is still in
+flight, its lane keeps the last measured height.
 Focus returns to the Voice tool with the live phase, before the box becomes
 inert. Reduced motion removes the fades and keeps the holds. The Point Talk
 field follows the same rules through an exit host that paints only a frozen

@@ -2,15 +2,16 @@
  * Owns when a transient surface, and a status label inside it, may appear,
  * stay, and leave. Time enters only as values, so every rule here is a pure
  * function; the timed store below is the one place that reads a clock and owns
- * a timer. Motion itself is CSS: this module only decides stages.
+ * a timer or frame. Motion itself is CSS: this module only decides stages.
  *
  * A surface is `present` while its live value exists. When the live value
  * goes away, the last content stays frozen: `holding` keeps a surface that
- * closed because work finished for at least `minVisibleMs` after it first
- * appeared, then `exiting` gives CSS `exitMs` to leave before unmount. A
- * person's own close skips the hold; a preemption cuts at once. A live value
- * returning under the same identity reverses to `present`; a new identity
- * replaces the old surface immediately, so two never coexist.
+ * closed because work finished for at least `minVisibleMs` after its first
+ * paint, then `exiting` gives CSS `exitMs` to leave before unmount. A person's
+ * own close skips the hold; a preemption cuts at once, and so does any close
+ * before the surface was ever painted, because nobody saw it to need a hold.
+ * A live value returning under the same identity reverses to `present`; a new
+ * identity replaces the old surface immediately, so two never coexist.
  */
 
 export const PRESENCE_TIMING = Object.freeze({
@@ -37,7 +38,11 @@ export type PresenceState<T> = Readonly<{
   stage: PresenceStage;
   /** Live content while present; the frozen last live content otherwise. */
   view: T;
-  shownAtMs: number;
+  /**
+   * The first animation frame after this identity became present; null until
+   * then. A browser paints the committed surface right after that frame.
+   */
+  paintedAtMs: number | null;
   close: Exclude<PresenceClose, "preempted"> | null;
   deadlineMs: number | null;
 }> | null;
@@ -59,7 +64,7 @@ export function syncPresence<T>(
         identity: live.identity,
         stage: "present",
         view: live.view,
-        shownAtMs: nowMs,
+        paintedAtMs: null,
         close: null,
         deadlineMs: null,
       });
@@ -70,11 +75,26 @@ export function syncPresence<T>(
   }
   if (state === null || close === "preempted") return null;
   if (state.stage !== "present") return state;
+  // Work that finished before its surface reached a frame, such as a held
+  // commit released the moment modal chrome closes, has nothing to leave.
+  if (state.paintedAtMs === null) return null;
   if (close === "person") return beginExit(state, "person", nowMs, policy);
-  const holdUntilMs = state.shownAtMs + policy.minVisibleMs;
+  const holdUntilMs = state.paintedAtMs + policy.minVisibleMs;
   return nowMs < holdUntilMs
     ? Object.freeze({ ...state, stage: "holding", close: "finished", deadlineMs: holdUntilMs })
     : beginExit(state, "finished", nowMs, policy);
+}
+
+/** Records the first frame after a surface became present. */
+export function markPresencePainted<T>(state: PresenceState<T>, nowMs: number): PresenceState<T> {
+  return state !== null && state.stage === "present" && state.paintedAtMs === null
+    ? Object.freeze({ ...state, paintedAtMs: nowMs })
+    : state;
+}
+
+/** Whether the timed store should request a frame to mark the first paint. */
+export function presenceAwaitsPaint(state: PresenceState<unknown>): boolean {
+  return state !== null && state.stage === "present" && state.paintedAtMs === null;
 }
 
 export function advancePresence<T>(
@@ -98,7 +118,8 @@ export type PresenceFrame<T> = Readonly<{
 /**
  * The frame a render may show before the layout-phase sync catches up. A live
  * value always renders present with its live content; a surface whose live
- * value just went away renders frozen at once, or not at all when preempted.
+ * value just went away renders frozen at once, or not at all when preempted
+ * or never painted.
  */
 export function projectPresence<T>(
   state: PresenceState<T>,
@@ -109,16 +130,21 @@ export function projectPresence<T>(
     return { identity: live.identity, stage: "present", view: live.view, close: null };
   }
   if (state === null || close === "preempted") return null;
-  return state.stage === "present"
-    ? { identity: state.identity, stage: "holding", view: state.view, close }
-    : { identity: state.identity, stage: state.stage, view: state.view, close: state.close };
+  if (state.stage !== "present") {
+    return { identity: state.identity, stage: state.stage, view: state.view, close: state.close };
+  }
+  return state.paintedAtMs === null
+    ? null
+    : { identity: state.identity, stage: "holding", view: state.view, close };
 }
 
 /** Whether a leaving surface still owns the layout space it reserved. */
 export function presenceReservesSpace(frame: PresenceFrame<unknown>): boolean {
-  // Work that finished releases its space as the exit starts, so material it
-  // produced never moves after first paint; a person's close keeps the space
-  // until unmount so the only jump happens after the surface is invisible.
+  // Work that finished releases its space the moment it stops being live,
+  // before the hold, in the same commit that shows what it produced; that
+  // material therefore never moves after its first paint. A person's close
+  // keeps the space until unmount, so the only jump happens after the surface
+  // is invisible.
   return frame !== null && frame.close !== "finished";
 }
 
@@ -335,40 +361,57 @@ export type TimedStore<S> = Readonly<{
   subscribe: (listener: () => void) => () => void;
   /** Applies one pure transition at the current time and arms its deadline. */
   update: (transition: (state: S, nowMs: number) => S) => void;
-  /** Re-arms a pending deadline; React Strict Mode may detach and re-attach. */
+  /** Re-arms a pending deadline or frame; React Strict Mode may detach and re-attach. */
   attach: () => void;
-  /** Clears the timer without touching state; idempotent. */
+  /** Clears the timer and frame without touching state; idempotent. */
   detach: () => void;
 }>;
 
 /**
- * The single clock and timer owner for one presence or status value.
+ * The single clock, timer, and frame owner for one presence or status value.
  * `notifies` lets a caller store a change silently when no render depends on
- * it, such as fresh live content that is rendered from props anyway.
+ * it, such as fresh live content that is rendered from props anyway. `frame`
+ * requests one animation frame while `due` holds, to record a first paint.
  */
 export function createTimedStore<S>(initial: S, options: Readonly<{
   deadline: (state: S) => number | null;
   advance: (state: S, nowMs: number) => S;
   notifies?: (previous: S, next: S) => boolean;
+  frame?: Readonly<{
+    due: (state: S) => boolean;
+    mark: (state: S, nowMs: number) => S;
+  }>;
   now?: () => number;
   setTimer?: (callback: () => void, delayMs: number) => unknown;
   clearTimer?: (timer: unknown) => void;
+  requestFrame?: (callback: () => void) => unknown;
+  cancelFrame?: (frame: unknown) => void;
 }>): TimedStore<S> {
   const now = options.now ?? (() => performance.now());
   const setTimer = options.setTimer ??
     ((callback: () => void, delayMs: number) => globalThis.setTimeout(callback, delayMs));
   const clearTimer = options.clearTimer ??
     ((timer: unknown) => globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>));
+  const requestFrame = options.requestFrame ??
+    ((callback: () => void) => globalThis.requestAnimationFrame(callback));
+  const cancelFrame = options.cancelFrame ??
+    ((frame: unknown) => globalThis.cancelAnimationFrame(frame as number));
   const notifies = options.notifies ?? ((previous: S, next: S) => previous !== next);
   const listeners = new Set<() => void>();
   let state = initial;
   let timer: unknown = null;
+  let frame: unknown = null;
   let attached = true;
 
   const disarm = () => {
-    if (timer === null) return;
-    clearTimer(timer);
-    timer = null;
+    if (timer !== null) {
+      clearTimer(timer);
+      timer = null;
+    }
+    if (frame !== null) {
+      cancelFrame(frame);
+      frame = null;
+    }
   };
   const commit = (next: S) => {
     const previous = state;
@@ -380,6 +423,14 @@ export function createTimedStore<S>(initial: S, options: Readonly<{
   const arm = () => {
     disarm();
     if (!attached) return;
+    const paint = options.frame;
+    if (paint?.due(state) === true) {
+      // A hidden page runs no frames, so what it never painted is never held.
+      frame = requestFrame(() => {
+        frame = null;
+        commit(paint.mark(state, now()));
+      });
+    }
     const deadline = options.deadline(state);
     if (deadline === null) return;
     timer = setTimer(() => {

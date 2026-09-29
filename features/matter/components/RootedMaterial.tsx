@@ -4789,7 +4789,9 @@ function AdmissionFeedback({
     urgent: view?.phase === "recording" || view?.phase === "stopping" || view?.phase === "error",
     lingers: view?.phase !== "error",
   }, !present);
-  const surfaceMounted = frame !== null;
+  // Modal chrome cuts the box while its work stays in flight; the lane keeps
+  // the last measured height so a tall box does not reflow twice.
+  const laneOwned = frame !== null || liveState.phase !== "idle";
 
   useLayoutEffect(() => {
     // Only a present surface is measured. A leaving one keeps its last height
@@ -4805,9 +4807,9 @@ function AdmissionFeedback({
     return () => observer.disconnect();
   }, [frame?.identity, onHeightChange, present]);
   useLayoutEffect(() => {
-    if (!surfaceMounted) return;
+    if (!laneOwned) return;
     return () => onHeightChange(0);
-  }, [onHeightChange, surfaceMounted]);
+  }, [laneOwned, onHeightChange]);
   useLayoutEffect(() => {
     const previousLiveState = previousLiveStateRef.current;
     previousLiveStateRef.current = liveState;

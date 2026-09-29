@@ -411,9 +411,24 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
   // the visible change until modal ownership and its opening pointer are gone.
   await expect(page.locator(".admission-feedback")).toHaveCount(0);
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as Window & { __matterReturnedFeedback?: string[] }).__matterReturnedFeedback = seen;
+    new MutationObserver(() => {
+      const box = document.querySelector<HTMLElement>(".admission-feedback");
+      if (box !== null) seen.push(`${box.dataset.presence}:${box.dataset.phase}`);
+    }).observe(document.body, { attributes: true, childList: true, subtree: true });
+  });
   await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount + 1);
   await expect(settings).toBeFocused();
+  // Work that finished as the paper returned was never shown again: no box
+  // re-presents over the new passage just to hold and fade a stale label.
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() =>
+    (window as Window & { __matterReturnedFeedback?: string[] }).__matterReturnedFeedback ?? [],
+  )).toEqual([]);
+  await expect(page.locator(".admission-feedback")).toHaveCount(0);
 });
 
 test("a transcription outage keeps material unchanged and Record again can recover", async ({ page }) => {

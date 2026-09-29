@@ -6,6 +6,8 @@ import {
   advanceSettledStatus,
   createTimedStore,
   emptySettledStatus,
+  markPresencePainted,
+  presenceAwaitsPaint,
   PRESENCE_TIMING,
   projectPresence,
   projectSettledStatus,
@@ -30,6 +32,7 @@ export function usePresence<T>(live: PresenceLive<T>, close: PresenceClose): Pre
   const [store] = useState(() => createTimedStore<PresenceState<T>>(null, {
     deadline: (state) => state?.deadlineMs ?? null,
     advance: (state, nowMs) => advancePresence(state, nowMs, presencePolicy()),
+    frame: { due: presenceAwaitsPaint, mark: markPresencePainted },
     // Fresh live content renders from props; only a stage or identity change
     // needs another render.
     notifies: (previous, next) =>
